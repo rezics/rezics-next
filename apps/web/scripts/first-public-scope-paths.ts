@@ -25,21 +25,26 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W14',
     job: 'Library → profile or state shelf → bounded filters → Subject → return',
     auth: 'signed-in',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W15',
     job: 'Library → private labels → create or edit → read back the same label',
     auth: 'signed-in',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W16',
     job: 'New curated Collection → add or transfer occurrences → review exact members',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-curated-collections.host.test.ts',
   },
   {
     id: 'W17',
     job: 'Built-in dynamic Collection → filters → native continuation → Subject',
     auth: 'signed-in',
+    missingFixture:
+      'The built-in Everything collection needs enough matching owned entries for a filtered native continuation to a known Subject.',
   },
   {
     id: 'W18',
@@ -50,41 +55,50 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W19',
     job: 'Subject or Library → progress session → update → current readback and return',
     auth: 'signed-in',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W20',
     job: 'Library → copies or holdings → edit → resolve newer reading → save and undo',
     auth: 'signed-in',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W21',
     job: 'Following → bounded targets → inspect admitted destination → follow or stop → readback',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-following.host.test.ts',
   },
   {
     id: 'W22',
     job: 'Private destination → sign-up or sign-in → safe return → sign-out',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-auth-security.host.test.ts',
   },
   {
     id: 'W23',
     job: 'Auth request → consent → approve or decline → current caller return',
     auth: 'signed-in',
+    missingFixture:
+      'The Web fixture needs a non-first-party consent request with a real requested scope and a return bound to the current caller.',
   },
   {
     id: 'W24',
     job: 'Security settings → step-up → change credential → renewed session',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-auth-security.host.test.ts',
   },
   {
     id: 'W25',
     job: 'Settings → profile, reading or privacy preference → save → replacement or deletion recovery',
     auth: 'signed-in',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W26',
     job: 'Admitted personal page → upload completion or download → current caller result',
     auth: 'signed-in',
+    nativeHost: 'tests/native/private-library-archive-restore.host.test.ts',
   },
   {
     id: 'W29',
@@ -95,6 +109,7 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W30',
     job: 'Subject → Global standard rating or review → explicit write → current native readback',
     auth: 'signed-in',
+    nativeHost: 'tests/native/subject-rating.host.test.ts',
   },
   {
     id: 'W31',
@@ -105,11 +120,13 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W32',
     job: 'Readable content → report → owner resolution → affected-author receipt and appeal',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-moderation.host.test.ts',
   },
   {
     id: 'W33',
     job: 'Signed-in Inbox → reply, mention or moderation notice → current destination and preference',
     auth: 'signed-in',
+    nativeHost: 'tests/native/native-notifications.host.test.ts',
   },
   {
     id: 'W34',
