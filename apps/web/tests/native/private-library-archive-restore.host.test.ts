@@ -363,11 +363,15 @@ async function restoreOwnerLibrary() {
 
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page
+  const restoreCollections = page
     .getByRole('navigation', { name: await message('en', 'library_archive_destinations'), exact: true })
-    .getByRole('link', { name: await message('en', 'library_export_restore_collections'), exact: true })
-    .click();
-  await page.waitForURL(`${stack.web}/en/library/recover-collections`);
+    .getByRole('link', { name: await message('en', 'library_export_restore_collections'), exact: true });
+  const restoreHref = await restoreCollections.getAttribute('href');
+  expect(restoreHref).toBeTruthy();
+  const restoreUrl = new URL(restoreHref!, page.url());
+  expect(restoreUrl.origin).toBe(new URL(page.url()).origin);
+  expect(restoreUrl.pathname.replace(/^\/en(?=\/)/u, '')).toBe('/library/recover-collections');
+  await restoreCollections.click();
   await hydrated(page);
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
