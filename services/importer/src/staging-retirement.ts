@@ -33,6 +33,7 @@ import {
   retentionWorkRow,
   runRetentionDeletePhase,
   throwIfRetentionAborted,
+  updateRetentionWork,
   type RetentionCatalog,
   type RetentionDeletePhase,
   type RetentionOptions,
@@ -1031,19 +1032,11 @@ export function applyStagingRetirementOnDatabase(
             nextCursor = '';
           } else complete = true;
         }
-        database
-          .query(
-            `UPDATE run_retention_work SET generation_id=?, phase=?, cursor=?, status=?, result_json=? WHERE plan_id=? AND status=?`,
-          )
-          .run(
-            complete ? '' : generationId,
-            complete ? '' : nextPhase,
-            complete ? '' : nextCursor,
-            complete ? 'complete' : 'applying',
-            complete ? JSON.stringify({ retired: [plan.generation] }) : null,
-            plan.planId,
-            'applying',
-          );
+        updateRetentionWork(
+          database,
+          plan.planId,
+          complete ? { retired: [plan.generation] } : { generationId, phase: nextPhase, cursor: nextCursor },
+        );
         return { nextPhase, nextCursor, complete };
       })
       .immediate();

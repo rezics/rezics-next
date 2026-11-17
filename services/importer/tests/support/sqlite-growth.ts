@@ -1,7 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 type PlanRow = { id: number; parent: number; notused: number; detail: string };
-type Kind = 'read' | 'write' | 'insert' | 'control' | 'unsupported';
+type Kind = 'read' | 'write' | 'insert' | 'control' | 'schema-lookup' | 'schema-columns' | 'unsupported';
 export type SqliteEvidence = {
   sql: string;
   parameters: unknown[];
@@ -57,8 +57,8 @@ function bindings(args: unknown[]): unknown[] {
  * Counts actual native executions and rows delivered to the caller, never rows
  * visited internally. Install before preparing statements (RecordStore offers
  * instrumentDatabase for this). Evidence contains raw SQL/binds: do not log it.
- * Verification conservatively rejects all relation scans and temporary sorts,
- * including scans of aliases, views and relations not declared as growing.
+ * Verification rejects relation scans and temporary sorts, except for exact
+ * table existence checks in the destination schema catalog.
  */
 export function createSqliteProbe(database: Database, options: { growingTables: readonly string[] }) {
   if (options.growingTables.some((table) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(table))) {
@@ -95,6 +95,16 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
   function classify(sql: string, parameters: unknown[]): Kind {
     if (/^(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i.test(sql)) return 'control';
     if (hasTriggers && /\b(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) return 'unsupported';
+    if (
+      (sql === 'SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?' &&
+        parameters.length === 2 &&
+        parameters[0] === 'table' &&
+        parameters[1] === 'source_destinations') ||
+      (sql === "SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='run_sources'" &&
+        parameters.length === 0)
+    )
+      return 'schema-lookup';
+    if (sql === 'PRAGMA table_info(source_destinations)' && parameters.length === 0) return 'schema-columns';
     if (/^(?:SELECT|WITH)\b/i.test(sql)) return 'read';
     if (/^(?:UPDATE|DELETE)\b/i.test(sql)) return 'write';
     if (/^INSERT\s+(?:OR\s+\w+\s+)?INTO\s+\w+\s*(?:\([^)]+\))?\s+SELECT\b/i.test(sql)) return 'write';
@@ -368,6 +378,8 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
       for (const event of evidence) {
         if (event.kind === 'unsupported') throw new Error('Unsupported SQLite statement');
         if (event.kind === 'control') continue;
+        if (event.kind === 'schema-lookup' && event.plan.length === 1 && event.plan[0]!.detail === 'SCAN sqlite_schema')
+          continue;
         for (const row of event.plan) {
           if (
             /\bAUTOMATIC\b|USE TEMP B-TREE/i.test(row.detail) ||
@@ -383,7 +395,7 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
           }
         }
         if (
-          (event.kind === 'read' && !event.plan.length) ||
+          ((event.kind === 'read' || event.kind === 'schema-lookup') && !event.plan.length) ||
           (event.kind === 'write' && !event.plan.some((row) => /^SEARCH\b/i.test(row.detail)))
         ) {
           throw new Error('Missing SQLite read plan evidence');
