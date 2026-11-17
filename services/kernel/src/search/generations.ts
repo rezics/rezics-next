@@ -212,7 +212,10 @@ export function searchForTurn(search: OpenSearch): OpenSearch {
 }
 
 /** A producer may outlive this turn when installed in a relay. Resolve the context at each call. */
-export function searchTurnMetadataProducers(producers: DiscoveryMetadataProducers): DiscoveryMetadataProducers {
+export function searchTurnMetadataProducers(
+  producers: DiscoveryMetadataProducers,
+  purpose?: 'population',
+): DiscoveryMetadataProducers {
   return Object.fromEntries(
     Object.entries(producers).flatMap(([kind, producer]) => {
       if (!producer) return [];
@@ -221,7 +224,7 @@ export function searchTurnMetadataProducers(producers: DiscoveryMetadataProducer
           kind,
           {
             ...producer,
-            readiness: () => searchTurnCall(() => producer.readiness()),
+            readiness: (requested?: 'population') => searchTurnCall(() => producer.readiness(purpose ?? requested)),
             page: (...args: Parameters<DiscoveryMetadataProducer['page']>) =>
               searchTurnCall(() => producer.page(...args)),
             read: (...args: Parameters<DiscoveryMetadataProducer['read']>) =>
@@ -1532,7 +1535,7 @@ export async function advanceDiscovery(options: AdvanceDiscoveryOptions): Promis
 
 async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<void> {
   const { pool, search, prefix, registry } = options;
-  const metadataProducers = searchTurnMetadataProducers(options.metadataProducers ?? {});
+  const metadataProducers = searchTurnMetadataProducers(options.metadataProducers ?? {}, 'population');
   const requiredKinds = options.requiredKinds ?? Object.keys(metadataProducers);
   const witnesses = options.capabilityWitnesses ?? (await discoveryCapabilityWitnesses(metadataProducers));
   const producerKinds = ['account', 'subject'];

@@ -452,7 +452,7 @@ export function startDiscoveryIndexing(options: {
       ? await turn.call(() =>
           resolveDiscoveryOwnerAdapters({
             ...producers,
-            metadataProducers: searchTurnMetadataProducers(producers.metadataProducers),
+            metadataProducers: searchTurnMetadataProducers(producers.metadataProducers, 'population'),
           }),
         )
       : undefined;

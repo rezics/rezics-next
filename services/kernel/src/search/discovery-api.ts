@@ -297,7 +297,7 @@ export type DiscoveryMetadataRecord = Readonly<{
 export type DiscoveryMetadataProducer = Readonly<{
   kind: DiscoveryMetadataKind;
   owner: 'commerce' | 'content';
-  readiness(): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
+  readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
   page(
     partition: number,
     after: Readonly<{ route: number; id: string }> | null,
