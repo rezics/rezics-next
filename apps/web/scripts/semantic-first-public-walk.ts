@@ -545,8 +545,19 @@ async function main(scope: WalkScope) {
     const results = roundResults;
     let browser: Browser | undefined;
     try {
-      browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: browserTemp } });
-      own('browser', () => browser!.close());
+      const server = await chromium.launchServer({ headless: true, env: { ...process.env, TMPDIR: browserTemp } });
+      own(
+        'browser',
+        async () => {
+          await server.close();
+          await browser?.close();
+        },
+        async () => {
+          await server.kill();
+          await browser?.close();
+        },
+      );
+      browser = await chromium.connect(server.wsEndpoint());
     } catch (error) {
       const cause = error instanceof Error ? error.message : String(error);
       results.push(...FIRST_PUBLIC_JOURNEYS.map((row) => failingRow(row, cause)));
