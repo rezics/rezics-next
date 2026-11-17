@@ -10,8 +10,14 @@ import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { developmentKeys, firstPublicWebWalk, startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
 import { fillPasswordSignIn, parseEnv, websiteToken } from './accounts-goal-walk.ts';
-import { readFirstPublicCatalogueReport, seedFirstPublicWeb, type WebFixture } from './first-public-scope-fixture.ts';
-import { readZonePage, type KernelOptions } from './semantic-first-public-native.ts';
+import {
+  readFirstPublicCatalogueReport,
+  seedCommunityWeb,
+  seedFirstPublicWeb,
+  type CommunityFixture,
+  type WebFixture,
+} from './first-public-scope-fixture.ts';
+import { readZonePage, type KernelCall, type KernelOptions } from './semantic-first-public-native.ts';
 import { FIRST_PUBLIC_SCOPE_PATHS, type PathAuth, type PathId, type PathStatus } from './first-public-scope-paths.ts';
 
 export { FIRST_PUBLIC_SCOPE_PATHS, type PathAuth, type PathId, type PathStatus } from './first-public-scope-paths.ts';
@@ -69,9 +75,8 @@ function publicFields(value: unknown): unknown {
   return output;
 }
 
-async function child(command: string[], name: string, env: NodeJS.ProcessEnv = process.env): Promise<number> {
-  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
-  const log = Bun.file(join(evidenceDir, `${name}.log`));
+async function child(command: string[], logPath: string, env: NodeJS.ProcessEnv): Promise<number> {
+  const log = Bun.file(logPath);
   const handle = await log.writer();
   const proc = spawn(command[0]!, command.slice(1), { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   proc.stdout.on('data', (chunk: Buffer) => handle.write(chunk));
@@ -239,9 +244,9 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
   };
 }
 
-type WalkContext = {
+type WalkContext<Fixture extends CommunityFixture = WebFixture> = {
   stack: Stack;
-  seed: WebFixture;
+  seed: Fixture;
   page: Page;
   signIn: { ok: boolean; detail: string };
 };
@@ -410,7 +415,7 @@ async function walkW18(ctx: WalkContext): Promise<unknown> {
 }
 
 async function withOwnerPage<T>(
-  ctx: WalkContext,
+  ctx: WalkContext<CommunityFixture>,
   returnUrl: string,
   observed: Json,
   witness: (page: Page, enter: (stage: string) => void) => Promise<T>,
@@ -474,7 +479,7 @@ async function withOwnerPage<T>(
   }
 }
 
-async function walkW29(ctx: WalkContext): Promise<unknown> {
+async function walkW29(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
   if (!ctx.seed.boardId || !ctx.seed.threadId) throw new Error('seed published no board or thread');
   const board = await gotoPage(ctx.page, `${ctx.stack.web}/en/boards/${ctx.seed.boardId}`);
   if (board.status >= 400) throw new Error(`board HTTP ${board.status}`);
@@ -568,7 +573,7 @@ async function walkW29(ctx: WalkContext): Promise<unknown> {
   });
 }
 
-async function walkW31(ctx: WalkContext): Promise<unknown> {
+async function walkW31(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
   const { realmId, spaceAddress } = ctx.seed;
   const opened = await gotoPage(ctx.page, `${ctx.stack.web}/en/realms/${realmId}`);
   const expected = spaceAddress ? `/en/spaces/${encodeURIComponent(spaceAddress)}` : `/en/realms/${realmId}`;
@@ -720,7 +725,14 @@ async function walkW35(ctx: WalkContext): Promise<unknown> {
   };
 }
 
-const walkers: Partial<Record<PathId, (ctx: WalkContext) => Promise<unknown>>> = {
+type Path = (typeof FIRST_PUBLIC_SCOPE_PATHS)[number];
+type Walkers<Fixture extends CommunityFixture> = Partial<
+  Record<PathId, (ctx: WalkContext<Fixture>) => Promise<unknown>>
+>;
+
+const communityWalkers: Walkers<CommunityFixture> = { W29: walkW29, W31: walkW31 };
+const walkers: Walkers<WebFixture> = {
+  ...communityWalkers,
   W01: walkW01,
   W02: walkW02,
   W03: (ctx) => walkViewToChild(ctx, 'Editions', { next: true, returnPathIncludes: '/editions' }),
@@ -739,23 +751,149 @@ const walkers: Partial<Record<PathId, (ctx: WalkContext) => Promise<unknown>>> =
   W10: walkW10,
   W11: walkW11,
   W18: walkW18,
-  W29: walkW29,
-  W31: walkW31,
   W34: walkW34,
   W35: walkW35,
 };
 
-function hourly(results: PathResult[]): void {
+export function selectFirstPublicPaths(args: readonly string[]) {
+  if (args.length === 0) return { scope: 'all', paths: FIRST_PUBLIC_SCOPE_PATHS, unselected: [] } as const;
+  if (args.length !== 2 || args[0] !== '--scope' || args[1] !== 'community')
+    throw new Error('Usage: first-public-scope-walk.ts [--scope community]');
+  const paths = FIRST_PUBLIC_SCOPE_PATHS.filter(({ id }) => Object.hasOwn(communityWalkers, id));
+  const unselected = FIRST_PUBLIC_SCOPE_PATHS.filter(({ id }) => !Object.hasOwn(communityWalkers, id)).map(
+    ({ id }) => id,
+  );
+  return { scope: 'community', paths, unselected } as const;
+}
+
+function pathSummary(results: readonly PathResult[], total: number) {
   const passing = results.filter((row) => row.status === 'PASS').length;
-  const failing = results.filter((row) => row.status !== 'PASS');
-  const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
+  const failing = results.filter((row) => row.status !== 'PASS' && row.persona !== 'setup');
+  const slowest = failing.sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
+  return {
+    passing: `${passing}/${total}`,
+    slowestFailing: slowest ? { id: slowest.id, elapsedMs: slowest.elapsedMs, status: slowest.status } : null,
+  };
+}
+
+function hourly(results: PathResult[], total: number): void {
+  const { passing, slowestFailing } = pathSummary(results, total);
   console.log(
-    `first-public-scope: ${passing}/${FIRST_PUBLIC_SCOPE_PATHS.length}` +
-      (slowest ? `; slowest failing ${slowest.id} ${slowest.elapsedMs}ms ${slowest.status}` : ''),
+    `first-public-scope: ${passing}` +
+      (slowestFailing
+        ? `; slowest failing ${slowestFailing.id} ${slowestFailing.elapsedMs}ms ${slowestFailing.status}`
+        : ''),
   );
 }
 
-export async function run(): Promise<PathResult[]> {
+async function walkPaths<Fixture extends CommunityFixture>(
+  paths: readonly Path[],
+  walkers: Walkers<Fixture>,
+  ctx: WalkContext<Fixture>,
+  results: PathResult[],
+  source: string,
+): Promise<void> {
+  for (const path of paths) {
+    const started = performance.now();
+    const persona =
+      path.id === 'W29' || path.id === 'W31' ? 'mixed' : path.auth === 'signed-in' ? 'signed-in' : 'anonymous';
+    try {
+      if ('nativeHost' in path) {
+        const acceptanceCommand = ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost];
+        const cause = SEPARATE_NATIVE_JOURNEY_CAUSE;
+        results.push({
+          id: path.id,
+          job: path.job,
+          auth: path.auth,
+          status: 'FAIL-unreached',
+          persona: 'mixed',
+          elapsedMs: Math.round(performance.now() - started),
+          source,
+          evidence: { cause },
+          acceptanceCommand,
+          firstWrong: cause,
+        });
+        hourly(results, paths.length);
+        continue;
+      }
+      if (path.auth === 'signed-in' && !ctx.signIn.ok) {
+        results.push({
+          id: path.id,
+          job: path.job,
+          auth: path.auth,
+          status: 'FAIL-unreached',
+          persona: 'signed-in',
+          elapsedMs: Math.round(performance.now() - started),
+          source,
+          evidence: { cause: ctx.signIn.detail },
+          firstWrong: ctx.signIn.detail,
+        });
+        hourly(results, paths.length);
+        continue;
+      }
+      const walker = walkers[path.id];
+      if (!walker) {
+        results.push({
+          id: path.id,
+          job: path.job,
+          auth: path.auth,
+          status: 'FAIL-unreached',
+          persona: path.auth === 'anonymous' ? 'anonymous' : 'signed-in',
+          elapsedMs: Math.round(performance.now() - started),
+          source,
+          evidence: { cause: ctx.signIn.ok ? 'no walker' : ctx.signIn.detail },
+          firstWrong: ctx.signIn.ok ? 'no walker' : ctx.signIn.detail,
+        });
+        hourly(results, paths.length);
+        continue;
+      }
+      const evidence = await walker(ctx);
+      results.push({
+        id: path.id,
+        job: path.job,
+        auth: path.auth,
+        status: 'PASS',
+        persona,
+        elapsedMs: Math.round(performance.now() - started),
+        source,
+        evidence,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const { unreached, observed } = error as { unreached?: boolean; observed?: unknown };
+      results.push({
+        id: path.id,
+        job: path.job,
+        auth: path.auth,
+        status: unreached ? 'FAIL-unreached' : 'FAIL',
+        persona,
+        elapsedMs: Math.round(performance.now() - started),
+        source,
+        evidence: { error: message, url: ctx.page.url(), ...(observed && { observed }) },
+        firstWrong: message,
+      });
+    }
+    hourly(results, paths.length);
+  }
+}
+
+async function seedCatalogue(stack: Stack, call: KernelCall): Promise<WebFixture> {
+  const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
+  const seedCode = await child(
+    [process.execPath, 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue', '--without-person-merge'],
+    join(evidenceDir, 'seed.log'),
+    seedEnv,
+  );
+  if (seedCode !== 0) throw new Error(`Catalogue seed exited ${seedCode}; see .temp/goal/web/seed.log`);
+  return seedFirstPublicWeb(root, stack, call, await readFirstPublicCatalogueReport(root));
+}
+
+type SetupResult =
+  | { status: 'PASS'; elapsedMs: number }
+  | { status: 'FAIL'; elapsedMs: number; stage: string; cause: string };
+
+export async function run(args: readonly string[] = []): Promise<PathResult[]> {
+  const { scope, paths, unselected } = selectFirstPublicPaths(args);
   if (
     !firstPublicWebWalk() ||
     !walkAcceptanceId(process.env, 'native') ||
@@ -763,166 +901,79 @@ export async function run(): Promise<PathResult[]> {
     !walkStackAdmitted(process.env, root)
   )
     throw new Error('Use dev-stack.ts walk --first-public-web with native and browser acceptance');
-  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+  const directory = scope === 'community' ? join(evidenceDir, scope) : evidenceDir;
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const source = await sourceRevision();
   const results: PathResult[] = [];
-  const failRest = (cause: string, persona = 'setup') => {
-    for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
+  const setupStarted = performance.now();
+  let stage = 'stack origins';
+  let prerequisite: SetupResult;
+  let stack: Stack | undefined;
+  let seed: CommunityFixture | WebFixture | undefined;
+  let frontends: Awaited<ReturnType<typeof startSeededFrontends>> | undefined;
+  let browser: Browser | undefined;
+  try {
+    const origins = stackOrigins();
+    stack = origins;
+    const call: KernelCall = (method, path, options) => kernel(origins, method, path, options);
+    stage = `${scope === 'community' ? 'community' : 'catalogue'} fixture`;
+    seed = scope === 'community' ? await seedCommunityWeb(root, stack, call) : await seedCatalogue(stack, call);
+
+    stage = 'frontend startup';
+    frontends = await startSeededFrontends();
+    stage = 'sign-in probe';
+    const signIn = await probeSignIn(stack);
+    await writeFile(
+      join(directory, 'sign-in-probe.json'),
+      `${JSON.stringify({ stack, signIn, seed: publicFields(seed) }, null, 2)}\n`,
+    );
+    stage = 'browser startup';
+    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
+    const context: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
+    const page = await context.newPage();
+    page.setDefaultTimeout(60_000);
+    prerequisite = { status: 'PASS', elapsedMs: Math.round(performance.now() - setupStarted) };
+    if ('workId' in seed) await walkPaths(paths, walkers, { stack, seed, page, signIn }, results, source);
+    else await walkPaths(paths, communityWalkers, { stack, seed, page, signIn }, results, source);
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    prerequisite = { status: 'FAIL', stage, cause, elapsedMs: Math.round(performance.now() - setupStarted) };
+    for (const path of paths) {
       if (results.some((row) => row.id === path.id)) continue;
-      const pathCause = 'nativeHost' in path ? SEPARATE_NATIVE_JOURNEY_CAUSE : cause;
       results.push({
         id: path.id,
         job: path.job,
         auth: path.auth,
         status: 'FAIL-unreached',
-        persona: 'nativeHost' in path ? 'mixed' : persona,
+        persona: 'nativeHost' in path ? 'mixed' : 'setup',
         elapsedMs: 0,
         source,
-        evidence: { cause: pathCause, ...(pathCause !== cause ? { setupCause: cause } : {}) },
         ...('nativeHost' in path
-          ? { acceptanceCommand: ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost] }
-          : {}),
-        firstWrong: pathCause,
+          ? {
+              evidence: { cause: SEPARATE_NATIVE_JOURNEY_CAUSE },
+              acceptanceCommand: ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost],
+              firstWrong: SEPARATE_NATIVE_JOURNEY_CAUSE,
+            }
+          : { evidence: { prerequisite: 'setup' } }),
       });
     }
-  };
-
-  const stack = stackOrigins();
-  let seed: WebFixture | undefined;
-  let frontends: Awaited<ReturnType<typeof startSeededFrontends>> | undefined;
-  let browser: Browser | undefined;
-  try {
-    const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
-    const seedCode = await child(
-      [process.execPath, 'scripts/datasets/cross-media-seed.ts', '--dev-catalogue', '--without-person-merge'],
-      'seed',
-      seedEnv,
-    );
-    if (seedCode !== 0) throw new Error(`Catalogue seed exited ${seedCode}; see .temp/goal/web/seed.log`);
-    seed = await seedFirstPublicWeb(
-      root,
-      stack,
-      (method, path, options) => kernel(stack, method, path, options),
-      await readFirstPublicCatalogueReport(root),
-    );
-    frontends = await startSeededFrontends();
-    const signIn = await probeSignIn(stack);
-    await writeFile(
-      join(evidenceDir, 'sign-in-probe.json'),
-      `${JSON.stringify({ stack, signIn, seed: publicFields(seed) }, null, 2)}\n`,
-    );
-    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
-    const context: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
-    const page = await context.newPage();
-    page.setDefaultTimeout(60_000);
-    const ctx: WalkContext = { stack, seed, page, signIn };
-
-    for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
-      const started = performance.now();
-      const persona =
-        path.id === 'W29' || path.id === 'W31' ? 'mixed' : path.auth === 'signed-in' ? 'signed-in' : 'anonymous';
-      try {
-        if ('nativeHost' in path) {
-          const acceptanceCommand = ['bun', 'apps/web/scripts/check.ts', '--host', path.nativeHost];
-          const cause = SEPARATE_NATIVE_JOURNEY_CAUSE;
-          results.push({
-            id: path.id,
-            job: path.job,
-            auth: path.auth,
-            status: 'FAIL-unreached',
-            persona: 'mixed',
-            elapsedMs: Math.round(performance.now() - started),
-            source,
-            evidence: { cause },
-            acceptanceCommand,
-            firstWrong: cause,
-          });
-          hourly(results);
-          continue;
-        }
-        if (path.auth === 'signed-in' && !signIn.ok) {
-          results.push({
-            id: path.id,
-            job: path.job,
-            auth: path.auth,
-            status: 'FAIL-unreached',
-            persona: 'signed-in',
-            elapsedMs: Math.round(performance.now() - started),
-            source,
-            evidence: { cause: signIn.detail },
-            firstWrong: signIn.detail,
-          });
-          hourly(results);
-          continue;
-        }
-        const walker = walkers[path.id];
-        if (!walker) {
-          results.push({
-            id: path.id,
-            job: path.job,
-            auth: path.auth,
-            status: 'FAIL-unreached',
-            persona: path.auth === 'anonymous' ? 'anonymous' : 'signed-in',
-            elapsedMs: Math.round(performance.now() - started),
-            source,
-            evidence: { cause: signIn.ok ? 'no walker' : signIn.detail },
-            firstWrong: signIn.ok ? 'no walker' : signIn.detail,
-          });
-          hourly(results);
-          continue;
-        }
-        const evidence = await walker(ctx);
-        results.push({
-          id: path.id,
-          job: path.job,
-          auth: path.auth,
-          status: 'PASS',
-          persona,
-          elapsedMs: Math.round(performance.now() - started),
-          source,
-          evidence,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const { unreached, observed } = error as { unreached?: boolean; observed?: unknown };
-        results.push({
-          id: path.id,
-          job: path.job,
-          auth: path.auth,
-          status: unreached ? 'FAIL-unreached' : 'FAIL',
-          persona,
-          elapsedMs: Math.round(performance.now() - started),
-          source,
-          evidence: { error: message, url: page.url(), ...(observed && { observed }) },
-          firstWrong: message,
-        });
-      }
-      hourly(results);
-    }
-  } catch (error) {
-    failRest(error instanceof Error ? error.message : String(error));
   } finally {
     await browser?.close();
     await frontends?.stop();
   }
-  await writeEvidence(source, results, stack, seed);
-  hourly(results);
-  return results;
-}
 
-async function writeEvidence(source: string, results: PathResult[], stack?: Stack, seed?: WebFixture): Promise<void> {
-  const passing = results.filter((row) => row.status === 'PASS').length;
-  const failing = results.filter((row) => row.status !== 'PASS');
-  const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
+  const summary = pathSummary(results, paths.length);
   await writeFile(
-    join(evidenceDir, 'evidence.json'),
+    join(directory, 'evidence.json'),
     `${JSON.stringify(
       {
         source,
         observedAt: new Date().toISOString(),
-        passing: `${passing}/${FIRST_PUBLIC_SCOPE_PATHS.length}`,
-        slowestFailing: slowest ? { id: slowest.id, elapsedMs: slowest.elapsedMs, status: slowest.status } : null,
+        scope,
+        unselected,
+        prerequisite,
+        ...summary,
         stack,
         seed: publicFields(seed),
         results,
@@ -931,10 +982,16 @@ async function writeEvidence(source: string, results: PathResult[], stack?: Stac
       2,
     )}\n`,
   );
+  if (prerequisite.status === 'FAIL')
+    console.log(
+      `first-public-scope: ${summary.passing}; prerequisite ${prerequisite.stage} failed after ${prerequisite.elapsedMs}ms: ${prerequisite.cause}`,
+    );
+  else hourly(results, paths.length);
+  return results;
 }
 
 if (import.meta.main) {
-  const results = await run();
+  const results = await run(process.argv.slice(2));
   const failed = results.some((row) => row.status !== 'PASS');
   process.exit(failed ? 1 : 0);
 }

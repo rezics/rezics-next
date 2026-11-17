@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { GLOBAL_CONTEXT } from '../../../services/importer/src/ordinary-owner-grants.ts';
+import { seedCommunityEntities } from '../scripts/first-public-scope-fixture.ts';
+import { selectFirstPublicPaths } from '../scripts/first-public-scope-walk.ts';
+import type { KernelCall } from '../scripts/semantic-first-public-native.ts';
 import { FIRST_PUBLIC_SCOPE_PATHS } from '../scripts/first-public-scope-paths.ts';
 
 const capabilities = resolve(import.meta.dir, '../../../docs/goals/web.capabilities.md');
@@ -71,4 +75,138 @@ test('the walk requires the admitted Web fixture and stops on incomplete catalog
   expect(walk).toContain('if (seedCode !== 0) throw');
   expect(walk).not.toContain("'persona'");
   expect(walk).not.toContain("'--dev'");
+});
+
+test('community selects only the Board and Realm journeys, with every other path explicitly unselected', () => {
+  const all = selectFirstPublicPaths([]);
+  expect(all.scope).toBe('all');
+  expect(all.paths).toEqual(FIRST_PUBLIC_SCOPE_PATHS);
+  expect(all.unselected).toEqual([]);
+
+  const community = selectFirstPublicPaths(['--scope', 'community']);
+  expect(community.scope).toBe('community');
+  expect(community.paths.map(({ id }) => id)).toEqual(['W29', 'W31']);
+  expect(community.unselected).toEqual(all.paths.map(({ id }) => id).filter((id) => id !== 'W29' && id !== 'W31'));
+  expect(() => selectFirstPublicPaths(['--scope', 'catalogue'])).toThrow('Usage:');
+  expect(() => selectFirstPublicPaths(['--scope'])).toThrow('Usage:');
+});
+
+const fixtureId = (tail: number) => `00000000-0000-8000-8000-${String(tail).padStart(12, '0')}`;
+
+test.each([undefined, fixtureId(9)])(
+  'community entities keep the exact authored Concept and opening context (%s)',
+  async (workId) => {
+    const [accountId, conceptId, boardId, threadId, openingPostId, openingRevisionId, spaceId, realmId] = [
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ].map(fixtureId);
+    const bearer = 'ordinary-owner';
+    const title = 'First-public Web Discussion';
+    const subject = { id: conceptId, type: 'skos:Concept', labels: { en: title }, revision: 1 };
+    const board = {
+      id: boardId,
+      realmId: null,
+      title,
+      purpose: 'discussion',
+      visibility: 'published',
+      availability: 'available',
+    };
+    const subjectIds = [workId ?? conceptId];
+    const spaceAddress = 'web-space';
+    const thread = {
+      id: threadId,
+      boardId,
+      kind: 'discussion',
+      firstPost: {
+        id: openingPostId,
+        revisionId: openingRevisionId,
+        authorId: accountId,
+        licence: 'CC-BY-4.0',
+        sha256: 'a'.repeat(64),
+        subjectIds,
+      },
+    };
+    const realm = { realmId, spaceId, visibility: 'public' };
+    const requests = [
+      ['POST', '/v1/subjects', bearer, { type: subject.type, labels: subject.labels }, 201, { subject }],
+      ['GET', `/v1/subjects/${conceptId}`, undefined, undefined, 200, { subject }],
+      [
+        'POST',
+        '/v1/boards',
+        bearer,
+        { conceptId, title, purpose: 'discussion', visibility: 'published' },
+        201,
+        { board },
+      ],
+      ['GET', '/v1/boards', undefined, undefined, 200, { boards: [board] }],
+      [
+        'POST',
+        '/v1/threads',
+        bearer,
+        {
+          boardId,
+          kind: 'discussion',
+          title: 'A note for the first-public discussion',
+          licence: 'CC-BY-4.0',
+          visibility: 'published',
+          subjectIds,
+          body: expect.objectContaining({ version: 'rezics-document-v1', profile: 'text' }),
+        },
+        201,
+        { thread },
+      ],
+      ['POST', '/v1/spaces', bearer, { title: 'First-public Web Space' }, 201, { space: { spaceId } }],
+      [
+        'POST',
+        '/v1/realms',
+        bearer,
+        { spaceId, title: 'First-public Web Realm', visibility: 'public', contextId: GLOBAL_CONTEXT },
+        201,
+        { realm },
+      ],
+      [
+        'GET',
+        `/v1/spaces/${spaceId}`,
+        undefined,
+        undefined,
+        200,
+        { space: { spaceId, realmId, address: spaceAddress } },
+      ],
+    ] as const;
+    let index = 0;
+    const call: KernelCall = async (method, path, options) => {
+      const [verb, target, credential, body, status, response] = requests[index++]!;
+      expect([method, path, options?.bearer]).toEqual([verb, target, credential]);
+      expect(options?.body).toEqual(body);
+      if (path === '/v1/boards' && method === 'GET')
+        expect(options?.query).toEqual({ purpose: 'discussion', limit: '100' });
+      return { status, headers: new Headers(), body: response };
+    };
+    expect(await seedCommunityEntities(call, bearer, accountId!, workId)).toEqual({
+      conceptId,
+      boardId,
+      threadId,
+      openingPostId,
+      openingRevisionId,
+      spaceId,
+      spaceAddress,
+      realmId,
+    });
+    expect(index).toBe(requests.length);
+  },
+);
+
+test('a different anonymous Subject stops the community fixture before Board creation', async () => {
+  const id = fixtureId(2);
+  const subject = { id, type: 'skos:Concept', labels: { en: 'First-public Web Discussion' }, revision: 1 };
+  const calls: string[] = [];
+  const call: KernelCall = async (method, path) => {
+    calls.push(`${method} ${path}`);
+    return {
+      status: method === 'POST' ? 201 : 200,
+      headers: new Headers(),
+      body: { subject: method === 'POST' ? subject : { ...subject, id: fixtureId(3) } },
+    };
+  };
+  await expect(seedCommunityEntities(call, 'ordinary-owner', fixtureId(1))).rejects.toThrow('Public Board Concept');
+  expect(calls).toEqual(['POST /v1/subjects', `GET /v1/subjects/${id}`]);
 });
