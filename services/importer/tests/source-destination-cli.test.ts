@@ -329,10 +329,9 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     expect(document.status).toBe('unbound');
     expect(document.recorded).toBeNull();
 
-    dropDiagnosticRecords(dir.state);
     const tablesBefore = tableNames(dir.state);
     const columnsBefore = generationColumns(dir.state);
-    expect(columnsBefore).not.toContain('diagnostic_records');
+    expect(columnsBefore).toContain('diagnostic_records');
 
     const declared = await runImportCli([
       'destination',
@@ -395,7 +394,7 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
   }
 });
 
-test('refused declaration through the destination CLI leaves a legacy generation schema unchanged', async () => {
+test('destination declaration refuses an unsupported generation schema without changing it', async () => {
   const dir = directory();
   try {
     const session = new ImportSession(dir.state);
@@ -419,7 +418,7 @@ test('refused declaration through the destination CLI leaves a legacy generation
       '--acknowledge-unverified',
     ]);
     expect(refused.code).toBe(2);
-    expect(refused.stderr).toContain('Declaration cannot rebind it');
+    expect(refused.stderr).toContain('Importer state schema is missing column run_generations.diagnostic_records.');
     expect(generationColumns(dir.state)).toEqual(columnsBefore);
     expect(tableNames(dir.state)).toEqual(tablesBefore);
   } finally {
