@@ -549,7 +549,11 @@ async function restoreOwnerLibrary() {
     memberCount: 2,
   });
   const members = await json<{ members: { note: string | null; subjectId: string }[] }>(
-    await stack.kernel(`/v1/collections/${restoredId}/members?view=FULL&limit=100`, undefined, 'alice'),
+    await stack.kernel(
+      `/v1/collections/${restoredId}/members?view=FULL&limit=100`,
+      { headers: { 'accept-language': 'en' } },
+      'alice',
+    ),
     200,
     'owner members readback',
   );
