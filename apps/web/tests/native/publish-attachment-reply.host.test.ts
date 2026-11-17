@@ -364,10 +364,40 @@ async function publishAttachmentReply() {
   await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }));
   sequence.push('dirty-departure-stay');
 
+  const postsPath = `/v1/threads/${threadId}/posts`;
+  const replyWrites = () =>
+    stack
+      .kernelRequests()
+      .filter((request) => !request.fixtureRequest && request.method === 'POST' && request.url === postsPath);
+  await stack.syncKernelRequests();
+  const writeCount = replyWrites().length;
   await send(replyPage);
-  await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }).last());
+  try {
+    await expectVisible(
+      replyPage.locator('[data-slot="post-reading-frame"]').getByRole('img', { name: 'Reply chart' }),
+    );
+  } finally {
+    await stack.syncKernelRequests().catch(() => {
+      sequence.push('reply-observation:unavailable');
+    });
+    const writes = replyWrites().slice(writeCount);
+    sequence.push(`reply-native-status:${writes.map(({ responseStatus }) => responseStatus ?? 'pending').join(',')}`);
+  }
+  expect(
+    replyWrites()
+      .slice(writeCount)
+      .map(({ responseStatus }) => responseStatus),
+  ).toEqual([201]);
 
-  const postsResponse = await stack.kernel(`/v1/threads/${threadId}/posts`);
+  const postsResponse = await stack.kernel(postsPath);
+  if (postsResponse.status !== 200) {
+    const body = (await postsResponse
+      .clone()
+      .json()
+      .catch(() => null)) as { code?: unknown } | null;
+    const problem = typeof body?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(body.code) ? body.code : 'unknown';
+    sequence.push(`reply-readback:${postsResponse.status}:${problem}`);
+  }
   expect(postsResponse.status).toBe(200);
   const posts = (await postsResponse.json()) as { posts: { id: string; mediaIds?: string[]; body: unknown }[] };
   expect(posts.posts.some((post) => post.mediaIds?.includes(mediaId) && documentHas(post.body, 'Opening chart'))).toBe(
