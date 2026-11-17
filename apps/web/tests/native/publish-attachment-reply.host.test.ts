@@ -136,7 +136,6 @@ async function signUpMember(returnTo: string): Promise<{
     returnTo: destination.pathname + destination.search + destination.hash,
   });
   expect(journey.url).toBe(destination.href);
-  await trustAccount(stack, journey.registration.accountId);
   return { context, page: journey.continueOnPage(), ...journey.registration };
 }
 
@@ -183,6 +182,8 @@ nativeAfterAll(lifecycle, 180_000);
 async function publishAttachmentReply() {
   const author = await signUpMember(board.boardUrl);
   sequence.push(`signup-author:${author.accountId}`);
+  await trustAccount(stack, author.accountId);
+  sequence.push('trusted-author-rate');
   const authorPage = author.page;
   await authorPage.setViewportSize({ width: 390, height: 844 });
   await authorPage.emulateMedia({ colorScheme: 'light' });
@@ -280,6 +281,8 @@ async function publishAttachmentReply() {
 
   const replier = await signUpMember(authorPage.url());
   sequence.push(`signup-replier:${replier.accountId}`);
+  await trustAccount(stack, replier.accountId);
+  sequence.push('trusted-replier-rate');
   const replyPage = replier.page;
   await replyPage.setViewportSize({ width: 1280, height: 800 });
   await hydrate(replyPage);
