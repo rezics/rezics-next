@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { type CompositionDocument, type ZoneStarter } from '@rezics/composition';
 import { fromPlainText } from '@rezics/document';
 import { slug } from '@rezics/definitions/slug';
@@ -473,20 +474,44 @@ export async function takedownZone(call: KernelCall, bearer: string, id: string,
   });
 }
 
-export async function searchType(call: KernelCall, type: string, limit = 8, bearer?: string) {
-  const deadline = Date.now() + 240_000;
-  while (true) {
-    const result = await call('POST', '/v1/subjects:search', {
-      ...(bearer === undefined ? {} : { bearer }),
-      body: { filter: { type: { in: [type] } }, sort: 'id', limit },
-    });
-    if (
-      result.status !== 503 ||
-      !['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code)) ||
-      Date.now() >= deadline
-    )
-      return result;
-    await Bun.sleep(500);
+export async function searchType(
+  call: KernelCall,
+  type: string,
+  limit = 8,
+  options: { expectedId?: string; signal?: AbortSignal | undefined } = {},
+) {
+  const deadline = AbortSignal.timeout(240_000);
+  const signal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;
+  const body = { filter: { type: { in: [type] } }, sort: 'id', limit };
+  let last: KernelAnswer | undefined;
+  try {
+    for (;;) {
+      signal.throwIfAborted();
+      const result = await call('POST', '/v1/subjects:search', {
+        body,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+      });
+      signal.throwIfAborted();
+      last = result;
+      if (result.status === 200 && options.expectedId !== undefined) {
+        const { subjects, freshness } = result.body;
+        if (!Array.isArray(subjects)) throw new Error('Catalogue Search returned an invalid subjects page');
+        // Current freshness allows a short indexing lag. Wait for the actual authored identity.
+        if (
+          (freshness as Json | undefined)?.state === 'current' &&
+          subjects.some((hit) => hit?.id === options.expectedId)
+        )
+          return result;
+      } else if (result.status !== 503 || !['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code))) {
+        return result;
+      }
+      await delay(500, undefined, { signal });
+    }
+  } catch (error) {
+    options.signal?.throwIfAborted();
+    if (!deadline.aborted) throw error;
+    if (!last) throw new Error(`Catalogue Search timed out before returning a ${type} page`, { cause: error });
+    return last;
   }
 }
 
