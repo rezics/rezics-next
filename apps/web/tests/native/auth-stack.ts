@@ -1,17 +1,16 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, relative, resolve, sep } from 'node:path';
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 import { type Browser, type BrowserContext, type Page, type Response as PlaywrightResponse } from 'playwright';
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import { traceWebModuleFailure } from './web-module-failure.ts';
-import { nativeViteEnvironment } from './vite-environment.ts';
+import { createNativeAuthPageApp } from './auth-page-app.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
   type NativeProcessOwnership,
+  type NativeProcessIdentity,
   type NativeTestLifecycle,
 } from './lifecycle.ts';
 
@@ -52,6 +51,8 @@ type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
   origin: string;
+  pageAppProcess(): NativeProcessIdentity | undefined;
+  settlePageApp(): Promise<void>;
   browserMemoryObservation(): { sampledAt: number; rssBytes: number; peakRssBytes: number } | null;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
@@ -106,28 +107,6 @@ async function freePort(): Promise<number> {
   const port = server.port;
   server.stop(true);
   return port;
-}
-
-async function waitForPage(
-  origin: string,
-  child: ChildProcess,
-  getOutput: () => string,
-  lifecycle: NativeTestLifecycle,
-): Promise<void> {
-  const deadline = Date.now() + 150_000;
-  while (Date.now() < deadline) {
-    lifecycle.assertOpen('wait for Auth app startup');
-    if (child.exitCode !== null || child.signalCode !== null)
-      throw new Error(`Auth app exited during startup: ${getOutput()}`);
-    try {
-      const response = await fetch(`${origin}/login`, {
-        signal: AbortSignal.any([lifecycle.signal, AbortSignal.timeout(3000)]),
-      });
-      if (response.status === 200) return;
-    } catch {}
-    await Bun.sleep(250);
-  }
-  throw new Error(`Auth app startup timed out: ${getOutput()}`);
 }
 
 async function stopChild(owner: NativeProcessOwnership | undefined): Promise<void> {
@@ -192,21 +171,13 @@ export async function startAuthStack(
     if (options.nativeFixtureKey !== undefined) {
       const response = await nativeAuthFixtureRequest(stack, options.nativeFixtureKey, {
         command: 'pages',
-        origin: attach ? appOrigin : null,
+        origin: attach ? pageGateway!.url.origin : null,
       });
       const mounted = (await response.json()) as { issuer: string };
       if (mounted.issuer !== stack.issuerOrigin) throw new Error('Native Auth page bridge changed its issuer');
       return mounted.issuer;
     }
-    return stack.routeAuthPages(
-      attach
-        ? (request) => {
-            const source = new URL(request.url);
-            const target = new URL(source.pathname + source.search, appOrigin);
-            return fetch(new Request(target, request), { redirect: 'manual' });
-          }
-        : undefined,
-    );
+    return stack.routeAuthPages(attach ? forwardPage : undefined);
   };
   const turnstile = Bun.serve({
     hostname: '127.0.0.1',
@@ -229,25 +200,93 @@ export async function startAuthStack(
     close: () => turnstile.stop(true),
     force: () => turnstile.stop(true),
   });
-  let output = '';
-  let persistenceDirectory: string | undefined;
-  const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: authRoot,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...nativeViteEnvironment(process.env),
-      REZICS_TEST_RUNTIME: '1',
-      REZICS_AUTH_PREPARED_MESSAGES: options.preparedMessages ? '1' : undefined,
-      REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
-      AUTH_ORIGIN: stack.authIssuer,
-      TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
-      TURNSTILE_SCRIPT_URL: turnstileScriptUrl ?? `${turnstile.url.origin}/api.js`,
-    },
+  const pageApp = createNativeAuthPageApp(lifecycle, authRoot, appOrigin, {
+    ...process.env,
+    REZICS_TEST_RUNTIME: '1',
+    REZICS_AUTH_PREPARED_MESSAGES: options.preparedMessages ? '1' : undefined,
+    REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
+    AUTH_ORIGIN: stack.authIssuer,
+    TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+    TURNSTILE_SCRIPT_URL: turnstileScriptUrl ?? `${turnstile.url.origin}/api.js`,
   });
-  const childOwner = lifecycle.ownProcessGroup('native Auth Vite app', child);
-  for (const stream of [child.stdout, child.stderr])
-    stream?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)));
+  let activeJourneys = 0;
+  const pendingPageResponses = new Set<Promise<void>>();
+  let retirementRequested = false;
+  const observedContexts = new Set<BrowserContext>();
+  const canRetirePages = () =>
+    retirementRequested &&
+    activeJourneys === 0 &&
+    pendingPageResponses.size === 0 &&
+    ![...new Set([...browser!.contexts(), ...observedContexts])].some((context) =>
+      context.pages().some((page) =>
+        page.frames().some((frame) => {
+          const address = frame.url();
+          return address !== '' && new URL(address).origin === origin;
+        }),
+      ),
+    );
+  const retirePages = () => {
+    if (browser && canRetirePages()) void pageApp.retire(canRetirePages).catch(() => {});
+  };
+  const observeContext = (context: BrowserContext) => {
+    if (observedContexts.has(context)) return;
+    observedContexts.add(context);
+    const observePage = (page: Page) => {
+      page.on('framenavigated', retirePages);
+      page.on('close', retirePages);
+    };
+    context.pages().forEach(observePage);
+    context.on('page', observePage);
+    context.on('close', () => {
+      observedContexts.delete(context);
+      retirePages();
+    });
+  };
+  const forwardPage = async (request: Request) => {
+    const drained = Promise.withResolvers<void>();
+    pendingPageResponses.add(drained.promise);
+    if (request.headers.get('sec-fetch-dest') === 'document') retirementRequested = false;
+    const release = () => {
+      pendingPageResponses.delete(drained.promise);
+      drained.resolve();
+      retirePages();
+    };
+    try {
+      await pageApp.ensure();
+      const source = new URL(request.url);
+      const response = await fetch(new Request(new URL(source.pathname + source.search, appOrigin), request), {
+        redirect: 'manual',
+      });
+      if (!response.body) {
+        release();
+        return response;
+      }
+      const stream = new TransformStream();
+      void response.body
+        .pipeTo(stream.writable)
+        .catch(() => {})
+        .finally(release);
+      return new Response(stream.readable, response);
+    } catch (error) {
+      release();
+      throw error;
+    }
+  };
+  const pageGateway =
+    options.nativeFixtureKey === undefined
+      ? undefined
+      : Bun.serve({
+          hostname: '127.0.0.1',
+          port: 0,
+          idleTimeout: 120,
+          fetch: forwardPage,
+        });
+  if (pageGateway)
+    lifecycle.register({
+      label: 'native Auth page app gateway',
+      close: () => pageGateway.stop(true),
+      force: () => pageGateway.stop(true),
+    });
   const contexts = new Map<AuthPersona, Promise<BrowserContext>>();
   const allContexts = new Set<Promise<BrowserContext>>();
   let browser: Browser | undefined;
@@ -259,23 +298,7 @@ export async function startAuthStack(
   let sampling = false;
   let sampleMemory = async () => {};
   try {
-    await waitForPage(appOrigin, child, () => output, lifecycle);
-    const effectivePersistence = output.match(/\[worker-persistence\]\s+app=auth\s+effective=(\S+)/u)?.[1];
-    if (!effectivePersistence)
-      throw new Error(`Native Auth app did not report its effective Worker persistence path: ${output}`);
-    persistenceDirectory = dirname(effectivePersistence);
-    const tmpRoot = realpathSync(tmpdir());
-    const ownedRoot = realpathSync(persistenceDirectory);
-    const relativePersistence = relative(tmpRoot, ownedRoot);
-    if (
-      relativePersistence === '' ||
-      relativePersistence === '..' ||
-      relativePersistence.startsWith(`..${sep}`) ||
-      dirname(ownedRoot) !== tmpRoot ||
-      !basename(ownedRoot).startsWith('rezics-auth-worker-') ||
-      !existsSync(effectivePersistence)
-    )
-      throw new Error(`Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`);
+    await pageApp.ensure();
     lifecycle.assertOpen('route Auth pages');
     origin = await routePages(true);
     const moduleFailureTrace =
@@ -336,14 +359,17 @@ export async function startAuthStack(
     await sampleMemory();
     // The Worker already uses this issuer; page routing needs no restart.
     console.info(`Native Auth app startup: ${Math.round(performance.now() - startupStarted)}ms`);
-    const createContext = (): Promise<BrowserContext> =>
-      browser!.newContext({
+    const createContext = async (): Promise<BrowserContext> => {
+      const context = await browser!.newContext({
         viewport: { width: 1280, height: 860 },
         reducedMotion: 'reduce',
         locale: 'en',
         javaScriptEnabled: true,
         ignoreHTTPSErrors: nativeIssuer.hostname === 'auth.native.rezics.com',
       });
+      observeContext(context);
+      return context;
+    };
     const ownContext = (value: BrowserContext, owner: NativeTestLifecycle, label: string) => {
       const close = async () => {
         const closed = await settledWithin(
@@ -382,7 +408,9 @@ export async function startAuthStack(
     ): Promise<AuthJourney & { registration?: NativeSignup }> {
       assertActive(signup ? 'start native sign-up journey' : 'start native sign-in journey');
       const journeyStarted = performance.now();
+      await pageApp.ensure();
       const browserContext = options.context ?? (await context(persona));
+      observeContext(browserContext);
       assertActive('create Auth journey page');
       const page = await browserContext.newPage();
       const pageOwner = currentNativeLifecycle() ?? lifecycle;
@@ -493,6 +521,7 @@ export async function startAuthStack(
       } else {
         await fillNativeSignIn(page, email);
         assertActive('submit native Auth sign-in form');
+        await pageApp.ensure();
         if (persona !== 'suspended')
           callbackResponse = page.waitForResponse(
             (response) => {
@@ -561,6 +590,8 @@ export async function startAuthStack(
         ...(registration ? { registration } : {}),
         continueOnPage() {
           page.off('request', recordRequest);
+          retirementRequested = true;
+          retirePages();
           return page;
         },
         response,
@@ -586,6 +617,15 @@ export async function startAuthStack(
         },
       };
     }
+    const runJourney = async (persona: AuthPersona, signup: boolean, options?: NativeSignInOptions) => {
+      activeJourneys++;
+      try {
+        return await journey(persona, signup, options);
+      } finally {
+        activeJourneys--;
+        retirePages();
+      }
+    };
     const closeContexts = async (): Promise<void> => {
       const errors: unknown[] = [];
       const results = await Promise.allSettled(
@@ -604,7 +644,8 @@ export async function startAuthStack(
     const forceAuth = async (): Promise<void> => {
       clearInterval(memorySampler);
       turnstile.stop(true);
-      await Promise.allSettled([privateBrowser?.force(), childOwner.force()]);
+      await pageGateway?.stop(true);
+      await Promise.allSettled([privateBrowser?.force(), pageApp.force()]);
     };
     const stop = () =>
       (stopping ??= (async () => {
@@ -629,14 +670,10 @@ export async function startAuthStack(
           const operations: Promise<unknown>[] = [];
           if (privateBrowser) operations.push(privateBrowser.close());
           operations.push(routePages());
-          operations.push(
-            stopChild(childOwner).then(() => {
-              if (persistenceDirectory && existsSync(persistenceDirectory))
-                throw new Error(`Auth Worker left its owned persistence after shutdown: ${persistenceDirectory}`);
-            }),
-          );
+          operations.push(pageApp.stop());
           const closed = await Promise.allSettled(operations);
           for (const result of closed) if (result.status === 'rejected') errors.push(result.reason);
+          await pageGateway?.stop(true);
           turnstile.stop(true);
           if (errors.length) throw new AggregateError(errors, 'Native Auth stack cleanup failed');
         })();
@@ -657,6 +694,12 @@ export async function startAuthStack(
     });
     return {
       origin,
+      pageAppProcess: () => pageApp.process(),
+      async settlePageApp() {
+        await Promise.all(pendingPageResponses);
+        retirePages();
+        await pageApp.settled();
+      },
       browserMemoryObservation: () => browserMemory,
       context,
       async newContext(_persona) {
@@ -668,16 +711,17 @@ export async function startAuthStack(
         return value;
       },
       signIn(persona, options) {
-        return journey(persona, false, options);
+        return runJourney(persona, false, options);
       },
       async submitSignIn(page, persona) {
         assertActive('submit native Auth sign-in form');
+        await pageApp.ensure();
         const { email } = await stack.authPersona(persona);
         await fillNativeSignIn(page, email);
         await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       },
       async signUp(persona, options) {
-        const result = await journey(persona, true, options);
+        const result = await runJourney(persona, true, options);
         if (!result.registration) throw new Error('Missing native Auth sign-up receipt');
         return { ...result, registration: result.registration };
       },
@@ -692,11 +736,8 @@ export async function startAuthStack(
         2_000,
       ).catch((cleanup) => cleanupErrors.push(cleanup));
     await privateBrowser?.force().catch((cleanup) => cleanupErrors.push(cleanup));
-    await stopChild(childOwner).catch((cleanup) => cleanupErrors.push(cleanup));
-    if (persistenceDirectory && existsSync(persistenceDirectory))
-      cleanupErrors.push(
-        new Error(`Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`),
-      );
+    await pageApp.stop().catch((cleanup) => cleanupErrors.push(cleanup));
+    await pageGateway?.stop(true);
     turnstile.stop(true);
     if (cleanupErrors.length)
       throw new AggregateError([error, ...cleanupErrors], 'Native Auth startup and cleanup failed');

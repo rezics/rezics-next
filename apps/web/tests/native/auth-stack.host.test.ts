@@ -1,15 +1,35 @@
 import { afterAll, afterEach, describe, expect } from 'bun:test';
-import { startAuthStack } from './auth-stack.ts';
+import { readFileSync } from 'node:fs';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
+import { sampleNativeMemory } from './native-memory.ts';
 import { startNativeWebStack } from './stack.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import {
+  NativeTestLifecycle,
+  inspectNativeProcessGroup,
+  nativeProcessGroupIsGone,
+  nativeAfterAll,
+  nativeBeforeAll,
+  nativeTest,
+  type NativeProcessIdentity,
+} from './lifecycle.ts';
 
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
 const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
 const lifecycle = new NativeTestLifecycle('native Auth and web stack suite');
+const controlPath = resolve(import.meta.dir, '../../../../.temp/native-auth-page-lifetime/control.json');
+async function writeControl(control: Record<string, unknown>) {
+  await mkdir(dirname(controlPath), { recursive: true, mode: 0o700 });
+  await writeFile(controlPath + '.pending', JSON.stringify(control, null, 2) + '\n', { mode: 0o600 });
+  await rename(controlPath + '.pending', controlPath);
+}
 
 // Kernel creation and the first Worker compilation are suite fixtures. Reuse
 // their owned stack while each Auth app/browser gets fresh cookies and cleanup.
 nativeBeforeAll(lifecycle, 300_000, async () => {
+  await writeControl({ outcome: 'incomplete', phase: 'setup' });
+  await prepareNativeAuthMessages();
   stacks.push(await startNativeWebStack());
   // Native setup includes its own 150s Worker startup budget plus database
   // migration and SQL compilation. Browser journey deadlines remain below.
@@ -24,13 +44,35 @@ afterAll(async () => {
 }, 180_000);
 nativeAfterAll(lifecycle, 180_000);
 
+function pageAppMemory(identity: NativeProcessIdentity) {
+  const group = inspectNativeProcessGroup(identity);
+  if (group.status !== 'observed') throw new Error(group.detail);
+  const bytes = (name: string) =>
+    group.identities.reduce((total, { pid }) => {
+      const memory = readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8');
+      const value = memory.match(new RegExp(`^${name}:\\s+(\\d+)`, 'mu'))?.[1];
+      if (value === undefined) throw new Error(`Missing ${name} for native Auth page process ${pid}`);
+      return total + Number(value) * 1024;
+    }, 0);
+  return { processes: group.identities.length, pssBytes: bytes('Pss'), privateDirtyBytes: bytes('Private_Dirty') };
+}
+
+async function groupExited(identity: NativeProcessIdentity) {
+  const deadline = Date.now() + 1_500;
+  while (Date.now() < deadline) {
+    if (nativeProcessGroupIsGone(identity)) return true;
+    await Bun.sleep(25);
+  }
+  return nativeProcessGroupIsGone(identity);
+}
+
 describe('native Auth and web stack', () => {
   nativeTest(
     'serves production Auth and signs native personas into the Worker session store',
     180_000,
     async () => {
       const stack = stacks[0]!;
-      const auth = await startAuthStack(stack);
+      const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
       authStacks.push(auth);
 
       const authPage = await fetch(`${auth.origin}/login`);
@@ -42,7 +84,37 @@ describe('native Auth and web stack', () => {
       expect(discovery.issuer).toBe(auth.origin);
 
       const alice = await auth.signIn('alice');
+      const firstApp = auth.pageAppProcess()!;
+      expect(firstApp).toBeDefined();
+      const before = pageAppMemory(firstApp);
+      expect(before.processes).toBeGreaterThan(0);
+      expect(before.pssBytes).toBeGreaterThan(0);
+      const commandBefore = sampleNativeMemory([{ role: 'fixture-host', pid: process.pid }]).cgroup.command;
+      const alicePage = alice.continueOnPage();
+      await auth.settlePageApp();
+      expect(await groupExited(firstApp)).toBe(true);
+      expect(auth.pageAppProcess()).toBeUndefined();
+      expect(alicePage.isClosed()).toBe(false);
+      const after = pageAppMemory(firstApp);
+      const commandAfter = sampleNativeMemory([{ role: 'fixture-host', pid: process.pid }]).cgroup.command;
+      expect(after).toEqual({ processes: 0, pssBytes: 0, privateDirtyBytes: 0 });
+      const idleSession = await alice.context.request.get(`${auth.origin}/session`);
+      expect(idleSession.status()).toBe(200);
+      expect((await idleSession.json()).account_id).toBe((await stack.authPersona('alice')).accountId);
+      await writeControl({ outcome: 'incomplete', phase: 'alice-retired', before, after, commandBefore, commandAfter });
+      const resumedPage = await fetch(`${auth.origin}/login`, { headers: { accept: 'text/html' } });
+      expect(resumedPage.status).toBe(200);
+      expect(await resumedPage.text()).toContain('Sign in');
+      expect(auth.pageAppProcess()?.pid).not.toBe(firstApp.pid);
+      await auth.settlePageApp();
+      expect(auth.pageAppProcess()).toBeUndefined();
       const bob = await auth.signIn('bob');
+      const secondApp = auth.pageAppProcess()!;
+      const bobPage = bob.continueOnPage();
+      await auth.settlePageApp();
+      expect(await groupExited(secondApp)).toBe(true);
+      expect(alicePage.isClosed()).toBe(false);
+      expect(bobPage.isClosed()).toBe(false);
       expect(alice.visitedUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
       expect(bob.visitedUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
       expect(alice.url).toStartWith(stack.web);
@@ -66,6 +138,22 @@ describe('native Auth and web stack', () => {
       expect(await (await auth.context('bob')).cookies(stack.web)).toEqual(
         expect.arrayContaining([expect.objectContaining({ name: '__Host-rezics_session' })]),
       );
+      const control = {
+        outcome: 'passed',
+        before,
+        after,
+        commandBefore,
+        commandAfter,
+        retainedPages: [alicePage, bobPage].map((page) => ({
+          closed: page.isClosed(),
+          origin: new URL(page.url()).origin,
+        })),
+        issuer: discovery.issuer,
+        aliceActor: (await stack.authPersona('alice')).accountId,
+        bobActor: (await stack.authPersona('bob')).accountId,
+      };
+      await writeControl(control);
+      console.info('native-auth-page-lifetime', JSON.stringify(control));
     },
     lifecycle,
   );
