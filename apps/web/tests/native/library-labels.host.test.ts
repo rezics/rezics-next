@@ -251,8 +251,10 @@ nativeTest(
   'the native served subject slot adds, removes and restores a label with JavaScript disabled',
   300_000,
   async () => {
+    const { subjectHref } = await import('../../src/subject/subject-href.ts');
+    const subjectPath = subjectHref({ id: subject.id, label: subject.title }, 'en').href;
     const signInContext = await auth.newContext('alice');
-    await auth.signIn('alice', { context: signInContext });
+    await auth.signIn('alice', { context: signInContext, returnTo: subjectPath });
     const storageState = await signInContext.storageState();
     await signInContext.close();
     const owner = currentNativeLifecycle();
@@ -274,7 +276,7 @@ nativeTest(
       });
       const page = await context.newPage();
       page.setDefaultTimeout(30_000);
-      const response = await page.goto(`${stack.web}/en/subjects/${subject.id}`, {
+      const response = await page.goto(`${stack.web}${subjectPath}`, {
         waitUntil: 'domcontentloaded',
       });
       expect(response?.status()).toBe(200);
