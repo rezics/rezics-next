@@ -116,7 +116,9 @@ test('the story boundary negotiates mixed and explicit legacy responses without 
   expect(parseDiscoveryPage(legacyResponse.data)).toBeUndefined();
   const legacyOutcome = await readSearchOutcome(legacy, (body) => client.subjects.$search.post(body));
   expect(legacyOutcome.recovery.status).toBe('ready');
-  expect(legacyOutcome.result?.subjects).toEqual(typedSearch.subjects);
+  expect(legacyOutcome.result?.subjects).toEqual(
+    typedSearch.subjects.map((hit) => ({ matchEvidence: { state: 'unavailable' }, ...hit })),
+  );
   expect(legacyOutcome.discovery).toBeUndefined();
   expect((await readSearchOutcome(mixed, async () => legacyResponse)).recovery.status).toBe('unavailable');
   const mixedResponse = await client.subjects.$search.post(mixed);
