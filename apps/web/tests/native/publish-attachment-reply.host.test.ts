@@ -210,12 +210,15 @@ async function publishAttachmentReply() {
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
   await insertImage(authorPage, 'opening.png', 'Opening chart', originalImage, 'image/png');
-  expect((await failedReserve).status()).toBeGreaterThanOrEqual(500);
+  const failedReservation = await failedReserve;
+  expect(failedReservation.status()).toBeGreaterThanOrEqual(500);
+  const originalReservation = failedReservation.request();
+  const originalReservationKey = await originalReservation.headerValue('idempotency-key');
+  expect(Boolean(originalReservationKey)).toBe(true);
   sequence.push('author-reserve-503');
   const failedRow = authorPage.getByRole('group').filter({ hasText: 'Opening chart' });
   await expectVisible(failedRow.getByRole('status'));
   await expectVisible(failedRow.getByRole('button', { name: 'Retry upload', exact: true }));
-  expect(await failedRow.innerText()).toMatch(/original reservation/i);
 
   const reserved = authorPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
@@ -226,6 +229,8 @@ async function publishAttachmentReply() {
   await failedRow.getByRole('button', { name: 'Retry upload', exact: true }).click();
   const reservation = await reserved;
   expect(reservation.status()).toBe(201);
+  expect((await reservation.request().headerValue('idempotency-key')) === originalReservationKey).toBe(true);
+  expect(reservation.request().postData() === originalReservation.postData()).toBe(true);
   const mediaId = ((await reservation.json()) as { media: NativeAttachment }).media.id;
   expect((await uploaded).status()).toBe(200);
   await waitForAvailableMedia(mediaId, authorPage);
@@ -300,7 +305,10 @@ async function publishAttachmentReply() {
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
   await insertImage(replyPage, 'chart.png', 'Reply chart', png, 'image/png');
-  expect((await refusedReserve).status()).toBe(415);
+  const refusedReservation = await refusedReserve;
+  expect(refusedReservation.status()).toBe(415);
+  const refusedReservationKey = await refusedReservation.request().headerValue('idempotency-key');
+  expect(Boolean(refusedReservationKey)).toBe(true);
   const replaceRow = replyPage.getByRole('group').filter({ hasText: 'Reply chart' });
   await expectVisible(replaceRow.getByText('not accepted', { exact: false }));
   await expectVisible(replaceRow.getByRole('button', { name: 'Replace image', exact: true }));
@@ -318,6 +326,8 @@ async function publishAttachmentReply() {
   });
   const replyReservation = await replyReserved;
   expect(replyReservation.status()).toBe(201);
+  const replacementReservationKey = await replyReservation.request().headerValue('idempotency-key');
+  expect(Boolean(replacementReservationKey) && replacementReservationKey !== refusedReservationKey).toBe(true);
   const replyMediaId = ((await replyReservation.json()) as { media: NativeAttachment }).media.id;
   expect((await replyUploaded).status()).toBe(200);
   await waitForAvailableMedia(replyMediaId, replyPage);
