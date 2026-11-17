@@ -10,6 +10,7 @@ import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 let stack: NativeWebStack;
+let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
 const evidence = resolve(import.meta.dir, '../../../../.temp/private-library-archive-restore');
 const provenance = resolve(evidence, 'provenance.json');
@@ -37,7 +38,9 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
   await prepareNativeWebSearch('library-archive');
-  stack = await startNativeWebStack();
+  stack = await startNativeWebStack({ observeBookSearchPreparation: true });
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
+  archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
   const generation = await waitForSubjectPublication(stack, signal);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-owner-library', generation });
@@ -118,9 +121,8 @@ async function openGates(stack: NativeWebStack) {
   }
 }
 
-async function prepareOwnerLibrary(stack: NativeWebStack) {
+async function prepareArchiveSubject(stack: NativeWebStack) {
   await openGates(stack);
-  const alice = await stack.authPersona('alice');
   const marker = crypto.randomUUID().slice(0, 8);
   const title = `Native archive work ${marker}`;
   const collectionTitle = `Portable archive ${marker}`;
@@ -134,6 +136,12 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
     'editor',
   );
   const { subject } = await json<{ subject: { id: string } }>(createdSubject, 201, 'create subject');
+  return { subject, title, collectionTitle };
+}
+
+async function prepareOwnerLibrary(stack: NativeWebStack) {
+  const { subject, title, collectionTitle } = archiveSubject;
+  const alice = await stack.authPersona('alice');
   const active = await json<{ digest: string }>(await stack.kernel('/v1/definitions/active'), 200, 'active definition');
   const released = await json<{
     release: {
