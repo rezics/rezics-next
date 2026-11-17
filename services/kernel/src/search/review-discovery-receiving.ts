@@ -324,15 +324,26 @@ export function createReviewDiscoveryReceiving(options: {
           deadline,
         ),
       );
-      const retained = await connection(pool, deadline, (client) =>
-        client.query(
-          `UPDATE search.review_discovery_receiving SET through=$8,stage=$9::jsonb WHERE ${where}
-           AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$10::bigint
-           AND (through IS NULL OR through=$8::bigint)`,
-          [...values, claim, page.through.toString(), encode({ page }), claimed.acknowledged],
-        ),
-      );
-      if (retained.rowCount !== 1) throw new Error('Review receiving claim was superseded or expired');
+      const unchanged =
+        claimed.through === null &&
+        page.next === null &&
+        page.changes.length === 0 &&
+        page.after === BigInt(claimed.acknowledged) &&
+        page.through === page.after;
+      const retainedThrough = unchanged ? null : page.through.toString();
+      // An unchanged journal cut has no cursor or actions to stage. Acknowledge it under the same target
+      // custody and live-claim CAS, including any wakeup recorded since the claim.
+      if (!unchanged) {
+        const retained = await connection(pool, deadline, (client) =>
+          client.query(
+            `UPDATE search.review_discovery_receiving SET through=$8,stage=$9::jsonb WHERE ${where}
+             AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$10::bigint
+             AND (through IS NULL OR through=$8::bigint)`,
+            [...values, claim, page.through.toString(), encode({ page }), claimed.acknowledged],
+          ),
+        );
+        if (retained.rowCount !== 1) throw new Error('Review receiving claim was superseded or expired');
+      }
       const ids = [...new Set(page.changes.map((change) => change.id))];
       const refreshed = ids.length
         ? await within(deadline, () => refreshReviewDiscoveryChanges(source, page))
@@ -340,21 +351,23 @@ export function createReviewDiscoveryReceiving(options: {
       const actions = refreshed ? await projection.prepareReviews(refreshed, ids, projectionContext) : [];
       let publishing: Promise<void> | undefined;
       const apply = async (client: PoolClient, index: string) => {
-        const admitted = await client.query(
-          `UPDATE search.review_discovery_receiving SET stage=$8::jsonb WHERE ${where}
-           AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$9::bigint AND through=$10::bigint
-           AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
-          [
-            ...values,
-            claim,
-            encode({ page, actions, nativePosition: refreshed?.nativePosition ?? null }),
-            claimed.acknowledged,
-            page.through.toString(),
-            refreshed?.nativePosition.toString() ?? null,
-          ],
-        );
-        if (admitted.rowCount !== 1)
-          throw new Error('Review receiving claim or native observation is no longer current');
+        if (!unchanged) {
+          const admitted = await client.query(
+            `UPDATE search.review_discovery_receiving SET stage=$8::jsonb WHERE ${where}
+             AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$9::bigint AND through=$10::bigint
+             AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
+            [
+              ...values,
+              claim,
+              encode({ page, actions, nativePosition: refreshed?.nativePosition ?? null }),
+              claimed.acknowledged,
+              page.through.toString(),
+              refreshed?.nativePosition.toString() ?? null,
+            ],
+          );
+          if (admitted.rowCount !== 1)
+            throw new Error('Review receiving claim or native observation is no longer current');
+        }
         await projection.applyReviews(actions, {
           client,
           index,
@@ -370,7 +383,7 @@ export function createReviewDiscoveryReceiving(options: {
                  pending=($9::bigint IS NOT NULL OR requested>$8::bigint),
                  status=CASE WHEN $9::bigint IS NOT NULL OR requested>$8::bigint THEN 'preparing' ELSE 'ready' END,
                  claim=NULL,claim_until=NULL WHERE ${where} AND claim=$7 AND claim_until>clock_timestamp()
-                 AND acknowledged=$12::bigint AND through=$10::bigint
+                 AND acknowledged=$12::bigint AND through IS NOT DISTINCT FROM $13::bigint
                  AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
               [
                 ...values,
@@ -380,6 +393,7 @@ export function createReviewDiscoveryReceiving(options: {
                 page.through.toString(),
                 refreshed?.nativePosition.toString() ?? null,
                 claimed.acknowledged,
+                retainedThrough,
               ],
             );
             if (result.rowCount !== 1) throw new Error('Review receiving acknowledgement lost its claim');
@@ -463,6 +477,7 @@ export function createReviewDiscoveryReceiving(options: {
   return {
     step,
     next,
-    status: (home: number, context?: ReviewReceivingContext) => readReviewDiscoveryReceiving(pool, target, home, context),
+    status: (home: number, context?: ReviewReceivingContext) =>
+      readReviewDiscoveryReceiving(pool, target, home, context),
   };
 }
