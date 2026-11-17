@@ -50,8 +50,7 @@ beforeAll(async () => {
     manifest = page.manifest ?? manifest;
     cursor = page.next;
   }
-  expect(manifest).not.toBeNull();
-  expect(manifest!.version).toBe(4);
+  expect(manifest).toMatchObject({ version: 1, coverage: 'private-library-owner-facts-v1' });
   artifact = { manifest: manifest!, records };
 }, 120_000);
 afterAll(async () => {
@@ -101,7 +100,7 @@ function receiver(owner: Identity, loseAck = false) {
   const journey = new ArchiveEntryRecoveryJourney(port, () => binding, Date.now() + 300_000);
   return { journey, port, calls };
 }
-const file = () => new File([JSON.stringify(artifact, null, 2)], 'completed-v4.json', { type: 'application/json' });
+const file = () => new File([JSON.stringify(artifact, null, 2)], 'completed-v1.json', { type: 'application/json' });
 
 test('Native producer file passes mounted receiving selection, preserved Entry, label creation, assignment and current reads', async () => {
   const owner = await f.identity(scopes);
