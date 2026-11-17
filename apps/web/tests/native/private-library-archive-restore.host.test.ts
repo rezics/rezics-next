@@ -879,14 +879,18 @@ async function restoreOwnerLibrary() {
     .getByRole('option', { name: await message('en', 'library_archive_entry_create_label'), exact: true })
     .click();
   await labelForm.locator(labelSelect).click();
-  await page.getByRole('button', { name: 'Review selected changes', exact: true }).click();
+  const steps = page.getByRole('navigation', { name: await message('en', 'library_archive_steps'), exact: true });
+  await steps
+    .getByRole('button', { name: `3. ${await message('en', 'library_archive_review_step')}`, exact: true })
+    .click();
+  await page.getByRole('button', { name: await message('en', 'library_archive_entry_review'), exact: true }).click();
   await page
     .getByRole('checkbox', {
       name: await message('en', 'library_archive_entry_confirm'),
       exact: true,
     })
     .check();
-  await page.getByRole('button', { name: 'Apply confirmed changes', exact: true }).click();
+  await page.getByRole('button', { name: await message('en', 'library_archive_entry_apply'), exact: true }).click();
   const results = page.getByRole('region', { name: await message('en', 'library_archive_results_step'), exact: true });
   const labelResult = results
     .getByRole('article')
