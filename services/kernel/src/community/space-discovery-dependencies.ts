@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { PARTITIONS } from '../route/route.ts';
@@ -40,6 +40,21 @@ export type SpaceDiscoveryDependencyReadiness =
       capabilities: DependencyCapabilities<'connected'>;
     }>;
 
+type PartitionCoverage = {
+  pending_install: string;
+  install_cut: string | null;
+  tuple_generation: string | null;
+  tuple_cut: string | null;
+  required: string;
+  witnessed: string;
+  pending: string;
+};
+
+const coverageBySession = new WeakMap<
+  PoolClient,
+  { snapshot_floor: string; storage: string; coverage: PartitionCoverage }
+>();
+
 /** A ready result is issued only for an explicit source census plus a current
  * exact witness for every retained Space. Empty pages and empty inverse ranges
  * never supply either proof. Generation/cut are opaque equality witnesses over
@@ -47,42 +62,60 @@ export type SpaceDiscoveryDependencyReadiness =
  */
 export async function spaceDiscoveryDependencyReadiness(pool: Pool): Promise<SpaceDiscoveryDependencyReadiness> {
   const observation = await withConnection(pool, async (client) => {
+    const cached = coverageBySession.get(client);
+    // The session's next statement has a fresh primary snapshot. Any commit
+    // newly visible since the full read has an XID at or above its snapshot xmin
+    // (including a writer already in flight). Only reuse below that boundary.
     const row = (
       await client.query<{
-        pending_install: string;
-        install_cut: string | null;
-        tuple_generation: string | null;
-        tuple_cut: string | null;
-        required: string;
-        witnessed: string;
-        pending: string;
+        snapshot_floor: string;
+        storage: string;
+        coverage: PartitionCoverage | null;
         producer_generation: string | null;
         producer_cut: string | null;
         producer_complete: boolean | null;
       }>(
-        `WITH installation AS MATERIALIZED (
-           SELECT COUNT(*) FILTER (WHERE NOT complete)::text AS pending_install,
-                  md5(string_agg(install_witness_segment,'|' ORDER BY partition_no)) AS install_cut
-           FROM community.space_discovery_dependency_install
-         ), tuple_coverage AS MATERIALIZED (
-           SELECT md5(string_agg(generation_witness_segment,'|' ORDER BY partition_no)) AS tuple_generation,
-                  md5(string_agg(cut_witness_segment,'|' ORDER BY partition_no)) AS tuple_cut,
-                  COALESCE(SUM(required),0)::text AS required,
-                  COALESCE(SUM(witnessed),0)::text AS witnessed,
-                  COALESCE(SUM(pending),0)::text AS pending
-           FROM community.space_discovery_tuple_capability
-         ), producer AS MATERIALIZED (
-           SELECT generation AS producer_generation,cut AS producer_cut,complete AS producer_complete
-           FROM community.space_discovery_tuple_producer WHERE singleton=true
+        `WITH native AS MATERIALIZED (
+           SELECT pg_current_snapshot() AS snapshot, ARRAY[
+             pg_relation_filenode('community.space_discovery_dependency_install'),
+             pg_relation_filenode('community.space_discovery_tuple_capability')
+           ]::text AS storage
          )
-         SELECT installation.pending_install,installation.install_cut,
-                tuple_coverage.tuple_generation,tuple_coverage.tuple_cut,
-                tuple_coverage.required,tuple_coverage.witnessed,tuple_coverage.pending,
-                producer.producer_generation,producer.producer_cut,producer.producer_complete
-         FROM installation CROSS JOIN tuple_coverage LEFT JOIN producer ON true`,
+         SELECT pg_snapshot_xmin(native.snapshot)::text AS snapshot_floor,native.storage,
+                producer.generation AS producer_generation,producer.cut AS producer_cut,
+                producer.complete AS producer_complete,
+                CASE WHEN $2::text=native.storage AND (
+                  SELECT transaction_id FROM community.space_discovery_readiness_change
+                  WHERE transaction_id >= $1::xid8 AND transaction_id < pg_snapshot_xmax(native.snapshot)
+                  ORDER BY transaction_id DESC LIMIT 1
+                ) IS NULL THEN NULL ELSE (
+                  WITH installation AS MATERIALIZED (
+                    SELECT COUNT(*) FILTER (WHERE NOT complete)::text AS pending_install,
+                           md5(string_agg(install_witness_segment,'|' ORDER BY partition_no)) AS install_cut
+                    FROM community.space_discovery_dependency_install
+                  ), tuple_coverage AS MATERIALIZED (
+                    SELECT md5(string_agg(generation_witness_segment,'|' ORDER BY partition_no)) AS tuple_generation,
+                           md5(string_agg(cut_witness_segment,'|' ORDER BY partition_no)) AS tuple_cut,
+                           COALESCE(SUM(required),0)::text AS required,
+                           COALESCE(SUM(witnessed),0)::text AS witnessed,
+                           COALESCE(SUM(pending),0)::text AS pending
+                    FROM community.space_discovery_tuple_capability
+                  )
+                  SELECT to_jsonb(installation)||to_jsonb(tuple_coverage)
+                  FROM installation CROSS JOIN tuple_coverage
+                ) END AS coverage
+         FROM native LEFT JOIN community.space_discovery_tuple_producer producer ON producer.singleton=true`,
+        [cached?.snapshot_floor ?? null, cached?.storage ?? null],
       )
     ).rows[0]!;
-    return row;
+    if (row.coverage) {
+      coverageBySession.set(client, {
+        snapshot_floor: row.snapshot_floor,
+        storage: row.storage,
+        coverage: row.coverage,
+      });
+    }
+    return { ...row, ...(row.coverage ?? cached!.coverage) };
   });
   const generation = createHash('sha256')
     .update(

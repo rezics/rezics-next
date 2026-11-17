@@ -571,6 +571,27 @@ $$;
 
 
 --
+-- Name: mark_space_discovery_readiness_change(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.mark_space_discovery_readiness_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE p integer;
+BEGIN
+  p := CASE TG_OP
+    WHEN 'TRUNCATE' THEN -1 WHEN 'DELETE' THEN OLD.partition_no ELSE NEW.partition_no
+  END;
+  INSERT INTO community.space_discovery_readiness_change AS change(authority,partition_no,transaction_id)
+  VALUES(TG_ARGV[0]::smallint,p,pg_current_xact_id())
+  ON CONFLICT (authority,partition_no) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
+    WHERE change.transaction_id<>EXCLUDED.transaction_id;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: realm_presentation_allowed(jsonb); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -1611,6 +1632,19 @@ CREATE TABLE community.space_discovery_population (
 
 
 --
+-- Name: space_discovery_readiness_change; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_readiness_change (
+    authority smallint NOT NULL,
+    partition_no integer NOT NULL,
+    transaction_id xid8 NOT NULL,
+    CONSTRAINT space_discovery_readiness_change_authority_check CHECK ((authority = ANY (ARRAY[0, 1]))),
+    CONSTRAINT space_discovery_readiness_change_partition_no_check CHECK (((partition_no >= '-1'::integer) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: space_discovery_tuple_capability; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -2148,6 +2182,14 @@ ALTER TABLE ONLY community.space_discovery_population
 
 
 --
+-- Name: space_discovery_readiness_change space_discovery_readiness_change_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_readiness_change
+    ADD CONSTRAINT space_discovery_readiness_change_pkey PRIMARY KEY (authority, partition_no);
+
+
+--
 -- Name: space_discovery_tuple_capability space_discovery_tuple_capability_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -2372,6 +2414,13 @@ CREATE UNIQUE INDEX space_discovery_dependency_page ON community.space_discovery
 --
 
 CREATE INDEX space_discovery_frontier_pending ON community.space_discovery_frontier USING btree (partition_no, obligation) WHERE (state = ANY (ARRAY['preparing'::text, 'draining'::text]));
+
+
+--
+-- Name: space_discovery_readiness_change_transaction; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_readiness_change_transaction ON community.space_discovery_readiness_change USING btree (transaction_id);
 
 
 --
@@ -2620,10 +2669,46 @@ CREATE CONSTRAINT TRIGGER realm_space_discovery_dependencies AFTER INSERT OR DEL
 
 
 --
+-- Name: space_discovery_tuple_capability space_discovery_capability_readiness_change; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_capability_readiness_change AFTER INSERT OR DELETE OR UPDATE ON community.space_discovery_tuple_capability FOR EACH ROW EXECUTE FUNCTION community.mark_space_discovery_readiness_change('1');
+
+ALTER TABLE community.space_discovery_tuple_capability ENABLE ALWAYS TRIGGER space_discovery_capability_readiness_change;
+
+
+--
+-- Name: space_discovery_tuple_capability space_discovery_capability_readiness_truncate; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_capability_readiness_truncate AFTER TRUNCATE ON community.space_discovery_tuple_capability FOR EACH STATEMENT EXECUTE FUNCTION community.mark_space_discovery_readiness_change('1');
+
+ALTER TABLE community.space_discovery_tuple_capability ENABLE ALWAYS TRIGGER space_discovery_capability_readiness_truncate;
+
+
+--
 -- Name: space space_discovery_dependencies; Type: TRIGGER; Schema: community; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER space_discovery_dependencies AFTER INSERT OR UPDATE ON community.space DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION community.change_space_discovery_dependencies();
+
+
+--
+-- Name: space_discovery_dependency_install space_discovery_install_readiness_change; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_install_readiness_change AFTER INSERT OR DELETE OR UPDATE ON community.space_discovery_dependency_install FOR EACH ROW EXECUTE FUNCTION community.mark_space_discovery_readiness_change('0');
+
+ALTER TABLE community.space_discovery_dependency_install ENABLE ALWAYS TRIGGER space_discovery_install_readiness_change;
+
+
+--
+-- Name: space_discovery_dependency_install space_discovery_install_readiness_truncate; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_install_readiness_truncate AFTER TRUNCATE ON community.space_discovery_dependency_install FOR EACH STATEMENT EXECUTE FUNCTION community.mark_space_discovery_readiness_change('0');
+
+ALTER TABLE community.space_discovery_dependency_install ENABLE ALWAYS TRIGGER space_discovery_install_readiness_truncate;
 
 
 --
