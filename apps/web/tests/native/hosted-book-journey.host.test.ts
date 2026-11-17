@@ -904,7 +904,12 @@ nativeTest(
               state: 'visible',
             });
             await versions.getByText(oneText, { exact: true }).waitFor({ state: 'visible' });
-            expect(await original.innerText()).toContain(seed!.chapterOne.revisionId);
+            for (const revision of [seed!.chapterOne, chapterOne!]) {
+              const row = versions.locator('li').filter({ hasText: revision.revisionId });
+              await row.getByText('Exact document version', { exact: true }).click();
+              await row.getByText(revision.revisionId, { exact: true }).waitFor({ state: 'visible' });
+              await row.getByText(revision.sha256, { exact: true }).waitFor({ state: 'visible' });
+            }
             return {
               value: true,
               observation:
@@ -1226,10 +1231,9 @@ nativeTest(
               revisionId: chapterOne!.revisionId,
               sha256: chapterOne!.sha256,
             });
-            await page.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
-            const prepareLink = page
-              .getByRole('region', { name: 'Publication', exact: true })
-              .getByRole('link', { name: 'Prepare the whole Book', exact: true });
+            const preparation = page.getByRole('region', { name: 'Prepare and publish', exact: true });
+            await preparation.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+            const prepareLink = preparation.getByRole('link', { name: 'Prepare the whole Book', exact: true });
             const prepareHref = await prepareLink.getAttribute('href');
             if (!prepareHref) throw new Error('Book Studio did not expose the mounted preparation route');
             await prepareLink.click();
