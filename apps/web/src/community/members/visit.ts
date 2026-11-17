@@ -1,5 +1,6 @@
 import type {
   MemberAddress,
+  MemberAdditionIntent,
   MemberPage,
   MemberPageRead,
   MemberRow,
@@ -24,6 +25,7 @@ type Selection = {
   read: MemberSelectionRead | { kind: 'loading' };
   /** Kept only while the same exact selection is refreshing its explicit status. */
   previous?: Extract<MemberSelectionRead, { kind: 'ready' }>;
+  statusIntent?: MemberAdditionIntent;
 };
 
 export type MembersSnapshot = {
@@ -307,7 +309,7 @@ export class RealmMembersVisit {
 
   private async readSelected(
     address: MemberSelectionAddress,
-    options: { allowEpisodeChange?: boolean } = {},
+    options: { allowEpisodeChange?: boolean; statusIntent?: MemberAdditionIntent } = {},
   ): Promise<MemberSelectionRead | null> {
     if (!this.admitted() || this.value.read.kind !== 'ready') return null;
     const connection = this.connection;
@@ -324,9 +326,19 @@ export class RealmMembersVisit {
     ) {
       previousRead = previous.read.kind === 'ready' ? previous.read : previous.previous;
     }
+    const enteredAbsence =
+      address.membershipInterval === undefined &&
+      previousRead?.membership === 'none' &&
+      previousRead.membershipInterval === null;
+    const statusIntent = enteredAbsence ? options.statusIntent : undefined;
     this.value = {
       ...this.value,
-      selection: { address, read: { kind: 'loading' }, ...(previousRead ? { previous: previousRead } : {}) },
+      selection: {
+        address,
+        read: { kind: 'loading' },
+        ...(previousRead ? { previous: previousRead } : {}),
+        ...(statusIntent ? { statusIntent } : {}),
+      },
     };
     this.emit();
     const read = await this.source.readSelected({ ...address });
@@ -350,8 +362,8 @@ export class RealmMembersVisit {
         !read.membershipEpisode ||
         (address.membershipInterval !== undefined && read.membershipEpisode !== address.membershipInterval) ||
         (previousRead !== undefined &&
-          !options.allowEpisodeChange &&
-          read.membershipEpisode !== previousRead.membershipEpisode) ||
+          read.membershipEpisode !== previousRead.membershipEpisode &&
+          !(enteredAbsence && (options.allowEpisodeChange || statusIntent) && read.membership === 'current')) ||
         (read.membership === 'current' &&
           (!read.membershipInterval || read.membershipEpisode !== read.membershipInterval)) ||
         (read.membership === 'none' && read.membershipInterval !== null))
@@ -366,11 +378,16 @@ export class RealmMembersVisit {
     } else {
       if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference))
         currentRead = { kind: 'unavailable' };
-      const retained =
-        previousRead && (currentRead.kind === 'failed' || currentRead.kind === 'unavailable')
-          ? { previous: previousRead }
-          : {};
-      this.value = { ...this.value, selection: { address, read: currentRead, ...retained } };
+      const transient = read.kind === 'failed' || read.kind === 'unavailable';
+      this.value = {
+        ...this.value,
+        selection: {
+          address,
+          read: currentRead,
+          ...(transient && previousRead ? { previous: previousRead } : {}),
+          ...(transient && statusIntent ? { statusIntent } : {}),
+        },
+      };
     }
     this.emit();
     return currentRead;
@@ -379,15 +396,27 @@ export class RealmMembersVisit {
   retrySelected = async () => {
     const selection = this.value.selection;
     if (!selection || (selection.read.kind !== 'failed' && selection.read.kind !== 'unavailable')) return;
-    await this.readSelected(selection.address);
+    await this.readSelected(selection.address, selection.statusIntent ? { statusIntent: selection.statusIntent } : {});
   };
 
   /** Explicit status readback updates the exact selection without advancing the roster cursor. */
-  refreshSelected = async () => {
+  refreshSelected = async (intent?: MemberAdditionIntent) => {
     const selection = this.value.selection;
     if (!selection || selection.read.kind !== 'ready') return null;
+    if (
+      intent &&
+      (selection.address.realmId !== intent.realmId ||
+        selection.address.accountId !== intent.accountId ||
+        selection.address.authority !== intent.authority ||
+        selection.address.membershipInterval !== undefined ||
+        selection.read.membership !== 'none' ||
+        intent.membershipInterval !== null ||
+        selection.read.membershipInterval !== intent.membershipInterval ||
+        selection.read.membershipEpisode !== intent.membershipEpisode)
+    )
+      return null;
     // Explicit accepted-work readback may replace a selected absence with its new current episode.
-    return this.readSelected(selection.address, { allowEpisodeChange: true });
+    return this.readSelected(selection.address, intent ? { statusIntent: intent } : { allowEpisodeChange: true });
   };
 
   closeSelection = () => {

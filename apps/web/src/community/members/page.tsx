@@ -272,8 +272,8 @@ export function RealmMembersPage({
               </Button>
             </div>
           </header>
-          {selected.kind === 'ready' ? (
-            <div className="min-w-0 space-y-5">
+          <div className="min-w-0 space-y-5">
+            {selected.kind === 'ready' ? (
               <ManagementReferences>
                 <ManagementField label={m.realm_bans_details_account()}>
                   <ManagementReference>{selected.identity.accountId}</ManagementReference>
@@ -282,12 +282,29 @@ export function RealmMembersPage({
                   <ManagementReference>{realmId}</ManagementReference>
                 </ManagementField>
               </ManagementReferences>
+            ) : (
+              <ManagementNotice>
+                {selected.kind === 'loading'
+                  ? m.realm_members_loading()
+                  : selected.kind === 'concealed'
+                    ? m.realm_members_concealed()
+                    : selected.kind === 'denied'
+                      ? m.realm_members_denied()
+                      : selected.kind === 'changed'
+                        ? m.realm_members_changed()
+                        : selected.kind === 'failed'
+                          ? m.realm_members_selected_failed()
+                          : m.realm_members_selected_unavailable()}
+              </ManagementNotice>
+            )}
+            {selected.kind === 'ready' || selection.statusIntent ? (
               <div className="min-w-0 space-y-4">
                 {actionableSelected && read.kind === 'ready' ? (
                   <MemberAddition
                     key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${actionableSelected.membershipEpisode}`}
                     realmLabel={read.page.realm.label}
                     selected={actionableSelected}
+                    disclosed={selected.kind === 'ready'}
                     address={selection.address}
                     current={() => selected?.kind === 'ready' && selectedMember?.current() === true}
                     sameSelection={() => {
@@ -318,22 +335,8 @@ export function RealmMembersPage({
                   </SelectedRealmMemberContext.Provider>
                 ) : null}
               </div>
-            </div>
-          ) : (
-            <ManagementNotice>
-              {selected.kind === 'loading'
-                ? m.realm_members_loading()
-                : selected.kind === 'concealed'
-                  ? m.realm_members_concealed()
-                  : selected.kind === 'denied'
-                    ? m.realm_members_denied()
-                    : selected.kind === 'changed'
-                      ? m.realm_members_changed()
-                      : selected.kind === 'failed'
-                        ? m.realm_members_selected_failed()
-                        : m.realm_members_selected_unavailable()}
-            </ManagementNotice>
-          )}
+            ) : null}
+          </div>
         </section>
       ) : read.kind === 'ready' ? (
         <section aria-labelledby={id} className="space-y-5">
