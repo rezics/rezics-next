@@ -1,7 +1,8 @@
 import { cookie, SESSION_COOKIE } from './cookies.ts';
 
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
-const formLimit = 4 * 1024;
+/** Allow the sealed Website credential plus the other single-entry Remove and Undo fields. */
+export const libraryEntryFormLimit = 32 * 1024;
 
 export function carriesSession(request: Request): boolean {
   return cookie(request, SESSION_COOKIE) !== undefined;
@@ -91,6 +92,7 @@ export async function csrfTokenFromRequest(request: Request): Promise<string | n
   if (!libraryForm && !settingsForm && !subjectForm) return null;
   if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/x-www-form-urlencoded')
     return null;
+  const formLimit = pathname === '/library/entry' ? libraryEntryFormLimit : 4 * 1024;
   const length = request.headers.get('content-length');
   if (length !== null && (!/^\d+$/.test(length) || Number(length) > formLimit)) return null;
   if (!request.body) return null;
