@@ -35,6 +35,7 @@ import type { WorkClient } from '../../../../services/kernel/src/work/client.ts'
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 import type { NativeArchivePreview, NativeArchiveStatus } from '../../src/library/archive-entry-recovery/native.ts';
+import { libraryEntryStateWrite } from '../../src/library/shelf-params.ts';
 import { observeArchiveProgressResponse, type ArchiveProgressResponse } from './archive-progress-observation.ts';
 import { archiveLabelIdentity, type ArchiveLabelIdentity } from './archive-label-observation.ts';
 
@@ -42,6 +43,16 @@ import { archiveLabelIdentity, type ArchiveLabelIdentity } from './archive-label
 const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
 
 export type NativeCredentials = { authorization: string; cookie?: string };
+type LibraryStateRevision = { state: string; revision: number };
+
+function libraryStateRevision(value: unknown): LibraryStateRevision | undefined {
+  if (!value || typeof value !== 'object' || !('state' in value) || !('revision' in value)) return;
+  const { state, revision } = value;
+  if (typeof state !== 'string' || !libraryEntryStateWrite(state)) return;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 1) return;
+  return { state, revision };
+}
+
 export type NativeKernelRequest = {
   method: string;
   url: string;
@@ -57,6 +68,8 @@ export type NativeKernelRequest = {
   archiveEntry?: ArchiveEntryResponse;
   archiveProgress?: ArchiveProgressResponse;
   archiveLabel?: ArchiveLabelIdentity;
+  libraryStateCommand?: LibraryStateRevision;
+  libraryStateAcknowledgement?: LibraryStateRevision;
   /** Only the subject selector is retained for observed Hosted checkpoint saves. */
   hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
@@ -89,6 +102,8 @@ export type NativeWebStackOptions = {
   writeRateOverrides?: string;
   /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
   observeBookSearchPreparation?: boolean;
+  /** Observe only state and revision on the mounted Book fixture's Library entry update. */
+  observeBookLibraryState?: boolean;
   /** Observe Entry upload and preview responses for the mounted Archive fixture. */
   observeArchiveEntry?: boolean;
   /** Observe Progress intake and the first retained evidence readers in the mounted Archive fixture. */
@@ -1287,6 +1302,7 @@ async function startStack(): Promise<
     sampleMemory('durable-worker-ready');
 
     const sourceApp = kernel!;
+    const observeBookLibraryState = process.env.NATIVE_WEB_OBSERVE_BOOK_LIBRARY_STATE === '1';
     const server = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -1308,6 +1324,14 @@ async function startStack(): Promise<
               ? { body: await request.clone().text() }
               : {}),
         };
+        const bookLibraryStateRoute =
+          observeBookLibraryState && request.method === 'PUT' && !observed.fixtureRequest
+            ? /^\/v1\/libraryEntries\/([^/?]+)$/u.exec(observed.url)
+            : null;
+        if (bookLibraryStateRoute) {
+          const command = libraryStateRevision(await request.clone().json().catch(() => undefined));
+          if (command) observed.libraryStateCommand = command;
+        }
         if (request.method === 'PUT' && url.pathname === '/v1/libraryHostedReading' && !observed.fixtureRequest) {
           const command = (await request
             .clone()
@@ -1347,6 +1371,16 @@ async function startStack(): Promise<
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           observed.responseStatus = response.status;
+          if (bookLibraryStateRoute && response.status === 200) {
+            const body = (await response.clone().json().catch(() => null)) as {
+              libraryEntry?: { subjectId?: unknown };
+            } | null;
+            const entry = body?.libraryEntry;
+            if (entry && entry.subjectId === bookLibraryStateRoute[1]) {
+              const acknowledgement = libraryStateRevision(entry);
+              if (acknowledgement) observed.libraryStateAcknowledgement = acknowledgement;
+            }
+          }
           if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY === '1' && !observed.fixtureRequest) {
             observed.archiveEntry = await observeArchiveEntryResponse(request, url, response).catch(() => undefined);
           }
@@ -1827,6 +1861,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
+    NATIVE_WEB_OBSERVE_BOOK_LIBRARY_STATE: options.observeBookLibraryState ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY: options.observeArchiveEntry ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS: options.observeArchiveProgress ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,

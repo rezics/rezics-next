@@ -707,6 +707,7 @@ export async function startBookCatalogueJourneyFixture(
   const stack = await startNativeWebStack({
     writeRateOverrides,
     observeBookSearchPreparation: !shelfOnly,
+    observeBookLibraryState: !shelfOnly,
     observePersonalAccess: shelfOnly,
   });
   let auth: NativeAuthStack | undefined;

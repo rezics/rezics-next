@@ -442,6 +442,7 @@ async function runBookCatalogueJourney(): Promise<void> {
   await formSearch.close();
 
   await browserExpect(bookShelf.getByRole('button', { name: `Actions for ${subjects.book.label}` })).toBeVisible();
+  await stack.syncKernelRequests();
   const requestStart = stack.kernelRequests().length;
   await bookShelf.getByRole('button', { name: `Actions for ${subjects.book.label}` }).click();
   await bookShelf.getByRole('menuitem', { name: 'Change status', exact: true }).click();
@@ -454,20 +455,25 @@ async function runBookCatalogueJourney(): Promise<void> {
   await bookShelf.keyboard.press('Escape');
   await bookShelf.keyboard.press('Escape');
   await stack.syncKernelRequests();
+  const changePath = `/v1/libraryEntries/${encodeURIComponent(subjects.book.id)}`;
   const change = stack
     .kernelRequests()
     .slice(requestStart)
-    .find((request) => request.method === 'PUT' && request.url === `/v1/libraryEntries/${subjects.book.id}`);
-  expect(change, 'the shelf command UI writes the exact Book entry through the native API').toBeDefined();
-  const command = JSON.parse(change!.body ?? '{}') as { state?: string; revision?: number };
-  expect(command).toMatchObject({ state: states.bookCompleted.id, revision: fixture.initialBookEntry.revision });
+    .find((request) => !request.fixtureRequest && request.method === 'PUT' && request.url === changePath);
+  if (!change) throw new Error(`The shelf command UI did not send PUT ${changePath} to the native API`);
+  const command = change.libraryStateCommand;
+  expect(command).toEqual({ state: states.bookCompleted.id, revision: fixture.initialBookEntry.revision });
+  expect(change.responseStatus).toBe(200);
+  const acknowledgement = change.libraryStateAcknowledgement;
+  expect(acknowledgement).toEqual({ state: states.bookCompleted.id, revision: fixture.initialBookEntry.revision + 1 });
 
   const readback = await readNativeEntry(subjects.book.id, 'alice');
   expect(readback.subjectId).toBe(subjects.book.id);
   expect(readback.state).toBe(states.bookCompleted.id);
   expect(readback.revision).toBe(fixture.initialBookEntry.revision + 1);
   stage('Library command and independent native readback', {
-    command: { method: change!.method, path: change!.url, ...command },
+    command: { method: change.method, path: change.url, ...command },
+    acknowledgement: { status: change.responseStatus, ...acknowledgement },
     readback: { subjectId: readback.subjectId, state: readback.state, revision: readback.revision },
   });
 
