@@ -305,6 +305,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
     200,
     'member order',
   );
+  const labelName = `Archive label ${marker}`;
   const label = await json<{ label: { id: string } }>(
     await stack.kernel(
       '/v1/libraryLabels',
@@ -315,7 +316,7 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
           'content-type': 'application/json',
           'idempotency-key': key(),
         },
-        body: JSON.stringify({ name: `Archive label ${marker}` }),
+        body: JSON.stringify({ name: labelName }),
       },
       'alice',
     ),
@@ -364,9 +365,20 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
     collectionId: collection.collection.id,
     collectionTitle,
     labelId: label.label.id,
+    labelName,
     sessionId: session.progressSession.id,
     stateId: activeState!.id,
   };
+}
+
+async function readOwnerLabels(prefix: string) {
+  const query = new URLSearchParams({ q: prefix, limit: '3' });
+  const { labels } = await json<{ labels: { id: string; name: string; revision: number }[] }>(
+    await stack.kernel(`/v1/libraryLabels?${query}`, undefined, 'alice'),
+    200,
+    'owner label readback',
+  );
+  return labels;
 }
 
 async function downloadArchive(page: Page) {
@@ -521,7 +533,13 @@ async function restoreOwnerLibrary() {
   const archivePath = await downloadArchive(page);
   const artifact = JSON.parse(await readFile(archivePath, 'utf8')) as {
     manifest: { version: number; coverage?: string; rows: number; sections: string[] };
-    records: { section: string; subject_id?: string; label_id?: string; session_id?: string }[];
+    records: {
+      section: string;
+      subject_id?: string;
+      label_id?: string;
+      normalized_name?: string;
+      session_id?: string;
+    }[];
   };
   const entryOrdinal = artifact.records.findIndex(
     (row) => row.section === 'entries' && row.subject_id === prepared.subjectId,
@@ -538,6 +556,7 @@ async function restoreOwnerLibrary() {
   expect(artifact.records.some((row) => row.section === 'collections')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'occurrences')).toBe(true);
   expect(labelOrdinal).toBeGreaterThanOrEqual(0);
+  expect(artifact.records[labelOrdinal]?.normalized_name).toBe(prepared.labelName);
   expect(sessionOrdinal).toBeGreaterThanOrEqual(0);
   expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":1');
 
@@ -641,6 +660,29 @@ async function restoreOwnerLibrary() {
   const bobDenied = await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'bob');
   expect([403, 404]).toContain(bobDenied.status);
 
+  // Free the downloaded name while keeping the source label and its identity live.
+  const [sourceLabel] = await readOwnerLabels(prepared.labelName);
+  expect(sourceLabel).toMatchObject({ id: prepared.labelId, name: prepared.labelName });
+  const renamedLabelName = `${prepared.labelName} (source)`;
+  const { label: renameReceipt } = await json<{ label: { id: string; revision: number } }>(
+    await stack.kernel(
+      `/v1/libraryLabels/${prepared.labelId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          authorization: prepared.alice.authorization,
+          'content-type': 'application/json',
+          'idempotency-key': key(),
+        },
+        body: JSON.stringify({ name: renamedLabelName, revision: sourceLabel!.revision }),
+      },
+      'alice',
+    ),
+    200,
+    'rename source label',
+  );
+  expect(renameReceipt).toEqual({ id: prepared.labelId, revision: sourceLabel!.revision + 1 });
+
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator('[data-recovery-state="complete"], [data-recovery-state="partial"]').waitFor({
     state: 'visible',
@@ -688,20 +730,46 @@ async function restoreOwnerLibrary() {
     })
     .check();
   await page.getByRole('button', { name: 'Apply confirmed changes', exact: true }).click();
-  const readCurrent = page
-    .getByRole('button', { name: await message('en', 'library_archive_entry_read_current') })
-    .first();
+  const results = page.getByRole('region', { name: await message('en', 'library_archive_results_step'), exact: true });
+  const labelResult = results
+    .getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: prepared.labelName, exact: true }) });
+  const readCurrent = labelResult.getByRole('button', {
+    name: await message('en', 'library_archive_entry_read_current'),
+    exact: true,
+  });
   await readCurrent.waitFor({
     state: 'visible',
     timeout: 60_000,
   });
+  await labelResult.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
+  const labelMapping = JSON.parse(await labelResult.locator('pre').innerText());
+  expect(labelMapping).toMatchObject({
+    ordinal: labelOrdinal,
+    section: 'labels',
+    status: 'acknowledged',
+    labelId: expect.any(String),
+  });
+  const restoredLabelId = labelMapping.labelId as string;
+  expect(restoredLabelId).not.toBe(prepared.labelId);
+
   await readCurrent.click();
+  const currentLabel = results.locator('section').filter({
+    has: page.getByRole('heading', { name: await message('en', 'library_archive_entry_current'), exact: true }),
+  });
+  await currentLabel.getByText(prepared.labelName, { exact: true }).waitFor({ state: 'visible' });
+  const currentLabels = await readOwnerLabels(prepared.labelName);
+  const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
+  const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
+  expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
+  expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+
   const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
     await stack.kernel(`/v1/libraryEntries/${prepared.subjectId}`, undefined, 'alice'),
     200,
     'entry readback',
   );
-  expect(entryRead.libraryEntry.subjectId).toBe(prepared.subjectId);
+  expect(entryRead.libraryEntry).toMatchObject({ subjectId: prepared.subjectId, state: prepared.stateId });
 
   await page.getByRole('link', { name: 'Recover archived progress' }).click();
   await hydrated(page);
@@ -800,6 +868,8 @@ async function restoreOwnerLibrary() {
       restoredMemberCount: nativeCollection.collection.memberCount,
       memberNotes: members.members.map((row) => row.note),
       otherMemberStatus: bobDenied.status,
+      renamedSourceLabel,
+      restoredLabel,
       progressSessionCount: sessions.progressSessions.length,
     },
   });
