@@ -415,7 +415,9 @@ test(
       progress.failed(pendingFailure);
       const recordDigest = createHash('sha256').update('101').digest('hex');
       const failure = formatSeedError(pendingFailure);
-      const identity = { generation: initial.runs.bangumi?.runId, keyDigest: recordDigest };
+      const generation = initial.runs.bangumi?.runId;
+      if (typeof generation !== 'string') throw new Error('Expected a Bangumi run ID for the cover continuation');
+      const identity = { generation, keyDigest: recordDigest };
       expect(failedCoverContinuation(failure)).toEqual({ ...identity, mediaState: 'uploaded' });
       expect(failedCoverContinuation(failure.replace('mediaState=uploaded', 'mediaState=reserved'))).toEqual({
         ...identity,
