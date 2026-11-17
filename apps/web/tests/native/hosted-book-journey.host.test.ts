@@ -2141,30 +2141,53 @@ nativeTest(
         'withdraw the control through Studio and preserve its old exact release',
         async () => {
           await openBookStudio(withdrawalPage, control!.catalogueId);
-          const publication = withdrawalPage.getByRole('button', { name: 'Publication', exact: true });
-          if ((await publication.getAttribute('aria-expanded')) !== 'true') await publication.click();
-          await withdrawalPage.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
-          await withdrawalPage
-            .getByRole('heading', { name: 'Review Book withdrawal', exact: true })
+          const beforeWithdrawal = await readOwnedBook(control!.author, control!.authorAccountId, control!.catalogueId);
+          expect(beforeWithdrawal.item.publicationId).toBe(currentReleaseRevisionId);
+          await withdrawalPage.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+          const publication = withdrawalPage.getByRole('region', { name: 'Publication', exact: true });
+          await publication.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
+          await publication.getByRole('heading', { name: 'Review Book withdrawal', exact: true }).waitFor({
+            state: 'visible',
+          });
+          await publication.getByText(`Current release: ${currentReleaseRevisionId}`, { exact: true }).waitFor({
+            state: 'visible',
+          });
+          await publication
+            .getByText(`Structure revision: ${beforeWithdrawal.item.headRevisionId}`, {
+              exact: true,
+            })
             .waitFor({ state: 'visible' });
-          await withdrawalPage
+          const withdraw = publication.getByRole('button', { name: 'Withdraw reviewed Book', exact: true });
+          expect(await withdraw.isEnabled()).toBe(false);
+          await publication
             .getByRole('checkbox', {
               name: 'I want to withdraw this exact current release from discovery.',
               exact: true,
             })
             .click();
-          await withdrawalPage.getByRole('button', { name: 'Withdraw reviewed Book', exact: true }).click();
+          await withdraw.click();
           await withdrawalPage.getByText('The Book was withdrawn from current discovery.', { exact: true }).waitFor({
             state: 'visible',
             timeout: 90_000,
           });
-          const current = await control!.anonymous.subjects({ id: control!.subjectId }).hostedCatalogues.get({
-            query: { limit: '20' },
-          });
+          const [current, owner, draft, anonymousPost] = await Promise.all([
+            control!.anonymous.subjects({ id: control!.subjectId }).hostedCatalogues.get({ query: { limit: '20' } }),
+            readOwnedBook(control!.author, control!.authorAccountId, control!.catalogueId),
+            readNativePost(control!.author, control!.chapter.postId),
+            control!.anonymous.posts({ id: control!.chapter.postId }).get(),
+          ]);
           if (current.status !== 200 || current.error || !current.data)
             throw new Error(`Generated post-withdrawal control discovery returned ${current.status}`);
-          const discoveryPage = current.data as { items: { catalogueId: string }[] };
+          const discoveryPage = current.data;
+          expect(discoveryPage.nextCursor).toBeNull();
           expect(discoveryPage.items.some((item) => item.catalogueId === control!.catalogueId)).toBe(false);
+          expect(owner.item.publicationId).toBeTruthy();
+          expect(owner.item.publicationId).not.toBe(currentReleaseRevisionId);
+          expect(owner.item.headRevisionId).toBe(beforeWithdrawal.item.headRevisionId);
+          const expectedDraft = pointRevision ?? control!.chapter;
+          expect(draft).toMatchObject({ revisionId: expectedDraft.revisionId, sha256: expectedDraft.sha256 });
+          expect(serializeDocument(draft.body)).toBe(serializeDocument(expectedDraft.body));
+          expect(anonymousPost.status).toBe(404);
           const historical = await assertPublishedBody(
             control!.anonymous,
             control!.catalogueId,
@@ -2177,7 +2200,10 @@ nativeTest(
           await readAnonymousControlPage(exactReaderHref!, control!.chapter);
           return {
             value: true,
-            observation: `current-discovery=${discoveryPage.items.length} historical-occurrence=${control!.occurrenceId} sha256=${historical.document?.sha256} old-url=${exactReaderHref}`,
+            observation:
+              `current-discovery=${discoveryPage.items.length} withdrawal-release=${owner.item.publicationId}` +
+              ` retained-structure=${owner.item.headRevisionId} retained-draft=${draft.revisionId} direct-post=${anonymousPost.status}` +
+              ` historical-occurrence=${control!.occurrenceId} sha256=${historical.document?.sha256} old-url=${exactReaderHref}`,
           };
         },
         () =>
