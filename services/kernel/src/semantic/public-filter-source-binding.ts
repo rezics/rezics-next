@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { nativePopulationStartId, readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import {
@@ -2740,7 +2741,8 @@ export function createNativePublicFilterSourceBinding(
     async readRepairStep(request, context) {
       const input = structuredClone(request),
         deadline = context.deadline;
-      return run({ deadline }, async (cost, db) => {
+      const observer = bookPreparationTiming;
+      const pending = run({ deadline }, async (cost, db) => {
         if (
           !input.bootstrap.startsWith('0:') ||
           !input.execution ||
@@ -3136,6 +3138,23 @@ export function createNativePublicFilterSourceBinding(
           subjectPublicationRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
         return result;
       });
+      if (!observer) return pending;
+      const identity = {
+        observation: input.queried.snapshot.observation,
+        execution: input.execution,
+        predecessor: input.predecessor,
+      };
+      return pending.then(
+        (result) => {
+          if (result.status !== 'verified')
+            observer.repairStepRefusal({ ...identity, status: result.status, reason: result.reason });
+          return result;
+        },
+        (error) => {
+          observer.repairStepRefusal({ ...identity, status: 'exception' });
+          throw error;
+        },
+      );
     },
     async readRepairReceipt(request, context) {
       // Copy data fields only: neither an in-process brand nor its deserialized absence is evidence.

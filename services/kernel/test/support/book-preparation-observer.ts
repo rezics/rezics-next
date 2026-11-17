@@ -8,6 +8,7 @@ import {
   type BookPublicationOutcome,
   type BookRepairOutcome,
   type BookRepairStage,
+  type BookRepairStepRefusal,
   type BookSourceOutcome,
   type BookPreparationTiming,
 } from '../../src/search/book-preparation-timing.ts';
@@ -38,6 +39,7 @@ export function createBookPreparationObserver(
   const active = new Set<Turn>();
   let finished: Turn[] = [];
   let dropped = 0;
+  let lastRepairStepRefusal: string | undefined;
   return {
     async turn<T>(turn: BookPreparationTurn, run: () => Promise<T>): Promise<T> {
       const sample: Turn = { ...turn, workflow: workflowId(), spans: {}, open: new Map() };
@@ -89,6 +91,18 @@ export function createBookPreparationObserver(
     sourcePageRefusal(reason: Parameters<BookPreparationTiming['sourcePageRefusal']>[0]) {
       const turn = context.getStore();
       if (turn) turn.sourcePageRefusal = reason;
+    },
+    repairStepRefusal(refusal: BookRepairStepRefusal) {
+      const bounded = {
+        ...refusal,
+        observation: refusal.observation.slice(0, 128),
+        execution: refusal.execution.slice(0, 128),
+        predecessor: refusal.predecessor?.slice(0, 128) ?? null,
+      };
+      const key = JSON.stringify(bounded);
+      if (key === lastRepairStepRefusal) return;
+      lastRepairStepRefusal = key;
+      emit(`book-search-timing ${JSON.stringify({ stage: 'source-repair-step-refusal', atMs: now(), ...bounded })}`);
     },
     flush(sample: 'interval' | 'cutoff' | 'exit') {
       if (sample !== 'cutoff' && !finished.length && !active.size && !dropped) return;

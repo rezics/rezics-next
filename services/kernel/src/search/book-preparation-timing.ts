@@ -96,6 +96,17 @@ export type BookRepairOutcome = {
   reason?: PublicFilterConsumerUnavailable['reason'];
 };
 
+export type BookRepairStepRefusal = Readonly<
+  {
+    observation: string;
+    execution: string;
+    predecessor: string | null;
+  } & (
+    | { status: PublicFilterBindingFailure['status']; reason: PublicFilterBindingFailure['reason'] }
+    | { status: 'exception' }
+  )
+>;
+
 export type BookPreparationTiming = {
   turn<T>(turn: BookPreparationTurn, run: () => Promise<T>): Promise<T>;
   start(span: BookPreparationSpan): (() => void) | undefined;
@@ -105,6 +116,7 @@ export type BookPreparationTiming = {
   repairStage(stage: BookRepairStage): void;
   repairOutcome(repair: BookRepairOutcome): void;
   sourcePageRefusal(reason: PublicFilterBindingFailure['reason']): void;
+  repairStepRefusal(refusal: BookRepairStepRefusal): void;
 };
 
 export let bookPreparationTiming: BookPreparationTiming | undefined;

@@ -17,7 +17,7 @@ export async function readSubjectPublicationFrontier(stack: NativeWebStack, dead
            ORDER BY (fence IS NOT NULL) DESC,activated_at DESC LIMIT 1
          ), source AS MATERIALIZED (
            SELECT b.partition_no,b.bootstrap,b.state,b.coverage_after,b.coverage_sealed,b.coverage_publication,
-                  b.publication_execution,p.phase,p.fence
+                  b.publication_execution,b.publication_observation,p.phase,p.fence
            FROM publication p JOIN semantic.public_filter_bootstrap b
              ON (b.partition_no,b.publication_job)=(p.source_home,p.job)
            WHERE b.state='adopted' LIMIT 1
@@ -48,7 +48,9 @@ export async function readSubjectPublicationFrontier(stack: NativeWebStack, dead
            'publicationCoverage',s.coverage_publication IS NOT NULL,
            'verifiedPages',f.verified_ordinal,'terminal',f.complete,'next',f.next,
            'retainedSuccessor',CASE WHEN n.step IS NOT NULL THEN jsonb_build_object(
-             'verified',n.verified_root IS NOT NULL,'protocol',n.receipt_protocol,'inputLimit',n.input_limit) END,
+             'verified',n.verified_root IS NOT NULL,'protocol',n.receipt_protocol,'inputLimit',n.input_limit,
+             'observation',s.publication_observation,'execution',n.execution,'predecessor',n.predecessor,
+             'bridge',saved.bridge) END,
            'home',CASE WHEN f.home IS NOT NULL THEN jsonb_build_object(
              'enrolled',e.partition_no IS NOT NULL,'complete',e.complete,'hasReceipt',e.receipt IS NOT NULL,
              'consumerMatches',e.creation_consumer='public_filter_' || replace(s.bootstrap::text,'-',''),
@@ -67,7 +69,21 @@ export async function readSubjectPublicationFrontier(stack: NativeWebStack, dead
          LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(f.home,e.creation_consumer)
          LEFT JOIN semantic.public_filter_repair_step n
            ON (n.partition_no,n.bootstrap,n.execution,n.predecessor)
-             =(s.partition_no,s.bootstrap,s.publication_execution,f.step)`,
+             =(s.partition_no,s.bootstrap,s.publication_execution,f.step)
+         LEFT JOIN LATERAL (
+           SELECT jsonb_object_agg(state_key,bounds) AS bridge FROM (
+             SELECT record_field->>0 AS state_key,jsonb_object_agg(bound_field->>0,bound_field->1->1) AS bounds
+             FROM jsonb_array_elements(n.state::jsonb->1) AS record_field
+             CROSS JOIN LATERAL jsonb_array_elements(CASE
+               WHEN record_field->>0 IN ('input','next') AND record_field->1->>0='object'
+                 THEN record_field->1->1 END) AS bridge_field
+             CROSS JOIN LATERAL jsonb_array_elements(CASE
+               WHEN bridge_field->>0='bridge' AND bridge_field->1->>0='object'
+                 THEN bridge_field->1->1 END) AS bound_field
+             WHERE bound_field->>0 IN ('position','through') AND bound_field->1->>0='bigint'
+             GROUP BY record_field->>0
+           ) states
+         ) saved ON true`,
         [target],
       );
       return result.rows[0]?.observation;
