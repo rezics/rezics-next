@@ -165,7 +165,7 @@ test('Collection composes exact raw operands and preserves empty allowed and typ
   });
   const result = await reads.withViewerFacts(actor, page, Date.now() + 30_000, async () => {
     finalized = true;
-    assertMemberPageCurrent(page, page);
+    await assertMemberPageCurrent(page, page);
   });
   expect(finalized).toBe(true);
   expect(result).toHaveProperty('viewerFacts.rows.0.actions', {

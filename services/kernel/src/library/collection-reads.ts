@@ -46,6 +46,7 @@ import {
   subjectCollectionCountPlan,
   subjectCollectionPairPlan,
 } from './subject-collection-read-bounds.ts';
+import { nativeMemberPage } from './member-viewer-currentness.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { resolveSubject } from './subject-anchor.ts';
@@ -1396,17 +1397,13 @@ export function createCollectionReads(
     const current = await capture();
     if (JSON.stringify(current) !== JSON.stringify(original)) throw new ProblemError('stale_cursor');
     const last = considered.at(-1);
-    return {
-      members: considered.filter((row) => readable.has(row.subjectId)).map(memberView),
-      next:
-        hasMore && last
-          ? encodeCursor(tokens, binding, {
-              // Cursor epoch 0 is rejected by the seal, while a new Collection's order epoch is 0.
-              epoch: collection.orderEpoch + 1,
-              after: [last.ordinalKey, last.id],
-            })
-          : null,
-    };
+    return nativeMemberPage(
+      considered.filter((row) => readable.has(row.subjectId)).map(memberView),
+      // Cursor epoch 0 is rejected by the seal, while a new Collection's order epoch is 0.
+      hasMore && last ? { epoch: collection.orderEpoch + 1, after: [last.ordinalKey, last.id] } : null,
+      (position) => encodeCursor(tokens, binding, position),
+      (cursor) => decodeCursor(tokens, binding, cursor),
+    );
   }
 
   async function listSubjectCollections(
