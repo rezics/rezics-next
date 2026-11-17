@@ -3,7 +3,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { type FilterDocument } from '@rezics/filter';
-import * as v from 'valibot';
 import recording from '../src/kernel/recorded/definitions-release.json';
 import { m } from '../src/paraglide/messages.js';
 import { ConditionEditor } from '../src/search/condition-editor';
@@ -16,7 +15,7 @@ import {
   conditionSearchState,
   type ConditionMetadata,
 } from '../src/search/condition-editor-model';
-import { discoverySearchHref, searchFormFields, searchLoaderDeps, searchParams } from '../src/search/search-params';
+import { discoverySearchHref, searchFormFields, searchLoaderDeps } from '../src/search/search-params';
 import { discoveryRequest, readSearchPage } from '../src/search/search-request';
 import { readDiscovery } from '../src/search/discovery';
 import { facetProblem } from '../src/search/refinement/request';
@@ -424,10 +423,10 @@ test('shared admission enforces all grammar ceilings, byte bounds and invalid ra
   expect(html).toContain('value="en"');
   expect(html).toContain('value=""');
   expect(html).toContain('aria-invalid="true"');
-  expect(v.safeParse(searchParams, { q: '界'.repeat(170) }).success).toBe(true);
-  expect(v.safeParse(searchParams, { q: '界'.repeat(171) }).success).toBe(false);
-  expect(v.safeParse(searchParams, { cursor: 'x'.repeat(4864) }).success).toBe(true);
-  expect(v.safeParse(searchParams, { cursor: 'x'.repeat(4865) }).success).toBe(false);
+  expect(searchLoaderDeps({ q: '界'.repeat(170) }).invalidInput).toBeUndefined();
+  expect(searchLoaderDeps({ q: '界'.repeat(171) }).invalidInput?.key).toBe('q');
+  expect(searchLoaderDeps({ cursor: 'x'.repeat(4864) }).invalidInput).toBeUndefined();
+  expect(searchLoaderDeps({ cursor: 'x'.repeat(4865) }).invalidInput?.key).toBe('cursor');
   const missing = render(undefined);
   expect(missing).toContain('Add conditions');
 });
