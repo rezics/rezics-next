@@ -11,6 +11,14 @@ import {
 } from './semantic-first-public-native.ts';
 import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 
+export type SemanticPageObservation = {
+  requestedUrl: string;
+  url?: string;
+  status?: number;
+  stage: 'navigation' | 'document' | 'hydration' | 'main' | 'complete';
+  failure?: 'http-status' | 'timeout' | 'closed' | 'transport';
+  clientError?: 'module-load' | 'module-initialization' | 'runtime';
+};
 export type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
 export type SemanticBrowserSession = {
   stack: WalkStackOrigins;
@@ -21,6 +29,8 @@ export type SemanticBrowserSession = {
   evidenceDir: string;
   frontendCause?: string;
   mountedSubject?: MountedSubjectDiagnostic;
+  pages?: SemanticPageObservation[];
+  observePage?: () => Promise<void>;
 };
 
 export async function hydrated(page: Page): Promise<void> {
@@ -32,6 +42,9 @@ async function openPage(
   href: string,
   viewport: { width: number; height: number },
   theme: 'light' | 'dark',
+  expectedStatus: number,
+  observation: SemanticPageObservation,
+  observe: () => Promise<void>,
   onMountedSubject?: (diagnostic: MountedSubjectDiagnostic) => void,
 ): Promise<{ page: Page; status: number; url: string }> {
   const page = await context.newPage();
@@ -39,18 +52,47 @@ async function openPage(
   await page.setViewportSize(viewport);
   await page.emulateMedia({ colorScheme: theme });
   if (onMountedSubject) await page.setExtraHTTPHeaders({ [mountedSubjectReadHeader]: '1' });
+  page.on('pageerror', (error) => {
+    observation.clientError ??=
+      /fetch dynamically imported module|Importing a module script|error loading dynamically imported module/i.test(
+        error.message,
+      )
+        ? 'module-load'
+        : /before initialization/i.test(error.message)
+          ? 'module-initialization'
+          : 'runtime';
+  });
   try {
     const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
     const status = response?.status() ?? 0;
+    observation.status = status;
+    observation.url = page.url();
+    observation.stage = 'document';
     if (onMountedSubject) {
       const header = await response?.headerValue(mountedSubjectReadHeader);
       onMountedSubject({ status, native: mountedSubjectReads(header ?? null) });
     }
+    await observe();
+    if (status !== expectedStatus) {
+      observation.failure = 'http-status';
+      throw new Error(`${observation.url} returned HTTP ${status}`);
+    }
+    observation.stage = 'hydration';
     await hydrated(page);
+    observation.stage = 'main';
     await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
+    observation.stage = 'complete';
+    await observe();
     return { page, status, url: page.url() };
   } catch (error) {
-    await page.close();
+    observation.failure ??=
+      error instanceof Error && /timeout/i.test(error.name + error.message)
+        ? 'timeout'
+        : error instanceof Error && /closed/i.test(error.message)
+          ? 'closed'
+          : 'transport';
+    await observe().catch(() => {});
+    await page.close().catch(() => {});
     throw error;
   }
 }
@@ -67,18 +109,22 @@ export async function visit(
   } = {},
 ) {
   if (session.frontendCause) throw new Error(session.frontendCause);
+  const observation: SemanticPageObservation = { requestedUrl: href, stage: 'navigation' };
+  (session.pages ??= []).push(observation);
+  const observe = async () => {
+    await session.observePage?.();
+  };
   const context = options.persona === 'member' ? session.member : session.anonymous;
   const opened = await openPage(
     context,
     href,
     { width: options.width ?? 1280, height: 900 },
     options.theme ?? 'light',
+    options.expectedStatus ?? 200,
+    observation,
+    observe,
     options.mountedSubject ? (diagnostic) => (session.mountedSubject = diagnostic) : undefined,
   );
-  if (options.mountedSubject && opened.status !== (options.expectedStatus ?? 200)) {
-    await opened.page.close();
-    throw new Error(`${href} returned HTTP ${opened.status}`);
-  }
   const title = await opened.page.title();
   const heading = await opened.page
     .locator('h1, h2')
@@ -92,8 +138,6 @@ export async function visit(
   );
   await opened.page.screenshot({ path: screenshot, fullPage: true });
   await opened.page.close();
-  if (opened.status !== (options.expectedStatus ?? 200))
-    throw new Error(`${href} returned HTTP ${opened.status}; screenshot ${screenshot}`);
   return { url: opened.url, status: opened.status, title, heading, screenshot };
 }
 

@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
 import { semanticFirstPublicCases, type SemanticFirstPublicSession } from '../scripts/semantic-first-public-cases.ts';
 import { chromium } from 'playwright';
-import { createAndRead, type SemanticBrowserSession } from '../scripts/semantic-first-public-browser.ts';
+import { createAndRead, visit, type SemanticBrowserSession } from '../scripts/semantic-first-public-browser.ts';
 import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 import {
   kernelDeadlineTimings,
@@ -123,6 +123,95 @@ test('both hosts receive the same ordered original 31 cases and each refreshes i
   expect(refreshes).toBe(31);
   expect(results.map((row) => row.id)).toEqual(FIRST_PUBLIC_JOURNEYS.map((row) => row.id));
   expect(results.every((row) => row.status === 'Failing')).toBe(true);
+});
+
+test.each([500, 200])('failed document evidence retains HTTP %i before hydration can fail', async (status) => {
+  let hydrationReads = 0;
+  let closed = false;
+  const page = {
+    setDefaultTimeout() {},
+    async setViewportSize() {},
+    async emulateMedia() {},
+    on() {},
+    async goto() {
+      return { status: () => status };
+    },
+    url: () => stack.web + '/en/my/contexts/new',
+    locator() {
+      hydrationReads++;
+      return {
+        async waitFor() {
+          throw new Error('hydration timeout');
+        },
+      };
+    },
+    async close() {
+      closed = true;
+    },
+  };
+  const context = {
+    async newPage() {
+      return page;
+    },
+  } as unknown as SemanticBrowserSession['member'];
+  const snapshots: unknown[] = [];
+  const session: SemanticBrowserSession = {
+    stack,
+    call: async () => {
+      throw new Error('unexpected native read');
+    },
+    editor: 'editor',
+    anonymous: context,
+    member: context,
+    evidenceDir: '/unused',
+    async observePage() {
+      snapshots.push(structuredClone(session.pages));
+    },
+  };
+  await expect(visit(session, page.url(), { persona: 'member' })).rejects.toThrow(
+    status === 500 ? 'returned HTTP 500' : 'hydration timeout',
+  );
+  expect(closed).toBe(true);
+  expect(hydrationReads).toBe(status === 500 ? 0 : 1);
+  expect(snapshots[0]).toEqual([{ requestedUrl: page.url(), url: page.url(), status, stage: 'document' }]);
+  expect(session.pages).toEqual([
+    {
+      requestedUrl: page.url(),
+      url: page.url(),
+      status,
+      stage: status === 500 ? 'document' : 'hydration',
+      failure: status === 500 ? 'http-status' : 'timeout',
+    },
+  ]);
+});
+
+test('lifecycle cancellation marks the interrupted original case and prevents later native work', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const session = {
+    stack,
+    editor: 'editor',
+    trace: [],
+    revision: 'source',
+    evidenceDir: '/unused',
+    signal: controller.signal,
+    async call() {
+      calls++;
+      controller.abort(new Error('phase ended'));
+      throw new Error('ECONNREFUSED');
+    },
+    async editorAgent() {
+      throw new Error('unexpected Agent read');
+    },
+  } as unknown as SemanticFirstPublicSession;
+  const cases = semanticFirstPublicCases(session);
+  const current = await cases.find((item) => item.id === 'context-creation')!.run();
+  const later = await cases.find((item) => item.id === 'subject-lifecycle')!.run();
+  expect(current).toMatchObject({ id: 'context-creation', status: 'Aborted', abort: { reason: 'lifecycle' } });
+  expect(later).toMatchObject({ id: 'subject-lifecycle', status: 'Aborted', abort: { reason: 'lifecycle' } });
+  expect(current.failure).toBeUndefined();
+  expect(later.failure).toBeUndefined();
+  expect(calls).toBe(1);
 });
 
 const fixtureSubjectId = 'abea4570-a90c-8fd8-a148-3ada6997936e';

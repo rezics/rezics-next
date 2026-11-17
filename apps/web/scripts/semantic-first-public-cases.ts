@@ -35,19 +35,22 @@ import {
   visit,
   type MountedSubjectDiagnostic,
   type SemanticBrowserSession,
+  type SemanticPageObservation,
 } from './semantic-first-public-browser.ts';
 import type { NativeObservation } from './semantic-first-public-request.ts';
 
 export type SemanticFirstPublicResult = {
   id: FirstPublicJourneyId;
   name: string;
-  status: 'Passing' | 'Failing';
+  status: 'Passing' | 'Failing' | 'Aborted';
   ms: number;
   persona: string;
   native?: unknown;
   commands?: NativeObservation[];
   browser?: unknown;
   mountedSubject?: MountedSubjectDiagnostic;
+  pages?: SemanticPageObservation[];
+  abort?: { reason: 'lifecycle' };
   failure?: { transition: string; expected: string; actual: string; owner: string };
 };
 
@@ -59,10 +62,12 @@ export type SemanticFirstPublicSession = SemanticBrowserSession & {
   editorAgentCause?: string;
   editorCause?: string;
   refreshEditor?: () => Promise<void>;
+  signal?: AbortSignal;
 };
 
 function ownerOf(error: string): string {
-  if (/playwright|hydrat|locator|html\[data-hydrated\]|heap out of memory/i.test(error)) return 'web';
+  if (/hydrat|locator|html\[data-hydrated\]/i.test(error)) return 'unclassified';
+  if (/playwright|heap out of memory/i.test(error)) return 'web';
   if (/search|opensearch|index/i.test(error)) return 'search';
   if (/licence|authored/i.test(error)) return 'content';
   if (/import|provider/i.test(error)) return 'imports';
@@ -97,10 +102,14 @@ async function journey(
   const meta = FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!;
   const started = Date.now();
   const traceOffset = session.trace.length;
+  const pageOffset = session.pages?.length ?? 0;
+  const pageEvidence = () => (session.pages ? { pages: session.pages.slice(pageOffset) } : {});
   const mountedSubjectEvidence = () =>
     id === 'generic-creation' && session.mountedSubject ? { mountedSubject: session.mountedSubject } : {};
   try {
+    session.signal?.throwIfAborted();
     await session.refreshEditor?.();
+    session.signal?.throwIfAborted();
     const observed = await run();
     return {
       id,
@@ -111,9 +120,22 @@ async function journey(
       native: observed.native,
       commands: session.trace.slice(traceOffset),
       browser: observed.browser,
+      ...pageEvidence(),
       ...mountedSubjectEvidence(),
     };
   } catch (error) {
+    if (session.signal?.aborted)
+      return {
+        id,
+        name: meta.name,
+        status: 'Aborted',
+        ms: Date.now() - started,
+        persona: 'editor+anonymous',
+        abort: { reason: 'lifecycle' },
+        commands: session.trace.slice(traceOffset),
+        ...pageEvidence(),
+        ...mountedSubjectEvidence(),
+      };
     const actual = error instanceof Error ? error.message : String(error);
     return {
       id,
@@ -123,6 +145,7 @@ async function journey(
       persona: 'editor+anonymous',
       commands: session.trace.slice(traceOffset),
       ...mountedSubjectEvidence(),
+      ...pageEvidence(),
       failure: fail(
         session.trace.at(-1)?.status && session.trace.at(-1)!.status! >= 400
           ? `${session.trace.at(-1)!.method} ${session.trace.at(-1)!.url}`

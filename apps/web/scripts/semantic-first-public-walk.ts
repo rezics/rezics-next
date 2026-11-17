@@ -480,7 +480,7 @@ async function main(scope: WalkScope) {
         await writeFile(join(evidenceDir, `${scope}.json`), `${JSON.stringify(evidence, null, 2)}\n`, {
           mode: 0o600,
         });
-        if (result.status === 'Failing') process.exitCode = 1;
+        if (result.status !== 'Passing') process.exitCode = 1;
         return;
       }
       if (setupCause && !editor) {
@@ -530,7 +530,7 @@ async function main(scope: WalkScope) {
         slowest ? `${slowest.name} (${slowest.failure?.owner})` : 'none'
       }`,
     );
-    if (failing.length) process.exitCode = 1;
+    if (results.some((row) => row.status !== 'Passing')) process.exitCode = 1;
   });
 }
 

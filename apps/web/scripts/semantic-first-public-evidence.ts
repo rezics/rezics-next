@@ -1,6 +1,6 @@
 export type JourneyResult = {
   name: string;
-  status: 'Passing' | 'Failing';
+  status: 'Passing' | 'Failing' | 'Aborted';
   persona: string;
   failure?: { owner: string; actual: string };
 };

@@ -33,6 +33,7 @@ async function retain() {
         editorAccountId,
         result,
         mountedSubject: session?.mountedSubject,
+        pages: session?.pages,
         commands: trace.map(summarizeBoundaryRequest),
       },
       null,
@@ -55,6 +56,7 @@ nativeBeforeAll(lifecycle, 600_000, async () => {
       (value) => (stage = value),
     );
     session = prepared.session;
+    session.observePage = retain;
     editorAccountId = prepared.editorAccountId;
   } finally {
     await retain();
@@ -72,7 +74,7 @@ nativeTest(
         .find((item) => item.id === 'generic-creation')!
         .run();
       stage = 'completed';
-      if (result.status === 'Failing') throw new Error(result.failure?.actual ?? 'Original generic Book case failed');
+      if (result.status !== 'Passing') throw new Error(result.failure?.actual ?? 'Original generic Book case failed');
     } finally {
       await retain();
     }
