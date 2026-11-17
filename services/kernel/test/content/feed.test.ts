@@ -19,6 +19,7 @@ import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts'
 import { ProblemError } from '../../src/http/problem.ts';
 import { createFeedActivityStore } from '../../src/content/feed-activity.ts';
 import { decodeFeedCursor, feedBinding, fingerprint } from '../../src/content/feed-cursor.ts';
+import { withBoundedReadOnlyTransaction } from '../../src/database/pool.ts';
 
 async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
   const end = Date.now() + 150_000;
@@ -34,6 +35,32 @@ function subjectReactions(item: FeedItem | undefined) {
   return item?.key.owner === 'semantic' && 'subjectReactions' in item.summary
     ? item.summary.subjectReactions
     : undefined;
+}
+
+async function readMixedDiscoveryProgress(databaseUrl: string, prefix: string) {
+  const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 1_500 });
+  try {
+    return await withBoundedReadOnlyTransaction(pool, Date.now() + 1_500, async (client) => {
+      const result = await client.query(
+        `SELECT g.generation::text, g.state, g.index_uuid IS NOT NULL AS index_assigned,
+                p.owner, count(p.partition_no)::int AS homes,
+                count(*) FILTER (WHERE p.complete)::int AS scanned,
+                count(*) FILTER (WHERE p.native_complete)::int AS native_complete,
+                count(*) FILTER (WHERE p.certified)::int AS certified,
+                count(*) FILTER (WHERE p.continuation IS NOT NULL)::int AS with_continuation,
+                coalesce(sum(p.indexed), 0)::text AS indexed_rows
+         FROM search.discovery_generation g
+         LEFT JOIN search.discovery_population p ON p.prefix=g.prefix AND p.generation=g.generation
+         WHERE g.partition_no=0 AND g.prefix=$1 AND g.state<>'retired'
+         GROUP BY g.generation, g.state, g.index_uuid, p.owner
+         ORDER BY g.generation, p.owner`,
+        [prefix],
+      );
+      return result.rows;
+    });
+  } finally {
+    await pool.end();
+  }
 }
 
 test('Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references', async () => {
@@ -204,6 +231,8 @@ test('Default mixed feed composes real discovery, current Following and Continue
       if (account) expect(response.headers.get('cache-control')).toBe('private, no-store');
       return body as FeedPage;
     }
+    const readProgressAt = Math.min(Date.now() + 145_000, startedAt + 232_000);
+    let observedDiscoveryProgress = false;
     const anonymous = await eventually(async () => {
       const result = await page(null);
       const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
@@ -214,6 +243,21 @@ test('Default mixed feed composes real discovery, current Following and Continue
         bookPresent: row !== undefined,
         expectedReaction,
       });
+      if (
+        process.env.REZICS_MIXED_HOME_TIMING === '1' &&
+        result.sources.discovery === 'preparing' &&
+        !observedDiscoveryProgress &&
+        Date.now() >= readProgressAt
+      ) {
+        observedDiscoveryProgress = true;
+        const elapsedMs = Date.now() - startedAt;
+        try {
+          const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
+          console.info('Mixed Home discovery generation', JSON.stringify({ elapsedMs, generations }));
+        } catch (error) {
+          console.info('Mixed Home discovery generation observation failed', String(error));
+        }
+      }
       return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
     });
     expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });

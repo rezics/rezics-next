@@ -61,6 +61,11 @@ Decision: Search discovery batches at most 128 durable owner/partition frontiers
 For zero-count Account and Semantic frontiers at the start of an indexed pass, one complete search under physical
 generation custody can prove absence across the wave's exact scopes. Counts, positions, ownership epochs and
 Account and claim revisions are checked before and after that search. A hit in the union requires keyed reconciliation.
+Core census and Account/claim witness callbacks share one live physical-pool read-only repeatable-read snapshot for
+each existing wave's before observation, and a fresh snapshot for its after observation. Every native callback and
+owner fence still runs. All nested reads settle before failure or release, and neither snapshot crosses external
+Search I/O. A concurrent native cut or fenced home remains unqualified, as exercised by
+`test/search/core-reconciliation-snapshot.test.ts`.
 A changed observation restarts that producer's native pass. For Collection, Review and Space, a complete initial
 native page at position zero with no keys, records or continuation can settle both passes in one turn. The wave
 proves zero indexed hits for the exact owner, kind and partition under physical generation custody. A fresh owner

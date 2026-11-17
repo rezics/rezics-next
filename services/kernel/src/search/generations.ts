@@ -8,7 +8,7 @@ import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { withSingleCommandAttempt } from '../command/command.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { readAccountDiscoveryWitness, subjectSource } from './native-bindings.ts';
+import { readAccountDiscoveryWitness, subjectSource, withReadTransaction } from './native-bindings.ts';
 import type {
   DiscoveryKey,
   DiscoveryOwnerRegistry,
@@ -1257,10 +1257,13 @@ async function reconcileDiscoveryPage(
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
   if (!entry || entry.owner !== row.owner) throw new Error('Both native discovery producers are required');
-  const census = await searchTurnCall(() => entry.source.count(partition));
-  const witness = coreReads
-    ? await coreReads.before.read(row)
-    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+  const count = () => searchTurnCall(() => entry.source.count(partition));
+  const { census, witness } = coreReads
+    ? await coreReads.before.read(row, count)
+    : {
+        census: await count(),
+        witness: (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition),
+      };
   if (!witness) throw new Error('Native Account/claim witness is absent');
   const indexed = BigInt(row.indexed);
   const reset =
@@ -1353,10 +1356,12 @@ async function reconcileDiscoveryPage(
     await searchTurnCall(() => projection.project(partition, keys, 0n, true));
     return false;
   }
-  const finish = await searchTurnCall(() => entry.source.count(partition));
-  const end = coreReads
-    ? await coreReads.after.read(row)
-    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+  const { census: finish, witness: end } = coreReads
+    ? await coreReads.after.read(row, count)
+    : {
+        census: await count(),
+        witness: (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition),
+      };
   const stable =
     finish.position === census.position &&
     finish.count === census.count &&
@@ -1636,16 +1641,32 @@ async function discoveryScopesEmpty(
 function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
   if (rows.length < 2) return undefined;
   function witnessBatch() {
-    const partitions = new Set<number>();
+    const requested = new Map<Population, () => Promise<{ position: bigint; count: number }>>();
     const reads = discoveryPageReadBatch(rows, () =>
-      searchTurnCall(() => readAccountDiscoveryWitness(pool, [...partitions])),
+      searchTurnCall(() =>
+        withReadTransaction(pool, async () => {
+          // Native owners retain their own readers and guards on this pool's one live RR snapshot.
+          // Settle every nested read before the snapshot can commit, roll back or release its client.
+          const results = await Promise.allSettled(
+            [...requested].map(async ([row, count]) => [row, await count()] as const),
+          );
+          const census = new Map<Population, { position: bigint; count: number }>();
+          for (const result of results) {
+            if (result.status === 'rejected') throw result.reason;
+            census.set(...result.value);
+          }
+          const partitions = [...new Set([...requested.keys()].map((row) => row.partition))];
+          return { census, witnesses: await readAccountDiscoveryWitness(pool, partitions) };
+        }),
+      ),
     );
     return {
       observed: reads.observed,
-      async read(row: Population) {
-        partitions.add(row.partition);
+      async read(row: Population, count: () => Promise<{ position: bigint; count: number }>) {
+        requested.set(row, count);
         reads.observed(row);
-        return (await reads.checkEmptyPage()).get(row.partition);
+        const result = await reads.checkEmptyPage();
+        return { census: result.census.get(row)!, witness: result.witnesses.get(row.partition) };
       },
     };
   }
