@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReaderAddress, useWorkspaceAdmission } from '../session/reader';
 import { searchApplication, searchQueryOptions } from './search-query-options';
+import { isBookCatalogueSearch } from './search-request';
 import {
   discoverySearchHref,
   realmCatalogueSearchLoaderDeps,
@@ -59,7 +60,9 @@ export function useSearchQuery(
   const readCount = () => client.getQueryState(queryKey)?.dataUpdateCount ?? 0;
   const lifetime = useRef({ owner, key, minimum: 0, refresh: false });
   if (lifetime.current.key !== key) lifetime.current = { owner, key, minimum: 0, refresh: false };
-  else if (lifetime.current.owner !== owner) lifetime.current = { owner, key, minimum: readCount() + 1, refresh: true };
+  // The exact public catalogue window has no viewer-dependent rows to retire during session enrollment.
+  else if (!isBookCatalogueSearch(params) && lifetime.current.owner !== owner)
+    lifetime.current = { owner, key, minimum: readCount() + 1, refresh: true };
   const current = lifetime.current;
   useEffect(() => {
     if (!enabled || !current.refresh || !matches) return;

@@ -28,20 +28,23 @@ export async function readSearchPage<Response extends SearchResponsePage, Reques
 
 const bookCatalogueTypes = new Set<string>(BOOK_CATALOGUE_TYPES);
 
+export function isBookCatalogueSearch(params: SearchLoaderDeps): params is SearchLoaderDeps & { type: string } {
+  return (
+    !!params.type &&
+    bookCatalogueTypes.has(params.type) &&
+    !params.condition &&
+    !params.filter &&
+    !params.resourceScope &&
+    !params.ratingPopulation &&
+    !params.kinds?.length &&
+    !Object.keys(params.facets).length &&
+    !Object.keys(params.ranges ?? {}).length &&
+    params.sort !== 'rating'
+  );
+}
+
 export function bookCatalogueSearchRequest(params: SearchLoaderDeps, languages: string[]): SubjectSearchRequest | null {
-  if (
-    !params.type ||
-    !bookCatalogueTypes.has(params.type) ||
-    params.condition ||
-    params.filter ||
-    params.resourceScope ||
-    params.ratingPopulation ||
-    params.kinds?.length ||
-    Object.keys(params.facets).length ||
-    Object.keys(params.ranges ?? {}).length ||
-    params.sort === 'rating'
-  )
-    return null;
+  if (!isBookCatalogueSearch(params)) return null;
   return {
     filter: { type: { in: [params.type] } },
     languages: params.languages ?? languages,

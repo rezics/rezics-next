@@ -48,7 +48,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { PageHeading } from '../shell/page-heading';
 import { localizedLabel } from './results.tsx';
 
-import { discoveryRequest, realmSearchRequest } from './search-request.ts';
+import { discoveryRequest, isBookCatalogueSearch, realmSearchRequest } from './search-request.ts';
 import { applicableRefinementProperties } from './refinement/model';
 import { Refinement } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
@@ -765,7 +765,7 @@ export function SearchPage({
   );
   const results = (
     <SearchResultsRegion
-      key={JSON.stringify([stateKey, locale, session, readerOwner])}
+      key={isBookCatalogueSearch(committedState) ? stateKey : JSON.stringify([stateKey, locale, session, readerOwner])}
       query={query}
       result={result}
       locale={locale}
