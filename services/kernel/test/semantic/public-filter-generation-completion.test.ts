@@ -384,6 +384,17 @@ test('native publication starts repair from the original adopted Source executio
       registration.rows[0]!.definition,
     );
     expect(retained.data.meaning.release).toEqual({ authority: 'semantic.readRelease', digest: f.meaning.digest });
+    const query = f.db.pool.query.bind(f.db.pool);
+    let lostAckReply = false;
+    f.db.pool.query = ((sql: unknown, ...args: unknown[]) => {
+      const response = Reflect.apply(query, undefined, [sql, ...args]);
+      if (lostAckReply || typeof sql !== 'string' || !sql.includes('SET ack_after=$6')) return response;
+      return Promise.resolve(response).then((result) => {
+        if (result.rowCount !== 1) return result;
+        lostAckReply = true;
+        throw Object.assign(new Error('Lost committed Source ACK frontier reply'), { code: '08006' });
+      });
+    }) as typeof f.db.pool.query;
     let activate = false;
     let boundAttempts = 0;
     let acknowledged = 0;
@@ -395,6 +406,7 @@ test('native publication starts repair from the original adopted Source executio
         activate = step.status === 'reconciled';
         continue;
       }
+      const recoveringAck = !lostAckReply;
       const result = await runtime.publication.activate(job, context());
       last = { status: result.status, ...('reason' in result && { reason: result.reason }), cost: result.cost };
       if (result.status === 'preparing' && result.next === 'step') activate = false;
@@ -430,7 +442,14 @@ test('native publication starts repair from the original adopted Source executio
       expect(advanced).toBeGreaterThanOrEqual(0);
       expect(advanced).toBeLessThanOrEqual(PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT);
       acknowledged = original.ack_after;
+      if (recoveringAck && lostAckReply) {
+        expect(advanced).toBeGreaterThan(0);
+        expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: false });
+        expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+        continue;
+      }
       if (advanced < 2) continue;
+      expect(lostAckReply).toBe(true);
       expect(result).toMatchObject({ status: 'preparing', next: 'activate', advanced: true });
       expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
       const receipts = await f.db.pool.query<{ homes: number }>(

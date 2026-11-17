@@ -525,6 +525,7 @@ export type NativePublicFilterPublicationCompletion =
       publication: NativePublicFilterPublication;
       reason: PublicFilterBindingFailure['reason'];
       advanced?: boolean;
+      ackAttempted?: true;
       cost: PublicFilterCost;
     }>
   | Readonly<{
@@ -2430,7 +2431,8 @@ export function createNativePublicFilterSourceBinding(
       deadline = context.deadline;
     const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
     if (joined.status !== 'joined') return joined;
-    return run({ deadline }, async (cost, db) => {
+    let ackAttempted = false;
+    const result = await run({ deadline }, async (cost, db) => {
       addCost(cost, joined.cost);
       const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
       if (
@@ -2657,6 +2659,7 @@ export function createNativePublicFilterSourceBinding(
           physicalTarget: settled.queried.consumer.physicalTarget,
           incarnation: settled.queried.consumer.incarnation,
         };
+        ackAttempted = publicationCost !== undefined;
         await acknowledgePublicFilterRepairBaseline(
           db,
           baseline,
@@ -2688,6 +2691,10 @@ export function createNativePublicFilterSourceBinding(
         cost,
       };
     });
+    // An uncertain receiver commit or frontier reply resumes settlement of the same terminal.
+    return ackAttempted && result.status !== 'joined' && !('advanced' in result)
+      ? { ...result, ackAttempted: true as const }
+      : result;
   }
 
   function boundSubjectPublication(
@@ -3602,6 +3609,7 @@ export function createNativePublicFilterSourceBinding(
           publication,
           reason: settled.reason,
           ...('advanced' in settled && settled.advanced === true ? { advanced: true as const } : {}),
+          ...('ackAttempted' in settled ? { ackAttempted: true as const } : {}),
           cost,
         };
       // Clean current population alone cannot replace the independently verified original
