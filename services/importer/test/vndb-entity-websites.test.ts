@@ -95,8 +95,14 @@ test('production seed joins selected staff, producer and release websites withou
   });
   expect(JSON.stringify(staff.payload)).not.toContain('unselected');
   expect(JSON.stringify(producer.payload)).not.toContain('unselected');
-  expect(plan.edges.some((edge) => edge.property === 'wdt:P5732' && edge.holder === 'v1' && edge.target === '1')).toBe(
-    true,
+  expect(plan.edges).toContainEqual(
+    expect.objectContaining({
+      property: 'rezics:crossMediaCounterpart',
+      holder: 'v1',
+      target: '1',
+      membership: 'referenced',
+      url: 'https://bgm.tv/subject/1',
+    }),
   );
   const bound = { source: 'vndb', subjectId: '00000000-0000-4000-8000-000000000001' };
   const staffConverted = convertCrossMediaEntity(
@@ -183,6 +189,8 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
       releases: ['id\ttitle', 'r1\tAuthored release'],
       releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete'],
       releases_producers: ['id\tpid\tdeveloper\tpublisher', 'r1\tp1\tt\tf'],
+      releases_platforms: ['id\tplatform', ''],
+      releases_media: ['id\tmedium\tqty', ''],
       producers: ['id\ttype\tname', 'p1\tco\tAuthored producer'],
       producers_relations: ['id\tpid\trelation', ''],
       staff_extlinks: ['id\tlink', 's4\t1\ns4\t6'],
@@ -191,8 +199,11 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
       vn_extlinks: ['id\tlink', ''],
       vn_relations: ['id\tvid\trelation', ''],
       vn_seiyuu: ['id\tcid\taid\tnote', ''],
-      chars_vns: ['id\tvid\trole', ''],
-      chars: ['id\tname', ''],
+      chars_vns: ['id\tvid\trid\trole\tspoil', ''],
+      chars: [
+        'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription',
+        '',
+      ],
       chars_names: ['id\tlang\tname\tlatin', ''],
       chars_alias: ['id\tspoil\tname\tlatin', ''],
       vn_anime: ['id\taid', ''],
