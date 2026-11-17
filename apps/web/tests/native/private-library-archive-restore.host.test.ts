@@ -64,19 +64,27 @@ async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
-async function leaveRecoveryFor(page: Page, name: string) {
+async function leaveRecoveryFor(page: Page, name: string, departure: 'accept' | 'stay' | 'settled' = 'accept') {
   const destinations = page.getByRole('navigation', {
     name: await message('en', 'library_archive_destinations'),
     exact: true,
   });
-  await Promise.all([
-    page.waitForEvent('dialog').then(async (dialog) => {
-      expect(dialog.type()).toBe('beforeunload');
-      await dialog.accept();
-    }),
-    destinations.getByRole('link', { name, exact: true }).click(),
-  ]);
-  await hydrated(page);
+  const destination = destinations.getByRole('link', { name, exact: true });
+  const current = page.url();
+  if (departure === 'settled') {
+    await destination.click();
+  } else {
+    await Promise.all([
+      page.waitForEvent('dialog').then(async (dialog) => {
+        expect(dialog.type()).toBe('beforeunload');
+        if (departure === 'stay') await dialog.dismiss();
+        else await dialog.accept();
+      }),
+      destination.click(),
+    ]);
+  }
+  if (departure === 'stay') expect(page.url()).toBe(current);
+  else await hydrated(page);
 }
 
 async function waitForSubjectPublication(stack: NativeWebStack, signal: AbortSignal, setupDeadline: number) {
@@ -416,7 +424,7 @@ async function recordCollectionPreviewFailure(page: Page, responses: readonly nu
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-collection-preview', observation });
 }
 
-async function startCollectionPreview(page: Page, archivePath: string) {
+async function startCollectionPreview(page: Page, archivePath?: string) {
   const responses: number[] = [];
   const origin = new URL(page.url()).origin;
   const observe = (response: Response) => {
@@ -431,8 +439,12 @@ async function startCollectionPreview(page: Page, archivePath: string) {
   };
   page.on('response', observe);
   try {
-    await page.getByLabel('Completed Library export file').setInputFiles(archivePath);
-    await page.getByRole('button', { name: 'Upload and preview', exact: true }).click();
+    if (archivePath === undefined) {
+      await page.getByRole('button', { name: 'Use the original archive', exact: true }).click();
+    } else {
+      await page.getByLabel('Completed Library export file').setInputFiles(archivePath);
+      await page.getByRole('button', { name: 'Upload and preview', exact: true }).click();
+    }
     await page.getByRole('button', { name: 'Review this Collection', exact: true }).waitFor({
       state: 'visible',
       timeout: 60_000,
@@ -489,7 +501,14 @@ async function restoreOwnerLibrary() {
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
   });
+  const entryDestination = await message('en', 'library_archive_title');
   await startCollectionPreview(page, archivePath);
+  await leaveRecoveryFor(page, entryDestination, 'stay');
+  await page.getByRole('button', { name: 'Cancel recovery', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop new recovery steps', exact: true }).click();
+  await page.locator('[data-recovery-state="cancelled"]').waitFor({ state: 'visible', timeout: 60_000 });
+  await page.getByRole('button', { name: 'Start another recovery', exact: true }).click();
+  await startCollectionPreview(page);
   await page.getByRole('button', { name: 'Review this Collection', exact: true }).click();
   await page.getByRole('button', { name: 'Toggle selection for this page', exact: true }).click();
   await page.getByRole('button', { name: 'Review selection', exact: true }).click();
@@ -562,23 +581,13 @@ async function restoreOwnerLibrary() {
   const bobDenied = await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'bob');
   expect([403, 404]).toContain(bobDenied.status);
 
-  await page.getByRole('button', { name: 'Start another recovery', exact: true }).click();
-  await page.getByRole('button', { name: 'Use the original archive', exact: true }).click();
-  await page.getByRole('button', { name: 'Review this Collection', exact: true }).waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
-  await page.getByRole('button', { name: 'Cancel recovery', exact: true }).click();
-  await page.getByRole('button', { name: 'Stop new recovery steps', exact: true }).click();
-  await page.getByRole('button', { name: 'Start another recovery', exact: true }).click();
-  await page.getByRole('button', { name: 'Use the original archive', exact: true }).click();
-  await page.getByRole('button', { name: 'Review this Collection', exact: true }).waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
-
   await page.setViewportSize({ width: 1440, height: 900 });
-  await leaveRecoveryFor(page, await message('en', 'library_archive_title'));
+  await page.locator('[data-recovery-state="complete"], [data-recovery-state="partial"]').waitFor({
+    state: 'visible',
+    timeout: 60_000,
+  });
+  await leaveRecoveryFor(page, entryDestination, 'settled');
+  expect(new URL(page.url()).pathname).toBe('/en/library/recover-archive');
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
   await page.getByLabel('Choose your completed Library archive').setInputFiles(archivePath);
   const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records') });
