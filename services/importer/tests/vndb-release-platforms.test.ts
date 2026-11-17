@@ -11,13 +11,13 @@ import {
   vndbReleasePlatformSchemeUri,
   vndbReleasePlatformTaxonomy,
 } from '@rezics/conversion/support';
-import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
+import { CrossMediaDumpFiles } from '../src/cross-media-seed.ts';
 import {
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
   type VndbReleaseBindingGroup,
 } from '../src/vndb-release-fidelity.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { vndbReleasePortFixture } from './support/vndb-release.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
 /** Authored COPY rows; they are not observations of a provider record. */
@@ -29,14 +29,14 @@ async function authoredTables(
   const db = join(directory, 'db');
   await mkdir(db, { recursive: true });
   const files: Record<string, [string, string]> = {
-    vn: ['id\tolang\tdevstatus\talias', 'v1\tja\t\N\t\N\nv2\tja\t\N\t\N'],
+    vn: ['id\tolang\tdevstatus\talias', 'v1\tja\t\\N\t\\N\nv2\tja\t\\N\t\\N'],
     vn_titles: [
       'id\tlang\tofficial\ttitle\tlatin',
-      'v1\tja\tt\tAuthored work one\t\N\nv2\tja\tt\tAuthored work two\t\N',
+      'v1\tja\tt\tAuthored work one\t\\N\nv2\tja\tt\tAuthored work two\t\\N',
     ],
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25\nv2\t1\t2026-10-25'],
     releases: ['id\treleased', 'r1\t20200101'],
-    releases_titles: ['id\tlang\tmtl\ttitle\tlatin', 'r1\tja\tt\tAuthored release\t\N'],
+    releases_titles: ['id\tlang\tmtl\ttitle\tlatin', 'r1\tja\tt\tAuthored release\t\\N'],
     releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete\nr1\tv2\tpartial'],
     releases_supersedes: ['id\trid', ''],
     releases_platforms: ['id\tplatform', platforms.map((code) => `r1\t${code}`).join('\n')],
@@ -52,6 +52,7 @@ async function authoredTables(
 test('selected authored VNDB COPY release classifications preserve values, dedupe rows and refresh through current bindings', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-platforms-'));
   try {
+    const fixture = vndbReleasePortFixture();
     const ids = new Map<string, string>();
     const groups: VndbReleaseBindingGroup[] = [
       {
@@ -79,7 +80,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
         subject: {
           id: group.schemeId,
           type: 'skos:ConceptScheme',
-          statements: { 'schema:url': [{ value: { content: group.uri } }] },
+          statements: { 'schema:url': [{ rank: 'normal', value: { type: 'value', content: group.uri } }] },
         },
       });
       for (const concept of group.concepts) {
@@ -88,41 +89,22 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
             id: concept.id,
             type: 'skos:Concept',
             statements: {
-              'schema:url': [{ value: { content: `${group.uri}/${concept.code}` } }],
-              'skos:inScheme': [{ value: { content: group.schemeId } }],
+              'schema:url': [{ rank: 'normal', value: { type: 'value', content: `${group.uri}/${concept.code}` } }],
+              'skos:inScheme': [{ rank: 'normal', value: { type: 'value', content: group.schemeId } }],
             },
           },
         });
       }
     }
     const commands: BatchCommand[] = [];
-    const metadata = sourceRecordMetadataFixture();
-    const port: CrossMediaPort = {
-      async batch(request) {
-        commands.push(...request.commands);
-        return {
-          results: request.commands.map((command) => ({
-            key: command.key,
-            status: command.op === 'retract' ? (200 as const) : (201 as const),
-            value:
-              command.op === 'create'
-                ? { id: randomUUID(), revision: 1 }
-                : command.op === 'retract'
-                  ? { revision: 1 }
-                  : { candidate: randomUUID(), revision: 1 },
-          })),
-        };
-      },
-      setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-      async fence() {
-        return { fenced: false, securityRevision: null };
-      },
-      async writeSourceStatistic() {
-        throw new Error('No statistic in this authored fixture');
-      },
-      async clearSourceStatistic() {},
-      async readReviewedSubject(id) {
-        return (known.get(id) ?? { subject: { id } }) as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+    const nativePort = fixture.port(commands);
+    const port = {
+      ...nativePort,
+      async readReviewedSubject(id: string) {
+        const catalogueSubject = known.get(id);
+        return catalogueSubject
+          ? (catalogueSubject as Awaited<ReturnType<typeof nativePort.readReviewedSubject>>)
+          : nativePort.readReviewedSubject(id);
       },
     };
     const propertyOf = (command: BatchCommand) => (command.op === 'propose' ? command.statement.property.id : '');
@@ -156,7 +138,9 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
     });
     const firstFacts = commands.filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
-    expect(first.readings.some((row) => row.externalId === 'r1')).toBe(true);
+    const releaseId = fixture.ids.get('r1')!;
+    expect(releaseId).toBeTruthy();
+    expect(first.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(firstFacts.map(targetOf).sort()).toEqual(['win', 'mac', 'cd', 'dvd'].map((code) => ids.get(code)!).sort());
     expect(JSON.stringify(first.gaps)).toContain('xyz');
     expect(firstFacts).toHaveLength(4);
@@ -183,6 +167,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
       bindingGroups: groups,
     });
     expect(repeat.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
+    expect(repeat.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
 
     const beforeRefresh = commands.length;
     const changed = await importVndbReleaseFidelity({
@@ -203,6 +188,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
       .slice(beforeRefresh)
       .filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
+    expect(changed.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(
       refreshed
         .filter((command) => propertyOf(command) === 'schema:gamePlatform')

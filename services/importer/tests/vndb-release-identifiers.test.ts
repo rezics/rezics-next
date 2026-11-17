@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,8 +9,8 @@ import {
   convertCrossMediaEntity,
   decodeVndbReleaseGtin,
 } from '@rezics/conversion/cross-media-entities';
-import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { CrossMediaDumpFiles } from '../src/cross-media-seed.ts';
+import { vndbReleasePortFixture } from './support/vndb-release.ts';
 import { planVndbReleaseIdentifiers } from '../src/vndb-release-identifiers.ts';
 import { importVndbReleaseIdentifiers } from '../src/selected-import.ts';
 
@@ -54,6 +53,8 @@ async function authoredCopy(directory: string, gtin = supported) {
       'id\tvid\trtype',
       'r1\tv1\tcomplete\nr1\tv2\tcomplete\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete\nr5\tv1\tcomplete',
     ],
+    releases_media: ['id\tmedium\tqty', ''],
+    releases_platforms: ['id\tplatform', ''],
     releases_supersedes: ['id\trid', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
@@ -61,40 +62,6 @@ async function authoredCopy(directory: string, gtin = supported) {
     await writeFile(join(db, name), `${body}\n`);
   }
   return new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
-}
-
-function port(commands: BatchCommand[]): CrossMediaPort {
-  const metadata = sourceRecordMetadataFixture();
-  return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? { id: randomUUID(), revision: 1 }
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {
-      throw new Error('No statistic in this authored fixture');
-    },
-    async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return { subject: { id, type: id.startsWith('r') ? 'wd:Q20631656' : 'wd:Q689445' } } as Awaited<
-        ReturnType<CrossMediaPort['readReviewedSubject']>
-      >;
-    },
-  };
 }
 
 function gtinFacts(commands: BatchCommand[], externalId: string) {
@@ -110,6 +77,7 @@ function gtinFacts(commands: BatchCommand[], externalId: string) {
 test('operator COPY import preserves a supported release GTIN, withholds unknown and invalid cells, and refreshes through one identity', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-identifiers-'));
   try {
+    const { port, ids } = vndbReleasePortFixture();
     const tables = await authoredCopy(directory);
     const plan = await planVndbReleaseIdentifiers(tables);
     const payload = (id: string) =>
@@ -163,6 +131,9 @@ test('operator COPY import preserves a supported release GTIN, withholds unknown
       bindings,
     });
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
+    const releaseId = ids.get('r1')!;
+    expect(releaseId).toBeTruthy();
+    expect(first.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(gtinFacts(firstCommands, 'r1')).toHaveLength(1);
     expect(gtinFacts(firstCommands, 'r2')).toEqual([]);
     expect(gtinFacts(firstCommands, 'r3')).toEqual([]);
@@ -178,6 +149,7 @@ test('operator COPY import preserves a supported release GTIN, withholds unknown
       bindings,
     });
     expect(refresh.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
+    expect(refresh.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(gtinFacts(refreshCommands, 'r1')).toEqual([]);
     const changedCommands: BatchCommand[] = [];
     const successor = await importVndbReleaseIdentifiers({
@@ -187,6 +159,7 @@ test('operator COPY import preserves a supported release GTIN, withholds unknown
       bindings,
     });
     expect(successor.runs.vndb?.counts.changed).toBeGreaterThan(0);
+    expect(successor.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(gtinFacts(changedCommands, 'r1')[0]?.statement.value).toEqual({ type: 'value', content: changed });
     expect(gtinFacts(changedCommands, 'r1')[0]?.key).not.toBe(gtinFacts(firstCommands, 'r1')[0]?.key);
   } finally {
