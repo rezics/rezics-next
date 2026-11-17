@@ -14,6 +14,7 @@ import {
   REVIEW_DISCOVERY_PAGE_LIMIT,
   ReviewDiscoverySourceError,
   type IndexedReview,
+  type NativeReviewDiscoverySource,
   type ReviewDiscoverySource,
 } from '../content/review-discovery.ts';
 import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../library/collection-discovery-source.ts';
@@ -161,6 +162,7 @@ function createCollectionPopulationProducer(
   return {
     kind: 'collection',
     owner: 'commerce',
+    initialPopulationWitness: 'none',
     async readiness() {
       return adapter.status === 'ready' ? 'ready' : adapter.status;
     },
@@ -206,10 +208,14 @@ function isAccessOrCommandUnavailable(error: unknown): boolean {
   );
 }
 
-function createReviewPopulationProducer(source: ReviewDiscoverySource | undefined): DiscoveryMetadataProducer {
+function createReviewPopulationProducer(
+  source: ReviewDiscoverySource | undefined,
+  native: boolean,
+): DiscoveryMetadataProducer {
   return {
     kind: 'review',
     owner: 'content',
+    ...(native && { initialPopulationWitness: 'none' }),
     async readiness(purpose) {
       if (!source?.pageWithCut) return 'unavailable';
       try {
@@ -312,6 +318,7 @@ export type DiscoveryOwnerCompositionInput = Readonly<{
   clock: KernelClock;
   collectionSource: CollectionDiscoverySource;
   reviewSource?: ReviewDiscoverySource;
+  nativeReviewSource?: NativeReviewDiscoverySource;
   space: SpaceDiscoveryAdapter;
 }>;
 
@@ -326,7 +333,8 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
     },
     DISCOVERY_OWNER_METADATA.collection,
   );
-  const review = createReviewDiscoveryAdapter(config.reviewSource);
+  const reviewSource = config.reviewSource ?? config.nativeReviewSource;
+  const review = createReviewDiscoveryAdapter(reviewSource);
   const space = config.space;
   const ownerContext = (context: DiscoveryReadContext) => ({ deadline: context.deadline });
   const reviewSlot = review
@@ -414,7 +422,10 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
   };
   const metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> = Object.freeze({
     collection: createCollectionPopulationProducer(collection),
-    review: createReviewPopulationProducer(config.reviewSource),
+    review: createReviewPopulationProducer(
+      reviewSource,
+      config.reviewSource === undefined && reviewSource !== undefined,
+    ),
     space: createSpacePopulationProducer(space),
   });
   return Object.freeze({

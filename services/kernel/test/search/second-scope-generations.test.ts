@@ -388,11 +388,16 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
     }),
   } as unknown as Pool;
   let pages = 0;
+  let readinessChecks = 0;
   const next = { ...raw, id: raw.id.replace(/1$/, '2') };
   const producer: DiscoveryMetadataProducer = {
     kind: 'collection',
     owner: 'commerce',
-    readiness: async () => 'ready',
+    initialPopulationWitness: 'none',
+    async readiness() {
+      readinessChecks++;
+      return 'ready';
+    },
     async page(partition, after, continuation, limit) {
       pages++;
       expect([partition, after, continuation, limit]).toEqual([10, pages === 1 ? raw : next, null, 100]);
@@ -446,6 +451,7 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   await advanceDiscovery(options);
   expect(pages).toBe(2);
   expect(identityReads).toBe(2);
+  expect(readinessChecks).toBe(6);
   expect(frontier?.slice(4, 9)).toEqual([null, null, null, true, '7']);
 });
 

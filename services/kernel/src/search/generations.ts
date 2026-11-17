@@ -973,14 +973,27 @@ async function mapBounded<T, Result>(
   return results;
 }
 
-function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
+function discoveryPageCapabilityCheck(
+  pool: Pool,
+  { target, metadataProducers }: DiscoveryProjection,
+  initialPopulation: boolean,
+) {
+  // The native opt-in declares that readiness can never contribute a generation/cut witness.
+  // The turn still admits every producer, and each partition still observes its own native page.
+  const producers = initialPopulation
+    ? Object.fromEntries(
+        Object.entries(metadataProducers).filter(
+          ([kind, producer]) => kind === 'space' || producer?.initialPopulationWitness !== 'none',
+        ),
+      )
+    : metadataProducers;
   let scheduled: Promise<void> | undefined;
   return () => {
     // Share only checks queued before the native observation starts. A page that reaches
     // its next check during that observation must still obtain a fresh one.
     return (scheduled ??= Promise.resolve().then(() => {
       scheduled = undefined;
-      return assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
+      return assertDiscoveryCapabilityBinding(pool, target, producers);
     }));
   };
 }
@@ -2029,7 +2042,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
-      const checkCapability = discoveryPageCapabilityCheck(pool, projection);
+      const checkCapability = discoveryPageCapabilityCheck(pool, projection, target.state === 'populating');
       await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),

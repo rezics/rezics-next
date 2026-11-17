@@ -29,14 +29,14 @@ export function createDiscoveryProducerEntry(input: {
 }): DiscoveryProducerEntry {
   const { pool, routeKey, access, clock } = input;
   const deadlineNow = input.deadlineNow ?? systemCommunityAmbient.deadlineNow;
-  const reviewSource =
-    input.reviewSource ??
-    (input.tokens
+  const nativeReviewSource =
+    input.reviewSource === undefined && input.tokens
       ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, clock, deadlineNow }, () => ({
           actor: { kind: 'anonymous' },
           deadline: Date.now() + 30_000,
         }))
-      : undefined);
+      : undefined;
+  const reviewSource = input.reviewSource ?? nativeReviewSource;
   const spaceDependencies = { pool, access, clock, deadlineNow };
   const space = createSpaceDiscoveryAdapter(spaceDiscoverySource(spaceDependencies), (ids, context) =>
     readSpaceDiscoverySummaries(spaceDependencies, ids, context),
@@ -47,7 +47,8 @@ export function createDiscoveryProducerEntry(input: {
     access,
     clock,
     collectionSource: publicCollectionDiscoverySource({ pool }),
-    ...(reviewSource ? { reviewSource } : {}),
+    ...(input.reviewSource ? { reviewSource: input.reviewSource } : {}),
+    ...(nativeReviewSource ? { nativeReviewSource } : {}),
     space,
   });
   return Object.freeze({

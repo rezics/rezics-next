@@ -297,6 +297,8 @@ export type DiscoveryMetadataRecord = Readonly<{
 export type DiscoveryMetadataProducer = Readonly<{
   kind: DiscoveryMetadataKind;
   owner: 'commerce' | 'content';
+  /** Native opt-in for status-only readiness. Initial page fences still require turn admission and the actual partition page. */
+  initialPopulationWitness?: 'none';
   readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
   page(
     partition: number,
