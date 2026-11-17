@@ -16,6 +16,7 @@ import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
 import { clientModuleSelectorEsm } from './scripts/client-module-esm.ts';
 import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
+import { logWebStartupMemory, webStartupMemoryAdmitted } from './tests/native/native-memory.ts';
 import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
@@ -316,6 +317,7 @@ function workerDeniedDependencies(): Plugin {
 }
 
 function webStartupEvidencePlugin(): Plugin {
+  const memory = process.env[webStartupMemoryAdmitted] === '1';
   const startedAt = performance.now();
   const modules = new Map<string, number>();
   return {
@@ -336,7 +338,7 @@ function webStartupEvidencePlugin(): Plugin {
       webStartupLog('server-initialization-start', { stage: 'optimizer-and-listen' });
     },
     transform(_code, id) {
-      if (!webStartupTraceId()) return;
+      if (!memory && !webStartupTraceId()) return;
       const environment = this.environment.name;
       const count = (modules.get(environment) ?? 0) + 1;
       modules.set(environment, count);
@@ -349,10 +351,15 @@ function webStartupEvidencePlugin(): Plugin {
         heapMiB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
         module: relative(appRoot, filePathOf(id)),
       });
+      if (memory && environment === 'ssr' && (count === 5000 || count === 6250))
+        logWebStartupMemory(`ssr-${count}`, 'vite');
+      if (memory && environment === 'client' && (count === 2500 || count === 3750))
+        logWebStartupMemory(`client-${count}`, 'vite');
     },
     configureServer(server) {
       webStartupLog('server-initialization-configured', { stage: 'listen-next' });
       server.httpServer?.once('listening', () => {
+        if (memory) logWebStartupMemory('vite-listen', 'vite');
         const address = server.httpServer?.address();
         webStartupLog('listen', {
           outcome: 'ready',

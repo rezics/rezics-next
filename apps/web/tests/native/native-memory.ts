@@ -1,4 +1,4 @@
-import { closeSync, openSync, readSync } from 'node:fs';
+import { closeSync, opendirSync, openSync, readlinkSync, readSync, writeSync } from 'node:fs';
 import { basename, posix } from 'node:path';
 import type { NativeProcessIdentity } from './lifecycle.ts';
 
@@ -28,6 +28,7 @@ type CgroupMemory =
       anonBytes: number;
       fileBytes: number;
       shmemBytes: number;
+      kernelBytes: number | null;
       maxBytes: number | 'max';
       cumulativePeakBytes: number | null;
       cumulativeEvents: { oom: number; oomKill: number; high: number; max: number } | null;
@@ -91,12 +92,17 @@ function unescapeMount(value: string): string {
   return value.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)));
 }
 
-function cgroupPaths(read: Read, declaredSlice: string | undefined) {
-  const membership = read('/proc/self/cgroup', 4096)
+function cgroupMembership(read: Read, path: string): string {
+  const membership = read(path, 4096)
     .split('\n')
     .find((line) => line.startsWith('0::'))
     ?.slice(3);
   if (!membership?.startsWith('/') || membership.split('/').includes('..')) throw new Error('cgroup_v2_unavailable');
+  return membership;
+}
+
+function cgroupPaths(read: Read, declaredSlice: string | undefined) {
+  const membership = cgroupMembership(read, '/proc/self/cgroup');
   const mount = read('/proc/self/mountinfo', 65536)
     .split('\n')
     .find((line) => line.includes(' - cgroup2 '));
@@ -113,12 +119,13 @@ function cgroupPaths(read: Read, declaredSlice: string | undefined) {
     depth = 1;
   while (ancestor !== command && (ancestor === mountpoint || ancestor.startsWith(`${mountpoint}/`))) {
     const name = posix.basename(ancestor);
-    if (expected ? name === expected : name.endsWith('.slice')) return { command, run: ancestor, depth };
+    if (expected ? name === expected : name.endsWith('.slice'))
+      return { command, run: ancestor, runMembership: posix.join(root, posix.relative(mountpoint, ancestor)), depth };
     if (ancestor === mountpoint) break;
     ancestor = posix.dirname(ancestor);
     depth++;
   }
-  return { command, run: null, depth: 0 };
+  return { command, run: null, runMembership: null, depth: 0 };
 }
 function cgroupMemory(read: Read, path: string, depth: number): CgroupMemory {
   try {
@@ -140,6 +147,7 @@ function cgroupMemory(read: Read, path: string, depth: number): CgroupMemory {
       anonBytes: integer(stat.get('anon')),
       fileBytes: integer(stat.get('file')),
       shmemBytes: integer(stat.get('shmem')),
+      kernelBytes: optional(() => integer(stat.get('kernel'))),
       maxBytes: maximum === 'max' ? 'max' : integer(maximum),
       cumulativePeakBytes: optional(() => integer(read(`${path}/memory.peak`, 128).trim())),
       cumulativeEvents: events,
@@ -275,4 +283,156 @@ export function sampleNativeMemory(
       unavailableTruncated,
     },
   };
+}
+
+export const webStartupMemoryOptIn = 'REZICS_WEB_STARTUP_MEMORY';
+export const webStartupMemoryAdmitted = 'REZICS_WEB_STARTUP_MEMORY_ADMITTED';
+
+type WebMemoryCheckpoint =
+  | 'declarations-before'
+  | 'declarations-after'
+  | 'vite-listen'
+  | 'ssr-5000'
+  | 'ssr-6250'
+  | 'client-2500'
+  | 'client-3750';
+type WebMemoryRole =
+  | 'vite'
+  | 'webPreparer'
+  | 'kernelHttp'
+  | 'auth'
+  | 'authPages'
+  | 'worker'
+  | 'workerd'
+  | 'chromium'
+  | 'other';
+type RoleMemory = { count: number; pssCount: number; pssBytes: number | null };
+type ReadChildren = (path: string) => { names: string[]; truncated: boolean };
+
+function boundedCgroupChildren(path: string): ReturnType<ReadChildren> {
+  const directory = opendirSync(path);
+  const names: string[] = [];
+  try {
+    for (let scanned = 0; scanned < 128; scanned++) {
+      const entry = directory.readSync();
+      if (!entry) return { names, truncated: false };
+      if (entry.isDirectory()) names.push(entry.name);
+    }
+    return { names, truncated: true };
+  } finally {
+    directory.closeSync();
+  }
+}
+
+function webMemoryRole(args: string[], cwd: () => string): WebMemoryRole {
+  const command = posix.basename(args[0] ?? '');
+  if (/^(chrome|chromium|chrome-headless-shell|headless_shell|chrome_crashpad_handler)$/.test(command))
+    return 'chromium';
+  if (command === 'workerd') return 'workerd';
+  if (args.some((arg) => posix.basename(arg) === 'work-auth-worker.ts')) return 'worker';
+  const stack = args.findIndex((arg) => posix.basename(arg) === 'dev-stack.ts');
+  if (stack !== -1 && args[stack + 1] === 'web') return 'webPreparer';
+  if (stack !== -1 && args[stack + 1] === 'host') return 'auth';
+  if (
+    args.some((arg) => arg === 'src/server.ts' || arg.endsWith('/services/kernel/src/server.ts')) &&
+    cwd().endsWith('/services/kernel')
+  )
+    return 'kernelHttp';
+  if (args.some((arg) => posix.basename(arg) === 'vite.config.ts') && cwd().endsWith('/apps/auth')) return 'authPages';
+  return 'other';
+}
+
+/** Inspect only the slice and command scope named by the owning physical run. Process totals are PSS observations;
+ * cgroup charges (including file cache) are independent. Only aggregate roles leave this reader.
+ */
+export function sampleWebStartupMemory(
+  selfRole: 'webPreparer' | 'vite',
+  env = process.env,
+  read: Read = boundedRead,
+  readChildren: ReadChildren = boundedCgroupChildren,
+  readCwd: (pid: number) => string = (pid) => readlinkSync(`/proc/${pid}/cwd`),
+  selfPid = process.pid,
+) {
+  const run = env.REZICS_CHECK_RUN;
+  const slice = env.REZICS_CHECK_SLICE;
+  if (!run || !/^[a-z0-9]+-[a-f0-9]{8}$/.test(run) || slice !== `rezics-check-${run.replaceAll('-', '_')}.slice`)
+    return { status: 'unavailable', reason: 'owned_run_not_declared' };
+  const paths = optional(() => cgroupPaths(read, slice));
+  if (!paths?.run || !paths.runMembership || posix.basename(paths.command) !== `rezics-check-${run}.scope`)
+    return { status: 'unavailable', reason: 'owned_run_slice_unavailable' };
+  const memory = cgroupMemory(read, paths.run, paths.depth);
+  const directories = [paths.run];
+  const pids = new Set<number>();
+  let partial = false;
+  for (const directory of directories) {
+    try {
+      const procs = read(`${directory}/cgroup.procs`, 4096).trim();
+      for (const pid of procs ? procs.split(/\s+/) : []) {
+        if (pids.size === 48) {
+          partial = true;
+          break;
+        }
+        pids.add(integer(pid));
+      }
+    } catch {
+      partial = true;
+    }
+    try {
+      const children = readChildren(directory);
+      partial ||= children.truncated || directories.length + children.names.length > 12;
+      for (const child of children.names.slice(0, 12 - directories.length))
+        directories.push(posix.join(directory, child));
+    } catch {
+      partial = true;
+    }
+  }
+  const roles: Partial<Record<WebMemoryRole, RoleMemory>> = {};
+  let unavailableCount = 0;
+  for (const pid of pids) {
+    const observed = optional(() => {
+      const proc = `/proc/${pid}`;
+      const before = processStat(read(`${proc}/stat`, 4096));
+      const member = cgroupMembership(read, `${proc}/cgroup`);
+      if (member !== paths.runMembership && !member.startsWith(`${paths.runMembership}/`)) return null;
+      const role =
+        pid === selfPid
+          ? selfRole
+          : (optional(() => webMemoryRole(read(`${proc}/cmdline`, 8192).split('\0'), () => readCwd(pid))) ?? 'other');
+      const pss = optional(() => 1024 * integer(/^Pss:\s+(\d+) kB$/m.exec(read(`${proc}/smaps_rollup`, 4096))?.[1]));
+      if (
+        processStat(read(`${proc}/stat`, 4096)).startTime !== before.startTime ||
+        cgroupMembership(read, `${proc}/cgroup`) !== member
+      )
+        return null;
+      return { role, pss };
+    });
+    if (!observed) {
+      unavailableCount++;
+      continue;
+    }
+    const row = (roles[observed.role] ??= { count: 0, pssCount: 0, pssBytes: null });
+    row.count++;
+    if (observed.pss !== null) {
+      row.pssCount++;
+      row.pssBytes = (row.pssBytes ?? 0) + observed.pss;
+    }
+  }
+  return { status: 'observed', memory, processes: { partial, unavailableCount, roles } };
+}
+
+const webMemoryCheckpoints = new Set<WebMemoryCheckpoint>();
+
+export function logWebStartupMemory(checkpoint: WebMemoryCheckpoint, selfRole: 'webPreparer' | 'vite'): void {
+  if (webMemoryCheckpoints.has(checkpoint)) return;
+  webMemoryCheckpoints.add(checkpoint);
+  const sampledAt = new Date().toISOString();
+  const observation = optional(() => sampleWebStartupMemory(selfRole)) ?? {
+    status: 'unavailable',
+    reason: 'memory_sample_unavailable',
+  };
+  try {
+    writeSync(2, `[web-startup-memory] ${JSON.stringify({ checkpoint, sampledAt, ...observation })}\n`);
+  } catch {
+    // Diagnostics do not interrupt startup if the output pipe is already gone.
+  }
 }
