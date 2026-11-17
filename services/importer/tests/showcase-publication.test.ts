@@ -7,6 +7,7 @@ import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/def
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { showcaseLimits } from '../src/showcase-contract.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -684,7 +685,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     );
     const expectedGraphSelection: AdoptionSelection = [
       ...retainedGraphSelection,
-      { candidate: graphParentCandidateId, rank: 'normal' },
+      { candidate: graphParentCandidateId, rank: 'normal' as const },
     ].sort((left, right) => left.candidate.localeCompare(right.candidate));
     expect(graphReplacement?.body).toEqual({
       context: globalContext,
@@ -724,6 +725,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const graphReadback = await review.reviewedCandidates(tagConceptId, {
       context: globalContext,
       property: 'skos:broader',
+      limit: showcaseLimits.reviewPage,
     });
     expect(graphReadback.candidates).toEqual(
       expect.arrayContaining([
@@ -970,7 +972,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     const expectedAbstractSelection: AdoptionSelection = [
       ...retainedAbstractSelection,
-      { candidate: sourceSynopsis.id, rank: 'normal' },
+      { candidate: sourceSynopsis.id, rank: 'normal' as const },
     ].sort((left, right) => left.candidate.localeCompare(right.candidate));
     const abstractReplacement = adoptionWrites.find(
       (write) => write.subjectId === workId && write.body.property === 'schema:abstract',
@@ -985,6 +987,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const abstractReadback = await review.reviewedCandidates(workId, {
       context: globalContext,
       property: 'schema:abstract',
+      limit: showcaseLimits.reviewPage,
     });
     expect(abstractReadback.candidates).toEqual(
       expect.arrayContaining(
@@ -1014,7 +1017,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       const currentSelection = adopted.get(`${subject.id}\0schema:abstract`)!.selection;
       expect(currentSelection).toEqual(
         subject.id === workId
-          ? [...retainedAbstractSelection, { candidate: candidate.id, rank: 'normal' }].sort((left, right) =>
+          ? [...retainedAbstractSelection, { candidate: candidate.id, rank: 'normal' as const }].sort((left, right) =>
               left.candidate.localeCompare(right.candidate),
             )
           : [{ candidate: candidate.id, rank: 'normal' }],
@@ -1119,6 +1122,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const rejectedMembershipPage = await review.reviewedCandidates(membership.command.subject, {
       context: globalContext,
       property: 'schema:genre',
+      limit: showcaseLimits.reviewPage,
     });
     expect(rejectedMembershipPage.candidates).toContainEqual(
       expect.objectContaining({ id: membershipCandidateId, decision: 'rejected', rank: 'deprecated' }),
@@ -1699,7 +1703,7 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
             ]),
           ),
         },
-      }) as unknown as ReviewedSubjectRead;
+      });
     const tables: CrossMediaTables = {
       async *rows(provider, table) {
         if (provider !== 'vndb') return;
@@ -1786,7 +1790,7 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
       const acknowledged = journal.acknowledgedCommands();
       const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
       const adoptionWrites: Parameters<ShowcaseReviewPort['adoptReviewedCandidates']>[1][] = [];
-      const publicReads: ReviewedSubjectRead[] = [];
+      const publicReads: ReturnType<typeof read>[] = [];
       let unavailableCandidateId: string | null = unresolved.id;
       const review: ShowcaseReviewPort = {
         fence: port.fence,
@@ -1945,7 +1949,7 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
       );
       const attempts = acceptanceCalls.filter((call) => call.candidateId === unresolved.id);
       expect(attempts).toHaveLength(3);
-      expect(attempts).toEqual([attempts[0], attempts[0], attempts[0]]);
+      for (const attempt of attempts) expect(attempt).toEqual(attempts[0]!);
       expect(journal.action(actionKey)).toMatchObject({
         state: 'acknowledged',
         body_json: originalAction.body_json,

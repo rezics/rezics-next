@@ -876,7 +876,7 @@ test('selected Book drafts preserve exact role admission through the publication
     { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
     { person_id: 6023, subject_id: 27, position: 2004, appear_eps: '' },
   ];
-  const expectedCredits = [
+  const expectedCredits: ReturnType<typeof creditTuples> = [
     {
       kind: 'staff',
       work: '26',

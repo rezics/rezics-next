@@ -10,6 +10,7 @@ import {
   publicHasValue,
   readCurrentCandidatePages,
   safeCandidatePage,
+  type CandidateRead,
 } from '../src/showcase-current-reads.ts';
 import { ShowcaseJournal } from '../src/showcase-journal.ts';
 import {
@@ -246,7 +247,7 @@ test('candidate listing resumes a journaled cursor after an interrupted seed run
     references: [],
   };
   const terminal = '019a1b2c-3d4e-7f00-8a00-000000000006';
-  const rejected = {
+  const rejected: CandidateRead = {
     id: '019a1b2c-3d4e-7f00-8a00-000000000007',
     source: null,
     statement,

@@ -465,6 +465,8 @@ test('current graph identities recover after reopen while current siblings keep 
     const drafts = plan.edges.filter((edge) => edge.relation || edge.vndbRelation);
     const side = drafts.find((edge) => edge.vndbRelation)!;
     const sideKey = graphEdgeCommandKey(side);
+    const vndbKeys = new Set(drafts.filter((edge) => edge.vndbRelation).map(graphEdgeKey));
+    const bangumiKeys = new Set(drafts.filter((edge) => edge.source === 'bangumi').map(graphEdgeKey));
     const nativeId = (key: string) => id(Number(key.replace(/^v/u, '')));
     const nativeType = (key: string) =>
       key.startsWith('v')
@@ -515,11 +517,11 @@ test('current graph identities recover after reopen while current siblings keep 
       });
 
     const first = await deliver();
-    expect(first.proposed.some((edge) => edge.vndbRelation)).toBe(false);
+    expect(first.proposed.some((edge) => vndbKeys.has(edge.key))).toBe(false);
     expect(first.unresolved).toContainEqual(
       expect.objectContaining({ reason: 'current_relation_endpoint_identity_mismatch:v17102' }),
     );
-    expect(first.proposed.some((edge) => edge.source === 'bangumi')).toBe(true);
+    expect(first.proposed.some((edge) => bangumiKeys.has(edge.key))).toBe(true);
 
     db.close();
     db = new Database(path);
@@ -527,7 +529,7 @@ test('current graph identities recover after reopen while current siblings keep 
     graph.remember(drafts);
     restored = true;
     const reopened = await deliver();
-    expect(reopened.proposed.some((edge) => edge.vndbRelation && edge.holder === side.holder)).toBe(true);
+    expect(reopened.proposed.some((edge) => edge.key === graphEdgeKey(side) && edge.holder === side.holder)).toBe(true);
     expect(sends.find((command) => command.key === sideKey)?.key).toBe(sideKey);
     const afterRecovery = sends.length;
 

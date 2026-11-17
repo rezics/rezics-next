@@ -11,6 +11,7 @@ import { reviewedCatalogueReviewAttemptBound } from '../src/reviewed-catalogue-a
 import { createReviewedCatalogueApplication } from '../src/reviewed-catalogue-application.ts';
 import { reviewedCatalogueSlot, type ReviewedCataloguePort } from '../src/reviewed-catalogue-contract.ts';
 import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
+import { reviewedStatementFixture, reviewedSubjectFixture } from './transport-driver.ts';
 
 type AcceptBody = Parameters<ReviewedCataloguePort['acceptReviewedCandidate']>[2];
 type AdoptBody = Parameters<ReviewedCataloguePort['adoptReviewedCandidates']>[1];
@@ -29,13 +30,7 @@ type Candidate = {
 };
 
 function nativeStatement(candidate: Candidate) {
-  return {
-    ...structuredClone(candidate.statement),
-    id: candidate.id,
-    rank: candidate.rank ?? 'normal',
-    qualifiers: [],
-    rezics: { release: 'released', revision: 1 },
-  };
+  return reviewedStatementFixture(candidate.id, candidate.rank ?? 'normal', candidate.statement);
 }
 
 /** The fake server commits independently of delivery and checks exact replays before current CAS heads. */
@@ -52,7 +47,7 @@ function reviewedServer() {
   const adoptReceipts = new Map<string, { call: AdoptCall; receipt: Adoption }>();
   const calls = { accept: [] as AcceptCall[], adopt: [] as AdoptCall[] };
   const events: ('accept' | 'adopt' | 'read')[] = [];
-  const reads: { subject: string; property: string; cursor?: string }[] = [];
+  const reads: { subject: string; property: string; cursor: string | undefined }[] = [];
   const slot = (subject: string, property: string) => `${subject}\0${property}`;
   const stale = () => new ImportTransportError(state.staleStatus, undefined, 'review_head_changed');
 
@@ -145,12 +140,14 @@ function reviewedServer() {
           decision: candidate.decision,
           rank: candidate.rank,
           head: candidate.head,
+          release: 'released',
+          revision: 1,
           retracted: null,
           retraction: null,
         })),
         adoption: head === undefined ? null : { mode: 'replace', head },
         next: continued ? null : 'current-candidates',
-      } as Awaited<ReturnType<ReviewedCataloguePort['reviewedCandidates']>>;
+      };
     },
     async acceptReviewedCandidate(subject, id, body, key) {
       events.push('accept');
@@ -191,11 +188,14 @@ function reviewedServer() {
       return receipt;
     },
     async readReviewedSubject(id) {
-      const current = structuredClone(subjects.get(id)!);
-      if (state.omitPublicFacts) current.statements = {};
-      return {
-        subject: { id, context: reviewedCatalogueSlot('schema:url').context, ...current },
-      } as Awaited<ReturnType<ReviewedCataloguePort['readReviewedSubject']>>;
+      const current = subjects.get(id)!;
+      return reviewedSubjectFixture({
+        id,
+        type: current.type,
+        context: reviewedCatalogueSlot('schema:url').context,
+        labels: {},
+        statements: state.omitPublicFacts ? {} : current.statements,
+      });
     },
   };
   return { port, state, candidates, calls, events, reads, selectCurrent, acceptReceipts, adoptReceipts };
@@ -290,8 +290,8 @@ for (const kind of ['accept', 'adopt'] as const) {
       const session = new ImportSession(path);
       try {
         expect(await application.readBinding(session.bindings, port)).toEqual({
-          sourceConcept: recovered.subjects['source-harem'],
-          canonicalConcept: recovered.subjects['canonical-harem'],
+          sourceConcept: recovered.subjects['source-harem']!,
+          canonicalConcept: recovered.subjects['canonical-harem']!,
         });
       } finally {
         session.close();

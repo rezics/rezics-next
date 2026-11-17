@@ -16,6 +16,7 @@ import {
   type ReviewedCataloguePort,
 } from '../src/reviewed-catalogue-contract.ts';
 import { releasedReviewedVocabulary, type ReviewedVocabularyPort } from '../src/reviewed-vocabulary-port.ts';
+import { reviewedStatementFixture, reviewedSubjectFixture } from './transport-driver.ts';
 
 type Candidate = {
   id: string;
@@ -30,13 +31,7 @@ type AdoptionBody = Parameters<ReviewedCataloguePort['adoptReviewedCandidates']>
 const continuation = 'reviewed-rejected-neighbor-next';
 
 function nativeStatement(candidate: Candidate, rank = candidate.rank ?? 'normal') {
-  return {
-    ...structuredClone(candidate.statement),
-    id: candidate.id,
-    rank,
-    qualifiers: [],
-    rezics: { release: 'released', revision: 1 },
-  };
+  return reviewedStatementFixture(candidate.id, rank, candidate.statement);
 }
 
 function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
@@ -46,7 +41,7 @@ function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
   const rejectedId = randomUUID();
   const subjects = new Map<
     string,
-    { type: string; labels: unknown; statements: Record<string, ReturnType<typeof nativeStatement>[]> }
+    { type: string; labels: Record<string, string>; statements: Record<string, ReturnType<typeof nativeStatement>[]> }
   >();
   const candidates = new Map<string, Candidate>();
   const receipts = new Map<string, BatchWriteResult['results'][number]>();
@@ -54,7 +49,7 @@ function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
   const proposals: Extract<BatchCommand, { op: 'propose' }>[] = [];
   const accepted: string[] = [];
   const adoptions: { subject: string; body: AdoptionBody }[] = [];
-  const reads: { property: string; cursor?: string; signal?: AbortSignal }[] = [];
+  const reads: { property: string; cursor: string | undefined; signal: AbortSignal | undefined }[] = [];
   const slot = (subject: string, property: string) => `${subject}\0${property}`;
   const port: ReviewedCataloguePort = {
     async fence() {
@@ -131,12 +126,14 @@ function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
           decision: candidate.decision,
           rank: candidate.rank,
           head: candidate.head,
+          release: 'released',
+          revision: 1,
           retracted: null,
           retraction: null,
         })),
         next: paginated && hasRejected && !continued ? continuation : null,
         adoption: head === undefined ? null : { mode: 'replace', head },
-      } as Awaited<ReturnType<ReviewedCataloguePort['reviewedCandidates']>>;
+      };
     },
     async acceptReviewedCandidate(subject, id, body) {
       const candidate = candidates.get(id)!;
@@ -172,9 +169,7 @@ function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
       } as Awaited<ReturnType<ReviewedCataloguePort['adoptReviewedCandidates']>>;
     },
     async readReviewedSubject(id) {
-      return {
-        subject: { id, context: reviewedCatalogueSlot('schema:url').context, ...structuredClone(subjects.get(id)!) },
-      } as Awaited<ReturnType<ReviewedCataloguePort['readReviewedSubject']>>;
+      return reviewedSubjectFixture({ id, context: reviewedCatalogueSlot('schema:url').context, ...subjects.get(id)! });
     },
   };
   const selectCurrent = (subject: string, property: string, candidate: string, rank: 'normal' | 'preferred') => {
@@ -206,7 +201,7 @@ for (const paginated of [false, true]) {
         sourceConcept: first.subjects['source-harem']!,
         canonicalConcept: first.subjects['canonical-harem']!,
       };
-      const expected = vocabulary.inventory.flatMap((seed) =>
+      const expected = vocabulary.inventory.flatMap<Extract<BatchCommand, { op: 'propose' }>>((seed) =>
         seed.facts.map((fact) => ({
           op: 'propose',
           source: reviewedCatalogueEnvelope(seed, vocabulary.revision),
@@ -220,7 +215,7 @@ for (const paginated of [false, true]) {
       for (const receipt of first.facts) {
         const read = await port.readReviewedSubject(receipt.subject, signal);
         expect(read.subject.statements[receipt.statement.property.id]).toContainEqual(
-          expect.objectContaining({ ...receipt.statement, id: receipt.candidate, rank: 'preferred' }),
+          reviewedStatementFixture(receipt.candidate, 'preferred', receipt.statement),
         );
       }
 

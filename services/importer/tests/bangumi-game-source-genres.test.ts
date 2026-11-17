@@ -10,6 +10,7 @@ import {
   createShowcaseBangumiGameGenreLookup,
   parseBangumiGameGenreBindings,
 } from '../src/showcase-bangumi-game-genres.ts';
+import { isUnavailableIdentifierResolution, type ImportIdentifierResolution } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -140,7 +141,8 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
     conversion: contextFree,
     signal: new AbortController().signal,
   });
-  if ('status' in withheld) throw new Error('Wrong-scheme fixture unexpectedly reported a read outage');
+  if (isUnavailableIdentifierResolution(withheld))
+    throw new Error('Wrong-scheme fixture unexpectedly reported a read outage');
   expect(withheld).toEqual({});
   expect(wrongScheme.diagnostics()).toContainEqual({
     sourceKey: String(record.id),
@@ -224,8 +226,8 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
       signal,
     });
   const idsFor = () => literals.map((value) => adapter.bindingFor(value)?.id);
-  const refs = () =>
-    Object.fromEntries(literals.map((value, index) => [bangumiGameSourceGenreReference(value), ids[index]]));
+  const refs = (): Readonly<Record<string, string>> =>
+    Object.fromEntries(literals.map((value, index) => [bangumiGameSourceGenreReference(value), ids[index]!]));
   const expectReads = (count: number) => expect([...reads.values()]).toEqual(Array(4).fill(count));
 
   const currentSignal = new AbortController().signal;
@@ -239,7 +241,7 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   const retiredSignal = new AbortController().signal;
   const retired = await lookup(retiredSignal);
   expect(await lookup(retiredSignal, '91046')).toEqual(retired);
-  expect(retired).toEqual({ [bangumiGameSourceGenreReference(literals[2]!)]: ids[2] });
+  expect(retired).toEqual({ [bangumiGameSourceGenreReference(literals[2]!)]: ids[2]! });
   expect(idsFor()).toEqual([undefined, undefined, ids[2]]);
   expectReads(2);
   expect([...associations.values()]).toEqual([1]);
@@ -254,13 +256,14 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   const unavailableSignal = new AbortController().signal;
   const unavailable = await lookup(unavailableSignal);
   expect(await lookup(unavailableSignal, '91046')).toEqual(unavailable);
-  expect(unavailable).toEqual({
+  const deferred: Extract<ImportIdentifierResolution, { status: 'unavailable' }> = {
     status: 'unavailable',
     preserveProperties: ['schema:genre'],
     resolvedReferences: Object.fromEntries(
-      literals.slice(1).map((value, index) => [bangumiGameSourceGenreReference(value), ids[index + 1]]),
+      literals.slice(1).map((value, index) => [bangumiGameSourceGenreReference(value), ids[index + 1]!]),
     ),
-  });
+  };
+  expect(unavailable).toEqual(deferred);
   expect(idsFor()).toEqual([undefined, ids[1], ids[2]]);
   expectReads(4);
 

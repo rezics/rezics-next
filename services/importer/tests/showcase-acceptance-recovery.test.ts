@@ -9,7 +9,6 @@ import {
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 import { showcaseDigest } from '../src/showcase-contract.ts';
@@ -61,7 +60,7 @@ async function recoveryFixture() {
           ]),
         ),
       },
-    }) as unknown as ReviewedSubjectRead;
+    });
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
       if (provider !== 'vndb') return;
@@ -156,7 +155,7 @@ async function recoveryFixture() {
     addEditorial('preferred');
     const calls: { candidateId: string; body: AcceptBody; key: string }[] = [];
     const adoptions: AdoptBody[] = [];
-    const publicReads: ReviewedSubjectRead[] = [];
+    const publicReads: ReturnType<typeof read>[] = [];
     const review: ShowcaseReviewPort = {
       fence: port.fence,
       readReviewedSubject: port.readReviewedSubject,
