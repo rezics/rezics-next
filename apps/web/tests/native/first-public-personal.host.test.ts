@@ -2,9 +2,11 @@ import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
 import type { Page } from 'playwright';
 import { decodePreferenceValues } from '@rezics/client';
+import { LIBRARY_PAGE_LIMIT } from '../../src/library/reads.ts';
 import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
-import { createLibraryEntry } from './library-navigation-fixture.ts';
+import { createLibraryEntry, prepareLibraryEntryCreator } from './library-navigation-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const lifecycle = new NativeTestLifecycle('first-public personal Web paths');
@@ -13,8 +15,9 @@ const settings = '/en/settings';
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
 
-nativeBeforeAll(lifecycle, 300_000, async () => {
+nativeBeforeAll(lifecycle, 600_000, async () => {
   await prepareNativeAuthMessages();
+  await prepareNativeWebSearch('first-public-personal');
   stack = await startNativeWebStack();
   auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
 });
@@ -154,6 +157,138 @@ nativeTest(
     expect((await bob.goto(shelfUrl, { waitUntil: 'domcontentloaded' }))?.status()).toBe(404);
     await browserExpect(bob.getByRole('heading', { level: 1, name: /not found/i })).toBeVisible();
     await browserExpect(bob.getByRole('main')).not.toContainText(name);
+  },
+  lifecycle,
+);
+
+nativeTest(
+  'W17 filters the owner’s built-in Everything Collection, follows its native cursor, and opens the exact Subject',
+  600_000,
+  async (signal) => {
+    const owner = await stack.authPersona('bob');
+    const createEntry = await prepareLibraryEntryCreator(stack, 'bob', owner.authorization);
+    const property = 'schema:datePublished';
+    const filterKey = `r.${property}`;
+    const filterValue = '1990,1999';
+    const createDatedEntry = async (title: string, year: number) => {
+      const { id } = await createEntry(title, {
+        [property]: [
+          {
+            property: { id: property },
+            value: {
+              type: 'value',
+              content: {
+                time: `+${year}-00-00T00:00:00Z`,
+                precision: 9,
+                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+              },
+            },
+            references: [
+              {
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/books' } },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      return { id, title };
+    };
+    const matching: { id: string; title: string }[] = [];
+    for (let index = 0; index <= LIBRARY_PAGE_LIMIT; index++) {
+      signal.throwIfAborted();
+      matching.push(await createDatedEntry(`Everything result ${index + 1}`, 1995));
+    }
+    await createDatedEntry('Everything result outside the range', 1985);
+
+    const { collections } = (await read(`/v1/collections?curatorAccountId=${owner.accountId}&limit=100`, 'bob')) as {
+      collections: { id: string; builtinKind?: string }[];
+    };
+    const everything = collections.find((collection) => collection.builtinKind === 'everything');
+    if (!everything) throw new Error('The native owner directory did not return Everything');
+    const collectionPath = `/en/collections/${encodeURIComponent(everything.id)}`;
+    const membersPath = `/v1/collections/${encodeURIComponent(everything.id)}/members`;
+    async function mountedMemberQuery(start: number, cursor: string | null) {
+      await stack.syncKernelRequests();
+      const request = stack
+        .kernelRequests()
+        .slice(start)
+        .findLast(({ method, url, fixtureRequest, responseStatus }) => {
+          if (fixtureRequest || method !== 'GET' || responseStatus !== 200) return false;
+          const address = new URL(url, stack.kernelOrigin);
+          return (
+            address.pathname === membersPath &&
+            address.searchParams.has('filter') &&
+            address.searchParams.get('cursor') === cursor
+          );
+        });
+      if (!request) throw new Error('The mounted Everything Collection did not complete its filtered native read');
+      const query = new URL(request.url, stack.kernelOrigin).searchParams;
+      expect(query.get('view')).toBe('FULL');
+      expect(query.get('limit')).toBe(String(LIBRARY_PAGE_LIMIT));
+      return query.get('filter')!;
+    }
+
+    const page = await accountPage('bob', library);
+    const link = page.getByRole('link', { name: 'Everything', exact: true });
+    await browserExpect(link).toHaveAttribute('href', collectionPath);
+    await link.click();
+    await browserExpect(page).toHaveURL(new URL(collectionPath, stack.web).href);
+    await page.locator('html[data-hydrated]').waitFor();
+    await browserExpect(page.getByRole('heading', { level: 1, name: 'Everything', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    const filters = page.getByRole('dialog', { name: 'Filters', exact: true });
+    await filters.getByRole('searchbox', { name: 'Find a property' }).fill(property);
+    await filters.getByRole('combobox', { name: 'Property', exact: true }).click();
+    await page.getByRole('option', { name: 'publication date', exact: true }).click();
+    await filters.locator(`input[name="range.from.${property}"]:visible`).fill('1990');
+    await filters.locator(`input[name="range.to.${property}"]:visible`).fill('1999');
+    await stack.syncKernelRequests();
+    const firstStart = stack.kernelRequests().length;
+    await filters.getByRole('button', { name: 'Apply filters', exact: true }).click();
+    await browserExpect(page).toHaveURL(
+      (url) =>
+        url.pathname === collectionPath && url.searchParams.get(filterKey) === filterValue && !url.searchParams.has('cursor'),
+      { timeout: 120_000 },
+    );
+    const more = page
+      .getByRole('navigation', { name: 'Members', exact: true })
+      .getByRole('link', { name: 'More', exact: true });
+    await browserExpect(more).toBeVisible({ timeout: 120_000 });
+    const filter = await mountedMemberQuery(firstStart, null);
+    expect(JSON.parse(filter)).toEqual({ statement: { property, range: { gte: 1990, lte: 1999 } } });
+
+    const members = page.locator('[data-collection-members] a[data-slot="list-row-link"]');
+    await browserExpect(members).toHaveCount(LIBRARY_PAGE_LIMIT);
+    const firstPageIds = await members.evaluateAll((links) =>
+      links.map((item) => new URL((item as HTMLAnchorElement).href).pathname.split('/')[3]!),
+    );
+    const remaining = matching.filter(({ id }) => !firstPageIds.includes(id));
+    expect(remaining).toHaveLength(1);
+    const target = remaining[0]!;
+    const emitted = new URL((await more.getAttribute('href'))!, stack.web);
+    expect(emitted.pathname).toBe(collectionPath);
+    expect(emitted.searchParams.get(filterKey)).toBe(filterValue);
+    const cursor = emitted.searchParams.get('cursor');
+    if (!cursor) throw new Error('The filtered Everything page did not emit a native continuation cursor');
+
+    const secondStart = stack.kernelRequests().length;
+    await more.click();
+    await browserExpect(page).toHaveURL(emitted.href, { timeout: 120_000 });
+    const subjectPath = `/en/subjects/${target.id}/`;
+    const member = members
+      .and(page.getByRole('link', { name: target.title, exact: true }))
+      .and(page.locator(`a[href^="${subjectPath}"]`));
+    await browserExpect(member).toBeVisible({ timeout: 120_000 });
+    await browserExpect(members).toHaveCount(1);
+    expect(await mountedMemberQuery(secondStart, cursor)).toBe(filter);
+
+    const subjectUrl = new URL((await member.getAttribute('href'))!, stack.web);
+    await member.click();
+    await browserExpect(page).toHaveURL(subjectUrl.href);
+    await browserExpect(page.getByRole('heading', { level: 1, name: target.title, exact: true })).toBeVisible();
   },
   lifecycle,
 );

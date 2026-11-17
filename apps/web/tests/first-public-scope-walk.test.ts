@@ -53,6 +53,7 @@ test('external paths retain their exact native/browser suites without claiming a
     ['W14', 'tests/native/first-public-personal.host.test.ts'],
     ['W15', 'tests/native/first-public-personal.host.test.ts'],
     ['W16', 'tests/native/native-curated-collections.host.test.ts'],
+    ['W17', 'tests/native/first-public-personal.host.test.ts'],
     ['W19', 'tests/native/first-public-personal.host.test.ts'],
     ['W20', 'tests/native/first-public-personal.host.test.ts'],
     ['W21', 'tests/native/native-following.host.test.ts'],
