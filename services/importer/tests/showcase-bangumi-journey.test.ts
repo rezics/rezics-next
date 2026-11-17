@@ -22,6 +22,7 @@ import {
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
   assertCurrentOperatorFact,
+  assertUnchangedSeedReopen,
   writeWalkInventoryArtifacts,
   receiveWalkInventoryArtifacts,
   sealInterruptedWalkInventory,
@@ -34,7 +35,10 @@ import {
   mountedVisitsForRow,
   mountedWalkRow,
   operatorResponseEvidence,
+  parseWalkSelection,
+  publishedWalkSeed,
   retireWalkJournals,
+  runWalkSelection,
   selectPublished,
   walkChildFailure,
   walkFailureCause,
@@ -108,7 +112,8 @@ test('mounted verdicts require every visit independently of later shared failure
   );
   const incomplete = visits.filter((visit) => !(visit.sourceKey === '26' && visit.viewport === 'desktop'));
   expect(mountedWalkRow(native, incomplete)).toMatchObject({
-    result: 'failing',
+    result: 'unreached',
+    elapsedMs: null,
     evidence: { native: 'passing', browser: 'pending' },
   });
   expect(mountedWalkRow(native, visits, 20, 'later browser failure')).toMatchObject({
@@ -118,8 +123,9 @@ test('mounted verdicts require every visit independently of later shared failure
     evidence: { browser: 'passing' },
   });
   expect(mountedWalkRow(native, incomplete, 20, 'mount failed')).toMatchObject({
-    result: 'failing',
-    cause: 'mount failed',
+    result: 'unreached',
+    elapsedMs: null,
+    cause: 'shared mounted stage failed',
     evidence: { browser: 'failing' },
   });
   expect(mountedWalkRow({ ...native, result: 'failing', cause: 'native read failed' }, visits)).toMatchObject({
@@ -289,6 +295,8 @@ test('the licensed VNDB walk archive starts with TIMESTAMP then db/vn.header', a
 
 test('the walk inventory reports passing over twelve and the slowest failing journey', () => {
   const inventory: WalkInventory = {
+    selection: parseWalkSelection([]),
+    prerequisites: [],
     command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
     revision: 'abc',
     startedAt: '2026-11-07T00:00:00Z',
@@ -335,6 +343,8 @@ test('the walk inventory replaces each pending capabilities row and names the sl
   expect(capabilitiesResultCell(passing)).toContain('passing; 40ms; id subject-1');
   const markdown = `| Path | Scope | Current dev result and evidence |\n| ---- | ----- | ------------------------------- |\n| I01  | Bangumi operator | Pending initial dev walk.       |\n| I06  | Game | Pending initial dev walk.       |\n\nBooks owner-grant composition uses the ordinary Global grant intent.\n`;
   const updated = applyWalkInventoryToCapabilities(markdown, {
+    selection: parseWalkSelection([]),
+    prerequisites: [],
     command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
     revision: 'abc',
     startedAt: '2026-11-07T00:00:00Z',
@@ -351,6 +361,8 @@ test('the walk inventory replaces each pending capabilities row and names the sl
   expect(updated).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
   const adjacent = updated.replace('\n\nBooks owner-grant', '\nBooks owner-grant');
   const rewritten = applyWalkInventoryToCapabilities(adjacent, {
+    selection: parseWalkSelection([]),
+    prerequisites: [],
     command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
     revision: 'def',
     startedAt: '2026-11-07T01:00:00Z',
@@ -363,24 +375,36 @@ test('the walk inventory replaces each pending capabilities row and names the sl
   expect(rewritten).toContain('Revision `def`.');
   expect(rewritten).toContain('Slowest failing: I06 4000ms seed published no Game identity.');
   expect(rewritten).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
-  const prerequisite = { ...failing, elapsedMs: 930_227, evidence: { seed: true } };
+  const prerequisite: WalkRowResult = {
+    ...failing,
+    result: 'unreached',
+    elapsedMs: null,
+    cause: 'shared seed failed',
+    evidence: { prerequisite: 'seed' },
+  };
   const blocked: WalkInventory = {
+    selection: parseWalkSelection([]),
+    prerequisites: [{ stage: 'seed', elapsedMs: 930_227, cause: 'seed published no Game identity' }],
     command: 'walk',
     revision: 'abc',
     startedAt: 't0',
     endedAt: 't1',
     passing: 1,
     total: 2,
-    slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 930_227, cause: failing.cause! },
+    slowestFailing: null,
     rows: [passing, prerequisite],
   };
-  expect(capabilitiesResultCell(prerequisite)).toBe('unreached; seed published no Game identity');
-  expect(walkInventorySummary(blocked)).toBe('1/2 passing; slowest failing none; 0 failing; 1 unreached');
+  expect(capabilitiesResultCell(prerequisite)).toBe('unreached; shared seed failed');
+  expect(walkInventorySummary(blocked)).toBe(
+    '1/2 passing; slowest failing none; 0 failing; 1 unreached; shared seed failed after 930227ms: seed published no Game identity',
+  );
   expect(applyWalkInventoryToCapabilities(markdown, blocked)).toContain('No measured row failure.');
   expect(walkRepairSkipReason(failing)).toBeNull();
   expect(
     walkRepairBrief(
       {
+        selection: parseWalkSelection([]),
+        prerequisites: [],
         command: 'walk',
         revision: 'abc',
         startedAt: 't0',
@@ -414,13 +438,71 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
   expect(env.REZICS_LOCAL_STACK_ISSUER_ORIGIN).toBe(stack.issuer);
   expect(env.KERNEL_ORIGIN).toBe(stack.kernel);
   expect(env.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
-  const source = await readFile(join(import.meta.dir, '../src/imports-public-journey.ts'), 'utf8');
-  const operatorsAt = source.indexOf("['I01', 'I02', 'I04', 'I03'] as const) await recordOperator(id)");
-  const seedAt = source.indexOf('scripts/datasets/cross-media-seed.ts');
-  const pagesAt = source.search(/startWalkStackActions\(\s*\['pages', 'web'\]/);
-  expect(operatorsAt).toBeGreaterThan(0);
-  expect(seedAt).toBeGreaterThan(operatorsAt);
-  expect(pagesAt).toBeGreaterThan(seedAt);
+});
+
+test('walk selection uses one fresh published result for catalogue reads and only reopens on request', async () => {
+  const report = {
+    showcase: {
+      status: 'published',
+      manifest: { digest: 'a'.repeat(64) },
+      published: journeyTargets.map(({ sourceKey }) => publishedRow(sourceKey)),
+    },
+    sourceDigests: { 'vndb/vn.header': 'b'.repeat(64) },
+  };
+  const fresh = publishedWalkSeed(report);
+  expect(() => publishedWalkSeed({ ...report, showcase: { ...report.showcase, status: 'incomplete' } })).toThrow(
+    'did not publish',
+  );
+  expect(() => publishedWalkSeed({ ...report, sourceDigests: undefined })).toThrow('exact source digests');
+  const replay = structuredClone(report);
+  assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay));
+  replay.showcase.published[0]!.subjectId = 'different-native-id';
+  expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow('published Subject IDs');
+
+  for (const [args, expected] of [
+    [['--scope', 'operators'], ['operators']],
+    [
+      ['--scope', 'catalogue'],
+      ['seed', 'catalogue'],
+    ],
+    [
+      ['--scope', 'catalogue', '--reopen-seed'],
+      ['seed', 'catalogue', 'reopen'],
+    ],
+    [
+      ['--scope', 'all', '--reopen-seed'],
+      ['operators', 'seed', 'catalogue', 'reopen'],
+    ],
+    [[], ['operators', 'seed', 'catalogue']],
+  ] as const) {
+    const calls: string[] = [];
+    const actions = {
+      async operators() {
+        calls.push('operators');
+      },
+      async seed() {
+        calls.push('seed');
+        return fresh;
+      },
+      async catalogue(seed: typeof fresh) {
+        expect(seed).toBe(fresh);
+        calls.push('catalogue');
+      },
+      async reopenSeed(seed: typeof fresh) {
+        expect(seed).toBe(fresh);
+        calls.push('reopen');
+      },
+    };
+    const selection = parseWalkSelection(args);
+    await runWalkSelection(selection, actions);
+    expect(calls).toEqual([...expected]);
+    if (selection.scope === 'catalogue') {
+      calls.length = 0;
+      await runWalkSelection(selection, { ...actions, seed: async () => null });
+      expect(calls).toEqual([]);
+    }
+  }
+  expect(() => parseWalkSelection(['--scope', 'operators', '--reopen-seed'])).toThrow('Usage');
 });
 
 test('the walk forwards only seed phase evidence and retains the child stderr', async () => {
@@ -512,13 +594,10 @@ test('operator causes keep safe status and request metadata without private nest
     walkChildFailure(
       'seed',
       1,
-      'Invalid record binding operation\nded its bounded scan\n',
-      'TypeError: Invalid record binding operation\n',
+      'TypeError: private text\nCross-media seed import failed provider=vndb kind=bulk-failed\nCross-media seed failed\n',
     ).message,
-  ).toBe('seed exited 1: TypeError: Invalid record binding operation');
-  expect(walkChildFailure('seed', 1, 'noise\n', 'Invalid record binding operation\n').message).toBe(
-    'seed exited 1: Invalid record binding operation',
-  );
+  ).toBe('seed exited 1: Cross-media seed import failed provider=vndb kind=bulk-failed');
+  expect(walkChildFailure('seed', 1, 'TypeError: private text\n').message).toBe('seed exited 1');
 });
 
 test('operator response evidence keeps per-command refusal metadata and accepts empty success', async () => {
@@ -719,40 +798,65 @@ test('walk outputs preserve source documents and sibling drafts and group a shar
     const document = join(repository, 'docs/goals/imports.capabilities.md');
     await mkdir(join(repository, 'docs/goals'), { recursive: true });
     await mkdir(join(repository, '.temp/continuation'), { recursive: true });
-    const original =
-      '| I05 | Anime | Pending |\n| I11 | Books | Pending |\n\nBooks owner-grant composition uses ordinary grants.\n';
+    const original = [
+      ...FIRST_PUBLIC_IMPORT_ROWS.map(({ id, path }) => `| ${id} | ${path} | Prior result |`),
+      '',
+      '### Observed walk',
+      '',
+      'Prior whole-walk evidence.',
+      '',
+      'Books owner-grant composition uses ordinary grants.',
+    ].join('\n');
     await writeFile(document, original);
     const sibling = join(repository, '.temp/continuation/sibling.md');
     await writeFile(sibling, 'another owner');
-    const rows: WalkRowResult[] = (['I05', 'I11'] as const).map((id) => ({
+    const rows: WalkRowResult[] = FIRST_PUBLIC_IMPORT_ROWS.map(({ id, path }, index) => ({
       id,
-      path: id,
-      result: 'failing',
-      elapsedMs: 41000,
-      cause: 'semantic_not_ready POST /v1/subjects:batchWrite',
-      evidence: { seed: true },
+      path,
+      result: index < 4 ? 'unselected' : 'unreached',
+      elapsedMs: null,
+      cause: index < 4 ? null : 'shared seed failed',
+      evidence: index < 4 ? {} : { prerequisite: 'seed' },
     }));
     const inventory: WalkInventory = {
-      command: 'walk',
+      command: 'walk --scope catalogue',
       revision: 'source-head',
       startedAt: 't0',
       endedAt: 't1',
       passing: 0,
-      total: 2,
-      slowestFailing: { id: 'I05', path: 'Anime', elapsedMs: 41000, cause: rows[0]!.cause! },
+      total: 12,
+      selection: parseWalkSelection(['--scope', 'catalogue']),
+      prerequisites: [
+        {
+          stage: 'seed',
+          elapsedMs: 41000,
+          cause: 'semantic_not_ready POST /v1/subjects:batchWrite',
+          remainingRequest: { method: 'POST', path: '/v1/subjects:batchWrite', status: 503 },
+        },
+      ],
+      slowestFailing: null,
       rows,
     };
+    await expect(writeWalkInventoryArtifacts({ ...inventory, rows: rows.slice(0, -1) }, repository)).rejects.toThrow(
+      'No returned walk observation for I12',
+    );
     await writeWalkInventoryArtifacts(inventory, repository);
     expect(await readFile(document, 'utf8')).toBe(original);
     expect(await readFile(sibling, 'utf8')).toBe('another owner');
     const draft = await readFile(join(repository, '.temp/imports-walk/continuation/imports-walk-seed.md'), 'utf8');
-    expect(draft).toContain('Affected rows: I05, I11');
+    expect(draft).toContain('Affected rows: I05, I06, I07, I08, I09, I10, I11, I12');
     expect(draft).toContain('Elapsed seed work: 41000ms');
     expect(draft).toContain('Semantic cf23');
     expect(draft).toContain('No catalogue current read or browser path was exercised');
+    expect(await readdir(join(repository, '.temp/imports-walk/continuation'))).toEqual(['imports-walk-seed.md']);
     await writeFile(join(repository, '.temp/imports-walk/inventory.json'), JSON.stringify(inventory));
-    await receiveWalkInventoryArtifacts(repository);
-    expect(await readFile(document, 'utf8')).toContain('Revision `source-head`');
+    expect(await receiveWalkInventoryArtifacts(repository)).toEqual(inventory);
+    const received = await readFile(document, 'utf8');
+    expect(received).toContain('Revision `source-head`');
+    expect(received).toContain('Prior whole-walk evidence.');
+    expect(received).toContain('| I01 | Bangumi operator | Prior result |');
+    expect(received).toContain('Unselected: I01, I02, I03, I04.');
+    expect(received.match(/41000ms/g)).toHaveLength(1);
     expect(await readFile(join(repository, '.temp/continuation/imports-walk-seed.md'), 'utf8')).toBe(draft);
     expect(await readFile(sibling, 'utf8')).toBe('another owner');
   } finally {
@@ -768,7 +872,13 @@ test('a settled infrastructure termination seals only its active row and keeps i
     cause: 'semantic_not_ready',
     evidence: {},
   }));
-  const run = { command: 'retained walk', revision: 'abc', startedAt: '2026-11-07T12:14:28Z' };
+  const run = {
+    command: 'retained walk',
+    revision: 'abc',
+    startedAt: '2026-11-07T12:14:28Z',
+    selection: parseWalkSelection([]),
+    prerequisites: [],
+  };
   const active = { id: 'I03' as const, startedAt: '2026-11-07T12:16:06Z' };
   const terminal = {
     finishedAt: '2026-11-07T14:08:48Z',
@@ -789,6 +899,14 @@ test('a settled infrastructure termination seals only its active row and keeps i
   expect(() => sealInterruptedWalkInventory(run, rows.slice(1), active, terminal)).toThrow(
     'No returned walk observation for I01',
   );
+  const scoped = sealInterruptedWalkInventory(
+    { ...run, command: 'retained walk --scope operators', selection: parseWalkSelection(['--scope', 'operators']) },
+    rows.slice(0, 3),
+    active,
+    terminal,
+  );
+  expect(scoped.rows.filter(({ result }) => result === 'unselected')).toHaveLength(8);
+  expect(scoped.rows.find(({ id }) => id === 'I03')).toMatchObject({ result: 'failing', elapsedMs: null });
 
   const book = inventory.rows.find((row) => row.id === 'I11')!;
   const pending = mountedWalkRow({ ...book, result: 'passing', cause: null, evidence: { series: 'observed' } }, []);
