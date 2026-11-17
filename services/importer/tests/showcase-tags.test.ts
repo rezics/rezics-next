@@ -99,19 +99,24 @@ const conceptIds = {
   g44: '00000000-0000-4000-8000-000000000031',
   g12: '00000000-0000-4000-8000-000000000032',
 };
+
+function nativeTagValueStatement(property: string, content: string) {
+  return { property: { id: property }, rank: 'normal' as const, value: { type: 'value' as const, content } };
+}
+
 const subjects: Record<string, object> = {
   [schemeIds.cont]: {
     subject: {
       id: schemeIds.cont,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: vndbPublicTagScheme('cont') } }] },
+      statements: { 'schema:url': [nativeTagValueStatement('schema:url', vndbPublicTagScheme('cont'))] },
     },
   },
   [schemeIds.ero]: {
     subject: {
       id: schemeIds.ero,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: vndbPublicTagScheme('ero') } }] },
+      statements: { 'schema:url': [nativeTagValueStatement('schema:url', vndbPublicTagScheme('ero'))] },
     },
   },
   [conceptIds.g311]: {
@@ -119,8 +124,8 @@ const subjects: Record<string, object> = {
       id: conceptIds.g311,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('cont', 'g311') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.cont } }],
+        'schema:url': [nativeTagValueStatement('schema:url', vndbPublicTagConceptUri('cont', 'g311'))],
+        'skos:inScheme': [nativeTagValueStatement('skos:inScheme', schemeIds.cont)],
       },
     },
   },
@@ -129,8 +134,8 @@ const subjects: Record<string, object> = {
       id: conceptIds.g12,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('cont', 'g12') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.cont } }],
+        'schema:url': [nativeTagValueStatement('schema:url', vndbPublicTagConceptUri('cont', 'g12'))],
+        'skos:inScheme': [nativeTagValueStatement('skos:inScheme', schemeIds.cont)],
       },
     },
   },
@@ -139,8 +144,8 @@ const subjects: Record<string, object> = {
       id: conceptIds.g44,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('ero', 'g44') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.ero } }],
+        'schema:url': [nativeTagValueStatement('schema:url', vndbPublicTagConceptUri('ero', 'g44'))],
+        'skos:inScheme': [nativeTagValueStatement('skos:inScheme', schemeIds.ero)],
       },
     },
   },
@@ -148,20 +153,27 @@ const subjects: Record<string, object> = {
 
 function port(commands: BatchCommand[]): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
+  const works = new Map<string, { id: string; type: string; statements: Record<string, unknown[]> }>();
   return {
     async batch(request) {
       commands.push(...request.commands);
       return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? { id: randomUUID(), revision: 1 }
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
+        results: request.commands.map((command) => {
+          if (command.op === 'create') {
+            const id = randomUUID();
+            works.set(id, { id, type: command.subject.type, statements: {} });
+            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
+          }
+          if (command.op === 'propose') {
+            const work = works.get(command.subject);
+            if (work && command.statement.property.id === 'wdt:P3180') {
+              // Model the independently adopted identifier on this exact Work.
+              work.statements['wdt:P3180'] = [{ ...structuredClone(command.statement), rank: 'normal' }];
+            }
+            return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+          }
+          return { key: command.key, status: 201 as const, value: { revision: 1 } };
+        }),
       };
     },
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -173,9 +185,8 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      const known = subjects[id];
-      if (!known) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-      return known as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      const work = works.get(id);
+      return (subjects[id] ?? { subject: work ?? { id } }) as ReviewedSubjectRead;
     },
   };
 }
@@ -225,6 +236,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     ],
   });
   const commands: BatchCommand[] = [];
+  const tagPort = port(commands);
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-'));
   try {
     const kanaResponse = (rating: number, spoiler: number) =>
@@ -252,7 +264,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     const prepared = await prepareShowcaseTags({
       tables: authoredTables(),
       selectedVids: ['v410'],
-      port: port(commands),
+      port: tagPort,
       known,
       fetch: fetchRatings,
     });
@@ -268,7 +280,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       tables: authoredTables(),
       selectedVids: ['v410'],
       path: join(directory, 'state.sqlite'),
-      port: port(commands),
+      port: tagPort,
       known,
       fetch: fetchRatings,
       manifest: {
@@ -379,7 +391,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       },
       selectedVids: ['v410'],
       path: join(directory, 'state.sqlite'),
-      port: port(commands),
+      port: tagPort,
       known,
       fetch: async () =>
         new Response(kanaResponse(2.5, 2), { status: 200, headers: { 'content-type': 'application/json' } }),
@@ -555,8 +567,10 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
         if (command.op === 'propose') {
           const subject = subjects.get(command.subject)?.subject;
           if (subject) {
-            const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
-            subject.statements[command.statement.property.id] = [statement];
+            // Model the current read after the vocabulary proposal is independently accepted and adopted.
+            subject.statements[command.statement.property.id] = [
+              { ...structuredClone(command.statement), rank: 'normal' },
+            ];
           }
           return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
         }
@@ -703,7 +717,9 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
 
     const contScheme = current.schemes.find((item) => item.taxonomy === 'vndb.tag.cont')!;
     const subject = port.subjects.get(contScheme.id)!.subject;
-    subject.statements['schema:url'] = [{ value: { content: 'https://rezics.com/schemes/vndb/public-tags/other' } }];
+    subject.statements['schema:url'] = [
+      nativeTagValueStatement('schema:url', 'https://rezics.com/schemes/vndb/public-tags/other'),
+    ];
     const withheld = await readShowcaseVndbPublicTagVocabulary({
       tables,
       selectedVids: ['v410'],
@@ -726,7 +742,7 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
     );
     expect(laterGenres.filter((command) => content(command) === g311 && !genres.includes(command))).toEqual([]);
     expect(afterRetract.bindings.concepts.map((item) => item.code)).toEqual(['g44']);
-    subject.statements['schema:url'] = [{ value: { content: vndbPublicTagScheme('cont') } }];
+    subject.statements['schema:url'] = [nativeTagValueStatement('schema:url', vndbPublicTagScheme('cont'))];
 
     const overflowParents = Array.from({ length: 520 }, (_, index) => `g${2000 + index}`);
     const overflow = publicationTables({
@@ -1125,9 +1141,6 @@ function journaledReview(options: {
     accepted.add(id);
     for (const row of [...workCandidates.first, ...workCandidates.second]) if (row.id === id) row.decision = 'accepted';
   };
-  const valueStatement = (content: string) => ({
-    value: { type: 'value', content },
-  });
   const subjects: Record<string, ReviewedSubjectRead> = {
     [schemeId]: { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: {} } } as ReviewedSubjectRead,
     [conceptId]: {
@@ -1135,9 +1148,9 @@ function journaledReview(options: {
         id: conceptId,
         type: 'skos:Concept',
         statements: {
-          'skos:inScheme': [valueStatement(schemeId)],
+          'skos:inScheme': [nativeTagValueStatement('skos:inScheme', schemeId)],
           ...(options.conceptBroader?.length
-            ? { 'skos:broader': options.conceptBroader.map((id) => valueStatement(id)) }
+            ? { 'skos:broader': options.conceptBroader.map((id) => nativeTagValueStatement('skos:broader', id)) }
             : {}),
         },
       },
@@ -1423,13 +1436,12 @@ test('unavailable Scheme withholds membership until independent recovery on unch
 test('two admitted Schemes withhold membership until child and parent share one Scheme', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-two-scheme-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-  const valueStatement = (content: string) => ({ value: { type: 'value', content } });
   const parentRead = (scheme: string) =>
     ({
       subject: {
         id: parentBId,
         type: 'skos:Concept',
-        statements: { 'skos:inScheme': [valueStatement(scheme)] },
+        statements: { 'skos:inScheme': [nativeTagValueStatement('skos:inScheme', scheme)] },
       },
     }) as unknown as ReviewedSubjectRead;
   try {
