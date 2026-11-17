@@ -61,8 +61,13 @@ Decision: Search discovery batches at most 128 durable owner/partition frontiers
 For zero-count Account and Semantic frontiers at the start of an indexed pass, one complete search under physical
 generation custody can prove absence across the wave's exact scopes. Counts, positions, ownership epochs and
 Account and claim revisions are checked before and after that search. A hit in the union requires keyed reconciliation.
-A changed observation restarts that producer's native pass. The durable `native_complete` flag distinguishes raw
-completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner revisions move. Publication requires every
+A changed observation restarts that producer's native pass. For Collection, Review and Space, a complete initial
+native page at position zero with no keys, records or continuation can settle both passes in one turn. The wave
+proves zero indexed hits for the exact owner, kind and partition under physical generation custody. A fresh owner
+read must then agree on position and epoch before committing the initial frontier and generation together. A hit or
+inconclusive shared search receives ordinary raw and keyed reconciliation. The durable `native_complete` flag
+distinguishes raw completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner
+revisions move. Publication requires every
 producer population to be complete, replay to be current, all reconciliation partitions to be certified and the
 physical UUID to remain unchanged. Only then does an observed alias switch make the candidate active; the former
 generation becomes retiring after that observation.
