@@ -1,5 +1,8 @@
 import { runCommand } from '../../src/command/command.ts';
-import { newId } from '../../src/route/route.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
+import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { checkGrowth, seed } from '../support/growth.ts';
 import { publicationJob } from './support/public-filter-binding.ts';
 import { expect, test } from 'bun:test';
@@ -675,13 +678,15 @@ test('Native public Source repair step and complete original cut are durably rev
   }
 }, 300000);
 
-test('native Source replays an empty repair step and drains a later home in the same window batch', async () => {
-  const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
+test('native Source replays its original creation window after the same home advances', async () => {
+  const { createPublicFilterCustody, decodePublicFilterNativeState } =
+    await import('../../src/search/public-filter-custody.ts');
   const { createOpenSearch } = await import('../../src/search/opensearch.ts');
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   const search = createOpenSearch(process.env.OPENSEARCH_URL!);
-  const index = `source-empty-step-${crypto.randomUUID()}`;
+  const prefix = `source-window-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = subjectIndexName(prefix, 1);
   const custody = createPublicFilterCustody(f.db.pool);
   let created = false;
   try {
@@ -695,21 +700,20 @@ test('native Source replays an empty repair step and drains a later home in the 
     };
     const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
-    await search.request('PUT', `/${index}`, {
-      settings: { number_of_shards: 1, number_of_replicas: 0 },
-    });
+    await createSubjectIndex(search, prefix, 1);
     created = true;
     const registered = await custody.register(
       {
         definition: resolved.definition,
         physicalTarget: index,
         consumerGeneration: '1',
-        projectionGeneration: '1',
+        projectionGeneration: resolved.definition.readDefinition,
       },
       search,
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
+    const execution = await publicationJob(f, source, registered.consumer);
     const begun = await prepareSource(f, binding, {
       source,
       meaning: f.meaning,
@@ -735,7 +739,6 @@ test('native Source replays an empty repair step and drains a later home in the 
     ).toBe('adopted');
     const acquired = await custody.acquire(retained.queried, readContext());
     if (acquired.status !== 'acquired') throw new Error(acquired.reason);
-    const execution = crypto.randomUUID();
     try {
       expect(
         (
@@ -760,8 +763,12 @@ test('native Source replays an empty repair step and drains a later home in the 
       queried: retained.queried,
       execution,
       frontier: null,
-      inputLimit: 256,
+      inputLimit: 64,
+      homeLimit: 128,
     };
+    expect(
+      await readNativePublicFilterPublicationCompletion(binding, { ...request, job: execution }, readContext()),
+    ).toMatchObject({ status: 'pending', publication: { execution } });
     const page = await binding.repairPage(request, readContext());
     expect(page.status).toBe('progress');
     if (page.status !== 'progress') throw new Error('Native Source step did not persist');
@@ -789,19 +796,68 @@ test('native Source replays an empty repair step and drains a later home in the 
       step: page.frontier,
       receipts: [],
     });
-    // An ordinary command opens home six while the earlier homes remain empty.
-    const openHome = 6;
-    await runCommand(
-      f.db.pool,
-      { partition: openHome, deadline: readContext().deadline, clock: f.config.clock },
-      async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
-    );
+    const openHome = 40;
+    let key = 0;
+    while (
+      key < 65536 &&
+      partitionOf(subjectTarget(f.config.routeKey, f.accounts.editor, String(key)).route) !== openHome
+    )
+      key++;
+    expect(key).toBeLessThan(65536);
+    const book = await f.create('schema:Book', {}, String(key));
+    expect(partitionOf(routeOf(book)!)).toBe(openHome);
+
     let frontier = page.frontier;
+    let prefixPredecessor: string | null | undefined;
+    let fallbackPredecessor: string | undefined;
     for (let turn = 0; turn < 80; turn++) {
-      const next = await recovered.repairPage({ ...request, frontier }, readContext());
+      const nextRequest = { ...request, frontier };
+      const next = await recovered.repairPage(nextRequest, readContext());
       if (next.status !== 'progress' && next.status !== 'complete')
         throw new Error(`Original Source continuation ${turn}: ${next.reason}`);
-      const verified = await recovered.readRepairStep({ ...read, predecessor: frontier }, readContext());
+      const stepRequest = { ...read, predecessor: frontier };
+      const row =
+        next.frontier &&
+        (
+          await f.db.pool.query<{ state: string }>(
+            `SELECT state FROM semantic.public_filter_repair_step
+         WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3)`,
+            [request.bootstrap.slice(2), execution, next.frontier],
+          )
+        ).rows[0];
+      const window =
+        row &&
+        decodePublicFilterNativeState<{
+          windowBatch?: { from: number; examined: number; through?: string[] };
+          next: { bridge?: { partition: number } };
+        }>(row.state);
+      if (window && window.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome)
+        prefixPredecessor = frontier;
+      const fallback = !fallbackPredecessor && window && window.windowBatch?.from === openHome;
+      if (fallback && window?.windowBatch) {
+        if (frontier === null || prefixPredecessor === undefined) throw new Error('Missing verified creation prefix');
+        fallbackPredecessor = frontier;
+        expect(window.windowBatch.through).toBeUndefined();
+        expect(window.windowBatch.examined).toBe(1);
+        expect(window.next.bridge?.partition).toBe(openHome);
+        await runCommand(
+          f.db.pool,
+          { partition: openHome, deadline: readContext().deadline, clock: f.config.clock },
+          async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
+        );
+        expect(await recovered.repairPage({ ...request, frontier: prefixPredecessor }, readContext())).toMatchObject({
+          status: 'progress',
+          frontier: fallbackPredecessor,
+        });
+      }
+      const verified = await recovered.readRepairStep(stepRequest, readContext());
+      if (fallback) {
+        const replay = await recovered.repairPage(nextRequest, readContext());
+        expect([verified, replay]).toMatchObject([
+          { status: 'verified', step: next.frontier, frontier: next.frontier, receipts: [], cost: { candidates: 1 } },
+          { status: 'progress', frontier: next.frontier, repairs: [], cost: { candidates: 1, frontierWrites: 0 } },
+        ]);
+      }
       expect(verified).toMatchObject({
         status: 'verified',
         frontier: next.frontier,
@@ -810,6 +866,7 @@ test('native Source replays an empty repair step and drains a later home in the 
       frontier = next.frontier;
       if (next.status === 'complete') break;
     }
+    if (!fallbackPredecessor) throw new Error('Missing ordinary window replay');
     expect(frontier).toBeNull();
     const closed = await f.db.pool.query<{ verified_home: number }>(
       `SELECT verified_home FROM semantic.public_filter_repair_step
@@ -817,6 +874,36 @@ test('native Source replays an empty repair step and drains a later home in the 
       [request.bootstrap.slice(2), execution, openHome],
     );
     expect(closed.rows).toEqual([{ verified_home: openHome }]);
+    const windowRequest = { ...read, predecessor: fallbackPredecessor };
+    await setNativePartitionEpochForFixture(f.db, openHome, 2);
+    expect(await recovered.readRepairStep(windowRequest, readContext())).toMatchObject({
+      status: 'unavailable',
+      reason: 'owner_unavailable',
+    });
+    await setNativePartitionEpochForFixture(f.db, openHome, 1);
+    expect(await recovered.readRepairStep(windowRequest, readContext())).toMatchObject({ status: 'verified' });
+    // Model lost retention custody despite the normal checkpoint trigger.
+    await withConnection(f.db.admin, async (admin) => {
+      await admin.query('BEGIN');
+      try {
+        await admin.query("SET LOCAL session_replication_role='replica'");
+        const removed = await admin.query(
+          `DELETE FROM core.consumer_checkpoint c USING semantic.public_filter_home_enrollment e
+           WHERE (e.partition_no,e.bootstrap)=($1,$2)
+             AND (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)`,
+          [openHome, request.bootstrap.slice(2)],
+        );
+        expect(removed.rowCount).toBe(1);
+        await admin.query('COMMIT');
+      } catch (error) {
+        await admin.query('ROLLBACK');
+        throw error;
+      }
+    });
+    expect(await recovered.readRepairStep(windowRequest, readContext())).toMatchObject({
+      status: 'unavailable',
+      reason: 'owner_unavailable',
+    });
   } finally {
     await custody.close();
     if (created) await search.request('DELETE', `/${index}`);

@@ -3072,7 +3072,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               m.check();
               return { ...original, advanced: true, cost: m.cost };
             }
-            if (original.advanced) {
+            if (original.advanced || original.ackAttempted) {
               m.check();
               return { ...original, cost: m.cost };
             }
@@ -3184,7 +3184,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       m.add(completion.cost);
       if (completion.status === 'pending') {
-        if (completion.advanced) {
+        if (completion.advanced || completion.ackAttempted) {
           m.check();
           return { ...completion, cost: m.cost };
         }
