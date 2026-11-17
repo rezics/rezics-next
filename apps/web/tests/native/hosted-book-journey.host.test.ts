@@ -1,12 +1,14 @@
 import { expect, setDefaultTimeout } from 'bun:test';
-import type { Page, Response as PlaywrightResponse } from 'playwright';
+import type { Locator, Page, Response as PlaywrightResponse } from 'playwright';
 import { documentText, serializeDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
+import { partitionOf, routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
   createHostedBookJourneySeed,
   createPrepublishedReaderControl,
   lanternFerryCoverPng,
+  openHostedBookReadingProgress,
   readNativePost,
   type HostedBookJourneySeed,
   type HostedReaderControl,
@@ -22,8 +24,9 @@ let stack: NativeWebStack;
 let auth: NativeAuthStack;
 
 nativeBeforeAll(lifecycle, 600_000, async () => {
-  stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
+  stack = await startNativeWebStack({ localShowcaseBoardCreation: true, observePersonalAccess: true });
   auth = await startAuthStack(stack);
+  await openHostedBookReadingProgress(stack);
 });
 
 nativeAfterAll(lifecycle, 180_000);
@@ -38,7 +41,12 @@ class StageJournal {
     label: string,
     operation: () => Promise<{ value: T; observation: string }>,
     onFailure?: () => Promise<string>,
+    blockedBy?: string | false,
   ): Promise<T | undefined> {
+    if (blockedBy) {
+      this.unreached(label, blockedBy);
+      return;
+    }
     try {
       const result = await operation();
       this.stages.push({ label, state: 'passed', observation: result.observation });
@@ -112,6 +120,203 @@ async function pageObservation(page: Page): Promise<string> {
   return `url=${page.url()} alerts=${JSON.stringify(alerts.slice(-4))} statuses=${JSON.stringify(statuses.slice(-6))}`;
 }
 
+async function observeMemberCheckpointFailure(page: Page, subjectId: string, memberAccountId: string): Promise<string> {
+  const [browser, refreshed] = await Promise.all([
+    pageObservation(page),
+    settledWithin(
+      stack.refreshKernelRequests().then(() => true),
+      1_200,
+    ).catch(() => false),
+  ]);
+  const requests = stack.kernelRequests().flatMap((request) => {
+    if (request.fixtureRequest || (request.method !== 'GET' && request.method !== 'PUT')) return [];
+    const url = URL.parse(request.url, stack.kernelOrigin);
+    const read =
+      request.method === 'GET' &&
+      url?.pathname === '/v1/libraryHostedReading/metadata' &&
+      url.searchParams.get('subjectId') === subjectId;
+    const write =
+      request.method === 'PUT' &&
+      url?.pathname === '/v1/libraryHostedReading' &&
+      request.hostedReadingSubjectId === subjectId;
+    if (!read && !write) return [];
+    return [
+      {
+        method: request.method,
+        status: request.responseStatus ?? null,
+        authorization: !!request.authorization,
+        idempotencyKey: !!request.idempotencyKey,
+        authenticated: request.access?.authenticated ?? null,
+        authorized: request.access?.authorized ?? null,
+        expectedMember: request.access ? request.access.actorId === memberAccountId : null,
+      },
+    ];
+  });
+  const reads = requests.filter(({ method }) => method === 'GET').slice(-4);
+  const writes = requests.filter(({ method }) => method === 'PUT').slice(-4);
+  return `${browser}; checkpoint request trace refreshed=${refreshed === true} metadata reads=${JSON.stringify(reads)} saves=${JSON.stringify(writes)}`;
+}
+
+async function observeContentFailure(statement: string, parameters: readonly (string | number)[]): Promise<string> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    connectionString: stack.databaseUrl,
+    connectionTimeoutMillis: 750,
+    statement_timeout: 750,
+    query_timeout: 1_000,
+    options: '-c default_transaction_read_only=on',
+    max: 1,
+  });
+  try {
+    const result = await pool.query(statement, [...parameters]);
+    return JSON.stringify(result.rows[0] ?? null);
+  } catch {
+    return 'unavailable';
+  } finally {
+    await pool.end();
+  }
+}
+
+async function observeCoverWork(mediaId: string): Promise<string> {
+  const route = routeOf(mediaId);
+  if (route === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT m.state,b.transaction_id IS NOT NULL AS upload_basis,
+       o.event_seq IS NOT NULL AS upload_event,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       relay.status AS image_effect,s.status AS image_work,
+       (SELECT count(*)::int FROM (
+          SELECT 1 FROM content.media_variant v WHERE (v.route,v.media_id)=(m.route,m.media_id) LIMIT 13
+        ) variants) AS variant_count
+     FROM content.media m
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($3,m.transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.position,o.epoch)=(b.partition_no,b.position,b.epoch)
+       AND o.type='com.rezics.content.media.uploaded.v1' AND o.subject=m.media_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN dbos.workflow_status relay
+       ON relay.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_media_image')
+       AND o.event_seq IS NOT NULL
+     LEFT JOIN dbos.workflow_status s
+       ON s.workflow_uuid=concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_image')
+       AND o.event_seq IS NOT NULL
+     WHERE (m.route,m.media_id)=($1,$2) LIMIT 1`,
+    [route, mediaId, partitionOf(route)],
+  );
+}
+
+async function observeDraftReadiness(authorId: string, postId: string, revisionId: string): Promise<string> {
+  const authorRoute = routeOf(authorId);
+  const postRoute = routeOf(postId);
+  if (authorRoute === null || postRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT p.draft_locator_pending,a.draft_state,
+       a.draft_revision_id=p.head_revision_id AS exact_head_projected,
+       a.thread_id=p.thread_id AS projected_source_thread,
+       g.complete AS coverage_complete,
+       EXISTS (SELECT 1 FROM content.post pending WHERE pending.author_account_id=$2
+         AND pending.post_id<>$4 AND pending.draft_locator_pending
+         AND pending.visibility='draft' AND pending.availability='available' LIMIT 1) AS other_author_locator_pending,
+       p.head_revision_id=$5 AS saved_revision_is_head,
+       b.transaction_id IS NOT NULL AS saved_revision_basis,
+       o.position::text AS saved_revision_event_position,
+       CASE WHEN o.event_seq IS NULL OR c.epoch IS NULL THEN NULL
+            WHEN c.epoch<>o.epoch THEN 'other-epoch'
+            WHEN c.position>=o.position THEN 'reached'
+            ELSE 'behind' END AS effects_checkpoint,
+       l.state AS locator_obligation,s.status AS locator_effect,s.queue_name AS locator_queue,
+       w.id AS locator_workflow,s.queue_partition_key AS locator_partition,
+       s.application_name AS locator_application,s.application_version AS locator_application_version,
+       s.created_at::text AS locator_created_at_ms,s.started_at_epoch_ms::text AS locator_started_at_ms,
+       s.recovery_attempts AS locator_attempts,s.executor_id AS locator_executor,
+       h.state AS locator_history_consumer,
+       (SELECT jsonb_object_agg(step.function_name,step.error IS NULL)
+        FROM dbos.operation_outputs step WHERE step.workflow_uuid=w.id
+          AND step.function_name IN ('effect.run','effect.locator.done')) AS locator_steps_succeeded,
+       (SELECT jsonb_build_object('id',pending.workflow_uuid,'executor',pending.executor_id,
+          'started_at_ms',pending.started_at_epoch_ms)
+        FROM dbos.workflow_status pending
+        WHERE pending.queue_name=s.queue_name AND pending.queue_partition_key=s.queue_partition_key
+          AND pending.status='PENDING' AND pending.workflow_uuid<>s.workflow_uuid
+        LIMIT 1) AS locator_partition_pending,
+       (SELECT jsonb_build_object('id',head.workflow_uuid,'created_at_ms',head.created_at,
+          'application',head.application_name,'version',head.application_version)
+        FROM dbos.workflow_status head
+        WHERE head.queue_name=s.queue_name AND head.queue_partition_key=s.queue_partition_key
+          AND head.status='ENQUEUED'
+        ORDER BY head.priority,head.created_at,head.workflow_uuid
+        LIMIT 1) AS locator_partition_first_enqueued,
+       q.partition_concurrency AS locator_partition_limit,q.worker_concurrency AS locator_worker_limit,
+       (SELECT count(*)::int FROM (
+          SELECT 1 FROM dbos.workflow_status active WHERE active.queue_name=s.queue_name
+            AND active.status='PENDING' LIMIT COALESCE(q.worker_concurrency,0)
+        ) active_sample) AS locator_queue_pending_up_to_worker_limit
+     FROM content.post p
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,$5)
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($6,r.recorded_transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(b.partition_no,b.epoch,b.position)
+       AND o.type='com.rezics.content.revision.created.v1'
+       AND o.data->>'itemId'=p.post_id::text AND o.data->>'revisionId'=r.revision_id::text
+     LEFT JOIN core.consumer_checkpoint c ON c.partition_no=o.partition_no AND c.consumer='effects'
+     LEFT JOIN LATERAL (
+       SELECT concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_author_item') AS id
+       WHERE o.event_seq IS NOT NULL
+     ) w ON true
+     LEFT JOIN access.erasure_locator_work l ON l.workflow_id=w.id
+     LEFT JOIN dbos.workflow_status s ON s.workflow_uuid=w.id
+     LEFT JOIN core.history_event_consumer h ON (h.partition_no,h.position,h.event_seq,h.consumer)=
+       (o.partition_no,o.position,o.event_seq,'content_author_item') AND h.workflow_id=w.id
+     LEFT JOIN dbos.queues q ON q.name=s.queue_name
+     LEFT JOIN content.author_item a ON (a.route,a.author_account_id,a.item_kind,a.item_id)=($1,$2,'post',$4)
+     LEFT JOIN content.own_draft_progress g ON g.singleton=0
+     WHERE (p.route,p.post_id,p.author_account_id)=($3,$4,$2) LIMIT 1`,
+    [authorRoute, authorId, postRoute, postId, revisionId, partitionOf(postRoute)],
+  );
+}
+
+async function observeBookDiscovery(
+  book: Pick<HostedReaderControl, 'subjectId' | 'catalogueId'>,
+  publicationId: string,
+): Promise<string> {
+  const subjectRoute = routeOf(book.subjectId);
+  const catalogueRoute = routeOf(book.catalogueId);
+  if (subjectRoute === null || catalogueRoute === null) return 'unavailable';
+  return observeContentFailure(
+    `SELECT (c.route=$1 AND $2::uuid=ANY(r.subject_ids)) AS same_route_reference,
+       st.source_epoch AS subject_thread_epoch,st.source_position::text AS subject_thread_position,
+       c.publication_id=$5 AS exact_current_release,
+       p.availability,p.visibility,p.author_erased,s.placement_count::text AS publication_placements,
+       o.epoch AS source_epoch,o.position::text AS source_position,
+       (o.data->'subjectIds' ? $2::text) AS source_names_subject,
+       cp.position::text AS effects_checkpoint,h.state AS subject_thread_consumer,
+       w.status AS subject_thread_workflow,w.queue_name AS subject_thread_queue
+     FROM content.hosted_catalogue c
+     LEFT JOIN content.post p ON (p.route,p.thread_id,p.post_id)=(c.route,c.thread_id,c.catalogue_id)
+     LEFT JOIN content.revision r ON (r.route,r.thread_id,r.post_id,r.revision_id)=
+       (p.route,p.thread_id,p.post_id,p.head_revision_id)
+     LEFT JOIN content.subject_thread st ON (st.route,st.subject_id,st.thread_id)=($1,$2,c.thread_id)
+       AND st.thread_route=c.route
+     LEFT JOIN content.hosted_version_revision v ON (v.route,v.catalogue_id,v.revision_id)=
+       (c.route,c.catalogue_id,c.publication_id) AND v.revision_kind='publication' AND v.generation_kind='candidate'
+     LEFT JOIN content.hosted_tree_snapshot_version s ON (s.route,s.catalogue_id,s.generation_id,s.sequence)=
+       (v.route,v.catalogue_id,v.generation_id,v.sequence)
+     LEFT JOIN editorial.write_basis b ON (b.partition_no,b.transaction_id)=($6,p.recorded_transaction_id)
+     LEFT JOIN core.outbox o ON (o.partition_no,o.epoch,o.position)=(b.partition_no,b.epoch,b.position)
+       AND o.type='com.rezics.content.thread.created.v1' AND o.subject=c.catalogue_id::text
+       AND o.data->>'threadId'=c.thread_id::text
+     LEFT JOIN core.consumer_checkpoint cp ON cp.partition_no=o.partition_no AND cp.consumer='effects'
+     LEFT JOIN core.history_event_consumer h ON (h.partition_no,h.position,h.event_seq,h.consumer)=
+       (o.partition_no,o.position,o.event_seq,'content_subject_thread')
+     LEFT JOIN dbos.workflow_status w ON w.workflow_uuid=
+       concat('fx:',o.epoch,':',o.partition_no,':',o.position,':',o.event_seq,':content_subject_thread')
+     WHERE (c.route,c.catalogue_id)=($3,$4) LIMIT 1`,
+    [subjectRoute, book.subjectId, catalogueRoute, book.catalogueId, publicationId, partitionOf(catalogueRoute)],
+  );
+}
+
 async function hydrate(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   await page.getByRole('main').waitFor({ state: 'attached' });
@@ -124,6 +329,80 @@ function pageFrom(journey: { context: { pages(): Page[] } }): Page {
   return page;
 }
 
+async function readAnonymousControlPage(href: string, chapter: JourneyPost): Promise<string> {
+  const page = await (await auth.context('anonymous')).newPage();
+  let status: number | undefined;
+  try {
+    page.setDefaultTimeout(30_000);
+    status = (await page.goto(href, { waitUntil: 'domcontentloaded' }))?.status();
+    await hydrate(page);
+    await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
+      state: 'visible',
+    });
+    await page.getByText(documentText(chapter.body), { exact: true }).waitFor({ state: 'visible' });
+    return page.url();
+  } catch (error) {
+    const [browser, headings, mounted] = await Promise.all([
+      pageObservation(page),
+      page
+        .getByRole('heading', { level: 1 })
+        .allInnerTexts()
+        .catch(() => [] as string[]),
+      page
+        .locator('[data-slot="hosted-book-reader"]')
+        .count()
+        .catch(() => 0),
+    ]);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Anonymous exact reader status=${status ?? 'unknown'} mounted=${mounted > 0} ${browser} headings=${JSON.stringify(headings.slice(0, 3))}: ${reason}`,
+      { cause: error },
+    );
+  } finally {
+    await page.close();
+  }
+}
+
+function chapterStudioPath(draft: JourneyPost) {
+  return `/en/studio?postId=${encodeURIComponent(draft.postId)}`;
+}
+
+async function findCurrentControlCatalogue(control: HostedReaderControl, revisionId: string) {
+  const timeout = 30_000;
+  const signal = AbortSignal.timeout(timeout);
+  const deadline = performance.now() + timeout;
+  let lastStatus: number | undefined;
+  do {
+    const listing = await control.member.subjects({ id: control.subjectId }).hostedCatalogues.get({
+      query: { includeTitle: '1', limit: '20' },
+      fetch: { signal },
+    });
+    lastStatus = listing.status;
+    if (listing.status === 200 && !listing.error && listing.data) {
+      const { items } = listing.data as { items: { catalogueId: string; revisionId: string; title?: string }[] };
+      const index = items.findIndex(
+        (item) => item.catalogueId === control.catalogueId && item.revisionId === revisionId,
+      );
+      if (index >= 0) return { index, title: items[index]!.title?.trim() || 'Published book ' + (index + 1) };
+    } else {
+      const problem = listing.error?.value;
+      if (
+        listing.status !== 503 ||
+        !problem ||
+        typeof problem !== 'object' ||
+        !('retryable' in problem) ||
+        problem.retryable !== true
+      )
+        throw new Error(`Generated member Book discovery returned ${listing.status}`);
+    }
+    // The Subject-thread effect is independent of committing the Book release.
+    await Bun.sleep(Math.max(0, Math.min(1_000, deadline - performance.now())));
+  } while (performance.now() < deadline);
+  throw new Error(
+    `Generated Book subject discovery omitted the separate control (last status ${lastStatus ?? 'unavailable'})`,
+  );
+}
+
 async function saveChapterDraft(
   page: Page,
   author: KernelClient,
@@ -131,9 +410,8 @@ async function saveChapterDraft(
   bodyText: string,
   includeCover: boolean,
 ) {
-  await page.goto(`${stack.web}/en/studio?postId=${encodeURIComponent(draft.postId)}`, {
-    waitUntil: 'domcontentloaded',
-  });
+  const href = new URL(chapterStudioPath(draft), stack.web).href;
+  if (page.url() !== href) await page.goto(href, { waitUntil: 'domcontentloaded' });
   await hydrate(page);
   const editor = page.locator('.ProseMirror[contenteditable="true"]').last();
   await editor.waitFor({ state: 'visible' });
@@ -184,24 +462,27 @@ async function saveChapterDraft(
           .waitFor({ state: 'visible' });
       } catch (cause) {
         const selected = [upload, ...polls];
-        const states = await settledWithin(
-          Promise.all(
-            selected.map(async (response) => {
-              const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
-              const state = body?.media?.state;
-              const knownState =
-                state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
-              return {
-                method: response.request().method(),
-                status: response.status(),
-                state: knownState ? state : null,
-              };
-            }),
-          ),
-          1_000,
-        ).catch(() => undefined);
+        const [work, states] = await Promise.all([
+          observeCoverWork(mediaId),
+          settledWithin(
+            Promise.all(
+              selected.map(async (response) => {
+                const body = (await response.json().catch(() => null)) as { media?: { state?: unknown } } | null;
+                const state = body?.media?.state;
+                const knownState =
+                  state === 'reserved' || state === 'uploaded' || state === 'available' || state === 'rejected';
+                return {
+                  method: response.request().method(),
+                  status: response.status(),
+                  state: knownState ? state : null,
+                };
+              }),
+            ),
+            1_000,
+          ).catch(() => undefined),
+        ]);
         throw new Error(
-          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}`,
+          `${errorText(cause)}; exact cover responses=${JSON.stringify(states ?? selected.map((response) => ({ method: response.request().method(), status: response.status() })))}; preview response=${JSON.stringify(preview ?? null)}; exact image work=${work}`,
           { cause },
         );
       }
@@ -229,12 +510,16 @@ async function saveChapterDraft(
   return { post, mediaId };
 }
 
-async function readStructure(client: KernelClient, catalogueId: string) {
-  const headResult = await client.hostedCatalogues({ id: catalogueId }).get({ query: { kind: 'structure' } });
+async function readStructure(client: KernelClient, catalogueId: string, signal?: AbortSignal) {
+  const request = signal ? { fetch: { signal } } : {};
+  const headResult = await client
+    .hostedCatalogues({ id: catalogueId })
+    .get({ ...request, query: { kind: 'structure' } });
   if (headResult.status !== 200 || headResult.error || !headResult.data)
     throw new Error(`Generated current Book structure read returned ${headResult.status}`);
   const head = headResult.data as NativeRevision;
   const rootResult = await client.hostedCatalogues({ id: catalogueId }).children.get({
+    ...request,
     query: { kind: 'structure', revisionId: head.revisionId, limit: '20' },
   });
   if (rootResult.status !== 200 || rootResult.error || !rootResult.data)
@@ -244,6 +529,7 @@ async function readStructure(client: KernelClient, catalogueId: string) {
   const items = [...root.items];
   for (const part of root.items.filter((item) => item.kind === 'part' && item.availability === 'available')) {
     const children = await client.hostedCatalogues({ id: catalogueId }).children.get({
+      ...request,
       query: { kind: 'structure', revisionId: head.revisionId, parentId: part.occurrenceId, limit: '20' },
     });
     if (children.status !== 200 || children.error || !children.data)
@@ -255,29 +541,71 @@ async function readStructure(client: KernelClient, catalogueId: string) {
   return { head, items };
 }
 
-async function pickDraft(page: Page, title: string) {
-  await page.getByRole('button', { name: 'Open a saved account draft', exact: true }).click();
-  await page
-    .getByRole('region', { name: 'Server-saved drafts', exact: true })
-    .getByRole('button', { name: title, exact: true })
-    .click();
+async function readChangedPlacement(
+  client: KernelClient,
+  catalogueId: string,
+  occurrenceId: string,
+  partTitle: string,
+  change: 'before-part' | 'inside-part',
+) {
+  const timeout = 30_000;
+  const signal = AbortSignal.timeout(timeout);
+  const deadline = performance.now() + timeout;
+  do {
+    const { items } = await readStructure(client, catalogueId, signal);
+    const part = items.find((item) => item.kind === 'part' && item.title === partTitle);
+    const moved = items.find((item) => item.occurrenceId === occurrenceId);
+    if (
+      part &&
+      moved &&
+      (change === 'inside-part'
+        ? moved.parentId === part.occurrenceId
+        : moved.parentId === part.parentId && moved.position < part.position)
+    )
+      return { part, moved };
+    await Bun.sleep(Math.max(0, Math.min(250, deadline - performance.now())));
+  } while (performance.now() < deadline);
+  throw new Error(`Generated Book structure did not confirm ${change} for the exact placement ${occurrenceId}`);
 }
 
-async function associateChapterLanguage(
-  page: Page,
-  chapterTitle: string,
-  language: string,
-  title: string,
-  makeDefault = false,
-) {
+async function pickDraft(page: Page, title: string) {
+  await page.getByRole('button', { name: 'Open a saved account draft', exact: true }).click();
+  const picker = page.getByRole('region', { name: 'Server-saved drafts', exact: true });
+  const loaded = picker.and(page.locator('[aria-busy="false"]'));
+  const draft = picker.getByRole('button', { name: title, exact: true });
+  const preparing = picker.getByText(
+    'This list is still being prepared. An empty page does not mean there are no drafts.',
+    {
+      exact: true,
+    },
+  );
+  const restart = picker.getByRole('button', { name: 'Restart list', exact: true });
+  const deadline = performance.now() + 30_000;
+  const remaining = () => {
+    const ms = Math.ceil(deadline - performance.now());
+    if (ms <= 0) throw new Error(`Server-saved drafts did not show ${title} within 30 seconds`);
+    return ms;
+  };
+  for (;;) {
+    await loaded.waitFor({ state: 'visible', timeout: remaining() });
+    if ((await draft.isVisible()) || !(await preparing.isVisible())) {
+      await draft.click({ timeout: remaining() });
+      return;
+    }
+    // Preparing pages are snapshots. Ask for another page through the same mounted picker.
+    await Bun.sleep(Math.min(1_000, remaining()));
+    await restart.click({ timeout: remaining() });
+  }
+}
+
+async function chapterLanguageForm(page: Page, chapterTitle: string) {
   const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await outline.getByRole('button', { name: `Organize ${chapterTitle}`, exact: true }).click();
   await page.getByRole('menuitem', { name: 'Chapter body languages', exact: true }).click();
-  const form = page.getByRole('form', { name: 'Chapter body languages', exact: true });
-  await form.getByLabel('Language code', { exact: true }).fill(language);
-  await form.getByLabel('Chapter title in this language', { exact: true }).fill(title);
-  if (makeDefault)
-    await form.getByRole('button', { name: 'Declare this language as the default', exact: true }).click();
+  return page.getByRole('form', { name: 'Chapter body languages', exact: true });
+}
+
+async function permitChapterLanguageSource(form: ReturnType<Page['getByRole']>) {
   const consent = form.getByRole('region', { name: 'Permission for this saved version', exact: true });
   await consent.getByRole('button', { name: 'Permit this version for this Book', exact: true }).click();
   await consent
@@ -285,26 +613,83 @@ async function associateChapterLanguage(
       exact: true,
     })
     .waitFor({ state: 'visible' });
+}
+
+async function associateChapterLanguage(
+  page: Page,
+  chapterTitle: string,
+  language: string,
+  title: string,
+  { makeDefault, permit }: { makeDefault?: boolean; permit?: boolean } = {},
+) {
+  const form = await chapterLanguageForm(page, chapterTitle);
+  await form.getByLabel('Language code', { exact: true }).fill(language);
+  await form.getByLabel('Chapter title in this language', { exact: true }).fill(title);
+  if (makeDefault)
+    await form.getByRole('button', { name: 'Declare this language as the default', exact: true }).click();
+  if (permit) await permitChapterLanguageSource(form);
   await form.getByRole('button', { name: 'Attach saved version', exact: true }).click();
   await form.waitFor({ state: 'hidden' });
 }
 
+async function assertExactVersionDetails(scope: Locator, version: Pick<JourneyPost, 'revisionId' | 'sha256'>) {
+  const details = scope.locator('details').filter({ hasText: 'Exact document version' });
+  const summary = details.getByText('Exact document version', { exact: true });
+  if ((await details.getAttribute('open')) === null) await summary.click();
+  await details.getByText(version.revisionId, { exact: true }).waitFor({ state: 'visible' });
+  await details.getByText(version.sha256, { exact: true }).waitFor({ state: 'visible' });
+}
+
+async function publishCatalogueOpening(page: Page, opening: JourneyPost) {
+  await page.goto(new URL(chapterStudioPath(opening), stack.web).href, { waitUntil: 'domcontentloaded' });
+  await hydrate(page);
+  const publication = page.getByRole('region', { name: 'Prepare and publish', exact: true });
+  await publication.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+  await publication.getByRole('button', { name: 'Review publication…', exact: true }).click();
+  const review = publication.getByRole('region', { name: 'Review before publishing', exact: true });
+  await review.getByRole('heading', { name: opening.title, exact: true }).waitFor({ state: 'visible' });
+  const decision = review.getByRole('region', { name: 'Confirm publication', exact: true });
+  await assertExactVersionDetails(decision, opening);
+  await decision
+    .getByRole('checkbox', {
+      name: 'I have reviewed this exact saved revision and want to publish it.',
+      exact: true,
+    })
+    .click();
+  await decision.getByRole('button', { name: 'Publish reviewed article', exact: true }).click();
+  await publication.getByText(/^Published snapshot /u).waitFor({ state: 'visible' });
+}
+
+function preparedActivation(page: Page) {
+  return page.getByRole('region', { name: 'Activate this prepared Book release', exact: true });
+}
+
+async function assertActivationRefusal(page: Page, message: string) {
+  const activation = preparedActivation(page);
+  await activation.getByRole('button', { name: 'Check this sealed candidate', exact: true }).click();
+  await activation.getByRole('button', { name: 'Check next targets', exact: true }).click();
+  await activation.getByRole('alert').filter({ hasText: message }).waitFor({ state: 'visible' });
+  expect(await activation.getByRole('button', { name: 'Activate this exact release', exact: true }).count()).toBe(0);
+}
+
 async function activatePreparedBook(page: Page) {
-  const activation = page.getByRole('region', { name: 'Activate this prepared Book release', exact: true });
+  const activation = preparedActivation(page);
   await activation.getByRole('button', { name: 'Check this sealed candidate', exact: true }).click();
   const confirm = activation.getByRole('button', { name: 'Activate this exact release', exact: true });
   const next = activation.getByRole('button', { name: 'Check next targets', exact: true });
-  // The witness has exactly two selected body targets; this is bounded explicit advancement, never a body/Book scan.
+  const restart = activation.getByRole('button', { name: 'Restart authority checks', exact: true });
+  const receipt = activation.getByText('Activation acknowledged for this exact release.', { exact: true }).first();
   for (let step = 0; step < 4; step++) {
-    await confirm.or(next).waitFor({ state: 'visible' });
-    if (await confirm.isVisible()) break;
-    await next.click();
+    await confirm.or(next).or(restart).or(receipt).waitFor({ state: 'visible' });
+    if (await receipt.isVisible()) break;
+    if (await restart.isVisible()) await restart.click();
+    else if (await confirm.isVisible()) {
+      await confirm.click();
+      await receipt.or(restart).waitFor({ state: 'visible' });
+    } else await next.click();
+    await activation.locator('[aria-busy="false"]').waitFor({ state: 'visible' });
   }
-  await confirm.click();
-  await activation
-    .getByText('Activation acknowledged for this exact release.', { exact: true })
-    .first()
-    .waitFor({ state: 'visible' });
+  await receipt.waitFor({ state: 'visible' });
   await activation.getByRole('button', { name: 'Read current publication and verify reader', exact: true }).click();
   await activation
     .getByText('The current publication and anonymous exact reader are verified.', { exact: true })
@@ -336,11 +721,16 @@ async function assertPublishedLanguage(
     throw new Error(`Exact ${language} body returned HTTP ${result.status}`);
   const value = result.data as {
     selectedLanguage: string | null;
-    occurrence: { availability: string; target?: { postId: string; revisionId: string; sha256: string } };
+    occurrence: {
+      availability: string;
+      title?: string;
+      target?: { postId: string; revisionId: string; sha256: string };
+    };
     document: { canonicalBytes: string; sha256: string; licence: string } | null;
   };
   expect(value.selectedLanguage).toBe(language);
   expect(value.occurrence.availability).toBe('available');
+  expect(value.occurrence.title).toBe(expected.title);
   expect(value.occurrence.target).toMatchObject({
     postId: expected.postId,
     revisionId: expected.revisionId,
@@ -352,10 +742,15 @@ async function assertPublishedLanguage(
   return value;
 }
 
+async function openBookPlacementForm(page: Page) {
+  const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
+  await outline.getByRole('button', { name: 'Add part or chapter', exact: true }).click();
+  return page.getByRole('form', { name: 'Add part or chapter', exact: true });
+}
+
 async function addChapterFromPicker(page: Page, title: string, draftTitle: string) {
   await pickDraft(page, draftTitle);
-  const form = page.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByLabel('Placement title', { exact: true }).fill(title);
   await form.getByRole('button', { name: 'Add chapter', exact: true }).click();
   await page.getByRole('button', { name: title, exact: true }).waitFor({ state: 'visible' });
@@ -363,9 +758,7 @@ async function addChapterFromPicker(page: Page, title: string, draftTitle: strin
 
 async function addPartInStudio(page: Page, title: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
-  await organizer.waitFor({ state: 'visible' });
-  const form = organizer.locator('details.studio-placement-form');
-  await form.locator('summary').click();
+  const form = await openBookPlacementForm(page);
   await form.getByRole('combobox', { name: 'Add', exact: true }).click();
   await page.getByRole('option', { name: 'Part', exact: true }).click();
   await form.getByLabel('Placement title', { exact: true }).fill(title);
@@ -376,17 +769,18 @@ async function addPartInStudio(page: Page, title: string) {
 async function movePlacementUnderPart(page: Page, placementTitle: string, partTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: 'Move to…', exact: true }).click();
-  await organizer.getByRole('combobox', { name: 'Destination', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to…', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Move to…', exact: true });
+  await form.getByRole('combobox', { name: 'Destination', exact: true }).click();
   await page.getByRole('option', { name: new RegExp(partTitle) }).click();
-  await organizer.getByRole('button', { name: 'Move placement', exact: true }).click();
+  await form.getByRole('button', { name: 'Move placement', exact: true }).click();
   await organizer.getByText(partTitle, { exact: true }).waitFor({ state: 'visible' });
 }
 
 async function movePlacementUp(page: Page, placementTitle: string) {
   const organizer = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await organizer.getByRole('button', { name: `Organize ${placementTitle}`, exact: true }).click();
-  await organizer.getByRole('button', { name: `Move up ${placementTitle}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: `Move up ${placementTitle}`, exact: true }).click();
 }
 
 async function openBookStudio(page: Page, catalogueId: string) {
@@ -478,10 +872,6 @@ nativeTest(
     let preparationOperands: string | undefined;
     let activationOperands: PrivateActivationOperands | undefined;
     let candidateSealed = false;
-    const ownerJourney = await auth.signIn('alice');
-    const page = pageFrom(ownerJourney);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-
     seed = await journal.run('generated private manuscript setup', async () => {
       const value = await createHostedBookJourneySeed(stack, 'Private draft journey');
       return {
@@ -501,6 +891,15 @@ nativeTest(
           value.chapterTwo.postId,
       };
     });
+
+    if (!seed) {
+      await journal.finish('Mounted private Hosted Book manuscript setup');
+      throw new Error('Mounted Hosted Book setup did not return the author manuscript');
+    }
+    const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(seed.chapterOne) });
+    let page = pageFrom(ownerJourney);
+    const ownerViewport = { width: 1440, height: 1000 };
+    await page.setViewportSize(ownerViewport);
 
     const frenchText =
       'Mara comptait les lanternes depuis le pont du bac et dessinait le port silencieux sur sa carte.';
@@ -553,7 +952,7 @@ nativeTest(
           async () => {
             await page.getByRole('button', { name: 'Version history', exact: true }).click();
             const versions = page.getByRole('region', { name: 'Document versions', exact: true });
-            await expect(versions).toBeVisible();
+            await versions.waitFor({ state: 'visible' });
             const original = versions.locator('li').filter({ hasText: seed!.chapterOne.revisionId });
             await original.getByRole('button', { name: /^Compare /u }).click();
             await versions.getByRole('heading', { name: 'Selected version', exact: true }).waitFor({
@@ -566,7 +965,10 @@ nativeTest(
               state: 'visible',
             });
             await versions.getByText(oneText, { exact: true }).waitFor({ state: 'visible' });
-            expect(await original.innerText()).toContain(seed!.chapterOne.revisionId);
+            for (const revision of [seed!.chapterOne, chapterOne!]) {
+              const row = versions.locator('li').filter({ hasText: revision.revisionId });
+              await assertExactVersionDetails(row, revision);
+            }
             return {
               value: true,
               observation:
@@ -763,7 +1165,13 @@ nativeTest(
                 placement.target?.revisionId,
             };
           },
-          () => pageObservation(page),
+          async () => {
+            const [browser, draft] = await Promise.all([
+              pageObservation(page),
+              observeDraftReadiness(seed!.authorAccountId, chapterTwo!.id, chapterTwo!.revisionId),
+            ]);
+            return `${browser}; exact draft readiness=${draft}`;
+          },
         );
       } else {
         journal.unreached('mounted Root Append', 'Book start or chapter two saved-version readback failed');
@@ -775,11 +1183,14 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await movePlacementUp(page, chapterTwoTitle!);
-            const outline = await readStructure(seed!.author, catalogueId!);
-            const moved = outline.items.find((item) => item.occurrenceId === chapterTwoOccurrence);
-            const part = outline.items.find((item) => item.kind === 'part' && item.title === partTitle);
-            if (!moved || !part || moved.parentId !== null || moved.position >= part.position)
-              throw new Error('Root sibling reorder did not place the chapter before its part');
+            const { part, moved } = await readChangedPlacement(
+              seed!.author,
+              catalogueId!,
+              chapterTwoOccurrence!,
+              partTitle!,
+              'before-part',
+            );
+            expect(moved.parentId).toBeNull();
             return {
               value: moved,
               observation:
@@ -798,16 +1209,14 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await movePlacementUnderPart(page, chapterTwoTitle!, partTitle!);
-            const outline = await readStructure(seed!.author, catalogueId!);
-            const part = outline.items.find((item) => item.kind === 'part' && item.title === partTitle);
-            const moved = outline.items.find((item) => item.occurrenceId === chapterTwoOccurrence);
-            if (
-              !part ||
-              !moved ||
-              moved.parentId !== part.occurrenceId ||
-              moved.target?.revisionId !== chapterTwo!.revisionId ||
-              moved.target.sha256 !== chapterTwo!.sha256
-            )
+            const { part, moved } = await readChangedPlacement(
+              seed!.author,
+              catalogueId!,
+              chapterTwoOccurrence!,
+              partTitle!,
+              'inside-part',
+            );
+            if (moved.target?.revisionId !== chapterTwo!.revisionId || moved.target.sha256 !== chapterTwo!.sha256)
               throw new Error('Generated structure did not retain the exact nested placement');
             return {
               value: moved,
@@ -827,7 +1236,10 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await page.getByRole('button', { name: chapterOneTitle!, exact: true }).click();
-            await associateChapterLanguage(page, chapterOneTitle!, 'en', chapterOneTitle!, true);
+            await associateChapterLanguage(page, chapterOneTitle!, 'en', chapterOneTitle!, {
+              makeDefault: true,
+              permit: true,
+            });
             await pickDraft(page, seed!.chapterFrench.title);
             await associateChapterLanguage(page, chapterOneTitle!, 'fr', frenchTitle);
             const current = await readStructure(seed!.author, catalogueId!);
@@ -871,6 +1283,11 @@ nativeTest(
         const prepared = await journal.run(
           'review, recover, and seal the exact selected private candidate',
           async () => {
+            // The completed editors and history comparisons release their page before the preparation visit.
+            await page.close();
+            page = await ownerJourney.context.newPage();
+            page.setDefaultTimeout(30_000);
+            await page.setViewportSize(ownerViewport);
             await openBookStudio(page, catalogueId!);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             const outline = await readStructure(seed!.author, catalogueId!);
@@ -881,7 +1298,9 @@ nativeTest(
               revisionId: chapterOne!.revisionId,
               sha256: chapterOne!.sha256,
             });
-            const prepareLink = page.getByRole('link', { name: 'Prepare the whole Book', exact: true });
+            const preparation = page.getByRole('region', { name: 'Prepare and publish', exact: true });
+            await preparation.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+            const prepareLink = preparation.getByRole('link', { name: 'Prepare the whole Book', exact: true });
             const prepareHref = await prepareLink.getAttribute('href');
             if (!prepareHref) throw new Error('Book Studio did not expose the mounted preparation route');
             await prepareLink.click();
@@ -920,12 +1339,12 @@ nativeTest(
             if (await excluded.count()) expect(await excluded.isChecked()).toBe(false);
             if (await excludedPart.count()) expect(await excludedPart.isChecked()).toBe(false);
             await selection.getByRole('button', { name: 'Add checked placements from this page', exact: true }).click();
-            await selection.getByRole('button', { name: 'Freeze stored selection', exact: true }).waitFor({
-              state: 'visible',
-            });
-            const count = selection.locator('dd').nth(0);
-            await count.waitFor({ state: 'visible' });
-            expect(await count.innerText()).toBe('1');
+            const acknowledged = selection
+              .locator('dt')
+              .filter({ hasText: /^Acknowledged inputs$/u })
+              .locator('xpath=following-sibling::dd[1]')
+              .filter({ hasText: /^1$/u });
+            await acknowledged.waitFor({ state: 'visible' });
             await selection.getByRole('button', { name: 'Freeze stored selection', exact: true }).click();
             await page.getByRole('button', { name: 'Resume preparation', exact: true }).waitFor({
               state: 'visible',
@@ -966,17 +1385,24 @@ nativeTest(
               ` unselectedRevision=${chapterTwo?.revisionId ?? 'unavailable'}`;
             await page.getByRole('button', { name: 'Seal private candidate', exact: true }).click();
             await page
-              .getByText('Private candidate sealed. It has not been published. The existing release stays current.', {
-                exact: true,
-              })
+              .getByRole('region', { name: 'Activate this prepared Book release', exact: true })
+              .getByRole('button', { name: 'Check this sealed candidate', exact: true })
               .waitFor({ state: 'visible', timeout: 90_000 });
+            const sealed = await seed!.author
+              .hostedCatalogues({ id: catalogueId! })
+              .publicationPreparations({ stageId: stageId! })
+              .$progress.post({}, { headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) } });
+            expect(sealed.status).toBe(200);
+            expect(sealed.data).toMatchObject({
+              catalogueId,
+              stageId,
+              candidate: { sealed: true, chapterCount: '1' },
+            });
             const afterSeal = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             expect(afterSeal.item.headRevisionId).toBe(sourceHead);
             expect(afterSeal.item.publicationId).toBeNull();
             const omittedDraft = await seed!.member.posts({ id: chapterTwo!.id }).get();
             expect(omittedDraft.status).toBe(404);
-            const view = await page.locator('main').innerText();
-            expect(view).toMatch(/Candidate chapters\s+1/u);
             candidateSealed = true;
             return {
               value: stageId,
@@ -986,7 +1412,20 @@ nativeTest(
                 omittedDraft.status,
             };
           },
-          () => pageObservation(page),
+          async () => {
+            const browser = await pageObservation(page);
+            if (!stageId) return browser;
+            await settledWithin(stack.refreshKernelRequests(), 1_200).catch(() => undefined);
+            const prefix = `/v1/hostedCatalogues/${catalogueId}/publicationPreparations/${stageId}:`;
+            const operations = stack
+              .kernelRequests()
+              .flatMap(({ url, fixtureRequest, responseStatus }) =>
+                !fixtureRequest && url.startsWith(prefix)
+                  ? [{ operation: url.slice(prefix.length).split('?')[0], status: responseStatus }]
+                  : [],
+              );
+            return `${browser}; selected stage operations=${JSON.stringify(operations.slice(-8))}`;
+          },
         );
         if (!prepared)
           journal.unreached(
@@ -1004,6 +1443,7 @@ nativeTest(
         catalogueId &&
         chapterOne &&
         chapterTwo &&
+        chapterFrench &&
         chapterOneOccurrence &&
         chapterTwoOccurrence &&
         partTitle &&
@@ -1011,20 +1451,87 @@ nativeTest(
         preparationOperands &&
         candidateSealed
       ) {
+        const preparationHref = page.url();
+        const publishedOpening = await journal.run(
+          'publish the catalogue opening explicitly and recheck the same sealed candidate',
+          async () => {
+            await assertActivationRefusal(
+              page,
+              'Publish the catalogue opening as an article in Studio, then reopen this sealed candidate.',
+            );
+            expect(
+              (await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!)).item.publicationId,
+            ).toBeNull();
+            expect((await seed!.anonymous.posts({ id: catalogueId! }).get()).status).toBe(404);
+
+            await publishCatalogueOpening(page, seed!.opening);
+            const opening = await readNativePost(seed!.anonymous, catalogueId!);
+            expect(opening.revisionId).not.toBe(seed!.opening.revisionId);
+            expect(opening.sha256).toBe(seed!.opening.sha256);
+            const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
+            expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            expect(owner.item.publicationId).toBeNull();
+            expect((await seed!.anonymous.hostedCatalogues({ id: catalogueId! }).get()).status).toBe(404);
+            return {
+              value: opening,
+              observation: `privateCatalogue=refused cataloguePost=200 openingRevision=${opening.revisionId} currentRelease=null`,
+            };
+          },
+          () => pageObservation(page),
+        );
+        const permittedFrench = await journal.run(
+          'permit the already bound French version after the sealed check refuses it',
+          async () => {
+            await page.goto(preparationHref, { waitUntil: 'domcontentloaded' });
+            await hydrate(page);
+            await assertActivationRefusal(
+              page,
+              'Review permission for the exact saved chapter versions in this Book, then reopen this sealed candidate.',
+            );
+            expect(
+              (await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!)).item.publicationId,
+            ).toBeNull();
+
+            await openBookStudio(page, catalogueId!);
+            await pickDraft(page, seed!.chapterFrench.title);
+            const form = await chapterLanguageForm(page, chapterOneTitle!);
+            await assertExactVersionDetails(form, chapterFrench!);
+            await permitChapterLanguageSource(form);
+            const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
+            expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            expect(owner.item.publicationId).toBeNull();
+            expect((await seed!.anonymous.posts({ id: chapterFrench!.id }).get()).status).toBe(404);
+            return {
+              value: true,
+              observation: `missingConsent=refused exactFrench=${chapterFrench!.revisionId} sha256=${chapterFrench!.sha256} directPost=404 currentRelease=null`,
+            };
+          },
+          () => pageObservation(page),
+          !publishedOpening && 'The catalogue opening did not reach public readback',
+        );
         await journal.run(
           'activate the selected private candidate through mounted checks and explicit publication',
           async () => {
+            await page.goto(preparationHref, { waitUntil: 'domcontentloaded' });
+            await hydrate(page);
             await activatePreparedBook(page);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             if (!owner.item.publicationId) throw new Error('Mounted activation did not produce a current release');
-            authorRelease = owner.item.publicationId;
+            const release = owner.item.publicationId;
             expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            const catalogue = await seed!.anonymous.hostedCatalogues({ id: catalogueId! }).get({
+              query: { kind: 'publication', revisionId: release, includeTitle: '1' },
+            });
+            expect(catalogue.status).toBe(200);
+            expect(catalogue.data).toMatchObject({ title: seed!.opening.title, revisionId: release });
+            authorRelease = release;
             return {
               value: authorRelease,
               observation: `activatedRelease=${authorRelease} sourceHead=${owner.item.headRevisionId} selected=${chapterOneOccurrence} languages=en,fr`,
             };
           },
           () => pageObservation(page),
+          !permittedFrench && 'The required French version permission did not reach readback',
         );
 
         const laterText = 'Mara revised the chart after sunrise, adding the ferry’s quiet western landing in blue ink.';
@@ -1044,6 +1551,7 @@ nativeTest(
             };
           },
           () => pageObservation(page),
+          !authorRelease && 'The selected private release did not reach public readback',
         );
         if (changed) {
           await journal.run(
@@ -1051,14 +1559,16 @@ nativeTest(
             async () => {
               await openBookStudio(page, catalogueId!);
               await movePlacementUnderPart(page, chapterOneTitle!, partTitle!);
-              const current = await readStructure(seed!.author, catalogueId!);
-              const moved = current.items.find((item) => item.occurrenceId === chapterOneOccurrence);
+              const { moved } = await readChangedPlacement(
+                seed!.author,
+                catalogueId!,
+                chapterOneOccurrence!,
+                partTitle!,
+                'inside-part',
+              );
               const currentPost = await readNativePost(seed!.author, chapterOne!.id);
               const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
-              expect(moved?.parentId).toBe(
-                current.items.find((item) => item.kind === 'part' && item.title === partTitle)?.occurrenceId,
-              );
-              expect(moved?.target).toMatchObject({
+              expect(moved.target).toMatchObject({
                 revisionId: chapterOne!.revisionId,
                 sha256: chapterOne!.sha256,
               });
@@ -1097,12 +1607,14 @@ nativeTest(
               expect(laterFrench.post.revisionId).not.toBe(chapterFrench!.revisionId);
               const frozenEnglish = {
                 ...seed!.chapterOne,
+                title: chapterOneTitle!,
                 revisionId: chapterOne!.revisionId,
                 sha256: chapterOne!.sha256,
                 body: chapterOne!.body,
               };
               const frozenFrench = {
                 ...seed!.chapterFrench,
+                title: frenchTitle,
                 revisionId: chapterFrench!.revisionId,
                 sha256: chapterFrench!.sha256,
                 body: chapterFrench!.body,
@@ -1148,6 +1660,7 @@ nativeTest(
             () => pageObservation(page),
           );
 
+          await page.close();
           await journal.run(
             'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',
             async () => {
@@ -1267,9 +1780,10 @@ nativeTest(
                 await reader
                   .getByRole('heading', { name: chapterOneTitle!, exact: true })
                   .waitFor({ state: 'visible' });
-                await reader
-                  .getByRole('link', { name: 'Resume saved chapter', exact: true })
-                  .waitFor({ state: 'visible' });
+                const continueReading = reader
+                  .getByRole('region', { name: 'Reading checkpoint', exact: true })
+                  .getByRole('link', { name: 'Continue reading', exact: true });
+                await continueReading.waitFor({ state: 'visible' });
                 expect(
                   await reader.evaluate(
                     () => (window as Window & { __bookLanguageScrollCalls?: unknown[] }).__bookLanguageScrollCalls,
@@ -1285,7 +1799,7 @@ nativeTest(
                     documentPosition: { blockId, offset: 0 },
                   },
                 });
-                await reader.getByRole('link', { name: 'Resume saved chapter', exact: true }).click();
+                await continueReading.click();
                 await reader.waitForURL((url) => url.searchParams.get('bodyLanguage') === 'fr');
                 await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
                 await reader.goto(`${stack.web}/en/library/continue`, { waitUntil: 'domcontentloaded' });
@@ -1333,6 +1847,8 @@ nativeTest(
         'start Book, add and reorder chapters, create a part, and move chapters under it',
         'review, recover, and seal an exact selected private candidate',
         'later private edit and move isolation',
+        'publish the catalogue opening explicitly and recheck the same sealed candidate',
+        'permit the already bound French version after the sealed check refuses it',
         'activate the selected private candidate through mounted checks and explicit publication',
         'later private French edits do not change either frozen published language',
         'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',
@@ -1405,9 +1921,16 @@ nativeTest(
       };
     });
 
-    const ownerJourney = await auth.signIn('alice');
+    const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(control!.chapter) });
+    const ownerViewport = { width: 1440, height: 1000 };
+    const reopenOwnerPage = async () => {
+      const page = await ownerJourney.context.newPage();
+      page.setDefaultTimeout(30_000);
+      await page.setViewportSize(ownerViewport);
+      return page;
+    };
     const ownerPage = pageFrom(ownerJourney);
-    await ownerPage.setViewportSize({ width: 1440, height: 1000 });
+    await ownerPage.setViewportSize(ownerViewport);
     let pointRevision: Awaited<ReturnType<typeof readNativePost>> | undefined;
     const revisedText = 'A later saved version adds a westward tide mark to the harbor map.';
     const revised = await journal.run(
@@ -1444,6 +1967,12 @@ nativeTest(
               item.kind === 'chapter' && item.title === title && item.target?.revisionId === pointRevision!.revisionId,
           );
           if (!placement) throw new Error('Current Book draft omitted the exact later chapter occurrence');
+          expect(placement.target).toMatchObject({
+            threadId: control!.chapter.threadId,
+            postId: pointRevision!.id,
+            revisionId: pointRevision!.revisionId,
+            sha256: pointRevision!.sha256,
+          });
           pointOccurrenceId = placement.occurrenceId;
           return {
             value: placement,
@@ -1458,7 +1987,13 @@ nativeTest(
               placement.target?.sha256,
           };
         },
-        () => pageObservation(ownerPage),
+        async () => {
+          const [browser, draft] = await Promise.all([
+            pageObservation(ownerPage),
+            observeDraftReadiness(control!.authorAccountId, control!.chapter.postId, pointRevision!.revisionId),
+          ]);
+          return `${browser}; exact draft readiness=${draft}`;
+        },
       );
     } else {
       journal.unreached(
@@ -1599,27 +2134,21 @@ nativeTest(
       );
     }
 
-    const memberJourney = await auth.signIn('bob');
+    await ownerPage.close();
+
+    const discoveryPath = `/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`;
+    const memberJourney = await auth.signIn('bob', { returnTo: discoveryPath });
     const memberPage = pageFrom(memberJourney);
     await memberPage.setViewportSize({ width: 1280, height: 900 });
     const discovery = await journal.run(
       'member opens the control through current Book subject discovery',
       async () => {
-        const listing = await control!.member.subjects({ id: control!.subjectId }).hostedCatalogues.get({
-          query: { includeTitle: '1', limit: '20' },
-        });
-        if (listing.status !== 200 || listing.error || !listing.data)
-          throw new Error(`Generated member Book discovery returned ${listing.status}`);
-        const body = listing.data as { items: { catalogueId: string; revisionId: string; title?: string }[] };
-        const index = body.items.findIndex(
-          (item) => item.catalogueId === control!.catalogueId && item.revisionId === currentReleaseRevisionId,
-        );
-        if (index < 0) throw new Error('Generated Book subject discovery omitted the separate control');
-        await memberPage.goto(`${stack.web}/en/books/${encodeURIComponent(control!.subjectId)}/read?view=catalogues`, {
-          waitUntil: 'domcontentloaded',
-        });
+        const { index, title: catalogueTitle } = await findCurrentControlCatalogue(control!, currentReleaseRevisionId!);
+        const discoveryHref = new URL(discoveryPath, stack.web).href;
+        // Auth can mount an empty snapshot before the Subject-thread effect is visible.
+        if (memberPage.url() === discoveryHref) await memberPage.reload({ waitUntil: 'domcontentloaded' });
+        else await memberPage.goto(discoveryHref, { waitUntil: 'domcontentloaded' });
         await hydrate(memberPage);
-        const catalogueTitle = body.items[index]!.title?.trim() || 'Published book ' + (index + 1);
         await memberPage.getByRole('link', { name: catalogueTitle, exact: true }).click();
         await memberPage
           .getByRole('link', { name: 'Read chapter · Control chapter · Beside the harbor steps', exact: true })
@@ -1633,7 +2162,13 @@ nativeTest(
         exactReaderHref = memberPage.url();
         return { value: exactReaderHref, observation: `discovery-index=${index + 1} exact-url=${exactReaderHref}` };
       },
-      () => pageObservation(memberPage),
+      async () => {
+        const [browser, native] = await Promise.all([
+          pageObservation(memberPage),
+          observeBookDiscovery(control!, currentReleaseRevisionId ?? control!.publicationRevisionId),
+        ]);
+        return `${browser}; exact discovery readiness=${native}`;
+      },
     );
 
     if (discovery && occurrence) {
@@ -1678,10 +2213,11 @@ nativeTest(
           });
           await memberPage.reload({ waitUntil: 'domcontentloaded' });
           await hydrate(memberPage);
-          await memberPage
-            .getByRole('link', { name: 'Resume saved chapter', exact: true })
-            .waitFor({ state: 'visible' });
-          await memberPage.getByRole('link', { name: 'Resume saved chapter', exact: true }).click();
+          const continueReading = memberPage
+            .getByRole('region', { name: 'Reading checkpoint', exact: true })
+            .getByRole('link', { name: 'Continue reading', exact: true });
+          await continueReading.waitFor({ state: 'visible' });
+          await continueReading.click();
           await memberPage.waitForURL((url) => url.searchParams.get('occurrence') === control!.occurrenceId);
           await memberPage
             .getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true })
@@ -1694,7 +2230,7 @@ nativeTest(
             observation: `state=${saved.state} subject=${saved.subjectId} occurrence=${saved.address.occurrenceId} block=${saved.address.documentPosition?.blockId} resumed=${exactReaderHref}`,
           };
         },
-        () => pageObservation(memberPage),
+        () => observeMemberCheckpointFailure(memberPage, control!.subjectId, control!.memberAccountId),
       );
     } else {
       journal.unreached(
@@ -1703,48 +2239,87 @@ nativeTest(
       );
     }
 
-    if (discovery && exactReaderHref) {
-      await journal.run('anonymous direct exact-reader address returns the selected control body', async () => {
-        const anonymous = await auth.context('anonymous');
-        const page = await anonymous.newPage();
-        page.setDefaultTimeout(30_000);
-        await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-        await hydrate(page);
-        await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-          state: 'visible',
-        });
-        await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
-        return { value: page.url(), observation: `status=mounted visible-body=true exact-url=${page.url()}` };
-      });
+    await memberPage.close();
 
+    if (discovery && exactReaderHref) {
+      let pinnedMetadata = 'unreached';
+      await journal.run(
+        'anonymous direct exact-reader address returns the selected control body',
+        async () => {
+          const { catalogueId, occurrenceId, chapter, anonymous } = control!;
+          const release = new URL(exactReaderHref!).searchParams.get('release');
+          if (!release) throw new Error('The emitted reader address omitted its exact release');
+          const metadata = await anonymous
+            .hostedCatalogues({ id: catalogueId })
+            .occurrences({ occurrenceId })
+            .metadata.get({
+              query: {
+                kind: 'publication',
+                revisionId: release,
+                targetPostId: chapter.postId,
+                targetRevisionId: chapter.revisionId,
+                targetSha256: chapter.sha256,
+              },
+              fetch: { redirect: 'manual' },
+            });
+          pinnedMetadata = `status=${metadata.status} availability=${metadata.data?.occurrence.availability ?? 'absent'}`;
+          const url = await readAnonymousControlPage(exactReaderHref!, control!.chapter);
+          expect(metadata.status).toBe(200);
+          expect(metadata.data).toMatchObject({
+            catalogueId,
+            revisionId: release,
+            kind: 'publication',
+            occurrence: {
+              occurrenceId,
+              availability: 'available',
+              target: { postId: chapter.postId, revisionId: chapter.revisionId, sha256: chapter.sha256 },
+            },
+          });
+          return {
+            value: url,
+            observation: `status=mounted visible-body=true exact-url=${url} pinned metadata ${pinnedMetadata}`,
+          };
+        },
+        () => Promise.resolve(`pinned metadata ${pinnedMetadata}`),
+      );
+
+      const movePage = await reopenOwnerPage();
       await journal.run(
         'move the control placement after publication through Book Studio',
         async () => {
-          await openBookStudio(ownerPage, control!.catalogueId);
-          await addPartInStudio(ownerPage, partTitle);
-          await movePlacementUnderPart(ownerPage, 'Control chapter · Beside the harbor steps', partTitle);
-          const current = await readStructure(control!.author, control!.catalogueId);
-          const part = current.items.find((item) => item.kind === 'part' && item.title === partTitle);
-          const moved = current.items.find((item) => item.occurrenceId === control!.occurrenceId);
-          if (!part || !moved || moved.parentId !== part.occurrenceId)
-            throw new Error('Control structure did not retain the same occurrence after moving it');
-          return {
-            value: moved,
-            observation: `occurrence=${moved.occurrenceId} parent=${moved.parentId} part=${part.occurrenceId}`,
-          };
+          await openBookStudio(movePage, control!.catalogueId);
+          await addPartInStudio(movePage, partTitle);
+          await movePlacementUnderPart(movePage, 'Control chapter · Beside the harbor steps', partTitle);
+          const timeout = 30_000;
+          const signal = AbortSignal.timeout(timeout);
+          const deadline = performance.now() + timeout;
+          do {
+            const current = await readStructure(control!.author, control!.catalogueId, signal);
+            const part = current.items.find((item) => item.kind === 'part' && item.title === partTitle);
+            const moved = current.items.find((item) => item.occurrenceId === control!.occurrenceId);
+            if (part && moved?.parentId === part.occurrenceId)
+              return {
+                value: moved,
+                observation: `occurrence=${moved.occurrenceId} parent=${moved.parentId} part=${part.occurrenceId}`,
+              };
+            await Bun.sleep(Math.max(0, Math.min(250, deadline - performance.now())));
+          } while (performance.now() < deadline);
+          throw new Error('Control structure did not retain the same occurrence after moving it');
         },
-        () => pageObservation(ownerPage),
+        async () => {
+          const [browser, outline] = await Promise.all([
+            pageObservation(movePage),
+            readStructure(control!.author, control!.catalogueId).catch(() => null),
+          ]);
+          const part = outline?.items.find((item) => item.kind === 'part' && item.title === partTitle);
+          const chapter = outline?.items.find((item) => item.occurrenceId === control!.occurrenceId);
+          return `${browser}; exact move readback=${JSON.stringify({ read: outline !== null, part: part?.occurrenceId, chapterParent: chapter?.parentId })}`;
+        },
       );
+      await movePage.close();
 
       await journal.run('the emitted old reader URL still serves its exact release after a later move', async () => {
-        const page = await (await auth.context('anonymous')).newPage();
-        page.setDefaultTimeout(30_000);
-        await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-        await hydrate(page);
-        await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-          state: 'visible',
-        });
-        await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
+        await readAnonymousControlPage(exactReaderHref!, control!.chapter);
         const exact = await assertPublishedBody(
           control!.anonymous,
           control!.catalogueId,
@@ -1758,32 +2333,59 @@ nativeTest(
         };
       });
 
+      const withdrawalPage = await reopenOwnerPage();
+      let withdrawalObserved = false;
       await journal.run(
         'withdraw the control through Studio and preserve its old exact release',
         async () => {
-          await openBookStudio(ownerPage, control!.catalogueId);
-          await ownerPage.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
-          await ownerPage
-            .getByRole('heading', { name: 'Review Book withdrawal', exact: true })
+          await openBookStudio(withdrawalPage, control!.catalogueId);
+          const beforeWithdrawal = await readOwnedBook(control!.author, control!.authorAccountId, control!.catalogueId);
+          expect(beforeWithdrawal.item.publicationId).toBe(currentReleaseRevisionId);
+          await withdrawalPage.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+          const publication = withdrawalPage.getByRole('region', { name: 'Publication', exact: true });
+          await publication.getByRole('button', { name: 'Review Book withdrawal…', exact: true }).click();
+          await publication.getByRole('heading', { name: 'Review Book withdrawal', exact: true }).waitFor({
+            state: 'visible',
+          });
+          await publication.getByText(`Current release: ${currentReleaseRevisionId}`, { exact: true }).waitFor({
+            state: 'visible',
+          });
+          await publication
+            .getByText(`Structure revision: ${beforeWithdrawal.item.headRevisionId}`, {
+              exact: true,
+            })
             .waitFor({ state: 'visible' });
-          await ownerPage
+          const withdraw = publication.getByRole('button', { name: 'Withdraw reviewed Book', exact: true });
+          expect(await withdraw.isEnabled()).toBe(false);
+          await publication
             .getByRole('checkbox', {
               name: 'I want to withdraw this exact current release from discovery.',
               exact: true,
             })
             .click();
-          await ownerPage.getByRole('button', { name: 'Withdraw reviewed Book', exact: true }).click();
-          await ownerPage.getByText('The Book was withdrawn from current discovery.', { exact: true }).waitFor({
+          await withdraw.click();
+          await withdrawalPage.getByText('The Book was withdrawn from current discovery.', { exact: true }).waitFor({
             state: 'visible',
             timeout: 90_000,
           });
-          const current = await control!.anonymous.subjects({ id: control!.subjectId }).hostedCatalogues.get({
-            query: { limit: '20' },
-          });
+          const [current, owner, draft, anonymousPost] = await Promise.all([
+            control!.anonymous.subjects({ id: control!.subjectId }).hostedCatalogues.get({ query: { limit: '20' } }),
+            readOwnedBook(control!.author, control!.authorAccountId, control!.catalogueId),
+            readNativePost(control!.author, control!.chapter.postId),
+            control!.anonymous.posts({ id: control!.chapter.postId }).get(),
+          ]);
           if (current.status !== 200 || current.error || !current.data)
             throw new Error(`Generated post-withdrawal control discovery returned ${current.status}`);
-          const discoveryPage = current.data as { items: { catalogueId: string }[] };
+          const discoveryPage = current.data;
+          expect(discoveryPage.nextCursor).toBeNull();
           expect(discoveryPage.items.some((item) => item.catalogueId === control!.catalogueId)).toBe(false);
+          expect(owner.item.publicationId).toBeTruthy();
+          expect(owner.item.publicationId).not.toBe(currentReleaseRevisionId);
+          expect(owner.item.headRevisionId).toBe(beforeWithdrawal.item.headRevisionId);
+          const expectedDraft = pointRevision ?? control!.chapter;
+          expect(draft).toMatchObject({ revisionId: expectedDraft.revisionId, sha256: expectedDraft.sha256 });
+          expect(serializeDocument(draft.body)).toBe(serializeDocument(expectedDraft.body));
+          expect(anonymousPost.status).toBe(404);
           const historical = await assertPublishedBody(
             control!.anonymous,
             control!.catalogueId,
@@ -1791,21 +2393,23 @@ nativeTest(
             control!.occurrenceId,
             control!.chapter,
           );
-          const page = await (await auth.context('anonymous')).newPage();
-          page.setDefaultTimeout(30_000);
-          await page.goto(exactReaderHref!, { waitUntil: 'domcontentloaded' });
-          await hydrate(page);
-          await page.getByRole('heading', { name: 'Control chapter · Beside the harbor steps', exact: true }).waitFor({
-            state: 'visible',
-          });
-          await page.getByText(documentText(control!.chapter.body), { exact: true }).waitFor({ state: 'visible' });
+          withdrawalObserved = true;
+          await withdrawalPage.close();
+          await readAnonymousControlPage(exactReaderHref!, control!.chapter);
           return {
             value: true,
-            observation: `current-discovery=${discoveryPage.items.length} historical-occurrence=${control!.occurrenceId} sha256=${historical.document?.sha256} old-url=${exactReaderHref}`,
+            observation:
+              `current-discovery=${discoveryPage.items.length} withdrawal-release=${owner.item.publicationId}` +
+              ` retained-structure=${owner.item.headRevisionId} retained-draft=${draft.revisionId} direct-post=${anonymousPost.status}` +
+              ` historical-occurrence=${control!.occurrenceId} sha256=${historical.document?.sha256} old-url=${exactReaderHref}`,
           };
         },
-        () => pageObservation(ownerPage),
+        () =>
+          withdrawalObserved
+            ? Promise.resolve(`Studio withdrawal and native readback completed; historical URL=${exactReaderHref}`)
+            : pageObservation(withdrawalPage),
       );
+      if (!withdrawalPage.isClosed()) await withdrawalPage.close();
     } else {
       for (const label of [
         'anonymous direct exact-reader address after a later move',

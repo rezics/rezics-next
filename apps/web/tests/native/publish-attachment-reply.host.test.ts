@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { BrowserContext, Page } from 'playwright';
+import type { BrowserContext, Page, Response as PlaywrightResponse } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
   createPublishAttachmentWorkBoard,
   trustAccount,
@@ -11,7 +12,7 @@ import {
 } from './publish-attachment-reply-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
-setDefaultTimeout(1_200_000);
+const lifecycle = new NativeTestLifecycle('native discussion Board publishing and attachments');
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
 const touchedLabels = [
@@ -50,6 +51,33 @@ let originalImage: Buffer;
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
 let board: PublishAttachmentWorkBoard;
+const sequence: string[] = [];
+
+async function writeBoardResult(result: object) {
+  const directory = resolve(import.meta.dir, '../../../../.temp/publish-attachment-reply');
+  await mkdir(directory, { recursive: true });
+  const pending = resolve(directory, 'walk.pending.json');
+  await writeFile(pending, `${JSON.stringify(result, null, 2)}\n`);
+  await rename(pending, resolve(directory, 'walk.json'));
+}
+
+async function withBoardResult(phase: 'setup' | 'journey', operation: () => Promise<void>) {
+  try {
+    await operation();
+  } catch (error) {
+    try {
+      await writeBoardResult({
+        outcome: 'failed',
+        phase,
+        sequence,
+        error: error instanceof Error ? error.name : typeof error,
+      });
+    } catch {
+      console.error('Could not write the native Board failure result');
+    }
+    throw error;
+  }
+}
 
 function kernelProblem(status: number, code: string, title: string, extra: Record<string, unknown> = {}) {
   return JSON.stringify({
@@ -68,6 +96,24 @@ async function hydrate(page: Page) {
 
 async function expectVisible(locator: { waitFor: (options: { state: 'visible'; timeout: number }) => Promise<void> }) {
   await locator.waitFor({ state: 'visible', timeout: 30_000 });
+}
+
+function waitForUploadResponse(page: Page) {
+  const response = page.waitForResponse(
+    (result) => /^\/media\/[^/]+$/.test(new URL(result.url()).pathname) && result.request().method() === 'PUT',
+  );
+  // Reserve can fail before this PUT is sent. Keep its error primary during cleanup.
+  void response.catch(() => {});
+  return response;
+}
+
+async function expectMediaReservation(response: PlaywrightResponse, phase: string) {
+  if (response.status() === 201) return;
+  const problem = (await response.json().catch(() => null)) as { code?: unknown } | null;
+  const code = typeof problem?.code === 'string' && /^[a-z][a-z0-9_]{0,63}$/u.test(problem.code) ? problem.code : '';
+  const failure = `${phase}:HTTP ${response.status()}${code ? ` ${code}` : ''}`;
+  sequence.push(failure);
+  throw new Error(failure);
 }
 
 async function editor(page: Page) {
@@ -99,41 +145,16 @@ async function signUpMember(returnTo: string): Promise<{
   accountId: string;
   handle: string;
 }> {
+  const destination = new URL(returnTo);
+  if (destination.origin !== new URL(stack.web).origin)
+    throw new Error('Board sign-up must return to the native Web site');
   const context = await auth.newContext('newcomer');
-  const page = await context.newPage();
-  const handle = `member-${crypto.randomUUID().slice(0, 8)}`;
-  const email = `member-${crypto.randomUUID()}@example.test`;
-  const password = `Member-${crypto.randomUUID()}-Secure-9`;
-  await page.goto(`${stack.web}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
-    waitUntil: 'domcontentloaded',
+  const journey = await auth.signUp('newcomer', {
+    context,
+    returnTo: destination.pathname + destination.search + destination.hash,
   });
-  await hydrate(page);
-  if (new URL(page.url()).origin !== new URL(stack.web).origin) {
-    await page
-      .getByRole('link', { name: /create an account|sign up/i })
-      .first()
-      .click();
-    await page.waitForURL((url) => new URL(url).pathname === '/signup');
-    await hydrate(page);
-    await page.getByLabel('Handle', { exact: true }).fill(handle);
-    await page.getByLabel('Email', { exact: true }).fill(email);
-    await page.getByLabel('Password', { exact: true }).fill(password);
-    const created = page.waitForResponse(
-      (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Create an account', exact: true }).click();
-    const signup = await created;
-    expect(signup.status()).toBe(201);
-    const body = (await signup.json()) as { accountId?: unknown };
-    expect(typeof body.accountId).toBe('string');
-    await page.waitForURL((url) => url.origin === new URL(stack.web).origin && !url.pathname.startsWith('/auth/'), {
-      timeout: 30_000,
-    });
-    await page.locator('#account-menu-button').waitFor({ state: 'visible' });
-    await trustAccount(stack, body.accountId as string);
-    return { context, page, accountId: body.accountId as string, handle };
-  }
-  throw new Error(`Sign-up did not reach Auth from ${page.url()}`);
+  expect(journey.url).toBe(destination.href);
+  return { context, page: journey.continueOnPage(), ...journey.registration };
 }
 
 async function insertImage(page: Page, name: string, alt: string, buffer: Buffer, mimeType: string) {
@@ -165,25 +186,22 @@ function documentHas(value: unknown, needle: string): boolean {
   return JSON.stringify(value).includes(needle);
 }
 
-beforeAll(async () => {
-  originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
-  stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
-  auth = await startAuthStack(stack);
-  board = await createPublishAttachmentWorkBoard(stack);
-}, 900_000);
+nativeBeforeAll(lifecycle, 900_000, () =>
+  withBoardResult('setup', async () => {
+    originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
+    stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
+    auth = await startAuthStack(stack);
+    board = await createPublishAttachmentWorkBoard(stack);
+  }),
+);
 
-afterAll(async () => {
-  try {
-    await auth?.stop();
-  } finally {
-    await stack?.stop();
-  }
-}, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
-test('ordinary members publish a Work Board post with an attachment, reply, recover, replace, and leave a dirty draft', async () => {
-  const sequence: string[] = [];
+async function publishAttachmentReply() {
   const author = await signUpMember(board.boardUrl);
   sequence.push(`signup-author:${author.accountId}`);
+  await trustAccount(stack, author.accountId);
+  sequence.push('trusted-author-rate');
   const authorPage = author.page;
   await authorPage.setViewportSize({ width: 390, height: 844 });
   await authorPage.emulateMedia({ colorScheme: 'light' });
@@ -210,22 +228,25 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
   await insertImage(authorPage, 'opening.png', 'Opening chart', originalImage, 'image/png');
-  expect((await failedReserve).status()).toBeGreaterThanOrEqual(500);
+  const failedReservation = await failedReserve;
+  expect(failedReservation.status()).toBeGreaterThanOrEqual(500);
+  const originalReservation = failedReservation.request();
+  const originalReservationKey = await originalReservation.headerValue('idempotency-key');
+  expect(Boolean(originalReservationKey)).toBe(true);
   sequence.push('author-reserve-503');
   const failedRow = authorPage.getByRole('group').filter({ hasText: 'Opening chart' });
   await expectVisible(failedRow.getByRole('status'));
   await expectVisible(failedRow.getByRole('button', { name: 'Retry upload', exact: true }));
-  expect(await failedRow.innerText()).toMatch(/original reservation/i);
 
   const reserved = authorPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
-  const uploaded = authorPage.waitForResponse(
-    (response) => /^\/media\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'PUT',
-  );
+  const uploaded = waitForUploadResponse(authorPage);
   await failedRow.getByRole('button', { name: 'Retry upload', exact: true }).click();
   const reservation = await reserved;
-  expect(reservation.status()).toBe(201);
+  await expectMediaReservation(reservation, 'author-reserve-retry');
+  expect((await reservation.request().headerValue('idempotency-key')) === originalReservationKey).toBe(true);
+  expect(reservation.request().postData() === originalReservation.postData()).toBe(true);
   const mediaId = ((await reservation.json()) as { media: NativeAttachment }).media.id;
   expect((await uploaded).status()).toBe(200);
   await waitForAvailableMedia(mediaId, authorPage);
@@ -281,6 +302,8 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
 
   const replier = await signUpMember(authorPage.url());
   sequence.push(`signup-replier:${replier.accountId}`);
+  await trustAccount(stack, replier.accountId);
+  sequence.push('trusted-replier-rate');
   const replyPage = replier.page;
   await replyPage.setViewportSize({ width: 1280, height: 800 });
   await hydrate(replyPage);
@@ -298,24 +321,34 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
   await insertImage(replyPage, 'chart.png', 'Reply chart', png, 'image/png');
-  expect((await refusedReserve).status()).toBe(415);
-  const replaceRow = replyPage.getByRole('group').filter({ hasText: 'Reply chart' });
+  const refusedReservation = await refusedReserve;
+  expect(refusedReservation.status()).toBe(415);
+  const refusedReservationKey = await refusedReservation.request().headerValue('idempotency-key');
+  expect(Boolean(refusedReservationKey)).toBe(true);
+  const replaceRow = replyPage.getByRole('group', { name: 'Reply chart', exact: true });
+  const replaceButton = replaceRow
+    .getByRole('button', { name: 'Replace image', exact: true })
+    .and(replaceRow.locator('button'));
   await expectVisible(replaceRow.getByText('not accepted', { exact: false }));
-  await expectVisible(replaceRow.getByRole('button', { name: 'Replace image', exact: true }));
+  await expectVisible(replaceButton);
   sequence.push('replier-type-refusal');
   const replyReserved = replyPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
-  const replyUploaded = replyPage.waitForResponse(
-    (response) => /^\/media\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'PUT',
-  );
-  await replaceRow.locator('input[type="file"]').setInputFiles({
+  const replyUploaded = waitForUploadResponse(replyPage);
+  const [replacementChooser] = await Promise.all([
+    replyPage.waitForEvent('filechooser', { timeout: 30_000 }),
+    replaceButton.click(),
+  ]);
+  await replacementChooser.setFiles({
     name: 'reply.png',
     mimeType: 'image/png',
     buffer: png,
   });
   const replyReservation = await replyReserved;
-  expect(replyReservation.status()).toBe(201);
+  await expectMediaReservation(replyReservation, 'replier-reserve-replacement');
+  const replacementReservationKey = await replyReservation.request().headerValue('idempotency-key');
+  expect(Boolean(replacementReservationKey) && replacementReservationKey !== refusedReservationKey).toBe(true);
   const replyMediaId = ((await replyReservation.json()) as { media: NativeAttachment }).media.id;
   expect((await replyUploaded).status()).toBe(200);
   await waitForAvailableMedia(replyMediaId, replyPage);
@@ -331,10 +364,40 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }));
   sequence.push('dirty-departure-stay');
 
+  const postsPath = `/v1/threads/${threadId}/posts`;
+  const replyWrites = () =>
+    stack
+      .kernelRequests()
+      .filter((request) => !request.fixtureRequest && request.method === 'POST' && request.url === postsPath);
+  await stack.syncKernelRequests();
+  const writeCount = replyWrites().length;
   await send(replyPage);
-  await expectVisible(replyPage.getByRole('img', { name: 'Reply chart' }).last());
+  try {
+    await expectVisible(
+      replyPage.locator('[data-slot="post-reading-frame"]').getByRole('img', { name: 'Reply chart' }),
+    );
+  } finally {
+    await stack.syncKernelRequests().catch(() => {
+      sequence.push('reply-observation:unavailable');
+    });
+    const writes = replyWrites().slice(writeCount);
+    sequence.push(`reply-native-status:${writes.map(({ responseStatus }) => responseStatus ?? 'pending').join(',')}`);
+  }
+  expect(
+    replyWrites()
+      .slice(writeCount)
+      .map(({ responseStatus }) => responseStatus),
+  ).toEqual([201]);
 
-  const postsResponse = await stack.kernel(`/v1/threads/${threadId}/posts`);
+  const postsResponse = await stack.kernel(postsPath);
+  if (postsResponse.status !== 200) {
+    const body = (await postsResponse
+      .clone()
+      .json()
+      .catch(() => null)) as { code?: unknown } | null;
+    const problem = typeof body?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(body.code) ? body.code : 'unknown';
+    sequence.push(`reply-readback:${postsResponse.status}:${problem}`);
+  }
   expect(postsResponse.status).toBe(200);
   const posts = (await postsResponse.json()) as { posts: { id: string; mediaIds?: string[]; body: unknown }[] };
   expect(posts.posts.some((post) => post.mediaIds?.includes(mediaId) && documentHas(post.body, 'Opening chart'))).toBe(
@@ -376,33 +439,32 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
     }
   }
 
-  const evidenceDirectory = resolve(import.meta.dir, '../../../../.temp/publish-attachment-reply');
-  await mkdir(evidenceDirectory, { recursive: true });
-  await writeFile(
-    resolve(evidenceDirectory, 'walk.json'),
-    `${JSON.stringify(
-      {
-        stack: { kind: 'native-isolated', web: stack.web, kernel: stack.kernelOrigin },
-        personas: {
-          author: { role: 'ordinary-member', accountId: author.accountId, handle: author.handle },
-          replier: { role: 'ordinary-member', accountId: replier.accountId, handle: replier.handle },
-          anonymous: { role: 'anonymous-reader' },
-        },
-        board: { id: board.boardId, title: board.boardTitle, conceptId: board.conceptId },
-        thread: { id: threadId, title: threadRead.thread.title },
-        media: {
-          opening: { id: mediaId, byteCount: storedOpening.byteCount, state: storedOpening.state },
-          reply: { id: replyMediaId, byteCount: storedReply.byteCount, state: storedReply.state },
-        },
-        sequence,
-        nativePosts: posts.posts.map((post) => ({ id: post.id, mediaIds: post.mediaIds ?? [] })),
-      },
-      null,
-      2,
-    )}\n`,
-  );
-
   await author.context.close();
   await replier.context.close();
   await anonymous.close();
-});
+
+  await writeBoardResult({
+    outcome: 'passed',
+    stack: { kind: 'native-isolated', web: stack.web, kernel: stack.kernelOrigin },
+    personas: {
+      author: { role: 'ordinary-member', accountId: author.accountId, handle: author.handle },
+      replier: { role: 'ordinary-member', accountId: replier.accountId, handle: replier.handle },
+      anonymous: { role: 'anonymous-reader' },
+    },
+    board: { id: board.boardId, title: board.boardTitle, conceptId: board.conceptId },
+    thread: { id: threadId, title: threadRead.thread.title },
+    media: {
+      opening: { id: mediaId, byteCount: storedOpening.byteCount, state: storedOpening.state },
+      reply: { id: replyMediaId, byteCount: storedReply.byteCount, state: storedReply.state },
+    },
+    sequence,
+    nativePosts: posts.posts.map((post) => ({ id: post.id, mediaIds: post.mediaIds ?? [] })),
+  });
+}
+
+nativeTest(
+  'ordinary members publish a Work Board post with an attachment, reply, recover, replace, and leave a dirty draft',
+  1_200_000,
+  () => withBoardResult('journey', publishAttachmentReply),
+  lifecycle,
+);

@@ -47,13 +47,17 @@ export type AuthJourney = {
   >;
 };
 type NativeSignInOptions = { returnTo?: string; context?: BrowserContext; sessionOnly?: boolean };
+type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
   origin: string;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
   signIn(persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>, options?: NativeSignInOptions): Promise<AuthJourney>;
-  signUp(persona: 'newcomer'): Promise<AuthJourney>;
+  signUp(
+    persona: 'newcomer',
+    options?: Pick<NativeSignInOptions, 'returnTo' | 'context'>,
+  ): Promise<AuthJourney & { registration: NativeSignup }>;
   stop(): Promise<void>;
 };
 
@@ -333,7 +337,7 @@ export async function startAuthStack(
       persona: AuthPersona,
       signup: boolean,
       options: NativeSignInOptions = {},
-    ): Promise<AuthJourney> {
+    ): Promise<AuthJourney & { registration?: NativeSignup }> {
       assertActive(signup ? 'start native sign-up journey' : 'start native sign-in journey');
       const journeyStarted = performance.now();
       const browserContext = options.context ?? (await context(persona));
@@ -407,6 +411,7 @@ export async function startAuthStack(
       await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
       await hydrate(page);
       let callbackResponse: Promise<PlaywrightResponse> | undefined;
+      let registration: NativeSignup | undefined;
       if (signup) {
         assertActive('open native Auth sign-up page');
         const signupLink = page.getByRole('link', { name: /create an account|sign up/i }).first();
@@ -414,9 +419,21 @@ export async function startAuthStack(
         await page.waitForURL((url) => url.origin === origin && url.pathname === '/signup');
         await hydrate(page);
         assertActive('submit native Auth sign-up form');
-        await page.getByLabel('Handle', { exact: true }).fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
-        await page.getByLabel('Email', { exact: true }).fill(email);
-        await page.getByLabel('Password', { exact: true }).fill(formPassword);
+        const handle = `newcomer-${crypto.randomUUID().slice(0, 8)}`;
+        const fields = page.locator('#signup-form input');
+        await fields.and(page.getByLabel('Handle', { exact: true })).fill(handle);
+        await fields.and(page.getByLabel('Email', { exact: true })).fill(email);
+        await fields.and(page.getByLabel('Password', { exact: true })).fill(formPassword);
+        await fields.and(page.getByLabel('Confirm password', { exact: true })).fill(formPassword);
+        await page.getByText('Loading the security check…', { exact: true }).waitFor({ state: 'hidden' });
+        // Capture the native registration receipt separately from the automatic sign-in response.
+        const signupResponse = page.waitForResponse(
+          (response) => {
+            const url = new URL(response.url());
+            return url.origin === origin && url.pathname === '/signup' && response.request().method() === 'POST';
+          },
+          { timeout: 30_000 },
+        );
         callbackResponse = page.waitForResponse(
           (response) => {
             const url = new URL(response.url());
@@ -425,6 +442,12 @@ export async function startAuthStack(
           { timeout: 30_000 },
         );
         await page.getByRole('button', { name: 'Create an account', exact: true }).click();
+        const response = await signupResponse;
+        if (response.status() !== 201) throw new Error(`Native Auth sign-up returned HTTP ${response.status()}`);
+        const receipt = (await response.json()) as { accountId?: unknown } | null;
+        if (typeof receipt?.accountId !== 'string' || !receipt.accountId)
+          throw new Error('Native Auth sign-up returned no account ID');
+        registration = { accountId: receipt.accountId, handle };
       } else {
         await page.getByLabel(/email/i).fill(email);
         await page.locator('input[name="password"]').fill(formPassword);
@@ -494,6 +517,7 @@ export async function startAuthStack(
         url: current,
         context: browserContext,
         visitedUrls,
+        ...(registration ? { registration } : {}),
         continueOnPage() {
           page.off('request', recordRequest);
           return page;
@@ -604,8 +628,10 @@ export async function startAuthStack(
       signIn(persona, options) {
         return journey(persona, false, options);
       },
-      signUp(persona) {
-        return journey(persona, true);
+      async signUp(persona, options) {
+        const result = await journey(persona, true, options);
+        if (!result.registration) throw new Error('Missing native Auth sign-up receipt');
+        return { ...result, registration: result.registration };
       },
       stop,
     };

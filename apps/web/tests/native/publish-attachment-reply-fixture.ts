@@ -10,10 +10,11 @@ async function call(
   method: string,
   path: string,
   body?: unknown,
+  key: string = randomUUID(),
 ): Promise<{ response: Response; value: JsonObject }> {
   const headers = new Headers();
   if (body !== undefined) headers.set('content-type', 'application/json');
-  if (method !== 'GET' && method !== 'HEAD') headers.set('idempotency-key', JSON.stringify(randomUUID()));
+  if (method !== 'GET' && method !== 'HEAD') headers.set('idempotency-key', JSON.stringify(key));
   const response = await stack.kernel(
     path,
     {
@@ -41,8 +42,9 @@ async function requireOk<T extends JsonObject>(
   method: string,
   path: string,
   body?: unknown,
+  key?: string,
 ): Promise<T> {
-  const result = await call(stack, persona, method, path, body);
+  const result = await call(stack, persona, method, path, body, key);
   if (!result.response.ok)
     throw new Error(
       `Work-board fixture ${method} ${path} failed (${result.response.status}): ${JSON.stringify(result.value)}`,
@@ -116,8 +118,14 @@ export async function createPublishAttachmentWorkBoard(stack: NativeWebStack): P
 
 export async function trustAccount(stack: NativeWebStack, accountId: string): Promise<void> {
   const key = randomUUID();
-  await requireOk(stack, 'governor', 'POST', `/v1/accounts/${encodeURIComponent(accountId)}:setRateTier`, {
+  const { rateTier } = await requireOk<{ rateTier: { accountId: string; tier: string } }>(
+    stack,
+    'governor',
+    'POST',
+    `/v1/accounts/${encodeURIComponent(accountId)}:setRateTier`,
+    { key, tier: 'trusted' },
     key,
-    tier: 'trusted',
-  });
+  );
+  if (rateTier?.accountId !== accountId || rateTier.tier !== 'trusted')
+    throw new Error('Work-board fixture did not acknowledge the requested trusted rate tier');
 }

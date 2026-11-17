@@ -50,6 +50,8 @@ export type NativeKernelRequest = {
   validLabelUndoRevision?: boolean;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
+  /** Only the subject selector is retained for observed Hosted checkpoint saves. */
+  hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
   authorizationDecision?: { status: number; body: string };
   /** Observed at the installed production Access methods, never inferred from HTTP success. */
@@ -928,7 +930,10 @@ async function startStack(): Promise<
           forwarded.headers.set('x-native-auth-url', serviceRequest.url);
           return fetch(forwarded, { redirect: 'manual' });
         }
-        if (pageOrigin && serviceRequest.method === 'POST' && url.pathname === '/signup')
+        if (
+          pageOrigin &&
+          ((serviceRequest.method === 'POST' && url.pathname === '/signup') || url.pathname === '/registration-page')
+        )
           return signupHandler!(serviceRequest);
         if (
           serviceRequest.method === 'POST' &&
@@ -1188,6 +1193,13 @@ async function startStack(): Promise<
               ? { body: await request.clone().text() }
               : {}),
         };
+        if (request.method === 'PUT' && url.pathname === '/v1/libraryHostedReading' && !observed.fixtureRequest) {
+          const command = (await request
+            .clone()
+            .json()
+            .catch(() => null)) as { subjectId?: unknown } | null;
+          if (typeof command?.subjectId === 'string') observed.hostedReadingSubjectId = command.subjectId;
+        }
         requests.push(observed);
         const createdReadFailure = request.method === 'GET' ? createdSubjectReadFailures.get(url.pathname) : undefined;
         if (createdReadFailure) {
