@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { planReads, platformRegistry } from '@rezics/composition';
-import { subjectAlias } from '../../../src/search/indices.ts';
+import { subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import {
@@ -54,22 +54,56 @@ export async function createBookComposition() {
     owner = fixture;
     assert(database && fixture.search);
     const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
-    const index = subjectAlias(fixture.search.indexPrefix);
+    const prefix = fixture.search.indexPrefix;
+    const index = subjectAlias(prefix);
     async function indexed(ids: readonly string[]) {
-      const until = Date.now() + 120_000;
-      for (;;) {
+      async function count(target: string, signal?: AbortSignal) {
+        const { body } = await engine.request<{ count: number; _shards: { failed: number } }>(
+          'POST',
+          `/${target}/_count`,
+          { query: { ids: { values: ids } } },
+          signal ? { signal } : undefined,
+        );
+        assert.equal(body._shards.failed, 0);
+        return body.count;
+      }
+
+      async function observeGenerations(signal: AbortSignal) {
         try {
-          const { body } = await engine.request<{ count: number; _shards: { failed: number } }>(
-            'POST',
-            `/${index}/_count`,
-            { query: { ids: { values: ids } } },
+          const { active, generations } = await subjectGenerations(engine, prefix, undefined, signal);
+          const physical = await Promise.all(
+            generations.map(async (generation) => ({
+              generation,
+              matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
+            })),
           );
-          assert.equal(body._shards.failed, 0);
-          if (body.count === ids.length) return;
+          return { active, physical };
+        } catch (error) {
+          return { inventoryError: String(error) };
+        }
+      }
+
+      const until = Date.now() + 120_000;
+      let observed: Awaited<ReturnType<typeof observeGenerations>> | undefined;
+      for (;;) {
+        let alias: number | 'HTTP 404';
+        try {
+          alias = await count(index);
+          if (alias === ids.length) return;
         } catch (error) {
           if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+          alias = 'HTTP 404';
         }
-        assert(Date.now() < until, `Search did not index the ${ids.length} released originals`);
+        const remaining = until - Date.now();
+        if (remaining <= 0) {
+          throw new Error(
+            `Search did not index the ${ids.length} released originals in 120s ` +
+              `(alias: ${alias}, generation snapshot: ${JSON.stringify(observed ?? null)})`,
+          );
+        }
+        // Sample native publication and projection once, within the original alias wait.
+        if (remaining <= 5_000 && !observed)
+          observed = await observeGenerations(AbortSignal.timeout(Math.min(remaining, 2_000)));
         await Bun.sleep(100);
       }
     }
