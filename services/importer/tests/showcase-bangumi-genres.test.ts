@@ -6,12 +6,14 @@ import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { bangumiPublicTagScheme, reviewedReferenceKey } from '@rezics/conversion/support';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
+import type { ReviewedCandidatePage } from '../src/import-client.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { createReviewedCatalogueApplication } from '../src/reviewed-catalogue-application.ts';
 import { sameStatementProvenance } from '../src/statement-provenance.ts';
 import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
 import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 import { ShowcaseJournal } from '../src/showcase-journal.ts';
+import { reviewedStatementFixture } from './transport-driver.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 test('statement provenance admits data descriptors before projecting semantic fields', () => {
@@ -33,13 +35,13 @@ type Candidate = {
   source: BatchCommand['source'];
   statement: BatchStatement;
   decision: 'proposed' | 'accepted' | 'rejected';
-  rank: 'normal' | 'preferred' | null;
+  rank: 'normal' | 'preferred' | 'deprecated' | null;
   retracted: number | null;
   head: number | null;
 };
 type Subject = { id: string; type: string; labels: Record<string, string>; statements: Record<string, unknown[]> };
 
-function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2] {
+function fakePort() {
   const subjects = new Map<string, Subject>();
   const owners = new Map<string, string>();
   const candidates = new Map<string, Candidate>();
@@ -50,7 +52,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   >();
   const key = (source: string, externalId: string) => `${source}\0${externalId}`;
   const adoptionKey = (id: string, property: string) => `${id}\0${property}`;
-  const page = (id: string, property: string, target?: string) => {
+  const candidatePage = (id: string, property: string, target?: string) => {
     const adoption = adoptions.get(adoptionKey(id, property));
     return {
       candidates: [...candidates.values()]
@@ -72,7 +74,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
         })),
       next: null,
       adoption: adoption ?? null,
-    } as never;
+    };
   };
   const port = {
     async batch(request: { commands: readonly BatchCommand[] }) {
@@ -139,7 +141,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       return { subject: { ...subject, context, statements } } as never;
     },
     async reviewedCandidates(id: string, query: Parameters<ReviewedCataloguePort['reviewedCandidates']>[1]) {
-      return page(id, query.property, query.target);
+      return candidatePage(id, query.property, query.target) as never;
     },
     async acceptReviewedCandidate(id: string, candidate: string, body: { context: string }) {
       const row = candidates.get(candidate)!;
@@ -172,7 +174,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       return {};
     },
   };
-  return port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2];
+  return { ...(port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2]), candidatePage };
 }
 
 test('reviewed tag binding survives deprecated history on unchanged reopen and withdraws for current conflicts', async () => {
@@ -234,11 +236,9 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
       adoptionWrites++;
       return native.adoptReviewedCandidates(...args);
     },
-    async reviewedCandidates(...args) {
-      const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
-        value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
-      );
-      if (alternate && args[0] === alternate.subject && args[1].property === alternate.property) {
+    async reviewedCandidates(id, query) {
+      const page = structuredClone(native.candidatePage(id, query.property, query.target));
+      if (alternate && id === alternate.subject && query.property === alternate.property) {
         const selected = page.candidates.find((candidate) => candidate.id === alternate!.candidate);
         if (selected)
           page.candidates.push({
@@ -246,30 +246,31 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
             id: 'historical-alternative',
             decision: 'accepted',
             rank: siblingRank,
-            statement: { ...selected.statement, value: { type: 'value', content: 'historical alternate value' } },
+            statement: {
+              ...selected.statement,
+              value: { type: 'value', content: 'historical alternate value' },
+            },
           });
-        if (page.adoption)
-          page.adoption.selection = [
-            ...page.adoption.selection,
-            { candidate: 'historical-alternative', rank: siblingRank },
-          ];
-      }
-      for (const candidate of page.candidates) {
-        const statement = candidate.statement;
-        Object.assign(statement, {
-          id: candidate.id,
-          rank: 'normal',
-          qualifiers: [],
-          rezics: { release: 'released', revision: 1 },
-        });
-        statement.property.data_type = 'url';
-        for (const reference of statement.references ?? []) {
-          reference.hash = 'native-reference-hash';
-          for (const part of reference.parts) part.property.data_type = 'url';
+        if (page.adoption) {
+          const selection = [...page.adoption.selection, { candidate: 'historical-alternative', rank: siblingRank }];
+          Object.assign(page.adoption, { selection });
         }
       }
       if (changed && page.candidates[0]) page.candidates[0].statement.references = [];
-      return page;
+      const reply = {
+        ...page,
+        candidates: page.candidates.map((candidate) => ({
+          ...candidate,
+          statement: reviewedStatementFixture(candidate.id, 'normal', candidate.statement),
+          release: 'released',
+          revision: 1,
+        })),
+      } satisfies ReviewedCandidatePage;
+      return JSON.parse(
+        JSON.stringify(reply),
+        (_key, value) =>
+          value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
+      );
     },
   };
   const vocabulary = releasedReviewedVocabulary();

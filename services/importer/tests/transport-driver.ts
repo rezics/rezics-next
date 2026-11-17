@@ -1,6 +1,9 @@
 export { createImportTransport } from '../src/import-client.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { createImportTransport } from '../src/import-client.ts';
+import { sourceDigest } from '@rezics/conversion/support';
+import type { BatchStatement } from '@rezics/definitions/bulk';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { createImportTransport, type ReviewedSubjectRead } from '../src/import-client.ts';
 import { isImportSourceRecord } from '../src/source-record-runtime.ts';
 import {
   type ImportSourceRecordMetadataCommand,
@@ -8,6 +11,47 @@ import {
   type ImportSourceObservationHead,
 } from '../src/import-contract.ts';
 import { sourceObservation, type SourceObservation } from '../../kernel/src/rating/source-provider.ts';
+
+type ReviewedStatement = ReviewedSubjectRead['subject']['statements'][string][number];
+
+export function reviewedStatementFixture(
+  id: string,
+  rank: ReviewedStatement['rank'],
+  statement: BatchStatement,
+): ReviewedStatement {
+  const nativeSnak = ({ property, value }: Pick<BatchStatement, 'property' | 'value'>) => ({
+    property: { id: property.id, data_type: bundledRelease.properties[property.id]!.datatype },
+    value: structuredClone(value),
+  });
+  return {
+    ...nativeSnak(statement),
+    id,
+    rank,
+    qualifiers: (statement.qualifiers ?? []).map(nativeSnak),
+    references: statement.references.map(({ parts }) => ({ parts: parts.map(nativeSnak), hash: sourceDigest(parts) })),
+    rezics: { release: 'released', revision: 1 },
+  };
+}
+
+export function reviewedSubjectFixture(
+  subject: Pick<ReviewedSubjectRead['subject'], 'id' | 'type' | 'context' | 'labels' | 'statements'>,
+): ReviewedSubjectRead {
+  return {
+    subject: {
+      revision: 1,
+      release: 'released',
+      resolution: {},
+      relationCounts: {},
+      descriptions: {},
+      aliases: {},
+      sourceRecords: [],
+      ...structuredClone(subject),
+    },
+    account: null,
+    summary: null,
+    related: {},
+  };
+}
 
 /** Explicit canonical provider heads for local protocol doubles, including clears. */
 export function sourceObservationFixture() {

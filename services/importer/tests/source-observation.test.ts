@@ -6,7 +6,12 @@ import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { Importer } from '../src/importer.ts';
-import type { ImportSourceObservationHead, ImportTransport } from '../src/import-contract.ts';
+import type {
+  ImportSourceObservationHead,
+  ImportSourceStatisticClearValue,
+  ImportSourceStatisticValue,
+  ImportTransport,
+} from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import {
   classifyObservation,
@@ -23,11 +28,16 @@ import { parseObservationArgs, runObservationsCli } from '../src/source-observat
 const subjectId = '00000000-0000-4000-8000-000000000101';
 const registration = createSourceRegistration('vndb', { sourceSnapshotAsOf: '2026-10-25' });
 
-function storedHead(id: string, row?: Record<string, unknown>): ImportSourceObservationHead {
+type ObservationPayload = NonNullable<ImportSourceObservationHead['observation']>['payload'];
+type StoredObservation =
+  | (ImportSourceStatisticValue & { cleared?: never })
+  | (ImportSourceStatisticClearValue & { cleared: true; count: 0; mean?: never });
+
+function storedHead(id: string, row?: StoredObservation): ImportSourceObservationHead {
   if (!row) return { state: 'empty', digest: null, observation: null };
   const { cleared: _cleared, expectedObservation: _expected, ...fields } = row;
-  const payload: Record<string, unknown> = { ...fields, sourceAlias: fields.sourceAlias ?? 'vndb' };
-  const digest = observationDigest(id, payload as never);
+  const payload: ObservationPayload = { ...fields, sourceAlias: fields.sourceAlias ?? 'vndb' };
+  const digest = observationDigest(id, payload);
   return {
     state: payload.count === 0 ? 'cleared' : 'published',
     digest,
@@ -36,7 +46,7 @@ function storedHead(id: string, row?: Record<string, unknown>): ImportSourceObse
       sourceRecordId: payload.sourceRecordId, asOf: payload.asOf, nativeOrder: '1', legacy: false,
       provenance: { kind: 'unversioned', digest }, payload,
     },
-  } as ImportSourceObservationHead;
+  };
 }
 
 test('canonical current inspection keeps empty and retained clear distinct', () => {
@@ -50,7 +60,10 @@ test('canonical current inspection keeps empty and retained clear distinct', () 
     licence: 'ODbL-1.0',
     attribution: 'VNDB',
   };
-  const current = storedHead(subjectId, intendedPayload(intended));
+  const { kind: _kind, ...value } = intended;
+  const current = storedHead(subjectId, value);
+  const observation = current.observation;
+  if (!observation || !('scale' in observation.payload)) throw new Error('Expected a published observation');
   const digest = observationDigest(subjectId, intended);
   expect(headFromInspection(subjectId, storedHead(subjectId))).toEqual({ kind: 'absent' });
   expect(headFromInspection(subjectId, current)).toMatchObject({ kind: 'head', head: { digest, cleared: false } });
@@ -58,14 +71,14 @@ test('canonical current inspection keeps empty and retained clear distinct', () 
     .toMatchObject({ kind: 'unavailable' });
   expect(headFromInspection(subjectId, {
     ...current,
-    observation: { ...current.observation!, payload: { ...current.observation!.payload, count: 99 } },
+    observation: { ...observation, payload: { ...observation.payload, count: 99 } },
   })).toMatchObject({ kind: 'unavailable' });
   expect(headFromInspection(subjectId, {
     ...current,
-    observation: { ...current.observation!, sourceAlias: 'another-catalogue' },
+    observation: { ...observation, sourceAlias: 'another-catalogue' },
   })).toMatchObject({ kind: 'unavailable' });
   expect(headFromInspection(subjectId, { ...current, digest: null })).toMatchObject({ kind: 'unavailable' });
-  const clear = storedHead(subjectId, { sourceRecordId: 'v123', count: 0, asOf: intended.asOf });
+  const clear = storedHead(subjectId, { sourceRecordId: 'v123', cleared: true, count: 0, asOf: intended.asOf });
   expect(headFromInspection(subjectId, clear)).toMatchObject({ kind: 'head', head: { count: 0, cleared: true } });
   expect(headFromAcknowledgedObservation(subjectId, intended).digest).toBe(digest);
   expect(
@@ -170,7 +183,7 @@ function resultFor(request: BatchWriteRequest, sequence: { value: number }): Bat
 
 async function observationFixture() {
   const directory = await mkdtemp(join(tmpdir(), 'observation-'));
-  const stored = new Map<string, Record<string, unknown>>();
+  const stored = new Map<string, StoredObservation>();
   const writes: { method: string; path: string; body: unknown; key: string | null }[] = [];
   const sequence = { value: 0 };
   let lost = false;
@@ -189,9 +202,9 @@ async function observationFixture() {
     async readPublicFigure(input: { subjectId: string }) {
       const row = stored.get(input.subjectId);
       if (!row || row.cleared) return { count: 0, state: 'insufficient_data', mean: null };
-      return { count: row.count as number, state: 'ready', mean: row.mean as number };
+      return { count: row.count, state: 'ready', mean: row.mean };
     },
-    async writeSourceStatistic(input: { subjectId: string; value: Record<string, unknown>; idempotencyKey: string }) {
+    async writeSourceStatistic(input: { subjectId: string; value: ImportSourceStatisticValue; idempotencyKey: string }) {
       writes.push({
         method: 'PUT',
         path: `/v1/subjects/${input.subjectId}/source-statistics/vndb`,
@@ -204,10 +217,10 @@ async function observationFixture() {
       return {
         source: 'vndb',
         ...value,
-        observation: { kind: 'unversioned', digest: observationDigest(input.subjectId, value as never) },
+        observation: { kind: 'unversioned', digest: observationDigest(input.subjectId, value) },
       };
     },
-    async clearSourceStatistic(input: { subjectId: string; value: Record<string, unknown>; idempotencyKey: string }) {
+    async clearSourceStatistic(input: { subjectId: string; value: ImportSourceStatisticClearValue; idempotencyKey: string }) {
       writes.push({
         method: 'POST',
         path: `/v1/subjects/${input.subjectId}/source-statistics/vndb:clear`,
@@ -268,7 +281,9 @@ test('newer refresh is automatic; equal-date waits; stale resolve is rejected; c
     expect(listed.code).toBe(0);
     expect(listed.stdout).toContain(page.operations[0]!.operationId);
     const inspected = page.operations[0]!;
-    f.stored.set(subjectId, { ...f.stored.get(subjectId)!, mean: 6.5 });
+    const retained = f.stored.get(subjectId);
+    if (!retained || retained.cleared) throw new Error('Expected the retained published observation');
+    f.stored.set(subjectId, { ...retained, mean: 6.5 });
     expect(await f.importer.resolveObservation('vndb', inspected.operationId, inspected.reviewedHead!.digest)).toEqual({
       status: 'conflict',
       operationId: inspected.operationId,

@@ -2,8 +2,17 @@ import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runDevelopmentSeed, seedFailureDetail } from '../../../scripts/datasets/cross-media-seed.ts';
-import { SeedReadinessError, waitForKernelReadiness } from '../src/seed-readiness.ts';
+import { SeedReadinessError, waitForKernelReadiness, type SeedReadinessOptions } from '../src/seed-readiness.ts';
 import { MAX_IMPORT_RESPONSE_BYTES } from '../src/import-fetch.ts';
+
+type ReadinessFetch = NonNullable<SeedReadinessOptions['fetch']>;
+function readinessFetch(mock: (...args: Parameters<ReadinessFetch>) => ReturnType<ReadinessFetch>): ReadinessFetch {
+  return Object.assign(mock, {
+    preconnect() {
+      throw new Error('Unexpected readiness preconnect');
+    },
+  });
+}
 
 const origin = 'http://127.0.0.1:4317';
 const env = {
@@ -67,12 +76,12 @@ test('development seed waits for network failure, boot 503 and HTTP 200 before c
           await waitForKernelReadiness({
             ...input,
             ...time,
-            fetch: (async (url, init) => {
+            fetch: readinessFetch(async (url, init) => {
               requests.push(new Request(url, init));
               events.push('probe');
               if (requests.length === 1) throw Object.assign(new Error('booting'), { code: 'ECONNREFUSED' });
               return new Response('{}', { status: requests.length === 2 ? 503 : 200 });
-            }) as typeof fetch,
+            }),
           });
           events.push('ready');
         },
@@ -143,10 +152,10 @@ test('readiness exhaustion leaves every development import effect unstarted and 
           ...input,
           ...time,
           deadlineMs: 5000,
-          fetch: (async () => {
+          fetch: readinessFetch(async () => {
             probes++;
             throw cause;
-          }) as typeof fetch,
+          }),
         }),
       fetchDumps: async () => {
         effects.push('dumps');
@@ -184,10 +193,10 @@ test('only HTTP 200 releases readiness, including after an initially absent boot
     await waitForKernelReadiness({
       origin: 'https://kernel.seed.test:8443',
       ...time,
-      fetch: (async (url) => {
+      fetch: readinessFetch(async (url) => {
         expect(String(url)).toBe('https://kernel.seed.test:8443/v1/definitions/active');
         return new Response(null, { status: ++probes === 1 ? bootStatus : 200 });
-      }) as typeof fetch,
+      }),
     });
     expect(probes).toBe(2);
     expect(time.timers.size).toBe(0);
@@ -202,10 +211,10 @@ test('repeated boot probes retain the original operation expiry', async () => {
       origin,
       ...time,
       deadlineMs: 2500,
-      fetch: (async () => {
+      fetch: readinessFetch(async () => {
         probes++;
         return new Response(null, { status: 404 });
-      }) as typeof fetch,
+      }),
     }),
   );
   expect(error.phase).toBe('deadline');
@@ -223,13 +232,13 @@ test('permanent HTTP refusal and an inadmissible Retry-After stop without exposi
       waitForKernelReadiness({
         origin,
         ...time,
-        fetch: (async () => {
+        fetch: readinessFetch(async () => {
           probes++;
           return Response.json(
             { retryable: true, detail: 'Bearer secret raw body' },
             { status, headers: { 'retry-after': '99999', 'x-request-id': 'readiness-1' } },
           );
-        }) as typeof fetch,
+        }),
       }),
     );
     expect(probes).toBe(1);
@@ -251,10 +260,10 @@ test('cancellation interrupts a pending retry wait and preserves its private rea
       origin,
       ...time,
       signal: caller.signal,
-      fetch: (async () => {
+      fetch: readinessFetch(async () => {
         probes++;
         return new Response(null, { status: 404 });
-      }) as typeof fetch,
+      }),
       sleep: () => {
         caller.abort(reason);
         return new Promise<void>(() => {});
@@ -289,13 +298,13 @@ test('an expired in-flight probe aborts and cancels a late HTTP 200 without star
           ...input,
           ...time,
           deadlineMs: 10,
-          fetch: (async (_url, init) => {
+          fetch: readinessFetch(async (_url, init) => {
             if (init?.signal) requestSignals.push(init.signal);
             started();
             return new Promise<Response>((resolve) => {
               complete = resolve;
             });
-          }) as typeof fetch,
+          }),
         }),
       fetchDumps: async () => {
         effects++;
@@ -319,7 +328,7 @@ test('an oversized HTTP 200 remains a bounded response failure', async () => {
     waitForKernelReadiness({
       origin,
       ...time,
-      fetch: (async () => new Response(new Uint8Array(MAX_IMPORT_RESPONSE_BYTES + 1))) as typeof fetch,
+      fetch: readinessFetch(async () => new Response(new Uint8Array(MAX_IMPORT_RESPONSE_BYTES + 1))),
     }),
   );
   expect(error.phase).toBe('response');

@@ -14,6 +14,7 @@ import {
   type ReviewedTagAdoption,
   type ReviewedTagCandidate,
 } from '../src/showcase-tags.ts';
+import { reviewedStatementFixture, reviewedSubjectFixture } from './transport-driver.ts';
 
 const schemeId = '00000000-0000-4000-8000-000000000010';
 const conceptId = '00000000-0000-4000-8000-000000000011';
@@ -50,7 +51,7 @@ function acceptanceReview(target: 'scheme' | 'concept') {
   });
   const adoptedProperty = (row: NativeCandidate): NativeProperty => ({
     candidates: [row],
-    adoption: { head: 1, selection: [{ candidate: row.id, rank: 'normal' }] },
+    adoption: { mode: 'replace', head: 1, selection: [{ candidate: row.id, rank: 'normal' }] },
   });
   const scheme = adoptedProperty(candidate(schemeCandidateId, 'tag-scheme:cont'));
   const concept = adoptedProperty(candidate(conceptCandidateId, 'g311'));
@@ -70,7 +71,7 @@ function acceptanceReview(target: 'scheme' | 'concept') {
   editorial.source = { source: 'editorial', external_id: 'editorial-note' };
   editorial.rank = 'preferred';
   current.candidates.unshift(editorial);
-  current.adoption = { head: 4, selection: [{ candidate: editorialId, rank: 'preferred' }] };
+  current.adoption = { mode: 'replace', head: 4, selection: [{ candidate: editorialId, rank: 'preferred' }] };
 
   const acceptCalls: { candidate: string; body: AcceptBody; key: string }[] = [];
   const adoptCalls: { body: AdoptBody; key: string }[] = [];
@@ -79,9 +80,16 @@ function acceptanceReview(target: 'scheme' | 'concept') {
   let loseAcceptance = true;
   let acceptFailure: Error | null = null;
   let beforeAdopt: (() => void) | undefined;
-  const selected = (state: NativeProperty, id: string) =>
-    state.adoption?.selection.some((item) => item.candidate === id) ?? false;
-  const value = (content: string) => ({ value: { type: 'value', content } });
+  const selectedStatements = (state: NativeProperty, id: string, property: string, content: string) => {
+    const selection = state.adoption?.selection.find((item) => item.candidate === id);
+    return selection
+      ? [reviewedStatementFixture(id, selection.rank, {
+          property: { id: property },
+          value: { type: 'value', content },
+          references: [],
+        })]
+      : [];
+  };
   const review = {
     async reviewedCandidates(id: string, query: { property: string }) {
       const state = properties.get(`${id}:${query.property}`);
@@ -91,7 +99,7 @@ function acceptanceReview(target: 'scheme' | 'concept') {
           rank: state?.adoption?.selection.find((item) => item.candidate === row.id)?.rank ?? row.rank,
         })),
         next: null,
-        adoption: state?.adoption ? { mode: 'replace', head: state.adoption.head } : null,
+        adoption: state?.adoption ? { mode: state.adoption.mode, head: state.adoption.head } : null,
       };
     },
     async acceptReviewedCandidate(id: string, candidateId: string, body: AcceptBody, key: string) {
@@ -124,25 +132,27 @@ function acceptanceReview(target: 'scheme' | 'concept') {
       const recovered = adoptionReceipts.get(key);
       if (recovered) return { adoption: { ...body, ...recovered } };
       if (body.expected_head !== (state.adoption?.head ?? null)) throw new ImportTransportError(412);
-      state.adoption = { head: (state.adoption?.head ?? 0) + 1, selection: body.selection };
+      state.adoption = { mode: body.mode, head: (state.adoption?.head ?? 0) + 1, selection: body.selection };
       adoptionReceipts.set(key, state.adoption);
       return { adoption: { ...body, ...state.adoption } };
     },
     async readReviewedSubject(id: string) {
-      const subjects = {
+      const subjects: Record<string, Pick<ReviewedSubjectRead['subject'], 'id' | 'type' | 'statements'>> = {
         [schemeId]: { id: schemeId, type: 'skos:ConceptScheme', statements: {} },
         [conceptId]: {
           id: conceptId,
           type: 'skos:Concept',
-          statements: { 'skos:inScheme': selected(concept, conceptCandidateId) ? [value(schemeId)] : [] },
+          statements: { 'skos:inScheme': selectedStatements(concept, conceptCandidateId, 'skos:inScheme', schemeId) },
         },
         [workId]: {
           id: workId,
           type: 'schema:VideoGame',
-          statements: { 'schema:genre': selected(work, workCandidateId) ? [value(conceptId)] : [] },
+          statements: { 'schema:genre': selectedStatements(work, workCandidateId, 'schema:genre', conceptId) },
         },
       };
-      return { subject: subjects[id as keyof typeof subjects] } as unknown as ReviewedSubjectRead;
+      const subject = subjects[id];
+      if (!subject) throw new Error('Unexpected reviewed-tag subject');
+      return reviewedSubjectFixture({ ...subject, context: GLOBAL_CONTEXT, labels: {} });
     },
   };
   return {
@@ -166,7 +176,7 @@ function acceptanceReview(target: 'scheme' | 'concept') {
       original.decision = 'rejected';
       original.rank = 'deprecated';
       original.head = 9;
-      current.adoption = { head: 12, selection: [{ candidate: editorialId, rank: 'preferred' }] };
+      current.adoption = { mode: 'replace', head: 12, selection: [{ candidate: editorialId, rank: 'preferred' }] };
     },
     failNextAcceptance(error: Error) {
       acceptFailure = error;
@@ -211,6 +221,7 @@ for (const target of ['scheme', 'concept'] as const) {
       expect(native.adoptCalls).toHaveLength(1);
       expect(native.adoptCalls[0]?.body.expected_head).toBe(4);
       expect(recovered.adopted[`${native.subjectId}:${native.property}`]).toEqual({
+        mode: 'replace',
         head: 5,
         selection: [
           { candidate: native.candidateId, rank: 'normal' },
@@ -252,12 +263,13 @@ test('a failed historical replay stays unknown, then its successful receipt pres
 
     const recovered = await completeReviewedSharedTagFlow({ ...input, journal });
     expect(native.acceptCalls).toHaveLength(3);
-    for (const call of native.acceptCalls) expect(call).toEqual(native.acceptCalls[0]);
+    for (const call of native.acceptCalls) expect(call).toEqual(native.acceptCalls[0]!);
     expect(journal.action(action)).toEqual({ ...sealed, state: 'acknowledged' });
     expect(native.original).toMatchObject({ decision: 'rejected', head: 9, rank: 'deprecated' });
     expect(recovered.accepted).not.toContain(native.candidateId);
     expect(recovered.rejected).toContain(native.candidateId);
     expect(recovered.adopted[`${native.subjectId}:${native.property}`]).toEqual({
+      mode: 'replace',
       head: 12,
       selection: [{ candidate: editorialId, rank: 'preferred' }],
     });

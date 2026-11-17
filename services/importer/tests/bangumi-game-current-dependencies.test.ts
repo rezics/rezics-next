@@ -14,7 +14,7 @@ const sourceUri = 'https://bgm.tv/info/platform/PC';
 const binding = { kind: 'platform', item: 'PC', conceptId: pc, sourceUri } as const;
 const reference = bangumiGameEnvironmentReferenceKey('schema:gamePlatform', 'PC');
 
-function current(id = pc, url = sourceUri) {
+function current(id: string = pc, url = sourceUri) {
   return {
     subject: {
       id,
