@@ -4,11 +4,12 @@ import { resolve } from 'node:path';
 import type { Locator, Page, Response } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
-import { startAuthStack } from './auth-stack.ts';
+import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
+import { archiveProgressOperation } from './archive-progress-observation.ts';
 
 let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
@@ -45,8 +46,13 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   const setupDeadline = Date.now() + 600_000;
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
+  await prepareNativeAuthMessages();
   await prepareNativeWebSearch('library-archive');
-  stack = await startNativeWebStack({ observeBookSearchPreparation: !entryOnly, observeArchiveEntry: true });
+  stack = await startNativeWebStack({
+    observeBookSearchPreparation: !entryOnly,
+    observeArchiveEntry: true,
+    observeArchiveProgress: true,
+  });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
@@ -597,6 +603,147 @@ async function startCollectionPreview(page: Page, archivePath?: string) {
   }
 }
 
+function progressUploadObservation(page: Page, ordinal: number, mapOccurrence: Locator) {
+  const posts: { status: number; serialized: boolean; privateNoStore: boolean; json: boolean }[] = [];
+  const pageErrors = new Set<string>();
+  const observeError = (error: Error) => {
+    const known = ['Archive viewer changed', 'Archive sender changed', 'Invalid archive command'];
+    if (pageErrors.size < 8)
+      pageErrors.add(
+        known.includes(error.message) ? error.message : error.name === 'SyntaxError' ? 'invalid-json' : 'other',
+      );
+  };
+  page.on('pageerror', observeError);
+  return {
+    inspect(response: Response) {
+      const headers = response.headers();
+      posts.push({
+        status: response.status(),
+        serialized: headers['x-tss-serialized'] === 'true',
+        privateNoStore: headers['cache-control'] === 'private, no-store',
+        json: headers['content-type']?.split(';')[0] === 'application/json',
+      });
+    },
+    async record(stage: string, matched: boolean) {
+      const synchronized = await settledWithin(
+        stack.syncKernelRequests().then(() => true),
+        2_000,
+      ).catch(() => false);
+      const native = stack
+        .kernelRequests()
+        .flatMap(({ fixtureRequest, url, method, responseStatus, archiveProgress }) => {
+          const operation = archiveProgressOperation(method, url.split('?')[0]!);
+          if (fixtureRequest || operation === null) return [];
+          const { ordinals, ...result } = archiveProgress?.result ?? {};
+          return [
+            {
+              operation,
+              method,
+              status: responseStatus ?? null,
+              response: archiveProgress
+                ? {
+                    ...archiveProgress,
+                    result: archiveProgress.result && {
+                      ...result,
+                      matchingOrdinal: ordinals?.includes(ordinal) ?? null,
+                    },
+                  }
+                : null,
+            },
+          ];
+        })
+        .slice(-8);
+      const ui = await settledWithin(
+        (async () => {
+          const noticeKeys = [
+            'preparing',
+            'ready',
+            'uncertain',
+            'recoverable',
+            'refused',
+            'expired',
+            'oversize',
+            'cancelled',
+            'removed',
+          ] as const;
+          const notices = await Promise.all(
+            noticeKeys.map(async (name) =>
+              (await page
+                .getByRole('status')
+                .filter({ hasText: await message('en', `library_archive_progress_${name}`) })
+                .first()
+                .isVisible())
+                ? name
+                : null,
+            ),
+          );
+          const controls = {
+            chooser: page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
+            occurrences: page.getByRole('region', {
+              name: await message('en', 'library_archive_progress_occurrences'),
+              exact: true,
+            }),
+            coverage: page.getByRole('region', {
+              name: await message('en', 'library_archive_recovery_coverage_title'),
+              exact: true,
+            }),
+            inspect: page.getByRole('button', {
+              name: await message('en', 'library_archive_progress_inspect'),
+              exact: true,
+            }),
+            retry: page.getByRole('button', {
+              name: await message('en', 'library_archive_progress_retry'),
+              exact: true,
+            }),
+            mapOccurrence,
+          };
+          const visible = await Promise.all(
+            Object.entries(controls).map(async ([name, locator]) => {
+              const count = await locator.count();
+              return [
+                name,
+                {
+                  count,
+                  visible: await locator.first().isVisible(),
+                  enabled: count === 1 ? await locator.isEnabled() : null,
+                },
+              ];
+            }),
+          );
+          return {
+            controls: Object.fromEntries(visible),
+            notices: notices.filter(Boolean),
+            unavailable: await page
+              .getByRole('status')
+              .filter({ hasText: await message('en', 'library_archive_unavailable') })
+              .first()
+              .isVisible(),
+            empty: await page
+              .getByText(await message('en', 'library_archive_progress_empty'), { exact: true })
+              .isVisible(),
+          };
+        })(),
+        2_000,
+      ).catch(() => undefined);
+      const observation = {
+        recovery: 'progress',
+        stage,
+        matched,
+        posts,
+        readerSynchronized: synchronized === true,
+        native,
+        ui: ui ?? null,
+        pageErrors: [...pageErrors],
+      };
+      console.info('Native Library Archive Progress upload boundary', observation);
+      await writeArchiveProvenance(observation, resolve(evidence, 'progress-boundary.json'));
+      if (!matched)
+        await writeArchiveProvenance({ outcome: 'incomplete', phase: 'uploading-recovery-archive', observation });
+    },
+    stop: () => page.off('pageerror', observeError),
+  };
+}
+
 async function uploadRecoveryArchive(
   page: Page,
   archivePath: string,
@@ -604,10 +751,13 @@ async function uploadRecoveryArchive(
   chooser: Locator,
   records: readonly Locator[],
   entryOrdinals?: EntryOrdinals,
+  progressOrdinal?: number,
 ) {
   const responses: number[] = [];
   const entry = entryOrdinals ? entryUploadObservation(page, entryOrdinals, records) : undefined;
-  const stopObserving = observeArchiveServerPosts(page, responses, entry?.inspect);
+  const progress =
+    progressOrdinal === undefined ? undefined : progressUploadObservation(page, progressOrdinal, records[0]!);
+  const stopObserving = observeArchiveServerPosts(page, responses, entry?.inspect ?? progress?.inspect);
   const deadline = performance.now() + 60_000;
   const remaining = () => Math.max(1, Math.ceil(deadline - performance.now()));
   const enabledChooser = chooser.and(page.locator('input[type="file"]:enabled:visible'));
@@ -623,7 +773,7 @@ async function uploadRecoveryArchive(
     await Promise.all(records.map((record) => record.waitFor({ state: 'visible', timeout: remaining() })));
     matched = true;
   } catch (error) {
-    if (entry) throw error;
+    if (entry || progress) throw error;
     await settledWithin(stack.syncKernelRequests(), 2_000).catch(() => undefined);
     const observation = {
       recovery,
@@ -641,6 +791,10 @@ async function uploadRecoveryArchive(
     if (entry) {
       entry.stop();
       observation = await entry.record(stage, matched).catch(() => undefined);
+    }
+    if (progress) {
+      progress.stop();
+      await progress.record(stage, matched).catch(() => undefined);
     }
   }
   if (entryOnly && entry) {
@@ -778,7 +932,7 @@ async function restoreCollection(
 async function restoreOwnerLibrary() {
   const prepared = await prepareOwnerLibrary(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
-  const auth = await startAuthStack(stack);
+  const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
   const page = signedIn.context.pages().at(-1)!;
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -905,14 +1059,41 @@ async function restoreOwnerLibrary() {
     timeout: 60_000,
   });
   await labelResult.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
-  const labelMapping = JSON.parse(await labelResult.locator('pre').innerText());
+  const labelEvidence = labelResult.locator('pre');
+  const labelMapping = JSON.parse((await labelEvidence.textContent()) ?? 'null');
+  const visibleLabelMapping = JSON.parse(await labelEvidence.innerText());
   expect(labelMapping).toMatchObject({
     ordinal: labelOrdinal,
     section: 'labels',
     status: 'acknowledged',
     labelId: expect.any(String),
   });
-  const restoredLabelId = labelMapping.labelId as string;
+  await stack.syncKernelRequests();
+  const applyRequest = stack
+    .kernelRequests()
+    .findLast(
+      ({ fixtureRequest, method, url, responseStatus }) =>
+        !fixtureRequest &&
+        method === 'POST' &&
+        responseStatus === 200 &&
+        /^\/v1\/libraryArchiveMerges\/[0-9a-f-]{36}\/apply$/u.test(url),
+    );
+  if (!applyRequest) throw new Error('No successful native Archive apply was observed for the mounted visit');
+  const resultPath = applyRequest.url.replace(/\/apply$/u, '/results?after=-1&limit=100');
+  const { results: appliedRows } = await json<{
+    results: {
+      section: string;
+      ordinal: number;
+      status: string;
+      result?: { effect?: string; labelId?: string };
+    }[];
+  }>(await stack.kernel(resultPath, { signal: AbortSignal.timeout(2_000) }, 'alice'), 200, 'owner Archive result');
+  const applied = appliedRows.find((item) => item.section === 'labels' && item.ordinal === labelOrdinal);
+  expect(applied).toMatchObject({
+    status: 'acknowledged',
+    result: { effect: 'label.create', labelId: expect.any(String) },
+  });
+  const restoredLabelId = applied!.result!.labelId!;
   expect(restoredLabelId).not.toBe(prepared.labelId);
 
   await readCurrent.click();
@@ -920,54 +1101,38 @@ async function restoreOwnerLibrary() {
     has: page.getByRole('heading', { name: await message('en', 'library_archive_entry_current'), exact: true }),
   });
   await currentLabel.getByText(prepared.labelName, { exact: true }).waitFor({ state: 'visible' });
+  await currentLabel.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
+  const displayed = JSON.parse((await currentLabel.locator('pre').textContent()) ?? 'null') as {
+    label?: { id?: unknown; name?: unknown; revision?: unknown };
+  } | null;
   const { labels: currentLabels, next } = await readOwnerLabelPage(prepared.labelName);
   const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
   const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
-  if (restoredLabel?.name !== prepared.labelName) {
-    const query = new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' });
-    const point = await settledWithin(
-      stack
-        .kernel(
-          `/v1/libraryLabelAssignments?${query}`,
-          { headers: { 'accept-language': 'en' }, signal: AbortSignal.timeout(2_000) },
-          'alice',
-        )
-        .then(async (response) => {
-          const { label, code } = ((await response.json().catch(() => null)) ?? {}) as {
-            label?: { id?: unknown; name?: unknown; revision?: unknown };
-            code?: string;
-          };
-          return {
-            status: response.status,
-            exactId: label?.id === restoredLabelId,
-            exactName: label?.name === prepared.labelName,
-            revision: typeof label?.revision === 'number' ? label.revision : null,
-            problem: ['not_found', 'forbidden', 'invalid_request', 'deadline_exceeded', 'dependency_unavailable'].find(
-              (known) => known === code,
-            ),
-          };
-        }),
-      2_000,
-    ).catch(() => undefined);
-    await writeArchiveProvenance({
+  let labelDisagreement: object | undefined;
+  if (restoredLabel?.name !== prepared.labelName || displayed?.label?.id !== restoredLabelId) {
+    labelDisagreement = {
       outcome: 'incomplete',
       phase: 'owner-label-prefix-readback',
+      browser: {
+        labelEvidenceMatchesNative: labelMapping.labelId === restoredLabelId,
+        visibleEvidenceMatchesNative: visibleLabelMapping?.labelId === restoredLabelId,
+        currentMatchesNative: displayed?.label?.id === restoredLabelId,
+        currentNameMatches: displayed?.label?.name === prepared.labelName,
+      },
       prefix: {
         status: 200,
         count: currentLabels.length,
         hasNext: typeof next === 'string',
-        rows: currentLabels.slice(0, 3).map((label) => ({
-          identity: label.id === prepared.labelId ? 'source' : label.id === restoredLabelId ? 'restored' : 'other',
-          archivedName: label.name === prepared.labelName,
-          renamedName: label.name === renamedLabelName,
-          revision: label.revision,
-        })),
+        matchesNative: restoredLabel?.name === prepared.labelName,
       },
-      exactOwnerPoint: point ?? 'unavailable',
-    });
+    };
+    await writeArchiveProvenance(labelDisagreement);
   }
-  expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
-  expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+  const assertLabelReadbacks = () => {
+    expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
+    expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+    expect(displayed?.label).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+  };
 
   const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
     await stack.kernel(`/v1/libraryEntries/${prepared.subjectId}`, undefined, 'alice'),
@@ -977,6 +1142,7 @@ async function restoreOwnerLibrary() {
   expect(entryRead.libraryEntry).toMatchObject({ subjectId: prepared.subjectId, state: prepared.stateId });
 
   if (!collection) {
+    assertLabelReadbacks();
     await writeArchiveProvenance({
       outcome: 'passed',
       phase: 'entry-readback',
@@ -1003,6 +1169,8 @@ async function restoreOwnerLibrary() {
     'progress',
     page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
     [mapOccurrence],
+    undefined,
+    sessionOrdinal,
   );
   await mapOccurrence.click();
   await page.getByLabel(await message('en', 'library_archive_progress_subject')).fill(prepared.subjectId);
@@ -1035,6 +1203,8 @@ async function restoreOwnerLibrary() {
   );
   expect(sessions.progressSessions.some((row) => row.id === prepared.sessionId)).toBe(true);
   expect(sessions.progressSessions.length).toBeGreaterThan(1);
+  if (labelDisagreement)
+    await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
   const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
@@ -1062,6 +1232,7 @@ async function restoreOwnerLibrary() {
     state: 'visible',
   });
 
+  assertLabelReadbacks();
   await writeArchiveProvenance({
     outcome: 'passed',
     stack: { kernel: stack.kernelOrigin, web: stack.web },

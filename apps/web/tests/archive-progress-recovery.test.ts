@@ -7,6 +7,7 @@ import type { ProgressChoices } from '../src/library/progress-profile';
 import { archiveBase64, ProgressRecoveryJourney } from '../src/library/archive-progress-recovery/controller';
 import { progressRecoveryNative, type Review, type ReviewInput } from '../src/library/archive-progress-recovery/native';
 import type { ProgressRecoveryPort as Port } from '../src/library/archive-progress-recovery/native';
+import { observeArchiveProgressResponse } from './native/archive-progress-observation';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const input: ReviewInput = {
@@ -151,6 +152,71 @@ test('generated native transport sends original JSON bytes and quotes each logic
   ]);
   expect(requests.every((request) => request.headers.get('authorization') === 'Bearer original')).toBe(true);
   expect(requests[2]!.url).toEndWith(`/progressReviews/${id}:apply`);
+});
+
+test('Progress intake observations preserve response bodies and retain only counts, expiry and page ordinals', async () => {
+  const headers = { 'cache-control': 'private, no-store' };
+  const uploaded = Response.json(upload, { headers });
+  expect(
+    await observeArchiveProgressResponse(
+      new Request('http://kernel.test/v1/libraryCopyArchives', { method: 'POST' }),
+      uploaded,
+    ),
+  ).toEqual({
+    operation: 'upload',
+    firstPage: false,
+    status: 200,
+    json: true,
+    privateNoStore: true,
+    result: {
+      expiry: 'future',
+      holdings: 0,
+      progressRecords: 1,
+      state: null,
+      rows: null,
+      ordinals: null,
+      sessionRows: null,
+      hasNext: null,
+    },
+  });
+  expect(await uploaded.json()).toEqual(upload);
+  const page = {
+    uploadId: id,
+    state: 'inspecting',
+    expiresAt: upload.expiresAt,
+    manifest: { private: 'archive manifest' },
+    coverage: [],
+    occurrences: [{ ordinal: 3, evidence: { section: 'sessions', session_id: id, reflection: 'private reflection' } }],
+    next: null,
+  };
+  const observed = await observeArchiveProgressResponse(
+    new Request(`http://kernel.test/v1/libraryCopyArchives/${id}/progress?after=-1`),
+    Response.json(page, { headers }),
+  );
+  expect(observed).toMatchObject({
+    operation: 'occurrences',
+    firstPage: true,
+    result: { expiry: 'future', state: 'inspecting', rows: 1, ordinals: [3], sessionRows: true, hasNext: false },
+  });
+  const text = JSON.stringify(observed);
+  for (const privateValue of [id, 'private reflection', 'archive manifest']) expect(text).not.toContain(privateValue);
+  const emptyPage = await observeArchiveProgressResponse(
+    new Request(`http://kernel.test/v1/libraryCopyArchives/${id}/progress?after=3`),
+    Response.json({ ...page, occurrences: [], expiresAt: '2000-01-01T00:00:00Z' }, { headers }),
+  );
+  expect(emptyPage).toMatchObject({ firstPage: false, result: { expiry: 'expired', rows: 0, ordinals: [] } });
+  const refusal = await observeArchiveProgressResponse(
+    new Request(`http://kernel.test/v1/libraryCopyArchives/${id}`),
+    Response.json({ detail: 'private refusal' }, { status: 403, headers }),
+  );
+  expect(refusal).toMatchObject({ operation: 'holdings', status: 403, result: null });
+  expect(JSON.stringify(refusal)).not.toContain('private refusal');
+  expect(
+    await observeArchiveProgressResponse(
+      new Request(`http://kernel.test/v1/libraryCopyArchives/${id}/progress/${id}/units`),
+      Response.json(page),
+    ),
+  ).toBeUndefined();
 });
 
 test('recoverable replay uses original sender and key across visit replacement, cancellation reconciles without a new Session', async () => {
