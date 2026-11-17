@@ -657,6 +657,9 @@ promotion remain distinct integration verification obligations. Focused cases li
 
 #### Cost: tuple capability readiness
 
+Each installation and tuple counter row generates its own digest input at write time. The readiness statement
+recomputes the ordered digests from the current rows in one snapshot.
+
 - Touches: One aggregate query reads the fixed 4,096 dependency-install rows, the fixed 4,096 per-partition tuple counters and the singleton producer row; it does not join native resource partitions.
 - Bound: 8,193 summary rows and one statement, with at most about 1 MB of aggregate text input from the schema's fixed UUID/position widths and 20-digit counters, plus PostgreSQL tuple/index overhead.
 - Growth check: Space count, tuple history and unrelated scopes do not increase these row or byte bounds; the partition count is fixed at 4,096.

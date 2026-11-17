@@ -743,11 +743,13 @@ export function discoveryCapabilityMatches(
 /** Used before and after native work, including final disclosure on a retained physical target. */
 export async function assertDiscoveryCapabilityBinding(
   pool: Pool,
-  target: DiscoveryTarget,
+  target: DiscoveryTarget & Partial<Pick<DiscoveryGeneration, 'capability'>>,
   producers: DiscoveryMetadataProducers,
 ): Promise<void> {
   const witnesses = await discoveryCapabilityWitnesses(searchTurnMetadataProducers(producers));
-  if (Object.keys(witnesses).length === 0) return;
+  const currentKinds = Object.keys(witnesses);
+  const boundKinds = Object.keys(target.capability?.witnesses ?? {});
+  if (currentKinds.length === 0 && boundKinds.length === 0 && !producers.space) return;
   const row = await withSearchConnection(
     pool,
     async (client) =>
@@ -762,7 +764,9 @@ export async function assertDiscoveryCapabilityBinding(
   if (!discoveryCapabilityMatches(target, row?.capability, witnesses))
     throw new DiscoveryProducerCoverageError({
       missingKinds: [],
-      unsupportedKinds: Object.keys(witnesses),
+      unsupportedKinds: [
+        ...new Set([...boundKinds, ...currentKinds, ...Object.keys(row?.capability?.witnesses ?? {})]),
+      ],
       duplicateKinds: [],
     });
 }

@@ -3,7 +3,9 @@ import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-r
 import type { Pool } from 'pg';
 import {
   allocateDiscovery,
+  assertDiscoveryCapabilityBinding,
   assertDiscoveryProducerCoverage,
+  type DiscoveryCapabilityBinding,
   DiscoveryProducerCoverageError,
   SECOND_SCOPE_PUBLIC_METADATA_KINDS,
   discoveryCapabilityMatches,
@@ -183,22 +185,26 @@ test('default review population stays unready when the source has only the legac
 
 test('the installed Space capability survives JSON and cannot bind another physical target or producer epoch', async () => {
   let producerGeneration = 'native-A';
+  let producerComplete = true;
+  let binding: DiscoveryCapabilityBinding;
   const pool = {
     connect: async () => ({
-      query: async () => ({
+      query: async (sql: string) => ({
         rows: [
-          {
-            pending_install: '0',
-            install_cut: 'installed',
-            tuple_generation: 'native',
-            tuple_cut: 'cut',
-            required: '1',
-            witnessed: '1',
-            pending: '0',
-            producer_generation: producerGeneration,
-            producer_cut: 'same-position',
-            producer_complete: true,
-          },
+          sql.includes('FROM search.discovery_generation')
+            ? { capability: binding }
+            : {
+                pending_install: '0',
+                install_cut: 'installed',
+                tuple_generation: 'native',
+                tuple_cut: 'cut',
+                required: '1',
+                witnessed: '1',
+                pending: '0',
+                producer_generation: producerGeneration,
+                producer_cut: 'same-position',
+                producer_complete: producerComplete,
+              },
         ],
       }),
       release() {},
@@ -215,7 +221,7 @@ test('the installed Space capability survives JSON and cannot bind another physi
   const witnesses = await discoveryCapabilityWitnesses(producers);
   expect(witnesses.space).toMatchObject({ state: 'ready', capabilities: { 'source-fence': 'connected' } });
   const target = { prefix: 'search', generation: 1, uuid: 'physical-A', incarnation: 'allocation-A' };
-  const binding = JSON.parse(
+  binding = JSON.parse(
     JSON.stringify({
       physicalTarget: 'searchdiscovery-g1',
       uuid: target.uuid,
@@ -233,6 +239,15 @@ test('the installed Space capability survives JSON and cannot bind another physi
   // Numeric positions can return to the old value; the replaced epoch still differs.
   expect(replacement.space?.cut).toBe(witnesses.space?.cut);
   expect(replacement.space?.generation).not.toBe(witnesses.space?.generation);
+
+  producerGeneration = 'native-A';
+  const retained = { ...target, state: 'populating', kinds: ['space'], capability: binding };
+  await assertDiscoveryCapabilityBinding(pool, retained, producers);
+  producerComplete = false;
+  const omitted = { unsupportedKinds: ['space'] };
+  await expect(assertDiscoveryCapabilityBinding(pool, retained, producers)).rejects.toMatchObject(omitted);
+  await expect(assertDiscoveryCapabilityBinding(pool, target, producers)).rejects.toMatchObject(omitted);
+  await expect(assertDiscoveryCapabilityBinding(pool, retained, {})).rejects.toMatchObject(omitted);
 });
 
 test('an allocated review owner omitted later retires the generation instead of looping as unsupported', async () => {

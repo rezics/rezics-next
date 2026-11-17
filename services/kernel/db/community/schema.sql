@@ -1563,6 +1563,7 @@ CREATE TABLE community.space_discovery_dependency_install (
     cut_route integer NOT NULL,
     cut_id uuid NOT NULL,
     complete boolean DEFAULT false NOT NULL,
+    install_witness_segment text GENERATED ALWAYS AS ((((((((((((partition_no)::text || ':'::text) || (cursor_route)::text) || ':'::text) || (cursor_id)::text) || ':'::text) || (cut_route)::text) || ':'::text) || (cut_id)::text) || ':'::text) || (complete)::text)) STORED CONSTRAINT space_discovery_dependency_ins_install_witness_segment_not_null NOT NULL,
     CONSTRAINT space_discovery_dependency_install_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
 );
 
@@ -1620,6 +1621,8 @@ CREATE TABLE community.space_discovery_tuple_capability (
     required bigint DEFAULT 0 NOT NULL,
     witnessed bigint DEFAULT 0 NOT NULL,
     pending bigint DEFAULT 0 NOT NULL,
+    generation_witness_segment text GENERATED ALWAYS AS ((((partition_no)::text || ':'::text) || (generation)::text)) STORED CONSTRAINT space_discovery_tuple_capab_generation_witness_segment_not_null NOT NULL,
+    cut_witness_segment text GENERATED ALWAYS AS ((((((((((partition_no)::text || ':'::text) || (cut)::text) || ':'::text) || (required)::text) || ':'::text) || (witnessed)::text) || ':'::text) || (pending)::text)) STORED NOT NULL,
     CONSTRAINT space_discovery_tuple_capability_check CHECK (((witnessed + pending) = required)),
     CONSTRAINT space_discovery_tuple_capability_cut_check CHECK ((cut >= 0)),
     CONSTRAINT space_discovery_tuple_capability_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),

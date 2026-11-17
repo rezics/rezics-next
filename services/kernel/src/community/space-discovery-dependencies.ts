@@ -62,13 +62,11 @@ export async function spaceDiscoveryDependencyReadiness(pool: Pool): Promise<Spa
       }>(
         `WITH installation AS MATERIALIZED (
            SELECT COUNT(*) FILTER (WHERE NOT complete)::text AS pending_install,
-                  md5(string_agg(partition_no::text||':'||cursor_route::text||':'||cursor_id::text||':'||
-                    cut_route::text||':'||cut_id::text||':'||complete::text,'|' ORDER BY partition_no)) AS install_cut
+                  md5(string_agg(install_witness_segment,'|' ORDER BY partition_no)) AS install_cut
            FROM community.space_discovery_dependency_install
          ), tuple_coverage AS MATERIALIZED (
-           SELECT md5(string_agg(partition_no::text||':'||generation::text,'|' ORDER BY partition_no)) AS tuple_generation,
-                  md5(string_agg(partition_no::text||':'||cut::text||':'||required::text||':'||
-                    witnessed::text||':'||pending::text,'|' ORDER BY partition_no)) AS tuple_cut,
+           SELECT md5(string_agg(generation_witness_segment,'|' ORDER BY partition_no)) AS tuple_generation,
+                  md5(string_agg(cut_witness_segment,'|' ORDER BY partition_no)) AS tuple_cut,
                   COALESCE(SUM(required),0)::text AS required,
                   COALESCE(SUM(witnessed),0)::text AS witnessed,
                   COALESCE(SUM(pending),0)::text AS pending
