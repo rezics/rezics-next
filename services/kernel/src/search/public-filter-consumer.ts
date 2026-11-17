@@ -1,3 +1,4 @@
+import { bookPreparationTiming } from './book-preparation-timing.ts';
 import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
@@ -2558,8 +2559,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: NativePublicFilterPublication,
   ) {
     const job = structuredClone(input);
+    const timing = publication ? bookPreparationTiming : undefined;
     let use: CustodyUse | undefined;
     const run = async () => {
+      timing?.repairStage('source-binding');
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const loaded = await load(job, m);
       const { work } = loaded;
@@ -2621,6 +2624,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         work.execution = execution;
         encoded = await save(work, encoded, false, m);
       }
+      timing?.repairStage('retained-custody');
       const retained = m.take(await custody.read({ queried: q, execution: work.execution }, context));
       if (retained.status !== 'found' || !retained.execution) return m.unavailable('observation_lost');
       const current = await repairCurrent.run(m.pool, {
@@ -2656,6 +2660,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
       let advanced = 0;
       while (!state.closed) {
+        timing?.repairStage('page-budget');
         // Reserve the next producer and verifier together under this turn's meter.
         // Each saved page is independently replayable from the same observation.
         if (
@@ -2681,6 +2686,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           m.check();
           if (m.inputLimit - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE)
             return m.unavailable('source_pending');
+          timing?.repairStage('source-page');
           const sourcePage = m.take(
             await binding.repairPage(
               {
@@ -2698,6 +2704,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             return m.unavailable('source_pending');
           // An actual owner successor resolves both nonempty items and the empty final step.
           // Source callbacks/brands/frontier equality do not certify its original retained window.
+          timing?.repairStage('page-verification');
           const intent = await verifyPublicFilterRepairSourcePage(
             binding,
             {
@@ -2734,6 +2741,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         let intent = verifiedIntent;
         if (!intent) {
           if (!page) return m.unavailable('source_pending');
+          timing?.repairStage('page-verification');
           intent = await verifyPublicFilterRepairSourcePage(
             binding,
             {
@@ -2749,6 +2757,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           );
         }
         // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
+        timing?.repairStage('retained-custody');
         const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
         if (
           finalCustody.status !== 'found' ||
@@ -2778,6 +2787,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         }
         // An empty page has no dispatch to stage. Its verified intent and the
         // coupled observation/execution CAS also cover concurrent or lost replies.
+        timing?.repairStage('writer-dispatch');
         if (intent.account && work.repairPage && !work.repairPage.accountDone) {
           if (intent.repairs.length || work.repair || work.projectionSource || work.records.length)
             return m.unavailable('source_pending');
@@ -2824,6 +2834,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           frontier: intent.frontier,
           closed: complete,
         };
+        timing?.repairStage('page-settlement');
         encoded = await saveRepair(work, encoded, state, previous, m, emptyPage);
         if (!subjectPublication && !complete) return progress();
         previous = encodeNative(state);
@@ -2831,6 +2842,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       // Publication's completion path owns the terminal Search verification and Source ACK.
       // Once Search has closed its retained page chain, retry that path on a fresh turn.
+      timing?.repairStage('terminal-repair');
       if (subjectPublication) return advanced > 0 ? progress() : m.unavailable('source_pending');
       // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
       const spent = () => ({
@@ -3105,6 +3117,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               m,
               original.publication,
             );
+            bookPreparationTiming?.repairOutcome({
+              status: repair.status,
+              ...('reason' in repair ? { reason: repair.reason } : {}),
+            });
             return { ...original, advanced: repair.status === 'progress' || repair.status === 'settled', cost: m.cost };
           } else if (original.publication.queried.snapshot.kind === 'prepared') {
             const q = original.publication.queried;

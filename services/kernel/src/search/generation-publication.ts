@@ -512,10 +512,15 @@ export function createSearchGenerationPublication(
       job.observation ?? undefined,
     );
     add(meter, custody.cost);
-    if (!('definition' in custody)) throw new Pending('source_pending');
+    if (!('definition' in custody)) {
+      bookPreparationTiming?.sourceOutcome({ status: 'custody-unavailable' });
+      throw new Pending('source_pending');
+    }
     const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
-    if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE))
+    if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE)) {
+      bookPreparationTiming?.sourceOutcome({ status: 'input-budget-exhausted' });
       return { complete: false, advanced: false, sourceAdvanced: false };
+    }
     const endSource = bookPreparationTiming?.start('nativeSource');
     const pendingSource = advanceNativeGenerationSource(
       {
@@ -541,6 +546,11 @@ export function createSearchGenerationPublication(
       context,
     );
     const completion = await (endSource ? pendingSource.finally(endSource) : pendingSource);
+    bookPreparationTiming?.sourceOutcome({
+      status: completion.status,
+      ...('reason' in completion ? { reason: completion.reason } : {}),
+      advanced: completion.advanced === true,
+    });
     add(meter, completion.cost);
     if ('publication' in completion) {
       const pin = publicationPinFromNative(completion.publication);

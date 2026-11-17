@@ -6,6 +6,9 @@ import {
   type BookPreparationSpan,
   type BookPreparationTurn,
   type BookPublicationStatus,
+  type BookRepairOutcome,
+  type BookRepairStage,
+  type BookSourceOutcome,
 } from '../../src/search/book-preparation-timing.ts';
 
 type Sample = { n: number; ms: number };
@@ -16,7 +19,10 @@ type Turn = BookPreparationTurn & {
   marks?: Mark[];
   open: Map<BookPreparationSpan, number>;
   finishedAtMs?: number;
-  publication?: { status: BookPublicationStatus; sourceAdvanced: boolean };
+  publication?: { status: BookPublicationStatus; advanced: boolean; sourceAdvanced: boolean };
+  source?: BookSourceOutcome;
+  repairStage?: BookRepairStage;
+  repair?: BookRepairOutcome;
   threw?: true;
 };
 
@@ -62,9 +68,21 @@ export function createBookPreparationObserver(
       const turn = context.getStore();
       if (turn) (turn.marks ??= []).push({ phase, atMs: now(), count });
     },
-    outcome(status: BookPublicationStatus, sourceAdvanced?: boolean) {
+    outcome(status: BookPublicationStatus, advanced: boolean, sourceAdvanced?: boolean) {
       const turn = context.getStore();
-      if (turn) turn.publication = { status, sourceAdvanced: sourceAdvanced === true };
+      if (turn) turn.publication = { status, advanced, sourceAdvanced: sourceAdvanced === true };
+    },
+    sourceOutcome(source: BookSourceOutcome) {
+      const turn = context.getStore();
+      if (turn) turn.source = source;
+    },
+    repairStage(stage: BookRepairStage) {
+      const turn = context.getStore();
+      if (turn) turn.repairStage = stage;
+    },
+    repairOutcome(repair: BookRepairOutcome) {
+      const turn = context.getStore();
+      if (turn) turn.repair = repair;
     },
     flush(sample: 'interval' | 'cutoff' | 'exit') {
       if (sample !== 'cutoff' && !finished.length && !active.size && !dropped) return;

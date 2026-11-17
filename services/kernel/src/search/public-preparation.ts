@@ -211,13 +211,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       const endPublication = bookPreparationTiming?.start('publication');
       const pending = options.runtime.publication.step(job, context, { enrollSource: true });
       const reconciliation = await (endPublication ? pending.finally(endPublication) : pending);
-      bookPreparationTiming?.outcome(
-        reconciliation.status,
-        'sourceAdvanced' in reconciliation && reconciliation.sourceAdvanced === true,
-      );
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';
+      bookPreparationTiming?.outcome(reconciliation.status, ready, ready && reconciliation.sourceAdvanced === true);
       return advance(
         { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
         ready ? 0 : 1000,
@@ -228,7 +225,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const endPublication = bookPreparationTiming?.start('publication');
     const pending = options.runtime.publication.activate(job, context);
     const activated = await (endPublication ? pending.finally(endPublication) : pending);
-    bookPreparationTiming?.outcome(activated.status, activated.status === 'preparing' && activated.sourceAdvanced);
+    bookPreparationTiming?.outcome(
+      activated.status,
+      activated.status === 'preparing' && activated.advanced === true,
+      activated.status === 'preparing' && activated.sourceAdvanced === true,
+    );
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated' || activated.status === 'superseded') return advance(null);
