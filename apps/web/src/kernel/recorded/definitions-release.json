@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:5e9240a492f5ee0e1251b9149c885e4cdaf44e34c4d66f1eb044cbacd197b3ab",
+  "digest": "sha256:034965da264a1ccb08758c500969f0723d240a2ce5fb0ed8e7c1346c7b6f0441",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1653,7 +1653,8 @@
           "ko": "출판사나 스튜디오 같은 조직 또는 크레딧에 기재된 단체입니다.",
           "zh-Hans": "出版社、工作室等组织，或署名的团体。",
           "zh-Hant": "出版社、製作公司等組織，或具署名的團體。"
-        }
+        },
+        "schemaOrgType": "https://schema.org/Organization"
       },
       "schema:PublicationVolume": {
         "iri": "http://schema.org/PublicationVolume",
@@ -2099,7 +2100,7 @@
         "facets": [],
         "coverRatio": "5:7",
         "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
-        "schemaOrgType": "https://schema.org/Organization",
+        "schemaOrgType": "https://schema.org/Event",
         "descriptions": {
           "de": "Ein zeitlich bestimmtes Ereignis mit eigener Identität, getrennt von Ort und Beteiligten.",
           "en": "A bounded occurrence with its own identity, distinct from its venue and participants.",
@@ -2760,7 +2761,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.11" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.12" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
