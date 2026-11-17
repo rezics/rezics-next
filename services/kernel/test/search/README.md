@@ -19,6 +19,22 @@ Its locale switches retain original-language evidence, and folded prefixes compa
 current disclosure. `current-text.test.ts` and `engine-analysis.test.ts` pin malformed third-party replies locally;
 typing or the presence of these cases supplies no native or browser pass.
 
+## First-public Book composition
+
+Run `bun run --cwd services/kernel check test/search/growth-book-composition.test.ts` for the released
+Book, Series and Edition workload. The [native fixture](support/book-composition.ts) publishes a profile
+with 16 distinct TypeLists and checks the same 128 visible slots for an anonymous reader and Alice as
+64, 512 and 4,096 additional originals enter the searchable catalogue. The measured anonymous request
+includes the installed Search handles, engine transport and Kernel SQL through final disclosure.
+[Performance](../performance/support/composed-discovery-bounds.ts) supplies the bounds.
+
+The [original wrappers and stage requirements](../../../../docs/goals/search.capabilities.md#original-suite-ledger)
+retain their scoped commands. The [paging assertions](../../../../specs/search-outcomes.test.ts) check stable ties,
+principal-bound continuations and omitted public totals. The engine handle retains its own count contract.
+Follow with the [installed CJK analyzer](cjk-engine.test.ts), [physical index identity](physical-incarnation.test.ts),
+[native erasure participant](erasure-participant.test.ts) and the [ready Web Book journey](../../../../apps/web/tests/native/book-catalogue-journey.host.test.ts)
+at the selected revision.
+
 ## Process and resource ownership
 
 The test parent creates one isolated fixture supervisor for each `SearchDriver` factory invocation. That supervisor
