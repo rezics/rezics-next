@@ -3,6 +3,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { type Browser, type BrowserContext, type Page, type Response as PlaywrightResponse } from 'playwright';
+import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import { traceWebModuleFailure } from './web-module-failure.ts';
@@ -45,14 +46,13 @@ export type AuthJourney = {
     }[]
   >;
 };
+type NativeSignInOptions = { returnTo?: string; context?: BrowserContext; sessionOnly?: boolean };
+
 export type NativeAuthStack = {
   origin: string;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
-  signIn(
-    persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>,
-    options?: { returnTo?: string; context?: BrowserContext },
-  ): Promise<AuthJourney>;
+  signIn(persona: Exclude<AuthPersona, 'newcomer' | 'anonymous'>, options?: NativeSignInOptions): Promise<AuthJourney>;
   signUp(persona: 'newcomer'): Promise<AuthJourney>;
   stop(): Promise<void>;
 };
@@ -332,7 +332,7 @@ export async function startAuthStack(
     async function journey(
       persona: AuthPersona,
       signup: boolean,
-      options: { returnTo?: string; context?: BrowserContext } = {},
+      options: NativeSignInOptions = {},
     ): Promise<AuthJourney> {
       assertActive(signup ? 'start native sign-up journey' : 'start native sign-in journey');
       const journeyStarted = performance.now();
@@ -445,20 +445,30 @@ export async function startAuthStack(
       if (persona !== 'suspended') {
         assertActive('finish native Auth callback');
         const callback = await callbackResponse;
-        let stage = 'Web hydration';
+        let stage = options.sessionOnly ? 'Web session cookie' : 'Web hydration';
         try {
-          // Public SSR can reach DOMContentLoaded before the client mounts its session observer.
-          // Use the return navigation budget for hydration and reserve the account wait for the mounted shell.
-          await page.waitForFunction(
-            (origin) =>
-              location.origin === origin &&
-              !location.pathname.startsWith('/auth/') &&
-              document.querySelector('html[data-hydrated]') !== null,
-            webOrigin,
-            { timeout: 30_000 },
-          );
-          stage = 'Web account menu';
-          await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+          if (options.sessionOnly) {
+            // Script-free journeys transfer the session established by the real callback.
+            if (callback?.status() !== 303) throw new Error('The signed-in callback did not complete');
+            const failure = await callback.finished();
+            if (failure) throw failure;
+            const cookies = await browserContext.cookies(webOrigin);
+            if (!cookies.some(({ name, httpOnly, value }) => name === SESSION_COOKIE && httpOnly && value))
+              throw new Error('The signed-in callback did not set a website session cookie');
+          } else {
+            // Public SSR can reach DOMContentLoaded before the client mounts its session observer.
+            // Use the return navigation budget for hydration and reserve the account wait for the mounted shell.
+            await page.waitForFunction(
+              (origin) =>
+                location.origin === origin &&
+                !location.pathname.startsWith('/auth/') &&
+                document.querySelector('html[data-hydrated]') !== null,
+              webOrigin,
+              { timeout: 30_000 },
+            );
+            stage = 'Web account menu';
+            await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+          }
         } catch (cause) {
           const path = new URL(page.url()).pathname;
           const navigation = visitedUrls.slice(-12).map((value) => new URL(value).pathname);
@@ -468,7 +478,7 @@ export async function startAuthStack(
           );
         }
       }
-      await page.waitForLoadState('domcontentloaded');
+      if (!options.sessionOnly) await page.waitForLoadState('domcontentloaded');
       await sampleMemory();
       if (!signup)
         console.info(
