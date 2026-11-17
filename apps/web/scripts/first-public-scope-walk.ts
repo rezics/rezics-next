@@ -620,9 +620,11 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
     throw new Error(`The exact public Realm and Space readback was missing (HTTP ${current.status})`);
   const observed: Json = { opened: opened.url, realmId, spaceId: ctx.seed.spaceId, native: current.status };
   return withOwnerPage(ctx, opened.url, observed, async (page, enter) => {
-    enter('Open the owner’s Members page from the public Realm home');
+    enter('Open current community management from the public Realm home');
     await page.getByRole('button', { name: 'Manage community', exact: true }).click();
+    enter('Follow the owner’s Members link from community management');
     await page.getByRole('link', { name: 'Members', exact: true }).click();
+    enter('Confirm the Members route for the exact Realm');
     await page.waitForURL((url) => url.origin === ctx.stack.web && url.pathname === `/en/realms/${realmId}/members`);
 
     const { outsider } = ctx.seed;

@@ -9,16 +9,20 @@ type ManagementObservation =
 /** The host supplies an existing current realm:manage observation, never ban or add advice. */
 export function RealmMembersEntry({
   realmId,
+  nativeCanManage,
   appearance,
   setup,
 }: {
   realmId: string;
+  nativeCanManage?: boolean | undefined;
   appearance: boolean;
   setup: ManagementObservation | null | undefined;
 }) {
-  // realm.update and appearance canManage both require native realm:manage. Space-only
-  // grants and a successful ban list cannot admit this destination.
-  const canManage = appearance || (setup?.kind === 'ready' && setup.realm?.id === realmId && setup.permitted.settings);
+  // The native home already checked realm:manage on this exact Realm. Older home
+  // sources can use the matching settings or appearance admission.
+  const canManage =
+    nativeCanManage ??
+    (appearance || (setup?.kind === 'ready' && setup.realm?.id === realmId && setup.permitted.settings));
   if (!canManage) return null;
   return (
     <Button
