@@ -21,6 +21,7 @@ import { useSubjectPersonalReader } from '../../features/pages/subject-personal-
 import { useSubjectReactionReader } from '../../features/pages/subject-reaction-reader';
 import {
   subjectFrameQuery,
+  subjectLabelUndoFromSearch,
   subjectLibraryQuery,
   subjectRatingQuery,
   subjectRelationsQuery,
@@ -43,20 +44,8 @@ export function SubjectOverview({
   search: ReturnType<typeof Route.useSearch>;
 }) {
   const { tabs, verification, reader: initialReader, page } = data;
-  const {
-    realm,
-    slot,
-    ratingFailure,
-    ratingResult,
-    labelResult,
-    undoLabelId,
-    undoAssignmentId,
-    undoRevision,
-    undoKey,
-    node,
-    streamProperty,
-    streamDirection,
-  } = search;
+  const { realm, slot, ratingFailure, ratingResult, labelResult, undoKey, node, streamProperty, streamDirection } =
+    search;
   const browserSession = useSession();
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm ?? page.requestedBoard, initialReader, browserSession);
@@ -64,14 +53,7 @@ export function SubjectOverview({
   const locale = getLocale();
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const id = page.subject!;
-  const labelUndo =
-    typeof undoLabelId === 'string' &&
-    typeof undoAssignmentId === 'string' &&
-    typeof undoRevision === 'number' &&
-    Number.isSafeInteger(undoRevision) &&
-    undoRevision > 0
-      ? { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: undoRevision }
-      : undefined;
+  const labelUndo = subjectLabelUndoFromSearch(search);
   const type = subjectPageType(page);
   const frameQuery = useQuery({
     ...subjectFrameQuery(type ?? '', locale),
@@ -249,6 +231,7 @@ export function SubjectOverview({
                     <SubjectLibrarySlot
                       subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
                       locale={subject.locale}
+                      documentLabels={data.documentLabels}
                       data={
                         library ?? {
                           session: 'signed-out',

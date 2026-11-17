@@ -8,6 +8,7 @@ import { type LibraryEntryStateWrite } from './entries-read';
 import { libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';
 import { readRelease } from '../subject/definitions';
 import { requestLocale } from '../kernel/client';
+import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import { libraryFullQuery, readLibraryResult, StaleCursorError } from './reads';
 import { readSubjectLabelAssignments, type SubjectLabel } from './subject-labels.ts';
 import {
@@ -225,6 +226,78 @@ export async function loadSubjectPublicCollections(
   }
 }
 
+async function readSlotLabels(client: KernelClient, subjectId: string, authorization: string) {
+  const admitted = await client.platform.exposure
+    .get({ headers: { authorization } })
+    .then((result) => (Array.isArray(result.data?.admitted) ? result.data.admitted : []))
+    .catch((): string[] => []);
+  const labels = admitted.includes('library_label.assignment_list')
+    ? await readSubjectLabelAssignments(client, subjectId, authorization).catch(() => null)
+    : null;
+  return { admitted, labels };
+}
+
+function labelPresentation(labels: SubjectLabel[] | null, result?: string, undo?: SubjectLabelUndo, undoKey?: string) {
+  const labelResult =
+    result === 'label-capacity' ||
+    result === 'label-restore-stale' ||
+    result === 'label-restore-expired' ||
+    result === 'label-restore-occupied' ||
+    result === 'label-restore-capacity' ||
+    result === 'label-removed' ||
+    result === 'closed' ||
+    result === 'unavailable'
+      ? result
+      : undefined;
+  return {
+    labels,
+    labelRemoveKeys: Object.fromEntries((labels ?? []).map((label) => [label.id, crypto.randomUUID()])),
+    labelCreateKey: crypto.randomUUID(),
+    labelAssignKey: crypto.randomUUID(),
+    labelUndoKey: undoKey ?? crypto.randomUUID(),
+    ...(undo ? { labelUndo: undo } : {}),
+    ...(labelResult ? { labelResult } : {}),
+  };
+}
+
+export type SubjectLabelDocument = { data: SubjectLibrarySlotData; admitted: readonly string[] };
+
+/** The private canonical document serves only the label controls needed by ordinary forms. */
+export async function loadSubjectLabelDocument(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  subjectId: string,
+  result?: string,
+  undo?: SubjectLabelUndo,
+  undoKey?: string,
+): Promise<SubjectLabelDocument | undefined> {
+  assertPublicCacheReadAllowed(request, 'Subject label document');
+  const identity = await readSubjectSlotSession(request, sessionEnv);
+  if (identity.state !== 'signed-in') return undefined;
+  const { admitted, labels } = await readSlotLabels(client, subjectId, identity.authorization);
+  if (!admitted.includes('library_label.assignment_list')) return undefined;
+  return {
+    admitted: admitted.filter((operation) => operation.startsWith('library_label.')),
+    data: {
+      session: 'signed-in',
+      csrfToken: identity.csrfToken,
+      entryAvailable: false,
+      entry: null,
+      publicCollections: null,
+      publicCollectionsNext: null,
+      collectionsLoaded: false,
+      collections: null,
+      ...labelPresentation(
+        labels,
+        result,
+        admitted.includes('library_label.unassign') && undoKey ? undo : undefined,
+        undoKey,
+      ),
+    },
+  };
+}
+
 /** Reads the entry and public collection page alongside the subject template read. */
 export async function loadSubjectLibrarySlot(
   client: KernelClient,
@@ -269,13 +342,7 @@ export async function loadSubjectLibrarySlot(
             () => ({ loaded: false as const, value: null }),
           )
         : Promise.resolve({ loaded: false as const, value: null });
-    const labelsPromise = client.platform.exposure
-      .get({ headers: { authorization: identity.authorization } })
-      .then((result) => result.data?.admitted?.includes('library_label.assignment_list') ?? false)
-      .catch(() => false)
-      .then((allowed) =>
-        allowed ? readSubjectLabelAssignments(client, subjectId, identity.authorization).catch(() => null) : null,
-      );
+    const labelsPromise = readSlotLabels(client, subjectId, identity.authorization);
     const [entryResult, collectionResult, labelsResult] = await Promise.all([
       entryPromise,
       collectionPromise,
@@ -296,7 +363,7 @@ export async function loadSubjectLibrarySlot(
     collectionsLoaded = collectionResult.loaded;
     collections = collectionResult.value?.collections ?? null;
     collectionsNext = collectionResult.value?.next ?? null;
-    labels = labelsResult;
+    labels = labelsResult.labels;
   }
   const result =
     resultValue === 'added' ||
@@ -316,22 +383,7 @@ export async function loadSubjectLibrarySlot(
     resultValue === 'label-removed'
       ? resultValue
       : undefined;
-  const labelResult =
-    labelResultValue === 'label-capacity' ||
-    labelResultValue === 'label-restore-stale' ||
-    labelResultValue === 'label-restore-expired' ||
-    labelResultValue === 'label-restore-occupied' ||
-    labelResultValue === 'label-restore-capacity' ||
-    labelResultValue === 'label-removed' ||
-    labelResultValue === 'closed' ||
-    labelResultValue === 'unavailable'
-      ? labelResultValue
-      : undefined;
   return {
-    labelRemoveKeys: Object.fromEntries((labels ?? []).map((label) => [label.id, crypto.randomUUID()])),
-    labelCreateKey: crypto.randomUUID(),
-    labelAssignKey: crypto.randomUUID(),
-    labelUndoKey: crypto.randomUUID(),
     session: identity.state,
     csrfToken: identity.csrfToken,
     ...(identity.state === 'signed-in'
@@ -354,9 +406,7 @@ export async function loadSubjectLibrarySlot(
     collectionsLoaded,
     collections,
     collectionsNext,
-    labels,
-    ...(labelUndo ? { labelUndo } : {}),
-    ...(labelResult ? { labelResult } : {}),
+    ...labelPresentation(labels, labelResultValue, labelUndo),
     ...(result ? { result } : {}),
   };
 }

@@ -28,7 +28,12 @@ import {
 import { CollectionChooserPanel } from './subject-collection-journey/chooser';
 import { PublicCollectionsPanel } from './subject-collection-journey/public';
 import { publicCountOf, type CapturedChooserTarget } from './subject-collection-journey';
-import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectLibrarySlotData } from './subject-slot';
+import type {
+  SubjectLabelDocument,
+  SubjectLibraryMutation,
+  SubjectLibraryMutationResponse,
+  SubjectLibrarySlotData,
+} from './subject-slot';
 import {
   SubjectEntryStateReview,
   captureEntryStateBasis,
@@ -78,6 +83,7 @@ type SubjectSlotProps = {
   subject: SubjectReference;
   locale: string;
   data: SubjectLibrarySlotData;
+  documentLabels?: SubjectLabelDocument | undefined;
 };
 
 // The state action is the page's one filled primary button; every other control here is a secondary (outline) button.
@@ -137,7 +143,8 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   ]);
   const scopeSequence = useRef({ scope, value: 0 });
   if (scopeSequence.current.scope !== scope) scopeSequence.current = { scope, value: scopeSequence.current.value + 1 };
-  const { data } = props;
+  const documentLabels = browser ? undefined : props.documentLabels;
+  const data = documentLabels?.data ?? props.data;
   const provenance = data.provenance;
   const actualIdentity =
     !browser ||
@@ -269,6 +276,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       key={scopeSequence.current.value}
       {...props}
       data={current}
+      documentLabelOperations={documentLabels?.admitted}
       entryIdentity={scope}
       entryObservation={observation.value.entry}
       entryLifetime={admissions.current.entry!.lifetime}
@@ -289,6 +297,7 @@ function SubjectLibrarySlotView({
   subject,
   locale,
   data,
+  documentLabelOperations,
   entryLifetime,
   entryHistoryAdmissions,
   entryIdentity,
@@ -297,6 +306,7 @@ function SubjectLibrarySlotView({
   labelWriteCustody,
   collectionLifetime,
 }: SubjectSlotProps & {
+  documentLabelOperations?: readonly string[] | undefined;
   entryLifetime: SlotLifetime;
   entryHistoryAdmissions: { list: boolean; review: boolean; restore: boolean };
   entryIdentity: string;
@@ -380,6 +390,10 @@ function SubjectLibrarySlotView({
   const labelListAdmitted = useOperation('library_label.list');
   const labelAssignAdmitted = useOperation('library_label.assign');
   const labelCreateAdmitted = useOperation('library_label.create');
+  const documentPickerAdmitted =
+    documentLabelOperations === undefined ||
+    (operationIsAdmitted('library_label.assign', documentLabelOperations) &&
+      operationIsAdmitted('library_label.create', documentLabelOperations));
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
   const [labelNameSubmitted, setLabelNameSubmitted] = useState(false);
@@ -1963,14 +1977,14 @@ function SubjectLibrarySlotView({
         </Exposure>
       ) : null}
       {data.session === 'signed-in' && data.labels === null ? (
-        <Exposure operation="library_label.assignment_list">
+        <Exposure operation="library_label.assignment_list" documentAdmitted={documentLabelOperations}>
           <p role="alert" className="basis-full text-sm text-muted-foreground">
             {m.library_subject_label_unavailable()}
           </p>
         </Exposure>
       ) : null}
       {data.session === 'signed-in' && data.labels !== null ? (
-        <Exposure operation="library_label.assignment_list">
+        <Exposure operation="library_label.assignment_list" documentAdmitted={documentLabelOperations}>
           <div data-subject-labels className="min-w-0 max-w-full basis-full space-y-2">
             {labels.length ? (
               <ul className="flex flex-wrap items-center gap-2">
@@ -1986,7 +2000,7 @@ function SubjectLibrarySlotView({
                     >
                       {label.name}
                     </a>
-                    <Exposure operation="library_label.unassign">
+                    <Exposure operation="library_label.unassign" documentAdmitted={documentLabelOperations}>
                       <form
                         data-subject-label-remove
                         method="post"
@@ -2023,7 +2037,10 @@ function SubjectLibrarySlotView({
               onConfirm={confirmLabelUnassignment}
               onCancel={cancelLabelUnassignmentReview}
             />
-            <Exposure operation="library_label.list">
+            <Exposure
+              operation="library_label.list"
+              documentAdmitted={documentPickerAdmitted ? documentLabelOperations : []}
+            >
               <details
                 data-subject-label-picker-details
                 open={labelPickerOpen}
@@ -2099,7 +2116,7 @@ function SubjectLibrarySlotView({
                         }}
                       />
                       <div className="flex flex-wrap gap-2">
-                        <Exposure operation="library_label.create">
+                        <Exposure operation="library_label.create" documentAdmitted={documentLabelOperations}>
                           <Button
                             type="submit"
                             variant="outline"

@@ -180,7 +180,10 @@ export const prepareExposure = createIsomorphicFn()
 const subscribe = () => () => {};
 // Standalone server-rendered previews have no query provider and remain closed.
 const previewClient = new QueryClient();
-export function useOperationAdmission(operation: ExposureOperation): OperationAdmission {
+export function useOperationAdmission(
+  operation: ExposureOperation,
+  documentAdmitted?: readonly string[],
+): OperationAdmission {
   const client = useContext(QueryClientContext) ?? previewClient;
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -197,7 +200,12 @@ export function useOperationAdmission(operation: ExposureOperation): OperationAd
     { ...viewerExposureQuery(observation), enabled: hydrated && observation !== undefined },
     client,
   );
-  if (!hydrated || admission.state === 'unknown' || admission.state === 'inactive') return 'unknown';
+  // A private document may supply its operation proof for the HTML and the matching hydration render.
+  if (!hydrated) {
+    if (!documentAdmitted) return 'unknown';
+    return operationIsAdmitted(operation, documentAdmitted) ? 'available' : 'denied';
+  }
+  if (admission.state === 'unknown' || admission.state === 'inactive') return 'unknown';
   if (admission.state === 'signed-out') {
     if (publicQuery.isError) return 'unavailable';
     const result = publicQuery.data;
@@ -218,6 +226,16 @@ export function useOperation(operation: ExposureOperation): boolean {
   return useOperationAdmission(operation) === 'available';
 }
 
-export function Exposure({ operation, children }: { operation: ExposureOperation; children: ReactNode }) {
-  return useOperation(operation) ? createElement(Fragment, null, children) : null;
+export function Exposure({
+  operation,
+  children,
+  documentAdmitted,
+}: {
+  operation: ExposureOperation;
+  children: ReactNode;
+  documentAdmitted?: readonly string[] | undefined;
+}) {
+  return useOperationAdmission(operation, documentAdmitted) === 'available'
+    ? createElement(Fragment, null, children)
+    : null;
 }
