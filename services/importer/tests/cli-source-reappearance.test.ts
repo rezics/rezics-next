@@ -1,4 +1,4 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -60,13 +60,19 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const sent: BatchCommand[] = [];
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
     const clearRequests = new Map<string, string>();
+    const observations = sourceObservationFixture();
     const fences = new Set<string>();
     let activeAlias: string = source;
+    let clearSends = 0;
     const transport = {
       setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
+      async readSourceObservationHead({ subjectId }: { subjectId: string }) {
+        return observations.read(subjectId);
+      },
       // This coordinator-only protocol double acknowledges exact clear requests separately
       // from semantic receipts. The native companion observes actual removal/204/receipts.
       async clearSourceStatistic(input: Parameters<NonNullable<ImportTransport['clearSourceStatistic']>>[0]) {
+        clearSends++;
         expect(input.source).toBe('vndb');
         expect(input.value).toEqual({
           ...(activeAlias === 'vndb' ? {} : { sourceAlias: activeAlias }),
@@ -78,6 +84,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
         const prior = clearRequests.get(input.idempotencyKey);
         if (prior !== undefined) expect(bytes).toBe(prior);
         clearRequests.set(input.idempotencyKey, bytes);
+        observations.observe(input.subjectId, input.value);
       },
       async readFence(tuple: { source: string; external_id: string; field_group: string }) {
         const fenced = fences.has(JSON.stringify(tuple));
@@ -126,6 +133,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     try {
       expect((await run(1)).status).toBe('committed');
       expect((await run(1, false, 'independent')).status).toBe('committed');
+      expect(clearRequests.size).toBe(source === 'vndb' ? 10 : 0);
       const owner = { source, external_id: record(source, 0, 1).key };
       const claim = importer.session.bindings.claim(owner);
       const bootstrap = sent.find(
@@ -180,6 +188,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
       for (const [key, value] of originalReceipts) expect(receipts.get(key)).toEqual(value);
       expect(importer.session.store.source('independent')).toEqual(independent);
       expect(importer.session.bindings.claim({ ...owner, source: 'independent' })).toEqual(independentClaim);
+      expect(clearSends).toBe(source === 'vndb' ? 10 : 0);
     } finally {
       await importer.close();
       await rm(directory, { recursive: true, force: true });

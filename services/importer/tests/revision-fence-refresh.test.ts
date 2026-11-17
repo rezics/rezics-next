@@ -141,6 +141,9 @@ function fixture() {
     lookups,
     receipts,
     statistics,
+    observationHead(subjectId: string) {
+      return observations.read(subjectId);
+    },
     get importer() {
       return importer;
     },
@@ -155,9 +158,9 @@ function fixture() {
         })(),
       );
     },
-    runVndb(average: number, converterRevision = 'conversion-v1') {
+    runVndb(average: number, sourceSnapshotAsOf: string, converterRevision = 'conversion-v1') {
       return importer.runRecords(
-        createSourceRegistration('vndb', { converterRevision }),
+        createSourceRegistration('vndb', { converterRevision, sourceSnapshotAsOf }),
         (async function* () {
           yield {
             source: 'vndb',
@@ -366,28 +369,43 @@ for (const fault of ['denied', 'interrupted'] as const) {
 test('same-revision VNDB statistic-only retention requires success and never substitutes for new-converter proposals', async () => {
   const f = fixture();
   try {
-    expect((await f.runVndb(735)).status).toBe('committed');
+    expect((await f.runVndb(735, '2026-10-25')).status).toBe('committed');
+    const claim = f.importer.session.bindings.claim({ source: 'vndb', external_id: 'v123' });
+    if (claim?.state !== 'bound') throw new Error('Expected bound VNDB claim');
+    const initialHead = f.observationHead(claim.subject);
+    expect(initialHead).toMatchObject({
+      state: 'published',
+      observation: { asOf: '2026-10-25', payload: { mean: 7.35, count: 20 } },
+    });
     const semantic = f.candidates('vndb', 'v123');
     const journals = f.journals('vndb');
     const baseline = f.importer.session.store.source('vndb');
     const row = f.importer.session.store.key('vndb', 'v123').baseline!;
     const count = f.calls.length;
     f.fail('statistic-denied');
-    expect((await f.runVndb(810)).status).toBe('bulk-failed');
+    expect((await f.runVndb(810, '2026-10-26')).status).toBe('bulk-failed');
     expect(f.importer.session.store.source('vndb')).toEqual(baseline);
     expect(f.candidates('vndb', 'v123')).toEqual(semantic);
+    expect(f.observationHead(claim.subject)).toEqual(initialHead);
+    expect(f.statistics).toHaveLength(2);
     const denied = f.statistics.at(-1)!;
     await f.reopen();
     f.fail(null);
-    expect((await f.runVndb(810)).status).toBe('committed');
+    expect((await f.runVndb(810, '2026-10-26')).status).toBe('committed');
+    expect(f.statistics).toHaveLength(3);
     expect(f.statistics.at(-1)).toEqual(denied);
+    expect(f.observationHead(claim.subject)).toMatchObject({
+      state: 'published',
+      observation: { asOf: '2026-10-26', payload: { mean: 8.1, count: 20 } },
+    });
     expect(f.calls).toHaveLength(count);
     expect(f.candidates('vndb', 'v123')).toEqual(semantic);
     expect(f.journals('vndb')).toEqual(journals);
     const refreshedRow = f.importer.session.store.key('vndb', 'v123').baseline!;
     expect(refreshedRow.recordRevision).toBe(row.recordRevision);
     expect(refreshedRow.digest).not.toBe(row.digest);
-    expect((await f.runVndb(810, 'conversion-v2')).status).toBe('committed');
+    expect((await f.runVndb(810, '2026-10-26', 'conversion-v2')).status).toBe('committed');
+    expect(f.statistics).toHaveLength(3);
     expect(
       f.calls
         .slice(count)

@@ -18,6 +18,7 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { vndbReleasePortFixture } from './support/vndb-release.ts';
 
 function families(
   aliases: Record<string, unknown>[] = [
@@ -252,22 +253,31 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
       vn_staff: ['id\taid\trole\teid\tnote', 'v1\t20\tscenario\t\\N\tWriter Alias'],
       staff: ['id\tgender\tlang\tmain\tdescription\tprod', 's4\t\\N\tja\t10\t\t\\N'],
       staff_alias: ['id\taid\tname\tlatin', 's4\t10\tPreferred Alias\t\\N\ns4\t20\tLater Alias\t\\N'],
+      staff_extlinks: ['id\tlink', ''],
       producers: ['id', ''],
       producers_relations: ['id\tpid\trelation', ''],
+      producers_extlinks: ['id\tlink', ''],
+      releases_platforms: ['id\tplatform', ''],
+      releases_media: ['id\tmedium\tqty', ''],
+      releases_extlinks: ['id\tlink', ''],
+      releases_supersedes: ['id\trid', ''],
+      releases_titles: ['id\tlang\tmtl\ttitle\tlatin', ''],
+      releases_vn: ['id\tvid\trtype', ''],
+      chars: [
+        'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription',
+        '',
+      ],
+      chars_names: ['id\tlang\tname\tlatin', ''],
+      chars_alias: ['id\tspoil\tname\tlatin', ''],
+      chars_vns: ['id\tvid\trid\trole\tspoil', ''],
+      extlinks: ['id\tsite\tvalue', ''],
+      vn_extlinks: ['id\tlink', ''],
     };
     for (const name of [
       'anime',
-      'chars',
-      'chars_vns',
-      'extlinks',
       'releases',
       'releases_producers',
-      'releases_supersedes',
-      'releases_titles',
-      'releases_vn',
-      'staff_extlinks',
       'vn_anime',
-      'vn_extlinks',
       'vn_relations',
       'vn_seiyuu',
     ])
@@ -286,8 +296,13 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
       Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'staff')),
     ).resolves.toEqual([{ id: 's4', gender: null, lang: 'ja', main: '10', description: '', prod: null }]);
     const plan = await planCrossMediaSeed(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')));
-    const first = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands), undefined, vndbSeed);
+    const reviewed = vndbReleasePortFixture();
+    const currentPort = reviewed.port(commands, ['wdt:P3180', 'schema:name']);
+    const path = join(directory, 'state.sqlite');
+    const first = await seedCrossMedia(plan, path, currentPort, undefined, vndbSeed);
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
+    const staff = first.readings.find((row) => row.externalId === 's4');
+    expect(staff?.subject.subject).toMatchObject({ id: reviewed.ids.get('s4'), type: 'schema:Person' });
     expect(staffNames(commands)).toEqual(
       expect.arrayContaining([
         { language: 'und', text: 'Preferred Alias' },
@@ -303,7 +318,8 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
       )
       .map((command) => command.key);
     const count = commands.length;
-    await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands), undefined, vndbSeed);
+    const reopened = await seedCrossMedia(plan, path, currentPort, undefined, vndbSeed);
+    expect(reopened.readings.find((row) => row.externalId === 's4')).toEqual(staff);
     expect(commands.length).toBeGreaterThanOrEqual(count);
     expect(
       commands
