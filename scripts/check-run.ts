@@ -527,7 +527,8 @@ export async function prepareCandidateSnapshot(
         const original = lstatSync(resolve(root, file), { throwIfNoEntry: false });
         const target = resolve(frozen, file);
         const captured = lstatSync(target);
-        if (!original?.isFile() || !captured.isFile() || (original.mode & 0o111) !== (captured.mode & 0o111)) continue;
+        // Git uses the owner's execute bit for regular files.
+        if (!original?.isFile() || !captured.isFile() || (original.mode & 0o100) !== (captured.mode & 0o100)) continue;
         if ((original.mode & 0o777) !== (captured.mode & 0o777)) chmodSync(target, original.mode & 0o777);
       }
     }
