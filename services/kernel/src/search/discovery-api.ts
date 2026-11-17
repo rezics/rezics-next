@@ -299,6 +299,8 @@ export type DiscoveryMetadataProducer = Readonly<{
   owner: 'commerce' | 'content';
   /** Native opt-in for status-only readiness. Initial page fences still require turn admission and the actual partition page. */
   initialPopulationWitness?: 'none';
+  /** True defers selection only. A scheduled page still has to prove its native cut. */
+  populationInvalidationPending?(): Promise<boolean>;
   readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
   page(
     partition: number,
