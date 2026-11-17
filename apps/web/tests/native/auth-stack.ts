@@ -51,6 +51,7 @@ type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
   origin: string;
+  browserMemoryObservation(): { sampledAt: number; rssBytes: number; peakRssBytes: number } | null;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
   submitSignIn(page: Page, persona: 'alice' | 'bob'): Promise<void>;
@@ -224,6 +225,7 @@ export async function startAuthStack(
   let privateBrowser: PrivateBrowser | undefined;
   let stopping: Promise<void> | undefined;
   let browserPeakMemoryBytes = 0;
+  let browserMemory: ReturnType<NativeAuthStack['browserMemoryObservation']> = null;
   let memorySampler: ReturnType<typeof setInterval> | undefined;
   let sampling = false;
   let sampleMemory = async () => {};
@@ -286,6 +288,7 @@ export async function startAuthStack(
             .map(Number)
             .reduce((sum, rss) => sum + rss * 1024, 0);
           browserPeakMemoryBytes = Math.max(browserPeakMemoryBytes, bytes);
+          browserMemory = { sampledAt: Date.now(), rssBytes: bytes, peakRssBytes: browserPeakMemoryBytes };
         }
       } finally {
         sampling = false;
@@ -621,6 +624,7 @@ export async function startAuthStack(
     });
     return {
       origin,
+      browserMemoryObservation: () => browserMemory,
       context,
       async newContext(_persona) {
         const owner = currentNativeLifecycle() ?? lifecycle;

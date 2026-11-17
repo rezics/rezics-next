@@ -26,6 +26,20 @@ function stage(name: string, evidence: Record<string, unknown>): void {
   console.info('book-catalogue-journey-stage', JSON.stringify({ stage: name, ...evidence }));
 }
 
+function readerMemory(stageName: string, page: Page): void {
+  if (process.env.NATIVE_WEB_BOOK_MEMORY !== '1') return;
+  const browser = fixture.auth.browserMemoryObservation();
+  const memory = fixture.stack.memoryObservation?.();
+  stage(stageName, {
+    pages: page.context().pages().length,
+    browser,
+    stackSampledAt: memory?.sampledAt,
+    command: memory?.cgroup.command,
+    run: memory?.cgroup.runSlice,
+    stackRssBytes: memory?.processes.observedRssBytes,
+  });
+}
+
 function exactSearchLink(page: Page, subject: BookCatalogueIdentity) {
   return page.locator(`#search-results a[data-slot="list-row-link"][href*="${subject.id}"]`);
 }
@@ -191,7 +205,11 @@ async function openReaderShelf(page: Page, subject: BookCatalogueIdentity, obser
   const href = await shelfLink.getAttribute('href');
   expect(href).toBeTruthy();
   expect(exactType(new URL(href!, fixture.stack.web).href)).toBe(type);
-  const shelf = await openNewTabFromLink(page, shelfLink, `reader shelf handoff ${type}`);
+  readerMemory('before reader Library popup', page);
+  const shelf = await openNewTabFromLink(page, shelfLink, `reader shelf handoff ${type}`, (popup) =>
+    readerMemory('reader Library popup opened', popup),
+  );
+  readerMemory('reader Library popup hydrated', shelf);
   await assertPlannedShelf(shelf, type);
   stage('reader exact-type shelf', {
     type,
