@@ -1,9 +1,10 @@
 import { expect } from 'bun:test';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Locator, Page, Response } from 'playwright';
+import type { Locator, Page, Request, Response } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
+import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
@@ -80,6 +81,105 @@ async function json<T>(response: Response, status: number, label: string): Promi
 
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+}
+
+async function visitLocalizedArchive(
+  page: Page,
+  locale: (typeof locales)[number],
+  route: 'export' | 'recover-collections' | 'recover-archive',
+  titleKey: string,
+) {
+  const target = new URL(`/${locale}/library/${route}`, stack.web);
+  const issuer = new URL(stack.issuerOrigin).origin;
+  const classifyPath = (href: string) => {
+    const { origin, pathname } = new URL(href);
+    if (origin !== target.origin) return origin === issuer ? 'issuer' : 'outside-web';
+    if (pathname === target.pathname) return 'expected';
+    if (locales.some((value) => pathname === `/${value}/library/${route}`)) return 'other-locale';
+    if (pathname.startsWith('/auth/')) return 'web-auth';
+    return 'other-web';
+  };
+  const browserErrors = new Set<string>();
+  const recordError = (kind: string) => {
+    if (browserErrors.size < 8) browserErrors.add(kind);
+  };
+  const documents: { status: number; path: string }[] = [];
+  const observeResponse = (response: Response) => {
+    const request = response.request();
+    if (request.isNavigationRequest() && response.frame() === page.mainFrame()) {
+      if (documents.length === 4) documents.shift();
+      documents.push({ status: response.status(), path: classifyPath(response.url()) });
+    } else if (request.resourceType() === 'script' && response.status() >= 400) {
+      recordError(`script-http-${response.status()}`);
+    }
+  };
+  const observeRequestFailure = (request: Request) => {
+    const resource = request.resourceType();
+    if (resource !== 'document' && resource !== 'script') return;
+    const reason = request.failure()?.errorText ?? '';
+    recordError(`${resource}-${/^net::ERR_[A-Z0-9_]{1,40}$/u.test(reason) ? reason : 'request-failed'}`);
+  };
+  const observePageError = ({ name, message }: Error) => {
+    if (/dynamically imported module|module script failed/u.test(message)) recordError('module-load');
+    else if (/hydrat(?:e|ion)/iu.test(message)) recordError('hydration');
+    else recordError(['TypeError', 'SyntaxError', 'ReferenceError', 'RangeError'].includes(name) ? name : 'page-error');
+  };
+  page.on('response', observeResponse);
+  page.on('requestfailed', observeRequestFailure);
+  page.on('pageerror', observePageError);
+  let stage = 'navigation';
+  try {
+    await page.goto(target.href, { waitUntil: 'domcontentloaded' });
+    stage = 'hydration';
+    await hydrated(page);
+    stage = 'localized-heading';
+    const expected = await message(locale, titleKey);
+    await page.getByRole('heading', { name: expected }).waitFor({ state: 'visible' });
+    stage = 'ready';
+    return expected;
+  } finally {
+    const [shell, sessionCookie] = await Promise.all([
+      settledWithin(
+        page.evaluate(
+          (requestedLocale) => ({
+            webShell: !!document.querySelector('[data-client-load-recovery]'),
+            hydrated: document.documentElement.hasAttribute('data-hydrated'),
+            clientLoadFailed: document.documentElement.hasAttribute('data-client-load-failed'),
+            localeMatches: document.documentElement.lang === requestedLocale,
+            accountMenu: !!document.querySelector('#account-menu-button'),
+            sessionPending: !!document.querySelector('[data-session-pending]'),
+            accountUnavailable: !!document.querySelector('[data-account-unavailable]'),
+          }),
+          locale,
+        ),
+        500,
+      ).catch(() => undefined),
+      settledWithin(
+        page
+          .context()
+          .cookies(target.origin)
+          .then((cookies) => cookies.some(({ name, httpOnly, value }) => name === SESSION_COOKIE && httpOnly && value)),
+        500,
+      ).catch(() => undefined),
+    ]);
+    page.off('response', observeResponse);
+    page.off('requestfailed', observeRequestFailure);
+    page.off('pageerror', observePageError);
+    console.info(
+      'Native Library Archive localized visit',
+      JSON.stringify({
+        actor: 'alice',
+        locale,
+        route,
+        stage,
+        documents,
+        currentPath: classifyPath(page.url()),
+        sessionCookie: sessionCookie ?? null,
+        shell: shell ?? null,
+        browserErrors: [...browserErrors],
+      }),
+    );
+  }
 }
 
 async function leaveRecoveryFor(page: Page, name: string, departure: 'accept' | 'stay' | 'settled' = 'accept') {
@@ -1334,22 +1434,10 @@ async function restoreOwnerLibrary() {
 
   const headings: Record<string, string> = {};
   for (const locale of locales) {
-    await page.goto(`${stack.web}/${locale}/library/export`, { waitUntil: 'domcontentloaded' });
-    await hydrated(page);
-    const expected = await message(locale, 'library_export_title');
-    await page.getByRole('heading', { name: expected }).waitFor({ state: 'visible' });
-    headings[locale] = expected;
+    headings[locale] = await visitLocalizedArchive(page, locale, 'export', 'library_export_title');
   }
-  await page.goto(`${stack.web}/zh-Hant/library/recover-collections`, { waitUntil: 'domcontentloaded' });
-  await hydrated(page);
-  await page.getByRole('heading', { name: await message('zh-Hant', 'library_archive_recovery_title') }).waitFor({
-    state: 'visible',
-  });
-  await page.goto(`${stack.web}/ja/library/recover-archive`, { waitUntil: 'domcontentloaded' });
-  await hydrated(page);
-  await page.getByRole('heading', { name: await message('ja', 'library_archive_title') }).waitFor({
-    state: 'visible',
-  });
+  await visitLocalizedArchive(page, 'zh-Hant', 'recover-collections', 'library_archive_recovery_title');
+  await visitLocalizedArchive(page, 'ja', 'recover-archive', 'library_archive_title');
 
   // Finish Alice's localized visits before opening Bob's separate context.
   await signedIn.context.close();
