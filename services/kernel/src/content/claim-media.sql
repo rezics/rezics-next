@@ -1,11 +1,12 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :media_ids::uuid[] AS media_ids,
+         :legacy_media_ids::uuid[] AS legacy_media_ids,
          :container_id::uuid AS container_id, :uploader_id::uuid AS uploader_id, :at::timestamptz AS at,
          :item_id::uuid AS item_id, :revision_id::uuid AS revision_id,
          :authorization_resource_id::uuid AS authorization_resource_id, :new_thread::boolean AS new_thread
 ), locked AS MATERIALIZED (
   SELECT m.route, m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
-         m.erased, m.collection_pending, m.taken_down, m.claimed_at, m.claimed_item_id
+         m.erased, m.collection_pending, m.taken_down, m.claimed_at, m.claimed_item_id, m.reservation_board_id
   FROM content.media m CROSS JOIN input i
   WHERE m.route = i.route AND m.media_id = ANY(i.media_ids)
   ORDER BY m.media_id
@@ -23,16 +24,20 @@ WITH input AS NOT MATERIALIZED (
       JOIN content.thread t ON t.route = i.route AND t.thread_id = p.thread_id
       WHERE p.route = i.route AND p.post_id = i.item_id
         AND (
-          (i.new_thread AND i.container_id = p.thread_id AND i.authorization_resource_id = t.board_id)
+          (i.new_thread AND i.container_id = p.thread_id AND i.authorization_resource_id = t.board_id
+            AND (m.reservation_board_id = t.board_id
+              OR (m.reservation_board_id IS NULL AND m.media_id = ANY(i.legacy_media_ids))))
           OR
           (NOT i.new_thread AND i.container_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
-            AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id))
+            AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
+            AND (m.reservation_board_id IS NULL OR m.reservation_board_id = t.board_id))
         )
         AND p.availability = 'available' AND p.visibility <> 'taken_down' AND r.availability = 'available'
     )
 ), changed AS (
   UPDATE content.media m
-  SET claimed_at = COALESCE(v.claimed_at, i.at), claimed_item_id = i.item_id
+  SET claimed_at = COALESCE(v.claimed_at, i.at), claimed_item_id = i.item_id,
+      reservation_board_id = COALESCE(m.reservation_board_id, CASE WHEN i.new_thread THEN i.authorization_resource_id END)
   FROM valid v CROSS JOIN input i
   WHERE m.route = i.route AND m.route = v.route AND m.media_id = v.media_id
     AND v.claimed_item_id IS NULL

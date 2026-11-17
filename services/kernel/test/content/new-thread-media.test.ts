@@ -9,13 +9,16 @@ import {
   type PublicJwks,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
+import { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { threadTarget } from '../../src/content/commands.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
@@ -23,13 +26,14 @@ import { dropTestDatabase } from '../support/drop-test-database.ts';
 const audience = 'https://kernel.new-thread-media.example.test';
 const password = 'correct horse battery staple';
 const routeKey = new Uint8Array(32).fill(37);
-const boardId = newId(0x4321);
-const subjectId = newId(0x4321);
 const authorId = newId(0x1234);
 const otherId = newId(0x2345);
 const hash = createHash('sha256').update('new-thread-image').digest('hex');
 const actionNames = [
   'board:read',
+  'board:create',
+  'subject:read',
+  'subject:create',
   'board:manage',
   'thread:create',
   'thread:read',
@@ -52,6 +56,8 @@ let authAdmin: Pool;
 let authPool: Pool;
 let auth: AuthService;
 let app: ReturnType<typeof createKernel>;
+let boardId: string;
+let otherBoardId: string;
 let authorBearer: string;
 let otherBearer: string;
 let issuer: string;
@@ -62,7 +68,7 @@ let authDatabaseName: string;
 const accounts = new Map<string, AccessAccount>();
 const approvals = new Set<string>();
 
-async function issueWebsite(accountId: string): Promise<string> {
+async function issueWebsite(accountId: string, scopes = websiteScopes): Promise<string> {
   const login = await auth.handler(
     new Request(`${issuer}/signin`, {
       method: 'POST',
@@ -87,7 +93,7 @@ async function issueWebsite(accountId: string): Promise<string> {
     client_id: WEBSITE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: websiteScopes.join(' '),
+    scope: scopes.join(' '),
     state,
     nonce: state,
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
@@ -205,33 +211,19 @@ beforeAll(async () => {
   authorBearer = await issueWebsite(authorId);
   otherBearer = await issueWebsite(otherId);
 
-  const access = createAccess({
-    actions: new Map(
-      actionNames.map((action) => [
-        action,
-        {
-          anonymous: action.endsWith(':read'),
-          ...(action === 'media:create'
-            ? { 'x-resource-types': ['content.media'] }
-            : action === 'thread:create'
-              ? { 'x-resource-types': ['content.thread', 'content.post'] }
-              : action === 'post:create'
-                ? { 'x-resource-types': ['content.post'] }
-                : {}),
-        },
-      ]),
-    ),
-    auth: {
-      issuer,
-      audience,
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async (url, init) => auth.handler(new Request(url, init)),
-    },
-  });
   app = createKernel({
     pool: db.pool,
     routeKey,
-    access,
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async (url, init) => auth.handler(new Request(url, init)),
+        },
+      }),
     writeRate: createWriteRateLimiter({
       secret: 'new-thread-media-rate-limit-secret-at-least-32-bytes',
       overrides: JSON.stringify({
@@ -243,17 +235,39 @@ beforeAll(async () => {
       }),
     }),
   });
+  await bootstrapGovernance(db.pool, otherId);
+  await bootstrapRelease(db.pool, bundledRelease);
+  await bootstrapLocalShowcaseBoardCreation(db.pool, otherId);
   await db.admin.query(
-    `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'New thread media','published',1,$4)`,
-    [routeOf(boardId), boardId, subjectId, randomUUID()],
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES (0,$1,$2,'subject:create','(,)',$2)`,
+    [GLOBAL_CONTEXT, otherId],
   );
-  for (const action of ['thread:create', 'media:create', 'board:read'])
-    await db.admin.query(
-      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-       VALUES ($1,$2,$3,$4,'(,)',$3)`,
-      [routeOf(boardId), boardId, authorId, action],
-    );
+  const concept = await call(
+    'POST',
+    '/v1/subjects',
+    { type: 'skos:Concept', labels: { en: 'New thread media' } },
+    randomUUID(),
+    otherBearer,
+  );
+  expect(concept.response.status, JSON.stringify(concept.body)).toBe(201);
+  const boardInput = {
+    conceptId: concept.body.subject.id,
+    purpose: 'discussion',
+    visibility: 'published',
+    title: 'New thread media',
+  };
+  const board = await call('POST', '/v1/boards', boardInput, randomUUID(), otherBearer);
+  expect(board.response.status, JSON.stringify(board.body)).toBe(201);
+  boardId = board.body.board.id;
+  const otherBoard = await call('POST', '/v1/boards', boardInput, randomUUID(), otherBearer);
+  expect(otherBoard.response.status, JSON.stringify(otherBoard.body)).toBe(201);
+  otherBoardId = otherBoard.body.board.id;
+  await db.admin.query(
+    `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+     VALUES ($1,$2,$3,'thread:create','resource','(,)',$3)`,
+    [routeOf(boardId), boardId, otherId],
+  );
 }, 120_000);
 
 afterAll(async () => {
@@ -299,7 +313,7 @@ async function call(
   return { response, body: await response.json() };
 }
 
-async function reserveNewThread(threadKey: string, requestKey = randomUUID()) {
+async function reserveNewThread(threadKey: string, requestKey = randomUUID(), bearer: string | null = authorBearer) {
   return call(
     'POST',
     '/v1/media',
@@ -311,6 +325,7 @@ async function reserveNewThread(threadKey: string, requestKey = randomUUID()) {
       sha256: hash,
     },
     requestKey,
+    bearer,
   );
 }
 
@@ -374,19 +389,34 @@ async function seedMedia(input: {
   return mediaId;
 }
 
-test('author reserves and uploads images for a new thread, then claims them on its opening post', async () => {
+test('an ordinary member reserves and claims the opening image on its exact Global Board', async () => {
   const key = randomUUID();
-  const reserved = await reserveNewThread(key);
-  expect(reserved.response.status).toBe(201);
+  const reservationKey = randomUUID();
+  const reserved = await reserveNewThread(key, reservationKey);
+  expect(reserved.response.status, JSON.stringify(reserved.body)).toBe(201);
   const media = reserved.body.media as { id: string; containerId: string; reservationRequestId: string };
   const target = threadTarget(routeKey, authorId, key);
   expect(media.containerId).toBe(target.id);
   expect(routeOf(media.id)).toBe(target.route);
+  const replay = await reserveNewThread(key, reservationKey);
+  expect(replay.response.status).toBe(201);
+  expect(replay.body.media.id).toBe(media.id);
+  const reducedBearer = await issueWebsite(
+    authorId,
+    websiteScopes.filter((scope) => scope !== 'media:create'),
+  );
+  const missingScope = await reserveNewThread(key, reservationKey, reducedBearer);
+  expect([missingScope.response.status, missingScope.body.code]).toEqual([403, 'forbidden']);
 
   const uploaded = await call('POST', `/v1/media/${media.id}:complete`, completion(media));
   expect(uploaded.response.status).toBe(200);
   expect(uploaded.body).toEqual({ media: { id: media.id, state: 'uploaded' } });
   await markAvailable(media.id);
+
+  const beforeWrongBoard = await rowCounts(target.route);
+  const wrongBoard = await call('POST', '/v1/threads', { ...threadInput([media.id]), boardId: otherBoardId }, key);
+  expect([wrongBoard.response.status, wrongBoard.body.code]).toEqual([409, 'media_unavailable']);
+  expect(await rowCounts(target.route)).toEqual(beforeWrongBoard);
 
   const created = await call('POST', '/v1/threads', threadInput([media.id]), key);
   expect(created.response.status).toBe(201);
@@ -421,6 +451,54 @@ test('author reserves and uploads images for a new thread, then claims them on i
   expect(existingContainer.body.media.containerId).toBe(target.id);
 });
 
+test('a legacy opening image requires its original Board and committed reservation', async () => {
+  const legacyImage = async (threadKey: string) => {
+    const reserved = await reserveNewThread(threadKey);
+    expect(reserved.response.status).toBe(201);
+    const mediaId = reserved.body.media.id as string;
+    await markAvailable(mediaId);
+    await db.admin.query('UPDATE content.media SET reservation_board_id=NULL WHERE route=$1 AND media_id=$2', [
+      routeOf(mediaId),
+      mediaId,
+    ]);
+    return mediaId;
+  };
+  const key = randomUUID();
+  const target = threadTarget(routeKey, authorId, key);
+  const mediaId = await legacyImage(key);
+  const before = await rowCounts(target.route);
+  const wrongBoard = await call('POST', '/v1/threads', { ...threadInput([mediaId]), boardId: otherBoardId }, key);
+  expect([wrongBoard.response.status, wrongBoard.body.code]).toEqual([409, 'media_unavailable']);
+  expect(await rowCounts(target.route)).toEqual(before);
+  const created = await call('POST', '/v1/threads', threadInput([mediaId]), key);
+  expect(created.response.status, JSON.stringify(created.body)).toBe(201);
+  expect(created.body.thread.firstPost.mediaIds).toEqual([mediaId]);
+  const { rows } = await db.admin.query(
+    'SELECT reservation_board_id, claimed_item_id FROM content.media WHERE route=$1 AND media_id=$2',
+    [target.route, mediaId],
+  );
+  expect(rows[0]).toMatchObject({ reservation_board_id: boardId, claimed_item_id: created.body.thread.firstPost.id });
+
+  const uncoveredKey = randomUUID();
+  const uncoveredTarget = threadTarget(routeKey, authorId, uncoveredKey);
+  const covered = await legacyImage(uncoveredKey);
+  const uncovered = await seedMedia({
+    containerId: uncoveredTarget.id,
+    uploaderId: authorId,
+    state: 'available',
+    reservationRequestId: randomUUID(),
+  });
+  const beforeMissing = await rowCounts(uncoveredTarget.route);
+  const missingReceipt = await call('POST', '/v1/threads', threadInput([covered, uncovered]), uncoveredKey);
+  expect([missingReceipt.response.status, missingReceipt.body.code]).toEqual([409, 'media_unavailable']);
+  expect(await rowCounts(uncoveredTarget.route)).toEqual(beforeMissing);
+  const { rows: untouched } = await db.admin.query(
+    'SELECT reservation_board_id, claimed_item_id FROM content.media WHERE route=$1 AND media_id=$2',
+    [uncoveredTarget.route, covered],
+  );
+  expect(untouched[0]).toEqual({ reservation_board_id: null, claimed_item_id: null });
+});
+
 test('invalid ownership, reservation key, availability, and anonymous requests do not create or claim content', async () => {
   const otherKey = randomUUID();
   const otherTarget = threadTarget(routeKey, otherId, otherKey);
@@ -438,7 +516,7 @@ test('invalid ownership, reservation key, availability, and anonymous requests d
     randomUUID(),
     otherBearer,
   );
-  expect(otherReservation.response.status).toBe(403);
+  expect([otherReservation.response.status, otherReservation.body.code]).toEqual([403, 'forbidden']);
   expect(await rowCounts(otherTarget.route)).toEqual(beforeOtherReservation);
 
   const cases = [

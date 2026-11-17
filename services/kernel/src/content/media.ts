@@ -6,6 +6,7 @@ import { Value } from 'typebox/value';
 import {
   authoritativeTimeValue,
   currentCommand,
+  currentCommandReceipt,
   mintReadTime,
   principalCommandIdentity,
   runCommand,
@@ -14,6 +15,7 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import {
   initializeResourceGrants,
   parentCreationAuthorization,
@@ -37,6 +39,8 @@ import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
+import readLegacyOpeningMedia from './read-legacy-opening-media.sql';
+import readOpeningMediaReservationReceipts from './read-opening-media-reservation-receipts.sql';
 import { claimCoverMedia } from './cover-reference.ts';
 import {
   mediaParentBoard,
@@ -230,11 +234,14 @@ function options(actor: Actor, r: number, kind: string, input: unknown, context:
     receipt: {
       kind,
       key: context.idempotencyKey,
-      digest: createHash('sha256')
-        .update(canonicalize([identity, kind, input])!)
-        .digest(),
+      digest: mediaCommandDigest(identity, kind, input),
     },
   };
+}
+function mediaCommandDigest(identity: ReturnType<typeof principalCommandIdentity>, kind: string, input: unknown) {
+  return createHash('sha256')
+    .update(canonicalize([identity, kind, input])!)
+    .digest();
 }
 type Row = Awaited<ReturnType<typeof readStatement.run>>[number];
 async function read(client: CommandTransaction, id: string, kind = 'media'): Promise<Row | null> {
@@ -254,6 +261,7 @@ export async function reserveMedia(
   const newThread = 'newThread' in input ? input.newThread : undefined;
   if (Boolean(newThread) !== Boolean(newThreadTarget)) throw new TypeError('Invalid new-thread media target');
   if (newThread) {
+    if (!owner.scopes.includes('media:create')) throw new GrantDeniedError();
     requestKey(newThread.idempotencyKey);
     if (newThreadTarget!.boardId !== newThread.boardId) throw new TypeError('Invalid new-thread board');
   }
@@ -297,13 +305,12 @@ export async function reserveMedia(
   let boardRealmId: string | null = null;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let boardRead: AccessCheck | undefined;
-  let threadCreate: AccessCheck | undefined;
   let knowledgeUpdate: AccessCheck | undefined;
   const board = newThreadTarget ? { route: route(newThreadTarget.boardId), id: newThreadTarget.boardId } : undefined;
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: realm ? 'realm:manage' : 'media:create',
+    action: board ? 'thread:create' : realm ? 'realm:manage' : 'media:create',
     parent: {
       resource: knowledge ? ownerResource : (board ?? { route: r, id: containerId }),
       async validate(client, time) {
@@ -322,10 +329,10 @@ export async function reserveMedia(
           const partition = await readPartition(client, partitionOf(board.route));
           if (!partition || partition.writeState === 'moved') return false;
           const current = await mediaParentBoard(client, board.id);
+          if (current.purpose !== 'discussion') return false;
           if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
             throw new GrantDeniedError();
-          if (current.visibility !== 'published' && !(await boardRead!(client, time))) return false;
-          return threadCreate!(client, time);
+          return current.visibility === 'published' || (await boardRead!(client, time));
         }
         const current = await mediaParentChain(client, containerId);
         if (current.length !== preparedChain.length) return false;
@@ -383,10 +390,6 @@ export async function reserveMedia(
       if (avatar || realm) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
-          pool: dependencies.pool,
-          deadline: context.deadline,
-        });
-        threadCreate = await accessCheck(dependencies.access, actor, 'thread:create', board, {
           pool: dependencies.pool,
           deadline: context.deadline,
         });
@@ -480,6 +483,7 @@ export async function reserveMedia(
         container_id: containerId,
         uploader_id: owner.accountId,
         reservation_request_id: context.idempotencyKey,
+        reservation_board_id: board?.id ?? null,
         purpose: body.purpose,
         media_type: body.mediaType,
         byte_count: body.byteCount,
@@ -838,6 +842,59 @@ function isVariant(value: unknown): value is MediaVariant {
     typeof value.key === 'string'
   );
 }
+/** Legacy rows have no Board column. Reconstruct the exact opening reservation from its own receipt and write basis. */
+async function legacyOpeningMedia(
+  transaction: CommandTransaction,
+  route: number,
+  mediaIds: readonly string[],
+  containerId: string,
+  uploaderId: string,
+  boardId: string,
+): Promise<string[]> {
+  const rows = await readLegacyOpeningMedia.run(transaction, {
+    route,
+    media_ids: [...mediaIds],
+    container_id: containerId,
+    uploader_id: uploaderId,
+  });
+  if (!rows.length) return [];
+  const kind = 'content.media.reserve';
+  const threadKey = currentCommandReceipt(transaction).key;
+  const expected = new Map(
+    rows.map((row) => [
+      row.media_id,
+      { row, keys: nativeReceiptKeyCandidates(transaction, kind, uploaderId, row.reservation_request_id) },
+    ]),
+  );
+  const receipts = await readOpeningMediaReservationReceipts.run(transaction, {
+    partition_no: partitionOf(route),
+    uploader_id: uploaderId,
+    receipt_keys: [...new Set([...expected.values()].flatMap(({ keys }) => keys))],
+  });
+  const proven = new Set<string>();
+  for (const receipt of receipts) {
+    const match = receipt.media_id === null ? undefined : expected.get(receipt.media_id);
+    if (!match?.keys.includes(receipt.idempotency_key) || receipt.client_id === null) continue;
+    const { row } = match;
+    const digest = mediaCommandDigest(
+      {
+        principal: { kind: 'account', id: uploaderId },
+        basis: { clientId: receipt.client_id, requestedBy: receipt.requested_by },
+      },
+      kind,
+      {
+        newThread: { boardId, idempotencyKey: threadKey },
+        purpose: 'post-image',
+        mediaType: row.media_type,
+        byteCount: Number(row.byte_count),
+        ...(row.declared_sha256 === null ? {} : { sha256: row.declared_sha256 }),
+      },
+    );
+    if (digest.equals(receipt.request_digest)) proven.add(row.media_id);
+  }
+  return [...proven];
+}
+
 export async function claimMedia(transaction: CommandTransaction, input: ClaimMediaInput): Promise<void> {
   const command = currentCommand(transaction);
   const owner = account(input.author);
@@ -886,16 +943,20 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
   const ids = [...new Set(input.mediaIds)];
   if (ids.some((id) => routeOf(id) !== r)) throw new MediaUnavailableError();
   if (ids.length === 0) return;
+  const newThread = command.authorization.action === 'thread:create';
+  const legacyIds = newThread
+    ? await legacyOpeningMedia(transaction, r, ids, input.containerId, owner.accountId, input.boardId!)
+    : [];
   const rows = await claimStatement.run(transaction, {
     route: r,
     media_ids: ids,
+    legacy_media_ids: legacyIds,
     container_id: input.containerId,
     uploader_id: owner.accountId,
     item_id: input.itemId,
     revision_id: input.revisionId,
-    authorization_resource_id:
-      command.authorization.action === 'thread:create' ? input.boardId! : command.authorization.resource.id,
-    new_thread: command.authorization.action === 'thread:create',
+    authorization_resource_id: newThread ? input.boardId! : command.authorization.resource.id,
+    new_thread: newThread,
     at: authoritativeTimeValue(command.time),
   });
   if (rows.length !== ids.length) throw new MediaUnavailableError();

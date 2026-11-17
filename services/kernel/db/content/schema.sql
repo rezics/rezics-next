@@ -4204,6 +4204,7 @@ CREATE TABLE content.media (
     claimed_item_id uuid,
     claimed_realm_id uuid,
     knowledge_publication_generation bigint,
+    reservation_board_id uuid,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_avatar_owner_check CHECK (((purpose <> 'avatar'::text) OR ((container_id = uploader_id) AND (source_url IS NULL) AND (credit IS NULL) AND (provenance IS NULL)))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
