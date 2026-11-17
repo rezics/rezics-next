@@ -475,8 +475,9 @@ export function startDiscoveryIndexing(options: {
     const metadataProducers = ownerAdapters?.metadataProducers;
     const reviewSource = producers?.reviewSource ?? options.reviewSource;
     let readiness: Error | undefined;
+    let waitingForReviewInvalidation = false;
     try {
-      await advanceDiscovery({
+      const result = await advanceDiscovery({
         ...options,
         search,
         registry,
@@ -484,6 +485,7 @@ export function startDiscoveryIndexing(options: {
         ...(metadataProducers ? { metadataProducers } : {}),
         ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
       });
+      waitingForReviewInvalidation = result === 'waiting-for-review-invalidation';
     } catch (error) {
       if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
         throw error;
@@ -493,7 +495,9 @@ export function startDiscoveryIndexing(options: {
     const generations = await discoveryGenerations(options.pool, options.prefix);
     if (stopped || paused) return;
     delay =
-      !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
+      !readiness &&
+      !waitingForReviewInvalidation &&
+      generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
         ? 0
         : (options.intervalMs ?? 100);
 

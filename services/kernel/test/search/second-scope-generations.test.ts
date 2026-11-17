@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DiscoveryReviewInvalidationPendingError } from '../../src/search/operation-outcomes.ts';
 import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import type { Pool } from 'pg';
 import {
@@ -328,10 +329,7 @@ test('Review population waits for invalidation and rejects a changed signed cut'
   const after = { route: 0, id: '018f0000-0000-7000-8000-000000000001' };
   expect(await review.readiness()).toBe('preparing');
   expect(await review.readiness('population')).toBe('ready');
-  await expect(review.page(0, after, 'signed', 100)).rejects.toHaveProperty(
-    'constructor',
-    DiscoveryProducerCoverageError,
-  );
+  await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryReviewInvalidationPendingError);
   state = 'changed';
   await expect(review.page(0, null, null, 100)).rejects.toHaveProperty('constructor', DiscoveryProducerCoverageError);
   await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryPopulationCutChangedError);
@@ -339,7 +337,7 @@ test('Review population waits for invalidation and rejects a changed signed cut'
   expect(await review.readiness('population')).toBe('unavailable');
 });
 
-test('a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup', async () => {
+test.each([true, false])('metadata reconciliation retains the raw frontier (%s)', async (statusOnly) => {
   const raw = { route: 160, id: '018f0000-0000-7000-8000-00a000000001' };
   const target = {
     prefix: 'search',
@@ -393,7 +391,7 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   const producer: DiscoveryMetadataProducer = {
     kind: 'collection',
     owner: 'commerce',
-    initialPopulationWitness: 'none',
+    ...(statusOnly && { pageCapabilityWitness: 'none' }),
     async readiness() {
       readinessChecks++;
       return 'ready';
@@ -451,7 +449,7 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
   await advanceDiscovery(options);
   expect(pages).toBe(2);
   expect(identityReads).toBe(2);
-  expect(readinessChecks).toBe(6);
+  expect(readinessChecks).toBe(statusOnly ? 2 : 6);
   expect(frontier?.slice(4, 9)).toEqual([null, null, null, true, '7']);
 });
 

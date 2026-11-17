@@ -7,6 +7,7 @@ import {
   CollectionDiscoveryReadinessError,
   createNativeCollectionDiscoveryAdapter,
 } from '../search/collection-discovery.ts';
+import { DiscoveryReviewInvalidationPendingError } from '../search/operation-outcomes.ts';
 import { createReviewDiscoveryAdapter } from '../search/review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
@@ -162,7 +163,7 @@ function createCollectionPopulationProducer(
   return {
     kind: 'collection',
     owner: 'commerce',
-    initialPopulationWitness: 'none',
+    pageCapabilityWitness: 'none',
     async readiness() {
       return adapter.status === 'ready' ? 'ready' : adapter.status;
     },
@@ -215,7 +216,10 @@ function createReviewPopulationProducer(
   return {
     kind: 'review',
     owner: 'content',
-    ...(native && { initialPopulationWitness: 'none' }),
+    ...(native && { pageCapabilityWitness: 'none' }),
+    ...(source?.populationInvalidationPending && {
+      populationInvalidationPending: source.populationInvalidationPending.bind(source),
+    }),
     async readiness(purpose) {
       if (!source?.pageWithCut) return 'unavailable';
       try {
@@ -238,11 +242,10 @@ function createReviewPopulationProducer(
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
       const page = await source.pageWithCut(partition, cursor, Math.min(limit, REVIEW_DISCOVERY_PAGE_LIMIT));
-      // A pending invalidation has yet to resolve the cut. A changed first page has no retained cut to abandon.
-      if (
-        (page.state === 'preparing' && page.missing === 'lifecycle-invalidation') ||
-        (page.state === 'changed' && cursor === null)
-      )
+      if (page.state === 'preparing' && page.missing === 'lifecycle-invalidation')
+        throw new DiscoveryReviewInvalidationPendingError();
+      // A changed first page has no retained cut to abandon.
+      if (page.state === 'changed' && cursor === null)
         throw new DiscoveryProducerCoverageError({
           missingKinds: [],
           unsupportedKinds: ['review'],

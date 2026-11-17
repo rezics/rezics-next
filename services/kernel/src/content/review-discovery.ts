@@ -29,6 +29,7 @@ export const REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES = REVIEW_DISCOVERY_PAGE_LIMIT 
 export const REVIEW_DISCOVERY_MAX_DEPENDENCIES = 512;
 export const REVIEW_DISCOVERY_MAX_CUT_HOMES = 256;
 const REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT = 100;
+const pendingInvalidation = 'EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false)';
 
 /** Candidate fields only. Author presentation is read from Accounts during final hydration. */
 export type IndexedReview = Readonly<{
@@ -112,6 +113,8 @@ export type ReviewDiscoverySource = Readonly<{
     limit: number,
     cut?: bigint,
   ): Promise<ReviewDiscoveryPage | ReviewDiscoveryIncompletePage>;
+  /** Scheduling hint from Content's lifecycle fence. A false observation grants no coverage. */
+  populationInvalidationPending?(): Promise<boolean>;
   /** Coherent native population pages; legacy `page` keys cannot carry this coverage proof. */
   pageWithCut?(
     partition: number,
@@ -124,6 +127,7 @@ export type ReviewDiscoverySource = Readonly<{
  * candidate installation does not grant it anonymous eligibility coverage. */
 export type NativeReviewDiscoverySource = ReviewDiscoverySource &
   Readonly<{
+    populationInvalidationPending: NonNullable<ReviewDiscoverySource['populationInvalidationPending']>;
     pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
     readEmptyPositions: NonNullable<ReviewDiscoverySource['readEmptyPositions']>;
     maintainCensus(partition: number): Promise<ReviewCensusStep>;
@@ -451,7 +455,7 @@ async function captureCut(
   const { rows } = await client.query<CutHomeRow>(
     `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,
             COALESCE(r.revision,0)::text AS projection,
-            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
+            ${pendingInvalidation} AS pending,
             COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=$3),0)::text AS frontier
      FROM core.partition p
      LEFT JOIN content.review_census_source_frontier r ON r.route=p.partition_no*16 AND r.route=ANY($2::integer[])
@@ -466,7 +470,7 @@ async function captureEmptyCuts(client: PoolClient, partitions: readonly number[
   const { rows } = await client.query<CutHomeRow & { moved_to: string | null }>(
     `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,p.moved_to,
             COALESCE((SELECT revision FROM content.review_census_source_frontier WHERE route=p.partition_no*16),0)::text AS projection,
-            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
+            ${pendingInvalidation} AS pending,
             COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=p.partition_no*16),0)::text AS frontier
      FROM core.partition p WHERE p.partition_no=ANY($1::integer[])`,
     [partitions],
@@ -1134,6 +1138,15 @@ export function createReviewDiscoverySource(
         reviews,
         next: examined < native.candidates.length && last ? { route: last.route, id: last.id } : null,
       };
+    },
+    async populationInvalidationPending() {
+      const { deadline } = checkedContext(makeAnonymousContext);
+      return withReadTransaction(
+        dependencies.pool,
+        async (client) =>
+          (await client.query<{ pending: boolean }>(`SELECT ${pendingInvalidation} AS pending`)).rows[0]!.pending,
+        Math.min(deadline, deadlineFor(Math.max(1, deadline - Date.now()))),
+      );
     },
     pageWithCut: coherentPage,
   });

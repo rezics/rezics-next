@@ -297,8 +297,10 @@ export type DiscoveryMetadataRecord = Readonly<{
 export type DiscoveryMetadataProducer = Readonly<{
   kind: DiscoveryMetadataKind;
   owner: 'commerce' | 'content';
-  /** Native opt-in for status-only readiness. Initial page fences still require turn admission and the actual partition page. */
-  initialPopulationWitness?: 'none';
+  /** Native status-only readiness contributes no page capability witness. Turn admission and the actual native cut still apply. */
+  pageCapabilityWitness?: 'none';
+  /** True defers selection only. A scheduled page still has to prove its native cut. */
+  populationInvalidationPending?(): Promise<boolean>;
   readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
   page(
     partition: number,
