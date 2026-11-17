@@ -1,11 +1,11 @@
 import { expect } from 'bun:test';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Page, Response } from 'playwright';
+import type { Locator, Page, Response } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import { startAuthStack } from './auth-stack.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
@@ -381,15 +381,10 @@ async function downloadArchive(page: Page) {
   return archivePath;
 }
 
-async function recordCollectionPreviewFailure(page: Page, responses: readonly number[]) {
-  const [notices] = await Promise.allSettled([
-    page.locator('main [role="status"], main [role="alert"]').allTextContents(),
-    stack.syncKernelRequests(),
-  ]);
-  const prefix = '/v1/libraryArchiveCollectionRecoveries';
-  const native = stack
+function archiveBoundaryRequests(prefix: string) {
+  return stack
     .kernelRequests()
-    .filter((request) => !request.fixtureRequest && request.url.startsWith(prefix))
+    .filter(({ fixtureRequest, url }) => !fixtureRequest && (url === prefix || url.startsWith(`${prefix}/`)))
     .slice(-8)
     .map(({ url, method, responseStatus, failure }) => {
       const path = url.split('?')[0];
@@ -400,17 +395,30 @@ async function recordCollectionPreviewFailure(page: Page, responses: readonly nu
         // Transport errors can have a non-JSON response.
       }
       const code = problem?.code;
+      const tail = path?.split('/').at(-1);
       return {
-        operation: path === prefix ? 'upload' : path?.endsWith('/collections') ? 'collections' : 'status',
+        operation:
+          path === prefix
+            ? 'upload'
+            : tail === 'collections' || tail === 'preview' || tail === 'progress'
+              ? tail
+              : 'status',
         method,
         status: responseStatus ?? null,
         ...(typeof code === 'string' && /^[a-z0-9_]{1,64}$/u.test(code) ? { code } : {}),
       };
     });
+}
+
+async function recordCollectionPreviewFailure(page: Page, responses: readonly number[]) {
+  const [notices] = await Promise.allSettled([
+    page.locator('main [role="status"], main [role="alert"]').allTextContents(),
+    stack.syncKernelRequests(),
+  ]);
   const observation = {
     path: new URL(page.url()).pathname,
     responses,
-    native,
+    native: archiveBoundaryRequests('/v1/libraryArchiveCollectionRecoveries'),
     notices:
       notices.status === 'fulfilled'
         ? notices.value
@@ -424,8 +432,7 @@ async function recordCollectionPreviewFailure(page: Page, responses: readonly nu
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-collection-preview', observation });
 }
 
-async function startCollectionPreview(page: Page, archivePath?: string) {
-  const responses: number[] = [];
+function observeArchiveServerPosts(page: Page, responses: number[]) {
   const origin = new URL(page.url()).origin;
   const observe = (response: Response) => {
     const url = new URL(response.url());
@@ -438,6 +445,12 @@ async function startCollectionPreview(page: Page, archivePath?: string) {
       responses.push(response.status());
   };
   page.on('response', observe);
+  return () => page.off('response', observe);
+}
+
+async function startCollectionPreview(page: Page, archivePath?: string) {
+  const responses: number[] = [];
+  const stopObserving = observeArchiveServerPosts(page, responses);
   try {
     if (archivePath === undefined) {
       await page.getByRole('button', { name: 'Use the original archive', exact: true }).click();
@@ -453,7 +466,45 @@ async function startCollectionPreview(page: Page, archivePath?: string) {
     await recordCollectionPreviewFailure(page, responses).catch(() => undefined);
     throw error;
   } finally {
-    page.off('response', observe);
+    stopObserving();
+  }
+}
+
+async function uploadRecoveryArchive(
+  page: Page,
+  archivePath: string,
+  recovery: 'entry' | 'progress',
+  chooser: Locator,
+  ...records: Locator[]
+) {
+  const responses: number[] = [];
+  const stopObserving = observeArchiveServerPosts(page, responses);
+  const deadline = performance.now() + 60_000;
+  const remaining = () => Math.max(1, Math.ceil(deadline - performance.now()));
+  const enabledChooser = chooser.and(page.locator('input[type="file"]:enabled:visible'));
+  let stage = 'enabled-chooser';
+  try {
+    // setInputFiles can target a disabled input before the private recovery controller connects.
+    await enabledChooser.waitFor({ state: 'visible', timeout: remaining() });
+    stage = 'select-file';
+    await enabledChooser.setInputFiles(archivePath, { timeout: remaining() });
+    stage = 'matching-records';
+    await Promise.all(records.map((record) => record.waitFor({ state: 'visible', timeout: remaining() })));
+  } catch (error) {
+    await settledWithin(stack.syncKernelRequests(), 2_000).catch(() => undefined);
+    const observation = {
+      recovery,
+      stage,
+      server: { method: 'POST', statuses: responses },
+      native: archiveBoundaryRequests(recovery === 'entry' ? '/v1/libraryArchiveMerges' : '/v1/libraryCopyArchives'),
+    };
+    console.info('Native Library Archive upload boundary', observation);
+    await writeArchiveProvenance({ outcome: 'incomplete', phase: 'uploading-recovery-archive', observation }).catch(
+      () => undefined,
+    );
+    throw error;
+  } finally {
+    stopObserving();
   }
 }
 
@@ -470,15 +521,24 @@ async function restoreOwnerLibrary() {
   const archivePath = await downloadArchive(page);
   const artifact = JSON.parse(await readFile(archivePath, 'utf8')) as {
     manifest: { version: number; coverage?: string; rows: number; sections: string[] };
-    records: { section: string }[];
+    records: { section: string; subject_id?: string; label_id?: string; session_id?: string }[];
   };
+  const entryOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'entries' && row.subject_id === prepared.subjectId,
+  );
+  const labelOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'labels' && row.label_id === prepared.labelId,
+  );
+  const sessionOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'sessions' && row.session_id === prepared.sessionId,
+  );
   expect(artifact.manifest.version).toBe(1);
   expect(artifact.manifest.coverage).toBe('private-library-owner-facts-v1');
-  expect(artifact.records.some((row) => row.section === 'entries')).toBe(true);
+  expect(entryOrdinal).toBeGreaterThanOrEqual(0);
   expect(artifact.records.some((row) => row.section === 'collections')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'occurrences')).toBe(true);
-  expect(artifact.records.some((row) => row.section === 'labels')).toBe(true);
-  expect(artifact.records.some((row) => row.section === 'sessions')).toBe(true);
+  expect(labelOrdinal).toBeGreaterThanOrEqual(0);
+  expect(sessionOrdinal).toBeGreaterThanOrEqual(0);
   expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":1');
 
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -589,24 +649,37 @@ async function restoreOwnerLibrary() {
   await leaveRecoveryFor(page, entryDestination, 'settled');
   expect(new URL(page.url()).pathname).toBe('/en/library/recover-archive');
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
-  await page.getByLabel('Choose your completed Library archive').setInputFiles(archivePath);
-  const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records') });
+  const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records'), exact: true });
+  const selectRecord = await message('en', 'library_archive_entry_select');
+  const entrySelect = page.getByRole('button', {
+    name: selectRecord.replace('{ordinal}', String(entryOrdinal)),
+    exact: true,
+  });
+  const labelSelect = page.getByRole('button', {
+    name: selectRecord.replace('{ordinal}', String(labelOrdinal)),
+    exact: true,
+  });
   const entryForm = records
     .getByRole('article')
-    .filter({ hasText: await message('en', 'library_export_section_entries') })
-    .first();
-  await entryForm.waitFor({ state: 'visible', timeout: 60_000 });
-  await entryForm.getByLabel(await message('en', 'library_archive_entry_subject_id')).fill(prepared.subjectId);
-  await entryForm.getByRole('button', { name: /Select record / }).click();
+    .filter({ hasText: await message('en', 'library_export_section_entries'), has: entrySelect });
   const labelForm = records
     .getByRole('article')
-    .filter({ hasText: await message('en', 'library_export_section_labels') })
-    .first();
+    .filter({ hasText: await message('en', 'library_export_section_labels'), has: labelSelect });
+  await uploadRecoveryArchive(
+    page,
+    archivePath,
+    'entry',
+    page.getByLabel(await message('en', 'library_archive_choose_file'), { exact: true }),
+    entryForm,
+    labelForm,
+  );
+  await entryForm.getByLabel(await message('en', 'library_archive_entry_subject_id')).fill(prepared.subjectId);
+  await entryForm.locator(entrySelect).click();
   await labelForm.getByRole('combobox', { name: await message('en', 'library_archive_entry_label_choice') }).click();
   await page
     .getByRole('option', { name: await message('en', 'library_archive_entry_create_label'), exact: true })
     .click();
-  await labelForm.getByRole('button', { name: /Select record / }).click();
+  await labelForm.locator(labelSelect).click();
   await page.getByRole('button', { name: 'Review selected changes', exact: true }).click();
   await page
     .getByRole('checkbox', {
@@ -632,12 +705,21 @@ async function restoreOwnerLibrary() {
 
   await page.getByRole('link', { name: 'Recover archived progress' }).click();
   await hydrated(page);
-  await page.getByLabel('Completed Library export JSON (32 MiB maximum)').setInputFiles(archivePath);
-  await page.getByRole('button', { name: 'Map this occurrence', exact: true }).waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
-  await page.getByRole('button', { name: 'Map this occurrence', exact: true }).click();
+  expect(new URL(page.url()).pathname).toBe('/en/library/recover-progress');
+  const item = (await message('en', 'library_archive_present_item')).replace('{number}', String(sessionOrdinal + 1));
+  const occurrence = page
+    .getByRole('region', { name: await message('en', 'library_archive_progress_occurrences'), exact: true })
+    .getByRole('listitem')
+    .filter({ hasText: `${item} ·` });
+  const mapOccurrence = occurrence.getByRole('button', { name: 'Map this occurrence', exact: true });
+  await uploadRecoveryArchive(
+    page,
+    archivePath,
+    'progress',
+    page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
+    mapOccurrence,
+  );
+  await mapOccurrence.click();
   await page.getByLabel(await message('en', 'library_archive_progress_subject')).fill(prepared.subjectId);
   await page.getByRole('button', { name: 'Read current profile choices', exact: true }).click();
   const pair = page.getByRole('combobox', { name: await message('en', 'library_archive_progress_pair') });
