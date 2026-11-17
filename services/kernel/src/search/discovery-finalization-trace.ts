@@ -1,3 +1,43 @@
+// Only fixed diagnostic vocabulary may cross into the mixed Home worker's retained trace.
+const failureNames = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'AccessUnavailableError',
+  'CommandUnavailableError',
+  'SearchUnavailableError',
+  'OpenSearchError',
+  'ReviewDiscoverySourceError',
+  'DiscoveryReviewFrontierError',
+  'DiscoveryReviewInvalidationPendingError',
+  'DiscoveryProducerCoverageError',
+  'CollectionDiscoveryReadinessError',
+  'DiscoveryPhysicalTargetChangedError',
+]);
+
+export function discoveryFailureObservation(error: unknown) {
+  const name = error instanceof Error && failureNames.has(error.name) ? error.name : 'UnknownError';
+  const source = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+  if (!(source instanceof Error && source.name === 'ReviewDiscoverySourceError')) return { name };
+  return {
+    name,
+    source: 'ReviewDiscoverySourceError',
+    state: ['changed', 'unavailable', 'preparing'].find((state) => 'state' in source && source.state === state),
+    missing: [
+      'source-home',
+      'dependency-home',
+      'lifecycle-invalidation',
+      'eligibility-dependency',
+      'source-lifecycle',
+      'review-dependency-directory',
+      'dependency-home-bound',
+    ].find((missing) => 'missing' in source && source.missing === missing),
+    observation: ['keyed-output', 'empty-position'].find(
+      (read) => 'observation' in source && source.observation === read,
+    ),
+  };
+}
+
 // Timing only. Read the existing operations in the native worker's bounded output.
 export function discoveryFinalizationTrace(prefix: string, deadline: number) {
   const startedAt = Date.now();

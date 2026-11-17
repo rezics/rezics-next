@@ -7,7 +7,7 @@ import {
   CollectionDiscoveryReadinessError,
   createNativeCollectionDiscoveryAdapter,
 } from '../search/collection-discovery.ts';
-import { DiscoveryReviewInvalidationPendingError } from '../search/operation-outcomes.ts';
+import { DiscoveryReviewFrontierError, DiscoveryReviewInvalidationPendingError } from '../search/operation-outcomes.ts';
 import { createReviewDiscoveryAdapter } from '../search/review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
@@ -213,6 +213,19 @@ function createReviewPopulationProducer(
   source: ReviewDiscoverySource | undefined,
   native: boolean,
 ): DiscoveryMetadataProducer {
+  async function read(partition: number, ids: readonly string[]) {
+    if (!source) throw new TypeError('Content review discovery source is unavailable');
+    try {
+      return await source.read(partition, ids);
+    } catch (error) {
+      if (error instanceof ReviewDiscoverySourceError) {
+        if (error.state === 'preparing' && error.missing === 'lifecycle-invalidation')
+          throw new DiscoveryReviewInvalidationPendingError(error);
+        throw new DiscoveryReviewFrontierError(error);
+      }
+      throw error;
+    }
+  }
   return {
     kind: 'review',
     owner: 'content',
@@ -245,12 +258,7 @@ function createReviewPopulationProducer(
       if (page.state === 'preparing' && page.missing === 'lifecycle-invalidation')
         throw new DiscoveryReviewInvalidationPendingError();
       // A changed first page has no retained cut to abandon.
-      if (page.state === 'changed' && cursor === null)
-        throw new DiscoveryProducerCoverageError({
-          missingKinds: [],
-          unsupportedKinds: ['review'],
-          duplicateKinds: [],
-        });
+      if (page.state === 'changed' && cursor === null) throw new DiscoveryReviewFrontierError();
       if (page.state !== 'ready') throw new DiscoveryPopulationCutChangedError('review');
       if (page.next && (typeof page.next.token !== 'string' || !page.next.token))
         throw new TypeError('Content review population returned an invalid opaque continuation');
@@ -263,9 +271,8 @@ function createReviewPopulationProducer(
       };
     },
     async read(partition, ids) {
-      if (!source) throw new TypeError('Content review discovery source is unavailable');
       const keys = requestedKeys('content', 'review', partition, ids);
-      const snapshot = await source.read(partition, ids);
+      const snapshot = await read(partition, ids);
       return {
         position: snapshot.position,
         keys,
@@ -273,8 +280,7 @@ function createReviewPopulationProducer(
       };
     },
     async position(partition) {
-      if (!source) throw new TypeError('Content review discovery source is unavailable');
-      return (await source.read(partition, [])).position;
+      return (await read(partition, [])).position;
     },
     ...(source?.readEmptyPositions ? { readEmptyPositions: source.readEmptyPositions.bind(source) } : {}),
   };

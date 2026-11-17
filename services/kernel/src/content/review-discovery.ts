@@ -679,6 +679,7 @@ export class ReviewDiscoverySourceError extends Error {
   constructor(
     readonly state: 'changed' | 'unavailable' | 'preparing',
     readonly missing: string,
+    readonly observation?: 'keyed-output' | 'empty-position',
   ) {
     super(`Review discovery ${state}: ${missing}`);
     this.name = 'ReviewDiscoverySourceError';
@@ -729,9 +730,11 @@ function failedSourceError(state: Exclude<CutState, { status: 'ready' }>): never
 function requireSameCut(
   before: PopulationCut,
   after: CutState,
+  observation: NonNullable<ReviewDiscoverySourceError['observation']>,
 ): asserts after is Extract<CutState, { status: 'ready' }> {
-  if (after.status !== 'ready') failedSourceError(after);
-  if (!sameCut(before, after.cut)) throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency');
+  if (after.status !== 'ready') throw new ReviewDiscoverySourceError(after.status, after.missing, observation);
+  if (!sameCut(before, after.cut))
+    throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency', observation);
 }
 
 async function reobserveOutput(
@@ -792,7 +795,7 @@ export function createReviewDiscoverySource(
       (client) => reobserveOutput(client, partition, observedCut, native.candidates),
       context.deadline,
     );
-    requireSameCut(observedCut, final.state);
+    requireSameCut(observedCut, final.state, 'keyed-output');
     if (!final.current) throw new ReviewDiscoverySourceError('changed', 'source-lifecycle');
     return { position: native.position, hydrated };
   }
@@ -1023,7 +1026,7 @@ export function createReviewDiscoverySource(
       for (const [partition, cut] of cuts) {
         const row = after.get(partition);
         const current = cutState(partition, row ? [row] : [], 1);
-        requireSameCut(cut, current);
+        requireSameCut(cut, current, 'empty-position');
         positions.set(partition, current.position);
       }
       return positions;

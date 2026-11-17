@@ -120,9 +120,17 @@ export class DiscoveryProducerCoverageError extends Error {
   }
 }
 
+/** A fresh Review observation could not establish its frontier. Signed continuation failures retire separately. */
+export class DiscoveryReviewFrontierError extends DiscoveryProducerCoverageError {
+  constructor(readonly cause?: Error) {
+    super({ missingKinds: [], unsupportedKinds: ['review'], duplicateKinds: [] });
+    this.name = 'DiscoveryReviewFrontierError';
+  }
+}
+
 /** Content has unfinished lifecycle work that can affect any Review home. */
 export class DiscoveryReviewInvalidationPendingError extends DiscoveryProducerCoverageError {
-  constructor() {
+  constructor(readonly cause?: Error) {
     super({ missingKinds: [], unsupportedKinds: ['review'], duplicateKinds: [] });
     this.name = 'DiscoveryReviewInvalidationPendingError';
   }

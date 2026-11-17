@@ -40,12 +40,16 @@ import {
   validateDiscoveryDocument,
 } from './discovery-documents.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
-import { discoveryFinalizationTrace, type DiscoveryFinalizationTrace } from './discovery-finalization-trace.ts';
+import {
+  discoveryFailureObservation,
+  discoveryFinalizationTrace,
+  type DiscoveryFinalizationTrace,
+} from './discovery-finalization-trace.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
-import { DiscoveryReviewInvalidationPendingError } from './operation-outcomes.ts';
+import { DiscoveryReviewFrontierError, DiscoveryReviewInvalidationPendingError } from './operation-outcomes.ts';
 import { discoveryCapabilityWitnesses, SECOND_SCOPE_PUBLIC_METADATA_KINDS } from './discovery-readiness.ts';
 import type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 import { discardConnection } from '../database/pool.ts';
@@ -1460,7 +1464,7 @@ async function reconcileMetadataDiscoveryPage(
       page.keys.length === 0 &&
       page.records.length === 0 &&
       actions.length === 0;
-    if (await guardedEmptyProbe?.isInitialMetadataEmpty(row, initialEmpty)) {
+    if (guardedEmptyProbe && (await guardedEmptyProbe.isInitialMetadataEmpty(row, initialEmpty))) {
       await checkCapability();
       // Release the generation lock before acquiring the owner's current read connection.
       const current = await producer.read(row.partition, []);
@@ -1473,7 +1477,7 @@ async function reconcileMetadataDiscoveryPage(
         return false;
       }
       if (current.keys.length === 0 && current.records.length === 0) {
-        await certifyInitialEmptyMetadata(pool, target, row, page.epoch ?? null);
+        await guardedEmptyProbe.certify(row, page.epoch ?? null);
         return false;
       }
     }
@@ -1730,10 +1734,15 @@ function reconciliationEmptyIndexProbe(
     async () =>
       coreScopes.length >= 2 && metadataScopes.length > 0 && optionalEmpty([...coreScopes, ...metadataScopes]),
   );
+  const certificates = initialEmptyMetadataCertificates(pool, target, metadataRows);
   let coreEmpty: Promise<boolean> | undefined;
   let metadataEmpty: Promise<boolean> | undefined;
   return {
-    observed: probe.observed,
+    certify: certificates.save,
+    observed(row: Population) {
+      probe.observed(row);
+      certificates.observed(row);
+    },
     async isCoreEmpty(row: Population, candidate: boolean) {
       if (coreRows.length < 2) return false;
       if (candidate) coreScopes.push(discoveryIndexTerms(row.partition, row.owner));
@@ -1755,39 +1764,51 @@ function reconciliationEmptyIndexProbe(
   };
 }
 
-async function certifyInitialEmptyMetadata(
-  pool: Pool,
-  target: DiscoveryTarget,
-  row: Population,
-  nativeEpoch: number | null,
-) {
-  await withSearchConnection(pool, (client) =>
-    client.query(
-      `WITH bound AS MATERIALIZED (
-         SELECT 1 FROM search.discovery_generation
-         WHERE partition_no=0 AND prefix=$1 AND generation=$2
-           AND index_uuid=$3 AND incarnation=$4::uuid AND state='reconciling'
-         FOR SHARE
-       )
-       UPDATE search.discovery_population SET native_complete=true,certified=true,reconcile_position=0,native_epoch=$7
-       WHERE prefix=$1 AND generation=$2 AND partition_no=$5 AND owner=$6
-         AND complete AND NOT native_complete AND NOT certified
-         AND after_route IS NULL AND after_id IS NULL AND continuation IS NULL AND reconcile_position IS NULL
-         AND indexed=0 AND census=0 AND position=$8::bigint AND native_epoch IS NOT DISTINCT FROM $9::integer
-         AND EXISTS (SELECT 1 FROM bound)`,
-      [
-        target.prefix,
-        target.generation,
-        target.uuid,
-        target.incarnation,
-        row.partition,
-        row.owner,
-        nativeEpoch,
-        row.position,
-        row.native_epoch,
-      ],
+function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, candidates: readonly Population[]) {
+  const proofs: {
+    partition: number;
+    owner: string;
+    position: string;
+    prior_epoch: number | null;
+    epoch: number | null;
+  }[] = [];
+  const batch = discoveryPageReadBatch(candidates, () =>
+    withSearchConnection(pool, (client) =>
+      client.query(
+        `WITH bound AS MATERIALIZED (
+           SELECT 1 FROM search.discovery_generation
+           WHERE partition_no=0 AND prefix=$1 AND generation=$2
+             AND index_uuid=$3 AND incarnation=$4::uuid AND state='reconciling'
+           FOR SHARE
+         ), locked AS MATERIALIZED (
+           SELECT p.partition_no,p.owner,i.epoch FROM bound,
+             jsonb_to_recordset($5::jsonb) AS i(partition integer,owner text,position bigint,prior_epoch integer,epoch integer)
+             JOIN search.discovery_population p ON p.partition_no=i.partition AND p.owner=i.owner
+           WHERE p.prefix=$1 AND p.generation=$2 AND p.complete AND NOT p.native_complete AND NOT p.certified
+             AND p.after_route IS NULL AND p.after_id IS NULL AND p.continuation IS NULL AND p.reconcile_position IS NULL
+             AND p.indexed=0 AND p.census=0 AND p.position=i.position AND p.native_epoch IS NOT DISTINCT FROM i.prior_epoch
+           ORDER BY p.partition_no,p.owner FOR UPDATE OF p
+         )
+         UPDATE search.discovery_population p SET native_complete=true,certified=true,reconcile_position=0,native_epoch=l.epoch
+         FROM locked l WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
+        [target.prefix, target.generation, target.uuid, target.incarnation, JSON.stringify(proofs)],
+      ),
     ),
   );
+  return {
+    observed: batch.observed,
+    async save(row: Population, epoch: number | null) {
+      proofs.push({
+        partition: row.partition,
+        owner: row.owner,
+        position: row.position,
+        prior_epoch: row.native_epoch,
+        epoch,
+      });
+      batch.observed(row);
+      await batch.checkEmptyPage();
+    },
+  };
 }
 
 function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, batch: readonly Population[]) {
@@ -2057,7 +2078,7 @@ export async function advanceDiscovery(options: AdvanceDiscoveryOptions) {
       return advanceDiscoveryTurn({ ...options, search: turn.search(options.search) }, trace);
     });
   } catch (error) {
-    trace?.report({ outcome: 'error', error: error instanceof Error ? error.message : String(error) });
+    trace?.report({ outcome: 'error', error: discoveryFailureObservation(error) });
     throw error;
   }
 }
@@ -2181,8 +2202,8 @@ async function advanceDiscoveryTurn(
   if (target.state === 'populating' || target.state === 'reconciling') {
     const review = metadataProducers.review;
     const readInvalidation = review?.populationInvalidationPending?.bind(review);
-    let reviewInvalidationPending =
-      target.state === 'populating' && readInvalidation ? await searchTurnCall(readInvalidation) : false;
+    let reviewInvalidationPending = readInvalidation ? await searchTurnCall(readInvalidation) : false;
+    const pending = target.state === 'populating' ? 'NOT complete' : 'NOT certified';
     const populations = await withSearchConnection(
       pool,
       async (client) =>
@@ -2190,7 +2211,7 @@ async function advanceDiscoveryTurn(
           await client.query<Population>(
             `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
       revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text,native_complete,native_epoch FROM search.discovery_population
-      WHERE prefix=$1 AND generation=$2 AND ${target.state === 'populating' ? 'NOT complete' : 'NOT certified'}
+      WHERE prefix=$1 AND generation=$2 AND ${pending}
       AND ($4::boolean = false OR owner <> 'review') ORDER BY partition_no,owner LIMIT $3`,
             [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE, reviewInvalidationPending],
           )
@@ -2198,6 +2219,7 @@ async function advanceDiscoveryTurn(
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
+      let deferredReview: DiscoveryProducerCoverageError | undefined;
       const checkCapability = discoveryPageCapabilityCheck(pool, projection);
       await mapBounded(
         populations,
@@ -2221,7 +2243,7 @@ async function advanceDiscoveryTurn(
           const coreReads = coreReconciliationBatch(pool, coreRows);
           return async (population) => {
             try {
-              if (reads && population.owner === 'review' && reviewInvalidationPending) return false;
+              if (population.owner === 'review' && reviewInvalidationPending) return false;
               return await searchTurnCall(() =>
                 reads && checkpoints
                   ? populationPage(pool, projection, population, checkCapability, reads, checkpoints)
@@ -2238,12 +2260,13 @@ async function advanceDiscoveryTurn(
                     ),
               );
             } catch (error) {
-              if (
-                reads &&
-                readInvalidation &&
-                population.owner === 'review' &&
-                error instanceof DiscoveryReviewInvalidationPendingError
-              ) {
+              if (population.owner === 'review' && error instanceof DiscoveryReviewFrontierError) {
+                // A fresh read has no accepted result. Its durable frontier remains selected for the next turn.
+                deferredReview ??= error;
+                return false;
+              }
+              if (population.owner === 'review' && error instanceof DiscoveryReviewInvalidationPendingError) {
+                deferredReview ??= error;
                 // The fence can open after selection. Later waves defer Review, and the next turn reads Content again.
                 reviewInvalidationPending = true;
                 return false;
@@ -2264,6 +2287,7 @@ async function advanceDiscoveryTurn(
         },
         (retired) => retired,
       );
+      if (deferredReview && !retiring) throw deferredReview;
       return;
     }
     // A filtered selection cannot certify exhaustion. Keep the held Review frontier intact.
@@ -2275,7 +2299,7 @@ async function advanceDiscoveryTurn(
           (
             await client.query(
               `SELECT 1 FROM search.discovery_population
-         WHERE prefix=$1 AND generation=$2 AND owner='review' AND NOT complete LIMIT 1`,
+         WHERE prefix=$1 AND generation=$2 AND owner='review' AND ${pending} LIMIT 1`,
               [prefix, target.generation],
             )
           ).rowCount === 1,
@@ -2320,41 +2344,44 @@ async function advanceDiscoveryTurn(
     const chunk = observations.slice(offset, offset + 100);
     trace?.step('native-cuts', offset);
     const checks = await checkDiscoveryCutBatch(pool, chunk, metadataProducers, requiredKinds, trace);
-    for (const check of checks) {
-      if (check.state === 'retire') {
-        trace?.step('retire-epoch');
-        await retireDiscoveryCapability(pool, target);
-        trace?.report({ outcome: 'native-epoch-changed', partition: check.partition, kind: check.kind });
-        return;
-      }
-      if (check.state === 'metadata') {
-        trace?.step('restart-metadata');
-        await restartMetadataReconciliation(pool, target, check.partition, check.kind);
-        await withSearchConnection(pool, (client) =>
-          client.query(
-            "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",
-            [prefix, target.generation],
-          ),
-        );
-        trace?.report({ outcome: 'metadata-cut-changed', partition: check.partition, kind: check.kind });
-        return;
-      }
-      if (check.state === 'current') continue;
-      trace?.step('restart-core');
+    const retired = checks.find((check) => check.state === 'retire');
+    if (retired) {
+      trace?.step('retire-epoch');
+      await retireDiscoveryCapability(pool, target);
+      trace?.report({ outcome: 'native-epoch-changed', partition: retired.partition, kind: retired.kind });
+      return;
+    }
+    const stale = checks.flatMap((check) => {
+      if (check.state === 'metadata') return [{ partition: check.partition, owner: check.kind }];
+      if (check.state !== 'native') return [];
+      const { accountPosition, semanticPosition, accountRevision, claimRevision } = check.changed;
+      const sharedWitnessChanged = accountRevision || claimRevision;
+      return [
+        ...(accountPosition || sharedWitnessChanged ? [{ partition: check.partition, owner: 'accounts' }] : []),
+        ...(semanticPosition || sharedWitnessChanged ? [{ partition: check.partition, owner: 'semantic' }] : []),
+      ];
+    });
+    if (stale.length) {
+      trace?.step('restart-frontiers');
+      // The bounded chunk already checked these homes. Reopen every observed mismatch before rechecking the inventory.
       await withSearchConnection(pool, (client) =>
         client.query(
-          `UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,reconcile_position=NULL,indexed=0
-        WHERE prefix=$1 AND generation=$2 AND partition_no=$3 AND owner IN ('accounts','semantic')`,
-          [prefix, target.generation, check.partition],
+          `WITH bound AS (
+             UPDATE search.discovery_generation SET state='reconciling'
+             WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND index_uuid=$3 AND incarnation=$4::uuid
+               AND state IN ('ready','reconciling') RETURNING generation
+           )
+           UPDATE search.discovery_population p SET certified=false,after_route=NULL,after_id=NULL,
+             reconcile_position=NULL,indexed=0,
+             native_complete=CASE WHEN p.owner IN ('accounts','semantic') THEN p.native_complete ELSE false END,
+             continuation=CASE WHEN p.owner IN ('accounts','semantic') THEN p.continuation ELSE NULL END
+           FROM bound,jsonb_to_recordset($5::jsonb) AS stale(partition integer,owner text)
+           WHERE p.prefix=$1 AND p.generation=bound.generation AND p.partition_no=stale.partition
+             AND p.owner=stale.owner AND p.certified`,
+          [prefix, target.generation, target.uuid, target.incarnation, JSON.stringify(stale)],
         ),
       );
-      await withSearchConnection(pool, (client) =>
-        client.query(
-          "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",
-          [prefix, target.generation],
-        ),
-      );
-      trace?.report({ outcome: 'core-cut-changed', partition: check.partition, changed: check.changed });
+      trace?.report({ outcome: 'cuts-changed', first: stale[0], frontiers: stale.length });
       return;
     }
   }
