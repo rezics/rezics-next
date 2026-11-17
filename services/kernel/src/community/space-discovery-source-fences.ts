@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
-import { noEffect, runCommand } from '../command/command.ts';
+import { CommandUnavailableError, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
@@ -247,13 +247,11 @@ export async function publishSpaceDiscoveryTupleWitness(
     async (tx) => {
       if (input.native) {
         const anchor = await readPartition(tx, partition);
-        if (
-          !anchor ||
-          anchor.writeState !== 'active' ||
-          anchor.epoch !== input.native.epoch ||
-          anchor.position.toString() !== input.native.position
-        )
+        if (!anchor || anchor.writeState !== 'active' || anchor.epoch !== input.native.epoch)
           throw new TypeError('Native Space tuple source changed before publication');
+        // Retry at the caller so the next attempt captures a fresh source position.
+        if (anchor.position.toString() !== input.native.position)
+          throw new CommandUnavailableError('contention', partition);
       }
       const head = await currentHead(tx, route, input.spaceId);
       if (

@@ -7,7 +7,10 @@ import { initializeSpaceDiscoveryDependencies } from '../../src/community/space-
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { publishSpaceDiscoveryTupleWitness } from '../../src/community/space-discovery-source-fences.ts';
 import { spaceDiscoverySource } from '../../src/community/space-discovery.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { createContentSystemWithOrdinaryScopes, type ContentSystem } from '../content/support/system.ts';
+import { startOutcomeWorkerProcess } from '../search/support/outcome-rpc.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 let system: ContentSystem;
 beforeAll(async () => {
@@ -38,7 +41,7 @@ async function call(method: string, path: string, body: unknown, head?: string) 
   return value;
 }
 
-test('native authored heads publish complete absence independently of eligibility and reject a stale owner cut', async () => {
+test('worker startup publishes native authored witnesses and exact reads reject stale cuts', async () => {
   const pool = system.database.pool;
   const source = spaceDiscoverySource({
     clock: () => new Date(),
@@ -52,7 +55,25 @@ test('native authored heads publish complete absence independently of eligibilit
     /* bounded retained inventory */
   }
   expect((await source.dependencies()).state).toBe('unavailable');
-  expect(await publishNativeSpaceDiscoveryWitness(pool)).toBe(true);
+  const databaseUrl = pool.options.connectionString!;
+  const worker = startOutcomeWorkerProcess(
+    workerTestEnv({ DATABASE_URL: databaseUrl, KERNEL_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url') }),
+    { searchDisabled: true },
+  );
+  try {
+    await worker.ready;
+    const work = await createWorkClient(databaseUrl);
+    try {
+      const upkeep = work.retrieveWorkflow('community.space-dependencies.upkeep:bootstrap');
+      expect((await upkeep.getStatus())?.workflowName).toBe('community.space-dependencies.upkeep');
+      await upkeep.getResult();
+    } finally {
+      await work.close();
+    }
+  } finally {
+    await worker.close();
+  }
+  expect((await source.dependencies()).state).toBe('ready');
   expect(await publishNativeSpaceDiscoveryWitness(pool)).toBe(false);
   const read = async () => (await source.tupleWitnesses(home, [space.spaceId])).get(space.spaceId)!;
   const first = await read();
@@ -116,6 +137,6 @@ test('native authored heads publish complete absence independently of eligibilit
         type: 'com.rezics.community.native-heads.observed.v1',
       },
     }),
-  ).rejects.toThrow('Native Space tuple source changed before publication');
+  ).rejects.toMatchObject({ reason: 'contention', partition: home });
   expect((await read()).witnessGeneration).toBe(current.witnessGeneration);
 }, 120_000);
