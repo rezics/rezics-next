@@ -210,12 +210,14 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
   return {
     kind: 'review',
     owner: 'content',
-    async readiness() {
+    async readiness(purpose) {
       if (!source?.pageWithCut) return 'unavailable';
       try {
         const page = await source.pageWithCut(0, null, 1);
         if (page.state === 'ready') return 'ready';
         if (page.state === 'unavailable') return 'unavailable';
+        if (purpose === 'population' && (page.state === 'changed' || page.missing === 'lifecycle-invalidation'))
+          return 'ready';
         return 'preparing';
       } catch (error) {
         if (isAccessOrCommandUnavailable(error)) return 'preparing';
@@ -230,6 +232,16 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
       const page = await source.pageWithCut(partition, cursor, Math.min(limit, REVIEW_DISCOVERY_PAGE_LIMIT));
+      // A pending invalidation has yet to resolve the cut. A changed first page has no retained cut to abandon.
+      if (
+        (page.state === 'preparing' && page.missing === 'lifecycle-invalidation') ||
+        (page.state === 'changed' && cursor === null)
+      )
+        throw new DiscoveryProducerCoverageError({
+          missingKinds: [],
+          unsupportedKinds: ['review'],
+          duplicateKinds: [],
+        });
       if (page.state !== 'ready') throw new DiscoveryPopulationCutChangedError('review');
       if (page.next && (typeof page.next.token !== 'string' || !page.next.token))
         throw new TypeError('Content review population returned an invalid opaque continuation');

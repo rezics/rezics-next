@@ -291,7 +291,8 @@ test('an allocated review owner omitted later retires the generation instead of 
   expect(statements.some((sql) => sql.includes("SET state='retiring'"))).toBe(true);
 });
 
-test('a retired signed Review cut requests fresh population instead of retrying the opaque continuation', async () => {
+test('Review population waits for invalidation and rejects a changed signed cut', async () => {
+  let state: 'preparing' | 'changed' | 'unavailable' = 'preparing';
   const producers = createDiscoveryProducerEntry({
     clock: () => new Date(),
     pool: {} as Pool,
@@ -299,18 +300,28 @@ test('a retired signed Review cut requests fresh population instead of retrying 
     access: {} as never,
     reviewSource: {
       pageWithCut: async () => ({
-        state: 'changed',
+        state,
         position: 7n,
         partition: 0,
         reviews: [],
         next: null,
-        missing: 'cut-changed',
+        missing: state === 'preparing' ? 'lifecycle-invalidation' : 'population-cut',
       }),
     } as never,
   });
-  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
-    DiscoveryPopulationCutChangedError,
+  const review = producers.metadataProducers.review!;
+  const after = { route: 0, id: '018f0000-0000-7000-8000-000000000001' };
+  expect(await review.readiness()).toBe('preparing');
+  expect(await review.readiness('population')).toBe('ready');
+  await expect(review.page(0, after, 'signed', 100)).rejects.toHaveProperty(
+    'constructor',
+    DiscoveryProducerCoverageError,
   );
+  state = 'changed';
+  await expect(review.page(0, null, null, 100)).rejects.toHaveProperty('constructor', DiscoveryProducerCoverageError);
+  await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryPopulationCutChangedError);
+  state = 'unavailable';
+  expect(await review.readiness('population')).toBe('unavailable');
 });
 
 test('a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup', async () => {

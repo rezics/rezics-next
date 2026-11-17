@@ -87,6 +87,8 @@ Search Space adapter's `source.dependencies`. Search retains the entire ready re
 allocation incarnation. Population, relay, reconciliation, activation and final disclosure recheck that binding.
 Collection pages also retain their native partition epoch; Review caps each request at Content's native `REVIEW_DISCOVERY_PAGE_LIMIT`, retains the signed `pageWithCut` continuation and
 rejects a changed cut instead of retrying it indefinitely. Installed machinery and matching counts confer no coverage.
+Pending Review lifecycle invalidation and a race on the first Review page defer population without changing the
+installed capability. Neither outcome advances the frontier. Current readers still apply the native readiness probe.
 
 Decision: replace the physical candidate on a native capability or epoch change, retaining the active target while the
 replacement prepares; never reuse external-version or deletion evidence across epochs, even at equal positions.
