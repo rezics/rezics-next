@@ -21,6 +21,7 @@ test('429 waits for Retry-After and retries the exact idempotent request', async
     redirect: string;
   }[] = [];
   const waits: number[] = [];
+  let wallTime = 10_000;
   const upstream = async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init);
     sent.push({
@@ -39,8 +40,10 @@ test('429 waits for Retry-After and retries the exact idempotent request', async
     origin,
     token: async () => 'ordinary-actor-token',
     fetch: upstream as typeof fetch,
+    now: () => wallTime,
     sleep: async (ms) => {
       waits.push(ms);
+      wallTime += ms;
     },
   });
   expect((await client(request())).status).toBe(200);
