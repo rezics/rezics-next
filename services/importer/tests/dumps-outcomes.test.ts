@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-test('the unchanged dump-reader outcome suite passes with production readers', async () => {
+test('the dump-reader outcome suite passes with production readers', async () => {
   const suite = resolve(import.meta.dir, '../../../specs/imports-dumps.test.ts');
   const driver = resolve(import.meta.dir, 'dumps-driver.ts');
   const names = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;
