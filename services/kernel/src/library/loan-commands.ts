@@ -102,6 +102,7 @@ export type LoanPage = Readonly<{
   items: readonly LoanPageItem[];
   nextCursor: string | null;
 }>;
+type LoanPageRequest = { filter: LoanFilter; cursor?: string; limit: number };
 
 type PreparedCreate = Readonly<{
   copy: CopyRow | null;
@@ -538,11 +539,11 @@ export function createLoanCommands(config: Dependencies) {
     );
   }
 
-  async function listLoans(
+  async function listLoansWithObservation(
     actor: Actor,
-    input: { filter: LoanFilter; cursor?: string; limit: number },
+    input: LoanPageRequest,
     deadline?: number,
-  ): Promise<LoanPage> {
+  ): Promise<{ page: LoanPage; revalidate: () => Promise<void> }> {
     const owner = requireActor(actor, 'copy:list');
     const route = routeOf(owner.accountId)!;
     const filter = input.filter;
@@ -552,61 +553,81 @@ export function createLoanCommands(config: Dependencies) {
     const boundary = loanDueBoundary(clock());
     const cursor = input.cursor;
     const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
-    return withRequestDeadline(operationDeadline, () =>
-      readOnly(pool, owner, operationDeadline, async (client) => {
-        const generationRow = await executeLoanNative(
-          client,
-          loanGenerationPlan({ route, accountId: owner.accountId }),
-        );
-        const generation = Number(generationRow.rows[0]?.generation ?? 1);
-        let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
-        if (after?.undated === null) {
-          const cursorRow = await executeLoanNative(
+    const readPage = () =>
+      withRequestDeadline(operationDeadline, () =>
+        readOnly(pool, owner, operationDeadline, async (client) => {
+          const generationRow = await executeLoanNative(
             client,
-            loanCursorDuePlan({ route, accountId: owner.accountId, id: after.id }),
+            loanGenerationPlan({ route, accountId: owner.accountId }),
           );
-          const dueOn = cursorRow.rows[0]?.dueOn;
-          if (dueOn === undefined) throw new Error('A generation-current legacy loan cursor has no retained loan');
-          after = { ...after, undated: dueOn === null };
-        }
-        const rows = await executeLoanNative(
-          client,
-          loanPagePlan({
-            route,
-            accountId: owner.accountId,
-            filter,
-            after: after
-              ? {
-                  day: after.day,
-                  id: after.id,
-                  undated: after.undated ?? false,
-                }
-              : null,
-            limit: size + 1,
-          }),
-        );
-        const visible = rows.rows.slice(0, size);
-        const last = visible.at(-1);
-        const nextCursor =
-          rows.rows.length > size && last
-            ? encodeCursor(tokens, binding, {
-                epoch: generation,
-                after: [
+          const generation = Number(generationRow.rows[0]?.generation ?? 1);
+          let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
+          if (after?.undated === null) {
+            const cursorRow = await executeLoanNative(
+              client,
+              loanCursorDuePlan({ route, accountId: owner.accountId, id: after.id }),
+            );
+            const dueOn = cursorRow.rows[0]?.dueOn;
+            if (dueOn === undefined) throw new Error('A generation-current legacy loan cursor has no retained loan');
+            after = { ...after, undated: dueOn === null };
+          }
+          const rows = await executeLoanNative(
+            client,
+            loanPagePlan({
+              route,
+              accountId: owner.accountId,
+              filter,
+              after: after
+                ? {
+                    day: after.day,
+                    id: after.id,
+                    undated: after.undated ?? false,
+                  }
+                : null,
+              limit: size + 1,
+            }),
+          );
+          const visible = rows.rows.slice(0, size);
+          const last = visible.at(-1);
+          const continuation =
+            rows.rows.length > size && last
+              ? [
                   filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!,
                   last.loanId,
                   ...(filter === 'open' ? [last.dueOn === null ? 'undated' : 'dated'] : []),
-                ],
-              })
-            : null;
-        return Object.freeze({
-          filter,
-          boundary,
-          generation,
-          items: Object.freeze(visible.map((row) => rowItem(row, boundary))),
-          nextCursor,
-        });
-      }),
-    );
+                ]
+              : null;
+          return {
+            generation,
+            items: Object.freeze(visible.map((row) => rowItem(row, boundary))),
+            continuation,
+          };
+        }),
+      );
+
+    const first = await readPage();
+    const nextCursor = first.continuation
+      ? encodeCursor(tokens, binding, { epoch: first.generation, after: first.continuation })
+      : null;
+    const membership = (items: LoanPage['items']) =>
+      JSON.stringify(items.map((item) => [item.loan.id, item.loan.revision, item.copy.revision, item.copy.state]));
+    return {
+      page: Object.freeze({ filter, boundary, generation: first.generation, items: first.items, nextCursor }),
+      async revalidate() {
+        const current = await readPage();
+        if (
+          current.generation !== first.generation ||
+          JSON.stringify(current.continuation) !== JSON.stringify(first.continuation) ||
+          membership(current.items) !== membership(first.items)
+        )
+          throw new ProblemError('stale_cursor');
+      },
+    };
+  }
+
+  async function listLoans(actor: Actor, input: LoanPageRequest, deadline?: number): Promise<LoanPage> {
+    const { page } = await listLoansWithObservation(actor, input, deadline);
+    return page;
   }
 
   async function assertCurrentOwner(actor: Actor, deadline?: number): Promise<void> {
@@ -615,5 +636,5 @@ export function createLoanCommands(config: Dependencies) {
     await withRequestDeadline(operationDeadline, () => readOnly(pool, owner, operationDeadline, async () => undefined));
   }
 
-  return { createLoan, extendLoan, returnLoan, listLoans, assertCurrentOwner };
+  return { createLoan, extendLoan, returnLoan, listLoans, listLoansWithObservation, assertCurrentOwner };
 }

@@ -281,6 +281,28 @@ test('filtered maximum inventory uses one sentinel in each observation without r
   ]);
 });
 
+test('inventory issues one cursor for a stable frontier and rejects lost lookahead', async () => {
+  const { ports, copy } = fixture();
+  const other = { ...copy, id: '00000000-0000-7000-8000-112200000004' };
+  let rows = [copy, other];
+  let issued = 0;
+  ports.page = async () => rows;
+  ports.encodeCursor = (_binding, cursor) => {
+    expect(cursor).toEqual({ epoch: 4, after: [copy.createdAt, copy.id] });
+    return `cursor-${++issued}`;
+  };
+  const application = createCopyApplication(ports);
+
+  expect(await application.listCopies(owner, { limit: 1 })).toEqual({ copies: [copy], next: 'cursor-1' });
+  expect(issued).toBe(1);
+
+  ports.inventory = async () => {
+    rows = [copy];
+    return { kinds: ['physical'] };
+  };
+  await expect(application.listCopies(owner, { limit: 1 })).rejects.toThrow('semantic_not_ready');
+});
+
 test('restore terminal authority precedes deferred retained-meaning failure; delete guard remains a conflict', async () => {
   const { ports, calls, setRetention } = fixture();
   ports.validateRetained = async () => {
