@@ -13,6 +13,7 @@ import { principalCommandIdentity, runCommand, type CommandEvent } from '../../s
 import { durableInitiatorCommitment } from '../../src/access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord } from '../../src/access/durable-initiator.ts';
 import { contentEffects } from '../../src/content/relays.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { createContentOperationClient, createContentWork } from '../../src/content/work.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
@@ -1469,8 +1470,24 @@ function workHistoryPopulation(): Population {
 }
 
 async function enqueueWorkflowFixture(item: WorkflowFixture): Promise<void> {
-  const type = item.event.type;
-  await matchingEffect(type).run(item.event);
+  const { event, source } = item;
+  const { type } = event;
+  if (type === 'com.rezics.content.media.import-requested.v1') {
+    await withConnection(fixture.db.pool, async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        await workRuntime!.effects.admit!(tx, [
+          { epoch: source.epoch, partition: source.partition, position: BigInt(source.position), events: [event] },
+        ]);
+        await tx.query('COMMIT');
+      } catch (error) {
+        await tx.query('ROLLBACK');
+        throw error;
+      }
+    });
+  } else {
+    await matchingEffect(type).run(event);
+  }
   const status = await workClient!.getWorkflow(item.workflowId);
   expect(status?.workflowName).toBe(
     type === 'com.rezics.content.media.uploaded.v1'

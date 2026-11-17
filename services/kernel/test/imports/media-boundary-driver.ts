@@ -26,10 +26,10 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { DBOSExecutor } from '@dbos-inc/dbos-sdk/internal/dbos-executor';
 import { globalParams } from '@dbos-inc/dbos-sdk/internal/utils';
 import { wfQueueRunner, type WorkflowQueue } from '@dbos-inc/dbos-sdk/internal/wfqueue';
-import { installNativeHistory } from '../../src/composition/history.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { effectWorkflowId } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -1177,16 +1177,23 @@ async function workerHost(): Promise<RpcHost> {
         if (method !== 'dispatch' && method !== 'measure') throw new Error('Unknown native worker operation');
         const envelope = input.envelope as Envelope;
         const mediaId = input.mediaId as string;
-        const run = async (source: Envelope, effect: string, kind: 'importFromUrl' | 'image') => {
+        const dispatchImport = async () => {
           checkDrain(mediaId);
-          const type =
-            kind === 'image' ? 'com.rezics.content.media.uploaded.v1' : 'com.rezics.content.media.import-requested.v1';
-          const index = source.events.findIndex((event) => event.subject === mediaId && event.type === type);
+          const index = envelope.events.findIndex(
+            (event) => event.subject === mediaId && event.type === 'com.rezics.content.media.import-requested.v1',
+          );
           if (index < 0) throw new Error('Missing native dispatch event');
-          await work!.effects.enqueue([source]);
-          await DBOS.retrieveWorkflow(effectWorkflowId(source, index, effect)).getResult({ pollingIntervalMs: 1 });
-          const id = contentWorkWorkflowId(source, index, kind, kind === 'image' ? undefined : mediaId);
-          return DBOS.retrieveWorkflow(id).getResult({ pollingIntervalMs: 1 });
+          await withConnection(database.pool, async (tx) => {
+            await tx.query('BEGIN');
+            try {
+              await work!.effects.admit!(tx, [envelope]);
+              await tx.query('COMMIT');
+            } catch (error) {
+              await tx.query('ROLLBACK');
+              throw error;
+            }
+          });
+          return contentWorkWorkflowId(envelope, index, 'importFromUrl', mediaId);
         };
         if (method === 'measure') {
           beginDrain([mediaId], 16);
@@ -1203,22 +1210,14 @@ async function workerHost(): Promise<RpcHost> {
           );
           return (
             await capture(database, async () => {
-              checkDrain(mediaId);
-              const index = envelope.events.findIndex(
-                (event) => event.subject === mediaId && event.type === 'com.rezics.content.media.import-requested.v1',
-              );
-              if (index < 0) throw new Error('Missing native dispatch event');
-              await work!.effects.enqueue([envelope]);
-              const effectId = effectWorkflowId(envelope, index, 'content_url_import');
-              await admit(effectsQueue, effectId);
-              await DBOS.retrieveWorkflow(effectId).getResult();
-              const importId = contentWorkWorkflowId(envelope, index, 'importFromUrl', mediaId);
+              const importId = await dispatchImport();
               await admit(importQueue, importId);
               return DBOS.retrieveWorkflow(importId).getResult();
             })
           ).capture;
         }
-        await run(envelope, 'content_url_import', 'importFromUrl');
+        const importId = await dispatchImport();
+        await DBOS.retrieveWorkflow(importId).getResult({ pollingIntervalMs: 1 });
         const trace = observer.trace(mediaId);
         if ((trace.anchors[mediaId] ?? []).length) {
           const uploaded = await mediaEnvelope(
@@ -1227,7 +1226,19 @@ async function workerHost(): Promise<RpcHost> {
             [trace],
             'com.rezics.content.media.uploaded.v1',
           ).catch(() => null);
-          if (uploaded) await run(uploaded, 'content_media_image', 'image');
+          if (uploaded) {
+            checkDrain(mediaId);
+            const index = uploaded.events.findIndex(
+              (event) => event.subject === mediaId && event.type === 'com.rezics.content.media.uploaded.v1',
+            );
+            if (index < 0) throw new Error('Missing native dispatch event');
+            await work!.effects.enqueue([uploaded]);
+            const effectId = effectWorkflowId(uploaded, index, 'content_media_image');
+            await DBOS.retrieveWorkflow(effectId).getResult({ pollingIntervalMs: 1 });
+            await DBOS.retrieveWorkflow(contentWorkWorkflowId(uploaded, index, 'image')).getResult({
+              pollingIntervalMs: 1,
+            });
+          }
         }
         return null;
       },

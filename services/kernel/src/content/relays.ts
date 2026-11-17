@@ -2,12 +2,12 @@ import { jsonParameter } from '../database/json.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { withConnection } from '../database/pool.ts';
-import type { Effect } from '../events/effects.ts';
+import type { Effect, NativeEffect } from '../events/effects.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
+import { enqueueWorkIntent, WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
@@ -43,12 +43,13 @@ import {
   contentWorkSource,
   contentWorkWorkflowId,
   subjectReactionMergeWorkflowId,
+  type ImportFromUrlWorkInput,
 } from './work-contract.ts';
 import { admitWorkEventEnvelope } from './core/index.ts';
 
 const authorRequested = 'com.rezics.content.author-erasure.requested.v1';
 const importRequested = 'com.rezics.content.media.import-requested.v1';
-type EnqueueKind = 'image' | 'purge' | 'authorErase' | 'importFromUrl';
+type EnqueueKind = 'image' | 'purge' | 'authorErase';
 type Source = { partition: number; epoch: number; position: bigint };
 
 function sourceIdentity(event: CloudEvent, objectId: string): Source {
@@ -119,18 +120,21 @@ async function bindErasure(pool: Pool, source: Source, event: CloudEvent, operat
   });
 }
 
+function workEventObjectId(event: CloudEvent, types: string[], key: 'mediaId' | 'operationId'): string {
+  if (!types.includes(event.type) || !Object.hasOwn(CONTENT_EVENTS(), event.type))
+    throw new TypeError('Unsupported content work event');
+  const schema = CONTENT_EVENTS()[event.type as keyof ReturnType<typeof CONTENT_EVENTS>];
+  if (!Value.Check(schema, event.data)) throw new TypeError('Invalid content work event data');
+  return (event.data as Record<typeof key, string>)[key];
+}
+
 function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: string[], kind: EnqueueKind): Effect {
   return {
     name,
     types,
     ...(kind === 'image' ? { queue: CONTENT_QUEUES.image } : {}),
     async run(event) {
-      if (!types.includes(event.type) || !Object.hasOwn(CONTENT_EVENTS(), event.type))
-        throw new TypeError('Unsupported content work event');
-      const schema = CONTENT_EVENTS()[event.type as keyof ReturnType<typeof CONTENT_EVENTS>];
-      if (!Value.Check(schema, event.data)) throw new TypeError('Invalid content work event data');
-      const data = event.data as { mediaId?: string; operationId?: string };
-      const objectId = (kind === 'authorErase' ? data.operationId : data.mediaId)!;
+      const objectId = workEventObjectId(event, types, kind === 'authorErase' ? 'operationId' : 'mediaId');
       const source = sourceIdentity(event, objectId);
       // Release the source connection/transaction before native durable enqueue.
       // Binding may commit before enqueue fails; replay binds the same identity.
@@ -151,12 +155,62 @@ function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: stri
           queueName: CONTENT_QUEUES[kind],
           workflowID,
           workflowIDReusePolicy: 'return-existing',
-          ...(kind === 'image' || kind === 'importFromUrl' ? contentWorkQueueOptions(source) : {}),
+          ...(kind === 'image' ? contentWorkQueueOptions(source) : {}),
         },
         {
           ...(kind === 'authorErase' ? { operationId: objectId } : { mediaId: objectId }),
           source: contentWorkSource(source, index),
         },
+      );
+    },
+  };
+}
+
+export function createUrlImportEffect(pool: Pool, client: WorkClient): NativeEffect & Pick<Effect, 'run'> {
+  const types = [importRequested];
+  const queue = CONTENT_QUEUES.importFromUrl;
+  const workflowName = CONTENT_WORKFLOWS.importFromUrl;
+
+  async function resolve(connection: PoolClient, event: CloudEvent) {
+    const mediaId = workEventObjectId(event, types, 'mediaId');
+    const source = sourceIdentity(event, mediaId);
+    const index = await eventIndex(connection, source, event);
+    const input: ImportFromUrlWorkInput = { mediaId, source: contentWorkSource(source, index) };
+    return {
+      workflowId: contentWorkWorkflowId(source, index, 'importFromUrl', mediaId),
+      input,
+      ...contentWorkQueueOptions(source),
+    };
+  }
+
+  return {
+    name: 'content_url_import',
+    types,
+    delivery: 'native',
+    async admit(tx, event) {
+      const { workflowId, input, queuePartitionKey } = await resolve(tx, event);
+      await enqueueWorkIntent(client, tx, {
+        queue,
+        workflowName,
+        workflowId,
+        queuePartitionKey,
+        input: { accounts: [] },
+        arguments: [input],
+      });
+    },
+    // Previously queued effect.run deliveries still resolve the same import workflow.
+    async run(event) {
+      const { workflowId, input, queuePartitionKey } = await withConnection(pool, (tx) => resolve(tx, event));
+      await client.enqueue(
+        {
+          applicationName: WORK_APPLICATION,
+          workflowName,
+          queueName: queue,
+          workflowID: workflowId,
+          workflowIDReusePolicy: 'return-existing',
+          queuePartitionKey,
+        },
+        input,
       );
     },
   };
@@ -234,7 +288,6 @@ export function contentEffects(
     enqueueEffect(pool, client, 'content_media_image', [MEDIA_WORK_EVENTS.image], 'image'),
     enqueueEffect(pool, client, 'content_media_purge', [...MEDIA_WORK_EVENTS.purge], 'purge'),
     enqueueEffect(pool, client, 'content_author_erasure', [authorRequested], 'authorErase'),
-    enqueueEffect(pool, client, 'content_url_import', [importRequested], 'importFromUrl'),
     enqueueSubjectReactionMergeEffect(pool, client),
     realmSubject.effect,
     ...(receiveCanonicalGeneration ? [createCanonicalWorkEffect(pool, receiveCanonicalGeneration)] : []),

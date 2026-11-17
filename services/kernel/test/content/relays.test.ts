@@ -5,7 +5,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { readBoardCandidates } from '../../src/content/board-projection.ts';
-import { contentEffects } from '../../src/content/relays.ts';
+import { contentEffects, createUrlImportEffect } from '../../src/content/relays.ts';
 import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
@@ -13,7 +13,7 @@ import {
   contentWorkWorkflowId,
 } from '../../src/content/work-contract.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { effectWorkflowId, type Effect } from '../../src/events/effects.ts';
+import { effectWorkflowId, registerEffects, relayEffects, type Effect } from '../../src/events/effects.ts';
 import { readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { startWorker } from '../../src/worker.ts';
@@ -145,14 +145,13 @@ async function appendMalformed(partition: number, type: string, data: unknown) {
   );
 }
 
-test('native durable media and URL import use actual event sequence and partitioned deterministic IDs without an executor', async () => {
+test('native durable media uses actual event sequence and partitioned deterministic IDs without an executor', async () => {
   const partition = freshPartition();
   const first = uploaded(partition);
   await seedMedia(first);
   const second = uploaded(partition);
   const erased = uploaded(partition);
   const rejected = uploaded(partition);
-  const imported = uploaded(partition);
   const envelope = await append(partition, [
     { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
     { type: 'com.rezics.content.media.uploaded.v1', data: first },
@@ -162,7 +161,6 @@ test('native durable media and URL import use actual event sequence and partitio
       type: 'com.rezics.content.media.rejected.v1',
       data: { mediaId: rejected.mediaId, containerId: rejected.containerId, decisionId: newId(16) },
     },
-    { type: 'com.rezics.content.media.import-requested.v1', data: { mediaId: imported.mediaId } },
   ]);
   expect(DBOS.isInitialized()).toBe(false);
   for (const [index, kind, mediaId] of [
@@ -170,7 +168,6 @@ test('native durable media and URL import use actual event sequence and partitio
     [2, 'image', second.mediaId],
     [3, 'purge', erased.mediaId],
     [4, 'purge', rejected.mediaId],
-    [5, 'importFromUrl', imported.mediaId],
   ] as const) {
     const event = envelope.events[index]!;
     const effect = effectFor(event);
@@ -182,7 +179,7 @@ test('native durable media and URL import use actual event sequence and partitio
       name: CONTENT_WORKFLOWS[kind],
       queue_name: CONTENT_QUEUES[kind],
       inputs: JSON.stringify([{ mediaId, source: contentWorkSource(envelope, index) }]),
-      ...(kind === 'image' || kind === 'importFromUrl' ? { queue_partition_key: String(partition) } : {}),
+      ...(kind === 'image' ? { queue_partition_key: String(partition) } : {}),
     });
     expect((await admin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows).toHaveLength(1);
   }
@@ -201,6 +198,76 @@ test('native durable media and URL import use actual event sequence and partitio
       ])
     ).rows,
   ).toEqual([]);
+});
+
+test('URL imports enter their own queue atomically and converge with legacy delivery in either order', async () => {
+  const partition = freshPartition();
+  const effect = createUrlImportEffect(pool, client);
+  const [first, second] = [uploaded(partition).mediaId, uploaded(partition).mediaId];
+  const envelope = await append(partition, [
+    { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
+    ...[first, second].map((mediaId) => ({ type: effect.types[0]!, subject: mediaId, data: { mediaId } })),
+  ]);
+  const firstId = contentWorkWorkflowId(envelope, 1, 'importFromUrl', first);
+  const secondId = contentWorkWorkflowId(envelope, 2, 'importFromUrl', second);
+  const failure = new Error('Admission interrupted');
+  let interrupt = true;
+  const effects = registerEffects(
+    [
+      {
+        ...effect,
+        async admit(tx, event) {
+          await effect.admit(tx, event);
+          if (interrupt) throw failure;
+        },
+      },
+    ],
+    pool,
+  );
+  const checkpoint = () =>
+    admin.query("SELECT position FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer='effects'", [
+      partition,
+    ]);
+  const consumers = () =>
+    admin.query(
+      'SELECT state, workflow_id FROM core.history_event_consumer WHERE partition_no=$1 AND consumer=$2 ORDER BY event_seq',
+      [partition, effect.name],
+    );
+  await expect(relayEffects(pool, effects, partition)).rejects.toBe(failure);
+  expect(await row(firstId)).toBeUndefined();
+  expect((await consumers()).rows).toEqual([]);
+  expect((await checkpoint()).rows).toEqual([{ position: '0' }]);
+
+  await effect.run(envelope.events[2]!);
+  expect(await row(secondId)).toMatchObject({ status: 'ENQUEUED' });
+  interrupt = false;
+  expect(await relayEffects(pool, effects, partition)).toEqual({
+    status: 'read',
+    envelopes: 1,
+    position: envelope.position,
+  });
+  expect(await row(firstId)).toMatchObject({ status: 'ENQUEUED' });
+  await effect.run(envelope.events[1]!);
+  expect((await checkpoint()).rows).toEqual([{ position: envelope.position.toString() }]);
+  const outerIds = [1, 2].map((index) => effectWorkflowId(envelope, index, 'content_url_import'));
+  expect((await consumers()).rows).toEqual(outerIds.map((workflow_id) => ({ state: 'transferred', workflow_id })));
+  const jobs = await admin.query<{ workflow_uuid: string }>(
+    'SELECT workflow_uuid FROM dbos.workflow_status WHERE workflow_uuid LIKE $1 ORDER BY workflow_uuid',
+    [`fx:${envelope.epoch}:${partition}:${envelope.position}:%`],
+  );
+  expect(jobs.rows.map(({ workflow_uuid }) => workflow_uuid)).toEqual([firstId, secondId]);
+  for (const [id, index, mediaId] of [
+    [firstId, 1, first],
+    [secondId, 2, second],
+  ] as const) {
+    expect(await row(id)).toMatchObject({
+      status: 'ENQUEUED',
+      name: CONTENT_WORKFLOWS.importFromUrl,
+      queue_name: CONTENT_QUEUES.importFromUrl,
+      queue_partition_key: String(partition),
+      inputs: JSON.stringify([{ mediaId, source: contentWorkSource(envelope, index) }]),
+    });
+  }
 });
 
 test('failed native enqueue retries with the same identity and no lost or duplicate work', async () => {

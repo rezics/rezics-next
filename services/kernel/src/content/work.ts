@@ -48,6 +48,7 @@ import { createReportLocatorEffect } from './report-locator.ts';
 import { createCreatorEditionIndexEffect } from './edition-index.ts';
 import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
 import { registerAccountErasureWork } from './account-erasure.ts';
+import { createUrlImportEffect } from './relays.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
@@ -288,6 +289,8 @@ async function registerWork(
     { name: 'content.import.step', ...retry },
   );
   DBOS.registerWorkflow(async (input: ContentWorkInput) => imported(input), { name: CONTENT_WORKFLOWS.importFromUrl });
+  if (!context.addNativeEffects) throw new Error('Content URL import requires native effects admission');
+  context.addNativeEffects([createUrlImportEffect(context.pool, context.client)]);
 
   // Register one retrying SDK step. The production orchestrator supplies its
   // deterministic bounded actions; DBOS records each invocation in native order.
