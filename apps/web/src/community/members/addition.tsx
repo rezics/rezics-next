@@ -21,6 +21,7 @@ type State =
 export function MemberAddition({
   realmLabel,
   selected,
+  disclosed,
   address,
   current,
   sameSelection,
@@ -29,11 +30,12 @@ export function MemberAddition({
 }: {
   realmLabel: string;
   selected: Selected;
+  disclosed: boolean;
   address: MemberSelectionAddress;
   current: () => boolean;
   sameSelection: () => boolean;
   addMember?: RealmMembersSource['addMember'];
-  refreshSelected: () => Promise<MemberSelectionRead | null>;
+  refreshSelected: (intent: MemberAdditionIntent) => Promise<MemberSelectionRead | null>;
 }) {
   const id = useId();
   const [state, setState] = useState<State>({ kind: 'idle' });
@@ -118,7 +120,7 @@ export function MemberAddition({
     working.current = true;
     setState({ kind: 'checking', intent });
     try {
-      const read = await refreshSelected();
+      const read = await refreshSelected(intent);
       if (!sameSelection() || sequence.current !== operation || intentNow.current !== intent) return;
       if (!current()) {
         working.current = false;
@@ -147,6 +149,12 @@ export function MemberAddition({
   }
 
   const workPending = state.kind === 'pending' || state.kind === 'checking';
+  if (!disclosed)
+    return workPending ? (
+      <p ref={status} role="status" tabIndex={-1} className="font-medium">
+        {m.realm_members_add_pending()}
+      </p>
+    ) : null;
   if (selected.membership === 'current') return null;
   if (selected.membership !== 'none' && !workPending) return null;
   if (selected.membership === 'none' && selected.advice.add === 'unavailable' && !workPending) return null;
