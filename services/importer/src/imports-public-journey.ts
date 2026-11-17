@@ -542,7 +542,9 @@ export async function captureSeedStderr(
 ): Promise<string> {
   let stderr = '';
   let pending = '';
-  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+  const decoder = new TextDecoder();
+  for await (const bytes of stream) {
+    const chunk = decoder.decode(bytes, { stream: true });
     stderr += chunk;
     const lines = (pending + chunk).split('\n');
     pending = lines.pop() ?? '';
@@ -550,6 +552,9 @@ export async function captureSeedStderr(
       if (SEED_PHASE_LINE.test(line)) write(line);
     }
   }
+  const final = decoder.decode();
+  stderr += final;
+  pending += final;
   if (SEED_PHASE_LINE.test(pending)) write(pending);
   return stderr;
 }
@@ -569,15 +574,25 @@ async function command(name: string, args: string[], env: NodeJS.ProcessEnv = pr
     // The admitted walk still owns PostgreSQL here. Keep the observation with the returned seed log.
     let evidence: object;
     try {
-      const { readCoverContinuation } = await import('../../kernel/scripts/read-cover-continuation.ts');
-      evidence = await readCoverContinuation({
+      const input = {
         journal: resolve(root, '.temp/cross-media-seed/state.sqlite'),
         generation: reserved[1]!,
         keyDigest: reserved[2]!,
         account: env.REZICS_DEV_PERSONA_ACCOUNT!,
         databasePort: process.env.KERNEL_DATABASE_PORT!,
         kernelEnvironment: await parseEnv(resolve(root, 'services/kernel/.env')),
+      };
+      const reader = Bun.spawn([process.execPath, 'services/kernel/scripts/read-cover-continuation.ts'], {
+        cwd: root,
+        stdin: new Blob([JSON.stringify(input)]),
+        stdout: 'pipe',
+        stderr: 'ignore',
+        timeout: 8_000,
       });
+      const [value, status] = await Promise.all([new Response(reader.stdout).json(), reader.exited]);
+      if (status !== 0 || value === null || typeof value !== 'object' || Array.isArray(value))
+        throw new Error('Native cover status observation unavailable');
+      evidence = value;
     } catch {
       evidence = { state: 'unavailable' };
     }

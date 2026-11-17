@@ -18,7 +18,8 @@ function deferredCovers(path: string, generation: string) {
   const db = new Database(path, { readonly: true, strict: true });
   try {
     // Same index and page size as RunStore.pageDeferredCovers, with one extra row to show truncation.
-    return db.query<JournalRow, [string]>(`
+    return db
+      .query<JournalRow, [string]>(`
       SELECT e.record_key, b.subject, m.key AS post_key,
              json_extract(m.accepted, '$.media.id') AS media_id,
              json_extract(m.status, '$.media.id') AS observed_id,
@@ -30,7 +31,8 @@ function deferredCovers(path: string, generation: string) {
         AND json_extract(m.status, '$.media.containerId')=b.subject
       WHERE e.source='bangumi_cross_media' AND e.run_id=? AND e.cover_pending=1
       ORDER BY e.record_key LIMIT 101
-    `).all(generation);
+    `)
+      .all(generation);
   } finally {
     db.close();
   }
@@ -90,7 +92,7 @@ SELECT COALESCE((SELECT CASE WHEN (container_id,uploader_id,reservation_request_
         FROM work) AS workflows
 `;
 
-export async function readCoverContinuation(input: {
+async function readCoverContinuation(input: {
   journal: string;
   generation: string;
   keyDigest: string;
@@ -148,4 +150,9 @@ export async function readCoverContinuation(input: {
   } finally {
     await client.end();
   }
+}
+
+if (import.meta.main) {
+  const input = (await Bun.stdin.json()) as Parameters<typeof readCoverContinuation>[0];
+  console.info(JSON.stringify(await readCoverContinuation(input)));
 }
