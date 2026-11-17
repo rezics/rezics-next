@@ -15,7 +15,7 @@ import {
   walkCommunityPath,
 } from '../../scripts/first-public-scope-walk.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { startNativeWebStack } from './stack.ts';
 
 const lifecycle = new NativeTestLifecycle('first-public native community');
@@ -238,6 +238,25 @@ for (const id of selected) {
               return auth.newContext('alice');
             },
             submitOwnerSignIn: (page) => auth.submitSignIn(page, 'alice'),
+            async observeRosterRead(realmId) {
+              if (
+                !(await settledWithin(
+                  stack.syncKernelRequests().then(() => true),
+                  5_000,
+                ))
+              )
+                return null;
+              return stack
+                .kernelRequests()
+                .filter(
+                  (request) =>
+                    !request.fixtureRequest &&
+                    request.method === 'GET' &&
+                    request.url === `/v1/realms/${realmId}/members`,
+                )
+                .slice(0, 6)
+                .map(({ responseStatus }) => responseStatus ?? null);
+            },
             async freshOutsider() {
               const outsider = await stack.authPersona('bob', rosterScopes);
               return { accountId: outsider.accountId, bearer: bearer(outsider) };

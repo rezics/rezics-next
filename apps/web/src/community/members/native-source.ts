@@ -9,9 +9,16 @@ import type { MemberPageRead, MemberSelectionRead, RealmMembersSource } from './
 type NativeReader = (input: RealmMembersReadInput) => Promise<NativeRealmMembersRead>;
 
 const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const productionRead: NativeReader = async (input) => (await import('./transport')).readRealmMembers({ data: input });
-const productionAddMember: NonNullable<RealmMembersSource['addMember']> = async (intent) =>
-  (await import('./commands')).addSelectedRealmMember(intent);
+export function browserRealmMembersSource(viewerId: string | null | undefined, csrfToken: string | null) {
+  return nativeRealmMembersSource(
+    viewerId,
+    async (data) =>
+      csrfToken
+        ? (await import('./transport')).readRealmMembers({ data, headers: { 'X-CSRF-Token': csrfToken } })
+        : { kind: 'denied' },
+    async (intent) => (await import('./commands')).addSelectedRealmMember(intent, csrfToken),
+  );
+}
 
 function pageFailure(read: Exclude<NativeRealmMembersRead, { kind: 'ready' }>): MemberPageRead {
   switch (read.kind) {
@@ -62,8 +69,8 @@ function availability(action: NativeRealmMemberAction): 'available' | 'unavailab
 /** Binds the browser composition to the authenticated viewer and producer-owned page observations. */
 export function nativeRealmMembersSource(
   viewerId: string | null | undefined,
-  reader: NativeReader = productionRead,
-  addMember: NonNullable<RealmMembersSource['addMember']> = productionAddMember,
+  reader: NativeReader,
+  addMember?: NonNullable<RealmMembersSource['addMember']>,
 ): RealmMembersSource {
   let pageBound = 0;
 
@@ -131,6 +138,6 @@ export function nativeRealmMembersSource(
         },
       };
     },
-    addMember,
+    ...(addMember ? { addMember } : {}),
   };
 }

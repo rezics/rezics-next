@@ -425,23 +425,34 @@ test('duplicate More reads once; failed Previous and First retry their staged cu
   stop();
 });
 
-test('a staged page read throws without creating an empty page or accepting its coordinate', async () => {
-  let reads = 0;
+test('thrown roster reads keep their exact page and selection retryable', async () => {
+  const cursors: (string | null)[] = [];
+  const accounts: string[] = [];
   const visit = new RealmMembersVisit('realm', {
     pageBound: 20,
     readPage: async ({ cursor }) => {
-      reads++;
-      if (cursor !== null) throw new Error('unexpected source failure');
-      return { kind: 'ready', page: { ...windowPage(null), next: 'w1' } };
+      cursors.push(cursor);
+      if (cursors.length === 2) throw new Error('unexpected source failure');
+      return { kind: 'ready', page: { ...windowPage(cursor), next: cursor === null ? 'w1' : null } };
     },
-    readSelected: async () => ({ kind: 'unavailable' }),
+    readSelected: async ({ accountId }) => {
+      accounts.push(accountId);
+      if (accounts.length === 1) throw new Error('unexpected selection failure');
+      return { kind: 'unavailable' };
+    },
   });
   const stop = visit.connect();
   await settle();
-  await expect(visit.more()).rejects.toThrow('unexpected source failure');
-  expect(visit.snapshot().read.kind).toBe('loading');
+  expect(await visit.more()).toBe(false);
+  expect(visit.snapshot().read.kind).toBe('failed');
   expect(visit.snapshot().address.cursor).toBe('w1');
   expect(visit.canPrevious()).toBe(false);
-  expect(reads).toBe(2);
+  expect(await visit.retryPage()).toBe(true);
+  expect(cursors).toEqual([null, 'w1', 'w1']);
+  expect(visit.canPrevious()).toBe(true);
+  expect(await visit.inspectAccount('entered-account')).toEqual({ kind: 'failed' });
+  await visit.retrySelected();
+  expect(accounts).toEqual(['entered-account', 'entered-account']);
+  expect(visit.snapshot().selection?.read.kind).toBe('unavailable');
   stop();
 });
