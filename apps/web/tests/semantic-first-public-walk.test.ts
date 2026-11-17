@@ -185,6 +185,55 @@ test.each([500, 200])('failed document evidence retains HTTP %i before hydration
   ]);
 });
 
+test('a protected-page Auth redirect retains its status and path while omitting OAuth query fields', async () => {
+  let hydrationReads = 0;
+  const page = {
+    setDefaultTimeout() {},
+    async setViewportSize() {},
+    async emulateMedia() {},
+    on() {},
+    async goto() {
+      return { status: () => 200 };
+    },
+    url: () => stack.issuer + '/login?state=private-state&nonce=private-nonce',
+    locator() {
+      hydrationReads++;
+      throw new Error('unexpected hydration wait');
+    },
+    async close() {},
+  };
+  const context = {
+    async newPage() {
+      return page;
+    },
+  } as unknown as SemanticBrowserSession['member'];
+  const session: SemanticBrowserSession = {
+    stack,
+    editor: 'editor',
+    anonymous: context,
+    member: context,
+    evidenceDir: '/unused',
+    call: async () => {
+      throw new Error('unexpected native call');
+    },
+  };
+  await expect(visit(session, stack.web + '/en/my/contexts/new', { persona: 'member' })).rejects.toThrow(
+    'reached Auth at ' + stack.issuer + '/login with HTTP 200',
+  );
+  expect(hydrationReads).toBe(0);
+  expect(session.pages).toEqual([
+    {
+      requestedUrl: stack.web + '/en/my/contexts/new',
+      url: stack.issuer + '/login',
+      status: 200,
+      stage: 'document',
+      failure: 'auth-redirect',
+    },
+  ]);
+  expect(JSON.stringify(session.pages)).not.toContain('private-state');
+  expect(JSON.stringify(session.pages)).not.toContain('private-nonce');
+});
+
 test('lifecycle cancellation marks the interrupted original case and prevents later native work', async () => {
   const controller = new AbortController();
   let calls = 0;

@@ -16,7 +16,7 @@ export type SemanticPageObservation = {
   url?: string;
   status?: number;
   stage: 'navigation' | 'document' | 'hydration' | 'main' | 'complete';
-  failure?: 'http-status' | 'timeout' | 'closed' | 'transport';
+  failure?: 'http-status' | 'auth-redirect' | 'timeout' | 'closed' | 'transport';
   clientError?: 'module-load' | 'module-initialization' | 'runtime';
 };
 export type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
@@ -66,7 +66,16 @@ async function openPage(
     const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
     const status = response?.status() ?? 0;
     observation.status = status;
-    observation.url = page.url();
+    const resolved = new URL(page.url());
+    const requested = new URL(href);
+    const authRedirect =
+      (resolved.origin !== requested.origin || resolved.pathname !== requested.pathname) &&
+      /^\/(?:auth(?:\/|$)|login(?:\/|$)|authorize(?:\/|$)|consent(?:\/|$)|signin(?:\/|$))/.test(resolved.pathname);
+    if (resolved.origin !== requested.origin || authRedirect) {
+      resolved.search = '';
+      resolved.hash = '';
+    }
+    observation.url = resolved.href;
     observation.stage = 'document';
     if (onMountedSubject) {
       const header = await response?.headerValue(mountedSubjectReadHeader);
@@ -76,6 +85,10 @@ async function openPage(
     if (status !== expectedStatus) {
       observation.failure = 'http-status';
       throw new Error(`${observation.url} returned HTTP ${status}`);
+    }
+    if (authRedirect) {
+      observation.failure = 'auth-redirect';
+      throw new Error(`${href} reached Auth at ${observation.url} with HTTP ${status}`);
     }
     observation.stage = 'hydration';
     await hydrated(page);
