@@ -219,6 +219,7 @@ export function searchTurnMetadataProducers(
   return Object.fromEntries(
     Object.entries(producers).flatMap(([kind, producer]) => {
       if (!producer) return [];
+      const readEmptyPositions = producer.readEmptyPositions?.bind(producer);
       return [
         [
           kind,
@@ -230,6 +231,10 @@ export function searchTurnMetadataProducers(
             read: (...args: Parameters<DiscoveryMetadataProducer['read']>) =>
               searchTurnCall(() => producer.read(...args)),
             position: (partition: number) => searchTurnCall(() => producer.position(partition)),
+            ...(readEmptyPositions && {
+              readEmptyPositions: (partitions: readonly number[]) =>
+                searchTurnCall(() => readEmptyPositions(partitions)),
+            }),
           },
         ] as const,
       ];
@@ -993,6 +998,39 @@ function discoveryPageReadBatch<Result>(rows: readonly Population[], checkEmpty:
     checkEmptyPage() {
       // Start the shared check after all participating native observations have settled.
       return (emptyPageCheck ??= settled.promise.then(checkEmpty));
+    },
+  };
+}
+
+function reviewCertificationBatch(
+  rows: readonly { partition: number }[],
+  read: NonNullable<DiscoveryMetadataProducer['readEmptyPositions']>,
+) {
+  const pending = new Set(rows);
+  const requested = new Set<number>();
+  const settled = Promise.withResolvers<void>();
+  let positions: Promise<ReadonlyMap<number, bigint>> | undefined;
+  const observed = (row: { partition: number }) => {
+    pending.delete(row);
+    if (pending.size === 0) settled.resolve();
+  };
+  return {
+    observed,
+    async position(row: { partition: number }) {
+      requested.add(row.partition);
+      observed(row);
+      // Collection can short-circuit a row. Wait until the wave has identified every Review request.
+      positions ??= settled.promise.then(async () => {
+        const partitions = rows.filter(({ partition }) => requested.has(partition)).map(({ partition }) => partition);
+        const result = await read(partitions);
+        if (
+          result.size !== partitions.length ||
+          partitions.some((partition) => typeof result.get(partition) !== 'bigint')
+        )
+          throw new SearchUnavailableError('Discovery Review positions are incomplete');
+        return result;
+      });
+      return (await positions).get(row.partition)!;
     },
   };
 }
@@ -1854,6 +1892,9 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
       ).rows,
   );
   if (observations.length !== 4096) throw new Error('Discovery population partitions are incomplete');
+  const readReviewPositions = requiredKinds.includes('review')
+    ? metadataProducers.review?.readEmptyPositions
+    : undefined;
   for (let offset = 0; offset < observations.length; offset += 100) {
     const chunk = observations.slice(offset, offset + 100);
     const witnesses = await searchTurnCall(() =>
@@ -1865,29 +1906,35 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     const checks = await mapBounded(
       chunk,
       Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
-      () => (row) =>
-        searchTurnCall(async () => {
-          const witness = witnesses.get(row.partition);
-          const metadataPositions = {
-            collection: row.collection_position,
-            review: row.review_position,
-            space: row.space_position,
-          };
-          for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
-            if (!requiredKinds.includes(kind)) continue;
-            const observation = await metadataProducers[kind]!.read(row.partition, []);
-            if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
-              return { state: 'retire' as const };
-            if (metadataPositions[kind] !== observation.position.toString())
-              return { state: 'metadata' as const, partition: row.partition, kind };
-          }
-          return row.position === row.head &&
-            row.semantic_position === row.head &&
-            witness?.revision === BigInt(row.revision) &&
-            witness.claimRevision === BigInt(row.claim_revision)
-            ? { state: 'current' as const }
-            : { state: 'native' as const, partition: row.partition };
-        }),
+      (batch) => {
+        const review = readReviewPositions && reviewCertificationBatch(batch, readReviewPositions);
+        return (row) =>
+          searchTurnCall(async () => {
+            const witness = witnesses.get(row.partition);
+            const metadataPositions = {
+              collection: row.collection_position,
+              review: row.review_position,
+              space: row.space_position,
+            };
+            for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+              if (!requiredKinds.includes(kind)) continue;
+              const observation: { position: bigint; epoch?: number } =
+                kind === 'review' && review
+                  ? { position: await review.position(row) }
+                  : await metadataProducers[kind]!.read(row.partition, []);
+              if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
+                return { state: 'retire' as const };
+              if (metadataPositions[kind] !== observation.position.toString())
+                return { state: 'metadata' as const, partition: row.partition, kind };
+            }
+            return row.position === row.head &&
+              row.semantic_position === row.head &&
+              witness?.revision === BigInt(row.revision) &&
+              witness.claimRevision === BigInt(row.claim_revision)
+              ? { state: 'current' as const }
+              : { state: 'native' as const, partition: row.partition };
+          }).finally(() => review?.observed(row));
+      },
     );
     for (const check of checks) {
       if (check.state === 'retire') {

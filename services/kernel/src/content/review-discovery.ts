@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessCheck } from './access-port.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -27,6 +28,7 @@ export const REVIEW_DISCOVERY_CANDIDATE_FACTOR = 4;
 export const REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES = REVIEW_DISCOVERY_PAGE_LIMIT * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
 export const REVIEW_DISCOVERY_MAX_DEPENDENCIES = 512;
 export const REVIEW_DISCOVERY_MAX_CUT_HOMES = 256;
+const REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT = 100;
 
 /** Candidate fields only. Author presentation is read from Accounts during final hydration. */
 export type IndexedReview = Readonly<{
@@ -100,6 +102,8 @@ export type ReviewDiscoveryCount =
 
 export type ReviewDiscoverySource = Readonly<{
   read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
+  /** Exact current positions for requests with no Review identities. */
+  readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   hydrate(partition: number, ids: readonly string[]): Promise<ReviewDiscoveryHydration>;
   count(partition: number): Promise<ReviewDiscoveryCount>;
   page(
@@ -121,6 +125,7 @@ export type ReviewDiscoverySource = Readonly<{
 export type NativeReviewDiscoverySource = ReviewDiscoverySource &
   Readonly<{
     pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
+    readEmptyPositions: NonNullable<ReviewDiscoverySource['readEmptyPositions']>;
     maintainCensus(partition: number): Promise<ReviewCensusStep>;
     censusCoverage(partition: number): Promise<ReviewCensusCoverage>;
   }>;
@@ -402,38 +407,21 @@ type CutState =
   | Readonly<{ position: bigint; cut: PopulationCut; status: 'ready' }>
   | Readonly<{ position: bigint; cut: null; status: 'preparing' | 'unavailable'; missing: string }>;
 
-async function captureCut(
-  client: Pick<PoolClient, 'query'>,
-  partition: number,
-  homes: readonly number[],
-): Promise<CutState> {
-  const selected = [...new Set([partition, ...homes])].sort((a, b) => a - b);
-  if (selected.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
-    return { position: 0n, cut: null, status: 'unavailable', missing: 'dependency-home-bound' };
-  // Read the same bounded evidence in one statement inside the caller's native snapshot.
-  const { rows } = await client.query<{
-    partition: number;
-    epoch: number;
-    position: string;
-    write_state: string;
-    projection: string;
-    pending: boolean;
-    frontier: string;
-  }>(
-    `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,
-            COALESCE(r.revision,0)::text AS projection,
-            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
-            COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=$3),0)::text AS frontier
-     FROM core.partition p
-     LEFT JOIN content.review_census_source_frontier r ON r.route=p.partition_no*16 AND r.route=ANY($2::integer[])
-     WHERE p.partition_no=ANY($1::integer[])
-     ORDER BY p.partition_no`,
-    [selected, selected.map((home) => home * 16), partition * 16],
-  );
+type CutHomeRow = {
+  partition: number;
+  epoch: number;
+  position: string;
+  write_state: string;
+  projection: string;
+  pending: boolean;
+  frontier: string;
+};
+
+function cutState(partition: number, rows: readonly CutHomeRow[], expectedHomes: number): CutState {
   const root = rows.find((item) => item.partition === partition);
   const position = BigInt(root?.position ?? '0');
   if (root?.write_state !== 'active') return { position, cut: null, status: 'unavailable', missing: 'source-home' };
-  if (rows.length !== selected.length || rows.some((item) => item.write_state !== 'active'))
+  if (rows.length !== expectedHomes || rows.some((item) => item.write_state !== 'active'))
     return { position, cut: null, status: 'unavailable', missing: 'dependency-home' };
   if (root.pending) return { position, cut: null, status: 'preparing', missing: 'lifecycle-invalidation' };
   return {
@@ -449,6 +437,43 @@ async function captureCut(
     },
     status: 'ready',
   };
+}
+
+async function captureCut(
+  client: Pick<PoolClient, 'query'>,
+  partition: number,
+  homes: readonly number[],
+): Promise<CutState> {
+  const selected = [...new Set([partition, ...homes])].sort((a, b) => a - b);
+  if (selected.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
+    return { position: 0n, cut: null, status: 'unavailable', missing: 'dependency-home-bound' };
+  // Read the same bounded evidence in one statement inside the caller's native snapshot.
+  const { rows } = await client.query<CutHomeRow>(
+    `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,
+            COALESCE(r.revision,0)::text AS projection,
+            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
+            COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=$3),0)::text AS frontier
+     FROM core.partition p
+     LEFT JOIN content.review_census_source_frontier r ON r.route=p.partition_no*16 AND r.route=ANY($2::integer[])
+     WHERE p.partition_no=ANY($1::integer[])
+     ORDER BY p.partition_no`,
+    [selected, selected.map((home) => home * 16), partition * 16],
+  );
+  return cutState(partition, rows, selected.length);
+}
+
+async function captureEmptyCuts(client: PoolClient, partitions: readonly number[]) {
+  const { rows } = await client.query<CutHomeRow & { moved_to: string | null }>(
+    `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,p.moved_to,
+            COALESCE((SELECT revision FROM content.review_census_source_frontier WHERE route=p.partition_no*16),0)::text AS projection,
+            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
+            COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=p.partition_no*16),0)::text AS frontier
+     FROM core.partition p WHERE p.partition_no=ANY($1::integer[])`,
+    [partitions],
+  );
+  const byPartition = new Map(rows.map((row) => [row.partition, row]));
+  if (byPartition.size !== rows.length) throw new TypeError('Review discovery returned a duplicate home');
+  return byPartition;
 }
 
 function sameCut(left: PopulationCut, right: PopulationCut): boolean {
@@ -697,6 +722,14 @@ function failedSourceError(state: Exclude<CutState, { status: 'ready' }>): never
   throw new ReviewDiscoverySourceError(state.status, state.missing ?? 'native-population');
 }
 
+function requireSameCut(
+  before: PopulationCut,
+  after: CutState,
+): asserts after is Extract<CutState, { status: 'ready' }> {
+  if (after.status !== 'ready') failedSourceError(after);
+  if (!sameCut(before, after.cut)) throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency');
+}
+
 async function reobserveOutput(
   client: Pick<PoolClient, 'query'>,
   partition: number,
@@ -751,10 +784,7 @@ export function createReviewDiscoverySource(
       (client) => reobserveOutput(client, partition, observedCut, native.candidates),
       context.deadline,
     );
-    const finalState = final.state;
-    if (finalState.status !== 'ready') failedSourceError(finalState);
-    if (!sameCut(native.state.cut, finalState.cut))
-      throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency');
+    requireSameCut(observedCut, final.state);
     if (!final.current) throw new ReviewDiscoverySourceError('changed', 'source-lifecycle');
     return { position: native.position, hydrated };
   }
@@ -949,6 +979,47 @@ export function createReviewDiscoverySource(
   });
 
   return Object.freeze({
+    async readEmptyPositions(partitions) {
+      if (!Array.isArray(partitions) || partitions.length > REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT)
+        throw new RangeError(`At most ${REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT} Review discovery partitions`);
+      const requested = [...partitions];
+      for (const partition of requested) assertPartition(partition);
+      if (new Set(requested).size !== requested.length)
+        throw new TypeError('Review discovery partitions must be distinct');
+      if (requested.length === 0) return new Map();
+
+      const context = checkedContext(makeAnonymousContext);
+      const deadline = Math.min(context.deadline, deadlineFor(Math.max(1, context.deadline - Date.now())));
+      // Empty identity sets have no candidate or dependency reads. Each requested home still needs both cuts.
+      const before = await withReadTransaction(
+        dependencies.pool,
+        (client) => captureEmptyCuts(client, requested),
+        deadline,
+      );
+      const cuts = new Map<number, PopulationCut>();
+      for (const partition of requested) {
+        const row = before.get(partition);
+        if (row?.write_state === 'moved') throw new CommandUnavailableError('moved', partition, row.moved_to);
+        if (row?.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
+        const state = cutState(partition, [row], 1);
+        if (state.status !== 'ready') failedSourceError(state);
+        cuts.set(partition, state.cut);
+      }
+
+      const after = await withReadTransaction(
+        dependencies.pool,
+        (client) => captureEmptyCuts(client, requested),
+        deadline,
+      );
+      const positions = new Map<number, bigint>();
+      for (const [partition, cut] of cuts) {
+        const row = after.get(partition);
+        const current = cutState(partition, row ? [row] : [], 1);
+        requireSameCut(cut, current);
+        positions.set(partition, current.position);
+      }
+      return positions;
+    },
     async maintainCensus(partition) {
       const context = checkedContext(makeAnonymousContext);
       return census.step(partition, context.deadline);
