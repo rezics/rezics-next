@@ -151,6 +151,9 @@ type Envelope = {
 /** Generation-scoped children for API68 retention; pruned evidence is unavailable. */
 export const DISAPPEARANCE_EVIDENCE_TABLES = ['run_disappearance_stops', 'run_disappearance_missing'] as const;
 
+const RUN_RETENTION_APPLYING_INDEX = `CREATE INDEX IF NOT EXISTS run_retention_applying
+  ON run_retention_work(source,plan_id) WHERE status='applying'`;
+
 export const RUN_TABLES = [
   'run_sources',
   'run_generations',
@@ -682,6 +685,11 @@ export class RunStore<Projection = BatchStatement[]> {
         .get();
       if (options.existing || retained) {
         assertExistingRunSchema(this.database);
+        // Upgrade older writable state once, before admitting a run.
+        const applyingIndex = this.database
+          .query("SELECT 1 FROM sqlite_schema WHERE type='index' AND name='run_retention_applying'")
+          .get();
+        if (!applyingIndex) this.database.exec(RUN_RETENTION_APPLYING_INDEX);
         return;
       }
       // Schema initialization happens once per connection, never in a run operation.
@@ -785,18 +793,21 @@ export class RunStore<Projection = BatchStatement[]> {
         record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL,
         PRIMARY KEY(source, run_id, ordinal)) WITHOUT ROWID`);
       this.database.exec('CREATE INDEX IF NOT EXISTS run_generation_seq ON run_generations(source, seq)');
-      this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
-        plan_id TEXT PRIMARY KEY,
-        source TEXT NOT NULL,
-        selected_json TEXT NOT NULL,
-        bound_json TEXT NOT NULL,
-        status TEXT NOT NULL,
-        generation_id TEXT NOT NULL DEFAULT '',
-        phase TEXT NOT NULL DEFAULT '',
-        cursor TEXT NOT NULL DEFAULT '',
-        result_json TEXT,
-        created_at TEXT NOT NULL
-      ) WITHOUT ROWID`);
+      this.transaction(() => {
+        this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
+          plan_id TEXT PRIMARY KEY,
+          source TEXT NOT NULL,
+          selected_json TEXT NOT NULL,
+          bound_json TEXT NOT NULL,
+          status TEXT NOT NULL,
+          generation_id TEXT NOT NULL DEFAULT '',
+          phase TEXT NOT NULL DEFAULT '',
+          cursor TEXT NOT NULL DEFAULT '',
+          result_json TEXT,
+          created_at TEXT NOT NULL
+        ) WITHOUT ROWID`);
+        this.database.exec(RUN_RETENTION_APPLYING_INDEX);
+      });
       // Immutable stop evidence is generation-scoped. API68 deletes these children with the generation.
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_disappearance_stops (
         source TEXT NOT NULL, run_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
@@ -1293,14 +1304,10 @@ export class RunStore<Projection = BatchStatement[]> {
     sourceId(source);
     const live = this.get<{ lease_run: string | null }>('SELECT lease_run FROM run_sources WHERE source=?', source);
     if (live?.lease_run) return null;
-    const found = this.get<{ found: number }>(
-      "SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='run_retention_work'",
-    );
-    if (!found) return null;
     const work = this.get<{ plan_id: string; generation_id: string }>(
-      'SELECT plan_id,generation_id FROM run_retention_work WHERE source=? AND status=? LIMIT 1',
+      `SELECT plan_id,generation_id FROM run_retention_work INDEXED BY run_retention_applying
+      WHERE source=? AND status='applying' ORDER BY plan_id LIMIT 1`,
       source,
-      'applying',
     );
     return work ? { planId: work.plan_id, generationId: work.generation_id } : null;
   }

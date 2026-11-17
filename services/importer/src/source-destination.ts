@@ -99,8 +99,16 @@ export function normalizeApiOrigin(value: string, testOrigin?: string): string {
   return url.origin;
 }
 
+function sourceDestinationTableExists(database: Database): boolean {
+  return Boolean(
+    database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
+      .get('table', SOURCE_DESTINATION_TABLE),
+  );
+}
+
 export function ensureSourceDestinationSchema(database: Database): void {
-  database.exec(SOURCE_DESTINATION_DDL);
+  if (!sourceDestinationTableExists(database)) database.exec(SOURCE_DESTINATION_DDL);
 }
 
 export function sourceHasHistory(database: Database, source: string): boolean {
@@ -118,10 +126,7 @@ export function readSourceDestination(
   database: Database,
   source: string,
 ): SourceDestinationBinding | null | 'unavailable' {
-  const table = database
-    .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
-    .get('table', SOURCE_DESTINATION_TABLE) as { found: number } | null;
-  if (!table) return null;
+  if (!sourceDestinationTableExists(database)) return null;
   const columns = new Set(
     database
       .query(`PRAGMA table_info(${SOURCE_DESTINATION_TABLE})`)

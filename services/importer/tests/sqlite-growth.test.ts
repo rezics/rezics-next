@@ -88,6 +88,27 @@ function fixture() {
   return db;
 }
 
+test('destination metadata evidence accepts only the exact catalog lookups', () => {
+  const db = fixture();
+  db.exec('CREATE TABLE source_destinations(source TEXT PRIMARY KEY) WITHOUT ROWID');
+  const p = createSqliteProbe(db, { growingTables: ['records'] });
+  try {
+    const lookup = db.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?');
+    p.measure(() => {
+      expect(lookup.get('table', 'source_destinations')).toEqual({ found: 1 });
+      expect(db.query('PRAGMA table_info(source_destinations)').all()).toHaveLength(1);
+    });
+    const [catalog] = p.verifyPlans();
+    expect(catalog!.plan.map((row) => row.detail)).toEqual(['SCAN sqlite_schema']);
+
+    p.measure(() => lookup.get('table', 'records'));
+    expect(() => p.verifyPlans()).toThrow('SQLite plan contains an unbounded scan');
+  } finally {
+    p.restore();
+    db.close();
+  }
+});
+
 test('probe counts execution rather than preparation, preserves bindings and raw plans', () => {
   const db = fixture();
   const p = createSqliteProbe(db, { growingTables: ['records'] });

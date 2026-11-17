@@ -1024,6 +1024,29 @@ function workRow(database: Database, planId: string): WorkRow | null {
   return database.query('SELECT * FROM run_retention_work WHERE plan_id=?').get(planId) as WorkRow | null;
 }
 
+function updateRetentionWork(
+  database: Database,
+  planId: string,
+  progress: { generationId: string; phase: string; cursor: string } | { retired: readonly string[] },
+): void {
+  if ('retired' in progress) {
+    database
+      .query(
+        `UPDATE run_retention_work SET generation_id='', phase='', cursor='', status='complete', result_json=?
+        WHERE plan_id=? AND status='applying'`,
+      )
+      .run(JSON.stringify({ retired: progress.retired }), planId);
+    return;
+  }
+  // Cursor updates leave the applying-work index untouched until completion.
+  database
+    .query(
+      `UPDATE run_retention_work SET generation_id=?, phase=?, cursor=?, result_json=NULL
+      WHERE plan_id=? AND status='applying'`,
+    )
+    .run(progress.generationId, progress.phase, progress.cursor, planId);
+}
+
 function phaseIndex(phase: string): number {
   const index = DELETE_PHASES.indexOf(phase as RetentionDeletePhase);
   if (index < 0) throw new RetentionFailure('Retention work cursor names an unknown deletion phase.', 'incompatible');
@@ -1515,19 +1538,11 @@ export function applyRetentionOnDatabase(
           }
         }
         const complete = !nextGeneration;
-        database
-          .query(
-            `UPDATE run_retention_work SET generation_id=?, phase=?, cursor=?, status=?, result_json=? WHERE plan_id=? AND status=?`,
-          )
-          .run(
-            nextGeneration,
-            complete ? '' : nextPhase,
-            complete ? '' : nextCursor,
-            complete ? 'complete' : 'applying',
-            complete ? JSON.stringify({ retired: selected }) : null,
-            plan.planId,
-            'applying',
-          );
+        updateRetentionWork(
+          database,
+          plan.planId,
+          complete ? { retired: selected } : { generationId: nextGeneration, phase: nextPhase, cursor: nextCursor },
+        );
         return { nextGeneration, nextPhase, nextCursor, complete };
       })
       .immediate();
@@ -1573,6 +1588,7 @@ export {
   requireKnownSchema as assertRetentionKnownSchema,
   ensureRetentionWork,
   workRow as retentionWorkRow,
+  updateRetentionWork,
   runPhasePage as runRetentionDeletePhase,
   openReadonly as openRetentionReadonly,
   openWritable as openRetentionWritable,
