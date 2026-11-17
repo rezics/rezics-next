@@ -163,7 +163,7 @@ function createCollectionPopulationProducer(
   return {
     kind: 'collection',
     owner: 'commerce',
-    initialPopulationWitness: 'none',
+    pageCapabilityWitness: 'none',
     async readiness() {
       return adapter.status === 'ready' ? 'ready' : adapter.status;
     },
@@ -216,7 +216,7 @@ function createReviewPopulationProducer(
   return {
     kind: 'review',
     owner: 'content',
-    ...(native && { initialPopulationWitness: 'none' }),
+    ...(native && { pageCapabilityWitness: 'none' }),
     ...(source?.populationInvalidationPending && {
       populationInvalidationPending: source.populationInvalidationPending.bind(source),
     }),

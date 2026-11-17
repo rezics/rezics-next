@@ -30,7 +30,7 @@ test('review population readiness follows native pageWithCut and omits a prepari
       access: {} as never,
       reviewSource: source(state),
     });
-    expect(producers.metadataProducers.review?.initialPopulationWitness).toBeUndefined();
+    expect(producers.metadataProducers.review?.pageCapabilityWitness).toBeUndefined();
     expect(await producers.metadataProducers.review?.readiness()).toBe(state);
   }
   const preparing = createDiscoveryProducerEntry({
@@ -47,7 +47,7 @@ test('review population readiness follows native pageWithCut and omits a prepari
   expect(classification.omittedKinds).toContainEqual({ kind: 'review', state: 'preparing' });
 });
 
-test('the production entry opts only native status probes out of initial page fences', () => {
+test('the production entry opts only native status probes out of capability page fences', () => {
   const { metadataProducers } = createDiscoveryProducerEntry({
     clock: () => new Date(),
     pool: {} as never,
@@ -55,9 +55,9 @@ test('the production entry opts only native status probes out of initial page fe
     access: {} as never,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32)]]) },
   });
-  expect(metadataProducers.review?.initialPopulationWitness).toBe('none');
-  expect(metadataProducers.collection?.initialPopulationWitness).toBe('none');
-  expect(metadataProducers.space?.initialPopulationWitness).toBeUndefined();
+  expect(metadataProducers.review?.pageCapabilityWitness).toBe('none');
+  expect(metadataProducers.collection?.pageCapabilityWitness).toBe('none');
+  expect(metadataProducers.space?.pageCapabilityWitness).toBeUndefined();
 });
 
 test('a pending lifecycle invalidation blocks the first Review population page', async () => {

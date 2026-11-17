@@ -987,20 +987,16 @@ async function mapBounded<T, Result>(
   return results;
 }
 
-function discoveryPageCapabilityCheck(
-  pool: Pool,
-  { target, metadataProducers }: DiscoveryProjection,
-  initialPopulation: boolean,
-) {
-  // The native opt-in declares that readiness can never contribute a generation/cut witness.
-  // The turn still admits every producer, and each partition still observes its own native page.
-  const producers = initialPopulation
-    ? Object.fromEntries(
-        Object.entries(metadataProducers).filter(
-          ([kind, producer]) => kind === 'space' || producer?.initialPopulationWitness !== 'none',
-        ),
-      )
-    : metadataProducers;
+function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
+  // Status-only producers are admitted by the turn and fence their own native pages.
+  // Keep the installed Space observation and recheck every durable bound witness.
+  const bound = target.capability?.witnesses ?? {};
+  const producers = Object.fromEntries(
+    Object.entries(metadataProducers).filter(
+      ([kind, producer]) =>
+        kind === 'space' || producer?.pageCapabilityWitness !== 'none' || Object.hasOwn(bound, kind),
+    ),
+  );
   let scheduled: Promise<void> | undefined;
   return () => {
     // Share only checks queued before the native observation starts. A page that reaches
@@ -2125,7 +2121,7 @@ async function advanceDiscoveryTurn(
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
-      const check = discoveryPageCapabilityCheck(pool, projection, target.state === 'populating');
+      const check = discoveryPageCapabilityCheck(pool, projection);
       const checkCapability = () => timeDiscovery('capability', check);
       await mapBounded(
         populations,
