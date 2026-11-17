@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { bundledDigest } from '@rezics/definitions/bundled';
+import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { BatchWriteRequest } from '@rezics/definitions/bulk';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import {
   crossMediaAliases,
@@ -14,7 +16,10 @@ import {
   type CrossMediaPort,
 } from '../src/cross-media-seed.ts';
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
+import { bangumiAppearanceSource } from '../src/cross-media-bindings.ts';
 import { ImportTransportError } from '../src/import-client.ts';
+import type { ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { buildShowcaseManifest, type ShowcaseManifest } from '../src/showcase-manifest.ts';
 import { createSelectedFamilySourceRegistration } from '../src/source-registry.ts';
@@ -134,6 +139,36 @@ test(
     const journalPath = join(directory, 'showcase.sqlite');
     const journal = new ShowcaseJournal(journalPath);
     const subjectId = randomUUID();
+    const characterId = randomUUID();
+    const vocab = (
+      [
+        ['bangumi.character.role', 'character-kinds'],
+        ['bangumi.subject-characters.type', 'appearance-roles'],
+      ] as const
+    ).map(([taxonomy, name]) => ({
+      taxonomy,
+      uri: `https://rezics.com/schemes/bangumi/${name}`,
+      schemeId: randomUUID(),
+      conceptId: randomUUID(),
+    }));
+    const bindings: SourceVocabularyBindings = {
+      releaseDigest: bundledDigest,
+      schemes: vocab.map(({ taxonomy, uri, schemeId }) => ({
+        taxonomy,
+        uri,
+        id: schemeId,
+        type: 'skos:ConceptScheme',
+        releaseDigest: bundledDigest,
+      })),
+      concepts: vocab.map(({ taxonomy, schemeId, conceptId }) => ({
+        taxonomy,
+        schemeId,
+        id: conceptId,
+        type: 'skos:Concept',
+        code: '1',
+        releaseDigest: bundledDigest,
+      })),
+    };
     const mediaId = randomUUID();
     let sourceReads = 0;
     let reservations = 0;
@@ -164,23 +199,28 @@ test(
       }) as typeof globalThis.fetch;
       const firstPlan = await acquireBangumiCoverSources(sourcePlan, { journal, fetch, sleep: async () => {} });
       const resumedPlan = await acquireBangumiCoverSources(sourcePlan, { journal, fetch, sleep: async () => {} });
+      const character = {
+        source: 'bangumi' as const,
+        key: 'character:11546',
+        revision: null,
+        payload: { id: 11546, type: 1, name: 'Character' },
+      };
+      firstPlan.entities.bangumi.push(character);
+      resumedPlan.entities.bangumi.push(character);
       expect(firstPlan.records.bangumi[0]!.payload).toMatchObject({ images: { large: sourceUrl } });
       expect(resumedPlan.coverSources).toEqual(firstPlan.coverSources);
       expect(sourceReads).toBe(1);
 
       const fake = {
-        async batch(request: {
-          commands: readonly {
-            key: string;
-            op: string;
-            source: { external_id: string };
-            subject?: { type: string; labels: Record<string, string> };
-          }[];
-        }) {
+        async batch(request: BatchWriteRequest) {
           return {
             results: request.commands.map((command) => {
               if (command.op === 'create')
-                return { key: command.key, status: 201 as const, value: { id: subjectId, revision: 1 } };
+                return {
+                  key: command.key,
+                  status: 201 as const,
+                  value: { id: command.source.external_id === character.key ? characterId : subjectId, revision: 1 },
+                };
               if (command.op === 'propose')
                 return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
               return { key: command.key, status: 200 as const, value: { revision: 1 } };
@@ -196,7 +236,22 @@ test(
         async writeSourceStatistic() {},
         async clearSourceStatistic() {},
         async readReviewedSubject(id: string) {
-          return { subject: { id, type: 'wd:Q20631656', labels: { en: 'STEINS;GATE' }, statements: {} } };
+          const value = (content: string) => [{ rank: 'normal', value: { type: 'value', content } }];
+          const scheme = vocab.find((binding) => binding.schemeId === id);
+          const concept = vocab.find((binding) => binding.conceptId === id);
+          if (scheme)
+            return { subject: { id, type: 'skos:ConceptScheme', statements: { 'schema:url': value(scheme.uri) } } };
+          if (concept)
+            return {
+              subject: {
+                id,
+                type: 'skos:Concept',
+                statements: { 'schema:url': value(`${concept.uri}/1`), 'skos:inScheme': value(concept.schemeId) },
+              },
+            };
+          if (id === characterId)
+            return { subject: { id, type: 'wd:Q95074', statements: { 'wdt:P6296': value('11546') } } };
+          return { subject: { id, type: 'schema:TVSeries', statements: { 'wdt:P5732': value('101') } } };
         },
         async requestMedia(bytes: string, key: string) {
           sealedBody = bytes;
@@ -337,18 +392,34 @@ test(
       expect(reservations).toBe(1);
       expect(statusReads).toBe(2);
 
-      availableOnStatusRead = statusReads + 2;
-      const resumed = await seedCrossMedia(
-        resumedPlan,
-        statePath,
-        port,
-        { origin: 'https://fixture.test' },
-        {
-          providers: ['bangumi'],
-          mediaDeadlineMs: 0,
-        },
-        { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      const transitions: string[] = [];
+      const reseed = () =>
+        seedCrossMedia(
+          resumedPlan,
+          statePath,
+          port,
+          { origin: 'https://fixture.test' },
+          {
+            providers: ['bangumi'],
+            recordConcurrency: 1,
+            mediaDeadlineMs: 0,
+            bangumiGenrePort: port as unknown as ReviewedCataloguePort,
+            recordImportProgress: new SeedFinalization('record-import', (line) => transitions.push(line)),
+          },
+          bindings,
+        );
+      const beforeReseed = journal.acknowledgedCommands();
+      const pendingFailure = await reseed().catch((error: unknown) => error);
+      const recordDigest = createHash('sha256').update('101').digest('hex');
+      expect(formatSeedError(pendingFailure)).toContain(
+        `kind=bulk-failed generation=${initial.runs.bangumi?.runId} run{phase=media reason=cover-pending keyDigest=${recordDigest} mediaState=uploaded}`,
       );
+      expect(transitions.at(-1)).toContain('phase=bangumi-cover-continuation');
+      expect(journal.acknowledgedCommands()).toEqual(beforeReseed);
+      expect(statusReads).toBe(4);
+
+      availableOnStatusRead = statusReads + 2;
+      const resumed = await reseed();
       expect(resumed.mediaOutcomes[0]).toMatchObject({
         status: 'available',
         mediaState: 'available',
@@ -358,8 +429,44 @@ test(
       expect(resumed.runs.bangumi).toMatchObject({ status: 'committed', runId: initial.runs.bangumi?.runId });
       expect(resumed.runs.bangumiCharacterFidelity?.status).toBe('committed');
       expect(resumed.runs.bangumiCharacterFidelity?.runId).not.toBe(resumed.runs.bangumi?.runId);
+      const afterReseed = journal.acknowledgedCommands();
+      expect(afterReseed).toEqual(expect.arrayContaining(beforeReseed));
+      const additions = afterReseed.filter(
+        ({ command }) =>
+          command.op === 'propose' &&
+          (command.statement.property.id === 'schema:keywords' || command.statement.property.id === 'schema:character'),
+      );
+      const appearanceEvidence = bangumiAppearanceSource(crossMediaAliases.bangumi, firstPlan.characterAppearances[0]!);
+      expect(additions.map(({ command }) => command)).toMatchObject([
+        {
+          source: { ...appearanceEvidence, external_id: '101' },
+          statement: {
+            property: { id: 'schema:character' },
+            value: { type: 'value', content: characterId },
+            qualifiers: [{ property: { id: 'wdt:P3831' }, value: { type: 'value', content: vocab[1]!.conceptId } }],
+          },
+        },
+        {
+          source: { external_id: character.key },
+          statement: { property: { id: 'schema:keywords' }, value: { type: 'value', content: vocab[0]!.conceptId } },
+        },
+      ]);
+      const manifest = buildShowcaseManifest({
+        plan: resumedPlan,
+        readings: resumed.readings,
+        acknowledgements: afterReseed,
+        aliases: crossMediaAliases,
+        mediaOutcomes: resumed.mediaOutcomes,
+      });
+      expect(manifest.records.find((record) => record.sourceKey === '101')?.assertions).toContainEqual(
+        expect.objectContaining({
+          property: 'schema:character',
+          source: { ...appearanceEvidence, external_id: '101' },
+          citations: expect.arrayContaining(['https://bgm.tv/subject/101#/subject-characters/0/type']),
+        }),
+      );
       expect(reservations).toBe(1);
-      expect(statusReads).toBe(4);
+      expect(statusReads).toBe(6);
       expect(sealedBody).toBe(JSON.stringify(mediaRequest));
       expect(sealedKey).toBeTruthy();
     } finally {

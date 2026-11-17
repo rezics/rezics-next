@@ -142,6 +142,12 @@ Bangumi Character fidelity reads current Character/work identities and Concept b
 four before starting its import generation. A non-404 failure prevents subsequent groups and is reported unchanged;
 request deadlines and retries remain owned by the existing import transport.
 
+The vocabulary reseed finishes any cover-only generation using its baseline registration before converting with
+current bindings. A pending cover leaves that generation open. Resolved records retain their receipts through
+continuation. The Work owns each appearance proposal, and the proposal carries its exact `subject-characters` row
+digest and citation. The seed failure line records the generation, Importer phase, key digest and the observed cover
+state or native refusal when available.
+
 Decision: Bangumi Character and non-Person creator endpoint reads count exact identifiers, Scheme URLs, Concept URLs
 and `skos:inScheme` values only at normal or preferred rank, scanning every statement so deprecated history cannot
 hide a later current match. Deprecated-only evidence withholds only dependent relationships; current evidence restores

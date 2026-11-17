@@ -171,6 +171,11 @@ export function bangumiAppearanceSource(alias: string, appearance: BangumiAppear
   );
 }
 
+/** The Work owns its proposal. The cited appearance row supplies the digest and converter revision. */
+export function bangumiAppearanceProposalSource(alias: string, appearance: BangumiAppearanceEvidence): Source {
+  return { ...bangumiAppearanceSource(alias, appearance), external_id: appearance.subjectId };
+}
+
 /** Merge adapter requests without allowing one taxonomy binding to replace another. */
 export function combineSourceVocabularyRequests(
   requests: readonly (SourceVocabularyRequest | undefined)[],

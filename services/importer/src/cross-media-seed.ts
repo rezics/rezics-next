@@ -2728,7 +2728,7 @@ export async function seedCrossMedia(
               containerId: input.subject,
               code: 'media-import-unknown',
             });
-            return { status: 'pending' };
+            return { status: 'pending', failure: error };
           }
           if (resolution.outcome === 'fenced') {
             mediaAttempts.set(recordKey, { ...source, status: 'fenced', containerId: input.subject });
@@ -2748,7 +2748,8 @@ export async function seedCrossMedia(
           };
           mediaAttempts.set(recordKey, observed);
           if (asset.outcome === 'rejected') return { status: 'rejected' };
-          if (asset.outcome === 'pending') return { status: 'pending' };
+          if (asset.mediaState === 'reserved' || asset.mediaState === 'uploaded')
+            return { status: 'pending', mediaState: asset.mediaState };
           ensure(
             mediaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(mediaId),
             'Available media identity is invalid',
@@ -2772,7 +2773,7 @@ export async function seedCrossMedia(
       }
       return pending;
     };
-    let pendingBangumiCoverRun: string | undefined;
+    let resumeBangumiCovers: (() => Promise<ImportRunResult>) | undefined;
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       progress?.enter(provider === 'bangumi' ? 'bangumi-records' : 'vndb-records');
@@ -2822,7 +2823,7 @@ export async function seedCrossMedia(
       const run = await importer.runRecords(registration, records());
       if (run.status !== 'committed') {
         if (!onlyPendingBangumiCovers(provider, run)) throw seedImportRunFailure(provider, run);
-        pendingBangumiCoverRun = run.runId;
+        resumeBangumiCovers = () => importer.resumeExisting(registration);
         progress?.enter('bangumi-cover-handoff');
       }
       runs[provider] = run;
@@ -2841,29 +2842,23 @@ export async function seedCrossMedia(
     if (
       providers.includes('bangumi') &&
       hasBangumiFidelityInput &&
-      (pendingBangumiCoverRun === undefined || characterBindings !== undefined)
+      (resumeBangumiCovers === undefined || characterBindings !== undefined)
     ) {
-      progress?.enter('bangumi-character-fidelity');
-      const runFidelity = () =>
-        runBangumiCharacterFidelity({
-          importer,
-          port,
-          sourceAlias: crossMediaAliases.bangumi,
-          records: bangumiFidelityRecords,
-          appearances: bangumiCharacterAppearances,
-          ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
-        });
-      fidelity = await runFidelity();
-      // Completing the old sealed run consumes that call. Start the fidelity generation with
-      // fresh current reads once the baseline has finished.
-      if (
-        pendingBangumiCoverRun !== undefined &&
-        fidelity.run.status === 'committed' &&
-        fidelity.run.runId === pendingBangumiCoverRun
-      ) {
-        runs.bangumi = fidelity.run;
-        fidelity = await runFidelity();
+      if (resumeBangumiCovers) {
+        progress?.enter('bangumi-cover-continuation');
+        const resumed = await resumeBangumiCovers();
+        if (resumed.status !== 'committed') throw seedImportRunFailure('bangumi', resumed);
+        runs.bangumi = resumed;
       }
+      progress?.enter('bangumi-character-fidelity');
+      fidelity = await runBangumiCharacterFidelity({
+        importer,
+        port,
+        sourceAlias: crossMediaAliases.bangumi,
+        records: bangumiFidelityRecords,
+        appearances: bangumiCharacterAppearances,
+        ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
+      });
       if (fidelity.run.status !== 'committed') throw seedImportRunFailure('bangumi', fidelity.run);
       runs.bangumiCharacterFidelity = fidelity.run;
     }
