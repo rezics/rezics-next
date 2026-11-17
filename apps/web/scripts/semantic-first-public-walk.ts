@@ -442,7 +442,9 @@ async function runNativeBoundaries(stack: Stack, revision: string, stackLog: str
   if (passing !== checks.length) process.exitCode = 1;
 }
 
-async function main(nativeBoundaries: boolean) {
+type WalkScope = 'all' | 'native-boundaries' | 'mounted-subject';
+
+async function main(scope: WalkScope) {
   const walkId = walkAcceptanceId(process.env);
   if (
     !walkId ||
@@ -456,7 +458,7 @@ async function main(nativeBoundaries: boolean) {
   const stack = stackOrigins();
   const stackLog = walkStackLogPath(root, walkId);
   const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
-  if (nativeBoundaries) return runNativeBoundaries(stack, revision, stackLog);
+  if (scope === 'native-boundaries') return runNativeBoundaries(stack, revision, stackLog);
 
   return withWalkResources(async (own) => {
     await mkdir(join(evidenceDir, 'screenshots'), { recursive: true, mode: 0o700 });
@@ -668,6 +670,30 @@ async function main(nativeBoundaries: boolean) {
         }
       }
       const setupCause = editorCause ?? personaCause ?? kernelCause;
+      const genericBook = () =>
+        journey(session, 'generic-creation', () =>
+          createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new', true),
+        );
+      if (scope === 'mounted-subject') {
+        const result = editor
+          ? await genericBook()
+          : failingRow(
+              FIRST_PUBLIC_JOURNEYS.find((row) => row.id === 'generic-creation')!,
+              setupCause ?? 'The ordinary catalogue author is unavailable',
+            );
+        const evidence = {
+          scope,
+          revision,
+          utc: new Date().toISOString(),
+          result,
+          kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
+        };
+        await writeFile(join(evidenceDir, 'mounted-subject.json'), `${JSON.stringify(evidence, null, 2)}\n`, {
+          mode: 0o600,
+        });
+        if (result.status === 'Failing') process.exitCode = 1;
+        return;
+      }
       if (setupCause && !editor) {
         for (const row of FIRST_PUBLIC_JOURNEYS) {
           if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
@@ -697,11 +723,7 @@ async function main(nativeBoundaries: boolean) {
       if (!editor) {
         // Sign-in is unavailable: anonymous definition and catalogue rows already ran; remaining rows keep the setup cause.
       } else {
-        results.push(
-          await journey(session, 'generic-creation', () =>
-            createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new', true),
-          ),
-        );
+        results.push(await genericBook());
         results.push(
           await journey(session, 'book-and-series-editing', async () => {
             const series = await createSubject(call, editor, 'schema:BookSeries', `Walk series ${token}`);
@@ -1169,16 +1191,16 @@ async function main(nativeBoundaries: boolean) {
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const nativeBoundaries = args.length === 2 && args[0] === '--scope' && args[1] === 'native-boundaries';
-  if (args.length && !nativeBoundaries) {
-    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries]');
+  const scope = args.length === 2 && args[0] === '--scope' ? args[1] : args.length === 0 ? 'all' : null;
+  if (scope !== 'all' && scope !== 'native-boundaries' && scope !== 'mounted-subject') {
+    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries|mounted-subject]');
     process.exit(1);
   }
   try {
-    await main(nativeBoundaries);
+    await main(scope);
   } catch (error) {
     const actual = error instanceof Error ? error.message : String(error);
-    if (nativeBoundaries) {
+    if (scope !== 'all') {
       console.error(actual);
       process.exit(1);
     }
