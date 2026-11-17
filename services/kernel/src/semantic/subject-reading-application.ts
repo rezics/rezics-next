@@ -34,7 +34,7 @@ import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { currentReadSnapshot, withReadTransaction } from './read.ts';
-import { SubjectRedirectError } from './contract/subject-errors.ts';
+import { SubjectProjectionPreparingError, SubjectRedirectError } from './contract/subject-errors.ts';
 import {
   selectedSynopsisFact,
   redactSynopsisFact,
@@ -949,7 +949,7 @@ async function readSubjectNative(
         };
       });
       if (!preflight) return null;
-      await waitForSubjectLinks(
+      let caughtUp = await waitForSubjectLinks(
         pool,
         [...(summaries.seen ?? []), preflight.component],
         subjectId,
@@ -957,6 +957,8 @@ async function readSubjectNative(
         [],
         summaries.yieldAdmission,
       );
+      requireAccessDeadline(deadline);
+      if (!caughtUp) throw new SubjectProjectionPreparingError();
       await refreshStatementReaderAuthorization();
       let check = await prepare();
       let expectedRevision = preflight.revision;
@@ -1120,7 +1122,7 @@ async function readSubjectNative(
         expectedRevision = snapshot.revision;
         expectedSecurityRevision = snapshot.securityRevision;
         requireAccessDeadline(deadline);
-        await waitForSubjectLinks(
+        caughtUp = await waitForSubjectLinks(
           pool,
           [...(summaries.seen ?? []), snapshot.component],
           subjectId,
@@ -1129,6 +1131,7 @@ async function readSubjectNative(
           summaries.yieldAdmission,
         );
         requireAccessDeadline(deadline);
+        if (!caughtUp) throw new SubjectProjectionPreparingError();
         await refreshStatementReaderAuthorization();
         check = await prepare();
         snapshot = await readCurrent();
