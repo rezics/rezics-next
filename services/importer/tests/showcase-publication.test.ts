@@ -324,9 +324,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     let preparedTags = await prepareSelectedTags();
     const parentPublication = await prepareShowcaseTagParentPublications({
       evidence: [graphParentBinding],
-      port,
+      port: captureShowcaseCommands(port, journal),
       journal,
     });
+    expect(parentPublication.gaps).toEqual([]);
+    expect(parentPublication.acknowledgements).toHaveLength(1);
     const graphParentCandidateId = parentPublication.acknowledgements[0]!.candidateId!;
     const graphParentCandidate = candidates.get(graphParentCandidateId)!;
     const staleAcceptanceHeads = new Map<string, number>([[graphParentCandidateId, 409]]);
@@ -957,7 +959,14 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(resumedAcknowledgedCalls).toContainEqual(membership.command);
     expect(candidates.has(interruptedSynopsis.id)).toBe(true);
     expect(candidates.has(membershipCandidateId)).toBe(true);
-    expect(replayed.status).toBe('published');
+    expect(
+      replayed.status,
+      JSON.stringify({
+        omissions: replayed.omissions.map(({ code }) => code),
+        published: replayed.published.length,
+        expected: replayed.manifest.records.length + replayed.manifest.vocabulary.length,
+      }),
+    ).toBe('published');
     expect(publicationPhases).toHaveLength(12);
     expect(publicationPhases.at(-2)).toContain('phase=manifest-finalization remaining=manifest-finalization');
     expect(publicationPhases.at(-1)).toBe(
@@ -2112,6 +2121,11 @@ test('stale adoption heads keep their sealed body and resume on a fresh journal 
   }
 });
 
+function fixtureAdoptionReceipt(body: Parameters<ShowcaseReviewPort['adoptReviewedCandidates']>[1], head: number) {
+  const { context, property, mode, selection } = body;
+  return { adoption: { context, property, mode, selection, head }, revision: head };
+}
+
 test('durable adopt resumes previous keys and later prepared actions before matching acknowledgements, then continues past 32 generations', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'durable-adopt-lifetime-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -2129,16 +2143,12 @@ test('durable adopt resumes previous keys and later prepared actions before matc
   const otherBody = { ...planned, selection: [{ candidate: other, rank: 'preferred' as const }] };
   const adoptKey = (digest: string) => `adopt:${showcaseDigest({ identity: `${subjectId}:schema:abstract`, digest })}`;
   const calls: { body: unknown; key: string }[] = [];
-  const review = {
-    async adoptReviewedCandidates(
-      _id: string,
-      body: { selection: { candidate: string; rank: string }[] },
-      key: string,
-    ) {
+  const review: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'> = {
+    async adoptReviewedCandidates(_id, body, key) {
       calls.push({ body, key });
-      return { adoption: { head: calls.length, selection: body.selection } };
+      return fixtureAdoptionReceipt(body, (body.expected_head ?? 0) + 1);
     },
-  } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  };
   try {
     const laterKey = adoptKey(showcaseDigest({ intent, generation: 1 }));
     journal.prepareAction(laterKey, planned, showcaseDigest({ action: laterKey, body: planned }));
@@ -2150,8 +2160,12 @@ test('durable adopt resumes previous keys and later prepared actions before matc
       review,
       subjectId,
       intent,
-      planned,
-      current: { selection: planned.selection },
+      property: planned.property,
+      async plan(refresh) {
+        expect(refresh).toBe(true);
+        expect(journal.action(laterKey)?.state).toBe('acknowledged');
+        return { planned: { ...planned, expected_head: 2 }, current: { selection: planned.selection } };
+      },
     });
     expect(historical.status).toBe('complete');
     expect(calls).toHaveLength(1);
@@ -2164,15 +2178,19 @@ test('durable adopt resumes previous keys and later prepared actions before matc
     const previous = await sendDurableAdopt({
       journal: previousJournal,
       review: {
-        async adoptReviewedCandidates(_id, _body, key) {
+        async adoptReviewedCandidates(_id, body, key) {
           previousCalls.push(key);
-          return { adoption: { head: 1, selection: planned.selection } };
+          return fixtureAdoptionReceipt(body, 2);
         },
-      } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>,
+      },
       subjectId,
       intent,
-      planned,
-      current: { selection: planned.selection },
+      property: planned.property,
+      async plan(refresh) {
+        expect(refresh).toBe(true);
+        expect(previousJournal.action(previousKey)?.state).toBe('acknowledged');
+        return { planned: { ...planned, expected_head: 2 }, current: { selection: planned.selection } };
+      },
     });
     expect(previous.status).toBe('complete');
     expect(previousCalls).toEqual(['previous-key']);
@@ -2197,8 +2215,12 @@ test('durable adopt resumes previous keys and later prepared actions before matc
       review,
       subjectId,
       intent,
-      planned: emptyPlanned,
-      current: { selection: [] },
+      property: planned.property,
+      async plan(refresh) {
+        expect(refresh).toBe(true);
+        expect(emptyJournal.action(emptyKey)?.state).toBe('acknowledged');
+        return { planned: { ...emptyPlanned, expected_head: 2 }, current: { selection: [] } };
+      },
     });
     expect(emptied.status).toBe('complete');
     expect(calls).toHaveLength(2);
@@ -2243,21 +2265,17 @@ test('durable adopt resumes previous keys and later prepared actions before matc
       unknownJournal.acknowledgeAction(action);
     }
     const unknownCalls: { body: unknown; key: string }[] = [];
-    let lose = true;
-    const unknownReview = {
-      async adoptReviewedCandidates(
-        _id: string,
-        body: { selection: { candidate: string; rank: string }[] },
-        key: string,
-      ) {
+    let committedReceipt: ReturnType<typeof fixtureAdoptionReceipt> | undefined;
+    const unknownReview: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'> = {
+      async adoptReviewedCandidates(_id, body, key) {
         unknownCalls.push({ body, key });
-        if (lose) {
-          lose = false;
+        if (!committedReceipt) {
+          committedReceipt = fixtureAdoptionReceipt(body, 2);
           throw new Error('Lost committed adoption');
         }
-        return { adoption: { head: unknownCalls.length + 10, selection: body.selection } };
+        return committedReceipt;
       },
-    } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+    };
     const lost = await sendDurableAdopt({
       journal: unknownJournal,
       review: unknownReview,
@@ -2281,8 +2299,13 @@ test('durable adopt resumes previous keys and later prepared actions before matc
       review: unknownReview,
       subjectId,
       intent,
-      planned: { ...planned, expected_head: 99 },
-      current: { selection: otherBody.selection },
+      property: planned.property,
+      async plan(refresh) {
+        expect(refresh).toBe(true);
+        const replayed = adoptKey(showcaseDigest({ intent, generation: 32 }));
+        expect(reopened.action(replayed)?.state).toBe('acknowledged');
+        return { planned: { ...planned, expected_head: 99 }, current: { selection: planned.selection } };
+      },
     });
     expect(recovered.status).toBe('complete');
     expect(unknownCalls).toHaveLength(2);
@@ -2315,16 +2338,16 @@ test('durable adopt recovers identity-bound generation 32 after close, a later r
   const sealedKey = 'unknown-32';
   let journal = new ShowcaseJournal(path);
   const calls: { body: unknown; key: string }[] = [];
-  const review = {
-    async adoptReviewedCandidates(
-      _id: string,
-      body: { selection: { candidate: string; rank: string }[] },
-      key: string,
-    ) {
+  const current = { head: 99, selection: otherBody.selection };
+  const review: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'> = {
+    async adoptReviewedCandidates(_id, body, key) {
       calls.push({ body, key });
-      return { adoption: { head: calls.length + 20, selection: body.selection } };
+      // Idempotent replay returns its original receipt while the current native head stays unchanged.
+      if (key === sealedKey) return fixtureAdoptionReceipt(planned, 2);
+      expect(body.expected_head).toBe(current.head);
+      return fixtureAdoptionReceipt(body, current.head + 1);
     },
-  } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  };
   try {
     for (let generation = 0; generation < 32; generation += 1) {
       const action = adoptKey(showcaseDigest({ intent, generation }));
@@ -2346,13 +2369,22 @@ test('durable adopt recovers identity-bound generation 32 after close, a later r
       review,
       subjectId,
       intent,
-      planned: { ...planned, expected_head: 99 },
-      current: { selection: otherBody.selection },
+      property: planned.property,
+      async plan(refresh) {
+        expect(refresh).toBe(true);
+        expect(journal.action(generation32)?.state).toBe('acknowledged');
+        return { planned: { ...planned, expected_head: current.head }, current };
+      },
     });
-    expect(recovered.status).toBe('complete');
-    expect(calls).toHaveLength(1);
+    expect(recovered).toEqual({
+      status: 'complete',
+      snapshot: { head: current.head + 1, selection: planned.selection },
+    });
+    expect(calls).toHaveLength(2);
     expect(calls[0]?.key).toBe(sealedKey);
     expect(calls[0]?.body).toEqual(planned);
+    expect(calls[1]?.key).not.toBe(sealedKey);
+    expect(calls[1]?.body).toEqual({ ...planned, expected_head: current.head });
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

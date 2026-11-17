@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { convertBangumi, converter_revision } from '@rezics/conversion/bangumi';
-import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
+import { creditSlot } from '../src/showcase-current-reads.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -85,6 +85,7 @@ const author = { id: 6023, name: '野村美月', name_cn: '野村美月', type: 
 const illustrator = { id: 7001, name: '竹岡美穗', type: 1, career: ['artist'] };
 const translator = { id: 7002, name: '他人译', type: 1, career: ['translator'] };
 const company = { id: 8001, name: 'エンターブレイン', type: 2 };
+const karaPublisher = { id: 128, name: '講談社', name_cn: null, type: 2 };
 
 function tables(
   extra: {
@@ -180,6 +181,9 @@ function valueContent(statement: { value: BatchStatement['value'] } | undefined)
 }
 
 function reviewWorld(journal: ShowcaseJournal) {
+  type Rank = 'normal' | 'preferred';
+  type PublicStatement = BatchStatement & { id: string; rank: Rank };
+  type Selection = { candidate: string; rank: Rank }[];
   const subjects = new Map<
     string,
     {
@@ -187,50 +191,46 @@ function reviewWorld(journal: ShowcaseJournal) {
       type: string;
       sourceExternalId: string;
       labels: Record<string, string>;
-      statements: Record<string, unknown[]>;
+      statements: Record<string, PublicStatement[]>;
     }
   >();
   const sources = new Map<string, string>();
   const receipts = new Map<string, { body: string; result: BatchWriteResult['results'][number] }>();
   const candidates = new Map<
     string,
-    { id: string; source: BatchCommand['source']; statement: BatchStatement; head: number | null }
+    {
+      id: string;
+      subject: string;
+      source: BatchCommand['source'];
+      statement: BatchStatement;
+      head: number | null;
+      decision: 'accepted' | null;
+    }
   >();
-  const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
+  const adopted = new Map<string, { head: number; selection: Selection }>();
   const metadata = sourceRecordMetadataFixture();
+  const slotKey = (id: string, slot: { property: string; target?: string; key?: string }) =>
+    JSON.stringify([id, slot.property, slot.target, slot.key]);
+  const publicStatement = (id: string, rank: Rank): PublicStatement => ({
+    ...candidates.get(id)!.statement,
+    id,
+    rank,
+  });
   const read = (id: string): ReviewedSubjectRead => {
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fixture subject');
-    const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
-    const property =
-      identity?.[1] === 'person' && subject.type === 'schema:Person'
-        ? 'wdt:P6298'
-        : identity?.[1] === 'character'
-          ? 'wdt:P6296'
-          : identity
-            ? 'wdt:P5732'
-            : undefined;
-    const statements = property
-      ? {
-          ...subject.statements,
-          [property]: [
-            {
-              property: { id: property },
-              value: { type: 'value', content: identity![2] },
-              references: [
-                {
-                  parts: [
-                    {
-                      property: { id: 'schema:url' },
-                      value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        }
-      : subject.statements;
+    // The source identity is already reviewed at the first current read. Use the exact
+    // proposal and its citation, and let subsequent native selections supersede it.
+    const identity = [...candidates.values()].find(
+      (candidate) =>
+        candidate.subject === id &&
+        (candidate.statement.property.id === 'wdt:P5732' || candidate.statement.property.id === 'wdt:P6298'),
+    );
+    const statements = { ...subject.statements };
+    if (identity) {
+      const property = identity.statement.property.id;
+      statements[property] ??= [publicStatement(identity.id, 'normal')];
+    }
     return { subject: { ...subject, statements } } as unknown as ReviewedSubjectRead;
   };
   const basePort = {
@@ -269,7 +269,14 @@ function reviewWorld(journal: ShowcaseJournal) {
             result = { key: command.key, status: 201, value: { id, revision: 1 } };
           } else if (command.op === 'propose') {
             const id = randomUUID();
-            candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
+            candidates.set(id, {
+              id,
+              subject: command.subject,
+              source: command.source,
+              statement: command.statement,
+              head: null,
+              decision: null,
+            });
             result = { key: command.key, status: 201, value: { candidate: id, revision: 1 } };
           } else result = { key: command.key, status: 200, value: { revision: 1 } };
           receipts.set(command.key, { body, result });
@@ -280,46 +287,69 @@ function reviewWorld(journal: ShowcaseJournal) {
   } as unknown as CrossMediaPort;
   const port = captureShowcaseCommands(basePort, journal);
   const review: ShowcaseReviewPort = {
+    fence: basePort.fence,
     readReviewedSubject: async (id) => read(id),
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
-      const adoption = adopted.get(`${id}\0${query.property}`);
+      const adoption = adopted.get(slotKey(id, query));
       return {
         candidates: [...candidates.values()]
-          .filter(
-            (candidate) =>
-              candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
-              candidate.statement.property.id === query.property,
-          )
-          .map((candidate) => ({
-            ...candidate,
-            rank: adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
+          .filter((candidate) => {
+            const slot = creditSlot(candidate.statement);
+            return (
+              candidate.subject === id &&
+              candidate.statement.property.id === query.property &&
+              slot?.target === query.target &&
+              slot?.key === query.key
+            );
+          })
+          .map(({ id, source, statement, head, decision }) => ({
+            id,
+            source,
+            statement,
+            head,
+            decision,
+            rank: adoption?.selection.find((selection) => selection.candidate === id)?.rank ?? null,
           })),
         next: null,
         adoption: adoption ? { head: adoption.head, mode: 'replace' } : null,
       } as never;
     },
-    async acceptReviewedCandidate(_id, candidateId) {
+    async acceptReviewedCandidate(id, candidateId, body) {
+      const candidate = candidates.get(candidateId)!;
+      expect(candidate.subject).toBe(id);
+      expect(body.context).toBe(globalContext);
+      expect(body.expected_head).toBe(candidate.head);
+      candidate.head = (candidate.head ?? 0) + 1;
+      candidate.decision = 'accepted';
       return {
-        acceptance: { context: globalContext, candidate: candidateId, decision: 'accept', head: 1 },
+        acceptance: { context: body.context, candidate: candidateId, decision: 'accept', head: candidate.head },
         revision: 1,
-      } as never;
+      };
     },
     async adoptReviewedCandidates(id, body) {
-      const action = body as {
-        property: string;
-        selection: { candidate: string; rank: 'normal' | 'preferred' }[];
-      };
-      const key = `${id}\0${action.property}`;
-      const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
+      const key = slotKey(id, body);
+      const previous = adopted.get(key);
+      expect(body.context).toBe(globalContext);
+      expect(body.mode).toBe('replace');
+      expect(body.expected_head).toBe(previous?.head ?? null);
+      const selection = body.selection as Selection;
+      for (const { candidate } of selection) {
+        const selected = candidates.get(candidate)!;
+        expect(selected.decision).toBe('accepted');
+        expect(
+          slotKey(selected.subject, { property: selected.statement.property.id, ...creditSlot(selected.statement) }),
+        ).toBe(key);
+      }
+      const next = { head: (previous?.head ?? 0) + 1, selection };
       adopted.set(key, next);
-      subjects.get(id)!.statements[action.property] = action.selection.map(
-        ({ candidate }) => candidates.get(candidate)!.statement,
-      );
-      return {
-        adoption: { context: globalContext, property: action.property, mode: 'replace', ...next },
-        revision: 1,
-      } as never;
+      const statements = subjects.get(id)!.statements;
+      const replaced = new Set(previous?.selection.map(({ candidate }) => candidate));
+      statements[body.property] = [
+        ...(statements[body.property] ?? []).filter((statement) => !replaced.has(statement.id)),
+        ...selection.map(({ candidate, rank }) => publicStatement(candidate, rank)),
+      ];
+      return { adoption: { ...body, head: next.head }, revision: 1 };
     },
   };
   const publicClient = createPublicBulkClient({
@@ -389,6 +419,7 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
     const first = await importShowcaseBooks({
       tables: tables({
         complete: true,
+        secondFamily: true,
         credits: [{ person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' }],
       }),
       path: join(directory, 'state.sqlite'),
@@ -440,7 +471,11 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
     expect(JSON.stringify(volumeRead)).not.toContain('9784757728066');
     const membership = [...world.receipts.values()].filter((row) => {
       const command = JSON.parse(row.body) as BatchCommand;
-      return command.op === 'propose' && command.statement.property.id === 'wdt:P179';
+      return (
+        command.op === 'propose' &&
+        command.statement.property.id === 'wdt:P179' &&
+        valueContent(command.statement) === first.identities['499']!.id
+      );
     });
     expect(membership).toHaveLength(2);
     expect(
@@ -470,6 +505,7 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
     const again = await importShowcaseBooks({
       tables: tables({
         complete: true,
+        secondFamily: true,
         credits: [{ person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' }],
       }),
       path: join(directory, 'state.sqlite'),
@@ -491,11 +527,13 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
 
 test('book status reflects creator evidence lost after seeding while retaining current roles and identities', async () => {
   const source = tables({
+    complete: true,
+    secondFamily: true,
     credits: [
       { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
-      { person_id: 7001, subject_id: 26, position: 2002, appear_eps: '' },
+      { person_id: 128, subject_id: 2815, position: 2004, appear_eps: '' },
     ],
-    people: [author, illustrator],
+    people: [author, karaPublisher],
   });
   const planned = await planShowcaseBooks({ tables: source });
   expect(planned.gaps).toEqual([]);
@@ -504,23 +542,25 @@ test('book status reflects creator evidence lost after seeding while retaining c
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
     const world = reviewWorld(journal);
-    let seededStatus: string | undefined;
     let seededAuthorId: string | undefined;
     const result = await runShowcaseBooks({
       seed: async (...args) => {
         const seeded = await seedCrossMedia(...args);
-        seededStatus = seeded.status;
+        expect({
+          status: seeded.status,
+          gaps: seeded.gaps,
+          creditGaps: seeded.creditGaps,
+          unresolved: seeded.unresolved,
+        }).toEqual({ status: 'imported', gaps: [], creditGaps: [], unresolved: [] });
         seededAuthorId = [...world.subjects.values()].find((subject) => subject.sourceExternalId === 'person:6023')?.id;
         const authorRole = [...world.subjects.values()].find(
           (subject) => subject.sourceExternalId === 'vocabulary:bangumi.staff:2001',
         );
         if (!authorRole) throw new Error('Missing seeded author-role concept');
-        authorRole.statements['schema:sameAs'] = [
-          {
-            property: { id: 'schema:sameAs' },
-            value: { type: 'value', content: 'https://example.test/retracted-author' },
-          },
-        ];
+        authorRole.statements['schema:sameAs'] = authorRole.statements['schema:sameAs']!.map((statement) => ({
+          ...statement,
+          value: { type: 'value', content: 'https://example.test/retracted-author' },
+        }));
         return seeded;
       },
       planned,
@@ -532,7 +572,6 @@ test('book status reflects creator evidence lost after seeding while retaining c
       publicClient: world.publicClient,
     });
 
-    expect(seededStatus).toBe('imported');
     expect(result.status).toBe('imported-with-gaps');
     expect(result.creditGaps).toEqual([
       {
@@ -543,7 +582,7 @@ test('book status reflects creator evidence lost after seeding while retaining c
         property: 'schema:author',
       },
     ]);
-    expect(result.creditRoles).toEqual([expect.objectContaining({ code: '2002', property: 'schema:illustrator' })]);
+    expect(result.creditRoles).toEqual([expect.objectContaining({ code: '2004', property: 'schema:publisher' })]);
     expect(seededAuthorId).toBeDefined();
     expect(result.identities['person:6023']?.id).toBe(seededAuthorId);
   } finally {
@@ -571,7 +610,7 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
         author,
         { id: 1466, name: '奈須きのこ', name_cn: null, type: 1, career: [] },
         { id: 1467, name: '武内崇', name_cn: null, type: 1, career: [] },
-        { id: 128, name: '講談社', name_cn: null, type: 2 },
+        karaPublisher,
       ],
     });
   try {
@@ -669,8 +708,10 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       'person:1466',
       'person:1467',
       'person:128',
-    ])
+    ]) {
+      expect(first.identities[key]?.id).toBeDefined();
       expect(reopened.identities[key]?.id).toBe(first.identities[key]?.id);
+    }
     expect(
       reopened.planned.edges.find((edge) => edge.property === 'rezics:crossMediaCounterpart')?.relation,
     ).toMatchObject({
@@ -741,7 +782,8 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
   );
 
   const directory = await mkdtemp(join(tmpdir(), 'showcase-books-gaps-'));
-  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
   try {
     const world = reviewWorld(journal);
     const first = await importShowcaseBooks({
@@ -763,16 +805,16 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     });
     const role = first.creditRoles![0]!;
     const concept = world.subjects.get(role.conceptId)!;
-    concept.statements['schema:sameAs'] = [
-      {
-        property: { id: 'schema:sameAs' },
-        value: { type: 'value', content: 'https://example.test/retracted-author' },
-      },
-    ];
+    concept.statements['schema:sameAs'] = concept.statements['schema:sameAs']!.map((statement) => ({
+      ...statement,
+      value: { type: 'value', content: 'https://example.test/retracted-author' },
+    }));
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
     const retracted = await importShowcaseBooks({
       tables: tables(),
       path: join(directory, 'state.sqlite'),
-      port: world.port,
+      port: captureShowcaseCommands(world.rawPort, journal),
       journal,
       review: world.review,
       publicClient: world.publicClient,
@@ -1051,7 +1093,7 @@ test('pinned real light-novel families publish through the reviewed world and re
     expect(new Set(first.planned.credits.map((draft) => draft.work))).toEqual(new Set(['499', '2815']));
     expect(contents(series2815, 'schema:publisher')).toContain(first.identities['person:128']!.id);
     expect(contents(series2815, 'schema:name')).toContainEqual({ language: 'und', text: 'THE GARDEN OF SINNERS' });
-    // The fake world adopts no relation statements, so volume membership is checked as its exact proposals.
+    // Check the exact relation proposals alongside the independent public subject reads.
     const membership = [...world.receipts.values()]
       .map((row) => JSON.parse(row.body) as BatchCommand)
       .filter(
@@ -1087,8 +1129,21 @@ test('pinned real light-novel families publish through the reviewed world and re
       prior: publication,
     });
     expect(reopened.selected).toEqual(first.selected);
-    for (const key of ['499', '2815', '26', '5329', '10862', '233', 'person:1466', 'person:1467', 'person:128'])
+    for (const key of [
+      '1851',
+      '499',
+      '2815',
+      '26',
+      '5329',
+      '10862',
+      '233',
+      'person:1466',
+      'person:1467',
+      'person:128',
+    ]) {
+      expect(first.identities[key]?.id).toBeDefined();
       expect(reopened.identities[key]?.id).toBe(first.identities[key]?.id);
+    }
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
