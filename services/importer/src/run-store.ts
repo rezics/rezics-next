@@ -2309,19 +2309,22 @@ export class RunStore<Projection = BatchStatement[]> {
       ).changes
     )
       throw new Error('Run is not ready');
-    if (this.generation(run).acquisition_mode === 'selected') return [];
     // after is the last emitted key. Its exact membership lookup recovers the seen half of
     // the durable composite cursor, including after failed staging touched some prior members.
     const after = page.after ?? '';
     return this.all<{ row_json: string }>(
       `SELECT m.row_json FROM run_members AS m INDEXED BY run_missing
       WHERE m.source=? AND m.active=1
-        AND m.seen<(SELECT seq FROM run_generations WHERE source=? AND id=?)
+        AND m.seen<(
+          SELECT seq FROM run_generations
+          WHERE source=? AND id=? AND lease=? AND status='ready' AND acquisition_mode<>'selected'
+        )
         AND (m.seen,m.record_key)>(COALESCE((SELECT seen FROM run_members WHERE source=? AND record_key=?),-1),?)
       ORDER BY m.seen,m.record_key LIMIT ?`,
       run.source,
       run.source,
       run.id,
+      run.lease,
       run.source,
       after,
       after,
