@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
-import type { Locator, Page, Response } from 'playwright';
+import type { Page, Response } from 'playwright';
 import { parseLegacySearchPage } from '../../src/search/discovery.ts';
 import {
   startBookCatalogueJourneyFixture,
@@ -8,6 +8,7 @@ import {
   type BookCatalogueJourneyFixture,
   type BookCatalogueType,
 } from './book-catalogue-journey-fixture.ts';
+import { assertShelfPage, exactType, openNewTabFromLink, pageReady, problemCode } from './book-catalogue-browser.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 
 const lifecycle = new NativeTestLifecycle('native Book catalogue journey');
@@ -23,25 +24,6 @@ const types = ['schema:Book', 'schema:BookSeries', 'bf:Instance'] as const;
 
 function stage(name: string, evidence: Record<string, unknown>): void {
   console.info('book-catalogue-journey-stage', JSON.stringify({ stage: name, ...evidence }));
-}
-
-async function pageReady(page: Page, stageName: string): Promise<void> {
-  page.setDefaultTimeout(45_000);
-  try {
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-  } catch (error) {
-    const body = await page
-      .locator('body')
-      .innerText()
-      .catch(() => 'body unavailable');
-    throw new Error(`${stageName}: page did not hydrate at ${page.url()}; body=${body.slice(0, 500)}`, {
-      cause: error,
-    });
-  }
-}
-
-function exactType(address: string): string | null {
-  return new URL(address).searchParams.get('type');
 }
 
 function exactSearchLink(page: Page, subject: BookCatalogueIdentity) {
@@ -78,18 +60,6 @@ async function assertSearchResult(page: Page, subject: BookCatalogueIdentity): P
   }).toPass({ timeout: 5_000 });
 }
 
-function problemCode(body: unknown): string | undefined {
-  if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return;
-    }
-  }
-  if (body === null || typeof body !== 'object' || !('code' in body)) return;
-  return typeof body.code === 'string' && /^[a-z0-9_]{1,64}$/u.test(body.code) ? body.code : undefined;
-}
-
 async function reportBookSearchFailure(
   browserResponses: readonly { boundary: 'document' | 'server function'; status: number }[],
 ) {
@@ -124,21 +94,6 @@ async function reportBookSearchFailure(
     parsed: page !== undefined,
     expectedBook: page?.subjects.some(({ id, type }) => id === subjects.book.id && type === subjects.book.type),
   });
-}
-
-async function openNewTabFromLink(page: Page, link: Locator, label: string): Promise<Page> {
-  const newPage = page.context().waitForEvent('page');
-  await link.click();
-  const opened = await newPage;
-  await opened.waitForLoadState('domcontentloaded');
-  await pageReady(opened, label);
-  return opened;
-}
-
-async function assertShelfPage(page: Page, type: BookCatalogueType): Promise<void> {
-  expect(new URL(page.url()).pathname).toBe('/en/library');
-  expect(exactType(page.url())).toBe(type);
-  await browserExpect(page.getByRole('main')).toBeVisible();
 }
 
 async function assertPlannedShelf(shelf: Page, type: BookCatalogueType): Promise<void> {

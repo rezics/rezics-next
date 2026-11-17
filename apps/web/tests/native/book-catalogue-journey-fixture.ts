@@ -50,6 +50,13 @@ type NativeRelease = {
 type NativeSubjectCreate = Parameters<KernelClient['subjects']['post']>[0];
 type NativeState = { id: string; label: string };
 type LibraryEntryRead = { subjectId: string; state: string; revision: number };
+export type BookShelfBoundaryFixture = {
+  stack: NativeWebStack;
+  auth: NativeAuthStack;
+  book: BookCatalogueIdentity;
+  bookPlanned: NativeState;
+  nativeShelf: { status: number; subjectId: string; state: string };
+};
 
 export type BookCatalogueJourneyFixture = {
   stack: NativeWebStack;
@@ -618,9 +625,31 @@ async function waitForNativeSearch(
   );
 }
 
-export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJourneyFixture> {
-  const searchContainer = await prepareSearch();
-  const stack = await startNativeWebStack({ writeRateOverrides, observeBookSearchPreparation: true });
+async function readPlannedBookShelf(stack: NativeWebStack, book: BookCatalogueIdentity, planned: NativeState) {
+  const path = `/v1/libraryEntries?view=FULL&limit=20&orderBy=lastActivity&direction=desc&type=${encodeURIComponent(book.type)}`;
+  const response = await stack.kernel(path, { headers: { 'accept-language': 'en' } }, 'alice');
+  const shelf = await responseJson<{ libraryEntries: LibraryEntryRead[] }>(
+    response,
+    200,
+    `GET ${path} as fixture Alice`,
+  );
+  const bookEntry = shelf.libraryEntries.find(({ subjectId, state }) => subjectId === book.id && state === planned.id);
+  if (!bookEntry) throw new Error('Fixture Alice’s sorted Book shelf did not contain the planned Book');
+  return { status: response.status, subjectId: bookEntry.subjectId, state: bookEntry.state };
+}
+
+export function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJourneyFixture>;
+export function startBookCatalogueJourneyFixture(scope: 'shelf-boundary'): Promise<BookShelfBoundaryFixture>;
+export async function startBookCatalogueJourneyFixture(
+  scope?: 'shelf-boundary',
+): Promise<BookCatalogueJourneyFixture | BookShelfBoundaryFixture> {
+  const shelfOnly = scope === 'shelf-boundary';
+  const searchContainer = shelfOnly ? undefined : await prepareSearch();
+  const stack = await startNativeWebStack({
+    writeRateOverrides,
+    observeBookSearchPreparation: !shelfOnly,
+    observePersonalAccess: shelfOnly,
+  });
   let auth: NativeAuthStack | undefined;
   try {
     const active = await responseJson<{ digest: string }>(
@@ -655,6 +684,16 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
         'wdt:P179': [relation('wdt:P179', series.id, `https://example.org/native-book-catalogue/${marker}/series`)],
       },
     );
+    if (shelfOnly) {
+      // Retain the exact Book seed, including its Series relation. The first shelf only reads Alice's Book entry.
+      await readCreatedSubject(stack, book, { property: 'wdt:P179', target: series.id });
+      const bookPlanned = releasedState(release, book.type, 'planned', true)!;
+      await openLibraryGates(stack);
+      await createLibraryEntry(stack, book, bookPlanned);
+      const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
+      auth = await startAuthStack(stack);
+      return { stack, auth, book, bookPlanned, nativeShelf };
+    }
     const edition = await createSubject(
       stack,
       marker,
@@ -699,20 +738,13 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     if (seriesPlanned) await createLibraryEntry(stack, series, seriesPlanned);
 
     const search = await waitForNativeSearch(stack, marker, expected);
-    const shelfPath = `/v1/libraryEntries?view=FULL&limit=20&orderBy=lastActivity&direction=desc&type=${encodeURIComponent(book.type)}`;
-    const shelf = await responseJson<{ libraryEntries: LibraryEntryRead[] }>(
-      await stack.kernel(shelfPath, { headers: { 'accept-language': 'en' } }, 'alice'),
-      200,
-      `GET ${shelfPath} as fixture Alice`,
-    );
-    if (!shelf.libraryEntries.some(({ subjectId, state }) => subjectId === book.id && state === bookPlanned.id))
-      throw new Error('Fixture Alice’s sorted Book shelf did not contain the planned Book');
+    const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
     auth = await startAuthStack(stack);
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({
         stage: 'fixture preparation',
-        directBookShelfStatus: 200,
+        directBookShelfStatus: nativeShelf.status,
         definitions: active.digest,
         defaultSearchStatus: 200,
         defaultSearchIdentities: expected.map(({ id, type, label }) => ({ id, type, label })),
@@ -721,7 +753,7 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
           edition: editionPlanned,
           series: seriesPlanned ?? 'no personal Library profile in this release',
         },
-        searchContainer: searchContainer.container ?? 'shared OPENSEARCH_URL',
+        searchContainer: searchContainer?.container ?? 'shared OPENSEARCH_URL',
       }),
     );
     return {
@@ -732,7 +764,7 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
       states: { bookPlanned, bookCompleted, editionPlanned, ...(seriesPlanned ? { seriesPlanned } : {}) },
       initialBookEntry,
       search,
-      searchContainer: searchContainer.container,
+      searchContainer: searchContainer?.container,
     };
   } catch (error) {
     await auth?.stop().catch(() => {});
