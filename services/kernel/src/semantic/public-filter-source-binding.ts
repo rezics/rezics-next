@@ -1363,6 +1363,7 @@ export function createNativePublicFilterSourceBinding(
     inputLimit: number,
     db: Pool,
     cost: BindingCost,
+    retained?: Pick<RepairRecord, 'windowBatch' | 'next'>,
   ): Promise<Readonly<{ next: RepairState; batch: NonNullable<RepairRecord['windowBatch']> }>> {
     if (
       state.phase !== 'window' ||
@@ -1375,8 +1376,9 @@ export function createNativePublicFilterSourceBinding(
       state.projection !== null
     )
       throw new BindingError('binding_mismatch');
-    const limit = Math.min(inputLimit, repairHomeBatchLimit, 4096 - state.partition);
-    const through = state.partition + limit - 1;
+    const maxHomes = Math.min(inputLimit, repairHomeBatchLimit, 4096 - state.partition);
+    const limit = retained?.windowBatch?.examined ?? maxHomes;
+    if (!Number.isInteger(limit) || limit < 1 || limit > maxHomes) throw new BindingError('binding_mismatch');
     const consumer = publicFilterCreationConsumer(nativeId(bootstrap));
     cost.rows += limit * 2;
     cost.dependencyPoints += limit * 2;
@@ -1385,10 +1387,14 @@ export function createNativePublicFilterSourceBinding(
       bootstrap: nativeId(bootstrap),
       consumer,
       partition_no: state.partition,
-      through,
+      through: state.partition + limit - 1,
+      replaying: retained !== undefined,
     });
-    if (rows.length < 1 || rows.length > limit) throw new BindingError('binding_mismatch');
+    if (rows.length < 1 || rows.length > limit || (retained && rows.length !== limit))
+      throw new BindingError('binding_mismatch');
     const closed: PublicFilterCreationWindow[] = [];
+    const originalRows: (typeof rows)[number][] = [];
+    const retainedOpen = retained?.next.bridge;
     let open: PublicFilterCreationWindow | undefined;
     for (const [index, row] of rows.entries()) {
       const partition = state.partition + index;
@@ -1411,19 +1417,30 @@ export function createNativePublicFilterSourceBinding(
       const base = BigInt(row.base);
       const head = BigInt(row.head);
       const checkpoint = BigInt(row.checkpoint);
-      if (base < 0n || head < base || checkpoint > base || !/^[0-9a-f]{64}$/.test(row.receipt))
+      // Only the final home could be open in the saved scan. Later appends
+      // must leave its bridge and the digest for all examined homes intact.
+      const through = retained ? (retainedOpen?.partition === partition ? retainedOpen.through : base) : head;
+      if (
+        base < 0n ||
+        typeof through !== 'bigint' ||
+        through < base ||
+        head < through ||
+        checkpoint > base ||
+        !/^[0-9a-f]{64}$/.test(row.receipt)
+      )
         throw new BindingError('configuration_changed');
+      originalRows.push(retained ? { ...row, head: String(through) } : row);
       const window: PublicFilterCreationWindow = {
         partition,
         epoch: row.epoch,
         receipt: row.receipt,
         base,
-        through: head,
+        through,
         position: base + 1n,
         sequence: 0,
         eventCount: null,
       };
-      if (head === base) closed.push(window);
+      if (through === base) closed.push(window);
       else {
         if (index !== rows.length - 1) throw new BindingError('binding_mismatch');
         open = window;
@@ -1443,7 +1460,7 @@ export function createNativePublicFilterSourceBinding(
         from: state.partition,
         count: closed.length,
         examined: rows.length,
-        digest: hash(encode({ input: state, inputLimit, consumer, rows })),
+        digest: hash(encode({ input: state, inputLimit, consumer, rows: originalRows })),
         packed: packClosedCreationWindows(closed),
       },
     };
@@ -1840,7 +1857,8 @@ export function createNativePublicFilterSourceBinding(
       const prefix = scanPrefix
         ? await scanPublicationCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, replay?.windowBatch)
         : null;
-      const scanned = prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost));
+      const scanned =
+        prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -2973,7 +2991,7 @@ export function createNativePublicFilterSourceBinding(
               throw new BindingError('binding_mismatch');
             const scanned =
               record.windowBatch.through === undefined
-                ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost)
+                ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
                 : await scanPublicationCreationPrefix(
                     input.bootstrap,
                     record.input,
