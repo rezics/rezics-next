@@ -505,6 +505,8 @@ test('finalization interrupted mid-cursor resumes without duplicate native effec
   const rows = Array.from({ length: 140 }, (_, i) => row(i + 1, `Title ${i + 1}`));
   let importer = new Importer({ path: state, transport: f.transport });
   try {
+    expect((await importer.runRecords(registration, records(rows[0]!))).status).toBe('committed');
+    const firstGeneration = importer.session.store.source('wikidata').generation!;
     expect((await importer.runRecords(registration, records(...rows))).status).toBe('committed');
     const generation = importer.session.store.source('wikidata').generation!;
     const writes = f.requests.length;
@@ -516,7 +518,18 @@ test('finalization interrupted mid-cursor resumes without duplicate native effec
       .run(rows[99]!.key, 'wikidata', generation);
     await importer.close();
     importer = new Importer({ path: state, transport: f.transport, existing: true });
-    const resumed = await importer.resumeExisting(registration);
+    let activated = false;
+    const mismatched = await importer.resumeExisting(registration, {
+      expectedGeneration: firstGeneration,
+      activateNetwork() {
+        activated = true;
+      },
+    });
+    expect(mismatched.status).toBe('invalid-dump');
+    expect(activated).toBe(false);
+    expect(importer.session.store.activeRun('wikidata')?.id).toBe(generation);
+    expect(f.requests.length).toBe(writes);
+    const resumed = await importer.resumeExisting(registration, { expectedGeneration: generation });
     expect(resumed.status, resumed.diagnostic).toBe('committed');
     expect(f.requests.length).toBe(writes);
     expect(importer.session.store.source('wikidata').generation).toBe(generation);

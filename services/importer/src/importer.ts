@@ -176,6 +176,8 @@ export type ImportRunOptions = {
   checkpoint?: StagingCheckpointRequest;
 };
 export type ResumeRunOptions = ImportRunOptions & {
+  /** Require the same active generation that a preceding handoff inspected. */
+  expectedGeneration?: string;
   /** Credentials and live transport are constructed only after sealed work is admitted. */
   activateNetwork?: () => void | Promise<void>;
 };
@@ -2784,6 +2786,8 @@ export class Importer {
           'invalid-dump',
           'No resumable sealed acquisition for this source. Use ordinary import with complete input, or inspect this state read-only.',
         );
+      if (options.expectedGeneration !== undefined && peeked.run.id !== options.expectedGeneration)
+        return finish('invalid-dump', 'The requested sealed acquisition is no longer active.');
       if (peeked.status === 'staging')
         return finish(
           'invalid-dump',
@@ -2803,7 +2807,8 @@ export class Importer {
       }
       if (options.activateNetwork) await options.activateNetwork();
       const run = this.session.reopen(ownership);
-      if (!run) return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
+      if (!run || run.id !== peeked.run.id)
+        return finish('invalid-dump', 'Sealed acquisition changed after ownership was taken.');
       const recheck = this.session.store.peekActive(ownership.source);
       if (!recheck || recheck.run.id !== run.id)
         return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');

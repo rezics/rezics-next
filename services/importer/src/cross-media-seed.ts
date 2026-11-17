@@ -2548,7 +2548,10 @@ export async function seedCrossMedia(
   const personIdentities: CrossMediaPersonIdentity[] = [];
   const mediaAttempts = new Map<string, CrossMediaMediaOutcome>();
   const unsubmittedCovers = new Set<string>();
-  const onlyPendingBangumiCovers = (provider: Provider, result: ImportRunResult): boolean => {
+  const onlyPendingBangumiCovers = (
+    provider: Provider,
+    result: ImportRunResult,
+  ): result is ImportRunResult & { runId: string } => {
     if (
       provider !== 'bangumi' ||
       result.status !== 'bulk-failed' ||
@@ -2823,7 +2826,7 @@ export async function seedCrossMedia(
       const run = await importer.runRecords(registration, records());
       if (run.status !== 'committed') {
         if (!onlyPendingBangumiCovers(provider, run)) throw seedImportRunFailure(provider, run);
-        resumeBangumiCovers = () => importer.resumeExisting(registration);
+        resumeBangumiCovers = () => importer.resumeExisting(registration, { expectedGeneration: run.runId });
         progress?.enter('bangumi-cover-handoff');
       }
       runs[provider] = run;
