@@ -536,6 +536,33 @@ async function readStructure(client: KernelClient, catalogueId: string, signal?:
   return { head, items };
 }
 
+async function readChangedPlacement(
+  client: KernelClient,
+  catalogueId: string,
+  occurrenceId: string,
+  partTitle: string,
+  change: 'before-part' | 'inside-part',
+) {
+  const timeout = 30_000;
+  const signal = AbortSignal.timeout(timeout);
+  const deadline = performance.now() + timeout;
+  do {
+    const { items } = await readStructure(client, catalogueId, signal);
+    const part = items.find((item) => item.kind === 'part' && item.title === partTitle);
+    const moved = items.find((item) => item.occurrenceId === occurrenceId);
+    if (
+      part &&
+      moved &&
+      (change === 'inside-part'
+        ? moved.parentId === part.occurrenceId
+        : moved.parentId === part.parentId && moved.position < part.position)
+    )
+      return { part, moved };
+    await Bun.sleep(Math.max(0, Math.min(250, deadline - performance.now())));
+  } while (performance.now() < deadline);
+  throw new Error(`Generated Book structure did not confirm ${change} for the exact placement ${occurrenceId}`);
+}
+
 async function pickDraft(page: Page, title: string) {
   await page.getByRole('button', { name: 'Open a saved account draft', exact: true }).click();
   const picker = page.getByRole('region', { name: 'Server-saved drafts', exact: true });
@@ -864,7 +891,7 @@ nativeTest(
           async () => {
             await page.getByRole('button', { name: 'Version history', exact: true }).click();
             const versions = page.getByRole('region', { name: 'Document versions', exact: true });
-            await expect(versions).toBeVisible();
+            await versions.waitFor({ state: 'visible' });
             const original = versions.locator('li').filter({ hasText: seed!.chapterOne.revisionId });
             await original.getByRole('button', { name: /^Compare /u }).click();
             await versions.getByRole('heading', { name: 'Selected version', exact: true }).waitFor({
@@ -1092,11 +1119,14 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await movePlacementUp(page, chapterTwoTitle!);
-            const outline = await readStructure(seed!.author, catalogueId!);
-            const moved = outline.items.find((item) => item.occurrenceId === chapterTwoOccurrence);
-            const part = outline.items.find((item) => item.kind === 'part' && item.title === partTitle);
-            if (!moved || !part || moved.parentId !== null || moved.position >= part.position)
-              throw new Error('Root sibling reorder did not place the chapter before its part');
+            const { part, moved } = await readChangedPlacement(
+              seed!.author,
+              catalogueId!,
+              chapterTwoOccurrence!,
+              partTitle!,
+              'before-part',
+            );
+            expect(moved.parentId).toBeNull();
             return {
               value: moved,
               observation:
@@ -1115,16 +1145,14 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await movePlacementUnderPart(page, chapterTwoTitle!, partTitle!);
-            const outline = await readStructure(seed!.author, catalogueId!);
-            const part = outline.items.find((item) => item.kind === 'part' && item.title === partTitle);
-            const moved = outline.items.find((item) => item.occurrenceId === chapterTwoOccurrence);
-            if (
-              !part ||
-              !moved ||
-              moved.parentId !== part.occurrenceId ||
-              moved.target?.revisionId !== chapterTwo!.revisionId ||
-              moved.target.sha256 !== chapterTwo!.sha256
-            )
+            const { part, moved } = await readChangedPlacement(
+              seed!.author,
+              catalogueId!,
+              chapterTwoOccurrence!,
+              partTitle!,
+              'inside-part',
+            );
+            if (moved.target?.revisionId !== chapterTwo!.revisionId || moved.target.sha256 !== chapterTwo!.sha256)
               throw new Error('Generated structure did not retain the exact nested placement');
             return {
               value: moved,
@@ -1198,7 +1226,10 @@ nativeTest(
               revisionId: chapterOne!.revisionId,
               sha256: chapterOne!.sha256,
             });
-            const prepareLink = page.getByRole('link', { name: 'Prepare the whole Book', exact: true });
+            await page.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+            const prepareLink = page
+              .getByRole('region', { name: 'Publication', exact: true })
+              .getByRole('link', { name: 'Prepare the whole Book', exact: true });
             const prepareHref = await prepareLink.getAttribute('href');
             if (!prepareHref) throw new Error('Book Studio did not expose the mounted preparation route');
             await prepareLink.click();
@@ -1368,14 +1399,16 @@ nativeTest(
             async () => {
               await openBookStudio(page, catalogueId!);
               await movePlacementUnderPart(page, chapterOneTitle!, partTitle!);
-              const current = await readStructure(seed!.author, catalogueId!);
-              const moved = current.items.find((item) => item.occurrenceId === chapterOneOccurrence);
+              const { moved } = await readChangedPlacement(
+                seed!.author,
+                catalogueId!,
+                chapterOneOccurrence!,
+                partTitle!,
+                'inside-part',
+              );
               const currentPost = await readNativePost(seed!.author, chapterOne!.id);
               const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
-              expect(moved?.parentId).toBe(
-                current.items.find((item) => item.kind === 'part' && item.title === partTitle)?.occurrenceId,
-              );
-              expect(moved?.target).toMatchObject({
+              expect(moved.target).toMatchObject({
                 revisionId: chapterOne!.revisionId,
                 sha256: chapterOne!.sha256,
               });
