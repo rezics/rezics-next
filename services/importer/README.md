@@ -91,7 +91,7 @@ supplied transport, cancellation, owner, credentials and seed context. `cli-cont
 plans and results; `cli-host.ts` binds the process, SQLite, filesystem, network and clock; `cli-application.ts`
 plans and executes commands. `ImportTransportError` and `formatImportTransportError` retain transport cause
 and phase. Native and browser acceptance uses the
-[first-public walk](../../docs/goals/imports.capabilities.md#first-public-journey-walk).
+[first-public catalogue qualification](../../docs/goals/imports.capabilities.md#first-public-catalogue-qualification).
 
 Decision: Legacy-history fixtures review and declare their selected API origin through the ordinary `destination` CLI before import. Import admission remains strict: a configured `--api` never supplies historical origin evidence, and fresh sources still record first use through the normal importer application.
 
@@ -146,7 +146,9 @@ Decision: current review and anonymous publication reads use `no-store`, includi
 The anonymous reader shares the 1 MiB Importer response bound and one deadline across the original request
 and its single native canonical hop. A second redirect requires a fresh read of the original identity. Selected-synopsis Sources sends the original Subject release and optional page release as `sha256:` digests through the generated Subject operation; Content admission and the final selected-slot check remain producer-owned. After Global adoption, publication independently rereads that selected slot and withholds the record when the current comparison is not a redacted match. Empty citations belong to the selected fact. Discovery acceptance uses native Search and its released count-free facet continuation rather than asserting retired population counts.
 
-Canonical Person identities are exact provider facts: Bangumi `person:N` uses `wdt:P6298=N`; VNDB `sN` uses `wdt:P3180=sN`. A current read must show one exact identifier on a Person before dependent credits publish. Missing, conflicting, wrong-type or unreadable identity withholds only dependent credits; independent source facts remain eligible. Durable bindings and citations retain original provider keys through a merge. Names and overlapping credits are discovery evidence, never identity proof.
+The catalogue serves the current adopted facts of canonical REZICS Subjects. External records contribute facts and citations, and their keys support durable source binding, refresh and recovery. [Semantic owns canonical Subject identity](../kernel/src/semantic/README.md#canonical-identity-boundary).
+
+Person source matching uses exact identifier facts on the REZICS Subject: Bangumi `person:N` uses `wdt:P6298=N`; VNDB `sN` uses `wdt:P3180=sN`. A current read must show one exact identifier on a Person before dependent credits publish. Missing, conflicting, wrong-type or unreadable source binding withholds only dependent credits; independent source facts remain eligible. Durable bindings and citations retain original provider keys through a merge. Names and overlapping credits are discovery evidence, never identity proof.
 
 Decision: combined Person credit readback keeps each current statement's own Character, credited name and citations together, retaining original provider bindings and resolving only a one-hop redirect to the canonical survivor.
 Decision: selected non-Person seed identities share one importer-local classifier. Only exact provider values at normal or preferred rank certify Work and Release identities; each path retains its current canonical-redirect policy, and Bangumi BookSeries and Organization retain exact source-tuple identity. Person identity remains on `observePersonIdentity`.

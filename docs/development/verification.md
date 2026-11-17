@@ -47,6 +47,15 @@ what its result will decide. Use the smallest case that reaches that boundary; b
 qualification unless the changed contract requires them. A failed setup establishes unavailable evidence, not a
 failed product assertion. Do not expand coverage merely because a run failed to start.
 
+Match setup and restart to the behavior under test. Reuse a compatible live stack or prepared fixture for checks
+with isolated state. Exercise replay or recovery with the smallest real input and retain the original durable
+state. Restart the process whose lifetime is under test. Select cold startup, full preparation, or growth only
+for outcomes that depend on those conditions. Keep the original bound when proving readiness or scale.
+
+When a shared prerequisite fails, record its elapsed time and first failing boundary once. Mark dependent
+assertions that never ran as unreached and retain the observations already made. Reproduce the failed boundary
+with its owner before repeating the full journey.
+
 Reuse passing evidence when its tested source, dependencies, fixtures and relevant configuration are unchanged.
 Record its original revision and applicability; a new aggregate head alone does not require rerunning it. A relevant
 change or new defect evidence justifies a rerun. Never relabel reused evidence as a new run or use it to prove changed
