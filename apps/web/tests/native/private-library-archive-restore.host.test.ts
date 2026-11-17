@@ -64,6 +64,21 @@ async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
+async function leaveRecoveryFor(page: Page, name: string) {
+  const destinations = page.getByRole('navigation', {
+    name: await message('en', 'library_archive_destinations'),
+    exact: true,
+  });
+  await Promise.all([
+    page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.type()).toBe('beforeunload');
+      await dialog.accept();
+    }),
+    destinations.getByRole('link', { name, exact: true }).click(),
+  ]);
+  await hydrated(page);
+}
+
 async function waitForSubjectPublication(stack: NativeWebStack, signal: AbortSignal, setupDeadline: number) {
   const url = process.env.OPENSEARCH_URL;
   const prefix = stack.searchWorker?.prefix;
@@ -393,6 +408,11 @@ async function restoreOwnerLibrary() {
   expect(restoreUrl.origin).toBe(new URL(page.url()).origin);
   expect(restoreUrl.pathname.replace(/^\/en(?=\/)/u, '')).toBe('/library/recover-collections');
   await restoreCollections.click();
+  const leaveExport = page.getByRole('alertdialog', {
+    name: await message('en', 'library_export_leave_title'),
+    exact: true,
+  });
+  await leaveExport.getByRole('button', { name: await message('en', 'library_export_leave'), exact: true }).click();
   await hydrated(page);
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
@@ -471,8 +491,7 @@ async function restoreOwnerLibrary() {
   });
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('link', { name: 'Recover from a Library archive' }).click();
-  await hydrated(page);
+  await leaveRecoveryFor(page, await message('en', 'library_archive_title'));
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
   await page.getByLabel('Choose your completed Library archive').setInputFiles(archivePath);
   const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records') });
@@ -553,6 +572,7 @@ async function restoreOwnerLibrary() {
   );
   expect(sessions.progressSessions.some((row) => row.id === prepared.sessionId)).toBe(true);
   expect(sessions.progressSessions.length).toBeGreaterThan(1);
+  await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
   const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
   const bobPage = bob.context.pages().at(-1)!;
