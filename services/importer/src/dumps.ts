@@ -151,8 +151,8 @@ export async function* readDump(
         allowPersonDetailTrailingLine = false;
         let recordBytes = bytes.length;
         if (source === 'wikidata') {
+          const untrimmedLength = text.length;
           text = text.trim();
-          let assembled = false;
           if (!text) continue;
           if (wiki === 'closed') return invalid();
           if (wiki === 'start') {
@@ -207,11 +207,12 @@ export async function* readDump(
             memory.hold(4, text);
             memory.hold(14, null);
             wiki = comma ? 'valueOrClose' : 'separator';
-            assembled = true;
+            counters.copiedBytes += wikiScan.bytes;
+            recordBytes = wikiScan.bytes;
+          } else if (text.length !== untrimmedLength) {
+            recordBytes = Buffer.byteLength(text, 'utf8');
           }
           memory.hold(4, text);
-          if (assembled) counters.copiedBytes += wikiScan.bytes;
-          recordBytes = wikiScan.bytes;
         }
         if (source === 'vndb') {
           if (table === null) {

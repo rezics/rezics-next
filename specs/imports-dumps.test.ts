@@ -266,7 +266,7 @@ test('COPY terminators and Wikidata array closing brackets are required when fra
   await scenario(async (driver) => {
     await aborts(driver, 'vndb', `COPY public.vn (id, description, image) FROM stdin;\n${row('vndb')}\n`);
     await aborts(driver, 'wikidata', `[\n${row('wikidata')}\n`);
-    for (const suffix of [',\n]\n', '\n]\n{}\n', '\n,\n,\n]\n']) {
+    for (const suffix of ['\n,\n]\n', ',\n,\n]\n', ',,\n]\n', '\n]\n{}\n', '\n,\n,\n]\n']) {
       await aborts(driver, 'wikidata', `[\n${row('wikidata')}${suffix}`);
     }
     await aborts(driver, 'wikidata', `[\n${row('wikidata')}\n${row('wikidata', '42')}\n]\n`);
@@ -396,6 +396,21 @@ test('record limits count encoded bytes and accept the exact boundary for every 
       await aborts(driver, source, dump(source, [record]), size - 1);
       // A complete over-limit line in one chunk must not bypass the bound.
       await aborts(driver, source, dump(source, [record]), size - 1, limit);
+    }
+
+    const record = row('wikidata', '41', 'Café 日本 🌙');
+    const size = encoder.encode(record).length;
+    const arrayRecord = record.replace(',"type"', ',\n"type"');
+    const arraySize = encoder.encode(arrayRecord).length;
+    const array = `[\n  ${arrayRecord},\r\n]\n`;
+    for (const chunkSize of [1, limit]) {
+      // Both JSONL inputs fit the physical line allowance, including their padding.
+      expect((await collect(driver, 'wikidata', `\u00a0${record}\n`, size, chunkSize)).map((r) => r.key)).toEqual([
+        'Q41',
+      ]);
+      await aborts(driver, 'wikidata', ` ${record}\n`, size - 1, chunkSize);
+      expect((await collect(driver, 'wikidata', array, arraySize, chunkSize)).map((r) => r.key)).toEqual(['Q41']);
+      await aborts(driver, 'wikidata', array, arraySize - 1, chunkSize);
     }
   });
 });
