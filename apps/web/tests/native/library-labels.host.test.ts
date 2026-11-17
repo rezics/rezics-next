@@ -241,9 +241,10 @@ nativeTest(
   'the native served subject slot adds, removes and restores a label with JavaScript disabled',
   300_000,
   async () => {
-    const signedIn = await auth.signIn('alice');
-    const storageState = await signedIn.context.storageState();
-    await signedIn.continueOnPage().close();
+    const signInContext = await auth.newContext('alice');
+    await auth.signIn('alice', { context: signInContext });
+    const storageState = await signInContext.storageState();
+    await signInContext.close();
     const owner = currentNativeLifecycle();
     if (!owner) throw new Error('The script-free browser requires an active native test lifecycle');
     const browser = await chromium.launch();
