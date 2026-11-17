@@ -277,6 +277,7 @@ function inactiveWalkRow(
   id: FirstPublicImportRowId,
   result: 'unselected' | 'unreached',
   prerequisite?: WalkPrerequisite['stage'],
+  report?: string,
 ): WalkRowResult {
   return {
     id,
@@ -284,7 +285,7 @@ function inactiveWalkRow(
     result,
     elapsedMs: null,
     cause: prerequisite ? `shared ${prerequisite} failed` : null,
-    evidence: prerequisite ? { prerequisite, fixture: rowFixture(id) } : {},
+    evidence: prerequisite ? { prerequisite, ...(report && { fixture: report }) } : {},
   };
 }
 
@@ -492,14 +493,17 @@ Reproduce with the retained walk command on one admitted stack. Restore ordinary
   }
   for (const { stage, cause, elapsedMs, remainingRequest } of inventory.prerequisites) {
     if (stage === 'setup' || cause === null) continue;
-    const owner = /sourceFences/.test(remainingRequest?.path ?? cause) ? 'Content d66' : 'Semantic cf23';
+    const operation = remainingRequest?.path ?? cause;
+    let attribution = 'Use the seed prerequisite evidence to identify the owner.';
+    if (cause.includes('Cross-media seed failed preparation{')) attribution = 'Importer owns the seed preparation step.';
+    if (operation.includes('sourceFences')) attribution = 'Existing owner: Content d66.';
+    else if (operation.includes('/v1/subjects:batchWrite')) attribution = 'Existing owner: Semantic cf23.';
     const first = stage === 'seed';
     await writeFile(
       resolve(drafts, `imports-walk-${stage}.md`),
       `# ${first ? 'Resume catalogue paths after shared seed failure' : 'Repair whole-seed reopen'}
 
 Goal: imports
-Manager: semantic
 
 Command: ${inventory.command}
 Revision: ${inventory.revision}
@@ -515,9 +519,9 @@ ${
 }
 Cause: ${cause}
 
-Existing owner: ${owner}. Proposal contention and sourceFences remain separate incidents. Operation/partition/server phase are available when present in the safe request evidence.${first ? ' No catalogue current read or browser path was exercised after the failed seed.' : ''}
+${attribution}${first ? ' No catalogue current read or browser path was exercised after the failed seed.' : ''}
 
-Use the returned ${stage}.log and ${first ? 'remaining-request.json' : 'seed-reopen-remaining-request.json'} when present. Retain the exact prepared source tuple, native type, converter, method/path/status and any safe problem/correlation. Resume through ordinary APIs and the original sealed body/key. Rerun the recorded command with its original selection. Preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions.
+Use the returned ${stage}.log.${remainingRequest ? ` Inspect ${first ? 'remaining-request.json' : 'seed-reopen-remaining-request.json'} for the observed operation and preserve any sealed command for replay through the ordinary API.` : ''} Rerun the recorded command with its original selection. Preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions.
 `,
     );
   }
@@ -1839,8 +1843,9 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
       async seed() {
         const seeded = await runSeed('seed');
         if (!seeded) {
+          const report = prerequisites.find(({ stage }) => stage === 'seed')?.report;
           for (const { id } of selected)
-            if (!isOperatorRow(id)) await recordInactive(inactiveWalkRow(id, 'unreached', 'seed'));
+            if (!isOperatorRow(id)) await recordInactive(inactiveWalkRow(id, 'unreached', 'seed', report));
         }
         return seeded;
       },
