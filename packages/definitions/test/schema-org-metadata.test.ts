@@ -23,6 +23,7 @@ const reviewedTypes = {
   'schema:BookSeries': 'https://schema.org/BookSeries',
   'schema:Person': 'https://schema.org/Person',
   'schema:Organization': 'https://schema.org/Organization',
+  'schema:Event': 'https://schema.org/Event',
   'schema:SoftwareApplication': 'https://schema.org/SoftwareApplication',
   'skos:Concept': 'https://schema.org/DefinedTerm',
   'skos:ConceptScheme': 'https://schema.org/DefinedTermSet',

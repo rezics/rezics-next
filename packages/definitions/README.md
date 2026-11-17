@@ -82,7 +82,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: source and bundled artifact are 1.0.11. Historical bytes and digests remain loadable for existing pins. Book
+is immutable once published. Historical bytes and digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,

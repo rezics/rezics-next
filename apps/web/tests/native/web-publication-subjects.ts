@@ -18,7 +18,7 @@ const date = (value: string) => ({
   precision: 11,
   calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
 });
-const position = (value: number) => snak('schema:position', { amount: `+${value}`, unit: '1' });
+const position = (value: number | string) => snak('schema:position', String(value));
 const reference = (text: string) => [{ parts: [snak('schema:name', { language: 'en', text })] }];
 
 /** API-authored facts, including actual withheld targets. This does not render or copy a read model. */
@@ -232,7 +232,7 @@ export async function seedPublicationSubjects(
           snak('wdt:P453', character.id),
           snak('wdt:P1932', data.traversal.credit.creditedName),
           snak('wdt:P3831', role.id),
-          position(Number(data.traversal.credit.position)),
+          position(data.traversal.credit.position),
         ],
       },
       snak('schema:character', character.id),

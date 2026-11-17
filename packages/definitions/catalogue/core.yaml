@@ -116,6 +116,8 @@ classes:
     description: An organization.
     exact_mappings:
       - wd:Q43229
+    annotations:
+      schema_org_type: https://schema.org/Organization
   Place:
     is_a: Thing
     class_uri: schema:Place
@@ -140,8 +142,6 @@ classes:
       - endDate
     annotations:
       schema_org_type: https://schema.org/Event
-    annotations:
-      schema_org_type: https://schema.org/Organization
   ReleaseGroup:
     is_a: Organization
     class_uri: rezics:ReleaseGroup
