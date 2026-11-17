@@ -149,11 +149,11 @@ async function prepareArchiveSubject(stack: NativeWebStack) {
     'editor',
   );
   const { subject } = await json<{ subject: { id: string } }>(createdSubject, 201, 'create subject');
-  return { subject, title, collectionTitle };
+  return { subject, title, collectionTitle, marker };
 }
 
 async function prepareOwnerLibrary(stack: NativeWebStack) {
-  const { subject, title, collectionTitle } = archiveSubject;
+  const { subject, title, collectionTitle, marker } = archiveSubject;
   const alice = await stack.authPersona('alice');
   const active = await json<{ digest: string }>(await stack.kernel('/v1/definitions/active'), 200, 'active definition');
   const released = await json<{
