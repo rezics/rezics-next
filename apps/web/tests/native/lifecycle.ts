@@ -41,6 +41,7 @@ export type NativeLifecycleOptions = {
 const activeLifecycle = new AsyncLocalStorage<NativeTestLifecycle>();
 const defaultCleanupGraceMs = 8_000;
 const defaultForceGraceMs = 4_000;
+const cleanupReportingMarginMs = 1_000;
 
 export class NativeLifecycleTimeoutError extends Error {
   readonly cleanupFailures: string[] = [];
@@ -251,7 +252,7 @@ export class NativeTestLifecycle {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
       throw new Error(`Native lifecycle ${phase} requires a finite positive deadline`);
 
-    const cleanupReserveMs = this.cleanupGraceMs + this.forceGraceMs + 1_000;
+    const cleanupReserveMs = this.cleanupGraceMs + this.forceGraceMs + cleanupReportingMarginMs;
     const reserved = Math.min(cleanupReserveMs, Math.floor(timeoutMs / 3));
     const operationDeadlineMs = Math.max(1, timeoutMs - reserved);
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -303,22 +304,31 @@ export class NativeTestLifecycle {
   }
 
   close(reason?: unknown): Promise<void> {
-    return (this.#closing ??= this.#close(reason));
+    return (this.#closing ??= this.#close(reason, this.cleanupGraceMs, this.forceGraceMs));
   }
 
-  async #close(reason?: unknown): Promise<void> {
+  closeForTeardown(timeoutMs: number): Promise<void> {
+    // The hook's timeout covers the ordered stop of suite fixtures and leaves
+    // time for force and diagnostics before Bun expires the hook.
+    const reportingMarginMs = Math.min(cleanupReportingMarginMs, Math.floor(timeoutMs / 10));
+    const forceGraceMs = Math.min(this.forceGraceMs, Math.floor(timeoutMs / 3));
+    const cleanupGraceMs = timeoutMs - forceGraceMs - reportingMarginMs;
+    return (this.#closing ??= this.#close(undefined, cleanupGraceMs, forceGraceMs));
+  }
+
+  async #close(reason: unknown, cleanupGraceMs: number, forceGraceMs: number): Promise<void> {
     if (this.#state === 'closed') return;
     this.#state = 'closing';
     this.controller.abort(reason);
     const resources = this.#resources.splice(0).reverse();
-    const deadline = Date.now() + this.cleanupGraceMs;
+    const deadline = Date.now() + cleanupGraceMs;
     const errors: unknown[] = [];
     let closeFailed = false;
     for (const resource of resources) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
         closeFailed = true;
-        errors.push(new Error(`Cleanup exceeded ${this.cleanupGraceMs}ms`));
+        errors.push(new Error(`Cleanup exceeded ${cleanupGraceMs}ms`));
         break;
       }
       try {
@@ -341,12 +351,12 @@ export class NativeTestLifecycle {
     }
     if (closeFailed) {
       const forceOperations = resources.map(async (resource) => resource.force?.());
-      const forced = await settledWithin(Promise.allSettled(forceOperations), this.forceGraceMs);
+      const forced = await settledWithin(Promise.allSettled(forceOperations), forceGraceMs);
       if (reason instanceof NativeLifecycleTimeoutError) {
         reason.cleanupFailures.push(
           ...errors.slice(0, 8).map((error) => (error instanceof Error ? error.name : typeof error)),
         );
-        if (forced === undefined) reason.cleanupFailures.push(`force escalation exceeded ${this.forceGraceMs}ms`);
+        if (forced === undefined) reason.cleanupFailures.push(`force escalation exceeded ${forceGraceMs}ms`);
         else
           reason.cleanupFailures.push(
             ...forced
@@ -389,7 +399,7 @@ export function nativeBeforeAll(
 }
 
 export function nativeAfterAll(lifecycle: NativeTestLifecycle, timeoutMs: number): void {
-  bunAfterAll(() => lifecycle.close(), timeoutMs);
+  bunAfterAll(() => lifecycle.closeForTeardown(timeoutMs), timeoutMs);
 }
 
 export async function settledWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
