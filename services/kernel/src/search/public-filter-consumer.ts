@@ -2731,9 +2731,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           }
           verifiedIntent = intent;
         }
-        const intent =
-          verifiedIntent ??
-          (await verifyPublicFilterRepairSourcePage(
+        let intent = verifiedIntent;
+        if (!intent) {
+          if (!page) return m.unavailable('source_pending');
+          intent = await verifyPublicFilterRepairSourcePage(
             binding,
             {
               bootstrap: state.bootstrap,
@@ -2745,7 +2746,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             context,
             charge,
             subjectPublication,
-          ));
+          );
+        }
         // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
         const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
         if (

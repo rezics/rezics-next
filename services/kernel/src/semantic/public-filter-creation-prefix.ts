@@ -1,12 +1,9 @@
 import type { Pool } from 'pg';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import type { PublicFilterCost } from './public-filter-source-contract.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import type { PublicFilterCreationWindow } from './public-filter-creation-window.ts';
 
-type Meter = {
-  -readonly [Key in 'inputKeys' | 'rows' | 'dependencyPoints']: PublicFilterCost[Key];
-};
+type Meter = Record<'inputKeys' | 'rows' | 'dependencyPoints', number>;
 type EventPoint = {
   position: string;
   epoch: number;

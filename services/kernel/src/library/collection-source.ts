@@ -471,7 +471,7 @@ function createCollectionSourceRuntime(
         }
       }
       await revalidate(input, l, current);
-      return state.result
+      return state.result === true
         ? {
             result: true,
             subjectId: input.subjectId,

@@ -213,7 +213,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       const reconciliation = await (endPublication ? pending.finally(endPublication) : pending);
       bookPreparationTiming?.outcome(
         reconciliation.status,
-        reconciliation.status !== 'unavailable' && reconciliation.sourceAdvanced,
+        'sourceAdvanced' in reconciliation && reconciliation.sourceAdvanced === true,
       );
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');

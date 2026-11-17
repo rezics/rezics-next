@@ -34,6 +34,7 @@ export type BookPublicationStatus =
   | 'progress'
   | 'reconciled'
   | 'unavailable'
+  | 'unready'
   | 'activated'
   | 'superseded'
   | 'preparing';
