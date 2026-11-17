@@ -204,17 +204,25 @@ nativeTest(
     try {
       const beforeBob = await labelRequestOffset();
       await openSubject(bob);
+      await bob.locator('[data-subject-labels]').waitFor({ state: 'visible' });
       expect(await bob.locator('[data-subject-label-chip]').count()).toBe(0);
       expect(await bob.locator('body').innerText()).not.toContain('Alice private label');
       await checkLabelProducer(beforeBob);
-      const aliceRead = stack
-        .kernelRequests()
-        .slice(beforeAlice, beforeBob)
-        .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
-      const bobRead = stack
-        .kernelRequests()
-        .slice(beforeBob)
-        .find(({ url }) => url.startsWith('/v1/libraryLabelAssignments'));
+      const isSubjectAssignmentRead = ({
+        url,
+        method,
+        fixtureRequest,
+      }: ReturnType<typeof stack.kernelRequests>[number]) => {
+        const request = new URL(url, stack.kernelOrigin);
+        return (
+          method === 'GET' &&
+          !fixtureRequest &&
+          request.pathname === '/v1/libraryLabelAssignments' &&
+          request.searchParams.get('subjectId') === subject.id
+        );
+      };
+      const aliceRead = stack.kernelRequests().slice(beforeAlice, beforeBob).find(isSubjectAssignmentRead);
+      const bobRead = stack.kernelRequests().slice(beforeBob).find(isSubjectAssignmentRead);
       expect(aliceRead?.authorization?.startsWith('Bearer ')).toBe(true);
       expect(bobRead?.authorization?.startsWith('Bearer ')).toBe(true);
       expect(bobRead?.authorization !== aliceRead?.authorization).toBe(true);
