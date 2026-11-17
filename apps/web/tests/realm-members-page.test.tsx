@@ -148,7 +148,10 @@ test('member discovery uses current Realm management observations and the Realm 
     await act(async () => update({ realmId: 'realm', setup, appearance, nativeCanManage }));
     const link = host.querySelector('a');
     expect(link !== null).toBe(admitted);
-    if (link) expect(link.getAttribute('href')).toBe('/realms/realm/members');
+    if (link) {
+      expect(link.getAttribute('href')).toBe('/realms/realm/members');
+      expect(link.getAttribute('role') ?? 'link').toBe('link');
+    }
   }
 });
 
