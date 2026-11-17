@@ -1,4 +1,4 @@
-import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
@@ -803,8 +803,9 @@ export async function advanceNativeGenerationSource(
 export const createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory = async (config) => {
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
     throw new TypeError('Consumer requires its injected native owners');
-  const meaning = freeze(structuredClone(config.meaning));
-  if (!hasExactPublicFilterMeaning(meaning))
+  const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
+  const meaning = nativeMeaning ? config.meaning : freeze(structuredClone(config.meaning));
+  if (!nativeMeaning && !hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');
@@ -2522,10 +2523,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     state: RetainedRepairSettlement,
     previous: string | null,
     m: Meter,
+    emptyPage?: { ordinal: number; intent: string },
   ): Promise<string> {
     const next = encodeState(work);
     if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
     const q = work.queried!;
+    if (emptyPage) {
+      // The final UPDATE reports only its own row. Reserve the retained
+      // page insert and the additional execution lock before dispatch.
+      m.cost.resultWrites++;
+      m.cost.rows++;
+      m.cost.inputKeys++;
+      m.cost.dependencyPoints++;
+    }
     const saved = await repairSave.run(m.pool, {
       partition_no: work.registration.partition,
       observation: q.snapshot.observation,
@@ -2534,6 +2544,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       execution: work.execution!,
       settlement: encodeNative(state),
       previous: previous ?? '',
+      empty_page_ordinal: emptyPage?.ordinal ?? 0,
+      empty_page_intent: emptyPage?.intent ?? '',
     });
     if (saved.length !== 1) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
@@ -2660,6 +2672,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         };
         let page = await repairPageSql.run(m.pool, keys);
         let verifiedIntent: RetainedRepairPage | undefined;
+        let emptyPage: { ordinal: number; intent: string } | undefined;
         const charge = (cost?: PublicFilterCost) => {
           if (cost) m.add(cost);
           m.check();
@@ -2700,15 +2713,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             },
             context,
             charge,
+            subjectPublication,
           );
           const body = encodeNative(intent);
-          const saved = await repairPageSave.run(m.pool, {
-            ...keys,
-            has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
-            intent: body,
-          });
-          page = saved ?? (await repairPageSql.run(m.pool, keys));
-          if (!page || page.intent !== body) return m.unavailable('source_pending');
+          const hasRepairs = intent.repairs.length > 0 || intent.account !== undefined;
+          if (subjectPublication && !intent.complete && !hasRepairs) {
+            // With no dispatch, retain the verified page in the same commit as its frontier.
+            emptyPage = { ordinal: keys.ordinal, intent: body };
+          } else {
+            const saved = await repairPageSave.run(m.pool, {
+              ...keys,
+              has_repairs: hasRepairs,
+              intent: body,
+            });
+            page = saved ?? (await repairPageSql.run(m.pool, keys));
+            if (!page || page.intent !== body) return m.unavailable('source_pending');
+          }
           verifiedIntent = intent;
         }
         const intent =
@@ -2724,6 +2744,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             decodeNative<RetainedRepairPage>(page.intent),
             context,
             charge,
+            subjectPublication,
           ));
         // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
         const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
@@ -2801,7 +2822,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           frontier: intent.frontier,
           closed: complete,
         };
-        encoded = await saveRepair(work, encoded, state, previous, m);
+        encoded = await saveRepair(work, encoded, state, previous, m, emptyPage);
         if (!subjectPublication && !complete) return progress();
         previous = encodeNative(state);
         advanced++;
@@ -3072,7 +3093,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               m.check();
               return { ...original, advanced: true, cost: m.cost };
             }
-            if (original.advanced) {
+            if (original.advanced || original.ackAttempted) {
               m.check();
               return { ...original, cost: m.cost };
             }
@@ -3184,7 +3205,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       m.add(completion.cost);
       if (completion.status === 'pending') {
-        if (completion.advanced) {
+        if (completion.advanced || completion.ackAttempted) {
           m.check();
           return { ...completion, cost: m.cost };
         }

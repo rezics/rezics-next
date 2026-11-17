@@ -393,11 +393,14 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
         client.query(
           `SELECT
              p.locator->>'phase' AS preparation_phase, p.revision AS preparation_revision,
+             floor(extract(epoch FROM now()) * 1000)::text AS observed_at_ms,
+             p.due_at::text AS preparation_due_at_ms, p.lease_until::text AS preparation_lease_until_ms,
              p.lease_until > extract(epoch FROM now()) * 1000 AS preparation_leased,
              j.phase, j.home, j.pass, j.native_incarnation,
              b.state AS source_state, b.owner_epoch AS source_epoch, b.publication_job IS NOT NULL AS source_pinned,
              b.coverage_after, b.coverage_sealed, repair.verified_ordinal AS repair_pages,
-             repair.verified_home AS repair_window_home, repair.ack_after,
+             repair.verified_home AS repair_window_home, repair.next_frontier AS repair_next_frontier,
+             repair.terminal AS source_terminal_repair, repair.ack_after,
              g.publication_home AS writer_home, g.publication_fence IS NOT NULL AS writer_fenced,
              g.publication_fence::text=j.fence AS writer_fence_matches,
              (SELECT jsonb_agg(jsonb_build_object(
@@ -417,8 +420,14 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
                 AND w.partition_no=ANY($5) AND w.original_id=ANY($6)) AS fixture_writers,
              intent.status AS current_intent_status, intent.queue_name AS current_intent_queue,
              intent.executor_id=$7 AS current_intent_owned,
+             intent.created_at::text AS current_intent_created_at_ms,
+             intent.started_at_epoch_ms::text AS current_intent_started_at_ms,
              delivery.status AS current_delivery_status, delivery.queue_name AS current_delivery_queue,
              delivery.executor_id=$7 AS current_delivery_owned,
+             delivery.created_at::text AS current_delivery_created_at_ms,
+             delivery.started_at_epoch_ms::text AS current_delivery_started_at_ms,
+             leased_delivery.status AS lease_input_delivery_status,
+             leased_delivery.started_at_epoch_ms::text AS lease_input_delivery_started_at_ms,
              prior.status AS prior_owned_delivery_status
            FROM (SELECT $1::text AS prefix) owner
            LEFT JOIN search.public_preparation p ON p.partition_no=0 AND p.prefix=owner.prefix
@@ -451,7 +460,19 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
              ORDER BY (b.publication_job IS NOT NULL) DESC LIMIT 1
            ) b ON true
            LEFT JOIN LATERAL (
-             SELECT verified_ordinal, verified_home, CASE WHEN complete THEN ack_after END AS ack_after
+             SELECT verified_ordinal, verified_home, complete AS terminal,
+                    CASE WHEN complete THEN ack_after END AS ack_after,
+                    (SELECT jsonb_object_agg(field->>0, field->1->1)
+                     FROM jsonb_array_elements((
+                       SELECT entry->1->1 FROM jsonb_array_elements(t.state::jsonb->1) AS entry
+                       WHERE entry->>0='next' AND entry->1->>0='object'
+                     )) AS field
+                     WHERE field->1->>0='value' AND (
+                       (field->>0='phase' AND field->1->>1 IN ('scan','advance','project','account','window','bridge'))
+                       OR (field->>0='owner' AND field->1->>1 IN ('semantic','accounts'))
+                       OR (field->>0='partition' AND jsonb_typeof(field->1->1)='number'
+                         AND field->1->1 BETWEEN '0'::jsonb AND '4096'::jsonb)
+                     )) AS next_frontier
              FROM semantic.public_filter_repair_step t
              WHERE t.partition_no=b.partition_no AND t.bootstrap=b.bootstrap
                AND t.execution=b.publication_execution AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
@@ -465,6 +486,10 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
            LEFT JOIN dbos.workflow_status delivery
              ON delivery.workflow_uuid='search.publicPreparation:' || p.id || ':' || p.revision || ':population'
              AND delivery.name='search.publicPreparation'
+           LEFT JOIN dbos.workflow_status leased_delivery
+             ON p.lease_until > extract(epoch FROM now()) * 1000
+             AND leased_delivery.workflow_uuid='search.publicPreparation:' || p.id || ':' || (p.revision-1) || ':population'
+             AND leased_delivery.name='search.publicPreparation'
            LEFT JOIN LATERAL (
              SELECT status FROM dbos.workflow_status w
              WHERE w.name='search.publicPreparation'
@@ -507,7 +532,18 @@ async function waitForNativeSearch(
   const input = { text: marker, languages: ['en'] } satisfies NativeSearchRequest;
   const deadline = performance.now() + 90_000;
   let last = 'no response';
+  let first = true;
   while (performance.now() < deadline) {
+    if (first) {
+      first = false;
+      console.info(
+        `book-search-timing ${JSON.stringify({
+          stage: 'first-search-post',
+          atMs: performance.timeOrigin + performance.now(),
+          deadlineAtMs: performance.timeOrigin + deadline,
+        })}`,
+      );
+    }
     const response = await stack.kernel('/v1/subjects:search', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -530,11 +566,26 @@ async function waitForNativeSearch(
           const hit = found.get(subject.id);
           return hit?.type === subject.type && hit.labels.en === subject.label;
         })
-      )
+      ) {
+        console.info(
+          `book-search-timing ${JSON.stringify({
+            stage: 'search-match',
+            atMs: performance.timeOrigin + performance.now(),
+            count: expected.length,
+          })}`,
+        );
         return parsed;
+      }
     }
     await Bun.sleep(250);
   }
+  console.info(
+    `book-search-timing ${JSON.stringify({
+      stage: 'search-cutoff',
+      atMs: performance.timeOrigin + performance.now(),
+      deadlineAtMs: performance.timeOrigin + deadline,
+    })}`,
+  );
   let workerOutput = 'unavailable';
   let readiness = 'unavailable';
   try {
@@ -558,7 +609,7 @@ async function waitForNativeSearch(
 
 export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJourneyFixture> {
   const searchContainer = await prepareSearch();
-  const stack = await startNativeWebStack({ writeRateOverrides });
+  const stack = await startNativeWebStack({ writeRateOverrides, observeBookSearchPreparation: true });
   let auth: NativeAuthStack | undefined;
   try {
     const active = await responseJson<{ digest: string }>(
@@ -609,6 +660,13 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     await readCreatedSubject(stack, series);
     await readCreatedSubject(stack, book, { property: 'wdt:P179', target: series.id });
     await readCreatedSubject(stack, edition, { property: 'schema:exampleOfWork', target: book.id });
+    console.info(
+      `book-search-timing ${JSON.stringify({
+        stage: 'anonymous-readbacks-complete',
+        atMs: performance.timeOrigin + performance.now(),
+        count: expected.length,
+      })}`,
+    );
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({

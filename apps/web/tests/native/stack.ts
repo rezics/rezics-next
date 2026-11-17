@@ -9,6 +9,7 @@ import { nativeViteEnvironment } from './vite-environment.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { Pool } from 'pg';
 import {
   createOwnedPostgresSocketDirectory,
@@ -76,6 +77,8 @@ export type NativeWebStackOptions = {
   localShowcaseBoardCreation?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
   writeRateOverrides?: string;
+  /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
+  observeBookSearchPreparation?: boolean;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
   commerce?: {
     apiHost: string;
@@ -352,7 +355,10 @@ function errorDetails(error: unknown): string {
   return details.join('\n');
 }
 
-async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
+async function startDurableWorker(
+  environment: NodeJS.ProcessEnv,
+  observeBookSearch: boolean,
+): Promise<{
   pid?: number | undefined;
   identity?: NativeProcessIdentity | undefined;
   logs(): string;
@@ -367,6 +373,7 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
       resolve(webRoot, 'tests/native/native-media-storage-fetch.ts'),
       '--preload',
       './test/support/fixture-event-types.ts',
+      ...(observeBookSearch ? ['--preload', './test/support/book-preparation-observer.ts'] : []),
       'src/worker.ts',
     ],
     {
@@ -384,11 +391,17 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
     failed = reject;
   });
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-  for (const stream of [child.stdout, child.stderr])
-    stream?.on('data', (chunk: Buffer) => {
-      output = (output + chunk).slice(-12_000);
-      if (output.includes('Worker ready')) started();
+  const capture = (chunk: Buffer | string) => {
+    output = (output + chunk).slice(-12_000);
+    if (output.includes('Worker ready')) started();
+  };
+  child.stderr?.on('data', capture);
+  if (observeBookSearch && child.stdout) {
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      if (line.startsWith('book-search-timing ')) reportStackProgress(line);
+      else capture(line + '\n');
     });
+  } else child.stdout?.on('data', capture);
   child.once('error', failed);
   child.once('exit', (code, signal) => failed(new Error(`Durable worker exited ${code ?? signal}: ${output}`)));
   const timer = setTimeout(() => failed(new Error(`Durable worker startup timed out: ${output}`)), 120_000);
@@ -418,7 +431,16 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
     })());
   try {
     await ready;
-    return { pid: child.pid, identity, logs: () => output, stop };
+    return {
+      pid: child.pid,
+      identity,
+      logs() {
+        // Book reads worker logs only at the existing Search timeout. Flush the timing buffer alongside that snapshot.
+        if (observeBookSearch && child.exitCode === null && child.signalCode === null) child.kill('SIGUSR2');
+        return output;
+      },
+      stop,
+    };
   } catch (error) {
     await stop();
     throw error;
@@ -1147,6 +1169,13 @@ async function startStack(): Promise<
     const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
     const nativeMediaStorageToken = randomBytes(32).toString('base64url');
     const testWriteRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
+    const observeBookSearch = process.env.NATIVE_BOOK_SEARCH_TIMING === '1';
+    const markBookReady = (stage: 'durable-worker-ready' | 'web-worker-ready') => {
+      if (observeBookSearch)
+        reportStackProgress(
+          `book-search-timing ${JSON.stringify({ stage, atMs: performance.timeOrigin + performance.now() })}`,
+        );
+    };
     const executorId = `native-web-${randomBytes(8).toString('hex')}`;
     const workerEnv = {
       ...workerTestEnv({
@@ -1167,7 +1196,8 @@ async function startStack(): Promise<
       ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
     };
     reportStackProgress('Native web stack startup: starting durable-work worker');
-    durableWorker = await startDurableWorker(workerEnv);
+    durableWorker = await startDurableWorker(workerEnv, observeBookSearch);
+    markBookReady('durable-worker-ready');
     reportStackProgress('Native web stack startup: durable-work worker ready');
     sampleMemory('durable-worker-ready');
 
@@ -1356,6 +1386,7 @@ async function startStack(): Promise<
     };
     reportStackProgress('Native web stack startup: starting production web Worker');
     webProcess = await launch();
+    markBookReady('web-worker-ready');
     reportStackProgress('Native web stack startup: production web Worker ready');
     sampleMemory('web-worker-ready');
 
@@ -1682,6 +1713,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',

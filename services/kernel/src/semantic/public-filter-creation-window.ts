@@ -164,14 +164,143 @@ export async function readPublicFilterCreationEvent(
     (w.eventCount !== null && row.event_count !== w.eventCount)
   )
     throw new CommandUnavailableError('contention', w.partition);
-  const last = w.sequence + 1 === row.event_count;
-  return {
-    event: { type: row.type, subject: row.subject },
-    next: Object.freeze({
-      ...w,
-      position: last ? w.position + 1n : w.position,
-      sequence: last ? 0 : w.sequence + 1,
-      eventCount: last ? null : row.event_count,
-    }),
+  return { event: { type: row.type, subject: row.subject }, next: creationEventSuccessor(w, row.event_count) };
+}
+
+function creationEventSuccessor(w: PublicFilterCreationWindow, count: number): PublicFilterCreationWindow {
+  const last = w.sequence + 1 === count;
+  return Object.freeze({
+    ...w,
+    position: last ? w.position + 1n : w.position,
+    sequence: last ? 0 : w.sequence + 1,
+    eventCount: last ? null : count,
+  });
+}
+
+const subjectPrefix = 'com.rezics.subject.';
+const statementPrefix = 'com.rezics.statement.';
+const accountEvents = [
+  'com.rezics.access.account-updated.v1',
+  'com.rezics.access.account-tombstoned.v1',
+  'com.rezics.access.account-discovery-changed.v1',
+];
+
+export function publicFilterCreationAction(type: string, accounts: boolean): 'semantic' | 'accounts' | null {
+  if (type.startsWith(subjectPrefix) || type.startsWith(statementPrefix)) return 'semantic';
+  return accounts && accountEvents.includes(type) ? 'accounts' : null;
+}
+
+type CreationEvent = Readonly<{
+  position: string;
+  event_seq: number;
+  event_count: number;
+  epoch: number;
+  id: string;
+  type: string;
+  subject: string | null;
+}>;
+
+type Meter = { inputKeys: number; rows: number; dependencyPoints: number };
+
+/** Walk exact original event keys in one snapshot, stopping at the first repair action.
+ * Replay caps the read at the original event count and validates the same envelopes.
+ */
+export async function readPublicFilterCreationEvents(
+  pool: Pool,
+  input: Readonly<{
+    bootstrap: string;
+    window: PublicFilterCreationWindow;
+    accounts: boolean;
+    inputLimit: number;
+    retainedCount?: number;
+  }>,
+  context: Readonly<{ deadline: number }>,
+  cost: Meter,
+) {
+  requireAccessDeadline(context.deadline);
+  const w = input.window;
+  const limit = input.retainedCount ?? input.inputLimit;
+  if (!validWindow(w) || w.position > w.through || !Number.isInteger(limit) || limit < 1 || limit > input.inputLimit)
+    throw new TypeError('Invalid creation event range');
+
+  const charge = (points: number) => {
+    cost.inputKeys += points;
+    cost.rows += points;
+    cost.dependencyPoints += points;
   };
+  charge(3 + limit);
+  const { rows } = await pool.query<CreationEvent>(
+    `/* semantic.native-keyed:0:0 */
+     WITH RECURSIVE events AS (
+       SELECT 0 AS ordinal,$4::bigint AS next_position,$5::integer AS next_seq,false AS repair,
+              NULL::bigint AS position,NULL::integer AS event_seq,NULL::integer AS event_count,
+              NULL::integer AS epoch,NULL::uuid AS id,NULL::text AS type,NULL::text AS subject
+       FROM semantic.public_filter_home_enrollment e
+       JOIN core.partition p ON p.partition_no=e.partition_no
+       JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+       WHERE (e.partition_no,e.bootstrap)=($1,$2) AND e.complete AND e.receipt=$6
+         AND e.creation_consumer=$3 AND p.write_state='active' AND p.epoch=e.owner_epoch
+         AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
+         AND p.epoch=$7 AND e.creation_position=$8 AND p.position>=$9
+       UNION ALL
+       SELECT e.ordinal+1,
+              CASE WHEN o.event_seq+1<o.event_count THEN o.position
+                   WHEN o.position<$9 THEN o.position+1 END,
+              CASE WHEN o.event_seq+1=o.event_count THEN 0 ELSE o.event_seq+1 END,
+              starts_with(o.type,$11) OR starts_with(o.type,$12) OR o.type=ANY($13::text[]),
+              o.position,o.event_seq,o.event_count,o.epoch,o.id,o.type,o.subject
+       FROM events e
+       JOIN LATERAL (
+         SELECT o.position,o.event_seq,o.event_count,o.epoch,o.id,o.type,o.subject
+         FROM core.outbox o
+         WHERE (o.partition_no,o.position,o.event_seq)=($1,e.next_position,e.next_seq)
+         LIMIT 1
+       ) o ON true
+       WHERE e.ordinal<$10 AND e.next_position<=$9 AND NOT e.repair
+     )
+     SELECT position::text,event_seq,event_count,epoch,id,type,subject
+     FROM events WHERE ordinal>0 ORDER BY ordinal`,
+    [
+      w.partition,
+      input.bootstrap,
+      publicFilterCreationConsumer(input.bootstrap),
+      String(w.position),
+      w.sequence,
+      w.receipt,
+      w.epoch,
+      String(w.base),
+      String(w.through),
+      limit,
+      subjectPrefix,
+      statementPrefix,
+      input.accounts ? accountEvents : [],
+    ],
+  );
+
+  let next = w;
+  let action: ReturnType<typeof publicFilterCreationAction> = null;
+  for (const row of rows) {
+    if (
+      action !== null ||
+      next.position > w.through ||
+      BigInt(row.position) !== next.position ||
+      row.event_seq !== next.sequence ||
+      row.epoch !== w.epoch ||
+      row.event_count <= next.sequence ||
+      (next.eventCount !== null && row.event_count !== next.eventCount)
+    )
+      throw new CommandUnavailableError('contention', w.partition);
+    next = creationEventSuccessor(next, row.event_count);
+    action = publicFilterCreationAction(row.type, input.accounts);
+  }
+  const event = rows.at(-1);
+  if (
+    !event ||
+    rows.length > limit ||
+    (input.retainedCount !== undefined && rows.length !== input.retainedCount) ||
+    (rows.length < input.inputLimit && action === null && next.position <= w.through)
+  )
+    throw new CommandUnavailableError('contention', w.partition);
+  charge(rows.length - limit);
+  return { event, next, envelopes: rows };
 }

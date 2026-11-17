@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
+import { hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -73,6 +74,8 @@ import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { validateObservation } from './indexer.ts';
 import { validateRefreshResponse } from './write-actions.ts';
+import type { CreditSearchSource } from './credit-search.ts';
+import { bookPreparationTiming } from './book-preparation-timing.ts';
 
 export type GenerationPublicationJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
 export type SearchGenerationPublication = Readonly<{
@@ -124,6 +127,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
   clock: KernelClock;
   meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
+  creditSearch?: CreditSearchSource;
   registry?: DiscoveryRegistry;
 }>;
 
@@ -282,10 +286,11 @@ export function createSearchGenerationPublication(
       config.writerGuard &&
       typeof config.writerGuard.write === 'function',
   );
-  requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
+  const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
+  if (!nativeMeaning) requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, readPublicationCompletion, writerGuard, registry } = config;
   bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion);
-  const meaning = structuredClone(config.meaning);
+  const meaning = nativeMeaning ? config.meaning : structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
     : Object.keys(meaning.release.types)
@@ -509,7 +514,8 @@ export function createSearchGenerationPublication(
     const remainingInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys;
     if (remainingInputs <= 0 || (enrollmentOnly && remainingInputs <= PUBLIC_FILTER_PREPARATION_INPUT_RESERVE))
       return { complete: false, advanced: false, sourceAdvanced: false };
-    const completion = await advanceNativeGenerationSource(
+    const endSource = bookPreparationTiming?.start('nativeSource');
+    const pendingSource = advanceNativeGenerationSource(
       {
         pool,
         search,
@@ -519,6 +525,7 @@ export function createSearchGenerationPublication(
         meaning,
         context,
         physicalTarget: job.physical_target,
+        ...(config.creditSearch === undefined ? {} : { creditSearch: config.creditSearch }),
         ...(registry ? { registry } : {}),
       },
       {
@@ -531,6 +538,7 @@ export function createSearchGenerationPublication(
       },
       context,
     );
+    const completion = await (endSource ? pendingSource.finally(endSource) : pendingSource);
     add(meter, completion.cost);
     if ('publication' in completion) {
       const pin = publicationPinFromNative(completion.publication);
@@ -1423,6 +1431,7 @@ export function createSearchGenerationPublication(
       throw new Pending('incarnation_changed');
     job.fence = result.fence.fence;
     await save(client, job, meter);
+    bookPreparationTiming?.mark('writerFence');
   }
   async function release(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     if (!job.fence) return;
@@ -1660,6 +1669,7 @@ export function createSearchGenerationPublication(
               job.after_id = null;
               job.after_route = null;
               await save(client, job, meter);
+              bookPreparationTiming?.mark('writerDrain');
               return preparing('step', true);
             }
             if (job.phase !== 'intent') {
@@ -1705,11 +1715,13 @@ export function createSearchGenerationPublication(
                 async () => (await aliasTarget(job, context, meter)) === job.physical_target,
                 'Generation publication alias could not be established',
               );
+              bookPreparationTiming?.mark('aliasWrite');
               // The retained intent and fence own confirmation on the next metered turn.
               if (job.family === 'subjects') return preparing('activate', true);
             }
             if (job.family === 'discovery') await adoptHeld(job, context, meter);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
+            bookPreparationTiming?.mark('aliasConfirmed');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.
             if (job.family === 'discovery') {
               await client.query('BEGIN');

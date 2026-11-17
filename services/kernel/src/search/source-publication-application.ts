@@ -3,6 +3,7 @@ export { searchSourcePublicationApplication } from './source-publication-binding
 import type { Pool } from 'pg';
 import { createSearchGenerationPublication, type SearchGenerationPublication } from './generation-publication.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
+import { retainNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import type {
   SearchNativePublicationCompletionReader,
   SearchPublicFilterSourceBinding,
@@ -13,7 +14,7 @@ import type { SearchGenerationPublicationConfig } from './generation-publication
 type WriterOptions = Omit<Parameters<typeof createSearchWriterGuard>[0], 'pool' | 'search'>;
 export type SearchSourcePublicationInput = Omit<
   SearchGenerationPublicationConfig,
-  'binding' | 'readPublicationCompletion' | 'writerGuard'
+  'binding' | 'creditSearch' | 'readPublicationCompletion' | 'writerGuard'
 > &
   Readonly<{
     binding: SearchPublicFilterSourceBinding;
@@ -50,13 +51,17 @@ export function createSearchSourcePublicationApplication(
       const readPublicationCompletion: SearchNativePublicationCompletionReader = (request, context) =>
         port.readNativePublicFilterPublicationCompletion(binding, request, context);
       const writerGuard = createSearchWriterGuard({ pool, search, ...writer });
+      const { creditSearch } = writer.source;
       return createSearchGenerationPublication({
         ...generation,
+        meaning: retainNativePublicFilterMeaning(generation.meaning, port.hasVerifiedReleaseDigest),
         pool,
         search,
         binding,
         readPublicationCompletion,
         writerGuard,
+        // Source repair must derive the same credit cut as the writer used for reconciliation.
+        ...(creditSearch === undefined ? {} : { creditSearch }),
       });
     },
   });
