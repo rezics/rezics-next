@@ -215,6 +215,11 @@ function phaseTimer() {
       last = now;
     },
     report(number: number) {
+      if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+        console.info(
+          'Mixed Home fixture timing',
+          JSON.stringify({ driver: number, phasesMs: Object.fromEntries(phases) }),
+        );
       const file = process.env.SEMANTIC_DRIVER_TIMINGS;
       if (!file) return;
       const line = [...phases].map(([name, ms]) => `${name} ${Math.round(ms)}ms`).join(', ');
@@ -711,6 +716,7 @@ async function startDriver(
       person('suspended'),
       person('outsider'),
     ]);
+    timer.mark('native personas');
     const accounts = { editor, acceptor, steward, suspended, outsider } satisfies Record<
       Exclude<Persona, 'anonymous'>,
       Account
@@ -722,6 +728,7 @@ async function startDriver(
     await setupPresentation(kernelPool);
     await bootstrapGovernance(kernelPool, governor.accountId);
     if (options.localShowcaseBoardCreation) await bootstrapLocalShowcaseBoardCreation(kernelPool, governor.accountId);
+    timer.mark('owner setup');
 
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
@@ -823,6 +830,7 @@ async function startDriver(
       { ...boundary, actor: await access.authenticate(governor.bearer, boundary) },
       { accountId: accounts.suspended.accountId, key: randomUUID() },
     );
+    timer.mark('fixture grants and suspension');
 
     if ((options.linkProjection ?? 'owned') === 'owned')
       relays = startRelays(runtimePool, [linkProjection(runtimePool)], { intervalMs: 25 });

@@ -37,9 +37,15 @@ function subjectReactions(item: FeedItem | undefined) {
 }
 
 test('Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references', async () => {
+  const startedAt = Date.now();
   const endpoint = process.env.OPENSEARCH_URL;
   if (!endpoint) throw new Error('OPENSEARCH_URL must name the native test service');
   const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
+  if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+    console.info(
+      'Mixed Home setup timing',
+      JSON.stringify({ phase: 'driver ready', elapsedMs: Date.now() - startedAt }),
+    );
   const { runtime } = driver.fixtures;
   const prefix = `feed-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const search = createOpenSearch(endpoint);
@@ -142,6 +148,11 @@ test('Default mixed feed composes real discovery, current Following and Continue
       KERNEL_SEARCH_PREFIX: prefix,
       KERNEL_PORT: '0',
     });
+    if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+      console.info(
+        'Mixed Home setup timing',
+        JSON.stringify({ phase: 'before worker start', elapsedMs: Date.now() - startedAt }),
+      );
     worker = startOutcomeWorkerProcess(env);
     await worker.ready;
     observe('worker ready');
