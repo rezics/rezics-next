@@ -75,7 +75,8 @@ async function fixture() {
 
 function completeIgnoredInput(): AsyncIterable<Uint8Array> {
   return (async function* () {
-    yield new TextEncoder().encode('{"id":9,"type":3,"name":"Music"}\n');
+    // Use the retained identity-only Music shape for an ignored baseline.
+    yield new TextEncoder().encode('{"id":9,"type":3}\n');
   })();
 }
 
@@ -117,7 +118,8 @@ for (const cleanup of ['never settles', 'rejects late', 'queued generator return
     };
     try {
       // Complete ignored members still require public fence reads; interrupted acquisition forbids all HTTP.
-      expect((await f.baseline()).code).toBe(0);
+      const baseline = await f.baseline();
+      expect(baseline.code, baseline.stderr).toBe(0);
       const before = f.snapshot();
       expect(before.members).toHaveLength(1);
       const run = f.invoke(stdin, controller.signal);
