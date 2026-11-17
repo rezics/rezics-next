@@ -536,7 +536,7 @@ async function restoreOwnerLibrary() {
   expect(restoredId).toBeTruthy();
   expect(restoredId).not.toBe(prepared.collectionId);
   const restoredText = await restored.innerText();
-  expect(restoredText).toContain('private');
+  expect(restoredText).toContain(await message('en', 'library_visibility_private'));
   expect(restoredText).toContain('First archived note');
   expect(restoredText).toContain('Repeated occurrence');
   const nativeCollection = await json<{
