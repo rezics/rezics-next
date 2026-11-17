@@ -10,6 +10,7 @@ import {
 } from './book-catalogue-journey-fixture.ts';
 import { assertShelfPage, exactType, openNewTabFromLink, pageReady, problemCode } from './book-catalogue-browser.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
+import { sampleNativeMemory, sampleOwnedWebRunMemory } from './native-memory.ts';
 
 const lifecycle = new NativeTestLifecycle('native Book catalogue journey');
 let fixture: BookCatalogueJourneyFixture;
@@ -29,14 +30,13 @@ function stage(name: string, evidence: Record<string, unknown>): void {
 function readerMemory(stageName: string, page: Page): void {
   if (process.env.NATIVE_WEB_BOOK_MEMORY !== '1') return;
   const browser = fixture.auth.browserMemoryObservation();
-  const memory = fixture.stack.memoryObservation?.();
+  const { sampledAt, cgroup } = sampleNativeMemory([]);
   stage(stageName, {
     pages: page.context().pages().length,
     browser,
-    stackSampledAt: memory?.sampledAt,
-    command: memory?.cgroup.command,
-    run: memory?.cgroup.runSlice,
-    stackRssBytes: memory?.processes.observedRssBytes,
+    sampledAt,
+    command: cgroup.command,
+    run: sampleOwnedWebRunMemory('other'),
   });
 }
 
@@ -277,12 +277,14 @@ function watchBookResult(page: Page, href: string) {
 async function returnToSearch(page: Page, subject: BookCatalogueIdentity, marker: string) {
   const { type } = subject;
   await page.goBack({ waitUntil: 'domcontentloaded' });
+  if (type === 'schema:Book') readerMemory('reader Back arrived at Search', page);
   await pageReady(page, `Search return after ${type} reader`);
   const address = new URL(page.url());
   expect(address.pathname).toBe('/en/search');
   expect(address.searchParams.get('q')).toBe(marker);
   expect(address.searchParams.get('type')).toBe(type);
   await assertSearchResult(page, subject);
+  if (type === 'schema:Book') readerMemory('reader Back restored typed Search', page);
   return { type, url: `${address.pathname}${address.search}` };
 }
 
