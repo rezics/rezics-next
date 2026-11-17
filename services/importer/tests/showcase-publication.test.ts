@@ -668,6 +668,18 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     // A fresh public reader can see the native Subject before its source identifier is adopted.
     // Publication must recover that exact original create target without rewriting seed identity evidence.
     const firstInput = { ...result, readings: result.readings.filter((reading) => reading.externalId !== '101') };
+    const subjectReads = spyOn(review, 'readReviewedSubject');
+    const pageReads = spyOn(review, 'reviewedCandidates');
+    const fenceReads = spyOn(review, 'fence');
+    const readCounts = () => ({
+      subjects: subjectReads.mock.calls.length,
+      pages: pageReads.mock.calls.length,
+      fences: fenceReads.mock.calls.length,
+    });
+    const tracePrefix = 'Cross-media final showcase manifest ';
+    const trace: Record<string, number | string>[] = [];
+    let validationStart = readCounts();
+    let validationEnd = validationStart;
     const first = await publishShowcase({
       plan,
       result: firstInput,
@@ -675,8 +687,49 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       journal,
       review,
       publicClient,
+      traceFinalManifest: true,
+      onProgress(line) {
+        if (line.includes('phase=manifest-validation')) validationStart = readCounts();
+        if (line.includes('phase=acceptance')) validationEnd = readCounts();
+        if (line.startsWith(tracePrefix)) trace.push(JSON.parse(line.slice(tracePrefix.length)));
+      },
       ...tagOptions,
     });
+    const milestones = trace.filter(({ phase }) => phase === 'assertions');
+    expect(milestones.map(({ state }) => state)).toEqual(['started', 25, 50, 75, 'completed']);
+    const finished = milestones.at(-1)!;
+    expect(milestones.map(({ completed }) => completed)).toEqual(
+      [0, 0.25, 0.5, 0.75, 1].map((fraction) => Math.ceil(fraction * Number(finished.total))),
+    );
+    const elapsed = trace.map(({ elapsedMs }) => Number(elapsedMs));
+    expect(elapsed).toEqual(elapsed.toSorted((a, b) => a - b));
+    const validationSubjects = subjectReads.mock.calls.slice(validationStart.subjects, validationEnd.subjects);
+    const validationFences = fenceReads.mock.calls.slice(validationStart.fences, validationEnd.fences);
+    expect(finished.subjects).toBe(new Set(validationSubjects.map(([id]) => id)).size);
+    expect(finished.subjects).toBe(validationSubjects.length);
+    expect(finished.candidatePages).toBe(validationEnd.pages - validationStart.pages);
+    expect(finished.candidateListingMisses).toBe(finished.candidatePages);
+    expect(finished.factsFences).toBe(validationFences.filter(([query]) => query.fieldGroup === 'facts').length);
+    expect(finished.coverFences).toBe(validationFences.filter(([query]) => query.fieldGroup === 'cover').length);
+    expect(finished.localMs).toBeGreaterThanOrEqual(0);
+    expect(trace.filter(({ state }) => state === 'completed').map(({ phase }) => phase)).toEqual([
+      'initial-build',
+      'validation-setup',
+      'bindings',
+      'assertions',
+      'validated-build',
+      'validated-seal',
+      'membership-build',
+      'membership-seal',
+      'final-build',
+      'final-seal',
+    ]);
+    expect(subjectReads.mock.calls.length).toBeGreaterThan(validationEnd.subjects);
+    expect(pageReads.mock.calls.length).toBeGreaterThan(validationEnd.pages);
+    expect(fenceReads.mock.calls.length).toBeGreaterThan(validationEnd.fences);
+    subjectReads.mockRestore();
+    pageReads.mockRestore();
+    fenceReads.mockRestore();
     expect(first.status).toBe('incomplete');
     expect(first.manifest.records.find((record) => record.sourceKey === '101')?.subjectId).toBe(workId);
     expect(firstInput.readings.some((reading) => reading.externalId === '101')).toBe(false);
@@ -1625,6 +1678,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         nativeType: 'skos:ConceptScheme',
       });
     }
+    const stageProgress: string[] = [];
     const stage = (selected: ShowcaseVocabularyRequirement[]) =>
       publishShowcaseVocabulary({
         plan,
@@ -1634,7 +1688,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         review,
         publicClient,
         vocabularyRequirements: selected,
-        onProgress() {},
+        onProgress(line) {
+          stageProgress.push(line);
+        },
       });
     const journalReads = spyOn(journal, 'acknowledgedCommands');
     const candidateReads = spyOn(review, 'reviewedCandidates');
@@ -1660,6 +1716,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       expect(journalReads.mock.calls).toEqual([[[requirements[0]!.source]], [[requirements[0]!.source]]]);
       for (const entry of journalReads.mock.results) expect(entry.value).toHaveLength(2);
       const expanded = await stage(requirements);
+      expect(stageProgress.some((line) => line.startsWith(tracePrefix))).toBe(false);
       expect(expanded.status).toBe('published');
       expect(expanded.published.map((row) => row.sourceKey)).toEqual(requirements.map((row) => row.sourceKey));
       expect(acceptanceCalls).toHaveLength(writes + 1);

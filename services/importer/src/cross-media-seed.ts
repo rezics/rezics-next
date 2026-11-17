@@ -4562,6 +4562,7 @@ export async function runCrossMediaSeedCli(
         tagParentGaps: [...publicTags.parentBindingGaps, ...tagParentPublicationGaps],
         tagParentAcknowledgements,
         tagParentRefreshes,
+        traceFinalManifest: process.env.REZICS_SHOWCASE_PUBLICATION_TRACE === '1',
       });
     // The reviewed endpoints exist only after the preceding showcase adoption has committed.
     finalization.enter('person-merge');

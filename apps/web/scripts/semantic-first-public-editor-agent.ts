@@ -112,6 +112,11 @@ try {
         client.release();
       }
 
+      // This disposable fixture owns the same command adapters as a native Kernel process.
+      stage = 'native-command-composition';
+      const { installNativeHistoryPreload } = await import('../../../services/kernel/src/composition/preload.ts');
+      installNativeHistoryPreload();
+
       stage = 'one-account-synchronization';
       await synchronizeAccountAgent(pool, actor.accountId);
     } finally {

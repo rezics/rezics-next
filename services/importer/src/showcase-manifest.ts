@@ -418,6 +418,26 @@ export function buildShowcaseManifest(input: {
   const appearanceOwners = new Map<string, string>();
   for (const appearance of [...(plan.characterAppearances ?? []), ...(plan.gameCharacterAppearances ?? [])])
     appearanceOwners.set(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)), appearance.subjectId);
+  const acknowledgementsBySource = new Map<string, Map<string, ShowcaseAcknowledgement[]>>();
+  for (const acknowledgement of acknowledgements) {
+    const source = acknowledgement.command.source;
+    let byOwner = acknowledgementsBySource.get(source.source);
+    if (!byOwner) {
+      byOwner = new Map();
+      acknowledgementsBySource.set(source.source, byOwner);
+    }
+    const appearanceOwner = appearanceOwners.size ? appearanceOwners.get(envelopeKey(source)) : undefined;
+    // An appearance may also match a record directly by external ID. Preserve input order and multiplicity.
+    const ownerKeys =
+      appearanceOwner !== undefined && appearanceOwner !== source.external_id
+        ? [source.external_id, appearanceOwner]
+        : [source.external_id];
+    for (const ownerKey of ownerKeys) {
+      const entries = byOwner.get(ownerKey);
+      if (entries) entries.push(acknowledgement);
+      else byOwner.set(ownerKey, [acknowledgement]);
+    }
+  }
   const omissions: ShowcaseOmission[] = [];
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
@@ -604,13 +624,13 @@ export function buildShowcaseManifest(input: {
     const member = memberIndex.get(`${provider}\0${row.key}`);
     const sourceAssertions: ShowcaseAssertion[] = [];
     let candidateOverflow = false;
-    for (const ack of acknowledgements) {
+    for (const ack of acknowledgementsBySource.get(alias)?.get(row.key) ?? []) {
       const source = ack.command.source;
+      const key = envelopeKey(source);
+      const ownerKey = appearanceOwners.get(key);
       if (
-        source.source !== alias ||
-        (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
-        !allowedSources.has(envelopeKey(source)) ||
-        (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
+        !allowedSources.has(key) ||
+        (graphEnvelopeKeys.has(key) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )
         continue;
@@ -638,9 +658,8 @@ export function buildShowcaseManifest(input: {
       )
         continue;
       // Work relations require the graph owner's current acknowledged result and both selected endpoints.
-      if (franchise.envelopes.has(envelopeKey(source)) && !franchise.targets.has(ack.command.key)) continue;
+      if (franchise.envelopes.has(key) && !franchise.targets.has(ack.command.key)) continue;
       if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
-      const ownerKey = appearanceOwners.get(envelopeKey(source));
       const graphTarget = graphTargetsByCommandKey.get(ack.command.key);
       const ownedAssertion = {
         ...assertion,
@@ -734,7 +753,8 @@ export function buildShowcaseManifest(input: {
 
   const vocabulary: ShowcaseVocabularyRecord[] = [];
   for (const requirement of vocabularyRequirements) {
-    const create = acknowledgements.find(
+    const entries = acknowledgementsBySource.get(requirement.source.source)?.get(requirement.source.external_id) ?? [];
+    const create = entries.find(
       (ack) =>
         ack.command.op === 'create' &&
         ack.command.subject.type === requirement.nativeType &&
@@ -752,7 +772,7 @@ export function buildShowcaseManifest(input: {
     }
     const assertions: ShowcaseAssertion[] = [];
     let candidateOverflow = false;
-    for (const entry of acknowledgements) {
+    for (const entry of entries) {
       if (
         entry.command.op !== 'propose' ||
         entry.command.subject !== create.subjectId ||
