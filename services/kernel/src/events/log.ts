@@ -1,6 +1,6 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { lookupEventType } from './catalogue.ts';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import advanceCheckpoint from './advance-checkpoint.sql';
 import compareAdvanceCheckpoint from './compare-advance-checkpoint.sql';
 import ensureCheckpoint from './ensure-checkpoint.sql';
@@ -187,10 +187,23 @@ async function readSnapshot(
       await client.query('COMMIT');
       return { checkpoint, ...parsed, rows: options.observe ? rows : undefined };
     } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
+      return rollbackEventTransaction(client, error);
     }
   });
+}
+
+async function rollbackEventTransaction(client: PoolClient, error: unknown): Promise<never> {
+  try {
+    await client.query('ROLLBACK');
+  } catch (rollbackError) {
+    discardConnection(
+      client,
+      rollbackError instanceof Error
+        ? rollbackError
+        : new Error('Event transaction rollback failed', { cause: rollbackError }),
+    );
+  }
+  throw error;
 }
 
 /**
@@ -242,8 +255,7 @@ export async function readBatch(
       if (reason) return stop(reason, envelopes.length, envelopes.at(-1)?.position ?? position);
       return { status: 'read', envelopes: envelopes.length, position: envelopes.at(-1)?.position ?? position };
     } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
+      return rollbackEventTransaction(client, error);
     }
   });
 }
