@@ -26,6 +26,7 @@ import {
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
 import { buildShowcaseManifest, showcaseStatementMatches, showcaseMediaContext } from './showcase-manifest.ts';
+import { ShowcaseManifestTrace } from './showcase-manifest-trace.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
@@ -331,7 +332,7 @@ function admittedCoverMedia(
 }
 
 async function currentCoverFence(
-  review: ShowcaseReviewPort,
+  review: Pick<ShowcaseReviewPort, 'fence'>,
   source: Pick<CrossMediaMediaOutcome, 'sourceAlias' | 'externalId'>,
 ): Promise<'open' | 'fenced' | 'unavailable'> {
   if (!review.fence) return 'unavailable';
@@ -664,15 +665,18 @@ async function candidatePage(
     journal?: ShowcaseJournal;
   },
   cache: Map<string, CandidatePage>,
+  trace?: ShowcaseManifestTrace,
 ): Promise<CandidatePage> {
   const key = groupKey(input.id, input.property, input.slot);
   const cached = cache.get(key);
   if (cached) return cached;
-  const page = await readCurrentCandidatePages(input.review, input.id, input.property, {
-    ...(input.journal ? { journal: input.journal } : {}),
-    ...(input.slot ? { slot: input.slot } : {}),
-    intent: 'showcase-publication-current-candidates-v1',
-  });
+  const read = () =>
+    readCurrentCandidatePages(input.review, input.id, input.property, {
+      ...(input.journal ? { journal: input.journal } : {}),
+      ...(input.slot ? { slot: input.slot } : {}),
+      intent: 'showcase-publication-current-candidates-v1',
+    });
+  const page = await (trace ? trace.candidateListingMiss(read) : read());
   if (cache.size >= showcaseLimits.reviewPage) cache.delete(cache.keys().next().value!);
   cache.set(key, page);
   return page;
@@ -981,6 +985,8 @@ type ShowcasePublicationInput = {
   tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
   /** Defaults to bounded stderr phase diagnostics. */
   onProgress?: (line: string) => void;
+  /** Set by the cross-media seed at its final combined publication call. */
+  traceFinalManifest?: boolean;
 };
 
 /** Intermediate stages publish only their dependency vocabulary. Every invocation
@@ -1086,11 +1092,14 @@ async function publishShowcasePhases(
     pageCache,
     input.journal,
   );
+  const trace = !vocabularyOnly && input.traceFinalManifest ? new ShowcaseManifestTrace(input.onProgress) : undefined;
   const buildManifest = (
+    phase: 'initial-build' | 'validated-build' | 'membership-build' | 'final-build',
     acknowledgements: readonly ShowcaseAcknowledgement[],
     outcomes: readonly CrossMediaMediaOutcome[] = mediaOutcomes,
-  ) =>
-    buildShowcaseManifest({
+  ) => {
+    const started = trace?.start(phase);
+    const manifest = buildShowcaseManifest({
       plan: input.plan,
       vocabularyOnly,
       readings: result.readings,
@@ -1130,9 +1139,18 @@ async function publishShowcasePhases(
           }
         : {}),
     });
+    trace?.complete(phase, started!);
+    return manifest;
+  };
+  const sealIntent = (phase: 'validated-seal' | 'membership-seal' | 'final-seal', manifest: ShowcaseManifest) => {
+    const started = trace?.start(phase);
+    input.journal.sealIntent(manifest);
+    trace?.complete(phase, started!);
+  };
   progress.enter('manifest-validation');
-  let manifest = buildManifest(manifestAcknowledgements);
+  let manifest = buildManifest('initial-build', manifestAcknowledgements);
 
+  const setupStarted = trace?.start('validation-setup');
   const omissions = [
     ...manifest.omissions.map((item) => ({ ...item, code: item.code })),
     ...recovered.omissions.map((item) => ({ ...item, code: 'legacy-candidate-not-exact' })),
@@ -1202,6 +1220,9 @@ async function publishShowcasePhases(
   const blockedSubjects = new Set<string>();
   const blockedCoverCandidates = new Set<string>();
   let vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
+  trace?.complete('validation-setup', setupStarted!);
+  const bindingStarted = trace?.start('bindings');
+  const validationReview = trace?.review(input.review) ?? input.review;
   const observedTagBindings = new Map<string, VndbTagRatingBinding>();
   for (const observation of manifest.tagWeightObservations)
     if (observation.responseDigest)
@@ -1221,11 +1242,14 @@ async function publishShowcasePhases(
     bindingReadIds.add(association.conceptId);
     bindingReadIds.add(association.schemeId);
   }
-  const readCurrentSubject = async (id: string): Promise<ReviewedSubjectRead | null> => {
+  const readCurrentSubject = async (
+    id: string,
+    review: Pick<ShowcaseReviewPort, 'readReviewedSubject'> = input.review,
+  ): Promise<ReviewedSubjectRead | null> => {
     if (currentSubjectCache.has(id)) return currentSubjectCache.get(id) ?? null;
     let read: ReviewedSubjectRead | null = null;
     try {
-      read = await input.review.readReviewedSubject(id);
+      read = await review.readReviewedSubject(id);
     } catch {
       read = null;
     }
@@ -1234,7 +1258,9 @@ async function publishShowcasePhases(
   };
   const bindingReadIdsList = [...bindingReadIds];
   for (let offset = 0; offset < bindingReadIdsList.length; offset += 16)
-    await Promise.all(bindingReadIdsList.slice(offset, offset + 16).map(readCurrentSubject));
+    await Promise.all(
+      bindingReadIdsList.slice(offset, offset + 16).map((id) => readCurrentSubject(id, validationReview)),
+    );
   const currentBindingMatches = (
     binding: Pick<VndbTagRatingBinding, 'category' | 'tagId' | 'conceptUri' | 'schemeUri'> & {
       conceptId: string | null;
@@ -1270,6 +1296,8 @@ async function publishShowcasePhases(
     currentMembershipBindingStates.set(tagAssociationKey(association), state);
     if (state === 'current') currentMembershipBindings.add(tagAssociationKey(association));
   }
+  trace?.complete('bindings', bindingStarted!);
+  trace?.assertions('started', 0, assertions.length);
   for (const record of manifest.records) {
     if (!record.subjectId || recordHasSourceIdentity(record)) continue;
     blockedSubjects.add(record.subjectId);
@@ -1338,14 +1366,26 @@ async function publishShowcasePhases(
     }
   }
 
-  for (const { record, assertion } of assertions) {
+  const milestones = [25, 50, 75] as const;
+  let nextMilestone = 0;
+  for (let completed = 0; completed < assertions.length; completed += 1) {
+    if (trace) {
+      while (
+        nextMilestone < milestones.length &&
+        completed >= Math.ceil((milestones[nextMilestone]! * assertions.length) / 100)
+      ) {
+        trace.assertions(milestones[nextMilestone]!, completed, assertions.length);
+        nextMilestone += 1;
+      }
+    }
+    const { record, assertion } = assertions[completed]!;
     const id = record.subjectId;
     if (!id || !recordSource(record, assertion)) continue;
     let currentMembership = false;
     let current = currentSubjectCache.get(id);
     if (current === undefined) {
       try {
-        current = await input.review.readReviewedSubject(id);
+        current = await validationReview.readReviewedSubject(id);
       } catch {
         current = null;
       }
@@ -1401,7 +1441,7 @@ async function publishShowcasePhases(
     }
     if (assertion.graphTarget) {
       if (assertion.graphTarget.factsFence) {
-        const state = await showcaseFranchiseFence(input.review, record.sourceAlias, [
+        const state = await showcaseFranchiseFence(validationReview, record.sourceAlias, [
           record.sourceKey,
           assertion.graphTarget.sourceKey,
         ]);
@@ -1423,7 +1463,7 @@ async function publishShowcasePhases(
       let targetCurrent = currentSubjectCache.get(targetId);
       if (targetCurrent === undefined) {
         try {
-          targetCurrent = await input.review.readReviewedSubject(targetId);
+          targetCurrent = await validationReview.readReviewedSubject(targetId);
         } catch {
           targetCurrent = null;
         }
@@ -1453,7 +1493,7 @@ async function publishShowcasePhases(
         blockedCoverCandidates.add(assertion.candidateId);
         continue;
       }
-      const state = await currentCoverFence(input.review, outcome);
+      const state = await currentCoverFence(validationReview, outcome);
       if (state !== 'open') {
         omissions.push({
           provider: record.provider,
@@ -1525,8 +1565,9 @@ async function publishShowcasePhases(
         // A missing row, partial listing, or failed read keeps the ordinary lookup and retry behavior.
         delete group.completeRows;
         const page = await candidatePage(
-          { review: input.review, id, property: assertion.property, slot, journal: input.journal },
+          { review: validationReview, id, property: assertion.property, slot, journal: input.journal },
           pageCache,
+          trace,
         );
         candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
         if (!candidate && !page.complete) retainUnavailableParent(assertion);
@@ -1557,13 +1598,19 @@ async function publishShowcasePhases(
     validated.set(assertion.candidateId, candidate);
     if (currentMembership) currentTagMembershipCandidateDigests.add(assertion.candidateDigest);
   }
+  if (trace) {
+    if (assertions.length)
+      for (const milestone of milestones.slice(nextMilestone))
+        trace.assertions(milestone, assertions.length, assertions.length);
+    trace.assertions('completed', assertions.length, assertions.length);
+  }
   validationGroups.clear();
 
   manifestAcknowledgements = manifestAcknowledgements.filter(
     (acknowledgement) => !acknowledgement.candidateId || validated.has(acknowledgement.candidateId),
   );
-  manifest = buildManifest(manifestAcknowledgements);
-  input.journal.sealIntent(manifest);
+  manifest = buildManifest('validated-build', manifestAcknowledgements);
+  sealIntent('validated-seal', manifest);
   const initialIntentDigest = manifest.digest;
   for (const omission of manifest.omissions) omissions.push({ ...omission, code: omission.code });
   assertions = assertionsFor(manifest);
@@ -2326,8 +2373,8 @@ async function publishShowcasePhases(
   parentPublicationOutcomes = [...parentOutcomeByPath.values()].sort((left, right) =>
     left.path.localeCompare(right.path),
   );
-  manifest = buildManifest(manifestAcknowledgements);
-  input.journal.sealIntent(manifest);
+  manifest = buildManifest('membership-build', manifestAcknowledgements);
+  sealIntent('membership-seal', manifest);
   assertions = assertionsFor(manifest);
   vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
 
@@ -3036,7 +3083,7 @@ async function publishShowcasePhases(
   }
 
   progress.enter('manifest-finalization');
-  const finalManifest = buildManifest(manifestAcknowledgements, finalMediaOutcomes);
+  const finalManifest = buildManifest('final-build', manifestAcknowledgements, finalMediaOutcomes);
   const finalMedia = finalManifest.media.map((item) => {
     const handoff = readHandoffs.get(`${item.sourceAlias}\0${item.sourceKey}`);
     if (handoff) {
@@ -3061,7 +3108,7 @@ async function publishShowcasePhases(
           media: finalMedia,
           omissions: finalOmissions,
         };
-  if (manifest.digest !== initialIntentDigest) input.journal.sealIntent(manifest);
+  if (manifest.digest !== initialIntentDigest) sealIntent('final-seal', manifest);
   for (const omission of manifest.omissions) omissions.push(omission);
 
   const uniqueOmissions = [
