@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
+import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const stacks: NativeWebStack[] = [];
@@ -28,6 +29,7 @@ setDefaultTimeout(300_000);
 
 nativeBeforeAll(lifecycle, 600_000, async () => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
+  await prepareNativeWebSearch('library-archive');
   stacks.push(await startNativeWebStack());
 });
 
@@ -74,7 +76,7 @@ async function message(locale: (typeof locales)[number], key: string) {
 }
 
 async function openGates(stack: NativeWebStack) {
-  for (const group of ['personal_library', 'collections', 'reading_progress'] as const) {
+  for (const group of ['personal_library', 'collections', 'reading_progress', 'search'] as const) {
     const opened = await stack.kernel(
       `/v1/platform/exposure/${group}:open`,
       { method: 'POST', headers: { 'idempotency-key': key() } },
@@ -370,9 +372,10 @@ test('owner exports a populated Library and restores Collection, Entry and progr
   const restoredId = await restored.getAttribute('data-receiving-collection');
   expect(restoredId).toBeTruthy();
   expect(restoredId).not.toBe(prepared.collectionId);
-  await expect(restored).toContainText('private');
-  await expect(restored).toContainText('First archived note');
-  await expect(restored).toContainText('Repeated occurrence');
+  const restoredText = await restored.innerText();
+  expect(restoredText).toContain('private');
+  expect(restoredText).toContain('First archived note');
+  expect(restoredText).toContain('Repeated occurrence');
   const nativeCollection = await json<{
     collection: { id: string; title: string; visibility: string; memberCount: number };
   }>(await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'alice'), 200, 'owner collection readback');
@@ -482,7 +485,7 @@ test('owner exports a populated Library and restores Collection, Entry and progr
   const bobPage = bob.context.pages().at(-1)!;
   await bobPage.goto(`${stack.web}/en/collections/${restoredId}`, { waitUntil: 'domcontentloaded' });
   await hydrated(bobPage);
-  await expect(bobPage.getByRole('heading', { name: prepared.collectionTitle })).toHaveCount(0);
+  expect(await bobPage.getByRole('heading', { name: prepared.collectionTitle }).count()).toBe(0);
 
   const headings: Record<string, string> = {};
   for (const locale of locales) {
