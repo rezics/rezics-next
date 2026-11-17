@@ -51,13 +51,31 @@ function exactSearchLink(page: Page, subject: BookCatalogueIdentity) {
 async function assertSearchResult(page: Page, subject: BookCatalogueIdentity): Promise<void> {
   const results = page.locator('#search-results');
   await browserExpect(results).toBeVisible();
-  const link = exactSearchLink(page, subject);
-  await browserExpect(link).toBeVisible();
-  expect(await link.innerText()).toContain(subject.label);
-  for (const other of identities()) {
-    const count = await exactSearchLink(page, other).count();
-    expect(count, `${subject.type} Search excludes ${other.type} ${other.id}`).toBe(other.id === subject.id ? 1 : 0);
-  }
+  const expected = identities();
+  await browserExpect(async () => {
+    // Hydration can replace the current result list. Match and exclude identities in one rendered snapshot.
+    const rendered = await results.locator('a[data-slot="list-row-link"]').evaluateAll(
+      (links, ids) =>
+        ids.map((id) =>
+          links
+            .filter((link) => link.getAttribute('href')?.includes(id))
+            .map((link) => ({
+              text: (link as HTMLElement).innerText,
+              visible: link.getClientRects().length > 0 && getComputedStyle(link).visibility === 'visible',
+            })),
+        ),
+      expected.map(({ id }) => id),
+    );
+    for (const [index, other] of expected.entries()) {
+      const matching = rendered[index]!;
+      if (other.id === subject.id) {
+        expect(matching, `exact result for ${subject.type}`).toHaveLength(1);
+        expect(matching[0]).toMatchObject({ visible: true, text: expect.stringContaining(subject.label) });
+      } else {
+        expect(matching, `${subject.type} Search excludes ${other.type} ${other.id}`).toHaveLength(0);
+      }
+    }
+  }).toPass({ timeout: 5_000 });
 }
 
 function problemCode(body: unknown): string | undefined {
