@@ -660,21 +660,80 @@ export function stackPhaseLine(phase: string, identity: string): string {
   return `stack: ${phase} ${identity}`;
 }
 
-/** Each acquired walk resource registers immediately; every cleanup settles before the original failure escapes. */
+type WalkResource = {
+  name: string;
+  cleanup: () => void | Promise<void>;
+  force?: (() => void | Promise<void>) | undefined;
+};
+
+export class WalkCleanupTimeoutError extends Error {
+  constructor(
+    readonly resource: string,
+    readonly phase: 'close' | 'force',
+    readonly timeoutMs: number,
+  ) {
+    super(`Walk ${resource} ${phase} did not settle within ${timeoutMs}ms`);
+    this.name = 'WalkCleanupTimeoutError';
+  }
+}
+
+async function settleWalkCleanup(
+  resource: WalkResource,
+  phase: 'close' | 'force',
+  action: () => void | Promise<void>,
+  timeoutMs: number,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve().then(action),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new WalkCleanupTimeoutError(resource.name, phase, timeoutMs)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function closeWalkResource(resource: WalkResource, timeoutMs: number): Promise<void> {
+  try {
+    await settleWalkCleanup(resource, 'close', resource.cleanup, timeoutMs);
+  } catch (error) {
+    if (resource.force) {
+      try {
+        await settleWalkCleanup(resource, 'force', resource.force, timeoutMs);
+      } catch (forced) {
+        throw new AggregateError([error, forced], `Walk ${resource.name} close and forced cleanup failed`, {
+          cause: error,
+        });
+      }
+    }
+    throw error;
+  }
+}
+
+/** Each acquired resource settles or reports bounded failure before the original error escapes. */
 export async function withWalkResources<T>(
-  run: (own: (name: string, cleanup: () => void | Promise<void>) => void) => Promise<T>,
+  run: (
+    own: (name: string, cleanup: () => void | Promise<void>, force?: () => void | Promise<void>) => void,
+  ) => Promise<T>,
+  // Frontends can use one graceful interval before their existing forced-exit path.
+  cleanupTimeoutMs = 2 * WALK_PROCESS_STOP_MS,
 ): Promise<T> {
-  const owned: { name: string; cleanup: () => void | Promise<void> }[] = [];
+  if (!Number.isFinite(cleanupTimeoutMs) || cleanupTimeoutMs <= 0)
+    throw new RangeError('Walk cleanup timeout must be a positive finite duration');
+  const owned: WalkResource[] = [];
   let failed = false;
   let original: unknown;
   try {
-    return await run((name, cleanup) => owned.push({ name, cleanup }));
+    return await run((name, cleanup, force) => owned.push({ name, cleanup, force }));
   } catch (error) {
     failed = true;
     original = error;
     throw error;
   } finally {
-    const results = await Promise.allSettled(owned.map(({ cleanup }) => Promise.resolve().then(cleanup)));
+    const results = await Promise.allSettled(owned.map((resource) => closeWalkResource(resource, cleanupTimeoutMs)));
     const failures = results.flatMap((result, index) =>
       result.status === 'rejected'
         ? [new Error(`${owned[index]!.name}: ${String(result.reason)}`, { cause: result.reason })]

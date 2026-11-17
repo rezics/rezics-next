@@ -61,6 +61,7 @@ import {
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { walkStackLogPath, withWalkResources } from '../../../scripts/walk-stack.ts';
+import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
@@ -68,6 +69,7 @@ const editorEmail = 'developer@rezics.test';
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
+type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
 
 type Result = {
   id: FirstPublicJourneyId;
@@ -78,6 +80,7 @@ type Result = {
   native?: unknown;
   commands?: NativeObservation[];
   browser?: unknown;
+  mountedSubject?: MountedSubjectDiagnostic;
   failure?: { transition: string; expected: string; actual: string; owner: string };
 };
 
@@ -173,15 +176,27 @@ async function openPage(
   href: string,
   viewport: { width: number; height: number },
   theme: 'light' | 'dark',
+  onMountedSubject?: (diagnostic: MountedSubjectDiagnostic) => void,
 ): Promise<{ page: Page; status: number; url: string }> {
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
   await page.setViewportSize(viewport);
   await page.emulateMedia({ colorScheme: theme });
-  const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
-  await hydrated(page);
-  await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
-  return { page, status: response?.status() ?? 0, url: page.url() };
+  if (onMountedSubject) await page.setExtraHTTPHeaders({ [mountedSubjectReadHeader]: '1' });
+  try {
+    const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
+    const status = response?.status() ?? 0;
+    if (onMountedSubject) {
+      const header = await response?.headerValue(mountedSubjectReadHeader);
+      onMountedSubject({ status, native: mountedSubjectReads(header ?? null) });
+    }
+    await hydrated(page);
+    await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
+    return { page, status, url: page.url() };
+  } catch (error) {
+    await page.close();
+    throw error;
+  }
 }
 
 function ownerOf(error: string): string {
@@ -225,17 +240,34 @@ type Session = {
   member: BrowserContext;
   revision: string;
   frontendCause?: string;
+  mountedSubject?: MountedSubjectDiagnostic;
   refreshEditor?: () => Promise<void>;
 };
 
 async function visit(
   session: Session,
   href: string,
-  options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member'; expectedStatus?: number } = {},
+  options: {
+    width?: number;
+    theme?: 'light' | 'dark';
+    persona?: 'anonymous' | 'member';
+    expectedStatus?: number;
+    mountedSubject?: boolean;
+  } = {},
 ) {
   if (session.frontendCause) throw new Error(session.frontendCause);
   const context = options.persona === 'member' ? session.member : session.anonymous;
-  const opened = await openPage(context, href, { width: options.width ?? 1280, height: 900 }, options.theme ?? 'light');
+  const opened = await openPage(
+    context,
+    href,
+    { width: options.width ?? 1280, height: 900 },
+    options.theme ?? 'light',
+    options.mountedSubject ? (diagnostic) => (session.mountedSubject = diagnostic) : undefined,
+  );
+  if (options.mountedSubject && opened.status !== (options.expectedStatus ?? 200)) {
+    await opened.page.close();
+    throw new Error(`${href} returned HTTP ${opened.status}`);
+  }
   const title = await opened.page.title();
   const heading = await opened.page
     .locator('h1, h2')
@@ -262,6 +294,8 @@ async function journey(
   const meta = FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!;
   const started = Date.now();
   const traceOffset = session.trace.length;
+  const mountedSubjectEvidence = () =>
+    id === 'generic-creation' && session.mountedSubject ? { mountedSubject: session.mountedSubject } : {};
   try {
     await session.refreshEditor?.();
     const observed = await run();
@@ -274,6 +308,7 @@ async function journey(
       native: observed.native,
       commands: session.trace.slice(traceOffset),
       browser: observed.browser,
+      ...mountedSubjectEvidence(),
     };
   } catch (error) {
     const actual = error instanceof Error ? error.message : String(error);
@@ -284,6 +319,7 @@ async function journey(
       ms: Date.now() - started,
       persona: 'editor+anonymous',
       commands: session.trace.slice(traceOffset),
+      ...mountedSubjectEvidence(),
       failure: fail(
         session.trace.at(-1)?.status && session.trace.at(-1)!.status! >= 400
           ? `${session.trace.at(-1)!.method} ${session.trace.at(-1)!.url}`
@@ -325,14 +361,8 @@ async function releasedDefinitions(session: Session): Promise<{ native: unknown;
   return { native: { digest, typeStatus: types.status, author: true }, browser };
 }
 
-async function createAndRead(
-  session: Session,
-  type: string,
-  label: string,
-  pagePath: string,
-  statements?: Record<string, unknown[]>,
-) {
-  const created = await createSubject(session.call, session.editor, type, label, statements);
+async function createAndRead(session: Session, type: string, label: string, pagePath: string, mountedSubject = false) {
+  const created = await createSubject(session.call, session.editor, type, label);
   const publicRead = await readSubject(session.call, created.id);
   requireStatus(publicRead, 200, `anonymous ${type}`);
   if ((publicRead.body.subject as { type: string }).type !== type) throw new Error(`${type} public type mismatch`);
@@ -341,7 +371,10 @@ async function createAndRead(
     theme: type.includes('VideoGame') ? 'dark' : 'light',
     persona: 'member',
   });
-  const reader = await visit(session, `${session.stack.web}${subjectHref(created.id, label)}`, { width: 1440 });
+  const reader = await visit(session, `${session.stack.web}${subjectHref(created.id, label)}`, {
+    width: 1440,
+    mountedSubject,
+  });
   return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
@@ -409,7 +442,9 @@ async function runNativeBoundaries(stack: Stack, revision: string, stackLog: str
   if (passing !== checks.length) process.exitCode = 1;
 }
 
-async function main(nativeBoundaries: boolean) {
+type WalkScope = 'all' | 'native-boundaries' | 'mounted-subject' | 'statement-consent';
+
+async function main(scope: WalkScope) {
   const walkId = walkAcceptanceId(process.env);
   if (
     !walkId ||
@@ -423,7 +458,7 @@ async function main(nativeBoundaries: boolean) {
   const stack = stackOrigins();
   const stackLog = walkStackLogPath(root, walkId);
   const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
-  if (nativeBoundaries) return runNativeBoundaries(stack, revision, stackLog);
+  if (scope === 'native-boundaries') return runNativeBoundaries(stack, revision, stackLog);
 
   return withWalkResources(async (own) => {
     await mkdir(join(evidenceDir, 'screenshots'), { recursive: true, mode: 0o700 });
@@ -469,10 +504,13 @@ async function main(nativeBoundaries: boolean) {
       personaCause ??= error instanceof Error ? error.message : String(error);
     }
     let editor = '';
+    let editorIssued = 0;
     let editorCause: string | undefined;
     if (keys) {
       try {
+        const issued = Date.now();
         editor = await accessToken(stack, editorEmail, keys.password);
+        editorIssued = issued;
       } catch (error) {
         editorCause = error instanceof Error ? error.message : String(error);
       }
@@ -507,8 +545,19 @@ async function main(nativeBoundaries: boolean) {
     const results = roundResults;
     let browser: Browser | undefined;
     try {
-      browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: browserTemp } });
-      own('browser', () => browser!.close());
+      const server = await chromium.launchServer({ headless: true, env: { ...process.env, TMPDIR: browserTemp } });
+      own(
+        'browser',
+        async () => {
+          await server.close();
+          await browser?.close();
+        },
+        async () => {
+          await server.kill();
+          await browser?.close();
+        },
+      );
+      browser = await chromium.connect(server.wsEndpoint());
     } catch (error) {
       const cause = error instanceof Error ? error.message : String(error);
       results.push(...FIRST_PUBLIC_JOURNEYS.map((row) => failingRow(row, cause)));
@@ -519,7 +568,6 @@ async function main(nativeBoundaries: boolean) {
     const member = browser
       ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
       : undefined;
-    let editorIssued = editor ? Date.now() : 0;
     const session: Session | undefined =
       anonymous && member
         ? {
@@ -535,10 +583,11 @@ async function main(nativeBoundaries: boolean) {
               ? {
                   async refreshEditor() {
                     if (editor && Date.now() - editorIssued < 240_000) return;
+                    const issued = Date.now();
                     const token = await accessToken(stack, editorEmail, keys.password);
                     editor = token;
                     session!.editor = token;
-                    editorIssued = Date.now();
+                    editorIssued = issued;
                   },
                 }
               : {}),
@@ -635,6 +684,78 @@ async function main(nativeBoundaries: boolean) {
         }
       }
       const setupCause = editorCause ?? personaCause ?? kernelCause;
+      const genericBook = () =>
+        journey(session, 'generic-creation', () =>
+          createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new', true),
+        );
+      const statementConsent = () =>
+        journey(session, 'statement-consent', async () => {
+          if (editorAgentCause) throw new Error(editorAgentCause);
+          const { id: target } = await seededEditorAgent(call, editor);
+          const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
+          const property = 'rezics:penNameOf';
+          const proposal = await propose(call, editor, person.id, {
+            property: { id: property },
+            value: { type: 'value', content: target },
+            references: [],
+            qualifiers: [],
+          });
+          const selected = (body: Json) =>
+            ((body.subject as Json).statements as Record<string, { id: string }[]>)[property]?.some(
+              (row) => row.id === proposal.candidate,
+            ) ?? false;
+          const before = await readSubject(call, person.id);
+          requireStatus(before, 200, 'private consent public read');
+          if (selected(before.body)) throw new Error('private consent assertion leaked before disclosure');
+          const browser = await visit(
+            session,
+            `${stack.web}${subjectHref(person.id, `Walk consent identity ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent(property)}&candidate=${proposal.candidate}&target=${target}`,
+            { persona: 'member' },
+          );
+          requireStatus(
+            await discloseStatement(call, editor, proposal.candidate),
+            200,
+            'disclose own private assertion',
+          );
+          const disclosed = await readSubject(call, person.id);
+          requireStatus(disclosed, 200, 'disclosed public read');
+          if (!selected(disclosed.body)) {
+            const query = new URLSearchParams({ property, target });
+            const current = await call('GET', `/v1/subjects/${person.id}/candidates?${query}`, { bearer: editor });
+            const candidates = Array.isArray(current.body.candidates) ? (current.body.candidates as Json[]) : [];
+            const exact = candidates.find((row) => row.id === proposal.candidate);
+            const decision = ['accepted', 'pending', 'rejected'].find((value) => value === exact?.decision);
+            throw new Error(
+              `disclosed assertion absent from public read; current owner candidates HTTP ${current.status}, exact decision ${decision ?? 'unavailable'}`,
+            );
+          }
+          requireStatus(await retractStatement(call, editor, proposal.candidate), 200, 'retract own disclosure');
+          const retracted = await readSubject(call, person.id);
+          requireStatus(retracted, 200, 'retracted public read');
+          if (selected(retracted.body)) throw new Error('retracted assertion remained public');
+          return { native: { id: person.id, target, candidate: proposal.candidate }, browser };
+        });
+      if (scope === 'mounted-subject' || scope === 'statement-consent') {
+        const id = scope === 'mounted-subject' ? 'generic-creation' : 'statement-consent';
+        const result = editor
+          ? await (scope === 'mounted-subject' ? genericBook() : statementConsent())
+          : failingRow(
+              FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!,
+              setupCause ?? 'The ordinary catalogue author is unavailable',
+            );
+        const evidence = {
+          scope,
+          revision,
+          utc: new Date().toISOString(),
+          result,
+          kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
+        };
+        await writeFile(join(evidenceDir, `${scope}.json`), `${JSON.stringify(evidence, null, 2)}\n`, {
+          mode: 0o600,
+        });
+        if (result.status === 'Failing') process.exitCode = 1;
+        return;
+      }
       if (setupCause && !editor) {
         for (const row of FIRST_PUBLIC_JOURNEYS) {
           if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
@@ -664,11 +785,7 @@ async function main(nativeBoundaries: boolean) {
       if (!editor) {
         // Sign-in is unavailable: anonymous definition and catalogue rows already ran; remaining rows keep the setup cause.
       } else {
-        results.push(
-          await journey(session, 'generic-creation', () =>
-            createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new'),
-          ),
-        );
+        results.push(await genericBook());
         results.push(
           await journey(session, 'book-and-series-editing', async () => {
             const series = await createSubject(call, editor, 'schema:BookSeries', `Walk series ${token}`);
@@ -965,45 +1082,7 @@ async function main(nativeBoundaries: boolean) {
             };
           }),
         );
-        results.push(
-          await journey(session, 'statement-consent', async () => {
-            if (editorAgentCause) throw new Error(editorAgentCause);
-            const { id: target } = await seededEditorAgent(call, editor);
-            const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
-            const property = 'rezics:penNameOf';
-            const proposal = await propose(call, editor, person.id, {
-              property: { id: property },
-              value: { type: 'value', content: target },
-              references: [],
-              qualifiers: [],
-            });
-            const selected = (body: Json) =>
-              ((body.subject as Json).statements as Record<string, { id: string }[]>)[property]?.some(
-                (row) => row.id === proposal.candidate,
-              ) ?? false;
-            const before = await readSubject(call, person.id);
-            requireStatus(before, 200, 'private consent public read');
-            if (selected(before.body)) throw new Error('private consent assertion leaked before disclosure');
-            const browser = await visit(
-              session,
-              `${stack.web}${subjectHref(person.id, `Walk consent identity ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent(property)}&candidate=${proposal.candidate}&target=${target}`,
-              { persona: 'member' },
-            );
-            requireStatus(
-              await discloseStatement(call, editor, proposal.candidate),
-              200,
-              'disclose own private assertion',
-            );
-            const disclosed = await readSubject(call, person.id);
-            requireStatus(disclosed, 200, 'disclosed public read');
-            if (!selected(disclosed.body)) throw new Error('disclosed assertion absent from public read');
-            requireStatus(await retractStatement(call, editor, proposal.candidate), 200, 'retract own disclosure');
-            const retracted = await readSubject(call, person.id);
-            requireStatus(retracted, 200, 'retracted public read');
-            if (selected(retracted.body)) throw new Error('retracted assertion remained public');
-            return { native: { id: person.id, target, candidate: proposal.candidate }, browser };
-          }),
-        );
+        results.push(await statementConsent());
         results.push(
           await journey(session, 'subject-lifecycle', async () => {
             const owned = await createSubject(call, editor, 'schema:Book', `Walk lifecycle ${token}`);
@@ -1136,16 +1215,21 @@ async function main(nativeBoundaries: boolean) {
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const nativeBoundaries = args.length === 2 && args[0] === '--scope' && args[1] === 'native-boundaries';
-  if (args.length && !nativeBoundaries) {
-    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries]');
+  const scope = args.length === 2 && args[0] === '--scope' ? args[1] : args.length === 0 ? 'all' : null;
+  if (
+    scope !== 'all' &&
+    scope !== 'native-boundaries' &&
+    scope !== 'mounted-subject' &&
+    scope !== 'statement-consent'
+  ) {
+    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries|mounted-subject|statement-consent]');
     process.exit(1);
   }
   try {
-    await main(nativeBoundaries);
+    await main(scope);
   } catch (error) {
     const actual = error instanceof Error ? error.message : String(error);
-    if (nativeBoundaries) {
+    if (scope !== 'all') {
       console.error(actual);
       process.exit(1);
     }

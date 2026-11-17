@@ -8,6 +8,7 @@ import {
   admitWalkStack,
   dropFileCache,
   withWalkResources,
+  WalkCleanupTimeoutError,
   firstRedactedDiagnostic,
   hydrationMonitorMessage,
   isStartupTransportError,
@@ -522,6 +523,82 @@ test('walk acquisition failure settles all acquired resources and retains its or
   expect((failure as AggregateError).cause).toBe(original);
   expect((failure as AggregateError).message).toContain('frontend stop');
   expect(settled).toContain('browser settled');
+});
+
+test('walk cleanup forces only its owned child after a pending close and retains the original failure', async () => {
+  const original = new Error('the selected walk wrote its result and failed');
+  const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-close-'));
+  const artifact = join(directory, 'evidence.json');
+  const child = Bun.spawn(
+    [process.execPath, '-e', 'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000);'],
+    { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' },
+  );
+  let forced = false;
+  let siblingClosed = false;
+  try {
+    const ready = child.stdout.getReader();
+    expect(new TextDecoder().decode((await ready.read()).value)).toContain('ready');
+    ready.releaseLock();
+    await Bun.write(artifact, JSON.stringify({ outcome: 'failed', selected: 'Book' }));
+    let failure: unknown;
+    try {
+      await withWalkResources(async (own) => {
+        own('frontends', () => {
+          siblingClosed = true;
+        });
+        own(
+          'browser',
+          () => {
+            child.kill('SIGTERM');
+            return new Promise<void>(() => {});
+          },
+          async () => {
+            forced = true;
+            child.kill('SIGKILL');
+            await child.exited;
+          },
+        );
+        throw original;
+      }, 50);
+    } catch (error) {
+      failure = error;
+    }
+    expect(forced).toBe(true);
+    expect(siblingClosed).toBe(true);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    expect(failure).toBeInstanceOf(AggregateError);
+    const aggregate = failure as AggregateError;
+    expect(aggregate.cause).toBe(original);
+    expect(aggregate.errors[0]).toBe(original);
+    expect(aggregate.errors[1]?.cause).toBeInstanceOf(WalkCleanupTimeoutError);
+    expect(aggregate.errors[1]?.cause).toMatchObject({ resource: 'browser', phase: 'close', timeoutMs: 50 });
+    expect(JSON.parse(readFileSync(artifact, 'utf8'))).toEqual({ outcome: 'failed', selected: 'Book' });
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await child.exited;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('walk cleanup reports a force callback that also never settles', async () => {
+  let failure: unknown;
+  try {
+    await withWalkResources(async (own) => {
+      own(
+        'browser',
+        () => new Promise<void>(() => {}),
+        () => new Promise<void>(() => {}),
+      );
+    }, 5);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(AggregateError);
+  const resourceFailure = (failure as AggregateError).errors[0]?.cause as AggregateError;
+  expect(resourceFailure).toBeInstanceOf(AggregateError);
+  expect(resourceFailure.errors).toHaveLength(2);
+  expect(resourceFailure.errors[0]).toMatchObject({ resource: 'browser', phase: 'close', timeoutMs: 5 });
+  expect(resourceFailure.errors[1]).toMatchObject({ resource: 'browser', phase: 'force', timeoutMs: 5 });
 });
 
 test('Kernel /v1/definitions is ready only on HTTP 200 with an active digest', async () => {

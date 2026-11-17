@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
+import { mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 import {
   kernelDeadlineTimings,
   nativeWalkCall,
@@ -26,6 +27,17 @@ const stack = {
   native: 'http://127.0.0.1:20022',
   kernel: 'http://127.0.0.1:20023',
 };
+
+test('mounted Subject evidence retains only bounded, allowlisted native outcomes', () => {
+  expect(mountedSubjectReads('subject 200, page 503 presentation_not_ready, links transport')).toEqual([
+    { route: 'GET /v1/subjects/:id', stage: 'response', status: 200 },
+    { route: 'POST /v1/pages:read', stage: 'response', status: 503, reason: 'presentation_not_ready' },
+    { route: 'GET /v1/subjects/:id/links', stage: 'transport' },
+  ]);
+  expect(mountedSubjectReads('account 200, page 503 arbitrary, subject 999, page 503 hidden value')).toEqual([]);
+  expect(mountedSubjectReads('page 503, '.repeat(5))).toHaveLength(4);
+  expect(mountedSubjectReads('x'.repeat(257))).toEqual([]);
+});
 
 test('walk records exact native operands and readback while keeping sessions isolated by credential', async () => {
   const trace: NativeObservation[] = [];

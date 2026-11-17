@@ -6,6 +6,7 @@ import { locales } from '../paraglide/runtime.js';
 import { requestLanguages } from './languages.ts';
 import { withPlatformClosedRecognition } from './platform-closed.ts';
 import { recordPageReadCacheControl } from '../security/page-cache.ts';
+import { mountedSubjectReadHeader } from '../subject/mounted-read-diagnostic';
 
 const kernelOrigin = createIsomorphicFn()
   .server(() => (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
@@ -41,11 +42,30 @@ export function configuredKernelOrigin(): string | undefined {
   return resolvedKernelOrigin();
 }
 
+const mountedSubjectObserver = createIsomorphicFn()
+  .server(async (request: Request, input: RequestInfo | URL, init?: RequestInit) => {
+    const diagnostic = await import('../subject/mounted-read-diagnostic.server');
+    const stage = diagnostic.mountedSubjectReadStage(request, input, init);
+    return stage && ((response?: Response) => diagnostic.recordMountedSubjectRead(stage, response).catch(() => {}));
+  })
+  .client(async (_request: Request, _input: RequestInfo | URL, _init?: RequestInit) => undefined);
+
 /** Carry the owner's restrictive cache policy through SSR, including nested server functions. */
 function pageFetch(fetcher: typeof fetch): typeof fetch {
   return (async (input, init) => {
-    const response = await fetcher(input, init);
     const request = currentRequest();
+    const observe =
+      import.meta.env.DEV && request?.headers.get(mountedSubjectReadHeader) === '1'
+        ? await mountedSubjectObserver(request, input, init).catch(() => undefined)
+        : undefined;
+    let response: Response;
+    try {
+      response = await fetcher(input, init);
+    } catch (error) {
+      if (observe) await observe();
+      throw error;
+    }
+    if (observe) await observe(response);
     if (request) recordPageReadCacheControl(request, response.headers.get('cache-control'));
     return response;
   }) as typeof fetch;
