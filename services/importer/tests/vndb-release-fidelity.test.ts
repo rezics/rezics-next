@@ -435,7 +435,7 @@ test('default selected-family traversal acquires directed release endpoints and 
   const statePath = join(directory, 'state.sqlite');
   const native = new Map<
     string,
-    { id: string; type: string; statements: Record<string, { value: { type: string; content: unknown } }[]> }
+    { id: string; type: string; statements: Record<string, ReturnType<typeof valueStatement>[]> }
   >();
   const created = new Map<string, string>();
   const successful = new Map<
@@ -448,7 +448,9 @@ test('default selected-family traversal acquires directed release endpoints and 
   const releaseReads = (counts: Map<string, number>) =>
     new Map([...counts].filter(([externalId]) => /^r[1-9][0-9]*$/u.test(externalId)));
   try {
-    const makePort = (options: { unknownRelation?: boolean; refusedRelease?: string } = {}): CrossMediaPort => {
+    const makePort = (
+      options: { unknownRelation?: boolean; refusedRelease?: string; deprecatedRelease?: string } = {},
+    ): CrossMediaPort => {
       const metadata = sourceRecordMetadataFixture();
       const readCounts = new Map<string, number>();
       const fenceCalls: { source: string; externalId: string; fieldGroup: string }[] = [];
@@ -485,10 +487,13 @@ test('default selected-family traversal acquires directed release endpoints and 
                 if (
                   subject &&
                   command.statement.property.id === 'wdt:P3180' &&
-                  command.statement.value.type === 'value'
+                  command.statement.value.type === 'value' &&
+                  typeof command.statement.value.content === 'string'
                 ) {
                   subject.statements['wdt:P3180'] ??= [];
-                  subject.statements['wdt:P3180'].push({ value: command.statement.value });
+                  subject.statements['wdt:P3180'].push(
+                    valueStatement(command.statement.value.content, command.statement.rank ?? 'normal'),
+                  );
                 }
                 const value = { candidate: randomUUID(), revision: 1 };
                 successful.set(command.key, value);
@@ -516,9 +521,13 @@ test('default selected-family traversal acquires directed release endpoints and 
             for (const sourceId of sourceIds) {
               if (typeof sourceId === 'string') readCounts.set(sourceId, (readCounts.get(sourceId) ?? 0) + 1);
             }
-            const sourceId = sourceIds.find((value) => value === options.refusedRelease);
-            if (sourceId) throw new ImportTransportError(403);
-            return { subject } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+            if (sourceIds.some((sourceId) => sourceId === options.refusedRelease)) throw new ImportTransportError(403);
+            const read = structuredClone(subject);
+            for (const statement of read.statements['wdt:P3180'] ?? []) {
+              if (statement.value.content === options.deprecatedRelease)
+                read.statements['wdt:P3180'] = [valueStatement(statement.value.content, 'deprecated')];
+            }
+            return { subject: read } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
           }
           const known = subjects[id];
           if (!known) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
@@ -571,11 +580,19 @@ test('default selected-family traversal acquires directed release endpoints and 
       ]),
     );
 
+    const deprecated = await seedCrossMedia(plan, statePath, makePort({ deprecatedRelease: 'r2' }));
+    expect(deprecated.releaseSupersessions?.[0]).toMatchObject({ status: 'unresolved', command: exactCommand });
+    expect(deprecated.unresolved).toContainEqual(
+      expect.objectContaining({ property: 'rezics:releaseSupersedes', reason: 'current_release_identity_mismatch:r2' }),
+    );
+    expect(deprecated.readings.some((reading) => reading.externalId === 'r2')).toBe(false);
+    expect(attemptedRelations).toHaveLength(1);
+
     const delivered = await seedCrossMedia(plan, statePath, makePort());
     expect(delivered.releaseSupersessions?.[0]).toMatchObject({ status: 'proposed', command: exactCommand });
     expect(delivered.releaseSupersessions?.[0]?.candidate).toMatch(/^[0-9a-f-]{36}$/u);
     expect(attemptedRelations).toHaveLength(2);
-    expect(releaseReads(currentReadCounts[2]!)).toEqual(
+    expect(releaseReads(currentReadCounts[3]!)).toEqual(
       new Map([
         ['r1', 1],
         ['r2', 1],
@@ -596,7 +613,7 @@ test('default selected-family traversal acquires directed release endpoints and 
     });
     expect(attemptedRelations[1]).toEqual(exactCommand);
     expect(attemptedRelations).toHaveLength(2);
-    expect(releaseReads(currentReadCounts[3]!)).toEqual(
+    expect(releaseReads(currentReadCounts[4]!)).toEqual(
       new Map([
         ['r1', 1],
         ['r2', 1],

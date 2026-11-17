@@ -1,15 +1,14 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
-import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
+import { CrossMediaDumpFiles } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { planVndbReleaseLanguage } from '../src/vndb-release-language.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { vndbReleasePortFixture } from './support/vndb-release.ts';
 import { importVndbReleaseLanguage } from '../src/selected-import.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
@@ -43,6 +42,8 @@ async function authoredCopy(
       ].join('\n'),
     ],
     releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete'],
+    releases_media: ['id\tmedium\tqty', ''],
+    releases_platforms: ['id\tplatform', ''],
     releases_supersedes: ['id\trid', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
@@ -50,40 +51,6 @@ async function authoredCopy(
     await writeFile(join(db, name), `${body}\n`);
   }
   return new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
-}
-
-function port(commands: BatchCommand[]): CrossMediaPort {
-  const metadata = sourceRecordMetadataFixture();
-  return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? { id: randomUUID(), revision: 1 }
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {
-      throw new Error('No statistic in this authored fixture');
-    },
-    async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return { subject: { id, type: id.startsWith('r') ? 'wd:Q20631656' : 'wd:Q689445' } } as Awaited<
-        ReturnType<CrossMediaPort['readReviewedSubject']>
-      >;
-    },
-  };
 }
 
 function languageContent(commands: BatchCommand[], externalId: string) {
@@ -100,6 +67,7 @@ function languageContent(commands: BatchCommand[], externalId: string) {
 test('selected-family COPY import retains distinct release original languages without using title language', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-language-'));
   try {
+    const { port, ids } = vndbReleasePortFixture();
     const tables = await authoredCopy(directory);
     const plan = await planVndbReleaseLanguage(tables);
     expect(plan.entities.vndb.map((row) => row.key)).toEqual(['r1', 'r2', 'r3', 'r4']);
@@ -116,6 +84,7 @@ test('selected-family COPY import retains distinct release original languages wi
           record: {
             id,
             olang,
+            minage: 15,
             releases_titles: [{ id, lang: 'en', mtl: true, title: titles, latin: null }],
           },
         },
@@ -158,6 +127,9 @@ test('selected-family COPY import retains distinct release original languages wi
     });
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
     expect(first.converterRevision).toBe(converter_revision);
+    const releaseId = ids.get('r1')!;
+    expect(releaseId).toBeTruthy();
+    expect(first.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(languageContent(commands, 'r1')).toEqual(['ja']);
     expect(languageContent(commands, 'r2')).toEqual(['pt-BR']);
     expect(languageContent(commands, 'r3')).toEqual([]);
@@ -170,6 +142,7 @@ test('selected-family COPY import retains distinct release original languages wi
       bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     });
     expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
+    expect(again.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(commands.length).toBeGreaterThanOrEqual(count);
     const changed: BatchCommand[] = [];
     const successor = await importVndbReleaseLanguage({
@@ -179,6 +152,7 @@ test('selected-family COPY import retains distinct release original languages wi
       bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     });
     expect(successor.runs.vndb?.counts.changed).toBeGreaterThan(0);
+    expect(successor.readings.find((row) => row.externalId === 'r1')?.subject.subject.id).toBe(releaseId);
     expect(languageContent(changed, 'r1')).toEqual(['en']);
     expect(languageContent(changed, 'r2')).toEqual([]);
   } finally {

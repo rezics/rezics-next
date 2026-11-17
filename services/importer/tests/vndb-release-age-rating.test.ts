@@ -11,6 +11,7 @@ import { createSourceRegistration } from '../src/source-registry.ts';
 import { Importer } from '../src/importer.ts';
 import type { ImportTransport, SourceRegistration } from '../src/import-contract.ts';
 import { planVndbReleaseFidelity, readVndbReleaseBindings } from '../src/vndb-release-fidelity.ts';
+import { vndbReleaseReadbackFixture } from './support/vndb-release.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
@@ -36,6 +37,8 @@ async function authoredCopy(directory: string, age = '15') {
       'id\tvid\trtype',
       'r1\tv1\tcomplete\nr1\tv2\tpartial\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete\nr5\tv1\tcomplete\nr6\tv1\tcomplete',
     ],
+    releases_media: ['id\tmedium\tqty', ''],
+    releases_platforms: ['id\tplatform', ''],
     releases_supersedes: ['id\trid', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
@@ -47,7 +50,7 @@ async function authoredCopy(directory: string, age = '15') {
 
 function transport(
   commands: BatchCommand[],
-  ids: Map<string, string>,
+  readback: ReturnType<typeof vndbReleaseReadbackFixture>,
   receipts: Map<string, BatchWriteResult['results'][number]>,
 ): ImportTransport {
   const metadata = sourceRecordMetadataFixture();
@@ -60,10 +63,14 @@ function transport(
           if (old) return structuredClone(old);
           let value: { id: string; revision: number } | { candidate: string; revision: number } | { revision: number };
           if (command.op === 'create') {
-            let id = ids.get(command.source.external_id);
-            if (!id) ids.set(command.source.external_id, (id = randomUUID()));
+            const id = readback.ids.get(command.source.external_id) ?? randomUUID();
+            readback.created(command, id);
             value = { id, revision: 1 };
-          } else value = command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 };
+          } else if (command.op === 'propose') {
+            const candidate = randomUUID();
+            if (command.statement.property.id === 'wdt:P3180') readback.select(command, candidate);
+            value = { candidate, revision: 1 };
+          } else value = { revision: 1 };
           const result = { key: command.key, status: 201 as const, value };
           receipts.set(command.key, result);
           return structuredClone(result);
@@ -79,10 +86,10 @@ function transport(
 
 function port(
   commands: BatchCommand[],
-  ids: Map<string, string>,
+  readback: ReturnType<typeof vndbReleaseReadbackFixture>,
   receipts: Map<string, BatchWriteResult['results'][number]>,
 ): CrossMediaPort {
-  const api = transport(commands, ids, receipts);
+  const api = transport(commands, readback, receipts);
   return {
     batch: api.batchWrite,
     setSourceRecordMetadata: api.setSourceRecordMetadata!,
@@ -93,9 +100,7 @@ function port(
       throw new Error('No statistic in this authored fixture');
     },
     async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-    },
+    readReviewedSubject: readback.readReviewedSubject,
   };
 }
 
@@ -106,7 +111,7 @@ async function* records(rows: SourceRecord[]) {
 test('operator refreshes unchanged VNDB COPY releases with explicit age while retaining release identity and source values', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-age-'));
   const commands: BatchCommand[] = [];
-  const ids = new Map<string, string>();
+  const readback = vndbReleaseReadbackFixture();
   const receipts = new Map<string, BatchWriteResult['results'][number]>();
   const path = join(directory, 'state.sqlite');
   try {
@@ -117,7 +122,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       converterRevision: entityRevision,
     });
     const release = plan.entities.vndb.find((row) => row.key === 'r1')!;
-    const bindings = await readVndbReleaseBindings(port([], ids, receipts), []);
+    const bindings = await readVndbReleaseBindings(port([], readback, receipts), []);
     const projected = current.convert(
       { external_id: release.key, record_revision: 'unversioned', record: release.payload },
       { source: crossMediaAliases.vndb },
@@ -146,7 +151,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     };
     const oldImporter = new Importer({
       path,
-      transport: transport(commands, ids, receipts),
+      transport: transport(commands, readback, receipts),
       destination: { origin: 'https://kernel.import.test' },
     });
     const oldResult = await oldImporter.runRecords(legacy, records(plan.entities.vndb));
@@ -158,7 +163,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     const refreshed = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory),
       path,
-      port: port(commands, ids, receipts),
+      port: port(commands, readback, receipts),
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });
@@ -176,13 +181,13 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     const idOf = (row: (typeof refreshed.readings)[number]) =>
       (row.subject as { subject?: { id: string } }).subject?.id ?? (row.subject as { id?: string }).id;
     const releaseId = idOf(refreshed.readings.find((row) => row.externalId === 'r1')!);
-    expect(releaseId).toBe(ids.get('r1'));
+    expect(releaseId).toBe(readback.ids.get('r1'));
     expect(refreshed.gaps.some((gap) => gap.fields.includes('minage'))).toBe(false);
 
     const changed = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory, '16'),
       path,
-      port: port(commands, ids, receipts),
+      port: port(commands, readback, receipts),
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });

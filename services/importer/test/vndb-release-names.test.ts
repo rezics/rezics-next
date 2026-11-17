@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,8 +6,8 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { convertCrossMediaEntity } from '@rezics/conversion/cross-media-entities';
 import { VNDB_DUMP_TABLES } from '../../../scripts/datasets/fetch-dumps.ts';
-import { collectSelectedReleaseTitles, CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
-import { sourceRecordMetadataFixture } from '../tests/transport-driver.ts';
+import { collectSelectedReleaseTitles, CrossMediaDumpFiles } from '../src/cross-media-seed.ts';
+import { vndbReleasePortFixture } from '../tests/support/vndb-release.ts';
 import { planVndbReleaseFidelity } from '../src/vndb-release-fidelity.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
 
@@ -43,38 +42,6 @@ async function authoredCopy(
   return new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
 }
 
-function port(commands: BatchCommand[]): CrossMediaPort {
-  const metadata = sourceRecordMetadataFixture();
-  return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? { id: randomUUID(), revision: 1 }
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {
-      throw new Error('No statistic in this authored fixture');
-    },
-    async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return { subject: { id, type: id.startsWith('r') ? 'wd:Q20631656' : 'wd:Q689445' } };
-    },
-  };
-}
-
 test('acquisition requires releases_titles with a dump header', () => {
   expect(VNDB_DUMP_TABLES).toContain('releases_titles');
 });
@@ -104,15 +71,13 @@ test('selected-family and date-fidelity planners bind only selected multilingual
     expect(JSON.stringify(release?.payload)).not.toContain('Other owner');
     expect(missing?.payload).not.toHaveProperty('releases_titles');
     expect(fidelity.gaps.some((gap) => gap.reason === 'Missing selected VNDB release title')).toBe(true);
-    expect(fidelity.edges.filter((edge) => edge.table === 'releases_supersedes')).toMatchObject([
-      {
-        holder: 'r1',
-        target: 'r2',
-        property: 'rezics:releaseSupersedes',
+    expect(fidelity.edges.filter((edge) => edge.table === 'releases_supersedes')).toEqual([]);
+    expect(fidelity.gaps).toContainEqual(
+      expect.objectContaining({
         record: { id: 'r1', rid: 'r2' },
-        fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
-      },
-    ]);
+        reason: 'Supersession endpoint is missing complete release evidence',
+      }),
+    );
     const reversed = await planVndbReleaseFidelity(
       await authoredCopy(directory, [
         'r1\tja\tf\t港別題\t\\N',
@@ -136,9 +101,25 @@ test('selected-family and date-fidelity planners bind only selected multilingual
     });
     if (converted.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');
     expect(converted.proposals[0].subject.labels).toEqual({ en: 'Harbor Soft', ja: '港の題名' });
+    const completeTables = await authoredCopy(
+      directory,
+      [...releaseTitles, 'r2\tja\tf\tEarlier edition\t\\N'],
+      supersessions,
+    );
+    const complete = await planVndbReleaseFidelity(completeTables);
+    expect(complete.edges.filter((edge) => edge.table === 'releases_supersedes')).toMatchObject([
+      {
+        holder: 'r1',
+        target: 'r2',
+        property: 'rezics:releaseSupersedes',
+        record: { id: 'r1', rid: 'r2' },
+        fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
+      },
+    ]);
     const commands: BatchCommand[] = [];
+    const { port } = vndbReleasePortFixture();
     const imported = await importVndbReleaseFidelity({
-      tables: await authoredCopy(directory, releaseTitles, supersessions),
+      tables: completeTables,
       path: join(directory, 'state.sqlite'),
       port: port(commands),
       bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
@@ -156,7 +137,11 @@ test('selected-family and date-fidelity planners bind only selected multilingual
     ).toBe(true);
     const supersession = proposed.find((command) => command.statement.property.id === 'rezics:releaseSupersedes');
     expect(supersession?.source.external_id).toBe('r1');
-    expect(supersession?.statement.value.type).toBe('value');
+    expect(supersession?.subject).toBe(imported.readings.find((row) => row.externalId === 'r1')?.boundSubjectId);
+    expect(supersession?.statement.value).toEqual({
+      type: 'value',
+      content: imported.readings.find((row) => row.externalId === 'r2')?.boundSubjectId,
+    });
     expect(
       supersession?.statement.references.flatMap((reference) => reference.parts.map((part) => part.value.content)),
     ).toContain('https://vndb.org/r1');

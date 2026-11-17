@@ -28,7 +28,8 @@ import {
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
-import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
+import { vndbReleasePortFixture } from './support/vndb-release.ts';
+import { sourceObservationFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 type Row = Record<string, unknown>;
@@ -88,55 +89,6 @@ function family(
   };
 }
 
-function localReviewPort(commands: BatchCommand[], created = new Map<string, string>()): CrossMediaPort {
-  const metadata = sourceRecordMetadataFixture();
-  const subjectsById = new Map<string, { subject: Record<string, unknown> }>();
-  for (const [id, value] of Object.entries(subjects(true)))
-    subjectsById.set(id, value as { subject: Record<string, unknown> });
-  return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => {
-          if (command.op === 'create') {
-            const id = created.get(command.key) ?? randomUUID();
-            created.set(command.key, id);
-            created.set(`source:${command.source.external_id}`, id);
-            subjectsById.set(id, {
-              subject: { id, type: command.subject.type, labels: command.subject.labels, statements: {} },
-            });
-            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
-          }
-          if (command.op === 'propose') {
-            const read = subjectsById.get(command.subject) ?? { subject: { id: command.subject, statements: {} } };
-            const subject = read.subject;
-            const statements = (subject.statements ?? {}) as Record<string, unknown[]>;
-            statements[command.statement.property.id] = [
-              ...(statements[command.statement.property.id] ?? []),
-              { value: command.statement.value },
-            ];
-            subject.statements = statements;
-            subjectsById.set(command.subject, read);
-            return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
-          }
-          return { key: command.key, status: 201 as const, value: { revision: 1 } };
-        }),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {},
-    async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return (subjectsById.get(id) ?? { subject: { id } }) as Awaited<
-        ReturnType<CrossMediaPort['readReviewedSubject']>
-      >;
-    },
-  };
-}
-
 const schemeId = '00000000-0000-4000-8000-000000000021';
 const statusId = '00000000-0000-4000-8000-000000000022';
 const hiddenStatus = '00000000-0000-4000-8000-000000000025';
@@ -170,6 +122,10 @@ function classificationGroups() {
   ];
 }
 
+function reviewedValue(content: string) {
+  return { rank: 'normal', value: { type: 'value', content } };
+}
+
 function subjects(statusBound: boolean, platformWinBound = true): Record<string, object> {
   const conceptId = statusBound ? statusId : hiddenStatus;
   return {
@@ -177,7 +133,7 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
       subject: {
         id: schemeId,
         type: 'skos:ConceptScheme',
-        statements: { 'schema:url': [{ value: { content: developmentStatusSchemeUri } }] },
+        statements: { 'schema:url': [reviewedValue(developmentStatusSchemeUri)] },
       },
     },
     [conceptId]: {
@@ -186,8 +142,8 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
         type: statusBound ? 'skos:Concept' : 'wd:Q20631656',
         statements: statusBound
           ? {
-              'schema:url': [{ value: { content: developmentStatusConceptUri('1') } }],
-              'skos:inScheme': [{ value: { content: schemeId } }],
+              'schema:url': [reviewedValue(developmentStatusConceptUri('1'))],
+              'skos:inScheme': [reviewedValue(schemeId)],
             }
           : {},
       },
@@ -196,7 +152,7 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
       subject: {
         id: platformSchemeId,
         type: 'skos:ConceptScheme',
-        statements: { 'schema:url': [{ value: { content: vndbReleasePlatformSchemeUri } }] },
+        statements: { 'schema:url': [reviewedValue(vndbReleasePlatformSchemeUri)] },
       },
     },
     [platformWinId]: {
@@ -205,10 +161,10 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
         type: 'skos:Concept',
         statements: platformWinBound
           ? {
-              'schema:url': [{ value: { content: `${vndbReleasePlatformSchemeUri}/win` } }],
-              'skos:inScheme': [{ value: { content: platformSchemeId } }],
+              'schema:url': [reviewedValue(`${vndbReleasePlatformSchemeUri}/win`)],
+              'skos:inScheme': [reviewedValue(platformSchemeId)],
             }
-          : { 'skos:inScheme': [{ value: { content: platformSchemeId } }] },
+          : { 'skos:inScheme': [reviewedValue(platformSchemeId)] },
       },
     },
     [platformMacId]: {
@@ -216,8 +172,8 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
         id: platformMacId,
         type: 'skos:Concept',
         statements: {
-          'schema:url': [{ value: { content: `${vndbReleasePlatformSchemeUri}/mac` } }],
-          'skos:inScheme': [{ value: { content: platformSchemeId } }],
+          'schema:url': [reviewedValue(`${vndbReleasePlatformSchemeUri}/mac`)],
+          'skos:inScheme': [reviewedValue(platformSchemeId)],
         },
       },
     },
@@ -225,7 +181,7 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
       subject: {
         id: mediumSchemeId,
         type: 'skos:ConceptScheme',
-        statements: { 'schema:url': [{ value: { content: vndbReleaseMediumSchemeUri } }] },
+        statements: { 'schema:url': [reviewedValue(vndbReleaseMediumSchemeUri)] },
       },
     },
     [mediumCdId]: {
@@ -233,8 +189,8 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
         id: mediumCdId,
         type: 'skos:Concept',
         statements: {
-          'schema:url': [{ value: { content: `${vndbReleaseMediumSchemeUri}/cd` } }],
-          'skos:inScheme': [{ value: { content: mediumSchemeId } }],
+          'schema:url': [reviewedValue(`${vndbReleaseMediumSchemeUri}/cd`)],
+          'skos:inScheme': [reviewedValue(mediumSchemeId)],
         },
       },
     },
@@ -243,56 +199,21 @@ function subjects(statusBound: boolean, platformWinBound = true): Record<string,
 
 function port(
   commands: BatchCommand[],
-  statusBound: boolean,
-  created = new Map<string, string>(),
-  platformWinBound = true,
+  fixture: ReturnType<typeof vndbReleasePortFixture>,
+  { statusBound = true, platformWinBound = true, reviewClassifications = false } = {},
 ): CrossMediaPort {
-  const metadata = sourceRecordMetadataFixture();
   const known = subjects(statusBound, platformWinBound);
+  const native = fixture.port(
+    commands,
+    reviewClassifications ? ['wdt:P3180', 'schema:url', 'skos:inScheme'] : ['wdt:P3180'],
+  );
   return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => {
-          if (command.op === 'create') {
-            const id = created.get(command.key) ?? randomUUID();
-            created.set(command.key, id);
-            created.set(`source:${command.source.external_id}`, id);
-            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
-          }
-          return {
-            key: command.key,
-            status: 201 as const,
-            value: command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
-          };
-        }),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {},
-    async clearSourceStatistic() {},
+    ...native,
     async readReviewedSubject(id) {
-      const row = known[id];
-      if (!row) {
-        const sourceId = [...created]
-          .find(([key, subjectId]) => key.startsWith('source:') && subjectId === id)?.[0]
-          .slice(7);
-        return {
-          subject: sourceId
-            ? {
-                id,
-                type: 'wd:Q20631656',
-                statements: {
-                  'wdt:P3180': [{ rank: 'normal', value: { type: 'value', content: sourceId } }],
-                },
-              }
-            : { id },
-        } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-      }
-      return row as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      const catalogueSubject = known[id];
+      return catalogueSubject
+        ? (catalogueSubject as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>)
+        : native.readReviewedSubject(id);
     },
   };
 }
@@ -322,7 +243,7 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
         { id: 'v3', olang: 'ja', alias: null },
       ],
     });
-    const created = new Map<string, string>();
+    const fixture = vndbReleasePortFixture();
     const observations = sourceObservationFixture();
     const effects: { action: 'read' | 'write'; subjectId: string }[] = [];
     const statistics = createImportTransport({
@@ -352,7 +273,7 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
       }) as typeof fetch,
     });
     const statisticPort: CrossMediaPort = {
-      ...port([], true, created),
+      ...port([], fixture),
       readSourceObservationHead: statistics.readSourceObservationHead,
       writeSourceStatistic: statistics.writeSourceStatistic,
     };
@@ -364,7 +285,7 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
         extras: { ...extras(), sourceSnapshotAsOf: '2026-10-25' },
       });
     await seed();
-    const subjectId = created.get('source:v1')!;
+    const subjectId = fixture.ids.get('v1')!;
     expect(effects).toEqual([
       { action: 'read', subjectId },
       { action: 'write', subjectId },
@@ -385,7 +306,7 @@ test('selected VNDB seed rereads the canonical statistic and leaves an unchanged
 
 test('default seed without binding files rereads catalogue state and exposes selected dates', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-'));
-  const created = new Map<string, string>();
+  const fixture = vndbReleasePortFixture();
   let journal: ShowcaseJournal | undefined;
   try {
     const tables = family({
@@ -419,7 +340,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
     expect(plan.entities.vndb.some((row) => row.key === 'r3')).toBe(false);
     const firstCommands: BatchCommand[] = [];
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-    const basePort = localReviewPort(firstCommands, created);
+    const basePort = port(firstCommands, fixture, { reviewClassifications: true });
     const baseBatch = basePort.batch.bind(basePort);
     const attempted: BatchCommand[] = [];
     let loseFirstDelivery = true;
@@ -661,7 +582,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       tables,
       plan,
       path: join(directory, 'state.sqlite'),
-      port: port(againCommands, true, created),
+      port: port(againCommands, fixture),
       extras: extras(),
     });
     expect(again.identities.find((row) => row.key === 'v1')?.subjectId).toBe(workId);
@@ -680,8 +601,8 @@ test('later selected-family reseeds carry the newly current release classificati
   const initialPlan = structuredClone(plan);
   const commands: BatchCommand[] = [];
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-  const created = new Map<string, string>();
-  const reviewPort = captureShowcaseCommands(localReviewPort(commands, created), journal);
+  const fixture = vndbReleasePortFixture();
+  const reviewPort = captureShowcaseCommands(port(commands, fixture, { reviewClassifications: true }), journal);
   try {
     const beforeVocabulary = await prepareShowcaseVndbReleaseClassifications({
       plan: initialPlan,
@@ -788,9 +709,9 @@ test('later selected-family reseeds carry the newly current release classificati
           command.source.external_id === 'r1' &&
           command.statement.property.id === 'schema:gamePlatform',
       );
-    expect(later.identities.find((identity) => identity.key === 'r1')?.subjectId).toBe(
-      first.identities.find((identity) => identity.key === 'r1')?.subjectId,
-    );
+    const releaseId = first.identities.find((identity) => identity.key === 'r1')?.subjectId;
+    expect(releaseId).toBeTruthy();
+    expect(later.identities.find((identity) => identity.key === 'r1')?.subjectId).toBe(releaseId);
     expect(laterPlatformProposals).toHaveLength(1);
     expect(
       laterPlatformProposals.some(
@@ -808,7 +729,7 @@ test('later selected-family reseeds carry the newly current release classificati
 
 test('malformed and retracted source states withhold only affected claims', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-edges-'));
-  const created = new Map<string, string>();
+  const fixture = vndbReleasePortFixture();
   try {
     const tables = family({
       vn: [
@@ -838,7 +759,7 @@ test('malformed and retracted source states withhold only affected claims', asyn
       tables,
       plan,
       path: join(directory, 'state.sqlite'),
-      port: port(firstCommands, true, created),
+      port: port(firstCommands, fixture),
       extras: extras(),
       groups: [
         {
@@ -899,12 +820,14 @@ test('malformed and retracted source states withhold only affected claims', asyn
     expect(JSON.stringify(proposed)).not.toContain('wdt:P155');
     const workId = first.identities.find((row) => row.key === 'v1')?.subjectId;
     const releaseId = first.identities.find((row) => row.key === 'r1')?.subjectId;
+    expect(workId).toBeTruthy();
+    expect(releaseId).toBeTruthy();
     const retracted: BatchCommand[] = [];
     const lost = await seedShowcaseVndbReleases({
       tables,
       plan,
       path: join(directory, 'state.sqlite'),
-      port: port(retracted, false, created),
+      port: port(retracted, fixture, { statusBound: false }),
       extras: extras(),
       groups: [
         {
@@ -948,7 +871,7 @@ test('malformed and retracted source states withhold only affected claims', asyn
       tables: initialPlatformTables,
       plan: await planCrossMediaSeed(initialPlatformTables),
       path: platformPath,
-      port: port(initialPlatformCommands, true, created),
+      port: port(initialPlatformCommands, fixture),
       extras: extras(),
       groups: classificationGroups(),
     });
@@ -974,13 +897,13 @@ test('malformed and retracted source states withhold only affected claims', asyn
       tables: changedPlatformTables,
       plan: await planCrossMediaSeed(changedPlatformTables),
       path: platformPath,
-      port: port(changedPlatformCommands, true, created, false),
+      port: port(changedPlatformCommands, fixture, { platformWinBound: false }),
       extras: extras(),
       groups: classificationGroups(),
     });
-    expect(changedPlatform.identities.find((row) => row.key === 'r1')?.subjectId).toBe(
-      initialPlatform.identities.find((row) => row.key === 'r1')?.subjectId,
-    );
+    const platformReleaseId = initialPlatform.identities.find((row) => row.key === 'r1')?.subjectId;
+    expect(platformReleaseId).toBeTruthy();
+    expect(changedPlatform.identities.find((row) => row.key === 'r1')?.subjectId).toBe(platformReleaseId);
     expect(
       changedPlatform.bindings.concepts.some(
         (row) => row.taxonomy === vndbReleasePlatformTaxonomy && row.code === 'win',
@@ -1032,8 +955,8 @@ test('a refused classification batch keeps HTTP status on the remaining request'
     });
     const plan = await planCrossMediaSeed(tables);
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-    const port: CrossMediaPort = {
-      ...localReviewPort([], new Map()),
+    const refusedPort: CrossMediaPort = {
+      ...port([], vndbReleasePortFixture()),
       async batch(request) {
         return {
           results: request.commands.map((command) => ({
@@ -1044,7 +967,7 @@ test('a refused classification batch keeps HTTP status on the remaining request'
         };
       },
     };
-    const captured = captureShowcaseCommands(port, journal);
+    const captured = captureShowcaseCommands(refusedPort, journal);
     try {
       await prepareShowcaseVndbReleaseClassifications({ plan, port: captured, journal, stage: 'schemes' });
       throw new Error('expected classification refusal');
