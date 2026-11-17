@@ -137,10 +137,12 @@ nativeTest(
     const path = `/v1/libraryLabels?${new URLSearchParams({ q: name, limit: '2' })}`;
     const { labels } = await read(path, 'alice');
     expect(labels).toHaveLength(1);
-    expect(labels[0]).toMatchObject({ id: expect.any(String), name });
+    const { id: labelId, name: labelName } = labels[0];
+    expect(typeof labelId).toBe('string');
+    expect(labelName).toBe(name);
     await link.click();
     await browserExpect(alice).toHaveURL(
-      (url) => url.pathname === library && url.searchParams.get('label') === labels[0].id,
+      (url) => url.pathname === library && url.searchParams.get('label') === labelId,
     );
     await browserExpect(alice.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
     const shelfUrl = alice.url();
@@ -168,10 +170,12 @@ nativeTest(
       unit: 'page',
       total: '300',
     });
-    expect(progressSession).toMatchObject({ id: expect.any(String), subjectId: subject.id });
+    const { id: sessionId } = progressSession;
+    expect(typeof sessionId).toBe('string');
+    expect(progressSession.subjectId).toBe(subject.id);
     const index = `${library}/progress?subjectId=${encodeURIComponent(subject.id)}`;
     const page = await accountPage('alice', index);
-    const detail = `${library}/progress/${progressSession.id}`;
+    const detail = `${library}/progress/${sessionId}`;
     const row = page.getByRole('main').locator(`a[href="${detail}"]`);
     await row.click();
     await browserExpect(page).toHaveURL((url) => url.pathname === detail);
@@ -179,15 +183,14 @@ nativeTest(
     await page.getByRole('spinbutton', { name: 'Amount', exact: true }).fill('125');
     await page.getByRole('button', { name: 'Record', exact: true }).click();
     await browserExpect(page.getByText(/125\s*\/\s*300\s+Page/).first()).toBeVisible();
-    const path = `/v1/progressSessions/${progressSession.id}?view=FULL`;
-    expect((await read(path, 'alice')).progressSession).toMatchObject({
-      id: progressSession.id,
-      subjectId: subject.id,
-      mode: 'scalar_amount',
-      unit: 'page',
-      amount: '125',
-      total: '300',
-    });
+    const path = `/v1/progressSessions/${sessionId}?view=FULL`;
+    const { progressSession: saved } = await read(path, 'alice');
+    expect(saved.id).toBe(sessionId);
+    expect(saved.subjectId).toBe(subject.id);
+    expect(saved.mode).toBe('scalar_amount');
+    expect(saved.unit).toBe('page');
+    expect(saved.amount).toBe('125');
+    expect(saved.total).toBe('300');
     expect((await stack.kernel(path, {}, 'bob')).status).toBe(404);
     await page.getByRole('link', { name: 'Return to progress', exact: true }).click();
     await browserExpect(page).toHaveURL(new URL(index, stack.web).href);
@@ -207,18 +210,21 @@ nativeTest(
       status: 'owned',
       location: 'First shelf',
     });
-    expect(copy).toMatchObject({ id: expect.any(String), subjectId: subject.id, revision: expect.any(Number) });
-    const path = `/v1/copies/${copy.id}`;
+    const { id: copyId, revision } = copy;
+    expect(typeof copyId).toBe('string');
+    expect(copy.subjectId).toBe(subject.id);
+    expect(typeof revision).toBe('number');
+    const path = `/v1/copies/${copyId}`;
     const page = await accountPage('alice', `${library}/copies?subjectId=${subject.id}`);
     const edit = async () => {
-      await page.locator(`button[data-copy-edit-id="${copy.id}"]`).click();
+      await page.locator(`button[data-copy-edit-id="${copyId}"]`).click();
       await page.getByRole('menuitem', { name: 'Edit copy', exact: true }).click();
     };
     await edit();
     await page.getByRole('button', { name: 'More', exact: true }).click();
     const note = 'Kept after reviewing the newer location';
     await page.getByLabel('Note', { exact: true }).fill(note);
-    const newer = await ownerWrite('PATCH', path, { revision: copy.revision, location: 'Second shelf' });
+    const newer = await ownerWrite('PATCH', path, { revision, location: 'Second shelf' });
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     const review = page.getByRole('region', { name: 'Review current details', exact: true });
     await review.getByRole('button', { name: 'Review current Copy', exact: true }).click();
@@ -229,14 +235,14 @@ nativeTest(
     await browserExpect(page.getByText(note, { exact: true })).toBeVisible();
     const saved = (await read(path, 'alice')).copy;
     const fields = {
-      id: copy.id,
+      id: copyId,
       subjectId: subject.id,
       kind: 'physical',
       status: 'owned',
       location: 'Second shelf',
       note,
     };
-    expect(saved).toMatchObject(fields);
+    for (const [field, value] of Object.entries(fields)) expect(saved[field], field).toBe(value);
     expect(saved.revision).toBeGreaterThan(newer.copy.revision);
 
     await edit();
@@ -247,7 +253,8 @@ nativeTest(
     expect((await stack.kernel(path, {}, 'alice')).status).toBe(404);
     await undo.click();
     await browserExpect(page.getByText(note, { exact: true })).toBeVisible();
-    expect((await read(path, 'alice')).copy).toMatchObject(fields);
+    const restored = (await read(path, 'alice')).copy;
+    for (const [field, value] of Object.entries(fields)) expect(restored[field], field).toBe(value);
     expect((await stack.kernel(path, {}, 'bob')).status).toBe(404);
   },
   lifecycle,
