@@ -508,6 +508,12 @@ export class InspectionStore {
     } catch (error) {
       await store.close();
       if (error instanceof InspectionFailure) throw error;
+      // SQLite can defer reading the file header until the first schema query.
+      if ((error as NodeJS.ErrnoException | undefined)?.code === 'SQLITE_NOTADB')
+        throw new InspectionFailure(
+          `State file is not a supported readable SQLite database: ${JSON.stringify(opened.path)}.`,
+          2,
+        );
       throw new InspectionFailure('Malformed or unavailable importer journal data; no state was changed.');
     }
   }

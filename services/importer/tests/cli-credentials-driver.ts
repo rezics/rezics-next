@@ -4,6 +4,7 @@ import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bu
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
 import { IMPORTER_SCOPES } from '../src/credentials.ts';
 import { MAX_IMPORT_BODY_BYTES, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from '../src/import-fetch.ts';
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import type {
   ApiRequestObservation,
   AuthRequestObservation,
@@ -81,6 +82,7 @@ export const createImportCliCredentialsDriver: CreateImportCliCredentialsDriver 
   let sequence = 0;
   const active = new Set<Promise<unknown>>();
   const subjects = new Map<string, string>();
+  const metadata = sourceRecordMetadataFixture();
   const api: ImportCliCredentialsDriver['api'] = {};
 
   return {
@@ -166,7 +168,7 @@ export const createImportCliCredentialsDriver: CreateImportCliCredentialsDriver 
       const apiFetch = async (request: Request): Promise<Response> => {
         const atMs = options.clock.now();
         let response = await api.beforeRequest?.(request, options.clock);
-        const body = request.body ? await request.text() : null;
+        const body = request.body ? await request.clone().text() : null;
         let responseText: string | undefined;
         let effectApplied = false;
         if (!response) {
@@ -176,13 +178,14 @@ export const createImportCliCredentialsDriver: CreateImportCliCredentialsDriver 
             response = new Response('denied', { status: 401 });
           } else {
             const path = new URL(request.url).pathname;
-            if (path === '/v1/sourceFences:check') {
-              const url = new URL(request.url);
-              const owner = JSON.stringify([url.searchParams.get('source'), url.searchParams.get('externalId')]);
-              const fenced = subjects.has(owner);
-              responseText = JSON.stringify({ fenced, securityRevision: fenced ? '1' : null });
-              response = new Response(responseText, { headers: { 'content-type': 'application/json' } });
-              effectApplied = true;
+            if (path === '/v1/sourceFences:check' && request.method === 'GET') {
+              response = Response.json({ fenced: false, securityRevision: null });
+            } else if (path === '/v1/source-records:setMetadata' && request.method === 'POST') {
+              const key = JSON.parse(request.headers.get('idempotency-key')!) as string;
+              const previous = metadata.receipts.get(key);
+              response = await metadata.fetch(request);
+              const receipt = metadata.receipts.get(key);
+              effectApplied = response.ok && !previous && !!receipt && receipt.result.effect !== 'noEffect';
             } else if (path === '/v1/subjects:batchWrite' && body !== null) {
               const payload = JSON.parse(body) as BatchWriteRequest;
               const result: BatchWriteResult = {

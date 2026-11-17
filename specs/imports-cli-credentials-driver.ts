@@ -19,8 +19,8 @@ import { pathToFileURL } from 'node:url';
  * expires_in=300. A rejected or revoked account key is denied by this fake Auth
  * boundary, never by a parallel CLI-specific credential shortcut.
  *
- * Fake API supports the importer's ordinary source-fence and batch-write
- * routes. A beforeRequest hook may inject an HTTP response before any effect;
+ * Fake API supports the importer's ordinary source-fence, source-record metadata
+ * and batch-write routes. A beforeRequest hook may inject an HTTP response before any effect;
  * afterResponse runs after the response is consumed and before the next CLI
  * operation. The virtual clock drives CLI time, Auth assertion times and
  * requests. advance is test-only control for representing elapsed run time or
