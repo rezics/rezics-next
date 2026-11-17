@@ -4,10 +4,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
-import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { createBangumiPersonCareerAdmission, parseBangumiPersonCareerBindings } from '../src/bangumi-person-careers.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { reviewedVocabularySubjectFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 
 test('ordinary Person refresh follows current career bindings and retains names and source identity', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/bangumi-person-careers-'));
@@ -36,21 +36,23 @@ test('ordinary Person refresh follows current career bindings and retains names 
     vocabularyAdmission: createBangumiPersonCareerAdmission(admission, {
       async readReviewedSubject(id) {
         if (unavailable) throw new ImportTransportError(503);
-        const code = id === conceptId ? 'writer' : 'actor';
-        return {
-          subject: {
+        if (id === schemeId) {
+          return reviewedVocabularySubjectFixture(
             id,
-            type: id === schemeId ? 'skos:ConceptScheme' : 'skos:Concept',
-            statements: visible
-              ? {
-                  'schema:url': [
-                    { value: { type: 'value', content: id === schemeId ? schemeUri : `${schemeUri}/${code}` } },
-                  ],
-                  ...(id === schemeId ? {} : { 'skos:inScheme': [{ value: { type: 'value', content: schemeId } }] }),
-                }
-              : {},
-          },
-        } as unknown as ReviewedSubjectRead;
+            'skos:ConceptScheme',
+            schemeUri,
+            visible ? { 'schema:url': schemeUri } : {},
+          );
+        }
+        if (id !== conceptId && id !== replacementId) throw new ImportTransportError(404);
+        const code = id === conceptId ? 'writer' : 'actor';
+        const uri = `${schemeUri}/${code}`;
+        return reviewedVocabularySubjectFixture(
+          id,
+          'skos:Concept',
+          uri,
+          visible ? { 'schema:url': uri, 'skos:inScheme': schemeId } : {},
+        );
       },
     }),
     transport: {
