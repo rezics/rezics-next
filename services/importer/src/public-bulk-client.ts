@@ -1,13 +1,13 @@
 import type { ReviewedSubjectRead } from './import-client.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { createBoundedPublicSubjectGet, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
+import { createBoundedPublicSubjectGet, MAX_IMPORT_DEADLINE_MS, SUBJECT_NOT_READY_TYPE } from './import-fetch.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const digest = /^[0-9a-f]{64}$/;
 const releaseDigest = /^sha256:[0-9a-f]{64}$/;
 /** The only Subject read 503 that means "not current yet"; any other 503 is terminal for the reader. */
-export const SUBJECT_NOT_READY_TYPE = 'https://rezics.com/problems/semantic_not_ready';
+export { SUBJECT_NOT_READY_TYPE };
 
 /** A public read that Semantic reports as not ready. Callers observe the same Subject again later. */
 export class ReviewedSubjectNotReady extends Error {
