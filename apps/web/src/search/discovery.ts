@@ -18,12 +18,11 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import { currentEvidenceMatches, evidencePageWithinLimit, matchEvidenceSchema } from './match-evidence';
 import { admitWorkContext, isWorkContextShape } from './work-context/admission';
 
-type NativePage = Extract<
-  NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
-  { subjects: unknown }
->;
+type NativeSearchResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
+type NativePage = Extract<NativeSearchResponse, { subjects: unknown }>;
 type NativeHit = NativePage['subjects'][number];
-type NativeWorkContext = NonNullable<NativeHit['workContext']>;
+type NativeDiscoveryHit = Extract<NativeSearchResponse, { hits: unknown }>['hits'][number];
+type NativeWorkContext = NonNullable<Extract<NativeDiscoveryHit, { summary: { kind: 'subject' } }>['workContext']>;
 
 // Keep the opt-in envelope separate from the generated Subject compatibility response.
 // Validate unknown wire data before allowing it to reach the page.
@@ -490,7 +489,7 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   if (!evidencePageWithinLimit(result.hits.map((hit) => hit.matchEvidence ?? { state: 'unavailable' }))) return;
   let reviewBytes = 0;
   const hits: DiscoveryPage['hits'] = result.hits.map((hit) => {
-    if (hit.summary.kind !== 'subject' || hit.workContext === undefined) return hit;
+    if (hit.summary.kind !== 'subject' || !('workContext' in hit) || hit.workContext === undefined) return hit;
     const context = admitWorkContext(hit.workContext, hit.summary.value);
     if (context) return { ...hit, workContext: context };
     const { workContext: _retiredContext, ...currentHit } = hit;
