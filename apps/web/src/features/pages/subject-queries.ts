@@ -5,6 +5,7 @@ import { notFound } from '@tanstack/react-router';
 import { createIsomorphicFn, createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { personalRead, publicRead } from '../../kernel/query';
+import { labelUndoRevisionParam } from '../../library/labels-address';
 import { loadSubjectLabelDocument, loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
 import { loadSettingsPage } from '../../settings/preferences';
 import type { SessionEnv } from '../../session/client';
@@ -367,19 +368,18 @@ export function subjectLabelUndoFromSearch({
 }: {
   undoLabelId?: string;
   undoAssignmentId?: string;
-  undoRevision?: number;
+  undoRevision?: string | number;
 }): SubjectLabelUndo | undefined {
+  const revision = labelUndoRevisionParam(undoRevision);
   if (
     !undoLabelId ||
     undoLabelId.length > 128 ||
     !undoAssignmentId ||
     undoAssignmentId.length > 128 ||
-    undoRevision === undefined ||
-    !Number.isSafeInteger(undoRevision) ||
-    undoRevision < 1
+    revision === undefined
   )
     return undefined;
-  return { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: undoRevision };
+  return { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: Number(revision) };
 }
 
 /** Only the canonical document loader reads this snapshot, outside the route's query cache. */

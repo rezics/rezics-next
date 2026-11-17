@@ -27,6 +27,7 @@ import {
   readSubjectDocumentLabels,
   subjectLabelUndoFromSearch,
 } from '../../features/pages/subject-queries';
+import { labelUndoRevisionParam } from '../../library/labels-address';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -208,12 +209,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     labelResult?: string;
     undoLabelId?: string;
     undoAssignmentId?: string;
-    undoRevision?: number;
+    undoRevision?: string;
     undoKey?: string;
   } => {
     const node = validatePageNode(search.node);
     const streamProperty = search.streamProperty;
     const streamDirection = search.streamDirection;
+    const undoRevision = labelUndoRevisionParam(search.undoRevision);
     if (
       (streamProperty !== undefined &&
         (typeof streamProperty !== 'string' ||
@@ -252,10 +254,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
         ? { undoKey: search.undoKey }
         : {}),
-      ...(typeof search.undoRevision === 'number' ||
-      (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
-        ? { undoRevision: Number(search.undoRevision) }
-        : {}),
+      ...(undoRevision === undefined ? {} : { undoRevision }),
     };
   },
   loaderDeps: ({ search }) => ({

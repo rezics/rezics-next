@@ -14,6 +14,13 @@ export type LabelsAddressResult =
       rawCursor: string | null;
     } & LabelsAddress);
 
+/** Keep the exact Undo revision in the router's string-valued search state. */
+export function labelUndoRevisionParam(value: unknown): string | undefined {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return;
+  const revision = Number(value);
+  if (Number.isSafeInteger(revision) && revision > 0) return String(revision);
+}
+
 function validPrefix(value: string): boolean {
   let scalarCount = 0;
   for (const scalar of value) {
