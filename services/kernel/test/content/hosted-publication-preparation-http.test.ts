@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { newId, ROUTES, routeOf } from '../../src/route/route.ts';
@@ -707,7 +708,7 @@ test('selection progress exposes only its pinned binding and rejects new batches
   const changedRelease = await f.native.call('POST', `${releaseBook.path}:publish`, {
     expectedRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
-    occurrenceIds: [releaseBook.nestedChapter],
+    occurrenceIds: [releaseBook.rootPart, releaseBook.childPart, releaseBook.nestedChapter],
   });
   expect(changedRelease.status).toBe(200);
   const replayedReleaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, releaseBatchBody, {
@@ -734,6 +735,151 @@ test('selection progress exposes only its pinned binding and rejects new batches
     expectedPublicationId: releaseBook.published.revisionId,
   });
   expect(await selectedRelease(releaseBook.catalogueId)).toBe(changedRelease.value.revisionId);
+});
+
+test('first publication prepares only the selected private root and its exact language bodies', async () => {
+  const opening = await f.native.thread('draft');
+  const english = fromPlainText('The lantern stayed lit until the ferry docked.');
+  const french = fromPlainText('La lanterne est restée allumée jusqu’à l’arrivée du bac.');
+  const target = f.target(await f.native.thread('draft', english));
+  const alternative = f.target(await f.native.thread('draft', french));
+  const excluded = f.target(await f.native.thread('draft'));
+  const catalogueId = opening.firstPost.id;
+  const path = `/v1/hostedCatalogues/${catalogueId}`;
+  const id = () => f.newOccurrenceIdFor(catalogueId);
+  const root = id();
+  const part = id();
+  const child = id();
+  let { revisionId } = await f.native.command('/v1/hostedCatalogues', {
+    postId: catalogueId,
+    threadId: opening.id,
+    placements: [],
+  });
+  for (const [occurrenceId, parentId, title, placement] of [
+    [root, null, 'Selected chapter', { kind: 'chapter', target }],
+    [part, null, 'Excluded part', { kind: 'part' }],
+    [child, part, 'Excluded chapter', { kind: 'chapter', target: excluded }],
+  ] as const) {
+    ({ revisionId } = await f.native.command(
+      `${path}:insertDraftPoint`,
+      { expectedRevisionId: revisionId, occurrenceId, parentId, beforeOccurrenceId: null, title, placement },
+      200,
+    ));
+  }
+  for (const [language, bodyTarget, title] of [
+    ['en', target, 'Selected chapter'],
+    ['fr', alternative, 'Chapitre choisi'],
+  ] as const) {
+    await f.native.command(
+      `/v1/posts/${bodyTarget.postId}:issueRevisionDisclosure`,
+      { catalogueId, target: bodyTarget },
+      200,
+    );
+    ({ revisionId } = await f.native.command(
+      `${path}/occurrences/${root}:bindLanguage`,
+      {
+        expectedRevisionId: revisionId,
+        language,
+        title,
+        target: bodyTarget,
+        ...(language === 'en' && { makeDefault: true }),
+      },
+      200,
+    ));
+  }
+
+  const freezeSelection = async (occurrenceId: string) => {
+    const stageId = id();
+    const stagePath = prepPath(path, stageId);
+    await f.native.command(
+      `${path}:prepareRelease`,
+      { stageId, expectedRevisionId: revisionId, expectedPublicationId: null, mode: 'selection' },
+      202,
+    );
+    const batch = await f.native.command(
+      `${stagePath}:appendSelectionBatch`,
+      { batchId: id(), occurrenceIds: [occurrenceId] },
+      200,
+    );
+    expect(batch.stage.inputCount).toBe('1');
+    const frozen = await f.native.command(`${stagePath}:freezeSelection`, {}, 200);
+    expect(frozen.stage).toMatchObject({ state: 'building', inputVersion: '1' });
+    return stagePath;
+  };
+  const stage = await freezeSelection(root);
+  expect((await f.native.call('POST', `${stage}:advance`, { stepId: id() }, { other: true })).status).toBe(403);
+  expect((await f.native.call('POST', `${stage}:startActivation`, {})).status).toBe(412);
+
+  let progress = await f.native.command(`${stage}:advance`, { stepId: id() }, 200);
+  expect(progress.stage).toMatchObject({ state: 'closing', settledInputCount: '1', candidateCount: '1' });
+
+  const missingParent = await freezeSelection(child);
+  await f.native.command(`${missingParent}:advance`, { stepId: id() }, 200);
+  const rejected = await f.native.command(`${missingParent}:advance`, { stepId: id() }, 200);
+  expect(rejected.stage).toMatchObject({ state: 'failed', failure: 'missing_ancestor' });
+  expect((await f.native.call('POST', `${missingParent}:seal`, {})).status).toBe(412);
+
+  for (let page = 0; !progress.candidate?.coverageComplete; page++) {
+    expect(page).toBeLessThan(8);
+    progress = await f.native.command(`${stage}:advance`, { stepId: id() }, 200);
+  }
+  expect(progress.candidate).toMatchObject({ placementCount: '1', rootCount: '1', chapterCount: '1' });
+  expect(await selectedRelease(catalogueId)).toBeNull();
+  const sealed = await f.native.command(`${stage}:seal`, {}, 200);
+  expect(sealed.candidateReady).toBe(true);
+  expect(await selectedRelease(catalogueId)).toBeNull();
+  expect((await f.native.call('GET', path, undefined, { anonymous: true })).status).toBe(404);
+
+  const wholeStageId = id();
+  const wholeStage = prepPath(path, wholeStageId);
+  await f.native.command(
+    `${path}:prepareRelease`,
+    { stageId: wholeStageId, expectedRevisionId: revisionId, expectedPublicationId: null, mode: 'whole' },
+    202,
+  );
+  const wholePage = await f.native.command(`${wholeStage}:advance`, { stepId: id() }, 200);
+  expect(wholePage.stage).toMatchObject({ state: 'ready', candidateCount: '3' });
+
+  const openingTarget = f.target(opening);
+  await f.native.command(
+    `/v1/posts/${openingTarget.postId}:issueRevisionDisclosure`,
+    { catalogueId, target: openingTarget },
+    200,
+  );
+  let activation = await f.native.command(`${stage}:startActivation`, {}, 200);
+  for (let page = 0; activation.state !== 'ready'; page++) {
+    expect(page).toBeLessThan(4);
+    activation = await f.native.command(`${stage}:advanceActivation`, {}, 200);
+  }
+  expect(await selectedRelease(catalogueId)).toBeNull();
+  const activated = await f.native.command(`${stage}:activate`, {}, 200);
+  expect(activated.state).toBe('activated');
+  expect(await selectedRelease(catalogueId)).toBe(activated.publicationId);
+  expect((await f.native.call('POST', `${wholeStage}:advance`, { stepId: id() })).status).toBe(412);
+  await f.native.command(`${wholeStage}:cancel`, {}, 200);
+
+  const publication = `kind=publication&revisionId=${activated.publicationId}`;
+  for (const [language, bodyTarget, body] of [
+    ['en', target, english],
+    ['fr', alternative, french],
+  ] as const) {
+    const exact = new URLSearchParams({
+      language,
+      targetPostId: bodyTarget.postId,
+      targetRevisionId: bodyTarget.revisionId,
+      targetSha256: bodyTarget.sha256,
+    });
+    const read = await f.native.call('GET', `${path}/occurrences/${root}/body?${publication}&${exact}`);
+    expect(read.status, JSON.stringify(read.value)).toBe(200);
+    expect(read.value).toMatchObject({
+      selectedLanguage: language,
+      occurrence: { target: bodyTarget },
+      document: { canonicalBytes: Buffer.from(serializeDocument(body)).toString('base64'), sha256: bodyTarget.sha256 },
+    });
+  }
+  for (const occurrenceId of [part, child]) {
+    expect((await f.native.call('GET', `${path}/occurrences/${occurrenceId}?${publication}`)).status).toBe(404);
+  }
 });
 
 test('selection advance replays acknowledged steps and fences stale settlement and closure', async () => {
@@ -824,7 +970,7 @@ test('selection advance replays acknowledged steps and fences stale settlement a
   const changedRelease = await f.native.call('POST', `${closureBook.path}:publish`, {
     expectedRevisionId: closureBook.created.revisionId,
     expectedPublicationId: closureBook.published.revisionId,
-    occurrenceIds: [closureBook.nestedChapter],
+    occurrenceIds: [closureBook.rootPart, closureBook.childPart, closureBook.nestedChapter],
   });
   expect(changedRelease.status).toBe(200);
   const closingReplay = await f.native.call(
