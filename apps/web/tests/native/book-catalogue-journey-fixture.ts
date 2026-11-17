@@ -701,7 +701,7 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     const search = await waitForNativeSearch(stack, marker, expected);
     const shelfPath = `/v1/libraryEntries?view=FULL&limit=20&orderBy=lastActivity&direction=desc&type=${encodeURIComponent(book.type)}`;
     const shelf = await responseJson<{ libraryEntries: LibraryEntryRead[] }>(
-      await stack.kernel(shelfPath, undefined, 'alice'),
+      await stack.kernel(shelfPath, { headers: { 'accept-language': 'en' } }, 'alice'),
       200,
       `GET ${shelfPath} as fixture Alice`,
     );
