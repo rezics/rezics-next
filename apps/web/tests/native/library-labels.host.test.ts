@@ -254,7 +254,7 @@ nativeTest(
     const { subjectHref } = await import('../../src/subject/subject-href.ts');
     const subjectPath = subjectHref({ id: subject.id, label: subject.title }, 'en').href;
     const signInContext = await auth.newContext('alice');
-    await auth.signIn('alice', { context: signInContext, returnTo: subjectPath });
+    await auth.signIn('alice', { context: signInContext, returnTo: subjectPath, sessionOnly: true });
     const storageState = await signInContext.storageState();
     await signInContext.close();
     const owner = currentNativeLifecycle();
