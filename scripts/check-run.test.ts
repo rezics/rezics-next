@@ -357,6 +357,30 @@ test('native shared-tree capture uses its committed checkpoint while newer edits
   }
 });
 
+test('committed capture with returns retains caller permissions across a different checkout umask', async () => {
+  const fixture = candidate();
+  const sourcePath = join(fixture.root, 'src/input.ts');
+  const defaultMode = 0o666 & ~process.umask();
+  chmodSync(sourcePath, defaultMode === 0o640 ? 0o644 : 0o640);
+  const returns = ['.temp/result.json'];
+  const snapshot = await prepareCandidateSnapshot(
+    fixture.root,
+    fixture.revision,
+    undefined,
+    returns,
+    undefined,
+    'committed',
+  );
+  try {
+    const original = await currentCheckSourceManifest(fixture.root, returns);
+    expect(snapshot.sourceHash).toBe(original.sourceSha256);
+    writeFileSync(sourcePath, 'export const value = 8;\n');
+    expect((await currentCheckSourceManifest(fixture.root, returns)).sourceSha256).not.toBe(snapshot.sourceHash);
+  } finally {
+    removeRetainedSnapshot(fixture, snapshot);
+  }
+});
+
 test('native shared-tree results retain exact captured pass or failure when current source advances', async () => {
   for (const exitCode of [0, 1]) {
     const fixture = candidate();
@@ -1100,7 +1124,12 @@ test('a final-only receiver restores row evidence from a long native check', asy
               schema: 1,
               status: 'complete',
               entries: [
-                { path, size: Buffer.byteLength(row), sha256: createHash('sha256').update(row).digest('hex'), kind: 'file' },
+                {
+                  path,
+                  size: Buffer.byteLength(row),
+                  sha256: createHash('sha256').update(row).digest('hex'),
+                  kind: 'file',
+                },
               ],
               failures: [],
             },

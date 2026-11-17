@@ -5870,12 +5870,13 @@ run_directory=${quote(directory)}
 ${cleanupCommands(true, 'controller-cleanup', false, unacknowledgedLeaseHost)}`;
 }
 
-export function stopRunScript(id: string): string {
+export function stopRunScript(id: string, retainLeaseForReturns = false): string {
   const slice = quote(runSlice(id));
-  return `${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop', true)} || true
-systemctl stop ${slice} >/dev/null 2>&1 || true
-${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop')} || exit 1
-python3 -c ${quote(leaseCustodyProgram + String.raw`
+  const stopLease = retainLeaseForReturns
+    ? ''
+    : `python3 -c ${quote(
+        leaseCustodyProgram +
+          String.raw`
 root=Path(sys.argv[1])
 try:
     value=verified_lease(root);owner=value['holder'];descriptor=os.pidfd_open(owner['pid'])
@@ -5883,7 +5884,12 @@ try:
         if lease_fields(owner['pid'])[19]==owner['start']: signal.pidfd_send_signal(descriptor,signal.SIGTERM)
     finally: os.close(descriptor)
 except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError): pass
-`)} ${quote(`${ROOT}/runs/${id}`)}
+`,
+      )} ${quote(`${ROOT}/runs/${id}`)}`;
+  return `${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop', true)} || true
+systemctl stop ${slice} >/dev/null 2>&1 || true
+${stopSupervisor(quote(`${ROOT}/runs/${id}`), 'controller-stop')} || exit 1
+${stopLease}
 if systemctl is-active --quiet ${slice}; then exit 1; fi
 printf 'STOPPED\\n'`;
 }
@@ -9222,7 +9228,7 @@ async function restorePinnedDumpCache(
     throw new Error(`dump cache extract on ${host.name} failed with exit code ${extracted.code}`);
 }
 
-/** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
+/** Executes only after upload and slot admission. A forced stop retains declared output until return collection. */
 async function runLeased(
   lease: Lease,
   prepared: PreparedRun,
@@ -9233,6 +9239,7 @@ async function runLeased(
 ): Promise<number> {
   const { host, id, directory, connectionId } = prepared;
   let leaseReleased = false;
+  let stoppedWithRetainedLease = false;
   let commandTerminal = false;
   let preserveRemoteRun = false;
   let run: ReturnType<typeof Bun.spawn> | undefined;
@@ -9427,6 +9434,28 @@ async function runLeased(
     const heartbeat = setInterval(() => void observeCommandStart(), heartbeatMs);
     void observeCommandStart();
     const commandResult = finished(run, signal);
+    const stopTimedOutCommand = async () => {
+      console.error(`remote-check: deadline reached after ${maxMs} ms`);
+      const retainLease = Boolean(options.returns?.length);
+      const stopped = await boundedSsh(
+        host,
+        connectionId,
+        stopRunScript(id, retainLease),
+        'remote command stop',
+        15_000,
+      );
+      if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
+        throw new RemoteTransportError(
+          host.name,
+          'remote command stop',
+          stopped.code || REMOTE_TRANSPORT_FAILURE,
+          false,
+        );
+      // Signalling the lease holder here would remove the stopped run's directory before copyReturns.
+      stoppedWithRetainedLease = retainLease;
+      commandTerminal = true;
+      code = REMOTE_DEADLINE_EXIT;
+    };
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
       // The host owns the deadline and receipt. This later controller guard only recovers a broken host monitor.
@@ -9440,17 +9469,7 @@ async function runLeased(
         commandTerminal = true;
         code = 70;
       } else if (completed === null) {
-        console.error(`remote-check: deadline reached after ${maxMs} ms`);
-        const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
-        if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
-          throw new RemoteTransportError(
-            host.name,
-            'remote command stop',
-            stopped.code || REMOTE_TRANSPORT_FAILURE,
-            false,
-          );
-        commandTerminal = true;
-        code = REMOTE_DEADLINE_EXIT;
+        await stopTimedOutCommand();
       } else {
         code = completed;
         commandTerminal = completed !== 255;
@@ -9492,28 +9511,20 @@ async function runLeased(
         );
       }
       if (status.kind === 'started' || status.kind === 'preparing') {
-        console.error(`remote-check: deadline reached after ${maxMs} ms`);
-        const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
-        if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
-          throw new RemoteTransportError(
-            host.name,
-            'remote command stop',
-            stopped.code || REMOTE_TRANSPORT_FAILURE,
-            false,
-          );
+        await stopTimedOutCommand();
         await settleRunTransport();
-        commandTerminal = true;
-        code = REMOTE_DEADLINE_EXIT;
       } else if (status.kind === 'completed') {
         code = status.code;
         commandTerminal = true;
       }
     }
     if (commandTerminal) settlementStarted ??= performance.now();
-    try {
-      await releaseLease();
-    } catch (error) {
-      leaseReleaseFailure = { error };
+    if (!stoppedWithRetainedLease) {
+      try {
+        await releaseLease();
+      } catch (error) {
+        leaseReleaseFailure = { error };
+      }
     }
     if (retainedAbortObserved) {
       const recovered = await reconcileRemoteRunOwned(

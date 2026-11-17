@@ -519,6 +519,18 @@ export async function prepareCandidateSnapshot(
     const selected = new Set(files);
     for (const tracked of baseFiles) if (!selected.has(tracked)) removeCandidateFile(frozen, tracked);
     for (const excluded of excludedInputs) removeCandidateFile(frozen, excluded);
+    if (mode === 'committed' && declarations.length && head === sourceRevision) {
+      // Git creates the frozen checkout under the launcher's umask. For return custody,
+      // retain the caller's existing file permissions without taking any working bytes.
+      for (const file of files) {
+        if (excludedInputs.some((excluded) => file === excluded || file.startsWith(`${excluded}/`))) continue;
+        const original = lstatSync(resolve(root, file), { throwIfNoEntry: false });
+        const target = resolve(frozen, file);
+        const captured = lstatSync(target);
+        if (!original?.isFile() || !captured.isFile() || (original.mode & 0o111) !== (captured.mode & 0o111)) continue;
+        if ((original.mode & 0o777) !== (captured.mode & 0o777)) chmodSync(target, original.mode & 0o777);
+      }
+    }
     for (const file of mode === 'working' ? files : []) {
       if (excludedInputs.some((excluded) => file === excluded || file.startsWith(`${excluded}/`))) continue;
       await copyFrozenInput(root, frozen, file);

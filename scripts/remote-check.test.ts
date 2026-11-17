@@ -3748,6 +3748,22 @@ test('a run that reaches its deadline stops its slice and returns a distinct dea
   expect(result.stderr).toContain('remote-check: deadline reached after 25 ms');
 });
 
+test('a forced deadline collects declared evidence before releasing the stopped run directory', async () => {
+  const proof = '.temp/captured-proof.json';
+  const { env, events } = scenario({ a: { available: 8e9, hang: true, present: [proof] } });
+  const result = await remote(env, workspace(), ['true'], ['--max-ms', '25', '--returns', proof]);
+  expect(result.code).toBe(124);
+  const observed = events();
+  const kinds = observed.map(({ kind }) => kind);
+  const stopped = kinds.indexOf('stop');
+  const returned = kinds.indexOf('returns');
+  expect(stopped).toBeGreaterThanOrEqual(0);
+  expect(observed[stopped]!.script).not.toContain("lease_fields(owner['pid'])");
+  expect(returned).toBeGreaterThan(stopped);
+  expect(observed[returned]!.slotHeld).toBe(true);
+  expect(kinds.indexOf('release')).toBeGreaterThan(kinds.lastIndexOf('rsync'));
+});
+
 test('deadline, command failure and transport failure keep distinct exit codes', async () => {
   const commandFailure = scenario({ a: { available: 8e9, exit: 7 } });
   expect((await remote(commandFailure.env, workspace(), ['true'])).code).toBe(7);

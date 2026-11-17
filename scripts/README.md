@@ -1015,7 +1015,9 @@ quiet live remote command; command deadline and liveness rules remain in force.
 
 `RemoteCheck.completed(receipt)` receives the outer physical result (`RemotePhysicalRunReceipt`, schema 1):
 `host`, immutable `run`, `exitCode`, `lifetimeFailure` and `resources`. The callback runs after terminal custody and
-slot release, before returns/cleanup. Resource observation failure supplies null and cannot change a command verdict.
+before return collection. Ordinary runs release the slot before the callback. When the controller forces a deadline
+stop with declared outputs, the lease remains held until return collection settles. Resource observation failure
+supplies null and cannot change a command verdict.
 `parseRemotePhysicalRunReceipt` validates structure; parsing arbitrary output does not establish provenance.
 The CLI sends this result over an optional inherited **fd 3** only when `REMOTE_CHECK_RECEIPT_FD=3` and
 `REMOTE_CHECK_RECEIPT_NONCE` are both set by its launcher. Each newline-delimited envelope contains that nonce and
@@ -1127,8 +1129,8 @@ CPU seconds come from the run slice's `cpu.stat` `usage_usec`. Average cores div
 from install start through command completion. Peak memory comes from `memory.peak`.
 These include the run's containers and installation, but exclude upload and admission wait.
 
-Finally, cleanup stops that run's scope, removes only its labelled containers with their associated volumes,
-stops its slice and deletes its directory. Slot locks are already released before this output and cleanup phase.
+Finally, after slot release, cleanup stops that run's scope, removes only its labelled containers with their associated
+volumes, stops its slice and deletes its directory.
 Signals also take this cleanup path. A failed cleanup connection leaves a warning.
 Before taking a slot, the stale-run sweep also removes directories older than 60 minutes
 whose corresponding scope is inactive and whose `.alive` file is absent or older than 10 minutes; a run without
