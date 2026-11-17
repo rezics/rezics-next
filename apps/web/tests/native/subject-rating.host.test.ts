@@ -1,26 +1,20 @@
-import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
-import { chromium, type Browser } from 'playwright';
+import { expect } from 'bun:test';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
 
-const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
-const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
-const browsers: Browser[] = [];
+const lifecycle = new NativeTestLifecycle('native Subject rating');
+let stack: Awaited<ReturnType<typeof startNativeWebStack>>;
+let auth: Awaited<ReturnType<typeof startAuthStack>>;
 const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const globalPopulation = '00000000-0000-8000-8000-000000000000';
 
-beforeAll(async () => {
-  stacks.push(await startNativeWebStack());
-}, 300_000);
+nativeBeforeAll(lifecycle, 300_000, async () => {
+  stack = await startNativeWebStack();
+  auth = await startAuthStack(stack);
+});
 
-afterEach(async () => {
-  for (const auth of authStacks.splice(0).reverse()) await auth.stop();
-}, 180_000);
-
-afterAll(async () => {
-  for (const browser of browsers.splice(0).reverse()) await browser.close();
-  for (const stack of stacks.splice(0).reverse()) await stack.stop();
-}, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
 type Figure = {
   questionId: string;
@@ -56,11 +50,14 @@ function idempotencyKey() {
   return `"${crypto.randomUUID()}"`;
 }
 
-test('the native browser rates a subject, publishes the Global figure at five votes and clears below threshold', async () => {
-  const stack = stacks[0]!;
-  const auth = await startAuthStack(stack);
-  authStacks.push(auth);
+nativeTest(
+  'the native browser rates a subject, publishes the Global figure at five votes and clears below threshold',
+  600_000,
+  rateSubject,
+  lifecycle,
+);
 
+async function rateSubject() {
   const openedLibrary = await stack.kernel(
     '/v1/platform/exposure/personal_library:open',
     { method: 'POST', headers: { 'idempotency-key': idempotencyKey() } },
@@ -85,8 +82,7 @@ test('the native browser rates a subject, publishes the Global figure at five vo
   const votePath = `/v1/subjects/${subject.id}/ratings/${standardQuestion}/vote`;
 
   const browserReader = await auth.signIn('alice');
-  const noScriptBrowser = await chromium.launch();
-  browsers.push(noScriptBrowser);
+  const noScriptBrowser = browserReader.context.browser()!;
   const noScriptContext = await noScriptBrowser.newContext({
     viewport: { width: 1280, height: 860 },
     reducedMotion: 'reduce',
@@ -110,6 +106,7 @@ test('the native browser rates a subject, publishes the Global figure at five vo
   await noScriptPage.getByRole('button', { name: 'Save rating', exact: true }).click();
   const noScriptReturn = await noScriptNavigation;
   expect(noScriptReturn?.status()).toBe(200);
+  await noScriptContext.close();
   const noScriptVote = await stack.kernel(votePath, undefined, 'alice');
   expect(noScriptVote.status, await noScriptVote.clone().text()).toBe(200);
   expect(await noScriptVote.json()).toMatchObject({ units: 12 });
@@ -204,4 +201,4 @@ test('the native browser rates a subject, publishes the Global figure at five vo
   expect(voteWrites.some(({ method }) => method === 'DELETE')).toBe(true);
   expect(voteWrites.every(({ idempotencyKey }) => idempotencyKey !== null && idempotencyKey.length > 0)).toBe(true);
   expect(new Set(voteWrites.map(({ idempotencyKey }) => idempotencyKey)).size).toBe(voteWrites.length);
-}, 600_000);
+}

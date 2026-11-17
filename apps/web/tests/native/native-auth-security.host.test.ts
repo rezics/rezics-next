@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { expect } from 'bun:test';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
 import {
@@ -13,13 +14,15 @@ import {
   submitPasswordSignIn,
 } from './native-auth-security-fixture.ts';
 
+const lifecycle = new NativeTestLifecycle('native Auth security');
 let stack: Awaited<ReturnType<typeof startNativeWebStack>>;
 let auth: Awaited<ReturnType<typeof startAuthStack>>;
 let issuerProxy: NativeAuthIssuerProxy;
 let fixture: NativeAuthSecurityFixture;
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 300_000, async () => {
   issuerProxy = await startNativeAuthIssuerProxy();
+  lifecycle.register({ label: 'Auth issuer proxy', close: () => issuerProxy.stop(), force: () => issuerProxy.stop() });
   stack = await startNativeWebStack({
     issuerOrigin: issuerProxy.origin,
     authClockOffsetSeconds: -601,
@@ -28,15 +31,18 @@ beforeAll(async () => {
   issuerProxy.setUpstream(stack.authIssuer);
   fixture = await provisionNativeAuthSecurityFixture(stack);
   auth = await startAuthStack(stack);
-}, 300_000);
+});
 
-afterAll(async () => {
-  await auth?.stop();
-  await stack?.stop();
-  await issuerProxy?.stop();
-}, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
-test('served account security journey signs up, steps up, uses passkeys, and revokes both sessions', async () => {
+nativeTest(
+  'served account security journey signs up, steps up, uses passkeys, and revokes both sessions',
+  420_000,
+  manageAccountSecurity,
+  lifecycle,
+);
+
+async function manageAccountSecurity() {
   const newcomerContext = await auth.context('newcomer');
   const newcomerPage = await newcomerContext.newPage();
   newcomerPage.setDefaultTimeout(15_000);
@@ -352,4 +358,4 @@ test('served account security journey signs up, steps up, uses passkeys, and rev
   await aliceContext.close();
   await bobContext.close();
   await newcomerContext.close();
-}, 420_000);
+}

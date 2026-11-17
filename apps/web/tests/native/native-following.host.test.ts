@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { describe, expect } from 'bun:test';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import type { BrowserContext, Page, Response as PlaywrightResponse } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import {
@@ -11,7 +12,7 @@ import {
 } from './native-following-fixture.ts';
 import { startNativeWebStack, type NativeKernelRequest, type NativeWebStack } from './stack.ts';
 
-setDefaultTimeout(600_000);
+const lifecycle = new NativeTestLifecycle('native private Following');
 
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
@@ -23,7 +24,7 @@ let aliceInitialPages: NativeFollowingPage[];
 let aliceCookiePresent = false;
 let bobCookiePresent = false;
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 600_000, async () => {
   stack = await startNativeWebStack();
   fixture = await createNativeFollowingFixture(stack);
   auth = await startAuthStack(stack);
@@ -34,15 +35,9 @@ beforeAll(async () => {
   bobCookiePresent = (await bob.cookies(stack.web)).some(({ name }) => name === '__Host-rezics_session');
   if ((await aliceJourney.response()).status() !== 200 || (await bobJourney.response()).status() !== 200)
     throw new Error('Native Alice and Bob must sign in through the served Auth forms');
-}, 600_000);
+});
 
-afterAll(async () => {
-  try {
-    await auth?.stop();
-  } finally {
-    await stack?.stop();
-  }
-}, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
 async function visit(
   context: BrowserContext,
@@ -129,7 +124,14 @@ async function setCollectionPrivate(): Promise<void> {
 }
 
 describe('native private Following destination', () => {
-  test('Alice follows a subject, Collection and Space through served controls and sees the native cursors', async () => {
+  nativeTest(
+    'Alice follows a subject, Collection and Space through served controls and sees the native cursors',
+    600_000,
+    followNativeTargets,
+    lifecycle,
+  );
+
+  async function followNativeTargets() {
     expect(aliceCookiePresent).toBe(true);
     expect(bobCookiePresent).toBe(true);
     console.info(`native-following-active-definition-release: ${fixture.releaseDigest}`);
@@ -282,9 +284,16 @@ describe('native private Following destination', () => {
         .getByRole('button', { name: `Inspect ${returnedTitle}`, exact: true })
         .evaluate((element) => element === document.activeElement),
     ).toBe(true);
-  }, 600_000);
+  }
 
-  test('Following uses embedded target summaries and has no public or fabricated follower total', async () => {
+  nativeTest(
+    'Following uses embedded target summaries and has no public or fabricated follower total',
+    240_000,
+    inspectFollowing,
+    lifecycle,
+  );
+
+  async function inspectFollowing() {
     const pageRequestStart = stack.kernelRequests().length;
     const firstPage = await visit(alice, '/en/library/following');
     expect(firstPage.response?.status()).toBe(200);
@@ -348,9 +357,16 @@ describe('native private Following destination', () => {
     console.info(
       `native-following-page-requests: ${JSON.stringify(pageFollows.map(({ method, url, failure }) => ({ method, request: `${new URL(url, stack.kernelOrigin).pathname}${new URL(url, stack.kernelOrigin).search}`, failure: failure?.status })))}`,
     );
-  }, 240_000);
+  }
 
-  test('the shared responsive menu unfollows only Alice and leaves her Library state and Bob edge intact', async () => {
+  nativeTest(
+    'the shared responsive menu unfollows only Alice and leaves her Library state and Bob edge intact',
+    240_000,
+    unfollowTarget,
+    lifecycle,
+  );
+
+  async function unfollowTarget() {
     await followingPage.setViewportSize({ width: 1280, height: 860 });
     await followingPage.goto(new URL('/en/library/following', stack.web).href, { waitUntil: 'domcontentloaded' });
     await followingPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
@@ -420,9 +436,16 @@ describe('native private Following destination', () => {
       `/v1/realms/${encodeURIComponent(fixture.space.realmId)}/members/me`,
     );
     expect(member.state).toBe('member');
-  }, 240_000);
+  }
 
-  test('an inaccessible followed Collection becomes a no-link tombstone without leaking its previous title', async () => {
+  nativeTest(
+    'an inaccessible followed Collection becomes a no-link tombstone without leaking its previous title',
+    240_000,
+    inspectHiddenCollection,
+    lifecycle,
+  );
+
+  async function inspectHiddenCollection() {
     for (const { id } of fixture.fillerSubjects) {
       const removed = await nativeFollowingJson<{ follow: { targetId: string; state: string } }>(
         stack,
@@ -489,5 +512,5 @@ describe('native private Following destination', () => {
     await followingPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
     expect(await followingPage.getByRole('heading', { level: 1, name: '正在关注' }).count()).toBe(1);
     expect(await followingPage.locator('li[data-slot="list-row"]').count()).toBe(0);
-  }, 240_000);
+  }
 });
