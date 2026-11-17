@@ -1278,12 +1278,12 @@ nativeTest(
             if (await excluded.count()) expect(await excluded.isChecked()).toBe(false);
             if (await excludedPart.count()) expect(await excludedPart.isChecked()).toBe(false);
             await selection.getByRole('button', { name: 'Add checked placements from this page', exact: true }).click();
-            await selection.getByRole('button', { name: 'Freeze stored selection', exact: true }).waitFor({
-              state: 'visible',
-            });
-            const count = selection.locator('dd').nth(0);
-            await count.waitFor({ state: 'visible' });
-            expect(await count.innerText()).toBe('1');
+            const acknowledged = selection
+              .locator('dt')
+              .filter({ hasText: /^Acknowledged inputs$/u })
+              .locator('xpath=following-sibling::dd[1]')
+              .filter({ hasText: /^1$/u });
+            await acknowledged.waitFor({ state: 'visible' });
             await selection.getByRole('button', { name: 'Freeze stored selection', exact: true }).click();
             await page.getByRole('button', { name: 'Resume preparation', exact: true }).waitFor({
               state: 'visible',
@@ -1344,7 +1344,20 @@ nativeTest(
                 omittedDraft.status,
             };
           },
-          () => pageObservation(page),
+          async () => {
+            const browser = await pageObservation(page);
+            if (!stageId) return browser;
+            await settledWithin(stack.refreshKernelRequests(), 1_200).catch(() => undefined);
+            const prefix = `/v1/hostedCatalogues/${catalogueId}/publicationPreparations/${stageId}:`;
+            const operations = stack
+              .kernelRequests()
+              .flatMap(({ url, fixtureRequest, responseStatus }) =>
+                !fixtureRequest && url.startsWith(prefix)
+                  ? [{ operation: url.slice(prefix.length).split('?')[0], status: responseStatus }]
+                  : [],
+              );
+            return `${browser}; selected stage operations=${JSON.stringify(operations.slice(-8))}`;
+          },
         );
         if (!prepared)
           journal.unreached(
