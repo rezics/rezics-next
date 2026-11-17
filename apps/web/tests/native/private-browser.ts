@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { ownBridgeSocket } from './private-browser-socket.ts';
 import type { WebModuleFailureTrace } from './web-module-failure.ts';
 import {
   currentNativeLifecycle,
@@ -103,6 +104,7 @@ export async function launchPrivateBrowser(
   };
 
   const bridge = createServer({ allowHalfOpen: true }, (socket) => {
+    ownBridgeSocket(socket);
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
     let mode: 'detect' | 'http' | 'tunnel' = 'detect';
