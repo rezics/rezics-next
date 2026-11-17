@@ -1,12 +1,14 @@
 import { existsSync, readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { expect, spyOn, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { resolve } from 'node:path';
 import {
   currentNativeLifecycle,
   NativeLifecycleTimeoutError,
   NativeTestLifecycle,
   inspectNativeProcessGroup,
+  nativeAfterAll,
+  nativeBeforeAll,
   nativeProcessGroupIsGone,
   nativeProcessIsSame,
   nativeTest,
@@ -26,6 +28,29 @@ function gate() {
   });
   return { promise, release };
 }
+
+describe('scheduled native fixture teardown', () => {
+  const lifecycle = new NativeTestLifecycle('scheduled teardown', undefined, { cleanupGraceMs: 1 });
+  const stopped: string[] = [];
+  nativeBeforeAll(lifecycle, 1_000, () => {
+    for (const label of ['Web', 'Auth']) {
+      lifecycle.register({
+        label,
+        close: async () => {
+          await Bun.sleep(10);
+          stopped.push(label);
+        },
+        force: () => {
+          stopped.push(`forced ${label}`);
+        },
+      });
+    }
+  });
+  nativeAfterAll(lifecycle, 1_000);
+  afterAll(() => expect(stopped).toEqual(['Auth', 'Web']));
+
+  test('uses the hook deadline for ordered fixture stops', () => expect(lifecycle.isOpen).toBe(true));
+});
 
 for (const settlement of ['reject', 'resolve'] as const) {
   test(`lifecycle expiry survives an operation that ${settlement}s during deadline cleanup`, async () => {
