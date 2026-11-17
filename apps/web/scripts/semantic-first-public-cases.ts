@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { FIRST_PUBLIC_JOURNEYS, type FirstPublicJourneyId } from './semantic-first-public-inventory.ts';
 import {
   acceptCandidate,
@@ -192,6 +193,7 @@ async function releasedDefinitions(
 export function semanticFirstPublicCases(session: SemanticFirstPublicSession, token = randomUUID().slice(0, 8)) {
   const { call, stack } = session;
   let termsBookId = '';
+  let contextId = '';
   const zoneLabel = `Walk zone ${token}`;
   const zoneHome = `Walk zone home ${token}`;
   const zoneAbout = `Walk zone about ${token}`;
@@ -548,6 +550,7 @@ export function semanticFirstPublicCases(session: SemanticFirstPublicSession, to
       run: () =>
         journey(session, 'context-creation', async () => {
           const context = await createContext(call, session.editor, `Walk Context ${token}`);
+          contextId = context.id;
           const current = await call('GET', `/v1/contexts/${context.id}`, { bearer: session.editor });
           requireStatus(current, 200, 'Context read');
           return {
@@ -560,16 +563,51 @@ export function semanticFirstPublicCases(session: SemanticFirstPublicSession, to
       id: 'context-editorial-decisions' as const,
       run: () =>
         journey(session, 'context-editorial-decisions', async () => {
-          const proposal = await propose(call, session.editor, termsBookId, cited('schema:inLanguage', 'zh'));
-          await acceptCandidate(call, session.editor, termsBookId, proposal.candidate);
-          await adoptCandidate(call, session.editor, termsBookId, proposal.candidate, 'schema:inLanguage');
+          if (!contextId) throw new Error('Context creation did not return an id');
+          const property = 'schema:inLanguage';
+          const global = await propose(call, session.editor, termsBookId, cited(property, 'en'));
+          await acceptCandidate(call, session.editor, termsBookId, global.candidate);
+          await adoptCandidate(call, session.editor, termsBookId, global.candidate, property);
+          const proposal = await propose(call, session.editor, termsBookId, cited(property, 'zh'));
+          await acceptCandidate(call, session.editor, termsBookId, proposal.candidate, contextId);
+          const selected = (body: Json) =>
+            ((body.subject as Json).statements as Record<string, { id: string; rank: string }[]>)[property] ?? [];
+          const beforeAdoption = await readSubject(call, termsBookId, session.editor, contextId);
+          requireStatus(beforeAdoption, 200, 'Context reading before adoption');
+          if (
+            (beforeAdoption.body.subject as Json).context !== contextId ||
+            !selected(beforeAdoption.body).some((row) => row.id === global.candidate) ||
+            selected(beforeAdoption.body).some((row) => row.id === proposal.candidate)
+          )
+            throw new Error('Context acceptance changed the selected reading before adoption');
+          await adoptCandidate(call, session.editor, termsBookId, proposal.candidate, property, 'preferred', contextId);
+          const contextRead = await readSubject(call, termsBookId, session.editor, contextId);
           const publicRead = await readSubject(call, termsBookId);
-          requireStatus(publicRead, 200, 'adopted language');
+          requireStatus(contextRead, 200, 'adopted Context language');
+          requireStatus(publicRead, 200, 'independent Global language');
+          if (
+            (contextRead.body.subject as Json).context !== contextId ||
+            selected(contextRead.body).length !== 1 ||
+            !selected(contextRead.body).some((row) => row.id === proposal.candidate && row.rank === 'preferred')
+          )
+            throw new Error('Context adoption did not retain its exact candidate and rank');
+          if (
+            (publicRead.body.subject as Json).context !== PAGE_GLOBAL_CONTEXT ||
+            selected(publicRead.body).length !== 1 ||
+            !selected(publicRead.body).some((row) => row.id === global.candidate)
+          )
+            throw new Error('Context adoption changed the independent Global selection');
           return {
-            native: { candidate: proposal.candidate },
+            native: {
+              context: contextId,
+              candidate: proposal.candidate,
+              globalCandidate: global.candidate,
+              contextRead: contextRead.status,
+              globalRead: publicRead.status,
+            },
             browser: await visit(
               session,
-              `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'context-review')}`,
+              `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'context-review')}?${new URLSearchParams({ context: contextId, property })}`,
               { persona: 'member' },
             ),
           };

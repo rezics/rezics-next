@@ -1312,7 +1312,9 @@ examples, not native acceptance or visual-review evidence.
 An actual subject reading links its native Context to
 `/{locale}/subjects/{id}/{slug}/context-review?context={contextId}`. This companion editor retains the public
 canonical subject frame. It verifies the explicit Context with native `GET /v1/contexts/{id}` after session
-preparation and explicit opening. Its label and Global/community scope come from that response. A Realm name
+preparation and explicit opening. An unqualified review address is temporarily redirected to the Context carried by
+the admitted native Subject reading, retaining its Realm and exact-slot search. The redirected address makes that
+Context explicit before the private editor opens. Its label and Global/community scope come from that response. A Realm name
 never supplies editorial scope, and this route does not change the selected Realm reader or its publication.
 
 The editor reuses candidate comparison for descriptive fields. Existing exact-slot links may additionally supply

@@ -81,6 +81,20 @@ export async function prepareSemanticFirstPublicHost(
     member: signedIn.context,
     anonymous: await auth.newContext('anonymous'),
     evidenceDir,
+    async verifyMember(page) {
+      try {
+        const identity = await page.evaluate(async () => {
+          const { sessionQuery } = await import(new URL('/src/session/query.ts', location.href).href);
+          const result = await sessionQuery.queryFn();
+          return { state: result.state, subject: result.subject };
+        });
+        if (identity.state === 'signed-out') return 'signed-out';
+        if (identity.state !== 'signed-in') return 'unavailable';
+        return identity.subject === editorAccountId ? 'matched' : 'different-reader';
+      } catch {
+        return 'unavailable';
+      }
+    },
     editorAgent: () => resolveEditorAgent(call, session.editor, editorAccountId),
     async refreshEditor() {
       if (Date.now() - editorIssued < 240_000) return;

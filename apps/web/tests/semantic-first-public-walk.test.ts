@@ -14,6 +14,9 @@ import {
 } from '../scripts/semantic-first-public-request.ts';
 import {
   createAndReadNativeBook,
+  acceptCandidate,
+  adoptCandidate,
+  readSubject,
   handleCall,
   readActiveDefinitions,
   resolveEditorAgent,
@@ -234,6 +237,56 @@ test('a protected-page Auth redirect retains its status and path while omitting 
   expect(JSON.stringify(session.pages)).not.toContain('private-nonce');
 });
 
+test('a member document cannot pass when its current Web reader differs from the native editor', async () => {
+  let closed = false;
+  const page = {
+    setDefaultTimeout() {},
+    async setViewportSize() {},
+    async emulateMedia() {},
+    on() {},
+    async goto() {
+      return { status: () => 200 };
+    },
+    url: () => stack.web + '/en/catalogue/new',
+    locator() {
+      return { async waitFor() {} };
+    },
+    async close() {
+      closed = true;
+    },
+  };
+  const context = {
+    async newPage() {
+      return page;
+    },
+  } as unknown as SemanticBrowserSession['member'];
+  const session: SemanticBrowserSession = {
+    stack,
+    editor: 'editor',
+    anonymous: context,
+    member: context,
+    evidenceDir: '/unused',
+    call: async () => {
+      throw new Error('unexpected native call');
+    },
+    verifyMember: async () => 'different-reader',
+  };
+  await expect(visit(session, page.url(), { persona: 'member' })).rejects.toThrow(
+    'Auth browser reader is different-reader',
+  );
+  expect(closed).toBe(true);
+  expect(session.pages).toEqual([
+    {
+      requestedUrl: page.url(),
+      url: page.url(),
+      status: 200,
+      stage: 'reader',
+      reader: 'different-reader',
+      failure: 'reader',
+    },
+  ]);
+});
+
 test('lifecycle cancellation marks the interrupted original case and prevents later native work', async () => {
   const controller = new AbortController();
   let calls = 0;
@@ -261,6 +314,54 @@ test('lifecycle cancellation marks the interrupted original case and prevents la
   expect(current.failure).toBeUndefined();
   expect(later.failure).toBeUndefined();
   expect(calls).toBe(1);
+});
+
+test('Context decisions and current reads retain the explicit Context while existing callers retain Global', async () => {
+  const context = '018f0000-0000-7000-8000-000000000032';
+  const operations: { method: string; path: string; options: unknown }[] = [];
+  const call: SemanticFirstPublicSession['call'] = async (method, path, options) => {
+    operations.push({ method, path, options });
+    return { status: 200, body: {}, headers: new Headers() };
+  };
+  await acceptCandidate(call, 'editor', 'subject', 'candidate', context);
+  await adoptCandidate(call, 'editor', 'subject', 'candidate', 'schema:inLanguage', 'preferred', context);
+  await readSubject(call, 'subject', 'editor', context);
+  await acceptCandidate(call, 'editor', 'subject', 'baseline');
+  await readSubject(call, 'subject');
+  expect(operations).toEqual([
+    {
+      method: 'POST',
+      path: '/v1/subjects/subject/candidates/candidate:accept',
+      options: {
+        bearer: 'editor',
+        body: { context, expected_head: null },
+      },
+    },
+    {
+      method: 'POST',
+      path: '/v1/subjects/subject:adopt',
+      options: {
+        bearer: 'editor',
+        body: {
+          context,
+          property: 'schema:inLanguage',
+          mode: 'replace',
+          selection: [{ candidate: 'candidate', rank: 'preferred' }],
+          expected_head: null,
+        },
+      },
+    },
+    { method: 'GET', path: '/v1/subjects/subject', options: { bearer: 'editor', query: { context } } },
+    {
+      method: 'POST',
+      path: '/v1/subjects/subject/candidates/baseline:accept',
+      options: {
+        bearer: 'editor',
+        body: { context: '00000000-0000-8000-8000-000000000000', expected_head: null },
+      },
+    },
+    { method: 'GET', path: '/v1/subjects/subject', options: {} },
+  ]);
 });
 
 const fixtureSubjectId = 'abea4570-a90c-8fd8-a148-3ada6997936e';

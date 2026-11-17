@@ -9,29 +9,39 @@ import { createServerFn } from '@tanstack/react-start';
 import { SubjectFrame } from '../../features/pages/subject-frame';
 import { subjectFrame } from '../../features/pages/subject-frame-model';
 import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
-import { loadSubjectPage } from '../../features/pages/subject-page-load';
+import { loadSubjectPage, PageReadError } from '../../features/pages/subject-page-load';
 import { subjectTabs } from '../../features/pages/views';
-import { editorialCreateHref } from '../../features/catalogue/editorial-context-location';
+import { editorialCreateHref, editorialContextSelection } from '../../features/catalogue/editorial-context-location';
 import { ContextCurationSession } from '../../features/catalogue/context-curation-session';
 import type { CandidateSlot } from '../../subject/candidates';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
+import { subjectBody } from '../../features/pages/subject-read';
 import { canonicalRedirect, subjectUrlForView } from '../../subject/subject-href';
 
 const readContextPage = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { id: string; slug: string; locale: string; search: string; realm?: string | undefined }) => {
-    if (
-      !/^[0-9a-f-]{36}$/i.test(input.id) ||
-      typeof input.slug !== 'string' ||
-      input.slug.length > 128 ||
-      typeof input.locale !== 'string' ||
-      input.locale.length > 35 ||
-      typeof input.search !== 'string' ||
-      input.search.length > 2048
-    )
-      throw notFound();
-    return { ...input, realm: validatePageRealm(input.realm) };
-  })
+  .validator(
+    (input: {
+      id: string;
+      slug: string;
+      locale: string;
+      search: string;
+      realm?: string | undefined;
+      context?: string | undefined;
+    }) => {
+      if (
+        !/^[0-9a-f-]{36}$/i.test(input.id) ||
+        typeof input.slug !== 'string' ||
+        input.slug.length > 128 ||
+        typeof input.locale !== 'string' ||
+        input.locale.length > 35 ||
+        typeof input.search !== 'string' ||
+        input.search.length > 2048
+      )
+        throw notFound();
+      return { ...input, realm: validatePageRealm(input.realm), context: editorialContextSelection(input.context) };
+    },
+  )
   .handler(async ({ data }) => {
     const { loadContextSubject, contextSubjectAddress } = await import('../../features/pages/context-subject');
     const { client, authorization, reader } = await subjectKernelClient(data.locale, data.realm);
@@ -45,6 +55,16 @@ const readContextPage = createServerFn({ method: 'GET', strict: false })
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, 'context-review'), data.search));
     if (page.kind !== 'page') throw notFound();
+    if (data.context === undefined) {
+      const context = page.page.context?.id ?? subjectBody(page.page)?.subject.context;
+      if (!context) throw new PageReadError('dependency_unavailable', 503);
+      const search = new URLSearchParams(data.search);
+      search.set('context', context);
+      throw redirect({
+        ...canonicalRedirect(subjectUrlForView(canonical.value, 'context-review'), '?' + search.toString()),
+        statusCode: 302,
+      });
+    }
     const frame = subjectFrame(page.page, data.locale);
     if (!frame) throw notFound();
     return {
@@ -58,7 +78,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
   staticData: { publicCache: false },
   validateSearch: (search: Record<string, unknown>) => {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (typeof search.context !== 'string' || !uuid.test(search.context)) throw notFound();
+    const context = editorialContextSelection(search.context);
     const property = typeof search.property === 'string' && search.property.length <= 256 ? search.property : undefined;
     const slot: CandidateSlot = {};
     for (const key of ['target', 'key'] as const) {
@@ -80,7 +100,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
       throw notFound();
     return {
       realm: validatePageRealm(search.realm),
-      context: search.context,
+      context,
       property,
       slot: Object.keys(slot).length ? slot : undefined,
     };
@@ -89,11 +109,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
   staleTime: 0,
   gcTime: 0,
   shouldReload: true,
-  loaderDeps: ({ search }) => ({ realm: search.realm }),
+  loaderDeps: ({ search }) => ({ realm: search.realm, context: search.context }),
   loader: ({ params, location, deps }) =>
     readContextPage({
       data: {
         realm: deps.realm,
+        context: deps.context,
         id: params.id,
         slug: params.slug,
         locale: getLocale(),
@@ -106,6 +127,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
 function ContextReviewRoute() {
   const { page, frame, reader } = Route.useLoaderData();
   const { realm, context, property, slot } = Route.useSearch();
+  if (!context) throw notFound();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, useSession()));
   const { slug } = Route.useParams();
   if (!currentReader) return <PendingPage />;

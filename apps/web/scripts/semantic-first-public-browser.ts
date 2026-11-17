@@ -11,12 +11,14 @@ import {
 } from './semantic-first-public-native.ts';
 import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 
+export type SemanticBrowserReader = 'matched' | 'signed-out' | 'different-reader' | 'unavailable';
 export type SemanticPageObservation = {
   requestedUrl: string;
   url?: string;
   status?: number;
-  stage: 'navigation' | 'document' | 'hydration' | 'main' | 'complete';
-  failure?: 'http-status' | 'auth-redirect' | 'timeout' | 'closed' | 'transport';
+  stage: 'navigation' | 'document' | 'hydration' | 'main' | 'reader' | 'capture' | 'complete';
+  failure?: 'http-status' | 'auth-redirect' | 'timeout' | 'closed' | 'transport' | 'reader';
+  reader?: SemanticBrowserReader;
   clientError?: 'module-load' | 'module-initialization' | 'runtime';
 };
 export type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
@@ -31,6 +33,7 @@ export type SemanticBrowserSession = {
   mountedSubject?: MountedSubjectDiagnostic;
   pages?: SemanticPageObservation[];
   observePage?: () => Promise<void>;
+  verifyMember?: (page: Page) => Promise<SemanticBrowserReader>;
 };
 
 export async function hydrated(page: Page): Promise<void> {
@@ -94,8 +97,6 @@ async function openPage(
     await hydrated(page);
     observation.stage = 'main';
     await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
-    observation.stage = 'complete';
-    await observe();
     return { page, status, url: page.url() };
   } catch (error) {
     observation.failure ??=
@@ -138,20 +139,37 @@ export async function visit(
     observe,
     options.mountedSubject ? (diagnostic) => (session.mountedSubject = diagnostic) : undefined,
   );
-  const title = await opened.page.title();
-  const heading = await opened.page
-    .locator('h1, h2')
-    .first()
-    .textContent()
-    .catch(() => null);
-  const screenshot = join(
-    session.evidenceDir,
-    'screenshots',
-    `${randomUUID()}-${options.width ?? 1280}-${options.theme ?? 'light'}.png`,
-  );
-  await opened.page.screenshot({ path: screenshot, fullPage: true });
-  await opened.page.close();
-  return { url: opened.url, status: opened.status, title, heading, screenshot };
+  try {
+    if (options.persona === 'member' && session.verifyMember) {
+      observation.stage = 'reader';
+      observation.reader = await session.verifyMember(opened.page);
+      if (observation.reader !== 'matched') {
+        observation.failure = 'reader';
+        throw new Error(`Auth browser reader is ${observation.reader}; expected the current native editor`);
+      }
+    }
+    observation.stage = 'capture';
+    const title = await opened.page.title();
+    const heading = await opened.page
+      .locator('h1, h2')
+      .first()
+      .textContent()
+      .catch(() => null);
+    const screenshot = join(
+      session.evidenceDir,
+      'screenshots',
+      `${randomUUID()}-${options.width ?? 1280}-${options.theme ?? 'light'}.png`,
+    );
+    await opened.page.screenshot({ path: screenshot, fullPage: true });
+    observation.stage = 'complete';
+    await observe();
+    return { url: opened.url, status: opened.status, title, heading, screenshot };
+  } catch (error) {
+    await observe().catch(() => {});
+    throw error;
+  } finally {
+    await opened.page.close().catch(() => {});
+  }
 }
 
 export async function createAndRead(

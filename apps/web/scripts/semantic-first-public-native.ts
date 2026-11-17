@@ -204,8 +204,16 @@ export async function createSubject(
   };
 }
 
-export async function readSubject(call: KernelCall, id: string, bearer?: string): Promise<KernelAnswer> {
-  return call('GET', `/v1/subjects/${id}`, bearer === undefined ? {} : { bearer });
+export async function readSubject(
+  call: KernelCall,
+  id: string,
+  bearer?: string,
+  context?: string,
+): Promise<KernelAnswer> {
+  return call('GET', `/v1/subjects/${id}`, {
+    ...(bearer === undefined ? {} : { bearer }),
+    ...(context === undefined ? {} : { query: { context } }),
+  });
 }
 
 export async function readActiveDefinitions(call: KernelCall) {
@@ -316,11 +324,17 @@ export async function propose(
 
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 
-export async function acceptCandidate(call: KernelCall, bearer: string, subject: string, candidate: string) {
+export async function acceptCandidate(
+  call: KernelCall,
+  bearer: string,
+  subject: string,
+  candidate: string,
+  context = GLOBAL_CONTEXT,
+) {
   requireStatus(
     await call('POST', `/v1/subjects/${subject}/candidates/${candidate}:accept`, {
       bearer,
-      body: { context: GLOBAL_CONTEXT, expected_head: null },
+      body: { context, expected_head: null },
     }),
     200,
     'accept candidate',
@@ -334,12 +348,13 @@ export async function adoptCandidate(
   candidate: string,
   property: string,
   rank: 'normal' | 'preferred' | 'deprecated' = 'normal',
+  context = GLOBAL_CONTEXT,
 ) {
   requireStatus(
     await call('POST', `/v1/subjects/${subject}:adopt`, {
       bearer,
       body: {
-        context: GLOBAL_CONTEXT,
+        context,
         property,
         mode: 'replace',
         selection: [{ candidate, rank }],

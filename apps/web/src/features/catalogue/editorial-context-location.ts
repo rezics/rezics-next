@@ -16,3 +16,13 @@ export function editorialSubjectSearch(search: Record<string, unknown>): { subje
 export function editorialCreateHref(locale: string, subject: string, slug: string) {
   return `/${locale}/contexts/new?${new URLSearchParams({ subject, slug })}`;
 }
+
+export function editorialContextSelection(value: unknown): string | undefined {
+  if (value === undefined) return;
+  if (
+    typeof value !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
+    throw notFound();
+  return value;
+}
