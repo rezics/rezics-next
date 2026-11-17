@@ -34,7 +34,7 @@ export function HostedReleaseActivationView({
     ready: copy.ready,
     restart: copy.restart,
     unknown: copy.unknown,
-    blocked: copy.blocked,
+    blocked: state.error?.reason ? copy[state.error.reason] : copy.blocked,
     activated: copy.activated,
   }[state.phase];
   const readback = {

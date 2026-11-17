@@ -41559,6 +41559,7 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
+                                        readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
                                     };
                                     413: Response | {
                                         type: unknown;
@@ -41707,6 +41708,7 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
+                                        readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
                                     };
                                     413: Response | {
                                         type: unknown;
@@ -41881,20 +41883,6 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                 code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
             }>>>;
         }>;
-        412: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
-            request_id: import("typebox").TString;
-            detail?: import("typebox").TOptional<import("typebox").TString>;
-            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-            }>>>;
-        }>;
         413: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -42043,6 +42031,22 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                 'cache-control': import("typebox").TString;
             };
         };
+        412: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        } & Omit<{
+            readonly reason: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"catalogue_not_public">, import("typebox").TLiteral<"chapter_not_eligible">]>>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
     };
     detail: {
         'x-exposure': string;
@@ -42108,17 +42112,6 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
             detail: unknown;
             errors: unknown;
         };
-        412: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
         413: {
             type: unknown;
             title: unknown;
@@ -42184,6 +42177,18 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
             candidateGenerationId: string;
             publicationId: string | null;
             restartRequired: boolean;
+        };
+        412: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "applied" | "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+            readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -42231,17 +42236,6 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
             detail: unknown;
             errors: unknown;
         };
-        412: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "applied" | "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
         413: {
             type: unknown;
             title: unknown;
@@ -42307,6 +42301,18 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
             candidateGenerationId: string;
             publicationId: string | null;
             restartRequired: boolean;
+        };
+        412: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "applied" | "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+            readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -42384,20 +42390,6 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                 }>>>;
             }>;
             404: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-                }>>>;
-            }>;
-            412: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -42559,6 +42551,22 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                     'cache-control': import("typebox").TString;
                 };
             };
+            412: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            } & Omit<{
+                readonly reason: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"catalogue_not_public">, import("typebox").TLiteral<"chapter_not_eligible">]>>;
+            }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
         };
         detail: {
             'x-exposure': string;
@@ -42702,20 +42710,6 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
             }>>>;
         }>;
         404: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
-            request_id: import("typebox").TString;
-            detail?: import("typebox").TOptional<import("typebox").TString>;
-            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
-            }>>>;
-        }>;
-        412: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -42877,6 +42871,22 @@ export declare function hostedPublicationActivationRoutes(app: ReturnType<typeof
                 'cache-control': import("typebox").TString;
             };
         };
+        412: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">, import("typebox").TLiteral<"applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+            }>>>;
+        } & Omit<{
+            readonly reason: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"catalogue_not_public">, import("typebox").TLiteral<"chapter_not_eligible">]>>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
     };
     detail: {
         'x-exposure': string;

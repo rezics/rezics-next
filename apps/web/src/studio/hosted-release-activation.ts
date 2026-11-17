@@ -1,9 +1,9 @@
 import type { Locale } from '../paraglide/runtime.js';
 import type { HistoricalReaderSource } from '../threads/historical-reader-provenance';
-import type { StudioFailure } from './contract';
 import type { HostedOwnedBook } from './hosted-contract';
 import type { ReleaseProgress } from './hosted-release-preparation-contract';
 import type {
+  ActivationFailure,
   ActivationKind,
   ActivationProgress,
   ActivationRequest,
@@ -77,7 +77,7 @@ export type ActivationState =
       busy: boolean;
       readback: ActivationReadback;
       observedPublicationId: string | null | undefined;
-      error: StudioFailure | null;
+      error: ActivationFailure | null;
     };
 export type ActivationOptions = {
   owner: HostedOwnedBook;

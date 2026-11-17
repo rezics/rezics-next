@@ -499,11 +499,13 @@ still follow their actual catalogue route; current actor admission and exact rec
 account homes.
 
 **Adopted activation currentness:** capture the installed 4,096-home generation/epoch vector before fresh source
-observations. A replayable pass checks the catalogue opening and at most 20 distinct staged targets per page through
-current public eligibility or exact Book-scoped consent, including current Board/Realm/Space ancestry, source
-incarnation, author/licence, erasure, Access state and the keyed sparse Post revision restriction. Restriction
-transitions must advance the same source-home epoch in their native transaction; the Post restriction owner supplies
-that keyed transition. Persist only the dependency homes actually proved. A changed
+observations. A replayable pass requires ordinary anonymous public eligibility for the catalogue opening. At most
+20 distinct staged chapter targets per page use current public eligibility or exact Book-scoped consent. Both checks
+include current Board/Realm/Space ancestry, source incarnation, author/licence, erasure, Access state and the keyed
+sparse Post revision restriction. An admitted author receives 412 with `catalogue_not_public` or
+`chapter_not_eligible` as the reason for an ineligible source. The candidate stays sealed and the publication pointer
+stays fixed for a fresh review. Restriction transitions must advance the same source-home epoch in their native
+transaction; the Post restriction owner supplies that keyed transition. Persist only the dependency homes actually proved. A changed
 epoch restarts these authority pages against a fresh vector while preserving the sealed candidate and old public
 release. The final command locks and compares only those homes in ascending order on the catalogue command client;
 it holds them through the immutable descriptor write, root selection, publication-pointer CAS, receipt, event and

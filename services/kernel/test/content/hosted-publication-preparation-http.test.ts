@@ -741,7 +741,8 @@ test('first publication prepares only the selected private root and its exact la
   const opening = await f.native.thread('draft');
   const english = fromPlainText('The lantern stayed lit until the ferry docked.');
   const french = fromPlainText('La lanterne est restée allumée jusqu’à l’arrivée du bac.');
-  const target = f.target(await f.native.thread('draft', english));
+  const englishPost = await f.native.thread('draft', english);
+  const target = f.target(englishPost);
   const alternative = f.target(await f.native.thread('draft', french));
   const excluded = f.target(await f.native.thread('draft'));
   const catalogueId = opening.firstPost.id;
@@ -770,11 +771,6 @@ test('first publication prepares only the selected private root and its exact la
     ['en', target, 'Selected chapter'],
     ['fr', alternative, 'Chapitre choisi'],
   ] as const) {
-    await f.native.command(
-      `/v1/posts/${bodyTarget.postId}:issueRevisionDisclosure`,
-      { catalogueId, target: bodyTarget },
-      200,
-    );
     ({ revisionId } = await f.native.command(
       `${path}/occurrences/${root}:bindLanguage`,
       {
@@ -841,27 +837,64 @@ test('first publication prepares only the selected private root and its exact la
   expect(wholePage.stage).toMatchObject({ state: 'ready', candidateCount: '3' });
 
   const openingTarget = f.target(opening);
+  const consent = (source: typeof target) =>
+    f.native.command(`/v1/posts/${source.postId}:issueRevisionDisclosure`, { catalogueId, target: source }, 200);
+  await consent(openingTarget);
+  await consent(target);
+  const frenchConsent = await consent(alternative);
+  const started = await f.native.command(`${stage}:startActivation`, {}, 200);
+  expect(started).toMatchObject({ state: 'checking', checkedTargetCount: '0', publicationId: null });
+  const foreign = await f.native.call('POST', `${stage}:advanceActivation`, {}, { other: true });
+  expect(foreign.status).toBe(403);
+  expect(foreign.value).not.toHaveProperty('reason');
+
+  const privateCatalogue = await f.native.call('POST', `${stage}:advanceActivation`, {});
+  expect(privateCatalogue.status).toBe(412);
+  expect(privateCatalogue.value).toMatchObject({ reason: 'catalogue_not_public', effect_status: 'not_applied' });
+  expect(await selectedRelease(catalogueId)).toBeNull();
+
+  const publishedOpening = await f.native.revise(opening.firstPost, {
+    body: fromPlainText('Opening'),
+    visibility: 'published',
+  });
+  expect(publishedOpening.status).toBe(200);
+  const anonymous = { anonymous: true };
+  expect((await f.native.call('GET', `/v1/posts/${catalogueId}`, undefined, anonymous)).status).toBe(200);
+  expect((await f.native.call('GET', path, undefined, anonymous)).status).toBe(404);
   await f.native.command(
-    `/v1/posts/${openingTarget.postId}:issueRevisionDisclosure`,
-    { catalogueId, target: openingTarget },
+    `/v1/posts/${alternative.postId}:revokeRevisionDisclosure`,
+    { disclosureId: frenchConsent.disclosureId, catalogueId, target: alternative },
     200,
   );
-  let activation = await f.native.command(`${stage}:startActivation`, {}, 200);
-  for (let page = 0; activation.state !== 'ready'; page++) {
-    expect(page).toBeLessThan(4);
-    activation = await f.native.command(`${stage}:advanceActivation`, {}, 200);
-  }
+  const missingFrenchConsent = await f.native.call('POST', `${stage}:advanceActivation`, {});
+  expect(missingFrenchConsent.status).toBe(412);
+  expect(missingFrenchConsent.value).toMatchObject({ reason: 'chapter_not_eligible', effect_status: 'not_applied' });
   expect(await selectedRelease(catalogueId)).toBeNull();
-  const activated = await f.native.command(`${stage}:activate`, {}, 200);
-  expect(activated.state).toBe('activated');
+
+  await consent(alternative);
+  let activation = started;
+  for (let page = 0; activation.state !== 'activated'; page++) {
+    expect(page).toBeLessThan(6);
+    const operation = activation.state === 'ready' ? 'activate' : 'advanceActivation';
+    activation = await f.native.command(`${stage}:${operation}`, {}, 200);
+    expect(activation.candidateGenerationId).toBe(started.candidateGenerationId);
+    if (activation.state !== 'activated') expect(await selectedRelease(catalogueId)).toBeNull();
+  }
+  const activated = activation;
   expect(await selectedRelease(catalogueId)).toBe(activated.publicationId);
   expect((await f.native.call('POST', `${wholeStage}:advance`, { stepId: id() })).status).toBe(412);
   await f.native.command(`${wholeStage}:cancel`, {}, 200);
 
   const publication = `kind=publication&revisionId=${activated.publicationId}`;
-  for (const [language, bodyTarget, body] of [
-    ['en', target, english],
-    ['fr', alternative, french],
+  const catalogue = await f.native.call('GET', `${path}?${publication}&includeTitle=1`, undefined, anonymous);
+  expect(catalogue.status).toBe(200);
+  expect(catalogue.value).toMatchObject({ title: 'Publication', sourceRevisionId: revisionId });
+  const later = await f.native.revise(englishPost.firstPost, { body: fromPlainText('Later private chapter.') });
+  expect(later.status).toBe(200);
+  expect(later.value.post.revisionId).not.toBe(target.revisionId);
+  for (const [language, bodyTarget, title, body] of [
+    ['en', target, 'Selected chapter', english],
+    ['fr', alternative, 'Chapitre choisi', french],
   ] as const) {
     const exact = new URLSearchParams({
       language,
@@ -869,17 +902,62 @@ test('first publication prepares only the selected private root and its exact la
       targetRevisionId: bodyTarget.revisionId,
       targetSha256: bodyTarget.sha256,
     });
-    const read = await f.native.call('GET', `${path}/occurrences/${root}/body?${publication}&${exact}`);
+    const read = await f.native.call(
+      'GET',
+      `${path}/occurrences/${root}/body?${publication}&${exact}`,
+      undefined,
+      anonymous,
+    );
     expect(read.status, JSON.stringify(read.value)).toBe(200);
     expect(read.value).toMatchObject({
       selectedLanguage: language,
-      occurrence: { target: bodyTarget },
+      occurrence: { title, target: bodyTarget },
       document: { canonicalBytes: Buffer.from(serializeDocument(body)).toString('base64'), sha256: bodyTarget.sha256 },
     });
+    expect((await f.native.call('GET', `/v1/posts/${bodyTarget.postId}`, undefined, anonymous)).status).toBe(404);
+    expect((await f.native.call('GET', `/v1/threads/${bodyTarget.threadId}`, undefined, anonymous)).status).toBe(404);
   }
-  for (const occurrenceId of [part, child]) {
-    expect((await f.native.call('GET', `${path}/occurrences/${occurrenceId}?${publication}`)).status).toBe(404);
-  }
+  const languages = await f.native.call(
+    'GET',
+    `${path}/occurrences/${root}/languages?${publication}&limit=20`,
+    undefined,
+    anonymous,
+  );
+  expect(languages.status).toBe(200);
+  expect(languages.value.items.map((item: { language: string }) => item.language)).toEqual(['en', 'fr']);
+  for (const occurrenceId of [part, child])
+    expect(
+      (await f.native.call('GET', `${path}/occurrences/${occurrenceId}?${publication}`, undefined, anonymous)).status,
+    ).toBe(404);
+
+  const otherOccurrence = f.newOccurrenceId();
+  const otherPath = `/v1/hostedCatalogues/${f.catalogueId}`;
+  const other = await f.native.command('/v1/hostedCatalogues', {
+    postId: f.catalogueId,
+    threadId: f.threadId,
+    placements: [
+      { occurrenceId: otherOccurrence, parentId: null, position: 0, title: 'Private source', kind: 'chapter', target },
+    ],
+  });
+  const otherRelease = await f.native.command(
+    `${otherPath}:publish`,
+    {
+      expectedRevisionId: other.revisionId,
+      expectedPublicationId: null,
+      occurrenceIds: [otherOccurrence],
+    },
+    200,
+  );
+  const otherChapter = await f.native.call(
+    'GET',
+    `${otherPath}/occurrences/${otherOccurrence}/body?kind=publication&revisionId=${otherRelease.revisionId}`,
+    undefined,
+    anonymous,
+  );
+  expect(otherChapter.status).toBe(200);
+  expect(otherChapter.value).toMatchObject({ occurrence: { availability: 'unavailable' }, document: null });
+  expect(otherChapter.value.occurrence).not.toHaveProperty('title');
+  expect(otherChapter.value.occurrence).not.toHaveProperty('target');
 });
 
 test('selection advance replays acknowledged steps and fences stale settlement and closure', async () => {

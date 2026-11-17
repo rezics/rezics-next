@@ -183,8 +183,8 @@ function homeOf(id: string): number | null {
 }
 
 /**
- * Observe one exact target through current anonymous public eligibility or
- * exact catalogue consent. It reads metadata only, then records every native
+ * Observe one exact target through current anonymous public eligibility. Only
+ * chapters can use exact Book-scoped consent. Record every native
  * home whose state can close the proof: source, account, Board, Realm and Space.
  * The caller must have captured its fixed home vector before calling this.
  */
@@ -198,7 +198,7 @@ export async function observeHostedPublicationActivationTarget(
     additionalAuthorityIds?: readonly string[];
     expectedAuthorId?: string;
     expectedLicence?: string;
-    opening?: boolean;
+    catalogueOpening?: boolean;
   }>,
   context: ReadContext,
 ): Promise<HostedPublicationAuthorityObservation | null> {
@@ -230,6 +230,7 @@ export async function observeHostedPublicationActivationTarget(
   }
 
   if (!metadata) {
+    if (input.catalogueOpening) return null;
     const observation = await observeIssuedRevisionDisclosure(
       deps,
       { catalogueId: input.catalogueId, target: input.target },
@@ -264,7 +265,7 @@ export async function observeHostedPublicationActivationTarget(
   }
 
   if (
-    (input.opening && metadata.documentKind !== 'opening') ||
+    (input.catalogueOpening && metadata.documentKind !== 'opening') ||
     (input.expectedAuthorId !== undefined && metadata.authorId !== input.expectedAuthorId) ||
     (input.expectedLicence !== undefined && metadata.licence !== input.expectedLicence)
   )

@@ -133,7 +133,7 @@ type PreparedActivationAdvance = Readonly<{
   openingNeedsObservation: boolean;
   stageTargetCount: bigint | null;
   observations: readonly PreparedActivationObservation[];
-  ineligible: boolean;
+  refusal: HostedPublicationActivationIneligibleError['reason'] | null;
 }>;
 
 type ActivationWork = (
@@ -170,7 +170,7 @@ export class HostedPublicationActivationConflictError extends Error {
 }
 
 export class HostedPublicationActivationIneligibleError extends Error {
-  constructor() {
+  constructor(readonly reason: 'catalogue_not_public' | 'chapter_not_eligible') {
     super('The exact Book release is not currently eligible for activation');
     this.name = 'HostedPublicationActivationIneligibleError';
   }
@@ -606,7 +606,7 @@ async function openingTarget(
       [route, threadId, catalogueId],
     )
   ).rows[0];
-  if (!row) throw new HostedPublicationActivationIneligibleError();
+  if (!row) throw new HostedPublicationActivationIneligibleError('catalogue_not_public');
   return { threadId, postId: catalogueId, revisionId: row.head_revision_id, sha256: row.sha256 };
 }
 
@@ -869,7 +869,7 @@ async function prepareActivationAdvance(
   if (!plan) return null;
 
   const observations: PreparedActivationObservation[] = [];
-  let ineligible = false;
+  let refusal: PreparedActivationAdvance['refusal'] = null;
   const readContext = { actor: { kind: 'anonymous' as const }, deadline: context.deadline };
   if (plan.openingNeedsObservation) {
     const observed = await observeHostedPublicationActivationTarget(
@@ -880,14 +880,14 @@ async function prepareActivationAdvance(
         target: plan.opening,
         occurrenceId: catalogueId,
         additionalAuthorityIds: [actor.accountId],
-        opening: true,
+        catalogueOpening: true,
       },
       readContext,
     );
-    if (!observed) ineligible = true;
+    if (!observed) refusal = 'catalogue_not_public';
     else observations.push({ target: plan.opening, occurrenceId: catalogueId, result: observed });
   }
-  if (!ineligible) {
+  if (!refusal) {
     for (const item of plan.page.items) {
       if (sameTarget(item.target, plan.opening)) continue;
       const observed = await observeHostedPublicationActivationTarget(
@@ -904,13 +904,13 @@ async function prepareActivationAdvance(
         readContext,
       );
       if (!observed) {
-        ineligible = true;
+        refusal = 'chapter_not_eligible';
         break;
       }
       observations.push({ target: item.target, occurrenceId: item.occurrenceId, result: observed });
     }
   }
-  return { ...plan, observations, ineligible };
+  return { ...plan, observations, refusal };
 }
 
 async function resetPass(
@@ -997,7 +997,7 @@ export function advanceHostedPublicationActivationAuthority(
       );
       if (!samePage(prepared.page, targetPage))
         throw new HostedPublicationActivationConflictError('The prepared exact target page changed');
-      if (prepared.ineligible) throw new HostedPublicationActivationIneligibleError();
+      if (prepared.refusal) throw new HostedPublicationActivationIneligibleError(prepared.refusal);
       if (!observationsMatchPage(prepared))
         throw new HostedPublicationActivationConflictError('The authority observations do not cover the exact page');
 
@@ -1124,13 +1124,28 @@ export function activateHostedPublicationCandidate(
         return activationProgressEffect(progress(restart));
       }
 
-      const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
+      // Earlier passes could prove the catalogue via chapter consent. Check its native
+      // publication flags with the existing catalogue lock and retained authority locks.
+      const current = (
+        await tx.query<{ head_revision_id: string; publication_id: string | null; opening_published: boolean }>(
+          `SELECT c.head_revision_id,c.publication_id,EXISTS (
+             SELECT 1 FROM content.thread t
+             JOIN content.post p ON p.route=t.route AND p.thread_id=t.thread_id AND p.post_id=t.first_post_id
+             WHERE t.route=c.route AND t.thread_id=c.thread_id AND p.post_id=c.catalogue_id
+               AND p.visibility='published' AND t.visibility='published'
+           ) AS opening_published
+           FROM content.hosted_catalogue c WHERE c.route=$1 AND c.catalogue_id=$2 FOR UPDATE OF c`,
+          [route, catalogueId],
+        )
+      ).rows[0];
       if (
         !current ||
         current.head_revision_id !== row.expected_head_revision_id ||
         current.publication_id !== row.expected_publication_id
       )
         throw new RevisionPreconditionError();
+      if (!current.opening_published) throw new HostedPublicationActivationIneligibleError('catalogue_not_public');
+
       const activationSnapshot = {
         route,
         catalogueId,

@@ -25,6 +25,9 @@ const en = {
   notPublic: 'The exact release is not admitted for public reading. Retry verification to check again.',
   verified: 'The current publication and anonymous exact reader are verified.',
   empty: 'Activation acknowledged; this candidate has no chapters to open in the reader.',
+  catalogue_not_public: 'Publish the catalogue opening as an article in Studio, then reopen this sealed candidate.',
+  chapter_not_eligible:
+    'Review permission for the exact saved chapter versions in this Book, then reopen this sealed candidate.',
   blocked: 'This command was not accepted. Reopen the Book and review its native preparation before continuing.',
   generation: 'Sealed candidate generation',
   candidateId: 'Sealed candidate',
@@ -63,6 +66,8 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: '這個確切版本尚未通過公開閱讀驗證。可重試驗證。',
     verified: '已驗證目前發布版本與匿名確切版本閱讀器。',
     empty: '啟用已確認；此候選版本沒有可在閱讀器開啟的章節。',
+    catalogue_not_public: '請在 Studio 將目錄開篇發布為文章，然後重新開啟這份已封存的候選版本。',
+    chapter_not_eligible: '請核對本書中確切章節版本的權限，然後重新開啟這份已封存的候選版本。',
     blocked: '指令未獲接受。請重新開啟書籍並核對原生準備狀態。',
     generation: '已封存的候選世代',
     candidateId: '已封存的候選版本',
@@ -97,6 +102,8 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: '这个确切版本尚未通过公开阅读验证。可重试验证。',
     verified: '已验证当前发布版本与匿名确切版本阅读器。',
     empty: '启用已确认；此候选版本没有可在阅读器打开的章节。',
+    catalogue_not_public: '请在 Studio 将目录开篇发布为文章，然后重新打开这份已封存的候选版本。',
+    chapter_not_eligible: '请核对本书中确切章节版本的权限，然后重新打开这份已封存的候选版本。',
     blocked: '指令未获接受。请重新打开书籍并核对原生准备状态。',
     generation: '已封存的候选世代',
     candidateId: '已封存的候选版本',
@@ -132,6 +139,8 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: 'この正確なリリースは公開閲覧を許可されていません。検証を再試行できます。',
     verified: '現在の公開版と匿名の正確なリーダーを検証しました。',
     empty: '有効化は確認済みです。この候補にはリーダーで開く章がありません。',
+    catalogue_not_public: 'Studio で目次の冒頭を記事として公開してから、この封印済み候補を開き直してください。',
+    chapter_not_eligible: 'この書籍で選んだ章の保存済み版の権限を確認してから、この封印済み候補を開き直してください。',
     blocked: 'コマンドは受理されませんでした。書籍を開き直して準備状態を確認してください。',
     generation: '封印済み候補の世代',
     candidateId: '封印済み候補',
@@ -167,6 +176,8 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: '이 정확한 릴리스는 공개 읽기가 허용되지 않았습니다. 검증을 재시도할 수 있습니다.',
     verified: '현재 공개 버전과 익명 사용자의 정확한 리더를 검증했습니다.',
     empty: '활성화가 확인되었습니다. 이 후보에는 리더에서 열 장이 없습니다.',
+    catalogue_not_public: 'Studio에서 목차의 시작 글을 게시한 다음 이 봉인된 후보를 다시 여세요.',
+    chapter_not_eligible: '이 책에 선택한 장의 저장 버전 권한을 검토한 다음 이 봉인된 후보를 다시 여세요.',
     blocked: '명령이 수락되지 않았습니다. 책을 다시 열어 준비 상태를 확인하세요.',
     generation: '봉인된 후보 세대',
     candidateId: '봉인된 후보',
@@ -206,6 +217,10 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: 'Diese genaue Veröffentlichung ist nicht zum öffentlichen Lesen zugelassen. Wiederhole die Prüfung.',
     verified: 'Aktuelle Veröffentlichung und anonymer exakter Reader sind geprüft.',
     empty: 'Aktivierung bestätigt; dieser Kandidat enthält keine Kapitel zum Öffnen im Reader.',
+    catalogue_not_public:
+      'Veröffentliche den Eröffnungsbeitrag des Katalogs in Studio als Artikel und öffne diesen versiegelten Kandidaten erneut.',
+    chapter_not_eligible:
+      'Prüfe die Berechtigungen für die ausgewählten Kapitelversionen dieses Buchs und öffne den versiegelten Kandidaten erneut.',
     blocked: 'Der Befehl wurde nicht angenommen. Öffne das Buch erneut und prüfe seinen Vorbereitungsstand.',
     generation: 'Versiegelte Kandidatengeneration',
     candidateId: 'Versiegelter Kandidat',
@@ -242,6 +257,10 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: 'Cette version exacte n’est pas admise en lecture publique. Réessayez la vérification.',
     verified: 'La publication actuelle et le lecteur anonyme exact sont vérifiés.',
     empty: 'Activation confirmée ; ce candidat ne contient aucun chapitre à ouvrir dans le lecteur.',
+    catalogue_not_public:
+      'Publiez l’ouverture du catalogue comme article dans Studio, puis rouvrez ce candidat scellé.',
+    chapter_not_eligible:
+      'Vérifiez les autorisations des versions de chapitre sélectionnées dans ce livre, puis rouvrez ce candidat scellé.',
     blocked: 'La commande n’a pas été acceptée. Rouvrez le livre et vérifiez sa préparation native.',
     generation: 'Génération du candidat scellé',
     candidateId: 'Candidat scellé',
@@ -279,6 +298,10 @@ export const activationCopy: Record<Locale, Copy> = {
     notPublic: 'Esta versión exacta no está admitida para lectura pública. Reintenta la verificación.',
     verified: 'Se han verificado la publicación actual y el lector anónimo exacto.',
     empty: 'Activación confirmada; este candidato no tiene capítulos que abrir en el lector.',
+    catalogue_not_public:
+      'Publica la apertura del catálogo como artículo en Studio y vuelve a abrir este candidato sellado.',
+    chapter_not_eligible:
+      'Revisa los permisos de las versiones de capítulo seleccionadas para este libro y vuelve a abrir este candidato sellado.',
     blocked: 'No se ha aceptado el comando. Abre el libro de nuevo y revisa su preparación nativa.',
     generation: 'Generación del candidato sellado',
     candidateId: 'Candidato sellado',
