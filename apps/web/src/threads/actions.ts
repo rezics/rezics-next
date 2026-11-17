@@ -62,13 +62,16 @@ function validateMediaIds(input: object): string[] | undefined {
   return value;
 }
 
-function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey: string; mediaIds?: string[] } {
+function validateDraft(
+  input: unknown,
+  allowText = false,
+): { body: DocumentSnapshot; idempotencyKey: string; mediaIds?: string[] } {
   if (
     !input ||
     typeof input !== 'object' ||
     !('body' in input) ||
     !checkDocument(input.body) ||
-    input.body.profile !== 'blocks' ||
+    (!allowText && input.body.profile !== 'blocks') ||
     !hasDocumentContent(input.body) ||
     !('idempotencyKey' in input) ||
     typeof input.idempotencyKey !== 'string' ||
@@ -277,7 +280,6 @@ function validateEdit(input: unknown): {
   title?: string;
   visibility?: 'draft' | 'published';
 } {
-  const draft = validateDraft(input);
   const postId = validatePostId(input).postId;
   if (
     !input ||
@@ -307,6 +309,8 @@ function validateEdit(input: unknown): {
     title = input.title;
   }
   const visibility = validateRevisionVisibility(input);
+  // Publishing can submit an already reviewed native Text snapshot without changing its bytes.
+  const draft = validateDraft(input, visibility === 'published');
   return {
     ...draft,
     postId,

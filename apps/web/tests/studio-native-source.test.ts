@@ -6,6 +6,7 @@ import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../src/content-editions/edition-model';
 import { setLocale } from '../src/paraglide/runtime.js';
 import type { StudioInput } from '../src/studio/contract';
+import type { OwnDraftCommands } from '../src/threads';
 import * as start from '../.storybook/react-start';
 
 const requests = new AsyncLocalStorage<Request>();
@@ -75,6 +76,7 @@ const { createStudioAccountPort } = await import('../src/studio/account-port');
 const { hostedBookNative } = await import('../src/studio/hosted-actions');
 const { historicalReaderSource } = await import('../src/threads/historical-reader-provenance');
 const { nativeOwnDraftRequests } = await import('../src/threads/own-drafts/native-requests');
+const { ownDraftNativeCommandTransport } = await import('../src/threads/own-drafts/visit');
 
 async function savedPost(body: DocumentSnapshot, revision = revisionId, mediaIds: string[] = []) {
   return {
@@ -96,13 +98,14 @@ async function savedPost(body: DocumentSnapshot, revision = revisionId, mediaIds
   };
 }
 
-function visit() {
+function visit(commands?: OwnDraftCommands) {
   const cache = new QueryClient();
   cache.setQueryData(['session'], { state: 'signed-in', subject: accountId, csrfToken });
   return createStudioAccountPort({
     identity: { ...viewer, callerEpoch: 'test', source: 'content', address: '/studio', locale: 'en' },
     initialPage: { viewer, state: 'preparing', drafts: [], next: null },
     reader: nativeOwnDraftRequests(client),
+    ...(commands ? { commands } : {}),
     source: historicalReaderSource(cache),
     csrfToken,
     locale: 'en',
@@ -190,6 +193,81 @@ test('Studio keeps the exact text source and conditionally saves its rich workin
   } finally {
     disconnect();
   }
+});
+
+test('account publication sends the exact reviewed Text revision through the native revision command', async () => {
+  let post = { ...(await savedPost(textBody)), subjectIds: [id(9)] };
+  const key = id(10);
+  const writes: Request[] = [];
+  send = async (request) => {
+    if (request.method === 'POST') {
+      writes.push(request.clone());
+      post = { ...post, revisionId: changedId, visibility: 'published' };
+      return postResponse(post);
+    }
+    return readNativeOpening(request, post);
+  };
+  const port = visit({
+    revise: (input, signal) => ownDraftNativeCommandTransport.revise!(input, csrfToken, signal),
+    readback: ownDraftNativeCommandTransport.readback,
+    write: (input, signal) => ownDraftNativeCommandTransport.write(input, csrfToken, signal),
+    erase: (input, signal) => ownDraftNativeCommandTransport.erase(input, csrfToken, signal),
+  });
+  const signal = new AbortController().signal;
+  const selected = await port.resume(postId, signal);
+  if (!selected.ok) throw new Error(selected.error.message);
+  const review = await port.reviewPublication(
+    { projectId: accountId, target: { kind: 'article', document: selected.value.revision.exact } },
+    signal,
+  );
+  if (!review.ok) throw new Error(review.error.message);
+
+  expect(await port.publish({ projectId: accountId, review: review.value, idempotencyKey: key }, signal)).toMatchObject(
+    {
+      ok: true,
+      value: {
+        state: 'published',
+        readbackSelection: {
+          revision: { exact: { postId, revisionId: changedId, sha256: post.sha256 }, title, body: textBody },
+        },
+      },
+    },
+  );
+  expect(writes).toHaveLength(1);
+  const command = writes[0]!;
+  expect(new URL(command.url).pathname).toBe(`/v1/posts/${postId}/revisions`);
+  expect(command.headers.get('if-match')).toBe(JSON.stringify(revisionId));
+  expect(command.headers.get('idempotency-key')).toBe(JSON.stringify(key));
+  expect(await command.json()).toEqual({
+    body: textBody,
+    boardId,
+    licence: post.licence,
+    subjectIds: post.subjectIds,
+    mediaIds: [],
+    visibility: 'published',
+  });
+});
+
+test('own-drafts publication also accepts the native Text profile', async () => {
+  const post = { ...(await savedPost(textBody, changedId)), visibility: 'published' };
+  const key = id(11);
+  let delivered = false;
+  send = async (request) => {
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(`/v1/posts/${postId}/revisions`);
+    expect(request.headers.get('if-match')).toBe(JSON.stringify(revisionId));
+    expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(key));
+    expect(await request.json()).toEqual({ body: textBody, mediaIds: [], visibility: 'published' });
+    delivered = true;
+    return postResponse(post);
+  };
+  const result = await ownDraftNativeCommandTransport.write(
+    { action: 'publish', postId, threadId, body: textBody, revisionId, mediaIds: [], idempotencyKey: key },
+    csrfToken,
+    new AbortController().signal,
+  );
+  expect(result).toEqual({ ok: true, post });
+  expect(delivered).toBe(true);
 });
 
 test('Book creation carries the browser session proof and reads the exact acknowledged outline', async () => {
