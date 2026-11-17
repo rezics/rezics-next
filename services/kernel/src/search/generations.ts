@@ -980,7 +980,7 @@ function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }:
   };
 }
 
-function populationReadBatch(rows: readonly Population[], checkCapability: () => Promise<void>) {
+function discoveryPageReadBatch(rows: readonly Population[], checkEmpty: () => Promise<void>) {
   const pending = new Set(rows);
   const settled = Promise.withResolvers<void>();
   let emptyPageCheck: Promise<void> | undefined;
@@ -991,9 +991,8 @@ function populationReadBatch(rows: readonly Population[], checkCapability: () =>
     },
     settled: settled.promise,
     checkEmptyPage() {
-      // Observe capability after every native read has settled. Engine work and
-      // nonempty checkpoints keep their independent checks.
-      return (emptyPageCheck ??= settled.promise.then(checkCapability));
+      // Start the shared check after all participating native observations have settled.
+      return (emptyPageCheck ??= settled.promise.then(checkEmpty));
     },
   };
 }
@@ -1003,7 +1002,7 @@ async function populationPage(
   projection: DiscoveryProjection,
   row: Population,
   checkCapability: () => Promise<void>,
-  reads: ReturnType<typeof populationReadBatch>,
+  reads: ReturnType<typeof discoveryPageReadBatch>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
@@ -1114,11 +1113,12 @@ async function reconcileDiscoveryPage(
   projection: DiscoveryProjection,
   row: Population,
   checkCapability: () => Promise<void>,
+  indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
   if (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') {
-    return reconcileMetadataDiscoveryPage(pool, search, projection, row, checkCapability);
+    return reconcileMetadataDiscoveryPage(pool, search, projection, row, checkCapability, indexedReads);
   }
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
@@ -1286,6 +1286,7 @@ async function reconcileMetadataDiscoveryPage(
   projection: DiscoveryProjection,
   row: Population,
   checkCapability: () => Promise<void>,
+  indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
 ): Promise<boolean> {
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
@@ -1360,6 +1361,8 @@ async function reconcileMetadataDiscoveryPage(
     throw new TypeError('Invalid metadata discovery reconciliation page');
   const hits = result.body.hits.hits;
   if (hits.length > 100) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  // Release populated pages from the empty-page barrier before preparing their writes.
+  if (hits.length > 0) indexedReads?.observed(row);
   const keys = hits.map((hit): { route: number; id: string } => {
     if (!record(hit) || typeof hit._id !== 'string' || !record(hit._source))
       throw new GenerationReconciliationMismatch();
@@ -1390,8 +1393,12 @@ async function reconcileMetadataDiscoveryPage(
     return false;
   }
   // Empty cleanup still checks the physical target under the same generation lock.
-  if (snapshot.actions.length === 0) await withDiscoveryTarget(pool, search, target, async () => {});
-  else await searchTurnCall(() => projection.applyNativeActions(snapshot.actions));
+  if (snapshot.actions.length === 0) {
+    if (indexedReads && emptyIndexedMetadataCandidate(row)) {
+      indexedReads.observed(row);
+      await indexedReads.checkEmptyPage();
+    } else await withDiscoveryTarget(pool, search, target, async () => {});
+  } else await searchTurnCall(() => projection.applyNativeActions(snapshot.actions));
   await checkCapability();
   const exhausted = hits.length < 100;
   const finalPosition = exhausted
@@ -1423,6 +1430,15 @@ async function reconcileMetadataDiscoveryPage(
     ),
   );
   return false;
+}
+
+function emptyIndexedMetadataCandidate(row: Population) {
+  return (
+    (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') &&
+    row.native_complete &&
+    row.after_id === null &&
+    row.reconcile_position !== null
+  );
 }
 
 async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
@@ -1685,13 +1701,19 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
-          const reads = target.state === 'populating' ? populationReadBatch(batch, checkCapability) : undefined;
+          const reads = target.state === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
+          const indexedReads =
+            target.state === 'reconciling'
+              ? discoveryPageReadBatch(batch.filter(emptyIndexedMetadataCandidate), () =>
+                  withDiscoveryTarget(pool, search, target, async () => {}),
+                )
+              : undefined;
           return async (population) => {
             try {
               return await searchTurnCall(() =>
                 reads
                   ? populationPage(pool, projection, population, checkCapability, reads)
-                  : reconcileDiscoveryPage(pool, search, projection, population, checkCapability),
+                  : reconcileDiscoveryPage(pool, search, projection, population, checkCapability, indexedReads),
               );
             } catch (error) {
               if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
@@ -1700,6 +1722,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               return true;
             } finally {
               reads?.observed(population);
+              indexedReads?.observed(population);
             }
           };
         },
