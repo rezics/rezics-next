@@ -5,7 +5,11 @@ import { kernelClient, requestLocale } from '../../kernel/client';
 import { prepareExpectedReader, validExpectedReader, type ExpectedReader } from '../../session/expected-reader';
 import type { SessionEnv } from '../../session/client';
 import { readReleaseForCaller } from '../../subject/definitions';
-import { captureEntryRestoreCredential, originalEntryRestoreCredential } from '../entry-restore-credential';
+import {
+  captureArchiveSenderCredential,
+  originalEntryRestoreCredential,
+  readArchiveSender,
+} from '../entry-restore-credential';
 import { progressFormChoices } from '../progress-profile';
 import { progressRecoveryNative, type NativePort, UPLOAD_BYTES } from './native';
 
@@ -19,7 +23,7 @@ export const progressRecoverySender = createServerFn({ method: 'POST' })
     const request = getRequest();
     if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
       throw new Error('Archive viewer changed');
-    return captureEntryRestoreCredential(request, env as Partial<SessionEnv>);
+    return captureArchiveSenderCredential(request, env as Partial<SessionEnv>);
   });
 
 type Command = { [K in keyof NativePort]: { operation: K; args: Parameters<NativePort[K]> } }[keyof NativePort];
@@ -46,8 +50,7 @@ function validate(input: unknown): Input {
     !Array.isArray(input.args)
   )
     throw new Error('Invalid archive command');
-  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200))
-    throw new Error('Invalid archive sender');
+  readArchiveSender(input);
   // The RPC envelope is external input. Native routes own each operand's semantic validation.
   if (
     input.operation === 'upload' &&
