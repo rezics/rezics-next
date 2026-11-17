@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { standingFixture } from '../access/standing-fixture.ts';
-import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
+import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createThread, revisePost } from '../../src/content/commands.ts';
@@ -22,6 +22,7 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { nativeDiscoveryRegistry, createDiscoveryProjection } from '../../src/search/account-discovery.ts';
 import {
+  advanceDiscovery,
   allocateDiscovery,
   discoveryGenerations,
   DiscoveryProducerCoverageError,
@@ -46,6 +47,90 @@ const request = () => ({
   idempotencyKey: Bun.randomUUIDv7(),
   deadline: Date.now() + 30_000,
   requestId: Bun.randomUUIDv7(),
+});
+
+test('pending Review invalidation leaves other population frontiers runnable', async () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const prefix = `review-coverage-${crypto.randomUUID().slice(0, 8)}-`;
+  const source = createRatedSubjectSource(pool, routeKey).source;
+  const entry = createDiscoveryProducerEntry({
+    clock: () => new Date(),
+    pool,
+    routeKey,
+    access: fixture.access,
+    subjects: source,
+    tokens,
+  });
+  const metadataProducers = { review: entry.metadataProducers.review! };
+  const { ownerAdapters } = await resolveDiscoveryOwnerAdapters({ ...entry, metadataProducers });
+  const registry = await nativeDiscoveryRegistry(pool, routeKey, source, {
+    release: bundledRelease,
+    accounts: entry.accounts,
+    ownerAdapters,
+  });
+  const advance = () =>
+    advanceDiscovery({
+      pool,
+      search,
+      prefix,
+      registry,
+      listing: subjectListingSource(pool),
+      requiredKinds: ['review'],
+      metadataProducers,
+    });
+  const work = { route: 65_520, id: crypto.randomUUID() };
+  async function frontiers() {
+    const result = await pool.query<{ owner: string; complete: number; withCursor: number }>(
+      `SELECT owner, count(*) FILTER (WHERE complete)::int AS complete,
+         count(*) FILTER (WHERE after_id IS NOT NULL OR continuation IS NOT NULL)::int AS "withCursor"
+       FROM search.discovery_population WHERE prefix=$1 GROUP BY owner ORDER BY owner`,
+      [prefix],
+    );
+    return result.rows;
+  }
+  try {
+    await advance();
+    await pool.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND partition_no>=64', [prefix]);
+    await pool.query(
+      `INSERT INTO content.review_discovery_work(route,id,origin,scopes)
+       VALUES ($1,$2,$3::jsonb,$4::jsonb)`,
+      [
+        work.route,
+        work.id,
+        JSON.stringify({
+          partition: 4095,
+          epoch: 1,
+          position: '1',
+          eventIndex: 0,
+          id: work.id,
+          type: 'com.rezics.content.post.restored.v1',
+        }),
+        JSON.stringify([{ kind: 'post', id: newId(work.route) }]),
+      ],
+    );
+    const blocked = await advance().catch((error: unknown) => (error as Error).name);
+    expect({ blocked, frontiers: await frontiers() }).toEqual({
+      blocked: undefined,
+      frontiers: [
+        { owner: 'accounts', complete: 64, withCursor: 0 },
+        { owner: 'review', complete: 0, withCursor: 0 },
+        { owner: 'semantic', complete: 64, withCursor: 0 },
+      ],
+    });
+    expect(await advance()).toBe('waiting-for-review-invalidation');
+    expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('populating');
+    expect((await processReviewDiscoveryPage(pool, work)).complete).toBe(true);
+    expect(await advance()).toBeUndefined();
+    expect(await frontiers()).toContainEqual({ owner: 'review', complete: 64, withCursor: 0 });
+  } finally {
+    await search.request('DELETE', `/${discoveryIndexName(prefix, 1)}`);
+    for (const table of ['discovery_population', 'discovery_generation'])
+      await pool.query(`DELETE FROM search.${table} WHERE prefix=$1`, [prefix]);
+    await pool.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [discoveryConsumer(prefix, 1)]);
+    await pool.query('DELETE FROM content.review_discovery_work WHERE route=$1 AND id=$2', [work.route, work.id]);
+    await pool.end();
+  }
 });
 
 // Real Content lifecycle, native journal, PostgreSQL and exact mixed writer.

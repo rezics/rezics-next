@@ -44,6 +44,7 @@ import { validateObservation } from './indexer.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
+import { DiscoveryReviewInvalidationPendingError } from './operation-outcomes.ts';
 import { discoveryCapabilityWitnesses, SECOND_SCOPE_PUBLIC_METADATA_KINDS } from './discovery-readiness.ts';
 import type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 import { discardConnection } from '../database/pool.ts';
@@ -1989,12 +1990,14 @@ type AdvanceDiscoveryOptions = SearchTurnContext & {
 };
 
 /** One bounded maintenance step; failed external work leaves its actual frontier replayable. */
-export async function advanceDiscovery(options: AdvanceDiscoveryOptions): Promise<void> {
+export async function advanceDiscovery(options: AdvanceDiscoveryOptions) {
   const context = options.deadline === undefined && options.signal === undefined ? undefined : options;
   return withSearchTurn(context, (turn) => advanceDiscoveryTurn({ ...options, search: turn.search(options.search) }));
 }
 
-async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<void> {
+async function advanceDiscoveryTurn(
+  options: AdvanceDiscoveryOptions,
+): Promise<void | 'waiting-for-review-invalidation'> {
   const { pool, search, prefix, registry } = options;
   const metadataProducers = searchTurnMetadataProducers(options.metadataProducers ?? {}, 'population');
   const requiredKinds = options.requiredKinds ?? Object.keys(metadataProducers);
@@ -2099,6 +2102,12 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
   }
   const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
   if (target.state === 'populating' || target.state === 'reconciling') {
+    const review = metadataProducers.review;
+    const readInvalidation = review?.populationInvalidationPending?.bind(review);
+    let reviewInvalidationPending =
+      target.state === 'populating' && readInvalidation
+        ? await timeDiscovery('review population readiness', () => searchTurnCall(readInvalidation))
+        : false;
     const populations = await timeDiscovery('frontier selection', () =>
       withSearchConnection(
         pool,
@@ -2107,8 +2116,9 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
             await client.query<Population>(
               `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
       revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text,native_complete,native_epoch FROM search.discovery_population
-      WHERE prefix=$1 AND generation=$2 AND ${target.state === 'populating' ? 'NOT complete' : 'NOT certified'} ORDER BY partition_no,owner LIMIT $3`,
-              [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE],
+      WHERE prefix=$1 AND generation=$2 AND ${target.state === 'populating' ? 'NOT complete' : 'NOT certified'}
+      AND ($4::boolean = false OR owner <> 'review') ORDER BY partition_no,owner LIMIT $3`,
+              [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE, reviewInvalidationPending],
             )
           ).rows,
       ),
@@ -2139,6 +2149,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
           const coreReads = coreReconciliationBatch(pool, coreRows);
           return async (population) => {
             try {
+              if (reads && population.owner === 'review' && reviewInvalidationPending) return false;
               return await searchTurnCall(() =>
                 reads && checkpoints
                   ? populationPage(pool, projection, population, checkCapability, reads, checkpoints)
@@ -2155,6 +2166,16 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
                     ),
               );
             } catch (error) {
+              if (
+                reads &&
+                readInvalidation &&
+                population.owner === 'review' &&
+                error instanceof DiscoveryReviewInvalidationPendingError
+              ) {
+                // The fence can open after selection. Later waves defer Review, and the next turn reads Content again.
+                reviewInvalidationPending = true;
+                return false;
+              }
               if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
               retiring ??= retireDiscoveryCapability(pool, target);
               await retiring;
@@ -2174,6 +2195,22 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
       );
       return;
     }
+    // A filtered selection cannot certify exhaustion. Keep the held Review frontier intact.
+    if (
+      reviewInvalidationPending &&
+      (await withSearchConnection(
+        pool,
+        async (client) =>
+          (
+            await client.query(
+              `SELECT 1 FROM search.discovery_population
+         WHERE prefix=$1 AND generation=$2 AND owner='review' AND NOT complete LIMIT 1`,
+              [prefix, target.generation],
+            )
+          ).rowCount === 1,
+      ))
+    )
+      return 'waiting-for-review-invalidation';
   }
   if (target.state === 'populating') {
     const changed = await withSearchConnection(pool, (client) =>

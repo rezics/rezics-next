@@ -120,6 +120,14 @@ export class DiscoveryProducerCoverageError extends Error {
   }
 }
 
+/** Content has unfinished lifecycle work that can affect any Review home. */
+export class DiscoveryReviewInvalidationPendingError extends DiscoveryProducerCoverageError {
+  constructor() {
+    super({ missingKinds: [], unsupportedKinds: ['review'], duplicateKinds: [] });
+    this.name = 'DiscoveryReviewInvalidationPendingError';
+  }
+}
+
 /** A signed owner continuation was invalidated; never retry its retired cut forever. */
 export class DiscoveryPopulationCutChangedError extends DiscoveryProducerCoverageError {
   constructor(kind: import('./discovery-api.ts').DiscoveryMetadataKind) {

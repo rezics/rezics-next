@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import { discoveryCapabilityWitnesses, DiscoveryProducerCoverageError } from '../../src/search/generations.ts';
+import { discoveryCapabilityWitnesses } from '../../src/search/generations.ts';
+import { DiscoveryReviewInvalidationPendingError } from '../../src/search/operation-outcomes.ts';
 
 test('review population readiness follows native pageWithCut and omits a preparing producer', async () => {
   const page = (state: 'ready' | 'preparing' | 'unavailable') => ({
@@ -80,9 +81,8 @@ test('a pending lifecycle invalidation blocks the first Review population page',
     } as never,
   });
   expect(await discoveryCapabilityWitnesses({ review: producers.metadataProducers.review! })).toEqual({});
-  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toHaveProperty(
-    'constructor',
-    DiscoveryProducerCoverageError,
+  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
+    DiscoveryReviewInvalidationPendingError,
   );
 });
 
