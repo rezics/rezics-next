@@ -1,4 +1,5 @@
 import type { ApiRuntimeFailure } from './api-runtime-support.ts';
+import type { BatchReference } from '@rezics/definitions/bulk';
 import { expect, test } from 'bun:test';
 import { createImportTransport, type ReviewedCandidatePage } from '../../../importer/src/import-client.ts';
 import { currentCandidates, fixtureFetch, valueContent } from './type-helpers.ts';
@@ -30,6 +31,19 @@ import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
 type Candidate = Exclude<ReviewedCandidatePage['candidates'][number], { deleted: true }>;
+
+function expectCreditQualifier(assertion: ShowcaseAssertion, property: string, expected: string) {
+  const values = (assertion.statement.qualifiers ?? [])
+    .filter((qualifier) => qualifier.property.id === property)
+    .map((qualifier) => valueContent(qualifier.value));
+  expect(values, `${assertion.property} qualifier ${property}`).toEqual([expected]);
+}
+
+function referenceParts(references: readonly BatchReference[]) {
+  return references.map(({ parts }) =>
+    parts.map(({ property, value }) => [property.id, value.type, valueContent(value)]),
+  );
+}
 
 function selectedVn(voiceAliasId = '10') {
   const bangumiRows: Record<string, Record<string, unknown>[]> = {
@@ -373,26 +387,15 @@ test('selected-VN credits reach adopted current facts through exact current bind
       vocabularyRequirements: selectedReviewRequirements,
     });
     expect(await currentSchemeIds(designId)).toEqual([wrongSchemeId]);
-    const publishedReferences = publishedShowcaseVndbCreditReferences(
+    const references = publishedShowcaseVndbCreditReferences(
       vocabularyPublication,
       journal,
       reopenedConcepts.requirements,
     );
-    expect(publishedReferences).toBeDefined();
-    if (!publishedReferences) throw new Error('Expected current published VNDB credit bindings');
-    const references = publishedReferences;
-    const scenarioId = references.concepts.find((concept) => concept.code === 'scenario')!.id;
-    expect(scenarioId).toBe(scenarioCreateId);
+    if (!references) throw new Error('Expected current published VNDB credit bindings');
     expect(references).toEqual({
       schemeId,
-      concepts: [
-        {
-          code: 'scenario',
-          id: acknowledgedCreate(
-            conceptRequirements.find((requirement) => requirement.sourceKey.endsWith(':scenario'))!.source.external_id,
-          ),
-        },
-      ],
+      concepts: [{ code: 'scenario', id: scenarioCreateId }],
     });
 
     const first = await seedCrossMedia(plan, statePath, port, destination, {
@@ -500,18 +503,10 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(valueContent(author.statement.value)).toBe(personId);
     expect(valueContent(voice.statement.value)).toBe(correctedVoiceId);
     expect(voice.candidateId).not.toBe(oldVoice.candidateId);
-    expect(author.statement.qualifiers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ property: { id: 'wdt:P3831' }, value: { content: scenarioId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Writer Alias' } }),
-      ]),
-    );
-    expect(voice.statement.qualifiers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ property: { id: 'wdt:P453' }, value: { content: characterId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Corrected Voice Alias' } }),
-      ]),
-    );
+    expectCreditQualifier(author, 'wdt:P3831', scenarioCreateId);
+    expectCreditQualifier(author, 'wdt:P1932', 'Writer Alias');
+    expectCreditQualifier(voice, 'wdt:P453', characterId);
+    expectCreditQualifier(voice, 'wdt:P1932', 'Corrected Voice Alias');
     expect(author.citations).toContain('https://vndb.org/v1#/vn_staff/v1/10/scenario');
     expect(voice.citations).toContain('https://vndb.org/v1#/vn_seiyuu/v1/30/c3');
     await adoptCredit(workId, author, personId);
@@ -519,14 +514,15 @@ test('selected-VN credits reach adopted current facts through exact current bind
 
     const oldVoiceSlot = await reviewSlot(workId, 'wdt:P725', creditSlot(oldVoice.statement));
     const withdrawnVoice = oldVoiceSlot.candidates.find((candidate) => candidate.id === oldVoice.candidateId);
-    expect(withdrawnVoice).toMatchObject({
-      source: oldVoice.source,
-      retracted: expect.any(Number),
-      retraction: {
-        source: { source: oldVoice.source.source, external_id: 'v1', field_group: 'facts' },
-      },
-    });
-    expect(withdrawnVoice?.retraction?.references).toEqual(oldVoice.statement.references);
+    expect(withdrawnVoice?.source).toEqual(oldVoice.source);
+    expect(Number.isInteger(withdrawnVoice?.retracted)).toBe(true);
+    const retraction = withdrawnVoice?.retraction;
+    if (!retraction || !('external_id' in retraction.source))
+      throw new Error(`Expected provider retraction for voice candidate ${oldVoice.candidateId}`);
+    expect(retraction.source.source).toBe(oldVoice.source.source);
+    expect(retraction.source.external_id).toBe('v1');
+    expect(retraction.source.field_group).toBe('facts');
+    expect(referenceParts(retraction.references)).toEqual(referenceParts(oldVoice.statement.references));
 
     await publishShowcase({
       plan: correctedPlan,
@@ -542,9 +538,15 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expectPublicCredit(current, voice);
     expect(current.statements['wdt:P725']?.map((statement) => valueContent(statement.value))).toEqual([correctedVoiceId]);
     expect(current.statements['schema:illustrator']).toBeUndefined();
-    expect(await read(personId)).toMatchObject({ id: personId, type: 'schema:Person' });
-    expect(await read(correctedVoiceId)).toMatchObject({ id: correctedVoiceId, type: 'schema:Person' });
-    expect(await read(characterId)).toMatchObject({ id: characterId, type: 'wd:Q95074' });
+    const authorPerson = await read(personId);
+    expect(authorPerson.id).toBe(personId);
+    expect(authorPerson.type).toBe('schema:Person');
+    const voicePerson = await read(correctedVoiceId);
+    expect(voicePerson.id).toBe(correctedVoiceId);
+    expect(voicePerson.type).toBe('schema:Person');
+    const character = await read(characterId);
+    expect(character.id).toBe(characterId);
+    expect(character.type).toBe('wd:Q95074');
     for (const otherWorkKey of ['v2', 'v3']) {
       const otherWorkId = correctedIdentities.get(otherWorkKey)!;
       const otherWork = await read(otherWorkId);
