@@ -4,6 +4,7 @@ import { act } from 'react';
 import type { SearchPageData } from '../src/search/search';
 import type { SearchLoaderDeps } from '../src/search/search-params';
 import { searchSessionLifetime } from '../src/search/scoped-search-lifetime';
+import { SEARCH_WINDOW_STATE } from '../src/search/search-window/history';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { readSearchOutcome, searchPageForRecovery, searchUnavailablePage } from '../src/search/search-recovery';
 import { discoveryRequest } from '../src/search/search-request';
@@ -56,6 +57,7 @@ window.scrollTo = () => undefined;
 const globals = {
   window,
   document: window.document,
+  Element: window.Element,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
   scrollTo: window.scrollTo,
@@ -98,7 +100,7 @@ async function click(action: string) {
   anchor.focus();
   await act(async () => anchor.click());
 }
-async function show(search = '/en/search?q=Mira') {
+async function show(search = '/en/search?q=Mira', onWindowReplace?: () => void) {
   reads.length = 0;
   window.history.replaceState({}, '', search);
   setLocale('en', { reload: false });
@@ -148,6 +150,10 @@ async function show(search = '/en/search?q=Mira') {
     defaultPendingMinMs: 0,
     defaultViewTransition: false,
   });
+  if (onWindowReplace)
+    router.history.subscribe(({ action, location }) => {
+      if (action.type === 'REPLACE' && location.state[SEARCH_WINDOW_STATE]) onWindowReplace();
+    });
   const navigate = router.navigate.bind(router);
   router.navigate = (options) => {
     navigation = navigate(options);
@@ -180,6 +186,16 @@ afterAll(() => {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('persisting a ready Search window keeps the browser entry without notifying the router', async () => {
+  let replacements = 0;
+  await show('/en/search?q=Mira&type=schema%3ABook', () => replacements++);
+  expect(window.history.state?.[SEARCH_WINDOW_STATE]).toMatchObject({
+    history: { windows: [{ cursor: null, number: 1 }] },
+  });
+  expect(replacements).toBe(0);
+  expect(reads).toHaveLength(1);
 });
 
 test.each([undefined, crypto.randomUUID()])(

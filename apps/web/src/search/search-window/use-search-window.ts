@@ -158,8 +158,10 @@ export function useSearchWindow({
       focus.current?.settle(request, cursor, navigationRef.current, regionRef.current);
     } else if (!transition) setBusy(false);
     if (!ready || !historyEnabled || typeof window === 'undefined') return;
-    // Preserve the router's own entry key and scroll state. No navigation or request is dispatched here.
-    window.history.replaceState(
+    // The router subscribes to its instance-level wrapper. This state-only write keeps the current entry
+    // and its scroll/navigation keys without loading the same Search address again.
+    window.History.prototype.replaceState.call(
+      window.history,
       {
         ...window.history.state,
         [SEARCH_WINDOW_STATE]: { request, checkpoint: current.checkpoint, history: current.history },
