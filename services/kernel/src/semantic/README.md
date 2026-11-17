@@ -611,6 +611,12 @@ The HTTP display reader prepares current subject and statement-audience authoriz
 before checking out the display snapshot. Waiting does not consume short-lived permission evidence or extend its TTL;
 authorization still checks the current native snapshot within the original request deadline.
 
+A full Subject display requires the links projection to cover the admitted source partition anchor, including
+disclosure and retraction changes. The existing bounded wait keeps its request deadline and admission yield.
+If that proof remains unfinished, the read returns retryable HTTP 503 `semantic_not_ready` with `Retry-After: 1`.
+A successful response admits its bounded relation preview from a caught-up projection. Missing, concealed and denied
+subjects are resolved before the projection wait. Standalone relation and inverse windows expose eventual freshness explicitly.
+
 Semantic keeps its logical snapshot registry and child deadline narrowing; the shared Kernel bounded read-only lifetime
 owns physical checkout, guarded SQL, transaction cleanup and uncertain-connection discard.
 

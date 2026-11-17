@@ -22,6 +22,7 @@ import { NotFound, ParseError, ValidationError } from 'elysia';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
+import { SubjectProjectionPreparingError } from '../semantic/contract/subject-errors.ts';
 
 import { extensionMembers, fieldErrorCodes } from './problem-schema.ts';
 export { problemSchema } from './problem-schema.ts';
@@ -145,6 +146,10 @@ export function problemResponse(
 
   if (error instanceof RealmLastOwnerError) {
     code = 'realm_last_owner';
+  } else if (error instanceof SubjectProjectionPreparingError) {
+    code = 'semantic_not_ready';
+    headers.set('retry-after', '1');
+    headers.set('cache-control', 'private, no-store');
   } else if (error instanceof ProblemError) {
     code = error.code;
     detail = error.detail;

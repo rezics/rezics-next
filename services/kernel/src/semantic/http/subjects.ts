@@ -1229,7 +1229,7 @@ function subjectRoutes(
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
-          503: problemSchema('overloaded', 'deadline_exceeded'),
+          503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
           operationId: 'subject.get',

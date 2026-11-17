@@ -1,5 +1,6 @@
 /** Subject command/read failures shared without loading editorial command implementations. */
 export class SubjectNotFoundError extends Error {}
+export class SubjectProjectionPreparingError extends Error {}
 export class EditorialConflictError extends Error {}
 
 export class SubjectRedirectError extends Error {
