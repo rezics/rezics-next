@@ -71,9 +71,9 @@ test.each(['bangumi', 'bangumi_cross_media'])(
               type: id === schemeId ? 'skos:ConceptScheme' : 'skos:Concept',
               statements: {
                 'schema:url': [
-                  { value: { type: 'value', content: id === schemeId ? schemeUri : `${schemeUri}/mangaka` } },
+                  { rank: 'normal', value: { type: 'value', content: id === schemeId ? schemeUri : `${schemeUri}/mangaka` } },
                 ],
-                ...(id === schemeId ? {} : { 'skos:inScheme': [{ value: { type: 'value', content: schemeId } }] }),
+                ...(id === schemeId ? {} : { 'skos:inScheme': [{ rank: 'normal', value: { type: 'value', content: schemeId } }] }),
               },
             },
           });
