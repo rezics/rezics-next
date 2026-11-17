@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
 import { bangumiPublicTagScheme, reviewedReferenceKey } from '@rezics/conversion/support';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import type { ReviewedCandidatePage } from '../src/import-client.ts';
@@ -45,7 +45,8 @@ function fakePort() {
   const subjects = new Map<string, Subject>();
   const owners = new Map<string, string>();
   const candidates = new Map<string, Candidate>();
-  const proposalsByKey = new Map<string, string>();
+  type Receipt = BatchWriteResult['results'][number];
+  const receipts = new Map<string, { command: BatchCommand; result: Receipt }>();
   const adoptions = new Map<
     string,
     { mode: 'replace'; head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }
@@ -77,9 +78,18 @@ function fakePort() {
     };
   };
   const port = {
-    async batch(request: { commands: readonly BatchCommand[] }) {
+    async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
       return {
         results: request.commands.map((command) => {
+          const retained = receipts.get(command.key);
+          if (retained) {
+            expect(command).toEqual(retained.command);
+            return structuredClone(retained.result);
+          }
+          const retain = (result: Receipt) => {
+            receipts.set(command.key, { command: structuredClone(command), result: structuredClone(result) });
+            return result;
+          };
           if (command.op === 'create') {
             const ownerKey = key(command.source.source, command.source.external_id);
             let id = owners.get(ownerKey);
@@ -89,34 +99,25 @@ function fakePort() {
               owners.set(ownerKey, id);
               subjects.set(id, { id, type: command.subject.type, labels: command.subject.labels, statements: {} });
             }
-            return { key: command.key, status: created ? (201 as const) : (200 as const), value: { id, revision: 1 } };
+            return retain({ key: command.key, status: created ? 201 : 200, value: { id, revision: 1 } });
           }
           if (command.op === 'propose') {
-            let id = proposalsByKey.get(command.key);
-            const created = id === undefined;
-            if (!id) {
-              id = randomUUID();
-              proposalsByKey.set(command.key, id);
-              candidates.set(id, {
-                id,
-                subject: command.subject,
-                source: command.source,
-                statement: command.statement,
-                decision: 'proposed',
-                rank: null,
-                retracted: null,
-                head: null,
-              });
-            }
-            return {
-              key: command.key,
-              status: created ? (201 as const) : (200 as const),
-              value: { candidate: id, revision: 1 },
-            };
+            const id = randomUUID();
+            candidates.set(id, {
+              id,
+              subject: command.subject,
+              source: command.source,
+              statement: command.statement,
+              decision: 'proposed',
+              rank: null,
+              retracted: null,
+              head: null,
+            });
+            return retain({ key: command.key, status: 201, value: { candidate: id, revision: 1 } });
           }
           const old = candidates.get(command.candidate);
           if (old) old.retracted = 1;
-          return { key: command.key, status: 200 as const, value: { revision: 2 } };
+          return retain({ key: command.key, status: 200, value: { revision: 2 } });
         }),
       };
     },
@@ -186,12 +187,28 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
   let alternate: { subject: string; property: string; candidate: string } | undefined;
   let sameAsRank: 'deprecated' | 'preferred' = 'deprecated';
   let siblingRank: 'deprecated' | 'normal' = 'deprecated';
-  let promoteSiblingAfterAcceptance = false;
+  let promoteSiblingOnProposalReplay = false;
   let adoptionWrites = 0;
   let readSignal: AbortSignal | undefined;
   let fenceSignal: AbortSignal | undefined;
   const port: ReviewedCataloguePort = {
     ...native,
+    async batch(request, signal) {
+      const result = await native.batch(request, signal);
+      if (
+        promoteSiblingOnProposalReplay &&
+        request.commands.some(
+          (command) =>
+            command.op === 'propose' &&
+            command.subject === alternate?.subject &&
+            command.statement.property.id === alternate.property,
+        )
+      ) {
+        promoteSiblingOnProposalReplay = false;
+        siblingRank = 'normal';
+      }
+      return result;
+    },
     async fence(...args) {
       fenceSignal = args[1];
       return native.fence(...args);
@@ -223,14 +240,6 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
           },
         ];
       return result as never;
-    },
-    async acceptReviewedCandidate(...args) {
-      const result = await native.acceptReviewedCandidate(...args);
-      if (promoteSiblingAfterAcceptance) {
-        promoteSiblingAfterAcceptance = false;
-        siblingRank = 'normal';
-      }
-      return result;
     },
     async adoptReviewedCandidates(...args) {
       adoptionWrites++;
@@ -266,10 +275,8 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
           revision: 1,
         })),
       } satisfies ReviewedCandidatePage;
-      return JSON.parse(
-        JSON.stringify(reply),
-        (_key, value) =>
-          value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
+      return JSON.parse(JSON.stringify(reply), (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
       );
     },
   };
@@ -335,8 +342,10 @@ test('reviewed tag binding survives deprecated history on unchanged reopen and w
 
       siblingRank = 'deprecated';
       expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
-      promoteSiblingAfterAcceptance = true;
-      await expect(application.seed({ path, port, signal })).rejects.toThrow();
+      promoteSiblingOnProposalReplay = true;
+      await expect(application.seed({ path, port, signal })).rejects.toThrow(
+        'Existing editorial selection must not be replaced',
+      );
       expect(adoptionWrites).toBe(beforeConflict);
       siblingRank = 'deprecated';
       expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
