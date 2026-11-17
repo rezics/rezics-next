@@ -82,13 +82,14 @@ async function observeLabelActivity(page: Page, since: number): Promise<string> 
         /^\/v1\/(?:platform\/exposure|libraryLabelAssignments|libraryLabels|libraryEntries)(?:[/?]|$)/.test(url),
     )
     .slice(-8)
-    .map(({ url, method, responseStatus, authorization, access }) => ({
+    .map(({ url, method, responseStatus, authorization, access, validLabelUndoRevision }) => ({
       method,
       path: new URL(url, stack.kernelOrigin).pathname,
       status: responseStatus,
       credentialPresent: Boolean(authorization),
       authenticated: access?.authenticated,
       authorized: access?.authorized,
+      validLabelUndoRevision,
     }));
   const pageState = await page
     .evaluate(() => ({
@@ -100,6 +101,15 @@ async function observeLabelActivity(page: Page, since: number): Promise<string> 
     }))
     .catch(() => null);
   return `${new URL(page.url()).pathname}: ${JSON.stringify({ refreshed, pageState, reads })}`;
+}
+
+function undoRouteState(location: URL) {
+  const search = location.searchParams;
+  return {
+    removalResult: search.get('labelResult') === 'label-removed',
+    unavailableResult: search.get('labelResult') === 'unavailable',
+    undoFields: ['undoLabelId', 'undoAssignmentId', 'undoRevision', 'undoKey'].filter((name) => search.has(name)),
+  };
 }
 
 async function openLabelPicker(page: Page, since: number): Promise<void> {
@@ -281,9 +291,32 @@ nativeTest(
       await waitForLabelOutcome(page, chip, beforeAdd);
 
       const beforeRemove = await labelRequestOffset();
-      await chip.getByRole('button', { name: 'Remove label No JavaScript label', exact: true }).click();
+      const formUrl = new URL(page.url());
+      const [removal] = await Promise.all([
+        page.waitForResponse((response) => {
+          const target = new URL(response.url());
+          return (
+            response.request().method() === 'POST' &&
+            target.origin === formUrl.origin &&
+            target.pathname === formUrl.pathname
+          );
+        }),
+        chip.getByRole('button', { name: 'Remove label No JavaScript label', exact: true }).click(),
+      ]);
       const undo = page.locator('[data-label-undo]');
-      await waitForLabelOutcome(page, undo, beforeRemove);
+      try {
+        await waitForLabelOutcome(page, undo, beforeRemove);
+      } catch (cause) {
+        const location = await removal.headerValue('location');
+        throw new Error(
+          `Script-free removal routing ${JSON.stringify({
+            status: removal.status(),
+            redirect: location ? undoRouteState(new URL(location, removal.url())) : null,
+            landing: undoRouteState(new URL(page.url())),
+          })}`,
+          { cause },
+        );
+      }
       expect(await chip.count()).toBe(0);
 
       const beforeRestore = await labelRequestOffset();

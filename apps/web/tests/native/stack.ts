@@ -47,6 +47,7 @@ export type NativeKernelRequest = {
   session: string | null;
   body?: string;
   responseStatus?: number;
+  validLabelUndoRevision?: boolean;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
   failure?: { status: number; body: string };
@@ -1219,6 +1220,11 @@ async function startStack(): Promise<
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           observed.responseStatus = response.status;
+          if (request.method === 'POST' && /^\/v1\/libraryLabels\/[^/]+:unassign$/u.test(url.pathname)) {
+            const revision = response.headers.get('Library-Label-Assignment-Revision');
+            observed.validLabelUndoRevision =
+              !!revision && /^[1-9]\d*$/.test(revision) && Number.isSafeInteger(Number(revision));
+          }
           if (
             request.method === 'POST' &&
             url.pathname === '/v1/subjects' &&
