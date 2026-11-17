@@ -19,6 +19,7 @@ import type {
 import type { SubjectListingSource } from './source.ts';
 import {
   createDiscoveryProjection,
+  withDiscoveryTarget,
   validateAccountPage,
   validateAccountSnapshot,
   DiscoveryPhysicalTargetChangedError,
@@ -960,7 +961,7 @@ async function mapBounded<T, Result>(
   return results;
 }
 
-function populationCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
+function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
   let scheduled: Promise<void> | undefined;
   return () => {
     // Share only checks queued before the native observation starts. A page that reaches
@@ -1080,11 +1081,12 @@ async function reconcileDiscoveryPage(
   search: OpenSearch,
   projection: DiscoveryProjection,
   row: Population,
+  checkCapability: () => Promise<void>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
   if (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') {
-    return reconcileMetadataDiscoveryPage(pool, search, projection, row);
+    return reconcileMetadataDiscoveryPage(pool, search, projection, row, checkCapability);
   }
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
@@ -1251,13 +1253,14 @@ async function reconcileMetadataDiscoveryPage(
   search: OpenSearch,
   projection: DiscoveryProjection,
   row: Population,
+  checkCapability: () => Promise<void>,
 ): Promise<boolean> {
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
   const owner = kind === 'collection' ? 'commerce' : 'content';
   const producer = await retainedMetadataProducer(pool, projection, kind);
   if (!producer) return true;
-  await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
+  await checkCapability();
   // Replay the native raw population first: target hits cannot discover a newly eligible identity.
   if (!row.native_complete) {
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
@@ -1273,7 +1276,7 @@ async function reconcileMetadataDiscoveryPage(
     }
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
     if (actions.length > 0) await searchTurnCall(() => projection.applyNativeActions(actions));
-    await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
+    await checkCapability();
     if (page.next === null && (await producer.position(row.partition)) !== page.position) {
       await restartMetadataReconciliation(pool, target, row.partition, kind);
       return false;
@@ -1354,13 +1357,10 @@ async function reconcileMetadataDiscoveryPage(
     await restartMetadataReconciliation(pool, target, row.partition, kind);
     return false;
   }
-  const actions = projection.prepareOwnerPageActions(kind, row.partition, {
-    position: snapshot.position,
-    keys: snapshot.keys,
-    records: snapshot.records,
-  });
-  await searchTurnCall(() => projection.applyNativeActions(actions));
-  await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
+  // Empty cleanup still checks the physical target under the same generation lock.
+  if (snapshot.actions.length === 0) await withDiscoveryTarget(pool, search, target, async () => {});
+  else await searchTurnCall(() => projection.applyNativeActions(snapshot.actions));
+  await checkCapability();
   const exhausted = hits.length < 100;
   const finalPosition = exhausted
     ? await searchTurnCall(() => projection.ownerPosition(kind, row.partition))
@@ -1648,7 +1648,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
-      const checkCapability = populationCapabilityCheck(pool, projection);
+      const checkCapability = discoveryPageCapabilityCheck(pool, projection);
       await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
@@ -1656,7 +1656,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
           try {
             return await (target.state === 'populating'
               ? populationPage(pool, projection, population, checkCapability)
-              : reconcileDiscoveryPage(pool, search, projection, population));
+              : reconcileDiscoveryPage(pool, search, projection, population, checkCapability));
           } catch (error) {
             if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
             retiring ??= retireDiscoveryCapability(pool, target);
