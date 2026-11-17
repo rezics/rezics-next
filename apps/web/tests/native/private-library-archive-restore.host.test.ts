@@ -13,7 +13,13 @@ import { readSubjectPublicationFrontier } from './subject-publication-observatio
 let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
-const evidence = resolve(import.meta.dir, '../../../../.temp/private-library-archive-restore');
+const entryOnly = process.env.WEB_ARCHIVE_ENTRY_FOCUSED === '1';
+const evidence = resolve(
+  import.meta.dir,
+  entryOnly
+    ? '../../../../.temp/private-library-archive-entry-focused'
+    : '../../../../.temp/private-library-archive-restore',
+);
 const provenance = resolve(evidence, 'provenance.json');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const messagesRoot = resolve(import.meta.dir, '../../messages');
@@ -29,10 +35,10 @@ function gitHead(): string | null {
   return result.exitCode === 0 ? result.stdout.toString().trim() : null;
 }
 
-async function writeArchiveProvenance(result: object) {
-  const pending = `${provenance}.pending`;
+async function writeArchiveProvenance(result: object, path = provenance) {
+  const pending = `${path}.pending`;
   await writeFile(pending, JSON.stringify({ sourceRevision: gitHead(), ...result }, null, 2) + '\n', { mode: 0o600 });
-  await rename(pending, provenance);
+  await rename(pending, path);
 }
 
 nativeBeforeAll(lifecycle, 600_000, async (signal) => {
@@ -40,7 +46,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
   await prepareNativeWebSearch('library-archive');
-  stack = await startNativeWebStack({ observeBookSearchPreparation: true });
+  stack = await startNativeWebStack({ observeBookSearchPreparation: !entryOnly, observeArchiveEntry: true });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
@@ -444,7 +450,7 @@ async function recordCollectionPreviewFailure(page: Page, responses: readonly nu
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-collection-preview', observation });
 }
 
-function observeArchiveServerPosts(page: Page, responses: number[]) {
+function observeArchiveServerPosts(page: Page, responses: number[], inspect?: (response: Response) => void) {
   const origin = new URL(page.url()).origin;
   const observe = (response: Response) => {
     const url = new URL(response.url());
@@ -453,11 +459,121 @@ function observeArchiveServerPosts(page: Page, responses: number[]) {
       url.origin === origin &&
       url.pathname.startsWith('/_serverFn/') &&
       response.request().method() === 'POST'
-    )
+    ) {
       responses.push(response.status());
+      inspect?.(response);
+    }
   };
   page.on('response', observe);
   return () => page.off('response', observe);
+}
+
+type EntryOrdinals = Readonly<{ entries: number; labels: number }>;
+
+function entryUploadObservation(page: Page, ordinals: EntryOrdinals, forms: readonly Locator[]) {
+  const posts: { status: number; serialized: boolean; privateNoStore: boolean; format: string }[] = [];
+  const pageErrors = new Set<string>();
+  const observeError = ({ message }: Error) => {
+    const known = [
+      'Archive viewer changed',
+      'Archive sender changed',
+      'Invalid archive command',
+      'invalid_private_value',
+      'retired_visit',
+    ];
+    pageErrors.add(known.find((value) => message === value) ?? 'other');
+  };
+  page.on('pageerror', observeError);
+  return {
+    inspect(response: Response) {
+      const headers = response.headers();
+      const contentType = headers['content-type']?.split(';')[0];
+      posts.push({
+        status: response.status(),
+        serialized: headers['x-tss-serialized'] === 'true',
+        privateNoStore: headers['cache-control'] === 'private, no-store',
+        format:
+          contentType === 'application/json' ? 'json' : contentType === 'application/x-tss-framed' ? 'framed' : 'other',
+      });
+    },
+    async record(stage: string, matched: boolean) {
+      const [native, ui] = await Promise.all([
+        settledWithin(stack.syncKernelRequests(), 2_000)
+          .then(() =>
+            stack
+              .kernelRequests()
+              .flatMap(({ fixtureRequest, responseStatus, archiveEntry }) => {
+                if (fixtureRequest || !archiveEntry) return [];
+                const { result, ...metadata } = archiveEntry;
+                const window = result?.window ?? null;
+                return [
+                  {
+                    ...metadata,
+                    status: responseStatus ?? null,
+                    state: result?.state ?? null,
+                    expiry: result?.expiry ?? null,
+                    coverage: result?.coverage ?? null,
+                    window: window && {
+                      rows: window.rows,
+                      hasNext: window.hasNext,
+                      entries:
+                        window.matches.find(
+                          ({ section, ordinal }) => section === 'entries' && ordinal === ordinals.entries,
+                        )?.status ?? null,
+                      labels:
+                        window.matches.find(
+                          ({ section, ordinal }) => section === 'labels' && ordinal === ordinals.labels,
+                        )?.status ?? null,
+                    },
+                  },
+                ];
+              })
+              .slice(-8),
+          )
+          .catch(() => null),
+        settledWithin(
+          (async () => {
+            const notices = [
+              'library_archive_entry_preparing',
+              'library_archive_entry_working',
+              'library_archive_present_refused',
+              'library_archive_recovery_uncertain',
+              'library_archive_entry_expired',
+              'library_archive_unavailable',
+            ] as const;
+            const [select, retry, ...noticeText] = await Promise.all([
+              message('en', 'library_archive_entry_select'),
+              message('en', 'library_window_retry'),
+              ...notices.map((key) => message('en', key)),
+            ]);
+            const visible = {
+              preview: page.locator('#archive-rows'),
+              inventory: page.locator('#archive-inventory'),
+              entryForm: forms[0]!,
+              labelForm: forms[1]!,
+              retry: page.getByRole('button', { name: retry, exact: true }),
+              entrySelect: entrySelectButton(page, select!, ordinals.entries),
+              labelSelect: entrySelectButton(page, select!, ordinals.labels),
+            };
+            const [controls, statuses] = await Promise.all([
+              Promise.all(Object.entries(visible).map(async ([name, locator]) => [name, await locator.isVisible()])),
+              Promise.all(
+                noticeText.map(async (text) => page.getByRole('status').filter({ hasText: text }).first().isVisible()),
+              ),
+            ]);
+            return { visible: Object.fromEntries(controls), notices: notices.filter((_, index) => statuses[index]) };
+          })(),
+          2_000,
+        ).catch(() => undefined),
+      ]);
+      const observation = { stage, matched, posts, native, ui: ui ?? null, pageErrors: [...pageErrors] };
+      console.info('Native Library Archive Entry upload boundary', observation);
+      await writeArchiveProvenance(observation, resolve(evidence, 'entry-boundary.json'));
+      if (!matched) await writeArchiveProvenance({ outcome: 'incomplete', phase: 'entry-upload', observation });
+      return observation;
+    },
+    stop: () => page.off('pageerror', observeError),
+  };
 }
 
 async function startCollectionPreview(page: Page, archivePath?: string) {
@@ -487,14 +603,18 @@ async function uploadRecoveryArchive(
   archivePath: string,
   recovery: 'entry' | 'progress',
   chooser: Locator,
-  ...records: Locator[]
+  records: readonly Locator[],
+  entryOrdinals?: EntryOrdinals,
 ) {
   const responses: number[] = [];
-  const stopObserving = observeArchiveServerPosts(page, responses);
+  const entry = entryOrdinals ? entryUploadObservation(page, entryOrdinals, records) : undefined;
+  const stopObserving = observeArchiveServerPosts(page, responses, entry?.inspect);
   const deadline = performance.now() + 60_000;
   const remaining = () => Math.max(1, Math.ceil(deadline - performance.now()));
   const enabledChooser = chooser.and(page.locator('input[type="file"]:enabled:visible'));
   let stage = 'enabled-chooser';
+  let matched = false;
+  let observation: Awaited<ReturnType<NonNullable<typeof entry>['record']>> | undefined;
   try {
     // setInputFiles can target a disabled input before the private recovery controller connects.
     await enabledChooser.waitFor({ state: 'visible', timeout: remaining() });
@@ -502,7 +622,9 @@ async function uploadRecoveryArchive(
     await enabledChooser.setInputFiles(archivePath, { timeout: remaining() });
     stage = 'matching-records';
     await Promise.all(records.map((record) => record.waitFor({ state: 'visible', timeout: remaining() })));
+    matched = true;
   } catch (error) {
+    if (entry) throw error;
     await settledWithin(stack.syncKernelRequests(), 2_000).catch(() => undefined);
     const observation = {
       recovery,
@@ -517,66 +639,57 @@ async function uploadRecoveryArchive(
     throw error;
   } finally {
     stopObserving();
+    if (entry) {
+      entry.stop();
+      observation = await entry.record(stage, matched).catch(() => undefined);
+    }
+  }
+  if (entryOnly && entry) {
+    expect(observation?.native).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ operation: 'upload', status: 200, state: 'ready' }),
+        expect.objectContaining({
+          operation: 'preview',
+          status: 200,
+          firstPage: true,
+          state: 'ready',
+          window: expect.objectContaining({ entries: 'unresolved', labels: 'unresolved' }),
+        }),
+      ]),
+    );
   }
 }
 
-async function restoreOwnerLibrary() {
-  const prepared = await prepareOwnerLibrary(stack);
-  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
-  const auth = await startAuthStack(stack);
-  const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
-  const page = signedIn.context.pages().at(-1)!;
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`${stack.web}/en/library/export`, { waitUntil: 'domcontentloaded' });
-  await hydrated(page);
-  await page.getByRole('heading', { name: 'Export your Library' }).waitFor({ state: 'visible' });
-  const archivePath = await downloadArchive(page);
-  const artifact = JSON.parse(await readFile(archivePath, 'utf8')) as {
-    manifest: { version: number; coverage?: string; rows: number; sections: string[] };
-    records: {
-      section: string;
-      subject_id?: string;
-      label_id?: string;
-      normalized_name?: string;
-      session_id?: string;
-    }[];
-  };
-  const entryOrdinal = artifact.records.findIndex(
-    (row) => row.section === 'entries' && row.subject_id === prepared.subjectId,
-  );
-  const labelOrdinal = artifact.records.findIndex(
-    (row) => row.section === 'labels' && row.label_id === prepared.labelId,
-  );
-  const sessionOrdinal = artifact.records.findIndex(
-    (row) => row.section === 'sessions' && row.session_id === prepared.sessionId,
-  );
-  expect(artifact.manifest.version).toBe(1);
-  expect(artifact.manifest.coverage).toBe('private-library-owner-facts-v1');
-  expect(entryOrdinal).toBeGreaterThanOrEqual(0);
-  expect(artifact.records.some((row) => row.section === 'collections')).toBe(true);
-  expect(artifact.records.some((row) => row.section === 'occurrences')).toBe(true);
-  expect(labelOrdinal).toBeGreaterThanOrEqual(0);
-  expect(artifact.records[labelOrdinal]?.normalized_name).toBe(prepared.labelName);
-  expect(sessionOrdinal).toBeGreaterThanOrEqual(0);
-  expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":1');
+function entrySelectButton(page: Page, pattern: string, ordinal: number) {
+  return page.getByRole('button', { name: pattern.replace('{ordinal}', String(ordinal)), exact: true });
+}
 
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.setViewportSize({ width: 390, height: 844 });
-  const restoreCollections = page
+async function leaveExportFor(page: Page, name: string, path: string) {
+  const destination = page
     .getByRole('navigation', { name: await message('en', 'library_archive_destinations'), exact: true })
-    .getByRole('link', { name: await message('en', 'library_export_restore_collections'), exact: true });
-  const restoreHref = await restoreCollections.getAttribute('href');
+    .getByRole('link', { name, exact: true });
+  const restoreHref = await destination.getAttribute('href');
   expect(restoreHref).toBeTruthy();
   const restoreUrl = new URL(restoreHref!, page.url());
   expect(restoreUrl.origin).toBe(new URL(page.url()).origin);
-  expect(restoreUrl.pathname.replace(/^\/en(?=\/)/u, '')).toBe('/library/recover-collections');
-  await restoreCollections.click();
+  expect(restoreUrl.pathname.replace(/^\/en(?=\/)/u, '')).toBe(path);
+  await destination.click();
   const leaveExport = page.getByRole('alertdialog', {
     name: await message('en', 'library_export_leave_title'),
     exact: true,
   });
   await leaveExport.getByRole('button', { name: await message('en', 'library_export_leave'), exact: true }).click();
   await hydrated(page);
+}
+
+async function restoreCollection(
+  page: Page,
+  archivePath: string,
+  prepared: Awaited<ReturnType<typeof prepareOwnerLibrary>>,
+) {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await leaveExportFor(page, await message('en', 'library_export_restore_collections'), '/library/recover-collections');
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
   });
@@ -660,6 +773,51 @@ async function restoreOwnerLibrary() {
   const bobDenied = await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'bob');
   expect([403, 404]).toContain(bobDenied.status);
 
+  return { restoredId, nativeCollection, members, bobDenied };
+}
+
+async function restoreOwnerLibrary() {
+  const prepared = await prepareOwnerLibrary(stack);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
+  const auth = await startAuthStack(stack);
+  const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
+  const page = signedIn.context.pages().at(-1)!;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${stack.web}/en/library/export`, { waitUntil: 'domcontentloaded' });
+  await hydrated(page);
+  await page.getByRole('heading', { name: 'Export your Library' }).waitFor({ state: 'visible' });
+  const archivePath = await downloadArchive(page);
+  const artifact = JSON.parse(await readFile(archivePath, 'utf8')) as {
+    manifest: { version: number; coverage?: string; rows: number; sections: string[] };
+    records: {
+      section: string;
+      subject_id?: string;
+      label_id?: string;
+      normalized_name?: string;
+      session_id?: string;
+    }[];
+  };
+  const entryOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'entries' && row.subject_id === prepared.subjectId,
+  );
+  const labelOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'labels' && row.label_id === prepared.labelId,
+  );
+  const sessionOrdinal = artifact.records.findIndex(
+    (row) => row.section === 'sessions' && row.session_id === prepared.sessionId,
+  );
+  expect(artifact.manifest.version).toBe(1);
+  expect(artifact.manifest.coverage).toBe('private-library-owner-facts-v1');
+  expect(entryOrdinal).toBeGreaterThanOrEqual(0);
+  expect(artifact.records.some((row) => row.section === 'collections')).toBe(true);
+  expect(artifact.records.some((row) => row.section === 'occurrences')).toBe(true);
+  expect(labelOrdinal).toBeGreaterThanOrEqual(0);
+  expect(artifact.records[labelOrdinal]?.normalized_name).toBe(prepared.labelName);
+  expect(sessionOrdinal).toBeGreaterThanOrEqual(0);
+  expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":1');
+
+  const collection = entryOnly ? null : await restoreCollection(page, archivePath, prepared);
+
   // Free the downloaded name while keeping the source label and its identity live.
   const [sourceLabel] = await readOwnerLabels(prepared.labelName);
   expect(sourceLabel).toMatchObject({ id: prepared.labelId, name: prepared.labelName });
@@ -684,23 +842,22 @@ async function restoreOwnerLibrary() {
   expect(renameReceipt).toEqual({ id: prepared.labelId, revision: sourceLabel!.revision + 1 });
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('[data-recovery-state="complete"], [data-recovery-state="partial"]').waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
-  await leaveRecoveryFor(page, entryDestination, 'settled');
+  const entryDestination = await message('en', 'library_archive_title');
+  if (collection) {
+    await page.locator('[data-recovery-state="complete"], [data-recovery-state="partial"]').waitFor({
+      state: 'visible',
+      timeout: 60_000,
+    });
+    await leaveRecoveryFor(page, entryDestination, 'settled');
+  } else {
+    await leaveExportFor(page, await message('en', 'library_export_restore_entries'), '/library/recover-archive');
+  }
   expect(new URL(page.url()).pathname).toBe('/en/library/recover-archive');
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
   const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records'), exact: true });
   const selectRecord = await message('en', 'library_archive_entry_select');
-  const entrySelect = page.getByRole('button', {
-    name: selectRecord.replace('{ordinal}', String(entryOrdinal)),
-    exact: true,
-  });
-  const labelSelect = page.getByRole('button', {
-    name: selectRecord.replace('{ordinal}', String(labelOrdinal)),
-    exact: true,
-  });
+  const entrySelect = entrySelectButton(page, selectRecord, entryOrdinal);
+  const labelSelect = entrySelectButton(page, selectRecord, labelOrdinal);
   const entryForm = records
     .getByRole('article')
     .filter({ hasText: await message('en', 'library_export_section_entries'), has: entrySelect });
@@ -712,8 +869,8 @@ async function restoreOwnerLibrary() {
     archivePath,
     'entry',
     page.getByLabel(await message('en', 'library_archive_choose_file'), { exact: true }),
-    entryForm,
-    labelForm,
+    [entryForm, labelForm],
+    { entries: entryOrdinal, labels: labelOrdinal },
   );
   await entryForm.getByLabel(await message('en', 'library_archive_entry_subject_id')).fill(prepared.subjectId);
   await entryForm.locator(entrySelect).click();
@@ -771,6 +928,18 @@ async function restoreOwnerLibrary() {
   );
   expect(entryRead.libraryEntry).toMatchObject({ subjectId: prepared.subjectId, state: prepared.stateId });
 
+  if (!collection) {
+    await writeArchiveProvenance({
+      outcome: 'passed',
+      phase: 'entry-readback',
+      entryStatePreserved: true,
+      sourceLabelRenamed: true,
+      distinctLabelCreated: true,
+      currentLabelRead: true,
+    });
+    return;
+  }
+  const { restoredId, nativeCollection, members, bobDenied } = collection;
   await page.getByRole('link', { name: 'Recover archived progress' }).click();
   await hydrated(page);
   expect(new URL(page.url()).pathname).toBe('/en/library/recover-progress');
@@ -785,7 +954,7 @@ async function restoreOwnerLibrary() {
     archivePath,
     'progress',
     page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
-    mapOccurrence,
+    [mapOccurrence],
   );
   await mapOccurrence.click();
   await page.getByLabel(await message('en', 'library_archive_progress_subject')).fill(prepared.subjectId);
@@ -876,7 +1045,9 @@ async function restoreOwnerLibrary() {
 }
 
 nativeTest(
-  'owner exports a populated Library and restores Collection, Entry and progress through actual pages',
+  entryOnly
+    ? 'owner exports a populated Library and restores Entry and Label through actual pages'
+    : 'owner exports a populated Library and restores Collection, Entry and progress through actual pages',
   300_000,
   restoreOwnerLibrary,
   lifecycle,
