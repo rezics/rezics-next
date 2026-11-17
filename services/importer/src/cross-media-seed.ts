@@ -157,6 +157,7 @@ import {
   createShowcaseBangumiGameGenreLookup,
   parseBangumiGameGenreBindings,
   prepareShowcaseBangumiGameGenres,
+  reviewedBangumiGameGenreBindings,
   type BangumiGameGenreBindings,
   type BangumiGameGenrePublication,
 } from './showcase-bangumi-game-genres.ts';
@@ -2547,7 +2548,6 @@ export async function seedCrossMedia(
   const readings: CrossMediaReading[] = [];
   const personIdentities: CrossMediaPersonIdentity[] = [];
   const mediaAttempts = new Map<string, CrossMediaMediaOutcome>();
-  const unsubmittedCovers = new Set<string>();
   const onlyPendingBangumiCovers = (
     provider: Provider,
     result: ImportRunResult,
@@ -2679,7 +2679,6 @@ export async function seedCrossMedia(
             'Bangumi cover intent does not match its admitted source evidence',
           );
           const recordKey = `${source.sourceAlias}\0${source.externalId}`;
-          if (unsubmittedCovers.has(recordKey)) return { status: 'unavailable' };
           let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
           try {
             resolution = await resolver.resolve({
@@ -2696,18 +2695,17 @@ export async function seedCrossMedia(
               ((error.status === 503 && error.code === 'dependency_unavailable') ||
                 (error.status === 429 && error.code === 'rate_limited'))
             ) {
-              // Keep the exact prepared intent, without claiming a reservation or Media ID.
-              // The ordinary cover coordinator retries on a later invocation, never inline here.
-              unsubmittedCovers.add(recordKey);
+              // The ordinary cover coordinator resumes the sealed intent within its existing deadline.
+              // No reservation or Media ID has been acknowledged yet.
               mediaAttempts.set(recordKey, {
                 ...source,
-                status: 'unavailable',
+                status: 'pending',
                 containerId: input.subject,
                 credit: intent.credit,
                 provenance: intent.provenance,
                 code: 'media-intent-not-delivered',
               });
-              return { status: 'unavailable' };
+              return { status: 'pending', failure: error };
             }
             const refused =
               error.status !== undefined &&
@@ -3656,7 +3654,9 @@ export async function runCrossMediaSeedCli(
   let gameEnvironmentBindings: readonly BangumiGameEnvironmentBinding[] | undefined;
   if (gameEnvironmentBindingsPath)
     gameEnvironmentBindings = await readBangumiGameEnvironmentBindingsFile(gameEnvironmentBindingsPath);
-  let gameGenreBindings: BangumiGameGenreBindings | undefined;
+  let gameGenreBindings = options.reviewedCatalogueSubjects
+    ? reviewedBangumiGameGenreBindings(reviewedVocabulary, options.reviewedCatalogueSubjects)
+    : undefined;
   if (gameGenreBindingsPath) {
     const bytes = await readFile(gameGenreBindingsPath);
     ensure(bytes.byteLength <= 256 * 1024, 'Bangumi Game genre bindings exceed the configuration limit');
@@ -3870,7 +3870,7 @@ export async function runCrossMediaSeedCli(
                 journal,
                 review: importPort,
                 publicClient,
-                subjectTypes: [2, 4],
+                subjectTypes: [1, 2, 4],
                 read,
               });
               return creditResolution;
@@ -4248,6 +4248,7 @@ export async function runCrossMediaSeedCli(
       });
       recordImportProgress.complete();
       recordImportProgress = undefined;
+      characterBindings = nextCharacterBindings;
     };
     finalization.enter('bangumi-character-vocabulary');
     if (journal && publicClient && !characterBindingsPath) {
@@ -4518,6 +4519,16 @@ export async function runCrossMediaSeedCli(
         );
       }
     }
+    if (books) {
+      combinedResult.runs = { ...combinedResult.runs, ...books.runs };
+      combinedResult.mediaOutcomes = books.mediaOutcomes;
+      combinedResult.creditGaps.push(...books.creditGaps);
+      combinedResult.characterDiagnostics = [
+        ...combinedResult.characterDiagnostics.filter((gap) => gap.provider !== 'bangumi'),
+        ...books.characterDiagnostics,
+      ];
+    }
+    combinedResult.workRelations = [...(combinedResult.workRelations ?? []), ...(books?.workRelations ?? [])];
     const separator = String.fromCharCode(0);
     const publicationReadings = [...combinedResult.readings];
     const seenReadings = new Set(publicationReadings.map((row) => row.source + separator + row.externalId));

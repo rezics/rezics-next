@@ -37,7 +37,7 @@ test('PersonDetail infobox name reaches cited Person statements with the origina
   expect(createHash('sha256').update(evidence.operatorExample.responseBody).digest('hex')).toBe(
     evidence.operatorExample.responseSha256,
   );
-  expect(converter_revision).toBe('cross-media-entities@15');
+  expect(converter_revision).toBe('cross-media-entities@16');
   expect(convert(record).normalizedRecord.name_cn).toBe('岸本齐史');
   const proposals = names(convert(record));
   expect(proposals.map(valueContent)).toEqual([

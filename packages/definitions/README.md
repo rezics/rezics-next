@@ -149,7 +149,7 @@ Facts belong to the later (`wdt:P155`), derived (`wdt:P144`, `rezics:spinOffOf`,
 edition (`schema:exampleOfWork`), member (`wdt:P179`), contained (`wdt:P361`, `schema:isPartOf`,
 `wdt:P1433`) or credited work. Inverses are metadata, never properties or aliases; `wdt:P1889`
 is symmetric. Credits sort by position, admit credited-as, position and detailed role, and filter
-by `[wdt:P3831, wdt:P518]`; appearances sort by name and filter by role or arc. Their `wdt:P3629`
+by `[wdt:P3831, wdt:P518]`; appearances sort by name and filter by role or arc, retaining a source ordinal in the optional schema:position qualifier. Their `wdt:P3629`
 age qualifier is work-specific, in years (`wd:Q577`). `rezics:relatedCharacterIdentity` (VNDB
 `chars.main`) differs from the `main` appearance role. Family, partner and rival associations
 target Character; unknown Bangumi codes stay omitted. Series members sort by position;

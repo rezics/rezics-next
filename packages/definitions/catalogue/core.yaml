@@ -788,7 +788,7 @@ slots:
       - wd:P674
     annotations:
       datatype: wikibase-item
-      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart appearanceAge
+      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart appearanceAge position
       relation_group: appearance
       inverse: rezics:appearsIn
       relation_order: name

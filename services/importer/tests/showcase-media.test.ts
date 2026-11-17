@@ -204,7 +204,7 @@ test(
         source: 'bangumi' as const,
         key: 'character:11546',
         revision: null,
-        payload: { id: 11546, type: 1, name: 'Character' },
+        payload: { id: 11546, role: 1, name: 'Character' },
       };
       firstPlan.entities.bangumi.push(character);
       resumedPlan.entities.bangumi.push(character);
@@ -311,15 +311,15 @@ test(
           },
         );
       const unavailable = await run();
-      expect(unavailable.mediaOutcomes[0]).toMatchObject({ status: 'unavailable', containerId: subjectId });
-      expect(unavailable.runs.bangumi?.status).toBe('committed');
+      expect(unavailable.mediaOutcomes[0]).toMatchObject({ status: 'pending', containerId: subjectId });
+      expect(unavailable.runs.bangumi?.status).toBe('bulk-failed');
       expect(unavailable.mediaOutcomes[0]?.mediaId).toBeUndefined();
       expect(reservations).toBe(0);
       expect(statusReads).toBe(0);
       refusal = new ImportTransportError(403, undefined, 'forbidden');
-      await expect(run()).rejects.toThrow('Cross-media bangumi import failed');
+      expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'refused' });
       refusal = new ImportTransportError(429, undefined, 'rate_limited', true);
-      expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'unavailable' });
+      expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'pending' });
       expect(reservations).toBe(0);
       refusal = undefined;
       firstPlan.characterAppearances = [
@@ -455,7 +455,10 @@ test(
           statement: {
             property: { id: 'schema:character' },
             value: { type: 'value', content: characterId },
-            qualifiers: [{ property: { id: 'wdt:P3831' }, value: { type: 'value', content: vocab[1]!.conceptId } }],
+            qualifiers: [
+              { property: { id: 'wdt:P3831' }, value: { type: 'value', content: vocab[1]!.conceptId } },
+              { property: { id: 'schema:position' }, value: { type: 'value', content: '1' } },
+            ],
           },
         },
         {

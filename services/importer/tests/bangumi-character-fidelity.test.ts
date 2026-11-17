@@ -90,7 +90,7 @@ test('ordinary selected Character registration converts captured CharacterDetail
   );
 });
 
-test('Bangumi character facts retain source identities, concepts, citation, and unsupported order diagnostics', () => {
+test('Bangumi character facts retain source identities, concepts, citation, and released appearance order', () => {
   const characterResult = registration.convert(
     {
       external_id: 'character:990001',
@@ -170,12 +170,17 @@ test('Bangumi character facts retain source identities, concepts, citation, and 
   const appearance = workResult.proposals.find(
     (item) => item.op === 'propose' && item.statement.property.id === 'schema:character',
   );
+  if (appearance?.op !== 'propose') throw new Error('Expected the cited appearance');
+  expect(checkStatementInput(appearance.statement, bundledRelease).violations).toEqual([]);
   expect(appearance).toMatchObject({
     op: 'propose',
     subject: work.id,
     statement: {
       value: { type: 'value', content: character.id },
-      qualifiers: [{ property: { id: 'wdt:P3831' }, value: { type: 'value', content: uuid(4) } }],
+      qualifiers: [
+        { property: { id: 'wdt:P3831' }, value: { type: 'value', content: uuid(4) } },
+        { property: { id: 'schema:position' }, value: { type: 'value', content: '3' } },
+      ],
       references: [
         expect.objectContaining({
           parts: expect.arrayContaining([
@@ -187,14 +192,7 @@ test('Bangumi character facts retain source identities, concepts, citation, and 
       ],
     },
   });
-  expect(workResult.sourceVocabularyGaps).toContainEqual(
-    expect.objectContaining({
-      path: '/subject-characters/2/type',
-      code: '1',
-      reason: 'qualifier_not_admitted',
-      property: 'schema:position',
-    }),
-  );
+  expect(workResult.sourceVocabularyGaps).toEqual([]);
 });
 
 test('Character fidelity bounds the identity read burst before importing and preserves source order and native errors', async () => {
@@ -361,4 +359,26 @@ test('Bangumi appearances require current endpoint and role evidence and recover
   restore(uuid(4), 'schema:url', mapSourceEnumeration('bangumi', 'subject-characters.type', '1')?.concept?.id ?? '');
   restore(uuid(4), 'skos:inScheme', uuid(2));
   expect(await refresh()).toEqual([firstCharacter, secondCharacter].sort());
+});
+
+test('archive Character role remains in its original field through the staged projection', () => {
+  const converted = registration.convert(
+    {
+      external_id: 'character:1007',
+      record_revision: null,
+      record: { id: 1007, role: 1, name: 'Archive Character', infobox: '' },
+    },
+    { source: crossMediaAliases.bangumi },
+  );
+  expect(converted.normalized).toHaveProperty('role', 1);
+  expect(converted.normalized).not.toHaveProperty('type');
+  const changed = registration.convert(
+    {
+      external_id: 'character:1007',
+      record_revision: null,
+      record: { id: 1007, role: 2, name: 'Archive Character', infobox: '' },
+    },
+    { source: crossMediaAliases.bangumi },
+  );
+  expect(changed.digest).not.toBe(converted.digest);
 });

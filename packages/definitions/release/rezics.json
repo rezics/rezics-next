@@ -4708,7 +4708,7 @@
       "mappings": ["wd:P674"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3629", "wdt:P3831", "wdt:P518"],
+      "qualifiers": ["rezics:spoilerLevel", "schema:position", "wdt:P1932", "wdt:P3629", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

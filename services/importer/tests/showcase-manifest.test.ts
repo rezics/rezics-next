@@ -27,7 +27,7 @@ test('selected publication digest and empty plan load from the owner-local contr
   expect(showcasePlanDigest(plan).length).toBe(64);
 });
 
-test('vocabulary retains the first exact create and ordered proposal receipts of the current selection', () => {
+test('vocabulary retains the first exact create and distinct ordered candidates of the current selection', () => {
   const plan = emptyCrossMediaPlan();
   plan.records.bangumi.push({ source: 'bangumi', key: '1', revision: null, payload: {} });
   const aliases = crossMediaAliases;
@@ -88,11 +88,7 @@ test('vocabulary retains the first exact create and ordered proposal receipts of
     second,
   ]);
   expect(initial.subjectId).toBe(previous.subjectId!);
-  expect(initial.assertions.map(({ candidateId }) => candidateId)).toEqual([
-    second.candidateId!,
-    first.candidateId!,
-    second.candidateId!,
-  ]);
+  expect(initial.assertions.map(({ candidateId }) => candidateId)).toEqual([second.candidateId!, first.candidateId!]);
   const refreshed = build([stale, current, previous, second, changed, first]);
   expect(refreshed.subjectId).toBe(current.subjectId!);
   expect(refreshed.assertions.map(({ candidateId }) => candidateId)).toEqual([changed.candidateId!]);
