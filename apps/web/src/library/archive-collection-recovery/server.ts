@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { hasKernelOrigin, kernelClient } from '../../kernel/client';
 import { prepareExpectedReader, validExpectedReader, type ExpectedReader } from '../../session/expected-reader';
-import { originalEntryRestoreCredential } from '../entry-restore-credential';
+import { originalEntryRestoreCredential, readArchiveSender } from '../entry-restore-credential';
 import type { SessionEnv } from '../../session/client';
 import {
   RECOVERY_CURSOR_CHARS,
@@ -12,7 +12,13 @@ import {
   RECOVERY_SELECTED_OCCURRENCES,
   RECOVERY_UPLOAD_BASE64_CHARS,
 } from './contract';
-import type { RecoveryApplyBody, RecoveryPageQuery, RecoveryResult, RecoveryReviewBody, RecoveryUploadBody } from './contract';
+import type {
+  RecoveryApplyBody,
+  RecoveryPageQuery,
+  RecoveryResult,
+  RecoveryReviewBody,
+  RecoveryUploadBody,
+} from './contract';
 import { kernelArchiveCollectionRecoveryPort } from './native';
 import { refreshRelease } from '../../subject/definitions';
 import { readCollectionTypeOptions } from '../collection-presentation';
@@ -131,9 +137,7 @@ type RecoverySender = ExpectedReader & { sender?: string };
 
 function validateCommand<T>(input: unknown, validate: (value: unknown) => T) {
   if (!validExpectedReader(input)) throw new Error('Invalid Collection recovery viewer');
-  const sender = 'sender' in input ? input.sender : undefined;
-  if (sender !== undefined && (typeof sender !== 'string' || sender.length > 3200))
-    throw new Error('Invalid Collection recovery sender');
+  const sender = readArchiveSender(input);
   return {
     sender: {
       expectedReader: input.expectedReader,
@@ -155,7 +159,9 @@ async function forReader<T>(
   if (!(await prepareExpectedReader(request, sessionEnv, sender))) return { kind: 'denied' };
   const authorization = await originalEntryRestoreCredential(request, sessionEnv, sender.sender).catch(() => null);
   if (!authorization) return { kind: 'denied' };
-  return action(kernelArchiveCollectionRecoveryPort(kernelClient(), request, sessionEnv, true, async () => authorization));
+  return action(
+    kernelArchiveCollectionRecoveryPort(kernelClient(), request, sessionEnv, true, async () => authorization),
+  );
 }
 
 const pageQuery = (cursor?: string): RecoveryPageQuery => ({

@@ -4,7 +4,11 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { prepareExpectedReader, validExpectedReader, type ExpectedReader } from '../../session/expected-reader';
 import type { SessionEnv } from '../../session/client';
-import { captureEntryRestoreCredential, originalEntryRestoreCredential } from '../entry-restore-credential';
+import {
+  captureArchiveSenderCredential,
+  originalEntryRestoreCredential,
+  readArchiveSender,
+} from '../entry-restore-credential';
 import { archiveRecoveryNative, type ArchiveRecoveryPort } from './native';
 
 /** Existing private command credential custody also preserves the archive sender across retries. */
@@ -18,7 +22,7 @@ export const archiveRecoverySender = createServerFn({ method: 'POST' })
     const request = getRequest();
     if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
       throw new Error('Archive viewer changed');
-    return await captureEntryRestoreCredential(request, env as Partial<SessionEnv>);
+    return await captureArchiveSenderCredential(request, env as Partial<SessionEnv>);
   });
 
 type Operation = keyof ArchiveRecoveryPort;
@@ -59,8 +63,7 @@ function validate(input: unknown): Input {
     )
       throw new Error('Invalid archive upload');
   }
-  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200))
-    throw new Error('Invalid archive sender');
+  readArchiveSender(input);
   return input as Input;
 }
 
