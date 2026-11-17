@@ -77,6 +77,8 @@ export type NativeAccountOperationActor = {
   scopes: readonly string[];
 };
 export type NativeWebStackOptions = {
+  /** Register the requesting application on the isolated Auth issuer, with no standing personal grants. */
+  externalConsentClient?: { clientId: string; displayName: string; scopes: string[] };
   /** Observe actual Access results for the frozen personal boundary contract. */
   observePersonalAccess?: boolean;
   /** Give the isolated showcase governor the native Global Board-creation grant. */
@@ -1406,6 +1408,10 @@ async function startStack(): Promise<
     governorScopes = [...driver.fixtures.governorScopes];
     const { mountedWebsiteConfiguration } = await import('../../../../services/auth/scripts/website-composition.ts');
     const { scopes } = mountedWebsiteConfiguration(actionCatalogue(sourceApp));
+    const externalConsentClient = process.env.NATIVE_WEB_EXTERNAL_CONSENT_CLIENT;
+    if (externalConsentClient) {
+      await auth.service.internal.registerClient({ ...JSON.parse(externalConsentClient), firstParty: false });
+    }
     const key = await generateKeyPair('ES256', { extractable: true });
     const kid = `native-web-${randomBytes(8).toString('hex')}`;
     await auth.service.internal.registerWebsiteClient({
@@ -1819,6 +1825,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY: options.observeArchiveEntry ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS: options.observeArchiveProgress ? '1' : undefined,

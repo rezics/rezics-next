@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
+import { expect } from 'bun:test';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { expect as browserExpect } from 'playwright/test';
 import type { Page, Response as PlaywrightResponse } from 'playwright';
 import {
   startNativeCuratedCollectionsFixture,
@@ -6,19 +8,17 @@ import {
   type NativeCuratedSubject,
 } from './native-curated-collections-fixture.ts';
 
-setDefaultTimeout(900_000);
+const lifecycle = new NativeTestLifecycle('native curated Collections');
 
 let fixture: NativeCuratedCollectionsFixture;
-let pageResponses: { url: string; method: string; status: number }[] = [];
+const pageResponses: { url: string; method: string; status: number }[] = [];
 
-beforeEach(async () => {
+nativeBeforeAll(lifecycle, 900_000, async () => {
   fixture = await startNativeCuratedCollectionsFixture();
-  pageResponses = [];
+  lifecycle.register({ label: 'curated Collections fixture', close: () => fixture.close() });
 });
 
-afterEach(async () => {
-  await fixture?.close();
-});
+nativeAfterAll(lifecycle, 180_000);
 
 type NativeCollection = {
   id: string;
@@ -138,7 +138,7 @@ async function addSubjectFromSubjectPage(
   const collection = disclosure.getByRole('button', {
     name: new RegExp(collectionTitle, 'i'),
   });
-  await expect(collection).toBeVisible();
+  await browserExpect(collection).toBeVisible();
   for (let index = 0; index < times; index++) {
     const response = await Promise.all([
       page.waitForResponse(
@@ -147,7 +147,7 @@ async function addSubjectFromSubjectPage(
       collection.click(),
     ]).then(([result]) => result);
     expect(response.status()).toBeLessThan(400);
-    await expect(page.getByRole('alert').filter({ hasText: 'Added to collection.' })).toBeVisible();
+    await browserExpect(page.getByRole('alert').filter({ hasText: 'Added to collection.' })).toBeVisible();
   }
 }
 
@@ -214,7 +214,14 @@ async function idempotentCollectionUpdate(
   return body.collection;
 }
 
-test('native curated Collections are edited, published, exported and withdrawn through served pages', async () => {
+nativeTest(
+  'native curated Collections are edited, published, exported and withdrawn through served pages',
+  900_000,
+  editAndPublishCollections,
+  lifecycle,
+);
+
+async function editAndPublishCollections() {
   const alicePage = await fixture.page('alice');
   const bobPage = await fixture.page('bob');
   const anonymousPage = await fixture.page('anonymous');
@@ -368,7 +375,7 @@ test('native curated Collections are edited, published, exported and withdrawn t
     const row = occurrenceRow(alicePage, occurrence.id);
     await row.getByRole('textbox', { name: 'Note', exact: true }).fill(note);
     await clickServerAction(alicePage, () => row.getByRole('button', { name: 'Save note', exact: true }).click());
-    await expect(row.getByText(note, { exact: true })).toBeVisible();
+    await browserExpect(row.getByText(note, { exact: true })).toBeVisible();
   }
   const ordered = await nativeMembers(collectionId, 'alice', 2);
   expect(ordered.map((member) => member.id)).toEqual([
@@ -404,9 +411,9 @@ test('native curated Collections are edited, published, exported and withdrawn t
   await alicePage.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   await alicePage.getByRole('textbox', { name: 'Title', exact: true }).fill(`${collectionTitle} stale`);
   await alicePage.getByRole('button', { name: 'Save collection', exact: true }).click();
-  await expect(alicePage.getByRole('alert')).toContainText('Your changes are still here.');
+  await browserExpect(alicePage.getByRole('alert')).toContainText('Your changes are still here.');
   await alicePage.getByRole('link', { name: 'Load the current version', exact: true }).click();
-  await expect(
+  await browserExpect(
     alicePage.getByRole('heading', {
       level: 1,
       name: `${collectionTitle} external`,
@@ -460,7 +467,7 @@ test('native curated Collections are edited, published, exported and withdrawn t
   expect((await nativeCollection(collectionId)).revision).toBe(replayed.revision);
   await alicePage.reload({ waitUntil: 'domcontentloaded' });
   await pageReady(alicePage);
-  await expect(
+  await browserExpect(
     alicePage.getByRole('heading', {
       level: 1,
       name: `${collectionTitle} replay-safe`,
@@ -479,15 +486,15 @@ test('native curated Collections are edited, published, exported and withdrawn t
     waitUntil: 'domcontentloaded',
   });
   await pageReady(anonymousPage);
-  await expect(
+  await browserExpect(
     anonymousPage.getByRole('heading', {
       level: 1,
       name: `${collectionTitle} replay-safe`,
     }),
   ).toBeVisible();
-  await expect(anonymousPage.locator('[data-member]')).toHaveCount(0);
-  await expect(anonymousPage.locator('article').getByText('0 members', { exact: true })).toBeVisible();
-  await expect(anonymousPage.locator('script[type="application/ld+json"]')).toHaveCount(0);
+  await browserExpect(anonymousPage.locator('[data-member]')).toHaveCount(0);
+  await browserExpect(anonymousPage.locator('article').getByText('0 members', { exact: true })).toBeVisible();
+  await browserExpect(anonymousPage.locator('script[type="application/ld+json"]')).toHaveCount(0);
   const anonymousCatalogue = await json<{
     collections: NativeCollection[];
     next: string | null;
@@ -532,7 +539,7 @@ test('native curated Collections are edited, published, exported and withdrawn t
     waitUntil: 'domcontentloaded',
   });
   await pageReady(anonymousPage);
-  await expect(
+  await browserExpect(
     anonymousPage.getByRole('heading', {
       level: 1,
       name: `${collectionTitle} replay-safe`,
@@ -557,8 +564,8 @@ test('native curated Collections are edited, published, exported and withdrawn t
   const publicRequestCount = (await fixture.stack.kernelRequests()).filter(({ url }) =>
     url.startsWith(`/v1/collections/${collectionId}`),
   ).length;
-  await expect(anonymousPage.getByText('First occurrence note', { exact: true })).toBeVisible();
-  await expect(anonymousPage.getByText('Duplicate occurrence note', { exact: true })).toBeVisible();
+  await browserExpect(anonymousPage.getByText('First occurrence note', { exact: true })).toBeVisible();
+  await browserExpect(anonymousPage.getByText('Duplicate occurrence note', { exact: true })).toBeVisible();
 
   const bobBefore = await nativeMembers(collectionId, 'bob', 20);
   const bobCollectionBefore = await nativeCollection(collectionId, 'bob');
@@ -651,7 +658,7 @@ test('native curated Collections are edited, published, exported and withdrawn t
   const row = occurrenceRow(alicePage, removeOccurrence.id);
   await row.getByRole('checkbox', { name: 'Remove this member', exact: true }).check();
   await clickServerAction(alicePage, () => row.getByRole('button', { name: 'Remove member', exact: true }).click());
-  await expect(occurrenceRow(alicePage, removeOccurrence.id)).toHaveCount(0);
+  await browserExpect(occurrenceRow(alicePage, removeOccurrence.id)).toHaveCount(0);
   const remainingOwnerMembers = await nativeMembers(collectionId, 'alice', 100);
   expect(remainingOwnerMembers.map(({ id }) => id)).not.toContain(removeOccurrence.id);
   expect((await nativeCollection(collectionId)).memberCount).toBe(collectionBeforeRemoval.memberCount - 1);
@@ -789,7 +796,7 @@ test('native curated Collections are edited, published, exported and withdrawn t
   await bobPage.close();
   await anonymousPage.close();
   await alicePage.close();
-});
+}
 
 function subjectHrefFor(id: string, subjects: NativeCuratedSubject[]): string {
   const subject = subjects.find((candidate) => candidate.id === id);
