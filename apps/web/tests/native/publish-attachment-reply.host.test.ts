@@ -127,9 +127,15 @@ async function signUpMember(returnTo: string): Promise<{
   accountId: string;
   handle: string;
 }> {
+  const destination = new URL(returnTo);
+  if (destination.origin !== new URL(stack.web).origin)
+    throw new Error('Board sign-up must return to the native Web site');
   const context = await auth.newContext('newcomer');
-  const journey = await auth.signUp('newcomer', { context, returnTo });
-  expect(journey.url).toBe(returnTo);
+  const journey = await auth.signUp('newcomer', {
+    context,
+    returnTo: destination.pathname + destination.search + destination.hash,
+  });
+  expect(journey.url).toBe(destination.href);
   await trustAccount(stack, journey.registration.accountId);
   return { context, page: journey.continueOnPage(), ...journey.registration };
 }
