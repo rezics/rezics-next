@@ -101,6 +101,17 @@ Focused command:
 cd apps/web && bun scripts/focused.ts --private-network -- bun test tests/native/book-catalogue-journey.host.test.ts
 ```
 
+To isolate the first signed-in Book shelf popup, run from the repository root on the selected candidate:
+
+```sh
+bun apps/web/scripts/check-placement.ts --returns .temp/book-shelf-boundary/evidence.json -- bun apps/web/scripts/focused.ts --private-network -- bun test apps/web/tests/native/book-shelf-boundary.host.test.ts
+```
+
+This selection keeps the same Book seed, Alice's native sorted shelf read, the real Auth return to `/en/books`,
+and the first shelf link. It checks the exact planned Book row after the popup hydrates. The returned private JSON
+records the shelf document and any observed popup server-function statuses, browser session evidence, and the
+corresponding native Kernel reads. A failed shelf assertion also records bounded browser and Worker diagnostics.
+
 Evidence status: the worker authored the native fixture and mounted journey but did not execute it. No browser or
 native outcome is claimed here. The controller must run this command on a containing candidate and record the
 fixture's actual Search identities, localized Books and type-filtered visits, literary reader identities, shelf
