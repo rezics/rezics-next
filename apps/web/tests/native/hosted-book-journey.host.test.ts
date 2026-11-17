@@ -505,12 +505,16 @@ async function saveChapterDraft(
   return { post, mediaId };
 }
 
-async function readStructure(client: KernelClient, catalogueId: string) {
-  const headResult = await client.hostedCatalogues({ id: catalogueId }).get({ query: { kind: 'structure' } });
+async function readStructure(client: KernelClient, catalogueId: string, signal?: AbortSignal) {
+  const request = signal ? { fetch: { signal } } : {};
+  const headResult = await client
+    .hostedCatalogues({ id: catalogueId })
+    .get({ ...request, query: { kind: 'structure' } });
   if (headResult.status !== 200 || headResult.error || !headResult.data)
     throw new Error(`Generated current Book structure read returned ${headResult.status}`);
   const head = headResult.data as NativeRevision;
   const rootResult = await client.hostedCatalogues({ id: catalogueId }).children.get({
+    ...request,
     query: { kind: 'structure', revisionId: head.revisionId, limit: '20' },
   });
   if (rootResult.status !== 200 || rootResult.error || !rootResult.data)
@@ -520,6 +524,7 @@ async function readStructure(client: KernelClient, catalogueId: string) {
   const items = [...root.items];
   for (const part of root.items.filter((item) => item.kind === 'part' && item.availability === 'available')) {
     const children = await client.hostedCatalogues({ id: catalogueId }).children.get({
+      ...request,
       query: { kind: 'structure', revisionId: head.revisionId, parentId: part.occurrenceId, limit: '20' },
     });
     if (children.status !== 200 || children.error || !children.data)
@@ -682,7 +687,6 @@ async function movePlacementUnderPart(page: Page, placementTitle: string, partTi
   await form.getByRole('combobox', { name: 'Destination', exact: true }).click();
   await page.getByRole('option', { name: new RegExp(partTitle) }).click();
   await form.getByRole('button', { name: 'Move placement', exact: true }).click();
-  await form.waitFor({ state: 'hidden' });
   await organizer.getByText(partTitle, { exact: true }).waitFor({ state: 'visible' });
 }
 
@@ -2088,15 +2092,21 @@ nativeTest(
           await openBookStudio(movePage, control!.catalogueId);
           await addPartInStudio(movePage, partTitle);
           await movePlacementUnderPart(movePage, 'Control chapter · Beside the harbor steps', partTitle);
-          const current = await readStructure(control!.author, control!.catalogueId);
-          const part = current.items.find((item) => item.kind === 'part' && item.title === partTitle);
-          const moved = current.items.find((item) => item.occurrenceId === control!.occurrenceId);
-          if (!part || !moved || moved.parentId !== part.occurrenceId)
-            throw new Error('Control structure did not retain the same occurrence after moving it');
-          return {
-            value: moved,
-            observation: `occurrence=${moved.occurrenceId} parent=${moved.parentId} part=${part.occurrenceId}`,
-          };
+          const timeout = 30_000;
+          const signal = AbortSignal.timeout(timeout);
+          const deadline = performance.now() + timeout;
+          do {
+            const current = await readStructure(control!.author, control!.catalogueId, signal);
+            const part = current.items.find((item) => item.kind === 'part' && item.title === partTitle);
+            const moved = current.items.find((item) => item.occurrenceId === control!.occurrenceId);
+            if (part && moved?.parentId === part.occurrenceId)
+              return {
+                value: moved,
+                observation: `occurrence=${moved.occurrenceId} parent=${moved.parentId} part=${part.occurrenceId}`,
+              };
+            await Bun.sleep(Math.max(0, Math.min(250, deadline - performance.now())));
+          } while (performance.now() < deadline);
+          throw new Error('Control structure did not retain the same occurrence after moving it');
         },
         async () => {
           const [browser, outline] = await Promise.all([
