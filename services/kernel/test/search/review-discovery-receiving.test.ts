@@ -2,6 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { standingFixture } from '../access/standing-fixture.ts';
+import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createThread, revisePost } from '../../src/content/commands.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
@@ -28,6 +30,7 @@ import {
 import { createDiscoveryIndex, discoveryIndexName, discoveryIndexUuid } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { startDiscoveryIndexing } from '../../src/search/runner.ts';
+import { resolveDiscoveryOwnerAdapters } from '../../src/search/discovery-owner-registry.ts';
 import {
   createReviewDiscoveryReceiving,
   requestReviewDiscoveryReceiving,
@@ -45,10 +48,12 @@ const request = () => ({
   requestId: Bun.randomUUIDv7(),
 });
 
-// Real Content lifecycle, native journal, PostgreSQL and exact mixed writer. Only transport delivery is faulted.
+// Real Content lifecycle, native journal, PostgreSQL and exact mixed writer.
 test('default mixed supervisor applies current reviews and recovers exact journal progress', async () => {
   await bootstrapRelease(fixture.pool, bundledRelease);
-  const author = (await fixture.context()).actor;
+  // Each native command has its own request-bound authority.
+  const actor = async () => (await fixture.context()).actor;
+  const author = await actor();
   const deps = { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey };
   const board = (
     await fixture.reader.query(
@@ -84,7 +89,14 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     actor: { kind: 'anonymous' },
     deadline: Date.now() + 30_000,
   }));
-  const registry = await nativeDiscoveryRegistry(fixture.pool, routeKey, source);
+  const entry = createDiscoveryProducerEntry({ ...deps, subjects: source, reviewSource: nativeSource });
+  const review = entry.metadataProducers.review!;
+  const producers = { ...entry, metadataProducers: { review } };
+  const { ownerAdapters } = await resolveDiscoveryOwnerAdapters(producers);
+  const registry = await nativeDiscoveryRegistry(fixture.pool, routeKey, source, {
+    accounts: entry.accounts,
+    ownerAdapters,
+  });
   const prefix = `receive-${crypto.randomUUID().slice(0, 8)}-`;
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);
   let lose = false;
@@ -99,7 +111,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       return result;
     },
   };
-  await allocateDiscovery(fixture.pool, prefix, registry);
+  await allocateDiscovery(fixture.pool, prefix, registry, ['review'], ['account', 'subject', 'review']);
   const target = (await discoveryGenerations(fixture.pool, prefix))[0]!;
   const index = discoveryIndexName(prefix, target.generation);
   await createDiscoveryIndex(search, prefix, target.generation, target.incarnation);
@@ -131,6 +143,14 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       sequence: outcome.position.toString().padStart(19, '0'),
     };
     await effect.run(event);
+    if (outcome === opened) {
+      expect(await review.readiness('population')).toBe('ready');
+      expect(await nativeSource.pageWithCut!(0, null, 1)).toMatchObject({
+        state: 'preparing',
+        missing: 'lifecycle-invalidation',
+      });
+      await expect(review.page(0, null, null, 100)).rejects.toMatchObject({ unsupportedKinds: ['review'] });
+    }
     let done = false;
     for (let n = 0; n < 20 && !done; n++)
       done = (await processReviewDiscoveryPage(fixture.pool, { route: outcome.partition * 16, id: row.id })).complete;
@@ -160,7 +180,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       listing,
       prefix,
       routeKey,
-      reviewSource: nativeSource,
+      producers,
       requiredKinds: ['space'],
       intervalMs: 1_000_000,
     });
@@ -179,9 +199,13 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     const first = await readReviewDiscoveryReceiving(fixture.pool, target, home);
     expect(first.status).toBe('ready');
 
+    await fixture.grant(author.accountId, 'post:revise', {
+      route: routeOf(opened.value.itemId)!,
+      id: opened.value.itemId,
+    });
     const edit = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, title: 'Edited title', body: fromPlainText('Edited body') },
       request(),
     );
@@ -200,7 +224,12 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       route: routeOf(opened.value.itemId)!,
       id: opened.value.itemId,
     });
-    const deleted = await softDeletePost(deps, author, { postId: opened.value.itemId, reason: 'Withdraw' }, request());
+    const deleted = await softDeletePost(
+      deps,
+      await actor(),
+      { postId: opened.value.itemId, reason: 'Withdraw' },
+      request(),
+    );
     await invalidate(deleted, 'com.rezics.content.post.erased.v1');
     // Duplicate and older wakeups cannot rewind journal progress or restore old text.
     await requestReviewDiscoveryReceiving(fixture.pool, prefix, firstWake);
@@ -208,7 +237,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     const removed = await advance();
     expect(await visible()).toEqual([]);
     expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
-    const restored = await restorePost(deps, author, opened.value.itemId, request());
+    const restored = await restorePost(deps, await actor(), opened.value.itemId, request());
     await invalidate(restored, 'com.rezics.content.post.restored.v1');
 
     // A refresh held across lease takeover must never overwrite the successor's current application.
@@ -235,24 +264,40 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     await reached.promise;
     // Concurrent live claim does no refresh or acknowledgement.
     expect((await advance()).acknowledged).toBe(removed.acknowledged);
-    await fixture.pool.query(
-      "UPDATE search.review_discovery_receiving SET claim_until=clock_timestamp()-interval '1 second' WHERE prefix=$1",
-      [prefix],
-    );
+    expect(
+      (
+        await fixture.pool.query(
+          `UPDATE search.review_discovery_receiving SET claim_until=clock_timestamp()-interval '1 second'
+           WHERE prefix=$1 AND generation=$2 AND partition_no=$3 AND claim IS NOT NULL`,
+          [prefix, target.generation, home],
+        )
+      ).rowCount,
+    ).toBe(1);
     const newer = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, title: 'Newest title', body: fromPlainText('Newest body') },
       request(),
     );
     await invalidate(newer, 'com.rezics.content.revision.created.v1');
     await advance(); // retained fixed cut, but current refresh is newer
     release.resolve();
-    await expect(older).rejects.toThrow('superseded or expired');
+    await expect(older).rejects.toThrow('Review receiving claim or native observation is no longer current');
     expect(await visible()).toMatchObject([{ names: ['Newest title'] }]);
     await advance(); // next cut includes the newer invalidation
     const complete = await receiver().status(home);
-    const empty = await receiver().step(home);
+    const staged: string[] = [];
+    const empty = await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        query(sql, _operands, dispatch) {
+          if (sql.includes('SET through=$8,stage=') || sql.includes('SET stage=$8')) staged.push(sql);
+          return dispatch();
+        },
+      },
+      () => receiver().step(home),
+    );
+    expect(staged).toEqual([]);
     expect(empty).toMatchObject({
       acknowledged: complete.acknowledged,
       nativePosition: complete.nativePosition,
@@ -276,7 +321,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     // Existing original delivery is deduplicated; create one fresh native revision to test failure.
     const final = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, body: fromPlainText('Final current body') },
       request(),
     );
@@ -291,7 +336,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     // Current disclosure removes a concealed row even though the opening itself still exists.
     const conceal = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, body: fromPlainText('Concealed opening') },
       request(),
     );
@@ -310,27 +355,41 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     // A source identity can also disappear before its retained original is dispatched.
     const vanished = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, body: fromPlainText('Disappeared opening') },
       request(),
     );
-    const saved = (
-      await fixture.reader.query('DELETE FROM content.thread WHERE route=$1 AND thread_id=$2 RETURNING *', [
-        routeOf(id),
-        id,
-      ])
-    ).rows[0]!;
-    await invalidate(vanished, 'com.rezics.content.revision.created.v1');
-    await advance();
-    expect(await visible()).toEqual([]);
-    expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
-    await fixture.reader.query(
-      'INSERT INTO content.thread SELECT (jsonb_populate_record(NULL::content.thread,$1::jsonb)).*',
-      [JSON.stringify(saved)],
-    );
+    const saved = await withConnection(fixture.reader, async (client) => {
+      await client.query('BEGIN');
+      try {
+        // Inject a missing owner row while retaining the original post graph for restoration.
+        await client.query('SET LOCAL session_replication_role = replica');
+        const result = await client.query('DELETE FROM content.thread WHERE route=$1 AND thread_id=$2 RETURNING *', [
+          routeOf(id),
+          id,
+        ]);
+        expect(result.rowCount).toBe(1);
+        await client.query('COMMIT');
+        return result.rows[0]!;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+    try {
+      await invalidate(vanished, 'com.rezics.content.revision.created.v1');
+      await advance();
+      expect(await visible()).toEqual([]);
+      expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
+    } finally {
+      await fixture.reader.query(
+        'INSERT INTO content.thread SELECT (jsonb_populate_record(NULL::content.thread,$1::jsonb)).*',
+        [JSON.stringify(saved)],
+      );
+    }
     const returned = await revisePost(
       deps,
-      author,
+      await actor(),
       { threadId: id, itemId: opened.value.itemId, body: fromPlainText('Returned opening') },
       request(),
     );
@@ -340,7 +399,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
 
     // A replacement allocation has independent zero coverage and the retired target refuses late work.
     await fixture.pool.query("UPDATE search.discovery_generation SET state='active' WHERE prefix=$1", [prefix]);
-    await allocateDiscovery(fixture.pool, prefix, registry);
+    await allocateDiscovery(fixture.pool, prefix, registry, ['review'], ['account', 'subject', 'review']);
     const replacement = (await discoveryGenerations(fixture.pool, prefix)).find(
       (row) => row.generation !== target.generation,
     )!;

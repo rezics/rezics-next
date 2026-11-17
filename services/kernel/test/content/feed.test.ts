@@ -170,7 +170,10 @@ test('Default mixed feed composes real discovery, current Following and Continue
       KERNEL_SEARCH_PREFIX: prefix,
       KERNEL_PORT: '0',
     });
-    worker = startOutcomeWorkerProcess(env);
+    worker = startOutcomeWorkerProcess({
+      ...env,
+      ...(process.env.REZICS_MIXED_HOME_TIMING === '1' ? { REZICS_MIXED_HOME_STARTED_AT: String(startedAt) } : {}),
+    });
     await worker.ready;
     observe('worker ready');
     const config = readConfig(env);

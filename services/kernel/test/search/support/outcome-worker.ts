@@ -2,6 +2,7 @@ import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/w
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects, RebuildError } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
+import { discoveryTiming } from '../../../src/search/discovery-timing.ts';
 import { readSearchConfig } from '../../../src/search/work.ts';
 import { subjectGenerations } from '../../../src/search/indices.ts';
 import { tree } from '../../../src/search/public-filter-codec.ts';
@@ -349,6 +350,14 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
 
   async function init(env: Record<string, string | undefined>, searchDisabled: boolean): Promise<WorkerStats> {
     try {
+      const timingStart = Number(env.REZICS_MIXED_HOME_STARTED_AT);
+      if (Number.isFinite(timingStart)) {
+        discoveryTiming.subscribe((message) => {
+          const { at, ...timing } = message as { at: number };
+          const elapsedMs = Math.round((at - timingStart) * 100) / 100;
+          process.stderr.write(`Mixed Home timing ${JSON.stringify({ ...timing, elapsedMs })}\n`);
+        });
+      }
       phase('startWorker:start');
       worker = await startWorker(
         { ...readWorkerConfig(env), ...overrides, clock: workerClock.clock },

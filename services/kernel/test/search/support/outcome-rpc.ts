@@ -98,18 +98,22 @@ export function startOutcomeWorkerProcess(
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   let output = '';
-  let outputRemainder = '';
   let exited = false;
   let custodyFailure: Error | undefined;
-  const append = (chunk: unknown) => {
-    const text = String(chunk);
-    output = (output + text).slice(-65_536);
-    const lines = `${outputRemainder}${text}`.split(/\r?\n/);
-    outputRemainder = lines.pop() ?? '';
-    for (const line of lines) if (line.includes('outcome-worker phase=')) process.stderr.write(`${line}\n`);
+  const capture = () => {
+    let remainder = '';
+    return (chunk: unknown) => {
+      const text = String(chunk);
+      output = (output + text).slice(-65_536);
+      const lines = `${remainder}${text}`.split(/\r?\n/);
+      remainder = lines.pop() ?? '';
+      for (const line of lines)
+        if (line.includes('outcome-worker phase=') || line.startsWith('Mixed Home timing '))
+          process.stderr.write(`${line}\n`);
+    };
   };
-  child.stdout!.on('data', append);
-  child.stderr!.on('data', append);
+  child.stdout!.on('data', capture());
+  child.stderr!.on('data', capture());
   const exit = new Promise<{ code: number | null; signal: string | null }>((resolve) =>
     child.once('close', (code, signal) => {
       exited = true;
