@@ -44,11 +44,11 @@ function exactType(address: string): string | null {
 }
 
 function exactSearchLink(page: Page, subject: BookCatalogueIdentity) {
-  return page.locator(`a[data-slot="list-row-link"][href*="${subject.id}"]`);
+  return page.locator(`#search-results a[data-slot="list-row-link"][href*="${subject.id}"]`);
 }
 
 async function assertSearchResult(page: Page, subject: BookCatalogueIdentity): Promise<void> {
-  const results = page.locator('[data-search-results]');
+  const results = page.locator('#search-results');
   await browserExpect(results).toBeVisible();
   const link = exactSearchLink(page, subject);
   await browserExpect(link).toBeVisible();
