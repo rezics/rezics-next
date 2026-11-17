@@ -101,40 +101,10 @@ async function signUpMember(returnTo: string): Promise<{
   handle: string;
 }> {
   const context = await auth.newContext('newcomer');
-  const page = await context.newPage();
-  const handle = `member-${crypto.randomUUID().slice(0, 8)}`;
-  const email = `member-${crypto.randomUUID()}@example.test`;
-  const password = `Member-${crypto.randomUUID()}-Secure-9`;
-  await page.goto(`${stack.web}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
-    waitUntil: 'domcontentloaded',
-  });
-  await hydrate(page);
-  if (new URL(page.url()).origin !== new URL(stack.web).origin) {
-    await page
-      .getByRole('link', { name: /create an account|sign up/i })
-      .first()
-      .click();
-    await page.waitForURL((url) => new URL(url).pathname === '/signup');
-    await hydrate(page);
-    await page.getByLabel('Handle', { exact: true }).fill(handle);
-    await page.getByLabel('Email', { exact: true }).fill(email);
-    await page.getByLabel('Password', { exact: true }).fill(password);
-    const created = page.waitForResponse(
-      (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Create an account', exact: true }).click();
-    const signup = await created;
-    expect(signup.status()).toBe(201);
-    const body = (await signup.json()) as { accountId?: unknown };
-    expect(typeof body.accountId).toBe('string');
-    await page.waitForURL((url) => url.origin === new URL(stack.web).origin && !url.pathname.startsWith('/auth/'), {
-      timeout: 30_000,
-    });
-    await page.locator('#account-menu-button').waitFor({ state: 'visible' });
-    await trustAccount(stack, body.accountId as string);
-    return { context, page, accountId: body.accountId as string, handle };
-  }
-  throw new Error(`Sign-up did not reach Auth from ${page.url()}`);
+  const journey = await auth.signUp('newcomer', { context, returnTo });
+  expect(journey.url).toBe(returnTo);
+  await trustAccount(stack, journey.registration.accountId);
+  return { context, page: journey.continueOnPage(), ...journey.registration };
 }
 
 async function insertImage(page: Page, name: string, alt: string, buffer: Buffer, mimeType: string) {

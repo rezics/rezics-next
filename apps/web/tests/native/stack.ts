@@ -928,7 +928,10 @@ async function startStack(): Promise<
           forwarded.headers.set('x-native-auth-url', serviceRequest.url);
           return fetch(forwarded, { redirect: 'manual' });
         }
-        if (pageOrigin && serviceRequest.method === 'POST' && url.pathname === '/signup')
+        if (
+          pageOrigin &&
+          ((serviceRequest.method === 'POST' && url.pathname === '/signup') || url.pathname === '/registration-page')
+        )
           return signupHandler!(serviceRequest);
         if (
           serviceRequest.method === 'POST' &&
