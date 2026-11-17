@@ -1,12 +1,14 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import { converter_revision } from '@rezics/conversion/bangumi';
+import type { BatchCommand, BatchReference, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
+import type { Candidate } from '../src/record-bindings.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 test('source provenance refresh preserves acknowledged proposals through partial receipts and response loss on reopen', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'source-provenance-recovery-'));
@@ -62,6 +64,53 @@ test('source provenance refresh preserves acknowledged proposals through partial
   let importer = open();
   const owner = { source: 'bangumi', external_id: '1' };
   const registration = createSourceRegistration('bangumi');
+  const source = (digest: string): BatchCommand['source'] => ({
+    ...owner,
+    record_revision: 'unversioned',
+    converter_revision,
+    digest,
+    field_group: 'facts',
+  });
+  const references: BatchReference[] = [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/1' } }] },
+  ];
+  const expectFacts = (commands: BatchCommand[], date: string, digest: string, subject: string) => {
+    const proposals = commands.filter((command) => command.op === 'propose');
+    expect(proposals.map(({ key: _key, ...proposal }) => proposal)).toEqual(
+      (
+        [
+          ['wdt:P5732', '1'],
+          ['schema:name', { language: 'und', text: 'Same Book' }],
+          [
+            'schema:datePublished',
+            {
+              time: `+${date}T00:00:00Z`,
+              precision: 11,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            },
+          ],
+        ] as const
+      ).map(([id, content]) => ({
+        op: 'propose',
+        source: source(digest),
+        subject,
+        statement: { property: { id }, value: { type: 'value', content }, references },
+      })),
+    );
+    return proposals;
+  };
+  const expectOwnedProposals = (candidates: Candidate[], proposals: ReturnType<typeof expectFacts>) => {
+    expect(candidates.map(({ key }) => key).sort()).toEqual(proposals.map(({ key }) => key).sort());
+    for (const proposal of proposals) {
+      const candidate = candidates.find(({ key }) => key === proposal.key)!;
+      expect(candidate.bytes).toBe(JSON.stringify({ commands: [proposal] }));
+      expect(receipts.get(proposal.key)?.result).toEqual({
+        key: proposal.key,
+        status: 201,
+        value: { candidate: candidate.candidate, revision: 1 },
+      });
+    }
+  };
   const run = (date: string) =>
     importer.runDump(
       registration,
@@ -72,19 +121,39 @@ test('source provenance refresh preserves acknowledged proposals through partial
   try {
     expect((await run('2000-01-01')).status).toBe('committed');
     const baseline = importer.session.store.source('bangumi');
+    const baselineDigest = importer.session.store.key('bangumi', '1').baseline!.digest;
     const claim = importer.session.bindings.claim(owner);
+    if (claim?.state !== 'bound') throw new Error('Missing original Bangumi subject binding');
     const initialReceipts = structuredClone([...receipts]);
     const old = importer.session.bindings.candidates(owner, 'facts', { limit: 100 });
+    const originalProposals = expectFacts(effects, '2000-01-01', baselineDigest, claim.subject);
+    expectOwnedProposals(old, originalProposals);
     const offset = requests.length;
     fault = 'partial';
     expect((await run('2001-01-01')).status).toBe('bulk-failed');
     expect(importer.session.store.source('bangumi')).toEqual(baseline);
     const plan = requests[offset]!;
-    expect(plan.commands.filter((command) => command.op === 'propose')).toHaveLength(2);
+    const refreshedDigest = plan.commands[0]!.source.digest;
+    expect(refreshedDigest).not.toBe(baselineDigest);
+    const proposals = expectFacts(plan.commands, '2001-01-01', refreshedDigest, claim.subject);
+    const retractions = plan.commands.filter((command) => command.op === 'retract');
+    expect(retractions.map(({ key: _key, ...retraction }) => retraction)).toEqual(
+      old.map(({ candidate }) => ({
+        op: 'retract',
+        source: source(refreshedDigest),
+        subject: claim.subject,
+        candidate,
+        references,
+      })),
+    );
+    expect(plan.commands).toEqual([...retractions, ...proposals]);
+    expect(new Set(plan.commands.map(({ key }) => key)).size).toBe(plan.commands.length);
+    const originalKeys = new Set(initialReceipts.map(([key]) => key));
+    expect(plan.commands.filter(({ key }) => originalKeys.has(key))).toEqual([]);
     const acknowledged = importer.session.bindings
       .candidates(owner, 'facts', { limit: 100 })
       .filter((candidate) => !old.some((prior) => prior.candidate === candidate.candidate));
-    expect(acknowledged).toHaveLength(2);
+    expectOwnedProposals(acknowledged, proposals);
     const runId = importer.session.store.activeRun('bangumi')!.id;
     await importer.close();
     importer = open();
@@ -102,16 +171,15 @@ test('source provenance refresh preserves acknowledged proposals through partial
     const current = importer.session.bindings.candidates(owner, 'facts', { limit: 100 });
     expect(current).toEqual(acknowledged);
     expect(importer.session.bindings.claim(owner)).toEqual(claim);
-    const digest = importer.session.store.key('bangumi', '1').baseline!.digest;
-    for (const candidate of current)
-      expect((JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!.source.digest).toBe(digest);
-    expect(digest).not.toBe(JSON.parse(old[0]!.bytes).commands[0].source.digest);
-    expect(effects.filter((command) => command.op === 'propose')).toHaveLength(4);
+    expect(importer.session.store.key('bangumi', '1').baseline!.digest).toBe(refreshedDigest);
+    expect(effects.filter((command) => command.op === 'propose')).toEqual([...originalProposals, ...proposals]);
     expect(
       effects
         .filter((command) => command.op === 'retract')
-        .every((command) => old.some((candidate) => candidate.candidate === command.candidate)),
-    ).toBe(true);
+        .map(({ key }) => key)
+        .sort(),
+    ).toEqual(retractions.map(({ key }) => key).sort());
+    expect(effects.filter((command) => command.op === 'create')).toHaveLength(1);
     for (const [key, receipt] of initialReceipts) expect(receipts.get(key)).toEqual(receipt);
     const count = requests.length;
     expect((await run('2001-01-01')).status).toBe('committed');

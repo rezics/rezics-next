@@ -13,7 +13,8 @@ import {
 import { prepareShowcaseTagParentPublications, projectShowcaseTagTables } from '../src/showcase-tags.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { emptyCrossMediaPlan, type CrossMediaSeedResult, type CrossMediaTables } from '../src/cross-media-seed.ts';
-import { createPublicBulkClient } from '../src/public-bulk-client.ts';
+import { createPublicBulkClient, GLOBAL_CONTEXT } from '../src/public-bulk-client.ts';
+import { showcaseLimits } from '../src/showcase-contract.ts';
 import { publishShowcase, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
@@ -369,56 +370,70 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
   const candidateId = '00000000-0000-4000-8000-000000000013';
   const binding = { ...resolved!, childId, parentId, schemeId };
   const command = showcaseTagParentCommand(binding);
-  const value = (content: string) => [{ value: { type: 'value' as const, content } }];
-  type FixtureSubject = {
-    subject: {
-      id: string;
-      type: string;
-      statements: Record<string, unknown>;
-    };
-  };
-  const subjects = new Map<string, FixtureSubject>([
+  const nativeProperty = (id: string) => ({ id, data_type: bundledRelease.properties[id]!.datatype });
+  const value = (property: string, content: string) => [
+    { property: nativeProperty(property), rank: 'normal', value: { type: 'value', content } },
+  ];
+  const concept = (id: string, uri: string) => ({
+    id,
+    type: 'skos:Concept',
+    statements: { 'schema:url': value('schema:url', uri), 'skos:inScheme': value('skos:inScheme', schemeId) },
+  });
+  const subjects = new Map<string, { id: string; type: string; statements: Record<string, ReturnType<typeof value>> }>([
     [
       schemeId,
       {
-        subject: {
-          id: schemeId,
-          type: 'skos:ConceptScheme',
-          statements: { 'schema:url': value(binding.schemeUri) },
-        },
+        id: schemeId,
+        type: 'skos:ConceptScheme',
+        statements: { 'schema:url': value('schema:url', binding.schemeUri) },
       },
     ],
-    [
-      childId,
-      {
-        subject: {
-          id: childId,
-          type: 'skos:Concept',
-          statements: {
-            'schema:url': value(binding.childUri),
-            'skos:inScheme': value(schemeId),
-          },
-        },
-      },
-    ],
-    [
-      parentId,
-      {
-        subject: {
-          id: parentId,
-          type: 'skos:Concept',
-          statements: {
-            'schema:url': value(binding.parentUri),
-            'skos:inScheme': value(schemeId),
-          },
-        },
-      },
-    ],
+    [childId, concept(childId, binding.childUri)],
+    [parentId, concept(parentId, binding.parentUri)],
   ]);
+  const nativeStatement = {
+    id: candidateId,
+    rank: 'normal' as const,
+    property: nativeProperty('skos:broader'),
+    value: command.statement.value,
+    qualifiers: [],
+    references: command.statement.references.map(({ parts }) => ({
+      hash: showcaseDigest(parts),
+      parts: parts.map(({ property, value }) => ({ property: nativeProperty(property.id), value })),
+    })),
+    rezics: { release: bundledDigest, revision: 1 },
+  };
+  const expectedAdoption = {
+    context: GLOBAL_CONTEXT,
+    property: 'skos:broader',
+    mode: 'replace' as const,
+    expected_head: null,
+    selection: [{ candidate: candidateId, rank: 'normal' as const }],
+  };
   const publishWith = async (decision: 'accepted' | 'rejected') => {
     const journal = new ShowcaseJournal(':memory:');
     const acceptCalls: string[] = [];
-    const adoptCalls: string[] = [];
+    type Adoption = Awaited<ReturnType<ShowcaseReviewPort['adoptReviewedCandidates']>>['adoption'];
+    const adoptCalls: { id: string; body: Parameters<ShowcaseReviewPort['adoptReviewedCandidates']>[1] }[] = [];
+    let adoption: Adoption | null = null;
+    const rank = () =>
+      decision === 'rejected'
+        ? 'deprecated'
+        : (adoption?.selection.find((row) => row.candidate === candidateId)?.rank ?? null);
+    const readSubject = (id: string) => {
+      const subject = subjects.get(id);
+      if (!subject) return null;
+      const currentRank = rank();
+      return {
+        subject: {
+          ...subject,
+          statements: {
+            ...subject.statements,
+            ...(id === childId && currentRank ? { 'skos:broader': [{ ...nativeStatement, rank: currentRank }] } : {}),
+          },
+        },
+      };
+    };
     journal.prepareCommand(command);
     journal.acknowledgeCommand(command, {
       key: command.key,
@@ -426,39 +441,42 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
       value: { candidate: candidateId, revision: 1 },
     });
     const review: ShowcaseReviewPort = {
-      async fence() {
+      async fence(tuple) {
+        expect(tuple).toEqual({ source: 'vndb_cross_media', externalId: binding.path, fieldGroup: 'facts' });
         return { fenced: false, securityRevision: null };
       },
       async readReviewedSubject(id) {
-        return subjects.get(id) as never;
+        const read = readSubject(id);
+        if (!read) throw Object.assign(new Error('Unknown Subject'), { status: 404 });
+        return read as unknown as Awaited<ReturnType<ShowcaseReviewPort['readReviewedSubject']>>;
       },
       async reviewedCandidates(id, query) {
         expect(id).toBe(childId);
-        expect(query.property).toBe('skos:broader');
+        expect(query).toEqual({ context: GLOBAL_CONTEXT, property: 'skos:broader', limit: showcaseLimits.reviewPage });
         return {
           candidates: [
             {
               id: candidateId,
               source: command.source,
-              statement: command.statement,
+              statement: nativeStatement,
               head: 1,
               decision,
               retracted: null,
               retraction: null,
-              release: null,
+              release: bundledDigest,
               revision: 1,
-              rank: 'normal',
+              rank: rank(),
             },
           ],
           next: null,
-          adoption: null,
-        } as unknown as Awaited<ReturnType<ShowcaseReviewPort['reviewedCandidates']>>;
+          adoption: adoption ? { mode: adoption.mode, head: adoption.head } : null,
+        };
       },
       async acceptReviewedCandidate(_id, acceptedId) {
         acceptCalls.push(acceptedId);
         return {
           acceptance: {
-            context: '00000000-0000-8000-8000-000000000000',
+            context: GLOBAL_CONTEXT,
             candidate: acceptedId,
             decision: 'accept',
             head: 2,
@@ -467,34 +485,27 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
         };
       },
       async adoptReviewedCandidates(id, body) {
-        adoptCalls.push(id);
-        subjects.get(childId)!.subject.statements['skos:broader'] = [command.statement];
-        const action = body as {
-          context: string;
-          property: string;
-          mode: 'inherit' | 'replace' | 'suppress';
-          selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+        adoptCalls.push({ id, body });
+        if (decision !== 'accepted' || id !== childId || body.expected_head !== (adoption?.head ?? null))
+          throw Object.assign(new Error('Invalid parent adoption'), { status: 422 });
+        adoption = {
+          context: body.context,
+          property: body.property,
+          mode: body.mode,
+          selection: body.selection,
+          head: (adoption?.head ?? 0) + 1,
         };
-        return {
-          adoption: {
-            context: action.context,
-            property: action.property,
-            mode: action.mode,
-            selection: action.selection,
-            head: 1,
-          },
-          revision: 1,
-        };
+        return { adoption, revision: 2 };
       },
     };
     const publicClient = createPublicBulkClient({
       origin: 'https://fixture.test',
       fetch: Object.assign(
         async (input: string | URL | Request) => {
-          const id = new URL(String(input)).pathname.split('/').at(-1)!;
-          const subject = subjects.get(id);
-          if (!subject) return new Response('missing', { status: 404 });
-          return new Response(JSON.stringify(subject), { headers: { 'content-type': 'application/json' } });
+          const url = new URL(input instanceof Request ? input.url : input);
+          expect(url.searchParams.get('context')).toBe(GLOBAL_CONTEXT);
+          const read = readSubject(url.pathname.split('/').at(-1)!);
+          return read ? Response.json(read) : new Response('missing', { status: 404 });
         },
         { preconnect: fetch.preconnect },
       ),
@@ -518,19 +529,23 @@ test('parent publication consumes accepted and rejected candidate-page verdicts 
   };
   const accepted = await publishWith('accepted');
   expect(accepted.acceptCalls).toEqual([]);
-  expect(accepted.adoptCalls).toEqual([childId]);
+  expect(accepted.adoptCalls).toEqual([{ id: childId, body: expectedAdoption }]);
   expect(accepted.published.manifest.tagParentPublications).toMatchObject([
-    { path: binding.path, childId, parentId, status: 'public' },
+    { path: binding.path, childId, parentId, schemeId, candidateId, status: 'public' },
   ]);
-  subjects.get(childId)!.subject.statements = {
-    'schema:url': value(binding.childUri),
-    'skos:inScheme': value(schemeId),
-  };
   const rejected = await publishWith('rejected');
   expect(rejected.acceptCalls).toEqual([]);
   expect(rejected.adoptCalls).toEqual([]);
   expect(rejected.published.manifest.tagParentPublications).toMatchObject([
-    { path: binding.path, status: 'withheld', reason: 'parent candidate is rejected' },
+    {
+      path: binding.path,
+      childId,
+      parentId,
+      schemeId,
+      candidateId,
+      status: 'withheld',
+      reason: 'parent candidate is rejected',
+    },
   ]);
   expect(rejected.published.omissions).toContainEqual({
     provider: 'vndb',
