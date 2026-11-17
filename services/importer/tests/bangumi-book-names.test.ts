@@ -14,7 +14,7 @@ import {
   type CrossMediaPort,
 } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { reviewedSubjectReadbackFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const bookId = 990401;
 const sameTitleId = 990402;
@@ -34,7 +34,7 @@ const sameTitleRow = {
   id: sameTitleId,
   type: 1,
   name: 'Selected Novel',
-  infobox: `{{Infobox animanga/Manga
+  infobox: `{{Infobox animanga/MangaExtra
 |中文名=Other template title
 |别名=Must stay out of Book names
 }}`,
@@ -68,29 +68,28 @@ test('selected Book names stay source-bound through ordinary and default imports
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-book-names-'));
   const state = join(directory, 'imports.sqlite');
   const sent: BatchCommand[] = [];
-  const identities = new Map<string, string>();
+  const readback = reviewedSubjectReadbackFixture();
   const created: string[] = [];
   const metadata = sourceRecordMetadataFixture();
   const port: CrossMediaPort = {
     async batch(request) {
       sent.push(...structuredClone(request.commands));
       return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? (() => {
-                  const externalId = command.source.external_id;
-                  created.push(externalId);
-                  const id = identities.get(externalId) ?? randomUUID();
-                  identities.set(externalId, id);
-                  return { id, revision: 1 };
-                })()
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
+        results: request.commands.map((command) => {
+          if (command.op === 'create') {
+            const externalId = command.source.external_id;
+            created.push(externalId);
+            const id = readback.ids.get(externalId) ?? randomUUID();
+            readback.created(command, id);
+            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
+          }
+          if (command.op === 'propose') {
+            const candidate = randomUUID();
+            if (command.statement.property.id === 'wdt:P5732') readback.select(command, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
+          }
+          return { key: command.key, status: 201 as const, value: { revision: 1 } };
+        }),
       };
     },
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -99,19 +98,7 @@ test('selected Book names stay source-bound through ordinary and default imports
     },
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      const externalId = [...identities].find(([, subjectId]) => subjectId === id)?.[0];
-      if (!externalId) throw new Error('Unknown selected Book identity');
-      return {
-        subject: {
-          id,
-          type: 'schema:Book',
-          statements: {
-            'wdt:P5732': [{ value: { type: 'value', content: externalId } }],
-          },
-        },
-      } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-    },
+    readReviewedSubject: readback.readReviewedSubject,
   };
   const run = (book: ReturnType<typeof selectedBook>) =>
     seedCrossMedia(selectedPlan(book), state, port, undefined, { providers: ['bangumi'], mediaDeadlineMs: 0 });

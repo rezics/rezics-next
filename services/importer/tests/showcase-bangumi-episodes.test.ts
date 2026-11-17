@@ -5,13 +5,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BATCH_LIMIT, type BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
 import { planCrossMediaSeed, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { composeVocabularyAdmissions, SHOWCASE_EPISODE_WINDOW } from '../src/showcase-bangumi-episodes.ts';
 import { episodeTypeConceptUri, episodeTypeSchemeUri } from '../src/bangumi-episode-fidelity.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import {
+  reviewedSubjectReadbackFixture,
+  reviewedVocabularySubjectFixture,
+  sourceRecordMetadataFixture,
+} from './transport-driver.ts';
 
 const schemeId = '00000000-0000-4000-8000-000000000190';
 const mainKindId = '00000000-0000-4000-8000-000000000191';
@@ -99,34 +102,23 @@ const currentVocabulary: SourceVocabularyBindings = {
 
 function port(commands: BatchCommand[]): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
-  const ids = new Map<string, string>();
-  const types = new Map<string, string>();
-  const sourceKeys = new Map<string, string>();
-  const catalog = new Map<string, unknown>([
+  const readback = reviewedSubjectReadbackFixture();
+  const mainKindUri = episodeTypeConceptUri('0');
+  const catalog = new Map([
     [
       schemeId,
-      {
-        subject: {
-          id: schemeId,
-          type: 'skos:ConceptScheme',
-          statements: { 'schema:url': [{ value: { type: 'value', content: episodeTypeSchemeUri } }] },
-        },
-      },
+      reviewedVocabularySubjectFixture(schemeId, 'skos:ConceptScheme', episodeTypeSchemeUri, {
+        'schema:url': episodeTypeSchemeUri,
+      }),
     ],
     [
       mainKindId,
-      {
-        subject: {
-          id: mainKindId,
-          type: 'skos:Concept',
-          statements: {
-            'schema:url': [{ value: { type: 'value', content: episodeTypeConceptUri('0') } }],
-            'skos:inScheme': [{ value: { type: 'value', content: schemeId } }],
-          },
-        },
-      },
+      reviewedVocabularySubjectFixture(mainKindId, 'skos:Concept', mainKindUri, {
+        'schema:url': mainKindUri,
+        'skos:inScheme': schemeId,
+      }),
     ],
-    [withheldKindId, { subject: { id: withheldKindId, type: 'skos:Concept', statements: {} } }],
+    [withheldKindId, reviewedVocabularySubjectFixture(withheldKindId, 'skos:Concept', episodeTypeConceptUri('1'), {})],
   ]);
   return {
     async batch(request) {
@@ -134,15 +126,16 @@ function port(commands: BatchCommand[]): CrossMediaPort {
       return {
         results: request.commands.map((command) => {
           if (command.op === 'create') {
-            const owner = `${command.source.source}\u0000${command.source.external_id}`;
-            const id = ids.get(owner) ?? randomUUID();
-            ids.set(owner, id);
-            types.set(id, command.subject.type);
-            sourceKeys.set(id, command.source.external_id);
+            const id = readback.ids.get(command.source.external_id) ?? randomUUID();
+            readback.created(command, id);
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
-          if (command.op === 'propose')
-            return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+          if (command.op === 'propose') {
+            const candidate = randomUUID();
+            const identityProperty = command.source.external_id.startsWith('episode:') ? 'schema:url' : 'wdt:P5732';
+            if (command.statement.property.id === identityProperty) readback.select(command, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
+          }
           return { key: command.key, status: 200 as const, value: { revision: 1 } };
         }),
       };
@@ -156,27 +149,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      const existing = catalog.get(id);
-      if (existing) return existing as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-      const key = sourceKeys.get(id);
-      const identity = key
-        ? key.startsWith('episode:')
-          ? { property: 'schema:url', value: bangumiRecordUrl(key) }
-          : { property: 'wdt:P5732', value: key }
-        : undefined;
-      return {
-        subject: {
-          id,
-          type: types.get(id) ?? 'schema:Thing',
-          statements: identity
-            ? {
-                [identity.property]: [
-                  { property: { id: identity.property }, value: { type: 'value', content: identity.value } },
-                ],
-              }
-            : {},
-        },
-      } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      return catalog.get(id) ?? readback.readReviewedSubject(id);
     },
   };
 }

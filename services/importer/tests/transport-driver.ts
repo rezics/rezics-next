@@ -1,9 +1,11 @@
 export { createImportTransport } from '../src/import-client.ts';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { sourceDigest } from '@rezics/conversion/support';
-import type { BatchStatement } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createImportTransport, type ReviewedSubjectRead } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
+import { GLOBAL_CONTEXT } from '../src/public-bulk-client.ts';
 import { isImportSourceRecord } from '../src/source-record-runtime.ts';
 import {
   type ImportSourceRecordMetadataCommand,
@@ -51,6 +53,69 @@ export function reviewedSubjectFixture(
     summary: null,
     related: {},
   };
+}
+
+/** Current local readback changes only when the fixture explicitly selects a proposal. */
+export function reviewedSubjectReadbackFixture() {
+  const subjects = new Map<string, ReviewedSubjectRead>();
+  const ids = new Map<string, string>();
+
+  return {
+    ids,
+    created(command: Extract<BatchCommand, { op: 'create' }>, id: string) {
+      ids.set(command.source.external_id, id);
+      if (!subjects.has(id)) {
+        subjects.set(
+          id,
+          reviewedSubjectFixture({
+            id,
+            type: command.subject.type,
+            context: GLOBAL_CONTEXT,
+            labels: command.subject.labels,
+            statements: {},
+          }),
+        );
+      }
+    },
+    select(command: Extract<BatchCommand, { op: 'propose' }>, candidate: string) {
+      const subject = subjects.get(command.subject)?.subject;
+      if (!subject) throw new Error(`Missing fixture subject ${command.subject}`);
+      const slot = (subject.statements[command.statement.property.id] ??= []);
+      if (!slot.some((statement) => statement.id === candidate))
+        slot.push(reviewedStatementFixture(candidate, command.statement.rank ?? 'normal', command.statement));
+    },
+    async readReviewedSubject(id: string) {
+      const read = subjects.get(id);
+      if (!read) throw new ImportTransportError(404);
+      return structuredClone(read);
+    },
+  };
+}
+
+export function reviewedVocabularySubjectFixture(
+  id: string,
+  type: 'skos:ConceptScheme' | 'skos:Concept',
+  uri: string,
+  currentValues: Record<string, string>,
+): ReviewedSubjectRead {
+  return reviewedSubjectFixture({
+    id,
+    type,
+    context: GLOBAL_CONTEXT,
+    labels: {},
+    statements: Object.fromEntries(
+      Object.entries(currentValues).map(([property, content]) => [
+        property,
+        [
+          reviewedStatementFixture(randomUUID(), 'normal', {
+            property: { id: property },
+            value: { type: 'value', content },
+            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] }],
+          }),
+        ],
+      ]),
+    ),
+  });
 }
 
 /** Explicit canonical provider heads for local protocol doubles, including clears. */

@@ -6,18 +6,21 @@ import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { NativeIdentity, SourceVocabularyRow } from '@rezics/conversion';
-import { bangumiRecordUrl, converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
   type CrossMediaPlan,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
-import { createSourceRegistration } from '../src/source-registry.ts';
+import { createSelectedFamilySourceRegistration } from '../src/source-registry.ts';
 import { bangumiAppearanceSource } from '../src/cross-media-bindings.ts';
-import { prepareShowcaseBangumiCharacterVocabulary } from '../src/showcase-bangumi-characters.ts';
+import {
+  prepareShowcaseBangumiCharacterVocabulary,
+  readShowcaseBangumiCharacterVocabulary,
+} from '../src/showcase-bangumi-characters.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { reviewedSubjectReadbackFixture } from './transport-driver.ts';
 
 const characterKindsUri = 'https://rezics.com/schemes/bangumi/character-kinds';
 const appearanceRolesUri = 'https://rezics.com/schemes/bangumi/appearance-roles';
@@ -84,46 +87,44 @@ function tables(): CrossMediaTables {
 }
 
 function vocabularyPort(journal: ShowcaseJournal) {
-  const identities = new Map<string, string>();
-  const subjects = new Map<string, { subject: { id: string; type: string; statements: Record<string, unknown[]> } }>();
-  const charSchemeId = () => identities.get(characterKindsSourceId);
+  const readback = reviewedSubjectReadbackFixture();
   return {
+    ids: readback.ids,
     async batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult> {
       for (const command of request.commands) journal.prepareCommand(command);
       const results = request.commands.map((command) => {
-        let value: { id: string; revision: number } | { candidate: string; revision: number };
         if (command.op === 'create') {
           const id = randomUUID();
-          identities.set(command.source.external_id, id);
-          subjects.set(id, { subject: { id, type: command.subject.type, statements: {} } });
-          value = { id, revision: 1 };
-        } else {
-          const subject = subjects.get(command.subject)?.subject;
-          if (subject && command.op === 'propose') {
-            const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
-            if (
-              command.statement.property.id === 'skos:inScheme' &&
-              command.source.external_id === appearanceRoleTwoSourceId
-            )
-              statement.value.content = charSchemeId();
-            subject.statements[command.statement.property.id] = [statement];
-          }
-          value = { candidate: randomUUID(), revision: 1 };
+          readback.created(command, id);
+          return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
         }
-        return { key: command.key, status: 201 as const, value };
+        if (command.op !== 'propose') throw new Error('Unexpected vocabulary command');
+        return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
       });
       for (const [index, command] of request.commands.entries()) {
-        journal.acknowledgeCommand(
-          command,
-          results[index]! as Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>,
-        );
+        journal.acknowledgeCommand(command, results[index]!);
       }
-      return { results } as BatchWriteResult;
+      return { results };
     },
-    async readReviewedSubject(id: string) {
-      const found = subjects.get(id);
-      if (found) return found as ReviewedSubjectRead;
-      throw Object.assign(new Error('Not found'), { status: 404 });
+    readReviewedSubject: readback.readReviewedSubject,
+    selectVocabulary() {
+      const kindScheme = readback.ids.get(characterKindsSourceId);
+      if (!kindScheme) throw new Error('Missing character-kind scheme');
+      for (const { command, candidateId } of journal.acknowledgedCommands()) {
+        if (command.op !== 'propose' || !candidateId) continue;
+        if (
+          command.source.external_id === appearanceRoleTwoSourceId &&
+          command.statement.property.id === 'skos:inScheme'
+        ) {
+          // The operator selected a distinct candidate assigning this role to the character-kind scheme.
+          readback.select(
+            { ...command, statement: { ...command.statement, value: { type: 'value', content: kindScheme } } },
+            randomUUID(),
+          );
+        } else {
+          readback.select(command, candidateId);
+        }
+      }
     },
   };
 }
@@ -170,13 +171,27 @@ test('default local adapter keeps character kinds separate from each anime appea
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
     const port = vocabularyPort(journal);
-    await prepareShowcaseBangumiCharacterVocabulary({ plan, port, journal, stage: 'schemes' });
+    const schemes = await prepareShowcaseBangumiCharacterVocabulary({ plan, port, journal, stage: 'schemes' });
+    expect(schemes.bindings.schemes).toEqual([]);
+    port.selectVocabulary();
     const prepared = await prepareShowcaseBangumiCharacterVocabulary({ plan, port, journal, stage: 'concepts' });
-    const kind = prepared.bindings.concepts.find((entry) => entry.taxonomy === 'bangumi.character.role');
-    const main = prepared.bindings.concepts.find(
+    expect(prepared.bindings.concepts).toEqual([]);
+    port.selectVocabulary();
+    const supportingId = port.ids.get(appearanceRoleTwoSourceId);
+    if (!supportingId) throw new Error('Missing supporting-role concept');
+    const supportingRead = await port.readReviewedSubject(supportingId);
+    expect(supportingRead.subject.statements['schema:url']?.map(({ value }) => value)).toEqual([
+      { type: 'value', content: `${appearanceRolesUri}/2` },
+    ]);
+    expect(supportingRead.subject.statements['skos:inScheme']?.map(({ value }) => value)).toEqual([
+      { type: 'value', content: port.ids.get(characterKindsSourceId) },
+    ]);
+    const bindings = await readShowcaseBangumiCharacterVocabulary({ plan, port, journal });
+    const kind = bindings.concepts.find((entry) => entry.taxonomy === 'bangumi.character.role');
+    const main = bindings.concepts.find(
       (entry) => entry.taxonomy === 'bangumi.subject-characters.type' && entry.code === '1',
     );
-    const supporting = prepared.bindings.concepts.find(
+    const supporting = bindings.concepts.find(
       (entry) => entry.taxonomy === 'bangumi.subject-characters.type' && entry.code === '2',
     );
     expect(kind).toBeDefined();
@@ -185,10 +200,7 @@ test('default local adapter keeps character kinds separate from each anime appea
 
     const characterId = randomUUID();
     const character = identity(characterId, 'wd:Q95074');
-    const registration = createSourceRegistration('bangumi', {
-      source: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
-    });
+    const registration = createSelectedFamilySourceRegistration('bangumi', crossMediaAliases.bangumi);
     const characterRecord = plan.entities.bangumi.find((record) => record.key === 'character:901')!;
     const kindResult = registration.convert(
       { external_id: characterRecord.key, record_revision: null, record: characterRecord.payload },
@@ -196,7 +208,7 @@ test('default local adapter keeps character kinds separate from each anime appea
         source: crossMediaAliases.bangumi,
         subjectId: characterId,
         sourceVocabulary: {
-          bindings: prepared.bindings,
+          bindings,
           rows: [{ kind: 'character-kind', path: '/character/901/type', character, code: 1 }],
         },
       },
@@ -231,7 +243,7 @@ test('default local adapter keeps character kinds separate from each anime appea
       {
         source: crossMediaAliases.bangumi,
         subjectId: workOneId,
-        sourceVocabulary: { bindings: prepared.bindings, rows: [appearanceRow(plan, 0, workOne, character)] },
+        sourceVocabulary: { bindings, rows: [appearanceRow(plan, 0, workOne, character)] },
       },
     );
     const workTwoResult = registration.convert(
@@ -239,7 +251,7 @@ test('default local adapter keeps character kinds separate from each anime appea
       {
         source: crossMediaAliases.bangumi,
         subjectId: workTwoId,
-        sourceVocabulary: { bindings: prepared.bindings, rows: [appearanceRow(plan, 1, workTwo, character)] },
+        sourceVocabulary: { bindings, rows: [appearanceRow(plan, 1, workTwo, character)] },
       },
     );
     const mainAppearance = workOneResult.proposals.find(

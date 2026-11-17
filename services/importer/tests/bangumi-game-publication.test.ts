@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/bangumi';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { Importer } from '../src/importer.ts';
 import {
   crossMediaAliases,
@@ -14,7 +13,7 @@ import {
   type CrossMediaPort,
 } from '../src/cross-media-seed.ts';
 import { createSourceRegistration, crossMediaBangumiRevision } from '../src/source-registry.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { reviewedSubjectReadbackFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 const dateProperty = 'schema:datePublished';
@@ -45,9 +44,8 @@ async function* bytes(record: ReturnType<typeof game>) {
 
 function port(commands: BatchCommand[]) {
   const metadata = sourceRecordMetadataFixture();
+  const readback = reviewedSubjectReadbackFixture();
   const ids = new Map<string, string>();
-  const types = new Map<string, string>();
-  const externalIds = new Map<string, string>();
   const receipts = new Map<string, { bytes: string; result: BatchWriteResult['results'][number] }>();
   async function send(request: BatchWriteRequest): Promise<BatchWriteResult> {
     return {
@@ -63,11 +61,12 @@ function port(commands: BatchCommand[]) {
         if (command.op === 'create') {
           const id = ids.get(owner) ?? randomUUID();
           ids.set(owner, id);
-          types.set(id, command.subject.type);
-          externalIds.set(id, command.source.external_id);
+          readback.created(command, id);
           result = { key: command.key, status: 201, value: { id, revision: 1 } };
         } else if (command.op === 'propose') {
-          result = { key: command.key, status: 201, value: { candidate: randomUUID(), revision: 1 } };
+          const candidate = randomUUID();
+          if (command.statement.property.id === 'wdt:P5732') readback.select(command, candidate);
+          result = { key: command.key, status: 201, value: { candidate, revision: 1 } };
         } else result = { key: command.key, status: 200, value: { revision: 1 } };
         receipts.set(command.key, { bytes: JSON.stringify(command), result });
         return structuredClone(result);
@@ -86,16 +85,7 @@ function port(commands: BatchCommand[]) {
       throw new Error('Game fixture has no source statistic');
     },
     async clearSourceStatistic() {},
-    async readReviewedSubject(id: string) {
-      const externalId = externalIds.get(id);
-      return {
-        subject: {
-          id,
-          type: types.get(id) ?? 'schema:Thing',
-          statements: externalId ? { 'wdt:P5732': [{ value: { type: 'value', content: externalId } }] } : {},
-        },
-      } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-    },
+    readReviewedSubject: readback.readReviewedSubject,
   };
   return fixture satisfies CrossMediaPort & {
     ids: Map<string, string>;

@@ -12,8 +12,8 @@ import {
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
-import { createSourceRegistration, crossMediaBangumiRevision } from '../src/source-registry.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from '../src/source-registry.ts';
+import { reviewedSubjectReadbackFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const targetId = 990401;
 const descriptiveUrl = 'https://catalogue.example/anime/CLANNAD?lang=ja#work';
@@ -27,7 +27,7 @@ const target = (changed = false) => ({
   type: 2,
   name: 'CLANNAD',
   infobox: `{{Infobox animanga/TVAnime
-|官方网站=https://official.example/clannad
+|官方网站=[[https://official.example/clannad|Official site]]
 |链接=
 * ${changed ? changedUrl : descriptiveUrl}
 |Copyright=${changed ? changedNotice : notice}
@@ -62,28 +62,29 @@ async function plan(directory: string, record: object) {
   return planCrossMediaSeed(tables);
 }
 
-function port(sent: BatchCommand[], identities: Map<string, string>, created: string[]): CrossMediaPort {
+function port(sent: BatchCommand[], created: string[]) {
   const metadata = sourceRecordMetadataFixture();
+  const readback = reviewedSubjectReadbackFixture();
   return {
+    ids: readback.ids,
     async batch(request) {
       sent.push(...structuredClone(request.commands));
       return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? (() => {
-                  const externalId = command.source.external_id;
-                  created.push(externalId);
-                  const id = identities.get(externalId) ?? randomUUID();
-                  identities.set(externalId, id);
-                  return { id, revision: 1 };
-                })()
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
+        results: request.commands.map((command) => {
+          if (command.op === 'create') {
+            const externalId = command.source.external_id;
+            created.push(externalId);
+            const id = readback.ids.get(externalId) ?? randomUUID();
+            readback.created(command, id);
+            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
+          }
+          if (command.op === 'propose') {
+            const candidate = randomUUID();
+            if (command.statement.property.id === 'wdt:P5732') readback.select(command, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
+          }
+          return { key: command.key, status: 201 as const, value: { revision: 1 } };
+        }),
       };
     },
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -92,10 +93,8 @@ function port(sent: BatchCommand[], identities: Map<string, string>, created: st
     },
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-    },
-  };
+    readReviewedSubject: readback.readReviewedSubject,
+  } satisfies CrossMediaPort & { ids: Map<string, string> };
 }
 
 function evidenceCommands(commands: readonly BatchCommand[]) {
@@ -123,19 +122,15 @@ test('selected-family Bangumi import proposes only cited TVAnime work evidence a
   const stateDir = await mkdtemp(join(tmpdir(), 'bangumi-work-evidence-state-'));
   const state = join(stateDir, 'state.sqlite');
   const sent: BatchCommand[] = [];
-  const identities = new Map<string, string>();
   const created: string[] = [];
-  const api = port(sent, identities, created);
+  const api = port(sent, created);
   const run = (input: Awaited<ReturnType<typeof plan>>) =>
     seedCrossMedia(input, state, api, undefined, { providers: ['bangumi'], mediaDeadlineMs: 0 });
   try {
     const selected = await plan(sourceDir, target());
     expect(selected.records.bangumi.some((row) => row.key === String(neighbor.id))).toBe(false);
 
-    const registration = createSourceRegistration('bangumi', {
-      source: crossMediaAliases.bangumi,
-      converterRevision: crossMediaBangumiRevision,
-    });
+    const registration = createSelectedFamilySourceRegistration('bangumi', crossMediaAliases.bangumi);
     const direct = registration.convert(
       { external_id: String(targetId), record_revision: null, record: target() },
       { source: crossMediaAliases.bangumi, subjectId: randomUUID() },
@@ -168,6 +163,9 @@ test('selected-family Bangumi import proposes only cited TVAnime work evidence a
 
     const first = await run(selected);
     expect(first.runs.bangumi?.status).toBe('committed');
+    const subjectId = api.ids.get(String(targetId));
+    expect(subjectId).toBeDefined();
+    expect(first.readings.find((row) => row.externalId === String(targetId))?.subject.subject.id).toBe(subjectId);
     const firstEvidence = evidenceCommands(sent);
     expect(evidenceValues(firstEvidence)).toEqual([
       { property: 'schema:copyrightNotice', value: notice },
@@ -212,7 +210,7 @@ test('selected-family Bangumi import proposes only cited TVAnime work evidence a
     ]);
     expect(refreshed.every((command) => !firstEvidence.some((previous) => previous.key === command.key))).toBe(true);
     expect(refreshed.every((command) => command.source.digest !== firstEvidence[0]!.source.digest)).toBe(true);
-    expect(identities.get(String(targetId))).toBeDefined();
+    expect(changed.readings.find((row) => row.externalId === String(targetId))?.subject.subject.id).toBe(subjectId);
   } finally {
     await rm(sourceDir, { recursive: true, force: true });
     await rm(stateDir, { recursive: true, force: true });
