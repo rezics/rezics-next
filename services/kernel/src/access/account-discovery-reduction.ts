@@ -151,117 +151,103 @@ export async function enrollAccountDiscoveryHome(
           )
         ).rows[0];
         if (!heads) throw new CommandUnavailableError('contention', input.partition);
-        const pending = (
-          await client.query<{ enqueue_revision: string }>(
-            `/* semantic.native-keyed:1:1 */
-             SELECT enqueue_revision::text FROM semantic.public_filter_privacy_pending
-             WHERE partition_no=$1 AND input_key='["domain","accounts"]'`,
-            [input.partition],
-          )
-        ).rows[0];
-        const enqueueRevision = pending?.enqueue_revision ?? '0';
-        await client.query(
-          `/* semantic.native-keyed:4:4 */
-           INSERT INTO semantic.public_filter_home_enrollment
-           (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
-            source_position,native_revision,native_claim_revision,key_digest,creation_consumer)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
-          [
-            input.partition,
-            input.bootstrap,
-            input.registration.partition,
-            input.registration.id,
-            input.readDefinition,
-            owner.epoch,
-            heads.position,
-            input.accounts ? heads.revision : null,
-            input.accounts ? heads.claim_revision : null,
-            keyDigest,
-            creationConsumer,
-          ],
-        );
-        const original = (
+        const { enqueue_revision: enqueueRevision, original } = (
           await client.query<{
-            owner_epoch: number;
-            source_position: string;
-            native_revision: string | null;
-            native_claim_revision: string | null;
-            key_after: string | null;
-            complete: boolean;
-            registration_partition: number;
-            registration: string;
-            read_definition: string;
-            creation_position: string | null;
-            native_enqueue_revision: string | null;
-            key_digest: string | null;
-            receipt: string | null;
-            creation_consumer: string | null;
+            enqueue_revision: string;
+            original: {
+              owner_epoch: number;
+              source_position: string;
+              native_revision: string | null;
+              native_claim_revision: string | null;
+              key_after: string | null;
+              complete: boolean;
+              registration_partition: number;
+              registration: string;
+              read_definition: string;
+              creation_position: string | null;
+              native_enqueue_revision: string | null;
+              key_digest: string | null;
+              receipt: string | null;
+              creation_consumer: string | null;
+            } | null;
           }>(
-            `/* semantic.native-keyed:1:1 */
-             SELECT owner_epoch,source_position::text,native_revision::text,native_claim_revision::text,
-           key_after,complete,registration_partition,registration,read_definition::text,
-           creation_position::text,native_enqueue_revision::text,key_digest,receipt,creation_consumer
-         FROM semantic.public_filter_home_enrollment WHERE (partition_no,bootstrap)=($1,$2) FOR UPDATE`,
+            `/* semantic.native-keyed:2:2 */
+             SELECT coalesce((
+               SELECT enqueue_revision::text FROM semantic.public_filter_privacy_pending
+               WHERE partition_no=$1 AND input_key='["domain","accounts"]'
+             ),'0') AS enqueue_revision, (
+               SELECT row_to_json(retained) FROM (
+                 SELECT owner_epoch,source_position::text,native_revision::text,native_claim_revision::text,
+                   key_after,complete,registration_partition,registration,read_definition::text,
+                   creation_position::text,native_enqueue_revision::text,key_digest,receipt,creation_consumer
+                 FROM semantic.public_filter_home_enrollment
+                 WHERE (partition_no,bootstrap)=($1,$2) FOR UPDATE
+               ) retained
+             ) AS original`,
             [input.partition, input.bootstrap],
           )
-        ).rows[0];
+        ).rows[0]!;
         if (
-          !original ||
-          original.owner_epoch !== owner.epoch ||
-          original.registration_partition !== input.registration.partition ||
-          original.registration !== input.registration.id ||
-          original.read_definition !== input.readDefinition ||
-          original.key_digest !== keyDigest ||
-          original.creation_consumer !== creationConsumer ||
-          (original.complete &&
-            (original.receipt === null ||
-              original.creation_position === null ||
-              original.native_enqueue_revision === null)) ||
-          (original.native_revision !== null) !== input.accounts
+          original &&
+          (original.owner_epoch !== owner.epoch ||
+            original.registration_partition !== input.registration.partition ||
+            original.registration !== input.registration.id ||
+            original.read_definition !== input.readDefinition ||
+            original.key_digest !== keyDigest ||
+            original.creation_consumer !== creationConsumer ||
+            (original.complete &&
+              (original.receipt === null ||
+                original.creation_position === null ||
+                original.native_enqueue_revision === null)) ||
+            (original.native_revision !== null) !== input.accounts)
         )
           throw new CommandUnavailableError('contention', input.partition);
         // Install the pin before admitting the original baseline, under the same
         // native writer locks. A legacy sealed row without this pin cannot be
         // repaired by installing one later: its earlier log may already be gone.
-        if (!original.complete) {
-          await client.query(
-            `/* semantic.native-keyed:2:2 */
+        // An inserted pin is held by this transaction. Only a retained pin needs a locking read.
+        type Pin = { epoch: number | null; position: string };
+        const createdPin = original?.complete
+          ? undefined
+          : (
+              await client.query<Pin>(
+                `/* semantic.native-keyed:2:2 */
              INSERT INTO core.consumer_checkpoint(partition_no,consumer)
-           VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-            [input.partition, creationConsumer],
-          );
-        }
-        const pin = (
-          await client.query<{ epoch: number | null; position: string }>(
-            `/* semantic.native-keyed:1:1 */
+             VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING epoch,position::text`,
+                [input.partition, creationConsumer],
+              )
+            ).rows[0];
+        const pin =
+          createdPin ??
+          (
+            await client.query<Pin>(
+              `/* semantic.native-keyed:1:1 */
              SELECT epoch,position::text FROM core.consumer_checkpoint
          WHERE (partition_no,consumer)=($1,$2) FOR SHARE`,
-            [input.partition, creationConsumer],
-          )
-        ).rows[0];
+              [input.partition, creationConsumer],
+            )
+          ).rows[0];
         if (
           !pin ||
           (pin.epoch !== null && pin.epoch !== owner.epoch) ||
-          BigInt(pin.position) > BigInt(original.creation_position ?? owner.position)
+          BigInt(pin.position) > BigInt(original?.creation_position ?? owner.position)
         )
           throw new CommandUnavailableError('contention', input.partition);
         // Count the key edge and its enrollment FK for each admitted key. The
         // remaining turn budget covers the compiler closure and native controls.
+        const keyAfter = original?.key_after ?? null;
         let low = 0,
           high = keys.length;
         while (low < high) {
           const middle = (low + high) >>> 1;
-          if (
-            original.key_after !== null &&
-            Buffer.compare(Buffer.from(keys[middle]!), Buffer.from(original.key_after)) <= 0
-          )
+          if (keyAfter !== null && Buffer.compare(Buffer.from(keys[middle]!), Buffer.from(keyAfter)) <= 0)
             low = middle + 1;
           else high = middle;
         }
         const admitted = keys.slice(low, low + input.keyLimit);
         const complete = low + admitted.length === keys.length;
         const receipt =
-          original.receipt ??
+          original?.receipt ??
           (complete
             ? createHash('sha256')
                 .update(
@@ -282,7 +268,7 @@ export async function enrollAccountDiscoveryHome(
                 )
                 .digest('hex')
             : null);
-        if (!original.complete) {
+        if (!original?.complete) {
           // Allocate under the Source home lock, shared with fanout window capture.
           // A later enrollment must stay outside that window even when its key
           // sorts before the retained registration frontier.
@@ -295,6 +281,39 @@ export async function enrollAccountDiscoveryHome(
             )
           ).rows[0];
           if (!generation) throw new CommandUnavailableError('fenced', input.partition);
+          // The writer locks serialize enrollment for this home. Install a new
+          // home with its final page state before inserting its compiler edges.
+          if (!original) {
+            const inserted = await client.query(
+              `/* semantic.native-keyed:5:5 */
+               INSERT INTO semantic.public_filter_home_enrollment
+                 (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
+                  source_position,native_revision,native_claim_revision,key_digest,creation_consumer,
+                  key_after,complete,creation_position,native_enqueue_revision,receipt)
+               SELECT $1,$2,$3,$4,$5::text::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+               WHERE $5::text::uuid::text=$5::text
+               ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
+              [
+                input.partition,
+                input.bootstrap,
+                input.registration.partition,
+                input.registration.id,
+                input.readDefinition,
+                owner.epoch,
+                heads.position,
+                input.accounts ? heads.revision : null,
+                input.accounts ? heads.claim_revision : null,
+                keyDigest,
+                creationConsumer,
+                admitted.at(-1) ?? keyAfter,
+                complete,
+                complete ? owner.position : null,
+                complete ? enqueueRevision : null,
+                receipt,
+              ],
+            );
+            if (inserted.rowCount !== 1) throw new CommandUnavailableError('contention', input.partition);
+          }
           await client.query(
             `/* semantic.native-keyed:${2 * admitted.length}:${2 * admitted.length}:${admitted.length} */
              INSERT INTO semantic.public_filter_key_enrollment
@@ -310,8 +329,9 @@ export async function enrollAccountDiscoveryHome(
               generation.enrollment_generation,
             ],
           );
-          await client.query(
-            `/* semantic.native-keyed:1:1 */
+          if (original) {
+            const advanced = await client.query(
+              `/* semantic.native-keyed:1:1 */
              UPDATE semantic.public_filter_home_enrollment SET key_after=$3,complete=$4,
              source_position=CASE WHEN $4 THEN $5::bigint ELSE source_position END,
              native_revision=CASE WHEN $4 THEN $6::bigint ELSE native_revision END,
@@ -320,35 +340,37 @@ export async function enrollAccountDiscoveryHome(
              native_enqueue_revision=CASE WHEN $4 THEN $9::bigint ELSE native_enqueue_revision END,
              receipt=$10
            WHERE (partition_no,bootstrap)=($1,$2) AND NOT complete`,
-            [
-              input.partition,
-              input.bootstrap,
-              admitted.at(-1) ?? original.key_after,
-              complete,
-              heads.position,
-              input.accounts ? heads.revision : null,
-              input.accounts ? heads.claim_revision : null,
-              owner.position,
-              enqueueRevision,
-              receipt,
-            ],
-          );
+              [
+                input.partition,
+                input.bootstrap,
+                admitted.at(-1) ?? keyAfter,
+                complete,
+                heads.position,
+                input.accounts ? heads.revision : null,
+                input.accounts ? heads.claim_revision : null,
+                owner.position,
+                enqueueRevision,
+                receipt,
+              ],
+            );
+            if (advanced.rowCount !== 1) throw new CommandUnavailableError('contention', input.partition);
+          }
         }
         requireAccessDeadline(context.deadline);
         await client.query('COMMIT');
         return Object.freeze({
           partition: input.partition,
-          epoch: original.owner_epoch,
-          revision: BigInt(original.complete ? (original.native_revision ?? heads.revision) : heads.revision),
+          epoch: owner.epoch,
+          revision: BigInt(original?.complete ? (original.native_revision ?? heads.revision) : heads.revision),
           claimRevision: BigInt(
-            original.complete ? (original.native_claim_revision ?? heads.claim_revision) : heads.claim_revision,
+            original?.complete ? (original.native_claim_revision ?? heads.claim_revision) : heads.claim_revision,
           ),
-          sourcePosition: BigInt(original.complete ? original.source_position : heads.position),
-          creationPosition: BigInt(original.complete ? original.creation_position! : owner.position),
-          enqueueRevision: BigInt(original.complete ? original.native_enqueue_revision! : enqueueRevision),
+          sourcePosition: BigInt(original?.complete ? original.source_position : heads.position),
+          creationPosition: BigInt(original?.complete ? original.creation_position! : owner.position),
+          enqueueRevision: BigInt(original?.complete ? original.native_enqueue_revision! : enqueueRevision),
           keyDigest,
           receipt,
-          complete: original.complete || complete,
+          complete: original?.complete || complete,
         });
       } catch (error) {
         try {
