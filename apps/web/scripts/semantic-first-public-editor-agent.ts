@@ -112,10 +112,14 @@ try {
         client.release();
       }
 
-      // This disposable fixture owns the same command adapters as a native Kernel process.
+      // This disposable fixture owns the same command adapters and receipt keys as the native Kernel.
       stage = 'native-command-composition';
-      const { installNativeHistoryPreload } = await import('../../../services/kernel/src/composition/preload.ts');
+      const [{ installNativeHistoryPreload }, { configureReceiptKeys, readReceiptKeyRing }] = await Promise.all([
+        import('../../../services/kernel/src/composition/preload.ts'),
+        import('../../../services/kernel/src/command/receipt-key.ts'),
+      ]);
       installNativeHistoryPreload();
+      configureReceiptKeys(pool, readReceiptKeyRing(env));
 
       stage = 'one-account-synchronization';
       await synchronizeAccountAgent(pool, actor.accountId);
