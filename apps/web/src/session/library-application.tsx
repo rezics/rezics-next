@@ -49,6 +49,9 @@ function recoveryObservation(client: QueryClient | undefined): RecoveryObserver 
     const viewer = client && viewerExposureLifetime(client).getSnapshot();
     const scopedKey = viewerExposureQuery(viewer?.state === 'signed-in' ? viewer.observation : undefined).queryKey;
     const scoped = client?.getQueryState(scopedKey);
+    const initializing = [exposure, scoped].some(
+      (state) => state?.status === 'pending' && state.fetchStatus !== 'idle',
+    );
     const next = [
       client?.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true }),
       session?.status,
@@ -63,6 +66,7 @@ function recoveryObservation(client: QueryClient | undefined): RecoveryObserver 
       scoped?.status,
       scoped?.dataUpdateCount,
       scoped?.data,
+      initializing,
     ];
     if (next.some((value, index) => value !== signature[index])) {
       signature = next;
@@ -71,6 +75,7 @@ function recoveryObservation(client: QueryClient | undefined): RecoveryObserver 
         subject: data?.state === 'signed-in' ? (data.subject ?? null) : null,
         csrfToken: data?.state === 'signed-in' ? data.csrfToken : null,
         identity: {},
+        initializing,
       };
     }
     return snapshot;

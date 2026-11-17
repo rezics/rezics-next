@@ -46,6 +46,10 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   const setupDeadline = Date.now() + 600_000;
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
+  await writeArchiveProvenance(
+    { outcome: 'unreached', phase: 'before-progress' },
+    resolve(evidence, 'progress-boundary.json'),
+  );
   await prepareNativeAuthMessages();
   await prepareNativeWebSearch('library-archive');
   stack = await startNativeWebStack({

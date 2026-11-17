@@ -12,7 +12,13 @@ export type LibrarySession = {
 
 export type LibraryOperation = Parameters<WorkspaceAdmission['allowed']>[0];
 
-export type RecoveryObservation = { subject: string | null; csrfToken: string | null; identity: object };
+export type RecoveryObservation = {
+  subject: string | null;
+  csrfToken: string | null;
+  identity: object;
+  /** An observed producer's first result will replace this observation before a sender can be retained. */
+  initializing?: boolean;
+};
 export type RecoveryObserver = {
   read: () => RecoveryObservation;
   subscribe: (notify: () => void) => () => void;

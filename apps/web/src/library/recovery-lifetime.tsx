@@ -46,7 +46,7 @@ export function useRecoveryLifetime(address: string, locale: string) {
       },
       current: () => {
         if (observer.read().identity !== observation.identity) retire();
-        return active && mounted && !!observation.subject && !!observation.csrfToken;
+        return active && mounted && !observation.initializing && !!observation.subject && !!observation.csrfToken;
       },
       onRetire: (listener: () => void) => {
         if (!active) listener();
