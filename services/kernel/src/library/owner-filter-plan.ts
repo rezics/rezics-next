@@ -20,10 +20,11 @@ import type { RelationFacetMatch } from '../search/source.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
-import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
+import { decodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { NativeOwnerFilterCeilings } from './owner-filter-native-binding.ts';
+import { listMemberPage } from './member-viewer-currentness.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import {
   createOrdinaryCollectionPageSource,
@@ -439,26 +440,24 @@ async function readWorkingOwnerFilterPage(
     if (disclosed.length !== members.length) throw unavailable();
   }
   requireAccessDeadline(input.deadline);
-  return {
-    members: disclosed,
-    next: exhausted
+  return listMemberPage(
+    disclosed,
+    deps.tokens,
+    cursorBinding,
+    exhausted
       ? null
-      : await encodeListCursor(
-          deps.tokens,
-          cursorBinding,
-          {
-            epoch: current.observation.stamp.epoch,
-            after: [
-              current.observation.basis.digest,
-              binding.scope.captureId,
-              binding.scope.committedRevision.toString(),
-              native.binding(binding)!.ownerFence ?? '',
-              after!,
-            ],
-          },
-          (deps.clock ?? systemClock)(),
-        ),
-  };
+      : {
+          epoch: current.observation.stamp.epoch,
+          after: [
+            current.observation.basis.digest,
+            binding.scope.captureId,
+            binding.scope.committedRevision.toString(),
+            native.binding(binding)!.ownerFence ?? '',
+            after!,
+          ],
+        },
+    deps.clock ?? systemClock,
+  );
 }
 
 async function readOwnerFilterPageNative(

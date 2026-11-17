@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { routeOf } from '../../src/route/route.ts';
-import { assertMemberPageCurrent } from '../../src/library/member-viewer-currentness.ts';
+import { testTokens } from '../support/test-kernel.ts';
+import { assertMemberPageCurrent, listMemberPage } from '../../src/library/member-viewer-currentness.ts';
 import { assertShelfPageCurrent } from '../../src/library/shelf-viewer-currentness.ts';
 import { createListPresentationFixture } from '../semantic/support/list-presentation-fixture.ts';
 
@@ -59,7 +60,7 @@ function interleaveViewerEntries(mutate: () => Promise<unknown>) {
   };
 }
 
-test('member currentness preserves occurrence identity and refuses changed or unavailable pages', () => {
+test('member currentness preserves occurrence identity and refuses changed or unavailable pages', async () => {
   const observed = {
     members: [
       { id: 'first', subjectId: 'same', note: 'first note', addedAt: '2026-01-01', orderKey: 'a' },
@@ -67,23 +68,58 @@ test('member currentness preserves occurrence identity and refuses changed or un
     ],
     next: 'opaque-first-cursor',
   };
-  expect(() =>
-    assertMemberPageCurrent(
-      observed,
-      {
-        ...observed,
-        members: observed.members.map((member) => ({ ...member, subject: { id: member.subjectId }, facts: {} })),
-      },
-      { listFactsAttached: true },
-    ),
-  ).not.toThrow();
-  expect(() =>
+  await assertMemberPageCurrent(
+    observed,
+    {
+      ...observed,
+      members: observed.members.map((member) => ({ ...member, subject: { id: member.subjectId }, facts: {} })),
+    },
+    { listFactsAttached: true },
+  );
+  await expect(
     assertMemberPageCurrent(observed, {
       ...observed,
       members: [{ ...observed.members[0]!, note: 'changed' }, observed.members[1]!],
     }),
-  ).toThrow();
-  expect(() => assertMemberPageCurrent(observed, { preparing: true })).toThrow();
+  ).rejects.toMatchObject({ code: 'stale_cursor' });
+  await expect(assertMemberPageCurrent(observed, { preparing: true })).rejects.toMatchObject({
+    code: 'semantic_not_ready',
+  });
+});
+
+test('member reread authenticates the original continuation against its current private frontier', async () => {
+  const tokens = testTokens();
+  const binding = {
+    route: 'GET /v1/collections/{collectionId}/members',
+    viewer: randomUUID(),
+    query: { collectionId: randomUUID(), query: 'private-filter-digest', limit: 1, sort: 'id' },
+  };
+  const members = [{ kind: 'dynamic', subjectId: randomUUID() }];
+  const position = { epoch: 1, after: ['basis', 'capture', 'revision', 'owner-fence', members[0]!.subjectId] };
+  const now = new Date();
+  const read = (scope = binding, frontier = position, at = now) =>
+    listMemberPage(members, tokens, scope, frontier, () => at);
+  const observed = await read();
+  const current = await read();
+  expect(observed.next).toBeString();
+  expect(current.next).toBeString();
+  expect(current.next).not.toBe(observed.next);
+  await assertMemberPageCurrent(observed, current);
+
+  const stale = { code: 'stale_cursor' };
+  const changed = await read(binding, { ...position, after: ['replacement-basis', ...position.after.slice(1)] });
+  await expect(assertMemberPageCurrent(observed, changed)).rejects.toMatchObject(stale);
+  const advanced = await read(binding, { ...position, after: [...position.after.slice(0, -1), randomUUID()] });
+  await expect(assertMemberPageCurrent(observed, advanced)).rejects.toMatchObject(stale);
+  const foreign = await read({ ...binding, viewer: randomUUID() });
+  await expect(assertMemberPageCurrent(foreign, current)).rejects.toMatchObject(stale);
+  const otherFilter = await read({ ...binding, query: { ...binding.query, query: 'different-digest' } });
+  await expect(assertMemberPageCurrent(otherFilter, current)).rejects.toMatchObject(stale);
+  await expect(assertMemberPageCurrent({ members, next: null }, current)).rejects.toMatchObject(stale);
+  await expect(assertMemberPageCurrent(observed, { members, next: null })).rejects.toMatchObject(stale);
+  await expect(assertMemberPageCurrent({ members, next: 'forged' }, current)).rejects.toMatchObject(stale);
+  const expired = await read(binding, position, new Date(now.getTime() - 16 * 60_000));
+  await expect(assertMemberPageCurrent(expired, current)).rejects.toMatchObject(stale);
 });
 
 test.serial(

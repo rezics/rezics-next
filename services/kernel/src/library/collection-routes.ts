@@ -1368,7 +1368,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         if ('members' in result && query.view === 'FULL') {
           const admitted = result;
           result = await read().withViewerFacts(actor, result, job.deadline, async () => {
-            assertMemberPageCurrent(admitted, await sourcePage(), { listFactsAttached });
+            await assertMemberPageCurrent(admitted, await sourcePage(), { listFactsAttached });
             await finalSource?.();
           });
         }

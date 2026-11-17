@@ -8,11 +8,12 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
+import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
+import { listMemberPage } from './member-viewer-currentness.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { ordinaryCollectionPagePlan, ordinaryPageWorkDimensions } from './ordinary-read-bounds.ts';
 
@@ -258,21 +259,18 @@ export async function readCollectionSourceMembers(
           )
         : shown;
     if (disclosed.length !== shown.length) throw new ProblemError('dependency_unavailable');
-    return {
-      members: disclosed,
-      next:
-        members.length > input.limit
-          ? await encodeListCursor(
-              deps.tokens,
-              binding,
-              {
-                epoch: observed.stamp.epoch,
-                after: [observed.incarnation, observed.basis.digest, version, shown.at(-1)!.subjectId],
-              },
-              clock(),
-            )
-          : null,
-    };
+    return await listMemberPage(
+      disclosed,
+      deps.tokens,
+      binding,
+      members.length > input.limit
+        ? {
+            epoch: observed.stamp.epoch,
+            after: [observed.incarnation, observed.basis.digest, version, shown.at(-1)!.subjectId],
+          }
+        : null,
+      clock,
+    );
   } finally {
     releaseOperationalTime(at);
   }

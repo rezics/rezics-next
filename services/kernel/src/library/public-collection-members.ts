@@ -10,9 +10,10 @@ import {
   type PublicOutputOriginalKey,
 } from '../semantic/identity-public-output-capture.ts';
 import { publicOutputReadWork } from '../semantic/identity-public-output-work.ts';
-import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
+import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
+import { listMemberPage } from './member-viewer-currentness.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import { authorizeNativeCollectionMetadata, readNativeCollectionMetadata } from './collection-source-native.ts';
@@ -255,17 +256,16 @@ export async function readPublicCollectionMembers(
     );
     if (result.length !== shown.length) throw new ProblemError('semantic_not_ready');
   } else await revalidate();
-  const next =
+  return listMemberPage(
+    [...result],
+    deps.tokens,
+    binding,
     members.length > input.limit
-      ? await encodeListCursor(
-          deps.tokens,
-          binding,
-          {
-            epoch: first.epoch,
-            after: [first.generation, first.digest, input.sourceGeneration, shown.at(-1)!.subjectId],
-          },
-          clock(),
-        )
-      : null;
-  return { members: [...result], next };
+      ? {
+          epoch: first.epoch,
+          after: [first.generation, first.digest, input.sourceGeneration, shown.at(-1)!.subjectId],
+        }
+      : null,
+    clock,
+  );
 }
