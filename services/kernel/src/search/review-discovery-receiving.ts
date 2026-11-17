@@ -391,7 +391,7 @@ export function createReviewDiscoveryReceiving(options: {
         deadline,
         (owned) => {
           publishing = onSession(pool, owned, (session) =>
-            withDiscoveryTarget(session, search, target, apply, false, projectionContext),
+            withDiscoveryTarget(session, search, target, apply, { context: projectionContext }),
           );
           return publishing;
         },
@@ -463,6 +463,7 @@ export function createReviewDiscoveryReceiving(options: {
   return {
     step,
     next,
-    status: (home: number, context?: ReviewReceivingContext) => readReviewDiscoveryReceiving(pool, target, home, context),
+    status: (home: number, context?: ReviewReceivingContext) =>
+      readReviewDiscoveryReceiving(pool, target, home, context),
   };
 }

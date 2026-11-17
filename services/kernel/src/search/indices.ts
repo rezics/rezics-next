@@ -139,11 +139,7 @@ export async function discoveryIndexUuid(search: OpenSearch, index: string, work
 
 export type DiscoveryPhysicalIdentity = Readonly<{ uuid: string; incarnation: string | null }>;
 
-/** Read both native identity components from one physical index observation. */
-export async function readDiscoveryPhysicalIdentity(
-  search: OpenSearch,
-  index: string,
-): Promise<DiscoveryPhysicalIdentity | null> {
+async function readDiscoveryPhysicalIndex(search: OpenSearch, index: string) {
   let response: { status: number; body: unknown };
   try {
     response = await search.request<unknown>('GET', `/${index}`);
@@ -163,15 +159,29 @@ export async function readDiscoveryPhysicalIdentity(
   return {
     uuid: settings.uuid,
     incarnation: record(mapping) && typeof mapping.incarnation === 'string' ? mapping.incarnation : null,
+    mappings: entry.mappings,
   };
+}
+
+/** Read both native identity components from one physical index observation. */
+export async function readDiscoveryPhysicalIdentity(
+  search: OpenSearch,
+  index: string,
+): Promise<DiscoveryPhysicalIdentity | null> {
+  const physical = await readDiscoveryPhysicalIndex(search, index);
+  return physical && { uuid: physical.uuid, incarnation: physical.incarnation };
 }
 
 export async function discoveryPhysicalTargetMatches(
   search: OpenSearch,
   target: Readonly<{ prefix: string; generation: number; uuid: string; incarnation: string }>,
+  requireCanonicalMapping = false,
 ): Promise<boolean> {
-  const physical = await readDiscoveryPhysicalIdentity(search, discoveryIndexName(target.prefix, target.generation));
-  return physical?.uuid === target.uuid && physical.incarnation === target.incarnation;
+  const physical = await readDiscoveryPhysicalIndex(search, discoveryIndexName(target.prefix, target.generation));
+  if (physical?.uuid !== target.uuid || physical.incarnation !== target.incarnation) return false;
+  if (requireCanonicalMapping && !hasDiscoveryDocumentFormat(physical.mappings))
+    throw new SearchUnavailableError('Discovery physical mapping is not canonical');
+  return true;
 }
 
 async function createIndex(

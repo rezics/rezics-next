@@ -1687,10 +1687,9 @@ function reconciliationEmptyIndexProbe(
   const coreScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const metadataScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const guardedEmpty = (scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) =>
-    withDiscoveryTarget(pool, search, target, async (_client, index) => {
-      const empty = await discoveryScopesEmpty(search, target, scopes);
-      if (empty) await requireDiscoveryIndexFormat(search, index);
-      return empty;
+    withDiscoveryTarget(pool, search, target, () => discoveryScopesEmpty(search, target, scopes), {
+      // The post-search physical observation also carries the complete mapping.
+      requireCanonicalMapping: (empty) => empty,
     });
   async function optionalEmpty(scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) {
     try {

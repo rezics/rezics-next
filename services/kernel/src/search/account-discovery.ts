@@ -440,9 +440,13 @@ export async function withDiscoveryTarget<T>(
   search: OpenSearch,
   target: DiscoveryTarget,
   work: (client: PoolClient, index: string) => Promise<T>,
-  purge = false,
-  context?: DiscoveryProjectionContext,
+  options: {
+    purge?: boolean;
+    context?: DiscoveryProjectionContext;
+    requireCanonicalMapping?: (result: T) => boolean;
+  } = {},
 ): Promise<T> {
+  const { purge, context, requireCanonicalMapping } = options;
   const index = discoveryIndexName(target.prefix, target.generation);
   const transport = projectionSearch(search, context);
   return withConnection(pool, async (client) => {
@@ -467,7 +471,8 @@ export async function withDiscoveryTarget<T>(
       if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
       if (context) projectionRemaining(context);
       const value = await work(client, index);
-      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+      if (!(await discoveryPhysicalTargetMatches(transport, target, requireCanonicalMapping?.(value))))
+        throw new DiscoveryPhysicalTargetChangedError();
       return value;
     } finally {
       try {
@@ -1105,7 +1110,7 @@ export async function eraseDiscoveryAccount(
         const cleared = await search.request('POST', `/${index}/_cache/clear`);
         validateRefreshResponse(cleared.status, cleared.body);
       },
-      true,
+      { purge: true },
     );
     await withConnection(pool, (client) =>
       client.query(

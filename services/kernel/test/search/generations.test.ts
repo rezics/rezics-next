@@ -1,9 +1,13 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import { withDiscoveryTarget } from '../../src/search/account-discovery.ts';
 import { RebuildError, rebuildSubjects } from '../../src/search/generations.ts';
 import {
+  createDiscoveryIndex,
   createSubjectIndex,
+  discoveryIndexName,
+  readDiscoveryPhysicalIdentity,
   MAX_SUBJECT_GENERATIONS,
   readSubjectSortFormat,
   subjectAlias,
@@ -445,3 +449,46 @@ test('native mapping receipts bind exactly one generation and malformed receipts
   expect(await readSubjectSortFormat(search, prefix, 3)).toBeNull();
   await expect(readSubjectSortFormat(search, prefix, 77)).rejects.toBeInstanceOf(SearchUnavailableError);
 }, 120_000);
+
+test('the post-effect Discovery identity read also requires the canonical mapping', async () => {
+  const prefix = `format-${crypto.randomUUID().slice(0, 8)}-`;
+  const incarnation = crypto.randomUUID();
+  const index = discoveryIndexName(prefix, 1);
+  await createDiscoveryIndex(search, prefix, 1, incarnation);
+  try {
+    const physical = await readDiscoveryPhysicalIdentity(search, index);
+    const target = { prefix, generation: 1, incarnation, uuid: physical!.uuid };
+    await admin.query(
+      `INSERT INTO search.discovery_generation(prefix,generation,index_uuid,incarnation,kinds,state)
+       VALUES ($1,1,$2,$3,ARRAY['account'],'reconciling')`,
+      [prefix, target.uuid, incarnation],
+    );
+    const requests: string[] = [];
+    const observed: OpenSearch = {
+      ...search,
+      request<T>(...args: Parameters<OpenSearch['request']>) {
+        requests.push(args[1]);
+        return search.request<T>(...args);
+      },
+    };
+    const options = { requireCanonicalMapping: (empty: boolean) => empty };
+    expect(await withDiscoveryTarget(pool, observed, target, async () => true, options)).toBe(true);
+    await expect(
+      withDiscoveryTarget(
+        pool,
+        observed,
+        target,
+        async () => {
+          await search.request('PUT', `/${index}/_mapping`, { _meta: { incarnation } });
+          return true;
+        },
+        options,
+      ),
+    ).rejects.toThrow('Discovery physical mapping is not canonical');
+    expect(await withDiscoveryTarget(pool, observed, target, async () => false, options)).toBe(false);
+    expect(requests).toEqual(Array(6).fill(`/${index}`));
+  } finally {
+    await admin.query('DELETE FROM search.discovery_generation WHERE prefix=$1', [prefix]);
+    await search.request('DELETE', `/${index}`);
+  }
+});
