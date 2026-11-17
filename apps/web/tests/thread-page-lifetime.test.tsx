@@ -704,20 +704,42 @@ test('signed-in page and bounded personal data compose, including a null-CSRF re
   }
 });
 
-test('the original anonymous page remains usable when the browser prepares a session for personal reads', async () => {
+test('a public thread rereads reply advice for the signed-in browser viewer', async () => {
+  const { authoredReadingPage } = await import('../src/kernel/fake/thread-reading-page');
   const threadId = id(125);
   const page = await mountRoute({ threadId, mode: 'anonymous', session: signedOut });
   try {
-    await page.settlePage(0, pageFor(threadId, { privateRead: false, body: 'Public page before session preparation' }));
+    const publicPage = pageFor(threadId, { body: 'Public page before session preparation' });
+    publicPage.composed = authoredReadingPage(publicPage.thread);
+    await page.settlePage(0, publicPage);
     expect(page.host.textContent).toContain('Public page before session preparation');
+    expect(page.host.querySelector('input[name="idempotency_key"]')).toBeNull();
     await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn()));
     expect(page.host.textContent).toContain('Public page before session preparation');
+    await until(() => pageReads.length === 2, 'the account reading page');
+    expect(pageReads[1]!.data).toMatchObject({
+      id: threadId,
+      credentialMode: 'session',
+      expectedReaderSubject: viewerId,
+    });
+    expect(personalReads).toHaveLength(0);
+    await page.settlePage(1, {
+      ...publicPage,
+      viewerId,
+      composed: {
+        ...publicPage.composed,
+        viewer: { kind: 'account', id: viewerId },
+        currentness: { ...publicPage.composed.currentness, actions: 'current' },
+        actions: { state: 'current', retryable: false, references: [], reply: { state: 'available' } },
+      },
+    });
     await until(() => personalReads.length >= 1, 'the personal read after session preparation');
     expect(personalReads).toHaveLength(1);
-    expect(pageReads).toHaveLength(1);
     await page.settlePersonal(0, personalFor(threadId, id(41)));
     expect(page.host.querySelector('input[name="idempotency_key"]')).not.toBeNull();
+    expect(page.host.querySelector<HTMLButtonElement>('button[data-slot="feed-reply-action"]')?.disabled).toBe(false);
     expect(page.host.textContent).toContain('Public page before session preparation');
+    expect(pageReads).toHaveLength(2);
   } finally {
     await page.dispose();
   }
