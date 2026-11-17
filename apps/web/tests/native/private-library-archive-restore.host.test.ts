@@ -10,6 +10,7 @@ import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
 import { archiveProgressOperation } from './archive-progress-observation.ts';
+import { archiveLabelServerReply, type ArchiveLabelIdentity } from './archive-label-observation.ts';
 
 let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
@@ -56,6 +57,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
     observeBookSearchPreparation: !entryOnly,
     observeArchiveEntry: true,
     observeArchiveProgress: true,
+    observePersonalAccess: true,
   });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
@@ -475,6 +477,44 @@ function observeArchiveServerPosts(page: Page, responses: number[], inspect?: (r
   };
   page.on('response', observe);
   return () => page.off('response', observe);
+}
+
+function observeArchiveLabelServerReplies(page: Page) {
+  const replies: NonNullable<ArchiveLabelIdentity>[] = [];
+  const pending = new Set<Promise<void>>();
+  let unreadable = 0;
+  let seen = 0;
+  const origin = new URL(page.url()).origin;
+  const observe = (response: Response) => {
+    const url = new URL(response.url());
+    if (
+      seen >= 8 ||
+      url.origin !== origin ||
+      !url.pathname.startsWith('/_serverFn/') ||
+      response.request().method() !== 'POST'
+    )
+      return;
+    seen++;
+    const task = (async () => {
+      try {
+        const identity = await archiveLabelServerReply(await response.json());
+        if (identity && replies.length < 8) replies.push(identity);
+      } catch {
+        unreadable++;
+      }
+    })();
+    pending.add(task);
+    void task.finally(() => pending.delete(task));
+  };
+  page.on('response', observe);
+  return async () => {
+    page.off('response', observe);
+    const drained = await settledWithin(
+      Promise.allSettled(pending).then(() => true),
+      2_000,
+    );
+    return { replies, unreadable, drained: drained === true };
+  };
 }
 
 type EntryOrdinals = Readonly<{ entries: number; labels: number }>;
@@ -1049,6 +1089,7 @@ async function restoreOwnerLibrary() {
       exact: true,
     })
     .check();
+  const finishLabelReplies = observeArchiveLabelServerReplies(page);
   await page.getByRole('button', { name: await message('en', 'library_archive_entry_apply'), exact: true }).click();
   const results = page.getByRole('region', { name: await message('en', 'library_archive_results_step'), exact: true });
   const labelResult = results
@@ -1110,6 +1151,74 @@ async function restoreOwnerLibrary() {
     label?: { id?: unknown; name?: unknown; revision?: unknown };
   } | null;
   const { labels: currentLabels, next } = await readOwnerLabelPage(prepared.labelName);
+  const pointResponse = await stack.kernel(
+    `/v1/libraryLabelAssignments?${new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' })}`,
+    { signal: AbortSignal.timeout(2_000) },
+    'alice',
+  );
+  const point = pointResponse.status === 200 ? ((await pointResponse.json()) as { label?: { id?: string } }) : null;
+  const bff = await finishLabelReplies();
+  const observed = stack.kernelRequests();
+  const nativeCurrent = observed.findLast(
+    ({ fixtureRequest, method, url }) =>
+      !fixtureRequest && method === 'GET' && url.startsWith('/v1/libraryLabelAssignments?'),
+  );
+  const nativeResult = observed.findLast(
+    ({ fixtureRequest, method, url }) => fixtureRequest && method === 'GET' && url === resultPath,
+  );
+  const nativePrefix = observed.findLast(
+    ({ fixtureRequest, method, url }) =>
+      fixtureRequest &&
+      method === 'GET' &&
+      url.startsWith('/v1/libraryLabels?') &&
+      new URL(url, stack.kernelOrigin).searchParams.get('q') === prepared.labelName,
+  );
+  const currentRequestId = nativeCurrent
+    ? new URL(nativeCurrent.url, stack.kernelOrigin).searchParams.get('labelId')
+    : null;
+  const nativeApplyId = applyRequest.archiveLabel?.labels.find((row) => row.ordinal === labelOrdinal)?.labelId;
+  const nativeResultId = nativeResult?.archiveLabel?.labels.find((row) => row.ordinal === labelOrdinal)?.labelId;
+  const bffApplied = bff.replies.findLast((row) => row.kind === 'applied');
+  const bffApplyId = bffApplied?.labels.find((row) => row.ordinal === labelOrdinal)?.labelId;
+  const bffCurrentId = bff.replies.findLast((row) => row.kind === 'label')?.labelId;
+  const identity = {
+    applyOwnerMatches: applyRequest.access?.authenticated
+      ? applyRequest.access.actorId === prepared.alice.accountId
+      : null,
+    resultOwnerMatches: nativeResult?.access?.authenticated
+      ? nativeResult.access.actorId === prepared.alice.accountId
+      : null,
+    currentOwnerMatches: nativeCurrent?.access?.authenticated
+      ? nativeCurrent.access.actorId === prepared.alice.accountId
+      : null,
+    prefixOwnerMatches: nativePrefix?.access?.authenticated
+      ? nativePrefix.access.actorId === prepared.alice.accountId
+      : null,
+    nativeApplyObserved: typeof nativeApplyId === 'string',
+    nativeApplyMatchesResults: nativeApplyId === restoredLabelId,
+    nativeResultObserved: typeof nativeResultId === 'string',
+    resultTransportMatchesNative: nativeResultId === restoredLabelId,
+    bffApplyObserved: typeof bffApplyId === 'string',
+    bffApplyMatchesNativeVisit: !!bffApplied && bffApplied.uploadId === applyRequest.archiveLabel?.uploadId,
+    bffApplyMatchesNativeApply: bffApplyId && nativeApplyId ? bffApplyId === nativeApplyId : null,
+    displayedMatchesBffApply: labelMapping.labelId === bffApplyId,
+    bffCurrentObserved: typeof bffCurrentId === 'string',
+    bffCurrentMatchesDisplayed: bffCurrentId ? bffCurrentId === displayed?.label?.id : null,
+    displayedCurrentMatchesApply: displayed?.label?.id === labelMapping.labelId,
+    currentRequestMatchesApply: currentRequestId === labelMapping.labelId,
+    nativeCurrentMatchesDisplayed: nativeCurrent?.archiveLabel?.labelId === displayed?.label?.id,
+    prefixMatchesDisplayed: currentLabels.some((row) => row.id === displayed?.label?.id),
+    nativePrefixMatchesResults: nativePrefix?.archiveLabel?.labelIds.includes(restoredLabelId) ?? null,
+    nativePrefixObserved: nativePrefix?.archiveLabel?.kind === 'labels',
+    prefixTransportMatchesNative:
+      JSON.stringify(currentLabels.map((row) => row.id)) === JSON.stringify(nativePrefix?.archiveLabel?.labelIds),
+    pointStatus: pointResponse.status,
+    pointMatchesResults: point?.label?.id === restoredLabelId,
+    bffRepliesDrained: bff.drained,
+    unreadableBffReplies: bff.unreadable,
+  };
+  console.info('Native Archive label identity boundaries', identity);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'owner-label-identity', identity });
   const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
   const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
   let labelDisagreement: object | undefined;
@@ -1117,6 +1226,7 @@ async function restoreOwnerLibrary() {
     labelDisagreement = {
       outcome: 'incomplete',
       phase: 'owner-label-prefix-readback',
+      identity,
       browser: {
         labelEvidenceMatchesNative: labelMapping.labelId === restoredLabelId,
         visibleEvidenceMatchesNative: visibleLabelMapping?.labelId === restoredLabelId,
@@ -1133,6 +1243,10 @@ async function restoreOwnerLibrary() {
     await writeArchiveProvenance(labelDisagreement);
   }
   const assertLabelReadbacks = () => {
+    expect(labelMapping.labelId).toBe(restoredLabelId);
+    expect(visibleLabelMapping?.labelId).toBe(restoredLabelId);
+    expect(pointResponse.status).toBe(200);
+    expect(point?.label?.id).toBe(restoredLabelId);
     expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
     expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
     expect(displayed?.label).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
@@ -1262,6 +1376,7 @@ async function restoreOwnerLibrary() {
       otherMemberStatus: bobDenied.status,
       renamedSourceLabel,
       restoredLabel,
+      labelIdentity: identity,
       progressSessionCount: sessions.progressSessions.length,
     },
   });

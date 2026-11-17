@@ -3,9 +3,32 @@ import { archiveRecoveryAdmission, type NativeArchiveResults } from '../src/libr
 import { selectedArchiveRecoveryResults } from '../src/library/archive-entry-recovery/results';
 import { RecoverySelection } from '../src/library/archive-entry-recovery/selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding } from '../src/library/archive-entry-recovery/visit';
+import { archiveLabelIdentity, archiveLabelServerReply } from './native/archive-label-observation';
+import { dirname } from 'node:path';
 
 test('Archive admission uses the installed exact review contract', () => {
   expect(archiveRecoveryAdmission()).toEqual({ available: true });
+});
+
+test('Archive identity observation preserves exact native IDs through the installed RPC codec', async () => {
+  const nativeId = '00000000-0000-4000-8000-000000000001';
+  const differentId = '00000000-0000-4000-8000-000000000002';
+  const native = {
+    uploadId: nativeId,
+    applied: [{ ordinal: 2, status: 'acknowledged', result: { effect: 'label.create', labelId: nativeId } }],
+  };
+  const start = Bun.resolveSync('@tanstack/react-start', import.meta.dir);
+  const core = Bun.resolveSync('@tanstack/start-client-core', dirname(start));
+  const { toCrossJSONAsync } = await import(Bun.resolveSync('seroval', dirname(core)));
+  const wire = await toCrossJSONAsync({ result: { kind: 'ok', value: native } }, { refs: new Map() });
+  const observed = await archiveLabelServerReply(JSON.parse(JSON.stringify(wire)));
+  expect(observed).toEqual(archiveLabelIdentity(native));
+  expect(observed?.labels).toEqual([{ ordinal: 2, labelId: nativeId }]);
+  const current = archiveLabelIdentity({ label: { id: differentId, name: 'private label' } });
+  expect(current?.labelId).toBe(differentId);
+  expect(current?.labelId).not.toBe(observed?.labels[0]?.labelId);
+  expect(JSON.stringify(current)).not.toContain('private label');
+  expect(archiveLabelIdentity({ results: [null, { ordinal: 2, result: { labelId: nativeId } }] })?.labels).toEqual([]);
 });
 
 // Local state scenarios only: these are not native receipts or an admitted artifact fixture.

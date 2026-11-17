@@ -4,6 +4,7 @@ import { ArchiveEntryRecoveryJourney } from '../../../../apps/web/src/library/ar
 import { archiveRecoveryNative } from '../../../../apps/web/src/library/archive-entry-recovery/native';
 import { createPersonalLabelCommands } from '../../src/library/label-commands';
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands';
+import { LIBRARY_EXPORT_FORMAT } from '../../src/library/library-export-format';
 import { routeOf } from '../../src/route/route';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture';
 
@@ -51,7 +52,11 @@ beforeAll(async () => {
     cursor = page.next;
   }
   expect(manifest).not.toBeNull();
-  expect(manifest!.version).toBe(4);
+  expect(manifest).toMatchObject({
+    format: LIBRARY_EXPORT_FORMAT,
+    version: 1,
+    coverage: 'private-library-owner-facts-v1',
+  });
   artifact = { manifest: manifest!, records };
 }, 120_000);
 afterAll(async () => {
@@ -102,6 +107,76 @@ function receiver(owner: Identity, loseAck = false) {
   return { journey, port, calls };
 }
 const file = () => new File([JSON.stringify(artifact, null, 2)], 'completed-v4.json', { type: 'application/json' });
+
+test('same-owner Archive label preserves the native identity across apply, results, current, point and prefix reads', async () => {
+  const labels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
+  const name = 'Archived private label';
+  const source = (await labels.listLabels(f.owner.actor, { q: name, limit: 3 })).labels.find(
+    (row) => row.name === name,
+  )!;
+  expect(source).toBeDefined();
+  await labels.renameLabel(
+    f.owner.actor,
+    source.id,
+    { name: `${name} (source)`, revision: source.revision },
+    entryKey(),
+  );
+  const { journey } = receiver(f.owner);
+  try {
+    await journey.upload(file());
+    const label = journey
+      .snapshot()
+      .state!.page!.rows.find((row) => row.section === 'labels' && row.evidence.label_id === source.id)!;
+    journey.choose({ ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } });
+    await journey.review();
+    await journey.apply();
+    const applied = journey.snapshot().state!.results!.rows.find((row) => row.ordinal === label.ordinal)!;
+    expect(applied.status).toBe('acknowledged');
+    expect(applied.labelId).toBeString();
+    expect(applied.labelId).not.toBe(source.id);
+    const uploadId = journey.snapshot().state!.upload!.id;
+    const resultResponse = await f.send(
+      'owner',
+      'GET',
+      `/v1/libraryArchiveMerges/${uploadId}/results?after=-1&limit=100`,
+    );
+    expect(resultResponse.status).toBe(200);
+    const result = await resultResponse.json();
+    const nativeId = result.results.find((row: { ordinal: number }) => row.ordinal === label.ordinal).result.labelId;
+    expect(nativeId).toBe(applied.labelId);
+    await journey.results();
+    expect(journey.snapshot().state!.results!.rows.find((row) => row.ordinal === label.ordinal)?.labelId).toBe(
+      nativeId,
+    );
+    await journey.readCurrent(label.ordinal);
+    expect(journey.snapshot().readback?.value).toMatchObject({ label: { id: nativeId, name } });
+    const pointResponse = await f.send(
+      'owner',
+      'GET',
+      `/v1/libraryLabelAssignments?${new URLSearchParams({ labelId: nativeId, view: 'FULL', limit: '1' })}`,
+    );
+    expect(pointResponse.status).toBe(200);
+    expect(await pointResponse.json()).toMatchObject({ label: { id: nativeId, name } });
+    const prefixResponse = await f.send(
+      'owner',
+      'GET',
+      `/v1/libraryLabels?${new URLSearchParams({ q: name, limit: '3' })}`,
+    );
+    expect(prefixResponse.status).toBe(200);
+    const prefix = await prefixResponse.json();
+    expect(prefix.next).toBeNull();
+    expect(prefix.labels).toContainEqual({ id: nativeId, name, revision: 1 });
+    expect(prefix.labels).toContainEqual({ id: source.id, name: `${name} (source)`, revision: source.revision + 1 });
+    console.info('Native Archive label identity', {
+      applyMatchesResults: true,
+      currentMatchesNative: true,
+      pointMatchesNative: true,
+      prefixMatchesNative: true,
+    });
+  } finally {
+    journey.retire();
+  }
+}, 120_000);
 
 test('Native producer file passes mounted receiving selection, preserved Entry, label creation, assignment and current reads', async () => {
   const owner = await f.identity(scopes);

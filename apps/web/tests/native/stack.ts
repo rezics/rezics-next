@@ -36,6 +36,7 @@ import type { OpenSearch } from '../../../../services/kernel/src/search/opensear
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 import type { NativeArchivePreview, NativeArchiveStatus } from '../../src/library/archive-entry-recovery/native.ts';
 import { observeArchiveProgressResponse, type ArchiveProgressResponse } from './archive-progress-observation.ts';
+import { archiveLabelIdentity, type ArchiveLabelIdentity } from './archive-label-observation.ts';
 
 // Match the private browser bridge's request budget for forwarded Auth pages and assets.
 const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
@@ -55,6 +56,7 @@ export type NativeKernelRequest = {
   fixtureRequest?: boolean;
   archiveEntry?: ArchiveEntryResponse;
   archiveProgress?: ArchiveProgressResponse;
+  archiveLabel?: ArchiveLabelIdentity;
   /** Only the subject selector is retained for observed Hosted checkpoint saves. */
   hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
@@ -1345,6 +1347,20 @@ async function startStack(): Promise<
           observed.responseStatus = response.status;
           if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY === '1' && !observed.fixtureRequest) {
             observed.archiveEntry = await observeArchiveEntryResponse(request, url, response).catch(() => undefined);
+          }
+          if (
+            process.env.NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY === '1' &&
+            response.ok &&
+            (/^\/v1\/libraryArchiveMerges\/[^/]+\/(?:apply|results)$/u.test(url.pathname) ||
+              url.pathname === '/v1/libraryLabelAssignments' ||
+              /^\/v1\/libraryLabels(?:\/[^/]+)?$/u.test(url.pathname))
+          ) {
+            observed.archiveLabel = archiveLabelIdentity(
+              await response
+                .clone()
+                .json()
+                .catch(() => null),
+            );
           }
           if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS === '1' && !observed.fixtureRequest) {
             observed.archiveProgress = await observeArchiveProgressResponse(request, response).catch(() => undefined);
