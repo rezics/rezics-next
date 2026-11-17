@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout } from 'bun:test';
-import type { Page, Response as PlaywrightResponse } from 'playwright';
+import type { Locator, Page, Response as PlaywrightResponse } from 'playwright';
 import { documentText, serializeDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
 import { partitionOf, routeOf } from '../../../../services/kernel/src/route/route.ts';
@@ -41,7 +41,12 @@ class StageJournal {
     label: string,
     operation: () => Promise<{ value: T; observation: string }>,
     onFailure?: () => Promise<string>,
+    blockedBy?: string | false,
   ): Promise<T | undefined> {
+    if (blockedBy) {
+      this.unreached(label, blockedBy);
+      return;
+    }
     try {
       const result = await operation();
       this.stages.push({ label, state: 'passed', observation: result.observation });
@@ -627,6 +632,14 @@ async function associateChapterLanguage(
   await form.waitFor({ state: 'hidden' });
 }
 
+async function assertExactVersionDetails(scope: Locator, version: Pick<JourneyPost, 'revisionId' | 'sha256'>) {
+  const details = scope.locator('details').filter({ hasText: 'Exact document version' });
+  const summary = details.getByText('Exact document version', { exact: true });
+  if ((await details.getAttribute('open')) === null) await summary.click();
+  await details.getByText(version.revisionId, { exact: true }).waitFor({ state: 'visible' });
+  await details.getByText(version.sha256, { exact: true }).waitFor({ state: 'visible' });
+}
+
 async function publishCatalogueOpening(page: Page, opening: JourneyPost) {
   await page.goto(new URL(chapterStudioPath(opening), stack.web).href, { waitUntil: 'domcontentloaded' });
   await hydrate(page);
@@ -635,14 +648,15 @@ async function publishCatalogueOpening(page: Page, opening: JourneyPost) {
   await publication.getByRole('button', { name: 'Review publication…', exact: true }).click();
   const review = publication.getByRole('region', { name: 'Review before publishing', exact: true });
   await review.getByRole('heading', { name: opening.title, exact: true }).waitFor({ state: 'visible' });
-  expect(await review.innerText()).toContain(opening.revisionId);
-  await review
+  const decision = review.getByRole('region', { name: 'Confirm publication', exact: true });
+  await assertExactVersionDetails(decision, opening);
+  await decision
     .getByRole('checkbox', {
       name: 'I have reviewed this exact saved revision and want to publish it.',
       exact: true,
     })
     .click();
-  await review.getByRole('button', { name: 'Publish reviewed article', exact: true }).click();
+  await decision.getByRole('button', { name: 'Publish reviewed article', exact: true }).click();
   await publication.getByText(/^Published snapshot /u).waitFor({ state: 'visible' });
 }
 
@@ -953,9 +967,7 @@ nativeTest(
             await versions.getByText(oneText, { exact: true }).waitFor({ state: 'visible' });
             for (const revision of [seed!.chapterOne, chapterOne!]) {
               const row = versions.locator('li').filter({ hasText: revision.revisionId });
-              await row.getByText('Exact document version', { exact: true }).click();
-              await row.getByText(revision.revisionId, { exact: true }).waitFor({ state: 'visible' });
-              await row.getByText(revision.sha256, { exact: true }).waitFor({ state: 'visible' });
+              await assertExactVersionDetails(row, revision);
             }
             return {
               value: true,
@@ -1440,7 +1452,7 @@ nativeTest(
         candidateSealed
       ) {
         const preparationHref = page.url();
-        await journal.run(
+        const publishedOpening = await journal.run(
           'publish the catalogue opening explicitly and recheck the same sealed candidate',
           async () => {
             await assertActivationRefusal(
@@ -1467,7 +1479,7 @@ nativeTest(
           },
           () => pageObservation(page),
         );
-        await journal.run(
+        const permittedFrench = await journal.run(
           'permit the already bound French version after the sealed check refuses it',
           async () => {
             await page.goto(preparationHref, { waitUntil: 'domcontentloaded' });
@@ -1483,9 +1495,7 @@ nativeTest(
             await openBookStudio(page, catalogueId!);
             await pickDraft(page, seed!.chapterFrench.title);
             const form = await chapterLanguageForm(page, chapterOneTitle!);
-            const exact = await form.innerText();
-            expect(exact).toContain(chapterFrench!.revisionId);
-            expect(exact).toContain(chapterFrench!.sha256);
+            await assertExactVersionDetails(form, chapterFrench!);
             await permitChapterLanguageSource(form);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
@@ -1497,6 +1507,7 @@ nativeTest(
             };
           },
           () => pageObservation(page),
+          !publishedOpening && 'The catalogue opening did not reach public readback',
         );
         await journal.run(
           'activate the selected private candidate through mounted checks and explicit publication',
@@ -1506,19 +1517,21 @@ nativeTest(
             await activatePreparedBook(page);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             if (!owner.item.publicationId) throw new Error('Mounted activation did not produce a current release');
-            authorRelease = owner.item.publicationId;
+            const release = owner.item.publicationId;
             expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
             const catalogue = await seed!.anonymous.hostedCatalogues({ id: catalogueId! }).get({
-              query: { kind: 'publication', revisionId: authorRelease, includeTitle: '1' },
+              query: { kind: 'publication', revisionId: release, includeTitle: '1' },
             });
             expect(catalogue.status).toBe(200);
-            expect(catalogue.data).toMatchObject({ title: seed!.opening.title, revisionId: authorRelease });
+            expect(catalogue.data).toMatchObject({ title: seed!.opening.title, revisionId: release });
+            authorRelease = release;
             return {
               value: authorRelease,
               observation: `activatedRelease=${authorRelease} sourceHead=${owner.item.headRevisionId} selected=${chapterOneOccurrence} languages=en,fr`,
             };
           },
           () => pageObservation(page),
+          !permittedFrench && 'The required French version permission did not reach readback',
         );
 
         const laterText = 'Mara revised the chart after sunrise, adding the ferry’s quiet western landing in blue ink.';
@@ -1538,6 +1551,7 @@ nativeTest(
             };
           },
           () => pageObservation(page),
+          !authorRelease && 'The selected private release did not reach public readback',
         );
         if (changed) {
           await journal.run(
