@@ -24,8 +24,11 @@ nativeBeforeAll(lifecycle, 600_000, async () => {
 nativeAfterAll(lifecycle, 180_000);
 
 async function accountPage(persona: 'alice' | 'bob', path: string) {
-  const journey = await auth.signIn(persona, { context: await auth.newContext(persona), returnTo: path });
+  // newContext registers the fresh context with the active nativeTest lifecycle.
+  const context = await auth.newContext(persona);
+  const journey = await auth.signIn(persona, { context, returnTo: path });
   const page = journey.continueOnPage();
+  await auth.settlePageApp();
   await browserExpect(page).toHaveURL(new URL(path, stack.web).href);
   return page;
 }
@@ -441,7 +444,9 @@ nativeTest(
       .toBe(false);
     await account.close();
     const replacement = await auth.signIn('bob', { context: page.context(), returnTo: settings });
-    await browserExpect(covers(replacement.continueOnPage())).toHaveAttribute('aria-checked', String(!show));
+    const replacementPage = replacement.continueOnPage();
+    await auth.settlePageApp();
+    await browserExpect(covers(replacementPage)).toHaveAttribute('aria-checked', String(!show));
     await page.bringToFront();
     await browserExpect(covers(page).and(page.locator(`[aria-checked="${show}"]`))).not.toBeVisible();
     await page.reload({ waitUntil: 'domcontentloaded' });
