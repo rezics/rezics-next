@@ -1957,24 +1957,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         };
         return loanRequest('list', actor, request, job.deadline, requestInput, async () => {
-          const readPage = () =>
-            admission.run('normal', job, () => command(() => loans().listLoans(actor, requestInput, job.deadline)));
+          const { page, revalidate: revalidatePage } = await admission.run('normal', job, () =>
+            command(() => loans().listLoansWithObservation(actor, requestInput, job.deadline)),
+          );
+          const revalidate = () => admission.run('normal', job, () => command(revalidatePage));
           const assertCurrentOwner = () =>
             admission.run('normal', job, () => command(() => loans().assertCurrentOwner(actor, job.deadline)));
-          const page = await readPage();
-          const membership = (value: typeof page) =>
-            JSON.stringify(
-              value.items.map((item) => [item.loan.id, item.loan.revision, item.copy.revision, item.copy.state]),
-            );
-          const revalidate = async () => {
-            const current = await readPage();
-            if (
-              current.generation !== page.generation ||
-              current.nextCursor !== page.nextCursor ||
-              membership(current) !== membership(page)
-            )
-              throw new ProblemError('stale_cursor');
-          };
           const languages = languageRanges(request.headers.get('accept-language'));
           const personIds = page.items.flatMap((item) =>
             item.loan.counterparty.kind === 'person' ? [item.loan.counterparty.personId] : [],

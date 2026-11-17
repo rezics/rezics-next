@@ -406,14 +406,15 @@ export function createCopyApplication<N extends CopyNativeTypes>(ports: CopyAppl
       },
     };
     const deadline = ports.deadline();
+    const requestedCursor = options.cursor;
     const readPage = () =>
       ports.readOnly(
         owner,
         async (client) => {
           const partition = await ports.partition(client, accountRoute);
           let after: { createdAt: string; copyId: string } | null = null;
-          if (options.cursor !== undefined) {
-            const cursor = ports.decodeCursor(binding, options.cursor);
+          if (requestedCursor !== undefined) {
+            const cursor = ports.decodeCursor(binding, requestedCursor);
             const createdAt = cursor.ok ? cursor.after[0] : undefined;
             const cursorId = cursor.ok ? cursor.after[1] : undefined;
             if (
@@ -456,10 +457,7 @@ export function createCopyApplication<N extends CopyNativeTypes>(ports: CopyAppl
           const inventoryValues = await ports.inventoryValues(client, accountRoute, owner.accountId);
           return {
             copies,
-            next:
-              more && last && partition
-                ? ports.encodeCursor(binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
-                : null,
+            continuation: more && last && partition ? { epoch: partition.epoch, after: [last.createdAt, last.id] } : null,
             accountEpoch: partition?.epoch ?? null,
             inventoryValues,
           };
@@ -475,23 +473,24 @@ export function createCopyApplication<N extends CopyNativeTypes>(ports: CopyAppl
         subjectId: filterSubjectId,
         kind: filterKind,
         status: filterStatus,
-        cursor: options.cursor ?? null,
+        cursor: requestedCursor ?? null,
       }),
       () =>
         ports.request(deadline, async () => {
           const first = await readPage();
+          const next = first.continuation ? ports.encodeCursor(binding, first.continuation) : null;
           const filterOptions = await ports.inventory(first.inventoryValues, deadline, languages);
           const current = await readPage();
           if (
             JSON.stringify(first.copies) !== JSON.stringify(current.copies) ||
-            first.next !== current.next ||
+            JSON.stringify(first.continuation) !== JSON.stringify(current.continuation) ||
             first.accountEpoch !== current.accountEpoch ||
             JSON.stringify(first.inventoryValues) !== JSON.stringify(current.inventoryValues)
           )
             throw ports.problem('semantic_not_ready');
           return {
             copies: first.copies,
-            next: first.next,
+            next,
             accountEpoch: first.accountEpoch,
             filterOptions,
           };
