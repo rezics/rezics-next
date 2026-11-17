@@ -837,8 +837,9 @@ nativeTest(
       throw new Error('Mounted Hosted Book setup did not return the author manuscript');
     }
     const ownerJourney = await auth.signIn('alice', { returnTo: chapterStudioPath(seed.chapterOne) });
-    const page = pageFrom(ownerJourney);
-    await page.setViewportSize({ width: 1440, height: 1000 });
+    let page = pageFrom(ownerJourney);
+    const ownerViewport = { width: 1440, height: 1000 };
+    await page.setViewportSize(ownerViewport);
 
     const frenchText =
       'Mara comptait les lanternes depuis le pont du bac et dessinait le port silencieux sur sa carte.';
@@ -1221,6 +1222,11 @@ nativeTest(
         const prepared = await journal.run(
           'review, recover, and seal the exact selected private candidate',
           async () => {
+            // The completed editors and history comparisons release their page before the preparation visit.
+            await page.close();
+            page = await ownerJourney.context.newPage();
+            page.setDefaultTimeout(30_000);
+            await page.setViewportSize(ownerViewport);
             await openBookStudio(page, catalogueId!);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             const outline = await readStructure(seed!.author, catalogueId!);
@@ -1502,6 +1508,7 @@ nativeTest(
             () => pageObservation(page),
           );
 
+          await page.close();
           await journal.run(
             'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',
             async () => {
