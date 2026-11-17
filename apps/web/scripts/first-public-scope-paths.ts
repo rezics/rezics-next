@@ -78,8 +78,7 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W23',
     job: 'Auth request → consent → approve or decline → current caller return',
     auth: 'signed-in',
-    missingFixture:
-      'The Web fixture needs a non-first-party consent request with a real requested scope and a return bound to the current caller.',
+    nativeHost: 'tests/native/external-client-consent.host.test.ts',
   },
   {
     id: 'W24',

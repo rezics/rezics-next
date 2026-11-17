@@ -926,7 +926,7 @@ async function walkPaths<Fixture extends CommunityFixture>(
       }
       const walker = walkers[path.id];
       if (!walker) {
-        const cause = !ctx.signIn.ok ? ctx.signIn.detail : 'missingFixture' in path ? path.missingFixture : 'no walker';
+        const cause = !ctx.signIn.ok ? ctx.signIn.detail : 'no walker';
         results.push({
           id: path.id,
           job: path.job,

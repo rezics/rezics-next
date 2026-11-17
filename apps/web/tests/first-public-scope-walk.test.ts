@@ -58,6 +58,7 @@ test('external paths retain their exact native/browser suites without claiming a
     ['W20', 'tests/native/first-public-personal.host.test.ts'],
     ['W21', 'tests/native/native-following.host.test.ts'],
     ['W22', 'tests/native/native-auth-security.host.test.ts'],
+    ['W23', 'tests/native/external-client-consent.host.test.ts'],
     ['W24', 'tests/native/native-auth-security.host.test.ts'],
     ['W25', 'tests/native/first-public-personal.host.test.ts'],
     ['W26', 'tests/native/private-library-archive-restore.host.test.ts'],
