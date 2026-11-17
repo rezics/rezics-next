@@ -661,8 +661,12 @@ const SEED_PHASE_LINE =
   /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|record-import|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
 const SEED_FAILURE_LINE =
   /^(?:Cross-media seed (?:import failed|publication incomplete|readiness failed|source failure|failed)|Import transport failed status=|Credential request failed )/;
-const RESERVED_COVER_CONTINUATION =
-  /^Cross-media seed import failed provider=bangumi kind=bulk-failed generation=([1-9][0-9]{0,19}) run\{phase=media reason=cover-pending keyDigest=([a-f0-9]{64}) mediaState=reserved\}[^\n]* finalization\{scope=record-import phase=bangumi-cover-continuation /m;
+const FAILED_COVER_CONTINUATION =
+  /^Cross-media seed import failed provider=bangumi kind=bulk-failed generation=(?<generation>[1-9][0-9]{0,19}) run\{phase=media reason=cover-pending keyDigest=(?<keyDigest>[a-f0-9]{64}) mediaState=(?<mediaState>reserved|uploaded)\}[^\n]* finalization\{scope=record-import phase=bangumi-cover-continuation /m;
+
+export function failedCoverContinuation(stderr: string) {
+  return FAILED_COVER_CONTINUATION.exec(stderr)?.groups;
+}
 
 export function walkChildFailure(name: string, code: number, stderr: string): Error {
   const firstFailure = stderr.split('\n').find((line) => SEED_FAILURE_LINE.test(line));
@@ -701,15 +705,14 @@ async function command(name: 'seed' | 'seed-reopen', args: string[], env: NodeJS
     child.exited,
   ]);
   let diagnostic = '';
-  const reserved = name === 'seed' && code !== 0 ? RESERVED_COVER_CONTINUATION.exec(stderr) : null;
-  if (reserved) {
+  const failure = name === 'seed' && code !== 0 ? failedCoverContinuation(stderr) : undefined;
+  if (failure) {
     // The admitted walk still owns PostgreSQL here. Keep the observation with the returned seed log.
     let evidence: object;
     try {
       const input = {
         journal: resolve(root, '.temp/cross-media-seed/state.sqlite'),
-        generation: reserved[1]!,
-        keyDigest: reserved[2]!,
+        ...failure,
         account: env.REZICS_DEV_PERSONA_ACCOUNT!,
         databasePort: process.env.KERNEL_DATABASE_PORT!,
         kernelEnvironment: await parseEnv(resolve(root, 'services/kernel/.env')),
