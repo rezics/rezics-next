@@ -325,15 +325,22 @@ async function publishAttachmentReply() {
   expect(refusedReservation.status()).toBe(415);
   const refusedReservationKey = await refusedReservation.request().headerValue('idempotency-key');
   expect(Boolean(refusedReservationKey)).toBe(true);
-  const replaceRow = replyPage.getByRole('group').filter({ hasText: 'Reply chart' });
+  const replaceRow = replyPage.getByRole('group', { name: 'Reply chart', exact: true });
+  const replaceButton = replaceRow
+    .getByRole('button', { name: 'Replace image', exact: true })
+    .and(replaceRow.locator('button'));
   await expectVisible(replaceRow.getByText('not accepted', { exact: false }));
-  await expectVisible(replaceRow.getByRole('button', { name: 'Replace image', exact: true }));
+  await expectVisible(replaceButton);
   sequence.push('replier-type-refusal');
   const replyReserved = replyPage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/media' && response.request().method() === 'POST',
   );
   const replyUploaded = waitForUploadResponse(replyPage);
-  await replaceRow.locator('input[type="file"]').setInputFiles({
+  const [replacementChooser] = await Promise.all([
+    replyPage.waitForEvent('filechooser', { timeout: 30_000 }),
+    replaceButton.click(),
+  ]);
+  await replacementChooser.setFiles({
     name: 'reply.png',
     mimeType: 'image/png',
     buffer: png,
