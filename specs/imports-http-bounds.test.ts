@@ -485,21 +485,44 @@ test('network errors and HTTP retries share lowered wait budget and never exceed
   expect(once.calls()).toBe(1);
 });
 
-test('terminal 401 and 403 retain status headers and bounded body without retry', async () => {
+test('401 refreshes once and final 401 and 403 retain status, headers and bounded bodies', async () => {
   const driver = await loadHttpBoundsDriver();
   for (const status of [401, 403]) {
-    const h = harness(driver, () =>
-      Response.json({ denied: true }, { status, headers: { [SESSION_HEADER]: 'denied-session' } }),
+    const attempts = status === 401 ? 2 : 1;
+    const firstDenial = streamed(4096, 4096, { [SESSION_HEADER]: 'discarded-session' }, 401);
+    const tokenRequests: boolean[] = [];
+    const h = harness(
+      driver,
+      (index) =>
+        status === 401 && index === 0
+          ? firstDenial.response
+          : Response.json({ denied: true }, { status, headers: { [SESSION_HEADER]: 'denied-session' } }),
+      {
+        maxAttempts: 1,
+        token: async (fresh = false) => {
+          tokenRequests.push(fresh);
+          return fresh ? 'refreshed-credential' : SECRET;
+        },
+      },
     );
     const response = await get(h.transport);
     expect(response.status).toBe(status);
     expect(response.headers.get(SESSION_HEADER)).toBe('denied-session');
     expect(await response.json()).toEqual({ denied: true });
-    expect(h.calls()).toBe(1);
+    expect(h.calls()).toBe(attempts);
+    expect(tokenRequests).toEqual(status === 401 ? [false, true] : [false]);
+    expect(h.requests[0]!.headers).toContainEqual(['authorization', `Bearer ${SECRET}`]);
+    if (status === 401) {
+      expect(h.requests[1]!.headers).toContainEqual(['authorization', 'Bearer refreshed-credential']);
+      expect(firstDenial.stats()).toEqual({ consumed: 0, cancelled: 1, closed: false });
+    }
     expect(h.waits).toEqual([]);
     const oversized = streamed(MIB + 4096, 4096, undefined, status);
-    const bounded = harness(driver, () => oversized.response);
+    const bounded = harness(driver, (index) =>
+      status === 401 && index === 0 ? new Response(null, { status }) : oversized.response,
+    );
     await rejected(async () => (await get(bounded.transport)).json());
+    expect(bounded.calls()).toBe(attempts);
     expect(oversized.stats().cancelled).toBe(1);
   }
 });
@@ -508,19 +531,24 @@ test('terminal 401 and 403 retain status headers and bounded body without retry'
 // await on defective production. The test's caller abort always cleans up.
 async function interrupt(
   driver: HttpBoundsDriver,
-  stage: 'request' | 'token' | 'network' | 'response' | 'injected' | 'native',
+  stage: 'request' | 'token' | 'network' | 'refresh' | 'response' | 'injected' | 'native',
   deadline: boolean,
   deadlineMs?: number,
+  bulk = false,
 ) {
   const caller = new AbortController();
+  const reason = new Error('caller cancelled');
   let cancelled = 0;
   let entered = false;
   const never = () => new Promise<never>(() => {});
   const h = harness(
     driver,
     () => {
-      entered = true;
-      if (stage === 'network') return never();
+      if (stage === 'network') {
+        entered = true;
+        return never();
+      }
+      if (stage === 'refresh') return new Response(null, { status: 401 });
       if (stage === 'response')
         return new Response(
           new ReadableStream(
@@ -540,8 +568,9 @@ async function interrupt(
     },
     deadlineMs === undefined ? {} : { deadlineMs },
   );
-  if (stage === 'token')
-    h.options.token = () => {
+  if (stage === 'token' || stage === 'refresh')
+    h.options.token = async (fresh = false) => {
+      if (fresh !== (stage === 'refresh')) return SECRET;
       entered = true;
       return never();
     };
@@ -567,44 +596,52 @@ async function interrupt(
           { highWaterMark: 0 },
         )
       : undefined;
-  const state = pendingResult(
-    (async () => {
-      const response = body
-        ? await transport(`${ORIGIN}/v1/import`, { method: 'POST', body, signal: caller.signal })
+  const operation = (async () => {
+    const response =
+      bulk || body
+        ? await transport(`${ORIGIN}/v1/${bulk ? 'subjects:batchWrite' : 'import'}`, {
+            method: 'POST',
+            body,
+            signal: caller.signal,
+          })
         : await get(transport, caller.signal);
-      await response.arrayBuffer();
-    })(),
-  );
+    await response.arrayBuffer();
+  })();
+  const state = pendingResult(operation);
   try {
     await flush();
-    expect(entered).toBe(true);
+    if (stage === 'native') expect([...h.time.timers.values()]).toContain(NOW + 1000);
+    else expect(entered).toBe(true);
     expect(state.settled).toBe(false);
     if (deadline) {
       expect([...h.time.timers.values()]).toContain(NOW + (deadlineMs ?? 120000));
       h.time.advance(deadlineMs ?? 120000);
-    } else caller.abort(new Error('caller cancelled'));
+    } else caller.abort(reason);
     await flush();
     expect(state).toEqual({ settled: true, rejected: true });
+    if (deadline) await expect(operation).rejects.toMatchObject({ name: 'TimeoutError' });
+    else await expect(operation).rejects.toBe(reason);
     for (const signal of h.signals) expect(signal.aborted).toBe(true);
     if (stage === 'request' || stage === 'response') expect(cancelled).toBe(1);
     expect(h.time.timers.size).toBe(0);
-    expect(h.calls()).toBeLessThanOrEqual(1);
+    expect(h.calls()).toBe(stage === 'request' || stage === 'token' ? 0 : 1);
   } finally {
     caller.abort();
     await flush();
   }
 }
 
-test('caller cancellation interrupts pending request token network response and both sleep paths', async () => {
+test('caller cancellation interrupts preparation, fetch, token refresh, response and both sleep paths', async () => {
   const driver = await loadHttpBoundsDriver();
-  for (const stage of ['request', 'token', 'network', 'response', 'injected', 'native'] as const)
+  for (const stage of ['request', 'token', 'network', 'refresh', 'response', 'injected', 'native'] as const)
     await interrupt(driver, stage, false);
+  for (const stage of ['request', 'token'] as const) await interrupt(driver, stage, false, undefined, true);
 });
 
-test('default and lowered service deadline terminate all pending IO including hooks without wall time', async () => {
+test('default and lowered generic deadlines terminate preparation and pending IO after the first send', async () => {
   const driver = await loadHttpBoundsDriver();
   for (const deadline of [undefined, 17])
-    for (const stage of ['request', 'token', 'network', 'response', 'injected', 'native'] as const)
+    for (const stage of ['request', 'token', 'network', 'refresh', 'response', 'injected', 'native'] as const)
       await interrupt(driver, stage, true, deadline);
 });
 
@@ -657,6 +694,76 @@ test('one deadline spans scheduled waits and later attempts rather than restarti
     expect(h.time.timers.size).toBe(0);
   } finally {
     abort.abort();
+    await flush();
+  }
+});
+
+test('bulk capture starts its deadline after body and token preparation and shares it with retries', async () => {
+  const driver = await loadHttpBoundsDriver();
+  const caller = new AbortController();
+  const releaseBody = Promise.withResolvers<void>();
+  const token = Promise.withResolvers<string>();
+  const deadlineMs = 1017;
+  const bytes = JSON.stringify({ commands: [{ key: 'stable' }] });
+  let reading = false;
+  let acquiring = false;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        reading = true;
+        await releaseBody.promise;
+        controller.enqueue(new TextEncoder().encode(bytes));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const h = harness(
+    driver,
+    (index) => (index === 0 ? Response.json({}, { status: 503 }) : new Promise<Response>(() => {})),
+    {
+      deadlineMs,
+      token: () => {
+        acquiring = true;
+        return token.promise;
+      },
+    },
+  );
+  const operation = h.transport(`${ORIGIN}/v1/subjects:batchWrite`, { method: 'POST', body, signal: caller.signal });
+  const state = pendingResult(operation);
+  try {
+    await flush();
+    expect(reading).toBe(true);
+    expect(acquiring).toBe(false);
+    expect(h.time.timers.size).toBe(0);
+    h.time.advance(deadlineMs + 1);
+    releaseBody.resolve();
+    await flush();
+    expect(acquiring).toBe(true);
+    expect(h.time.timers.size).toBe(0);
+    h.time.advance(deadlineMs + 1);
+    expect(state.settled).toBe(false);
+    expect(h.calls()).toBe(0);
+    const startedAt = h.time.now();
+    token.resolve(SECRET);
+    await flush();
+    expect(h.calls()).toBe(2);
+    expect(h.waits).toEqual([1000]);
+    expect(h.requests.map((request) => request.body)).toEqual([bytes, bytes]);
+    expect([...h.time.timers.values()]).toEqual([startedAt + deadlineMs]);
+    h.time.advance(16);
+    await flush();
+    expect(state.settled).toBe(false);
+    h.time.advance(1);
+    await flush();
+    expect(state).toEqual({ settled: true, rejected: true });
+    await expect(operation).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(h.signals[1]!.aborted).toBe(true);
+    expect(h.time.timers.size).toBe(0);
+  } finally {
+    caller.abort();
+    releaseBody.resolve();
+    token.resolve(SECRET);
     await flush();
   }
 });

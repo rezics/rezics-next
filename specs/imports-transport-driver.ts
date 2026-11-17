@@ -27,7 +27,7 @@ export type MediaOutcome =
   | { outcome: 'fenced' };
 export interface TransportOptions {
   origin: string;
-  tokenProvider: () => Promise<string>;
+  tokenProvider: (fresh?: boolean) => Promise<string>;
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
