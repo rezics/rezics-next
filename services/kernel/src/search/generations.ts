@@ -994,7 +994,6 @@ function discoveryPageReadBatch<Result>(rows: readonly Population[], checkEmpty:
       pending.delete(row);
       if (pending.size === 0) settled.resolve();
     },
-    settled: settled.promise,
     checkEmptyPage() {
       // Start the shared check after all participating native observations have settled.
       return (emptyPageCheck ??= settled.promise.then(checkEmpty));
@@ -1035,12 +1034,80 @@ function reviewCertificationBatch(
   };
 }
 
+type PopulationAdvance = {
+  partition_no: number;
+  owner: Population['owner'];
+  prior_id: string | null;
+  prior_continuation: string | null;
+  after_route: number | null;
+  after_id: string | null;
+  continuation: string | null;
+  native_epoch: number | null;
+  position: string;
+};
+
+function populationCheckpointBatch(pool: Pool, target: DiscoveryTarget, rows: readonly Population[]) {
+  const plans: PopulationAdvance[] = [];
+  const batch = discoveryPageReadBatch(rows, async () => {
+    await withSearchConnection(pool, async (client) => {
+      await client.query(
+        `WITH input AS MATERIALIZED (
+           SELECT * FROM jsonb_to_recordset($3::jsonb) AS i(
+             partition_no integer, owner text, prior_id uuid, prior_continuation jsonb,
+             after_route integer, after_id uuid, continuation jsonb, native_epoch integer, position bigint)
+         ), locked AS MATERIALIZED (
+           SELECT p.partition_no,p.owner
+           FROM search.discovery_population p JOIN input i
+             ON (p.partition_no,p.owner)=(i.partition_no,i.owner)
+           WHERE p.prefix=$1 AND p.generation=$2 AND NOT p.complete
+             AND p.after_id IS NOT DISTINCT FROM i.prior_id
+             AND (p.owner IN ('accounts','semantic') OR p.continuation IS NOT DISTINCT FROM i.prior_continuation)
+           ORDER BY p.partition_no,p.owner FOR UPDATE OF p
+         )
+         UPDATE search.discovery_population p
+         SET after_route=i.after_route,after_id=i.after_id,complete=i.after_id IS NULL,
+             position=GREATEST(p.position,i.position),
+             continuation=CASE WHEN p.owner IN ('accounts','semantic') THEN p.continuation ELSE i.continuation END,
+             native_epoch=CASE WHEN p.owner IN ('accounts','semantic') THEN p.native_epoch ELSE i.native_epoch END
+         FROM input i JOIN locked l ON (l.partition_no,l.owner)=(i.partition_no,i.owner)
+         WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
+        [target.prefix, target.generation, JSON.stringify(plans)],
+      );
+    });
+  });
+  return {
+    observed: batch.observed,
+    async save(
+      row: Population,
+      next: { route: number; id: string } | null,
+      position: bigint,
+      continuation: string | null = null,
+      nativeEpoch: number | null = null,
+    ) {
+      plans.push({
+        partition_no: row.partition,
+        owner: row.owner,
+        prior_id: row.after_id,
+        prior_continuation: row.continuation,
+        after_route: next?.route ?? null,
+        after_id: next?.id ?? null,
+        continuation,
+        native_epoch: nativeEpoch,
+        position: position.toString(),
+      });
+      batch.observed(row);
+      await batch.checkEmptyPage();
+    },
+  };
+}
+
 async function populationPage(
   pool: Pool,
   projection: DiscoveryProjection,
   row: Population,
   checkCapability: () => Promise<void>,
   reads: ReturnType<typeof discoveryPageReadBatch>,
+  checkpoints: ReturnType<typeof populationCheckpointBatch>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
@@ -1092,10 +1159,14 @@ async function populationPage(
     next = page.next;
     position = page.position;
     // Empty native pages advance owner coverage without reserving an engine write.
-    if (actions.length > 0) {
-      await searchTurnCall(() => projection.applyNativeActions(actions));
-      await checkCapability();
-    } else await reads.checkEmptyPage();
+    if (actions.length === 0) {
+      await reads.checkEmptyPage();
+      await checkpoints.save(row, next, position, page.continuation, page.epoch ?? null);
+      return false;
+    }
+    checkpoints.observed(row);
+    await searchTurnCall(() => projection.applyNativeActions(actions));
+    await checkCapability();
     await withSearchConnection(pool, async (client) => {
       await client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
@@ -1121,9 +1192,12 @@ async function populationPage(
     return false;
   }
   reads.observed(row);
+  if (keys.length > 0) checkpoints.observed(row);
   await searchTurnCall(() => projection.project(partition, keys, 0n, true));
-  // Let PostgreSQL group the independently durable empty checkpoints after native reads.
-  if (keys.length === 0) await reads.settled;
+  if (keys.length === 0) {
+    await checkpoints.save(row, next, position);
+    return false;
+  }
   await withSearchConnection(pool, async (client) => {
     await client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
@@ -1796,6 +1870,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
           const reads = target.state === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
+          const checkpoints = reads ? populationCheckpointBatch(pool, target, batch) : undefined;
           const indexedReads =
             target.state === 'reconciling'
               ? discoveryPageReadBatch(batch.filter(emptyIndexedMetadataCandidate), () =>
@@ -1807,8 +1882,8 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
           return async (population) => {
             try {
               return await searchTurnCall(() =>
-                reads
-                  ? populationPage(pool, projection, population, checkCapability, reads)
+                reads && checkpoints
+                  ? populationPage(pool, projection, population, checkCapability, reads, checkpoints)
                   : reconcileDiscoveryPage(
                       pool,
                       search,
@@ -1826,6 +1901,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               return true;
             } finally {
               reads?.observed(population);
+              checkpoints?.observed(population);
               indexedReads?.observed(population);
               emptyIndexProbe?.observed(population);
             }
