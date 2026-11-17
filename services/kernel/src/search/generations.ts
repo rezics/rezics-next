@@ -66,6 +66,7 @@ import {
 } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
+import { discoveryEdge, discoveryFrontier, observeDiscovery, timeDiscovery } from './discovery-timing.ts';
 import reconcile from './reconcile.sql';
 import freshness from './freshness.sql';
 import lockRebuild from './rebuild-lock.sql';
@@ -923,6 +924,7 @@ async function allocateDiscoveryTurn(
         [consumer],
       );
       await client.query('COMMIT');
+      discoveryEdge('allocated', generation);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -955,12 +957,16 @@ async function mapBounded<T, Result>(
   concurrency: number,
   workForBatch: (batch: readonly T[]) => (item: T) => Promise<Result>,
   stopAfterBatch?: (result: Result) => boolean,
+  wave?: { phase: 'populating' | 'reconciling'; generation: number },
 ): Promise<Result[]> {
   const results: Result[] = [];
   for (let offset = 0; offset < items.length; offset += concurrency) {
     const itemsInBatch = items.slice(offset, offset + concurrency);
     const work = workForBatch(itemsInBatch);
-    const settled = await Promise.allSettled(itemsInBatch.map(work));
+    const settle = () => Promise.allSettled(itemsInBatch.map(work));
+    const settled = await (wave
+      ? observeDiscovery({ event: 'wave', ...wave, selected: itemsInBatch.length }, settle)
+      : settle());
     searchTurns.getStore()?.check();
     const batch: Result[] = [];
     for (const outcome of settled) {
@@ -1059,11 +1065,20 @@ type PopulationAdvance = {
   position: string;
 };
 
+async function checkpointDiscovery(
+  pool: Pool,
+  write: (client: PoolClient) => Promise<{ rowCount: number | null }>,
+  certified = false,
+) {
+  const result = await timeDiscovery('checkpoint CAS', () => withSearchConnection(pool, write));
+  discoveryFrontier(result.rowCount, certified);
+}
+
 function populationCheckpointBatch(pool: Pool, target: DiscoveryTarget, rows: readonly Population[]) {
   const plans: PopulationAdvance[] = [];
-  const batch = discoveryPageReadBatch(rows, async () => {
-    await withSearchConnection(pool, async (client) => {
-      await client.query(
+  const batch = discoveryPageReadBatch(rows, () =>
+    checkpointDiscovery(pool, (client) =>
+      client.query(
         `WITH input AS MATERIALIZED (
            SELECT * FROM jsonb_to_recordset($3::jsonb) AS i(
              partition_no integer, owner text, prior_id uuid, prior_continuation jsonb,
@@ -1085,9 +1100,9 @@ function populationCheckpointBatch(pool: Pool, target: DiscoveryTarget, rows: re
          FROM input i JOIN locked l ON (l.partition_no,l.owner)=(i.partition_no,i.owner)
          WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
         [target.prefix, target.generation, JSON.stringify(plans)],
-      );
-    });
-  });
+      ),
+    ),
+  );
   return {
     observed: batch.observed,
     async save(
@@ -1130,7 +1145,7 @@ async function populationPage(
   if (row.owner === 'accounts') {
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
     const page = validateAccountPage(
-      await searchTurnCall(() => account.source.page(partition, after, 100)),
+      await timeDiscovery('native pre', () => searchTurnCall(() => account.source.page(partition, after, 100))),
       partition,
       after,
       100,
@@ -1139,16 +1154,18 @@ async function populationPage(
     next = page.next;
     position = page.position;
   } else if (row.owner === 'semantic') {
-    const rows = await withSearchConnection(
-      pool,
-      async (client) =>
-        (
-          await client.query<{ route: number; id: string; kind: string }>(
-            `SELECT route,subject_id::text AS id,type AS kind FROM semantic.subject WHERE route >= $1 AND route < $2
+    const rows = await timeDiscovery('native pre', () =>
+      withSearchConnection(
+        pool,
+        async (client) =>
+          (
+            await client.query<{ route: number; id: string; kind: string }>(
+              `SELECT route,subject_id::text AS id,type AS kind FROM semantic.subject WHERE route >= $1 AND route < $2
        AND ($3::integer IS NULL OR (route,subject_id)>($3,$4::uuid)) ORDER BY route,subject_id LIMIT 257`,
-            [partition * 16, (partition + 1) * 16, row.after_route, row.after_id],
-          )
-        ).rows,
+              [partition * 16, (partition + 1) * 16, row.after_route, row.after_id],
+            )
+          ).rows,
+      ),
     );
     keys = rows.slice(0, 256).map((row) => ({ owner: 'semantic', ...row }));
     const last = keys.at(-1);
@@ -1159,7 +1176,9 @@ async function populationPage(
     if (!producer) return true;
     await checkCapability();
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
-    const page = await nativePopulationPage(pool, target, producer, partition, after, row.continuation);
+    const page = await timeDiscovery('native pre', () =>
+      nativePopulationPage(pool, target, producer, partition, after, row.continuation),
+    );
     reads.observed(row);
     if (!page) return true;
     if (row.native_epoch !== null && page.epoch !== row.native_epoch) {
@@ -1178,10 +1197,10 @@ async function populationPage(
       return false;
     }
     checkpoints.observed(row);
-    await searchTurnCall(() => projection.applyNativeActions(actions));
+    await timeDiscovery('physical writes', () => searchTurnCall(() => projection.applyNativeActions(actions)));
     await checkCapability();
-    await withSearchConnection(pool, async (client) => {
-      await client.query(
+    await checkpointDiscovery(pool, (client) =>
+      client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
         complete=$8,position=GREATEST(position,$9),native_epoch=$12
         WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
@@ -1200,19 +1219,19 @@ async function populationPage(
           row.continuation === null ? null : JSON.stringify(row.continuation),
           page.epoch ?? null,
         ],
-      );
-    });
+      ),
+    );
     return false;
   }
   reads.observed(row);
   if (keys.length > 0) checkpoints.observed(row);
-  await searchTurnCall(() => projection.project(partition, keys, 0n, true));
+  await timeDiscovery('projection', () => searchTurnCall(() => projection.project(partition, keys, 0n, true)));
   if (keys.length === 0) {
     await checkpoints.save(row, next, position);
     return false;
   }
-  await withSearchConnection(pool, async (client) => {
-    await client.query(
+  await checkpointDiscovery(pool, (client) =>
+    client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
       WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4 AND after_id IS NOT DISTINCT FROM $9::uuid AND NOT complete`,
       [
@@ -1226,8 +1245,8 @@ async function populationPage(
         position.toString(),
         row.after_id,
       ],
-    );
-  });
+    ),
+  );
   return false;
 }
 
@@ -1260,10 +1279,12 @@ async function reconcileDiscoveryPage(
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
   if (!entry || entry.owner !== row.owner) throw new Error('Both native discovery producers are required');
-  const census = await searchTurnCall(() => entry.source.count(partition));
+  const census = await timeDiscovery('native pre', () => searchTurnCall(() => entry.source.count(partition)));
   const witness = coreReads
     ? await coreReads.before.read(row)
-    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+    : (
+        await timeDiscovery('native pre', () => searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition])))
+      ).get(partition);
   if (!witness) throw new Error('Native Account/claim witness is absent');
   const indexed = BigInt(row.indexed);
   const reset =
@@ -1293,13 +1314,15 @@ async function reconcileDiscoveryPage(
     return key;
   });
   let expected: DiscoveryIndexAction[];
-  if (!empty) await requireDiscoveryIndexFormat(search, index);
+  if (!empty) await timeDiscovery('physical reads', () => requireDiscoveryIndexFormat(search, index));
   if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
-      await searchTurnCall(() =>
-        entry.source.read(
-          partition,
-          keys.map(({ id }) => id),
+      await timeDiscovery('native keyed', () =>
+        searchTurnCall(() =>
+          entry.source.read(
+            partition,
+            keys.map(({ id }) => id),
+          ),
         ),
       ),
       partition,
@@ -1308,11 +1331,13 @@ async function reconcileDiscoveryPage(
     );
     expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined);
   } else {
-    const snapshot = await searchTurnCall(() =>
-      readCreditIndexSnapshot(
-        entry.source,
-        partition,
-        keys.map(({ id }) => id),
+    const snapshot = await timeDiscovery('native keyed', () =>
+      searchTurnCall(() =>
+        readCreditIndexSnapshot(
+          entry.source,
+          partition,
+          keys.map(({ id }) => id),
+        ),
       ),
     );
     validateObservation(
@@ -1322,15 +1347,17 @@ async function reconcileDiscoveryPage(
       census.position,
       true,
     );
-    const counts = await searchTurnCall(() =>
-      projection.listing.read(
-        partition,
-        snapshot.subjects.map(({ id }) => id),
+    const counts = await timeDiscovery('native keyed', () =>
+      searchTurnCall(() =>
+        projection.listing.read(
+          partition,
+          snapshot.subjects.map(({ id }) => id),
+        ),
       ),
     );
     expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
   }
-  expected = await prepareBoundedSortKeys(search, index, expected);
+  expected = await timeDiscovery('physical reads', () => prepareBoundedSortKeys(search, index, expected));
   let mismatch = false;
   for (let offset = 0; offset < hits.length; offset++) {
     const hit = hits[offset],
@@ -1350,13 +1377,15 @@ async function reconcileDiscoveryPage(
       mismatch = true;
   }
   if (mismatch) {
-    await searchTurnCall(() => projection.project(partition, keys, 0n, true));
+    await timeDiscovery('projection', () => searchTurnCall(() => projection.project(partition, keys, 0n, true)));
     return false;
   }
-  const finish = await searchTurnCall(() => entry.source.count(partition));
+  const finish = await timeDiscovery('native post', () => searchTurnCall(() => entry.source.count(partition)));
   const end = coreReads
     ? await coreReads.after.read(row)
-    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+    : (
+        await timeDiscovery('native post', () => searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition])))
+      ).get(partition);
   const stable =
     finish.position === census.position &&
     finish.count === census.count &&
@@ -1376,11 +1405,12 @@ async function reconcileDiscoveryPage(
         after_id=NULL,reconcile_position=NULL,indexed=0 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4`,
           [partition, target.prefix, target.generation, row.owner],
         );
-        await client.query(
+        const reopened = await client.query(
           "UPDATE search.discovery_generation SET state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='reconciling'",
           [target.prefix, target.generation],
         );
         await client.query('COMMIT');
+        discoveryEdge('reopened population', target.generation, reopened.rowCount);
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -1389,28 +1419,31 @@ async function reconcileDiscoveryPage(
     return false;
   }
   const last = keys.at(-1);
-  await withSearchConnection(pool, async (client) => {
-    await client.query(
-      `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$8,reconcile_position=$9,
+  await checkpointDiscovery(
+    pool,
+    (client) =>
+      client.query(
+        `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$8,reconcile_position=$9,
       revision=$10,claim_revision=$11,certified=$12 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
       AND after_id IS NOT DISTINCT FROM $13::uuid`,
-      [
-        partition,
-        target.prefix,
-        target.generation,
-        row.owner,
-        exhausted ? null : (last?.route ?? null),
-        exhausted ? null : (last?.id ?? null),
-        total.toString(),
-        census.count,
-        census.position.toString(),
-        witness.revision.toString(),
-        witness.claimRevision.toString(),
-        exhausted,
-        row.after_id,
-      ],
-    );
-  });
+        [
+          partition,
+          target.prefix,
+          target.generation,
+          row.owner,
+          exhausted ? null : (last?.route ?? null),
+          exhausted ? null : (last?.id ?? null),
+          total.toString(),
+          census.count,
+          census.position.toString(),
+          witness.revision.toString(),
+          witness.claimRevision.toString(),
+          exhausted,
+          row.after_id,
+        ],
+      ),
+    exhausted,
+  );
   return false;
 }
 
@@ -1434,7 +1467,9 @@ async function reconcileMetadataDiscoveryPage(
   // Replay the native raw population first: target hits cannot discover a newly eligible identity.
   if (!row.native_complete) {
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
-    const page = await nativePopulationPage(pool, target, producer, row.partition, after, row.continuation);
+    const page = await timeDiscovery('native pre', () =>
+      nativePopulationPage(pool, target, producer, row.partition, after, row.continuation),
+    );
     if (!page) return true;
     if (row.native_epoch !== null && page.epoch !== row.native_epoch) {
       await retireDiscoveryCapability(pool, target);
@@ -1457,7 +1492,7 @@ async function reconcileMetadataDiscoveryPage(
     if (await guardedEmptyProbe?.isInitialMetadataEmpty(row, initialEmpty)) {
       await checkCapability();
       // Release the generation lock before acquiring the owner's current read connection.
-      const current = await producer.read(row.partition, []);
+      const current = await timeDiscovery('native post', () => producer.read(row.partition, []));
       if (current.epoch !== page.epoch) {
         await retireDiscoveryCapability(pool, target);
         return true;
@@ -1471,13 +1506,17 @@ async function reconcileMetadataDiscoveryPage(
         return false;
       }
     }
-    if (actions.length > 0) await searchTurnCall(() => projection.applyNativeActions(actions));
+    if (actions.length > 0)
+      await timeDiscovery('physical writes', () => searchTurnCall(() => projection.applyNativeActions(actions)));
     await checkCapability();
-    if (page.next === null && (await producer.position(row.partition)) !== page.position) {
+    if (
+      page.next === null &&
+      (await timeDiscovery('native post', () => producer.position(row.partition))) !== page.position
+    ) {
       await restartMetadataReconciliation(pool, target, row.partition, kind);
       return false;
     }
-    await withSearchConnection(pool, (client) =>
+    await checkpointDiscovery(pool, (client) =>
       client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
        native_complete=$8,reconcile_position=$9,native_epoch=$12
@@ -1501,7 +1540,7 @@ async function reconcileMetadataDiscoveryPage(
     );
     return false;
   }
-  const current = await producer.read(row.partition, []);
+  const current = await timeDiscovery('native pre', () => producer.read(row.partition, []));
   if (row.native_epoch !== null && current.epoch !== row.native_epoch) {
     await retireDiscoveryCapability(pool, target);
     return true;
@@ -1536,11 +1575,13 @@ async function reconcileMetadataDiscoveryPage(
       throw new GenerationReconciliationMismatch();
     return { route: key.route, id: key.id };
   });
-  const snapshot = await searchTurnCall(() =>
-    projection.prepareOwnerActions(
-      kind,
-      row.partition,
-      keys.map(({ id }) => id),
+  const snapshot = await timeDiscovery('native keyed', () =>
+    searchTurnCall(() =>
+      projection.prepareOwnerActions(
+        kind,
+        row.partition,
+        keys.map(({ id }) => id),
+      ),
     ),
   );
   if (row.reconcile_position !== null && BigInt(row.reconcile_position) !== snapshot.position) {
@@ -1552,37 +1593,41 @@ async function reconcileMetadataDiscoveryPage(
     if (indexedReads && emptyIndexedMetadataCandidate(row)) {
       indexedReads.observed(row);
       await indexedReads.checkEmptyPage();
-    } else await withDiscoveryTarget(pool, search, target, async () => {});
-  } else await searchTurnCall(() => projection.applyNativeActions(snapshot.actions));
+    } else await timeDiscovery('physical custody', () => withDiscoveryTarget(pool, search, target, async () => {}));
+  } else
+    await timeDiscovery('physical writes', () => searchTurnCall(() => projection.applyNativeActions(snapshot.actions)));
   await checkCapability();
   const exhausted = hits.length < 100;
   const finalPosition = exhausted
-    ? await searchTurnCall(() => projection.ownerPosition(kind, row.partition))
+    ? await timeDiscovery('native post', () => searchTurnCall(() => projection.ownerPosition(kind, row.partition)))
     : snapshot.position;
   if (finalPosition !== snapshot.position) {
     await restartMetadataReconciliation(pool, target, row.partition, kind);
     return false;
   }
   const last = keys.at(-1);
-  await withSearchConnection(pool, (client) =>
-    client.query(
-      `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$7,
+  await checkpointDiscovery(
+    pool,
+    (client) =>
+      client.query(
+        `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$7,
       reconcile_position=$8,certified=$9 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
       AND after_id IS NOT DISTINCT FROM $10::uuid AND reconcile_position IS NOT DISTINCT FROM $11::bigint`,
-      [
-        row.partition,
-        target.prefix,
-        target.generation,
-        kind,
-        exhausted ? null : (last?.route ?? null),
-        exhausted ? null : (last?.id ?? null),
-        (BigInt(row.indexed) + BigInt(hits.length)).toString(),
-        snapshot.position.toString(),
-        exhausted,
-        row.after_id,
-        row.reconcile_position,
-      ],
-    ),
+        [
+          row.partition,
+          target.prefix,
+          target.generation,
+          kind,
+          exhausted ? null : (last?.route ?? null),
+          exhausted ? null : (last?.id ?? null),
+          (BigInt(row.indexed) + BigInt(hits.length)).toString(),
+          snapshot.position.toString(),
+          exhausted,
+          row.after_id,
+          row.reconcile_position,
+        ],
+      ),
+    exhausted,
   );
   return false;
 }
@@ -1605,11 +1650,10 @@ async function readDiscoveryIndexHits(
   target: DiscoveryTarget,
   body: Readonly<Record<string, unknown> & { size: number }>,
 ) {
-  const result = await search.request<unknown>(
-    'POST',
-    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
-    body,
-    { query: { allow_partial_search_results: false } },
+  const result = await timeDiscovery('physical reads', () =>
+    search.request<unknown>('POST', `/${discoveryIndexName(target.prefix, target.generation)}/_search`, body, {
+      query: { allow_partial_search_results: false },
+    }),
   );
   assertCompleteSearch(result.body);
   if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
@@ -1635,10 +1679,10 @@ async function discoveryScopesEmpty(
 
 function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
   if (rows.length < 2) return undefined;
-  function witnessBatch() {
+  function witnessBatch(stage: 'native pre' | 'native post') {
     const partitions = new Set<number>();
     const reads = discoveryPageReadBatch(rows, () =>
-      searchTurnCall(() => readAccountDiscoveryWitness(pool, [...partitions])),
+      timeDiscovery(stage, () => searchTurnCall(() => readAccountDiscoveryWitness(pool, [...partitions]))),
     );
     return {
       observed: reads.observed,
@@ -1649,8 +1693,8 @@ function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
       },
     };
   }
-  const before = witnessBatch();
-  const after = witnessBatch();
+  const before = witnessBatch('native pre');
+  const after = witnessBatch('native post');
   return {
     before,
     after,
@@ -1687,11 +1731,13 @@ function reconciliationEmptyIndexProbe(
   const coreScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const metadataScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const guardedEmpty = (scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) =>
-    withDiscoveryTarget(pool, search, target, async (_client, index) => {
-      const empty = await discoveryScopesEmpty(search, target, scopes);
-      if (empty) await requireDiscoveryIndexFormat(search, index);
-      return empty;
-    });
+    timeDiscovery('physical custody', () =>
+      withDiscoveryTarget(pool, search, target, async (_client, index) => {
+        const empty = await discoveryScopesEmpty(search, target, scopes);
+        if (empty) await requireDiscoveryIndexFormat(search, index);
+        return empty;
+      }),
+    );
   async function optionalEmpty(scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) {
     try {
       return await guardedEmpty(scopes);
@@ -1739,9 +1785,11 @@ async function certifyInitialEmptyMetadata(
   row: Population,
   nativeEpoch: number | null,
 ) {
-  await withSearchConnection(pool, (client) =>
-    client.query(
-      `WITH bound AS MATERIALIZED (
+  await checkpointDiscovery(
+    pool,
+    (client) =>
+      client.query(
+        `WITH bound AS MATERIALIZED (
          SELECT 1 FROM search.discovery_generation
          WHERE partition_no=0 AND prefix=$1 AND generation=$2
            AND index_uuid=$3 AND incarnation=$4::uuid AND state='reconciling'
@@ -1753,18 +1801,19 @@ async function certifyInitialEmptyMetadata(
          AND after_route IS NULL AND after_id IS NULL AND continuation IS NULL AND reconcile_position IS NULL
          AND indexed=0 AND census=0 AND position=$8::bigint AND native_epoch IS NOT DISTINCT FROM $9::integer
          AND EXISTS (SELECT 1 FROM bound)`,
-      [
-        target.prefix,
-        target.generation,
-        target.uuid,
-        target.incarnation,
-        row.partition,
-        row.owner,
-        nativeEpoch,
-        row.position,
-        row.native_epoch,
-      ],
-    ),
+        [
+          target.prefix,
+          target.generation,
+          target.uuid,
+          target.incarnation,
+          row.partition,
+          row.owner,
+          nativeEpoch,
+          row.position,
+          row.native_epoch,
+        ],
+      ),
+    true,
   );
 }
 
@@ -1780,7 +1829,9 @@ function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, ba
       row.owner as DiscoveryMetadataKind,
     ),
   );
-  const reads = discoveryPageReadBatch([...candidates], () => discoveryScopesEmpty(search, target, scopes));
+  const reads = discoveryPageReadBatch([...candidates], () =>
+    timeDiscovery('physical reads', () => discoveryScopesEmpty(search, target, scopes)),
+  );
   return {
     observed: reads.observed,
     async isEmpty(row: Population) {
@@ -1797,12 +1848,13 @@ async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
     await client.query('BEGIN');
     try {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [index]);
-      await client.query(
+      const retiring = await client.query(
         `UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND generation=$2
        AND index_uuid=$3 AND incarnation=$4::uuid AND state NOT IN ('active','retired','quarantined')`,
         [target.prefix, target.generation, target.uuid, target.incarnation],
       );
       await client.query('COMMIT');
+      discoveryEdge('retiring', target.generation, retiring.rowCount);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -1897,13 +1949,14 @@ async function completeDiscoveryActivation(
         "UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",
         [target.prefix, target.generation],
       );
-      await client.query(
+      const activated = await client.query(
         `UPDATE search.discovery_generation SET state='active',activated_at=clock_timestamp()
          WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'
            AND index_uuid=$3 AND incarnation=$4::uuid`,
         [target.prefix, target.generation, target.uuid, target.incarnation],
       );
       await client.query('COMMIT');
+      discoveryEdge('active', target.generation, activated.rowCount);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -1975,7 +2028,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
   for (const candidate of generations) {
     if (!candidate.uuid || ['active', 'allocated', 'retiring', 'retired', 'quarantined'].includes(candidate.state))
       continue;
-    if (!(await discoveryPhysicalTargetMatches(search, candidate))) {
+    if (!(await timeDiscovery('advance physical target', () => discoveryPhysicalTargetMatches(search, candidate)))) {
       await retireDiscoveryCapability(pool, candidate);
       retiredCapturedTarget = true;
     }
@@ -2012,7 +2065,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     if (!physical || physical.incarnation !== target.incarnation)
       throw allocationFailure ?? new SearchUnavailableError('Discovery allocation identity is unavailable');
     const uuid = physical.uuid;
-    await withSearchConnection(pool, (client) =>
+    const assigned = await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET index_uuid=$3,capability=$4::jsonb,state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='allocated' AND incarnation=$5::uuid",
         [
@@ -2024,6 +2077,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
         ],
       ),
     );
+    discoveryEdge('populating', target.generation, assigned.rowCount);
     return;
   }
   if (!discoveryCapabilityMatches(target, target.capability, witnesses)) {
@@ -2032,21 +2086,24 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
   }
   const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
   if (target.state === 'populating' || target.state === 'reconciling') {
-    const populations = await withSearchConnection(
-      pool,
-      async (client) =>
-        (
-          await client.query<Population>(
-            `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
+    const populations = await timeDiscovery('frontier selection', () =>
+      withSearchConnection(
+        pool,
+        async (client) =>
+          (
+            await client.query<Population>(
+              `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
       revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text,native_complete,native_epoch FROM search.discovery_population
       WHERE prefix=$1 AND generation=$2 AND ${target.state === 'populating' ? 'NOT complete' : 'NOT certified'} ORDER BY partition_no,owner LIMIT $3`,
-            [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE],
-          )
-        ).rows,
+              [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE],
+            )
+          ).rows,
+      ),
     );
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
-      const checkCapability = discoveryPageCapabilityCheck(pool, projection, target.state === 'populating');
+      const check = discoveryPageCapabilityCheck(pool, projection, target.state === 'populating');
+      const checkCapability = () => timeDiscovery('capability', check);
       await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
@@ -2056,7 +2113,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
           const indexedReads =
             target.state === 'reconciling'
               ? discoveryPageReadBatch(batch.filter(emptyIndexedMetadataCandidate), () =>
-                  withDiscoveryTarget(pool, search, target, async () => {}),
+                  timeDiscovery('physical custody', () => withDiscoveryTarget(pool, search, target, async () => {})),
                 )
               : undefined;
           const emptyIndexProbe =
@@ -2100,32 +2157,37 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
           };
         },
         (retired) => retired,
+        { phase: target.state, generation: target.generation },
       );
       return;
     }
   }
   if (target.state === 'populating') {
-    await withSearchConnection(pool, (client) =>
+    const changed = await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='replaying' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='populating'",
         [prefix, target.generation],
       ),
     );
+    discoveryEdge('replaying', target.generation, changed.rowCount);
     return;
   }
-  const replay = await withSearchConnection(pool, (client) =>
-    freshness.run(client, { consumer: discoveryConsumer(prefix, target.generation) }),
+  const replay = await timeDiscovery('replay freshness', () =>
+    withSearchConnection(pool, (client) =>
+      freshness.run(client, { consumer: discoveryConsumer(prefix, target.generation) }),
+    ),
   );
   if (!replay || (replay.behind > 0 && replay.oldest === null))
     throw new SearchUnavailableError('Discovery replay freshness is unavailable');
   if (replay.behind > 0) return;
   if (target.state === 'replaying') {
-    await withSearchConnection(pool, (client) =>
+    const changed = await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='replaying'",
         [prefix, target.generation],
       ),
     );
+    discoveryEdge('reconciling', target.generation, changed.rowCount);
     return;
   }
   // A native write after a partition was certified invalidates that partition, including empty populations.
@@ -2250,6 +2312,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
       [prefix, target.generation, target.uuid, target.incarnation],
     );
     if (ready.rowCount !== 1) throw new SearchUnavailableError('Discovery activation target changed');
+    if (target.state !== 'ready') discoveryEdge('ready', target.generation);
   });
   if (!(await discoveryAliasMatches(search, target))) {
     await observedWrite(

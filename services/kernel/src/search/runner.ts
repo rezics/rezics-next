@@ -24,6 +24,7 @@ import {
   type DiscoveryGeneration,
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
+import { observeDiscovery, timeDiscovery } from './discovery-timing.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { discoveryIndexName, discoveryPhysicalTargetMatches, readDiscoveryPhysicalIdentity } from './indices.ts';
@@ -449,26 +450,30 @@ export function startDiscoveryIndexing(options: {
     if (stopped || paused) return;
     const producers = options.producers;
     const ownerAdapters = producers
-      ? await turn.call(() =>
-          resolveDiscoveryOwnerAdapters({
-            ...producers,
-            metadataProducers: searchTurnMetadataProducers(producers.metadataProducers, 'population'),
-          }),
+      ? await timeDiscovery('readiness', () =>
+          turn.call(() =>
+            resolveDiscoveryOwnerAdapters({
+              ...producers,
+              metadataProducers: searchTurnMetadataProducers(producers.metadataProducers, 'population'),
+            }),
+          ),
         )
       : undefined;
     if (stopped || paused) return;
-    const registry = await turn.call(() =>
-      nativeDiscoveryRegistry(
-        options.pool,
-        options.routeKey,
-        options.source,
-        ownerAdapters && producers
-          ? {
-              ownerAdapters: ownerAdapters.ownerAdapters,
-              accounts: producers.accounts,
-              omittedKinds: ownerAdapters.omittedKinds,
-            }
-          : undefined,
+    const registry = await timeDiscovery('registry', () =>
+      turn.call(() =>
+        nativeDiscoveryRegistry(
+          options.pool,
+          options.routeKey,
+          options.source,
+          ownerAdapters && producers
+            ? {
+                ownerAdapters: ownerAdapters.ownerAdapters,
+                accounts: producers.accounts,
+                omittedKinds: ownerAdapters.omittedKinds,
+              }
+            : undefined,
+        ),
       ),
     );
     if (stopped || paused) return;
@@ -476,21 +481,25 @@ export function startDiscoveryIndexing(options: {
     const reviewSource = producers?.reviewSource ?? options.reviewSource;
     let readiness: Error | undefined;
     try {
-      await advanceDiscovery({
-        ...options,
-        search,
-        registry,
-        requiredKinds: options.requiredKinds ?? Object.keys(metadataProducers ?? {}),
-        ...(metadataProducers ? { metadataProducers } : {}),
-        ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
-      });
+      await timeDiscovery('advance', () =>
+        advanceDiscovery({
+          ...options,
+          search,
+          registry,
+          requiredKinds: options.requiredKinds ?? Object.keys(metadataProducers ?? {}),
+          ...(metadataProducers ? { metadataProducers } : {}),
+          ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
+        }),
+      );
     } catch (error) {
       if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
         throw error;
       readiness = error;
     }
     if (stopped || paused) return;
-    const generations = await discoveryGenerations(options.pool, options.prefix);
+    const generations = await timeDiscovery('runner inventory', () =>
+      discoveryGenerations(options.pool, options.prefix),
+    );
     if (stopped || paused) return;
     delay =
       !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
@@ -500,7 +509,8 @@ export function startDiscoveryIndexing(options: {
     const relayTargets: (DiscoveryGeneration & { uuid: string })[] = [];
     for (const target of generations) {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
-      if (await discoveryPhysicalTargetMatches(search, target)) relayTargets.push(target);
+      if (await timeDiscovery('runner physical target', () => discoveryPhysicalTargetMatches(search, target)))
+        relayTargets.push(target);
     }
     const bindings = new Map<number, string>(
       relayTargets.map((target) => [target.generation, target.uuid + ':' + target.incarnation]),
@@ -593,9 +603,11 @@ export function startDiscoveryIndexing(options: {
     for (const target of generations) {
       if (stopped || paused) return;
       if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
-        await turn.call(async () => {
-          await installation?.receivers.get(target.generation)?.next();
-        });
+        await timeDiscovery('review receiving', () =>
+          turn.call(async () => {
+            await installation?.receivers.get(target.generation)?.next();
+          }),
+        );
     }
     if (stopped || paused) return;
     if (readiness) throw readiness;
@@ -625,7 +637,7 @@ export function startDiscoveryIndexing(options: {
       if (stopped || paused) return;
       try {
         turn.check();
-        await next(turn);
+        await (next === retireOne ? timeDiscovery('retirement', () => next(turn)) : next(turn));
       } catch (error) {
         failures.push(error);
       }
@@ -634,7 +646,9 @@ export function startDiscoveryIndexing(options: {
   };
   const refresh = (context?: SearchTurnContext) => {
     if (stopped) return Promise.resolve();
-    const { queued, result } = queueSearchTurn(running, context, lifetime.signal, step);
+    const { queued, result } = queueSearchTurn(running, context, lifetime.signal, (turn) =>
+      observeDiscovery({ event: 'turn' }, () => step(turn)),
+    );
     running = queued.catch((error) => {
       delay = options.intervalMs ?? 100;
       if (!stopped) console.error('Discovery maintenance failed', error);
