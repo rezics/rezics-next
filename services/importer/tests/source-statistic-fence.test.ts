@@ -1,4 +1,4 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -27,16 +27,21 @@ test('bound VNDB refresh suppresses source-statistic publication behind the exac
   let statistics = 0;
   let sequence = 0;
   const fences: string[] = [];
+  const observations = sourceObservationFixture();
   const transport: ImportTransport = {
     setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence(tuple) {
       fences.push(`${tuple.source}:${tuple.external_id}:${tuple.field_group}`);
-      return tuple.field_group === 'facts' && fenced
+      return fenced && tuple.source === 'vndb' && tuple.external_id === 'v123' && tuple.field_group === 'facts'
         ? { fenced: true, securityRevision: '1' }
         : { fenced: false, securityRevision: null };
     },
-    async writeSourceStatistic() {
+    async readSourceObservationHead({ subjectId }) {
+      return observations.read(subjectId);
+    },
+    async writeSourceStatistic(input) {
       statistics++;
+      observations.observe(input.subjectId, input.value);
     },
     async batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
       return {
@@ -54,29 +59,34 @@ test('bound VNDB refresh suppresses source-statistic publication behind the exac
     },
   };
   const importer = new Importer({ path: ':memory:', transport });
-  const registration = createSourceRegistration('vndb');
-  const run = (revision: number) =>
+  const run = (revision: number, sourceSnapshotAsOf: string) =>
     importer.runRecords(
-      registration,
+      createSourceRegistration('vndb', { sourceSnapshotAsOf }),
       (async function* () {
         yield row(revision);
       })(),
     );
   try {
-    expect((await run(7)).status).toBe('committed');
+    expect((await run(7, '2026-10-25')).status).toBe('committed');
     expect(statistics).toBe(1);
+    const prior = observations.read(subject);
+    expect(prior).toMatchObject({
+      state: 'published',
+      observation: { asOf: '2026-10-25', payload: { mean: 7.35 } },
+    });
     const claim = importer.session.bindings.claim({ source: 'vndb', external_id: 'v123' });
     expect(claim?.state).toBe('bound');
     if (claim?.state !== 'bound') throw new Error('Expected bound VNDB claim');
     expect(claim.subject).toBe(subject);
     fenced = true;
     const before = fences.length;
-    expect((await run(8)).status).toBe('committed');
+    expect((await run(8, '2026-10-26')).status).toBe('committed');
     expect(statistics).toBe(1);
     expect(fences.slice(before)).toContain('vndb:v123:facts');
     const refreshed = fences.length;
-    expect((await run(8)).status).toBe('committed');
+    expect((await run(8, '2026-10-26')).status).toBe('committed');
     expect(statistics).toBe(1);
+    expect(observations.read(subject)).toEqual(prior);
     expect(fences.slice(refreshed)).toContain('vndb:v123:facts');
   } finally {
     await importer.close();

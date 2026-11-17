@@ -401,6 +401,8 @@ for (const failure of ['denied', 'lost'] as const) {
   test(`unacknowledged statistic refresh (${failure}) preserves the completed baseline and resumes under its original key`, async () => {
     const f = await statisticRefreshFixture();
     try {
+      const baseline = f.importer.session.store.source('vndb');
+      const priorHead = f.importer.session.store.retainedAggregateHead('vndb', subjectId);
       f.fail(failure);
       const run = await f.run(735);
       expect(run.status).toBe('bulk-failed');
@@ -415,7 +417,8 @@ for (const failure of ['denied', 'lost'] as const) {
         expect(formatSeedError(error)).toContain('status=403');
         expect(formatSeedError(error)).not.toContain('local-protocol-token');
       }
-      const baseline = f.importer.session.store.source('vndb');
+      expect(f.importer.session.store.source('vndb')).toEqual(baseline);
+      expect(f.importer.session.store.retainedAggregateHead('vndb', subjectId)).toEqual(priorHead);
       const uncertainRun = f.importer.session.store.activeRun('vndb')!;
       expect(uncertainRun).not.toBeNull();
       expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
@@ -425,17 +428,24 @@ for (const failure of ['denied', 'lost'] as const) {
       expect(JSON.parse(uncertain[0]!.body).asOf).toBe('2026-11-04');
       await f.reopen();
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
+      expect(f.importer.session.store.retainedAggregateHead('vndb', subjectId)).toEqual(priorHead);
       if (failure === 'lost') f.setSourceSnapshotAsOf('2026-11-05');
       f.fail(null);
       expect((await f.run(735)).status).toBe('committed');
+      expect(f.writes).toHaveLength(uncertain.length + 1);
       expect(f.writes.at(-1)).toEqual(uncertain[0]!);
       expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
       const refreshed = f.importer.session.store.source('vndb');
       expect(refreshed.generation).not.toBeNull();
+      const refreshedHead = f.importer.session.store.retainedAggregateHead('vndb', subjectId);
+      expect(refreshedHead).toMatchObject({ sourceRecordId: 'v123', mean: 7.35, asOf: '2026-11-04' });
       const count = f.writes.length;
+      // Use the sealed snapshot date to exercise a genuinely unchanged rerun.
+      f.setSourceSnapshotAsOf('2026-11-04');
       expect((await f.run(735)).status).toBe('committed');
       expect(f.writes).toHaveLength(count);
       expect(f.importer.session.store.source('vndb')).toEqual(refreshed);
+      expect(f.importer.session.store.retainedAggregateHead('vndb', subjectId)).toEqual(refreshedHead);
     } finally {
       await f.close();
     }
