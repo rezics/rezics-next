@@ -444,21 +444,83 @@ async function main() {
       if (editor && !frontendCause && keys) {
         try {
           const signIn = await session.member.newPage();
-          await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
-            waitUntil: 'domcontentloaded',
-            timeout: 180_000,
-          });
-          for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
-            await hydrated(signIn);
-            const email = signIn.locator('input[type="email"]');
-            if (await email.count()) {
-              await email.fill('developer@rezics.test');
-              await signIn.locator('input[type="password"]').fill(keys.password);
+          const accountEmail = 'developer@rezics.test';
+          const returnTo = '/en/catalogue/new';
+          const destination = new URL(returnTo, stack.web).href;
+          let callbackAccepted = false;
+          let accountConfirmed = false;
+          try {
+            signIn.on('response', (response) => {
+              const url = new URL(response.url());
+              if (url.origin !== stack.web || url.pathname !== '/auth/callback' || response.status() !== 303) return;
+              const next = response.headers().location;
+              if (next && new URL(next, url).href === destination) callbackAccepted = true;
+            });
+            await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 180_000,
+            });
+            for (let attempt = 0; attempt < 4;) {
+              const step = await signIn.waitForFunction(
+                ({ issuer, web, destination, accountEmail, accountConfirmed }) => {
+                  if (location.href === destination) return 'arrived';
+                  if (location.origin === web && location.pathname === '/auth/callback') return false;
+                  if (location.origin !== issuer) return 'unexpected-origin';
+                  if (!document.documentElement.hasAttribute('data-hydrated')) return false;
+                  const email = document.querySelector<HTMLInputElement>('input[type="email"]');
+                  if (email?.readOnly && email.value !== accountEmail) return 'wrong-account';
+                  if (email?.readOnly && !accountConfirmed) return 'confirmed-account';
+                  const password = document.querySelector<HTMLInputElement>('input[type="password"]');
+                  if (email?.disabled || password?.readOnly || password?.disabled) return false;
+                  if (document.querySelector('form button[type="submit"]:enabled')) return 'submit';
+                  if (
+                    Array.from(document.querySelectorAll('button:enabled')).some(
+                      (button) => button.textContent?.trim() === 'Continue',
+                    )
+                  )
+                    return 'continue-account';
+                  return false;
+                },
+                { issuer: stack.issuer, web: stack.web, destination, accountEmail, accountConfirmed },
+                { timeout: 30_000 },
+              );
+              const next = await step.jsonValue();
+              await step.dispose();
+              if (next === 'arrived') break;
+              if (next === 'wrong-account') throw new Error('Auth presented a different readonly sign-in account');
+              if (next === 'unexpected-origin') throw new Error('Auth left the expected sign-in and callback routes');
+              if (next === 'confirmed-account') {
+                accountConfirmed = true;
+                continue;
+              }
+              if (new URL(signIn.url()).origin !== stack.issuer) continue;
+              attempt++;
+              if (next === 'continue-account') {
+                const current = signIn.getByText(`You’re signed in as ${accountEmail}.`, { exact: true });
+                if (!(await current.isVisible())) throw new Error('Auth presented a different current sign-in account');
+                accountConfirmed = true;
+                await signIn.getByRole('button', { name: 'Continue', exact: true }).click();
+                continue;
+              }
+              const email = signIn.locator('input[type="email"]');
+              if (await email.count()) {
+                if ((await email.inputValue()) !== accountEmail) {
+                  if (!(await email.isEditable())) throw new Error('Auth presented a different readonly sign-in account');
+                  await email.fill(accountEmail);
+                }
+                accountConfirmed = true;
+              }
+              const password = signIn.locator('input[type="password"]:not([readonly]):enabled');
+              if (await password.count()) await password.fill(keys.password);
+              await signIn.locator('form button[type="submit"]:enabled').first().click();
             }
-            await signIn.locator('form button[type="submit"]').first().click();
-            await signIn.waitForLoadState('domcontentloaded');
+            await signIn.waitForURL(destination, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+            if (!accountConfirmed || !callbackAccepted) throw new Error('Auth did not confirm the expected account and Web callback');
+            await hydrated(signIn);
+            await signIn.locator('#account-menu-button').waitFor({ state: 'visible', timeout: 30_000 });
+          } finally {
+            await signIn.close();
           }
-          await signIn.close();
         } catch (error) {
           session.frontendCause = error instanceof Error ? error.message : String(error);
           frontendCause = session.frontendCause;
