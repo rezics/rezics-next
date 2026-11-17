@@ -914,7 +914,32 @@ async function restoreOwnerLibrary() {
     status: 'acknowledged',
     labelId: expect.any(String),
   });
-  const restoredLabelId = labelMapping.labelId as string;
+  await stack.syncKernelRequests();
+  const applyRequest = stack
+    .kernelRequests()
+    .findLast(
+      ({ fixtureRequest, method, url, responseStatus }) =>
+        !fixtureRequest &&
+        method === 'POST' &&
+        responseStatus === 200 &&
+        /^\/v1\/libraryArchiveMerges\/[0-9a-f-]{36}\/apply$/u.test(url),
+    );
+  if (!applyRequest) throw new Error('No successful native Archive apply was observed for the mounted visit');
+  const resultPath = applyRequest.url.replace(/\/apply$/u, '/results?after=-1&limit=100');
+  const { results: appliedRows } = await json<{
+    results: {
+      section: string;
+      ordinal: number;
+      status: string;
+      result?: { effect?: string; labelId?: string };
+    }[];
+  }>(await stack.kernel(resultPath, { signal: AbortSignal.timeout(2_000) }, 'alice'), 200, 'owner Archive result');
+  const applied = appliedRows.find((item) => item.section === 'labels' && item.ordinal === labelOrdinal);
+  expect(applied).toMatchObject({
+    status: 'acknowledged',
+    result: { effect: 'label.create', labelId: expect.any(String) },
+  });
+  const restoredLabelId = applied!.result!.labelId!;
   expect(restoredLabelId).not.toBe(prepared.labelId);
 
   await readCurrent.click();
@@ -922,109 +947,37 @@ async function restoreOwnerLibrary() {
     has: page.getByRole('heading', { name: await message('en', 'library_archive_entry_current'), exact: true }),
   });
   await currentLabel.getByText(prepared.labelName, { exact: true }).waitFor({ state: 'visible' });
+  await currentLabel.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
+  const displayed = JSON.parse((await currentLabel.locator('pre').textContent()) ?? 'null') as {
+    label?: { id?: unknown; name?: unknown; revision?: unknown };
+  } | null;
   const { labels: currentLabels, next } = await readOwnerLabelPage(prepared.labelName);
   const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
   const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
   let labelDisagreement: object | undefined;
-  if (restoredLabel?.name !== prepared.labelName) {
-    await currentLabel.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
-    const displayed = JSON.parse((await currentLabel.locator('pre').textContent()) ?? 'null') as {
-      label?: { id?: unknown; name?: unknown; revision?: unknown };
-    } | null;
-    const displayedId = displayed?.label?.id;
-    const appearsInPrefix = typeof displayedId === 'string' && currentLabels.some((label) => label.id === displayedId);
-    await stack.syncKernelRequests();
-    const resultRequest = stack
-      .kernelRequests()
-      .findLast(
-        ({ fixtureRequest, method, url, responseStatus }) =>
-          !fixtureRequest &&
-          method === 'GET' &&
-          responseStatus === 200 &&
-          /^\/v1\/libraryArchiveMerges\/[0-9a-f-]{36}\/results(?:\?|$)/u.test(url),
-      );
-    let nativeReceiptStatus: number | undefined;
-    let nativeReceiptId: unknown;
-    if (resultRequest) {
-      const response = await stack
-        .kernel(resultRequest.url, { signal: AbortSignal.timeout(2_000) }, 'alice')
-        .catch(() => undefined);
-      nativeReceiptStatus = response?.status;
-      if (response?.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          results?: { section?: unknown; ordinal?: unknown; status?: unknown; result?: { labelId?: unknown } }[];
-        } | null;
-        nativeReceiptId = body?.results?.find(
-          (item) => item.section === 'labels' && item.ordinal === labelOrdinal && item.status === 'acknowledged',
-        )?.result?.labelId;
-      } else {
-        await response?.body?.cancel();
-      }
-    }
-    const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
-    const query = new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' });
-    const point = await settledWithin(
-      stack
-        .kernel(
-          `/v1/libraryLabelAssignments?${query}`,
-          { headers: { 'accept-language': 'en' }, signal: AbortSignal.timeout(2_000) },
-          'alice',
-        )
-        .then(async (response) => {
-          const { label, code } = ((await response.json().catch(() => null)) ?? {}) as {
-            label?: { id?: unknown; name?: unknown; revision?: unknown };
-            code?: string;
-          };
-          return {
-            status: response.status,
-            exactId: label?.id === restoredLabelId,
-            exactName: label?.name === prepared.labelName,
-            revision: typeof label?.revision === 'number' ? label.revision : null,
-            problem: ['not_found', 'forbidden', 'invalid_request', 'deadline_exceeded', 'dependency_unavailable'].find(
-              (known) => known === code,
-            ),
-          };
-        }),
-      2_000,
-    ).catch(() => undefined);
+  if (restoredLabel?.name !== prepared.labelName || displayed?.label?.id !== restoredLabelId) {
     labelDisagreement = {
       outcome: 'incomplete',
       phase: 'owner-label-prefix-readback',
       browser: {
-        visibleReceiptMatchesText: visibleLabelMapping?.labelId === restoredLabelId,
-        currentMatchesReceipt: displayedId === restoredLabelId,
-        currentAppearsInPrefix: appearsInPrefix,
+        labelEvidenceMatchesNative: labelMapping.labelId === restoredLabelId,
+        visibleEvidenceMatchesNative: visibleLabelMapping?.labelId === restoredLabelId,
+        currentMatchesNative: displayed?.label?.id === restoredLabelId,
         currentNameMatches: displayed?.label?.name === prepared.labelName,
-        currentRevision: typeof displayed?.label?.revision === 'number' ? displayed.label.revision : null,
-        rawReceiptIsUuid: uuid.test(restoredLabelId),
-        visibleReceiptIsUuid:
-          typeof visibleLabelMapping?.labelId === 'string' && uuid.test(visibleLabelMapping.labelId),
-      },
-      nativeReceipt: {
-        status: nativeReceiptStatus ?? null,
-        matchesResultText: nativeReceiptId === restoredLabelId,
-        matchesCurrentLabel: typeof nativeReceiptId === 'string' && nativeReceiptId === displayedId,
-        appearsInPrefix:
-          typeof nativeReceiptId === 'string' && currentLabels.some((label) => label.id === nativeReceiptId),
       },
       prefix: {
         status: 200,
         count: currentLabels.length,
         hasNext: typeof next === 'string',
-        rows: currentLabels.slice(0, 3).map((label) => ({
-          identity: label.id === prepared.labelId ? 'source' : label.id === restoredLabelId ? 'restored' : 'other',
-          archivedName: label.name === prepared.labelName,
-          renamedName: label.name === renamedLabelName,
-          revision: label.revision,
-        })),
+        matchesNative: restoredLabel?.name === prepared.labelName,
       },
-      exactOwnerPoint: point ?? 'unavailable',
     };
     await writeArchiveProvenance(labelDisagreement);
   }
   const assertLabelReadbacks = () => {
     expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
     expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+    expect(displayed?.label).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
   };
 
   const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
