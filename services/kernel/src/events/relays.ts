@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { NestedPoolCheckoutError, withConnection } from '../database/pool.ts';
 import scanPartitions from './scan-partitions.sql';
 import upsertConsumerLag from './upsert-consumer-lag.sql';
-import type { BatchResult } from './log.ts';
+import { projectionBatchCaughtUp, type BatchResult } from './log.ts';
 
 export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
 
@@ -74,7 +74,7 @@ export function startRelays(
           }
           return;
         }
-        if (result.status === 'busy' || result.envelopes === 0) return;
+        if (result.status === 'busy' || result.envelopes === 0 || projectionBatchCaughtUp(result)) return;
       }
     } catch (error) {
       if (!(max <= 1 && isPoolAcquireTimeout(error)))
