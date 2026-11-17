@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CommandUnavailableError } from '../command/command.ts';
-import { readPartition, readPartitions } from '../partition/partition.ts';
+import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessCheck } from './access-port.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -410,45 +410,42 @@ async function captureCut(
   const selected = [...new Set([partition, ...homes])].sort((a, b) => a - b);
   if (selected.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
     return { position: 0n, cut: null, status: 'unavailable', missing: 'dependency-home-bound' };
-  const partitions = await readPartitions(client, selected);
-  const byHome = new Map(partitions.map((item) => [item.partitionNo, item]));
-  const root = byHome.get(partition);
-  if (!root) return { position: 0n, cut: null, status: 'unavailable', missing: 'source-home' };
-  if (root.writeState === 'moved' || root.writeState !== 'active')
-    return { position: root.position, cut: null, status: 'unavailable', missing: 'source-home' };
-  if (partitions.length !== selected.length || selected.some((home) => !byHome.has(home)))
-    return { position: root.position, cut: null, status: 'unavailable', missing: 'dependency-home' };
-  if (partitions.some((item) => item.writeState !== 'active'))
-    return { position: root.position, cut: null, status: 'unavailable', missing: 'dependency-home' };
-  const pending = await client.query<{ pending: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM content.review_discovery_work WHERE complete=false LIMIT 1
-     ) AS pending`,
+  // Read the same bounded evidence in one statement inside the caller's native snapshot.
+  const { rows } = await client.query<{
+    partition: number;
+    epoch: number;
+    position: string;
+    write_state: string;
+    projection: string;
+    pending: boolean;
+    frontier: string;
+  }>(
+    `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,
+            COALESCE(r.revision,0)::text AS projection,
+            EXISTS (SELECT 1 FROM content.review_discovery_work WHERE complete=false) AS pending,
+            COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=$3),0)::text AS frontier
+     FROM core.partition p
+     LEFT JOIN content.review_census_source_frontier r ON r.route=p.partition_no*16 AND r.route=ANY($2::integer[])
+     WHERE p.partition_no=ANY($1::integer[])
+     ORDER BY p.partition_no`,
+    [selected, selected.map((home) => home * 16), partition * 16],
   );
-  if (pending.rows[0]?.pending)
-    return { position: root.position, cut: null, status: 'preparing', missing: 'lifecycle-invalidation' };
-  const frontier = await client.query<{ position: string }>(
-    `SELECT position::text FROM content.review_discovery_frontier WHERE route=$1`,
-    [partition * 16],
-  );
-  const projections = await client.query<{ partition: number; revision: string }>(
-    `SELECT route/16 AS partition,revision::text FROM content.review_census_source_frontier
-     WHERE route=ANY($1::integer[])`,
-    [selected.map((home) => home * 16)],
-  );
-  const revisions = new Map(projections.rows.map((row) => [row.partition, BigInt(row.revision)]));
+  const root = rows.find((item) => item.partition === partition);
+  const position = BigInt(root?.position ?? '0');
+  if (root?.write_state !== 'active') return { position, cut: null, status: 'unavailable', missing: 'source-home' };
+  if (rows.length !== selected.length || rows.some((item) => item.write_state !== 'active'))
+    return { position, cut: null, status: 'unavailable', missing: 'dependency-home' };
+  if (root.pending) return { position, cut: null, status: 'preparing', missing: 'lifecycle-invalidation' };
   return {
-    position: root.position,
+    position,
     cut: {
-      homes: partitions
-        .map((item) => ({
-          partition: item.partitionNo,
-          epoch: item.epoch,
-          position: item.position,
-          projection: revisions.get(item.partitionNo) ?? 0n,
-        }))
-        .sort((a, b) => a.partition - b.partition),
-      frontier: BigInt(frontier.rows[0]?.position ?? '0'),
+      homes: rows.map((item) => ({
+        partition: item.partition,
+        epoch: item.epoch,
+        position: BigInt(item.position),
+        projection: BigInt(item.projection),
+      })),
+      frontier: BigInt(root.frontier),
     },
     status: 'ready',
   };
