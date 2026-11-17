@@ -72,7 +72,7 @@ function uniqueIds(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-function checkedAnchor(row: Record<string, unknown>, realmRoute: number): MemberAnchor {
+function checkedAnchor(row: Record<string, unknown>): MemberAnchor {
   if (
     typeof row.accountId !== 'string' ||
     typeof row.reservationId !== 'string' ||
@@ -80,7 +80,12 @@ function checkedAnchor(row: Record<string, unknown>, realmRoute: number): Member
   )
     throw new MemberPageUnavailableError();
   const accountRoute = routeOf(row.accountId);
-  if (accountRoute === null || routeOf(row.reservationId) !== accountRoute || routeOf(row.transactionId) !== realmRoute)
+  // Command transaction UUIDs are opaque. The membership query binds the Realm route.
+  if (
+    accountRoute === null ||
+    routeOf(row.reservationId) !== accountRoute ||
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(row.transactionId)
+  )
     throw new MemberPageUnavailableError();
   return { accountId: row.accountId, reservationId: row.reservationId, transactionId: row.transactionId };
 }
@@ -199,7 +204,7 @@ async function readCurrentMembers(
   const result = new Map<string, CurrentMemberRow>();
   const requested = new Set(accountIds);
   for (const row of rows) {
-    const anchor = checkedAnchor(row, input.route);
+    const anchor = checkedAnchor(row);
     if (
       !requested.has(anchor.accountId) ||
       result.has(anchor.accountId) ||
@@ -278,7 +283,7 @@ export async function selectRealmMembers(
       const raw = rawRows.map((row) => {
         if (typeof row.current !== 'boolean' || typeof row.hasMore !== 'boolean')
           throw new MemberPageUnavailableError();
-        return { ...checkedAnchor(row, route), current: row.current, hasMore: row.hasMore };
+        return { ...checkedAnchor(row), current: row.current, hasMore: row.hasMore };
       });
       const ids = uniqueIds([
         ...raw.filter((member) => member.current).map((member) => member.accountId),
