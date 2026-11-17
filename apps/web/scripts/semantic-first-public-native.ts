@@ -10,6 +10,8 @@ export type KernelOptions = {
   body?: unknown;
   ifMatch?: string | undefined;
   query?: Record<string, string> | undefined;
+  redirect?: 'manual';
+  signal?: AbortSignal;
 };
 export type KernelAnswer = { status: number; headers: Headers; body: Json; etag?: string | undefined };
 export type KernelCall = (method: string, path: string, options?: KernelOptions) => Promise<KernelAnswer>;
@@ -189,16 +191,113 @@ export async function createSubject(
   type: string,
   label: string,
   statements?: Record<string, unknown[]>,
-): Promise<{ id: string; revision: string; body: Json }> {
+) {
   const body: Json = { type, labels: { en: label } };
   if (statements && Object.keys(statements).length) body.statements = statements;
   const created = await call('POST', '/v1/subjects', { bearer, body });
   requireStatus(created, 201, `create ${type}`);
-  return { id: subjectId(created.body), revision: subjectRevision(created.body), body: created.body };
+  return {
+    id: subjectId(created.body),
+    revision: subjectRevision(created.body),
+    body: created.body,
+    location: created.headers.get('location'),
+  };
 }
 
 export async function readSubject(call: KernelCall, id: string, bearer?: string): Promise<KernelAnswer> {
   return call('GET', `/v1/subjects/${id}`, bearer === undefined ? {} : { bearer });
+}
+
+export async function readActiveDefinitions(call: KernelCall) {
+  const { digest, head } = requireStatus(
+    await call('GET', '/v1/definitions/active', { redirect: 'manual' }),
+    200,
+    'active definitions',
+  );
+  if (
+    typeof digest !== 'string' ||
+    !/^sha256:[a-f0-9]{64}$/.test(digest) ||
+    typeof head !== 'number' ||
+    !Number.isSafeInteger(head)
+  )
+    throw new Error('active Definitions omitted its release digest or head');
+  return { digest, head };
+}
+
+export async function createAndReadNativeBook(call: KernelCall, bearer: string, label: string) {
+  const type = 'schema:Book';
+  const created = await createSubject(call, bearer, type, label);
+  const path = `/v1/subjects/${created.id}`;
+  const current = requireStatus(await call('GET', path, { redirect: 'manual' }), 200, 'current anonymous Book');
+  const subject = current.subject as { type?: string; labels?: Record<string, string> };
+  if (
+    created.location !== path ||
+    subjectId(current) !== created.id ||
+    subjectRevision(current) !== created.revision ||
+    subject?.type !== type ||
+    subject.labels?.en !== label
+  )
+    throw new Error('current Book did not match the creation receipt identity, revision, type and label');
+  return { id: created.id, revision: created.revision, location: path, type, label };
+}
+
+/** Resolve only the current seeded account and its native person Agent. All probes are reads. */
+export async function resolveEditorAgent(call: KernelCall, bearer: string, accountId: string) {
+  const signal = AbortSignal.timeout(15_000);
+  const read = async (query: Record<string, string>, label: string) => {
+    const body = requireStatus(await call('GET', '/v1/accounts', { query, signal, redirect: 'manual' }), 200, label);
+    if (!Array.isArray(body.accounts) || body.accounts.length > 1)
+      throw new Error(`${label} did not resolve a single account`);
+    const account = body.accounts[0] as Json | undefined;
+    if (
+      account &&
+      (account.id !== accountId ||
+        account.state !== 'active' ||
+        account.kind !== 'actor' ||
+        account.automated !== false)
+    )
+      throw new Error(`${label} did not resolve the active seeded editor ${accountId}`);
+    return account;
+  };
+  const handle = (await read({ ids: accountId }, 'seeded editor identity'))?.handle;
+  if (typeof handle !== 'string' || !handle) throw new Error(`seeded editor ${accountId} has no current handle`);
+  const attempts = 12;
+  let pending = 'forward Agent link';
+  for (let attempt = 1; attempt <= attempts && !signal.aborted; attempt++) {
+    const forward = await read({ handle }, 'editor forward Agent link');
+    if (!forward || forward.handle !== handle || forward.movedTo !== undefined)
+      throw new Error(`seeded editor ${accountId} no longer owns the current handle`);
+    const link = forward.subject as Json | null;
+    if (!link) {
+      pending = 'forward Agent link';
+      if (attempt < attempts) await Bun.sleep(1_000);
+      continue;
+    }
+    const id = requireId(link.id, 'editor Agent');
+    if (link.type !== 'schema:Person') throw new Error(`seeded editor ${accountId} has a non-person Agent link`);
+    const inverse = await read({ agent: id }, 'editor inverse Agent link');
+    if (!inverse) {
+      pending = 'inverse Agent link';
+      if (attempt < attempts) await Bun.sleep(1_000);
+      continue;
+    }
+    const inverseLink = inverse.subject as Json | null;
+    if (inverse.handle !== handle || inverseLink?.id !== id || inverseLink.type !== link.type)
+      throw new Error(`inverse Agent link disagreed with seeded editor ${accountId}`);
+    const subject = requireStatus(
+      await call('GET', `/v1/subjects/${id}`, { bearer, signal, redirect: 'manual' }),
+      200,
+      'current editor Agent Subject',
+    );
+    if (
+      subjectId(subject) !== id ||
+      (subject.subject as Json).type !== link.type ||
+      (subject.account as Json | null)?.id !== accountId
+    )
+      throw new Error(`current Agent Subject disagreed with seeded editor ${accountId}`);
+    return { accountId, handle, id, type: link.type, revision: subjectRevision(subject) };
+  }
+  throw new Error(`seeded editor ${accountId} still has no current ${pending} after bounded reads`);
 }
 
 export async function propose(

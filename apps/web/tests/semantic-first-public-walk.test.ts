@@ -1,8 +1,18 @@
 import { expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
-import { nativeWalkCall, type NativeObservation } from '../scripts/semantic-first-public-request.ts';
 import {
+  kernelDeadlineTimings,
+  nativeWalkCall,
+  summarizeBoundaryRequest,
+  type NativeObservation,
+} from '../scripts/semantic-first-public-request.ts';
+import {
+  createAndReadNativeBook,
   handleCall,
+  readActiveDefinitions,
+  resolveEditorAgent,
   searchType,
   walkReadinessUrls,
   websiteAccessToken,
@@ -62,6 +72,146 @@ test('the first-public walk names each of the 31 catalogue and Zone journeys onc
   expect(FIRST_PUBLIC_JOURNEYS).toHaveLength(31);
   expect(new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.id)).size).toBe(31);
   expect(new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.name)).size).toBe(31);
+});
+
+const fixtureSubjectId = 'abea4570-a90c-8fd8-a148-3ada6997936e';
+const fixtureAccountId = '50a1a364-ba10-82b1-be1c-8d868d243da6';
+
+test('native Definitions and Book boundaries perform anonymous reads and keep the editor write receipt key', async () => {
+  const trace: NativeObservation[] = [];
+  const digest = `sha256:${'a'.repeat(64)}`;
+  const subject = { id: fixtureSubjectId, revision: 1, type: 'schema:Book', labels: { en: 'Native Book' } };
+  const path = `/v1/subjects/${subject.id}`;
+  const call = nativeWalkCall(stack.kernel, trace, (async (url, init) => {
+    const request = new Request(url, init);
+    const pathname = new URL(request.url).pathname;
+    if (request.method === 'POST') {
+      expect(pathname).toBe('/v1/subjects');
+      expect(request.headers.get('authorization')).toBe('Bearer editor-secret');
+      expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(trace.at(-1)?.key));
+      expect(await request.json()).toEqual({ type: subject.type, labels: subject.labels });
+      return Response.json(
+        { subject },
+        { status: 201, headers: { location: path, 'rezics-session-token': 'write-session' } },
+      );
+    }
+    expect(request.headers.has('authorization')).toBe(false);
+    expect(request.headers.has('rezics-session-token')).toBe(false);
+    expect(request.redirect).toBe('manual');
+    if (pathname === '/v1/definitions/active') return Response.json({ digest, head: 1 });
+    expect(pathname).toBe(path);
+    return Response.json({ subject });
+  }) as typeof fetch);
+  expect(await readActiveDefinitions(call)).toEqual({ digest, head: 1 });
+  expect(await createAndReadNativeBook(call, 'editor-secret', 'Native Book')).toMatchObject({
+    id: subject.id,
+    revision: '1',
+    location: path,
+  });
+  expect(trace.map(({ method, status }) => [method, status])).toEqual([
+    ['GET', 200],
+    ['POST', 201],
+    ['GET', 200],
+  ]);
+});
+
+test('consent waits for the current seeded editor Agent and rejects a divergent inverse account', async () => {
+  const account = { id: fixtureAccountId, kind: 'actor', state: 'active', handle: 'current-editor', automated: false };
+  const subject = { id: fixtureSubjectId, type: 'schema:Person', revision: 1 };
+  let waitForLink = true;
+  let wrongInverse = false;
+  const requests: string[] = [];
+  const call = handleCall(
+    async (request) => {
+      const url = new URL(request.url);
+      requests.push(`${url.pathname}${url.search}`);
+      expect(request.method).toBe('GET');
+      if (url.pathname === `/v1/subjects/${subject.id}`) {
+        expect(request.headers.get('authorization')).toBe('Bearer editor');
+        return Response.json({ subject, account: { id: account.id } });
+      }
+      expect(url.pathname).toBe('/v1/accounts');
+      expect(request.headers.has('authorization')).toBe(false);
+      if (url.searchParams.has('ids')) return Response.json({ accounts: [account] });
+      if (url.searchParams.has('handle') && waitForLink) {
+        waitForLink = false;
+        return Response.json({ accounts: [{ ...account, subject: null }] });
+      }
+      return Response.json({
+        accounts: [
+          { ...account, id: url.searchParams.has('agent') && wrongInverse ? subject.id : account.id, subject },
+        ],
+      });
+    },
+    (token) => token,
+  );
+  expect(await resolveEditorAgent(call, 'editor', account.id)).toMatchObject({ accountId: account.id, id: subject.id });
+  expect(requests).toEqual([
+    `/v1/accounts?ids=${account.id}`,
+    '/v1/accounts?handle=current-editor',
+    '/v1/accounts?handle=current-editor',
+    `/v1/accounts?agent=${subject.id}`,
+    `/v1/subjects/${subject.id}`,
+  ]);
+  wrongInverse = true;
+  await expect(resolveEditorAgent(call, 'editor', account.id)).rejects.toThrow('editor inverse Agent link');
+  expect(requests.at(-1)).toBe(`/v1/accounts?agent=${subject.id}`);
+});
+
+test('deadline evidence joins only the observed native request ID and retains timing fields', async () => {
+  const trace: NativeObservation[] = [];
+  const problem = { code: 'deadline_exceeded', effect_status: 'not_applied', request_id: fixtureSubjectId };
+  const call = nativeWalkCall(stack.kernel, trace, (async () =>
+    Response.json(problem, { status: 503 })) as typeof fetch);
+  await call('POST', '/v1/subjects', { bearer: 'editor-secret' });
+  expect(summarizeBoundaryRequest(trace[0]!)).toMatchObject({
+    status: 503,
+    requestId: fixtureSubjectId,
+    effect: 'not_applied',
+    code: 'deadline_exceeded',
+  });
+  const record = {
+    event: 'deadline_exceeded',
+    request_id: fixtureSubjectId,
+    method: 'POST',
+    elapsed_ms: 2001,
+    phases_ms: {
+      before_command: 2001,
+      command_overhead: 0,
+      time_mint: 0,
+      access_prepare: 0,
+      gate_wait: 0,
+      transaction_pool_wait: 0,
+      transaction_body: 0,
+      commit: 0,
+      writable_wait: 0,
+      contention_pause: 0,
+      request_completion: 0,
+    },
+    contention_retries: 0,
+    dominant_phase: 'before_command',
+  };
+  const temp = resolve(import.meta.dir, '../../../.temp');
+  await mkdir(temp, { recursive: true });
+  const directory = await mkdtemp(join(temp, 'semantic-deadlines-'));
+  try {
+    const log = join(directory, 'stack.log');
+    expect(await kernelDeadlineTimings(log, trace)).toEqual([]);
+    await Bun.write(
+      log,
+      [
+        { ...record, request_id: fixtureAccountId },
+        { ...record, method: 'GET' },
+        { ...record, extra: 'raw-log-secret', phases_ms: { ...record.phases_ms, sql: 42 } },
+        record,
+      ]
+        .map((line) => JSON.stringify(line))
+        .join('\n'),
+    );
+    expect(await kernelDeadlineTimings(log, trace)).toEqual([record]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('the authored catalogue fixture waits for Book Search readiness and returns a gate denial immediately', async () => {
