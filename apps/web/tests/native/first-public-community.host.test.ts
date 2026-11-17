@@ -31,6 +31,15 @@ type Result = {
   stage?: string;
   evidence?: unknown;
 };
+type SetupObservation = {
+  action: string;
+  method?: string;
+  status?: number;
+  problem?: string;
+  returned?: boolean;
+  account?: 'expected' | 'unexpected';
+  mismatch?: string;
+};
 
 let source: string;
 let setup = 'native stack';
@@ -40,12 +49,50 @@ let origins: Origins;
 let seed: CommunityFixture;
 let signIn: Awaited<ReturnType<typeof probeSignIn>>;
 const results: Partial<Record<Case, Result>> = {};
+const setupTrace: SetupObservation[] = [];
+const knownProblems = new Set([
+  'authentication_required',
+  'conflict',
+  'deadline_exceeded',
+  'dependency_unavailable',
+  'forbidden',
+  'idempotency_conflict',
+  'invalid_credentials',
+  'invalid_request',
+  'not_found',
+  'platform_closed',
+  'rate_limited',
+]);
+
+function observeSetup(action: string, method?: string): SetupObservation {
+  const observation = { action, ...(method === undefined ? {} : { method }) };
+  if (setupTrace.length < 24) setupTrace.push(observation);
+  return observation;
+}
+
+function observeStatus(observation: SetupObservation, status: number, body: unknown) {
+  observation.status = status;
+  if (status < 400) return;
+  const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+  observation.problem = typeof code === 'string' && knownProblems.has(code) ? code : 'unclassified';
+}
+
+const seedActions: Record<string, string> = {
+  'POST subjects': 'create Concept',
+  'GET subjects': 'read public Concept',
+  'POST boards': 'create Global Board',
+  'GET boards': 'read public Board directory',
+  'POST threads': 'create Thread opening',
+  'POST spaces': 'create Space',
+  'POST realms': 'create public Realm',
+  'GET spaces': 'read public Space and Realm',
+};
 
 async function retain() {
   await mkdir(dirname(evidencePath), { recursive: true, mode: 0o700 });
   await writeFile(
     evidencePath,
-    `${JSON.stringify({ source, scope: 'community-native-host', selected, setup, results }, null, 2)}\n`,
+    `${JSON.stringify({ source, scope: 'community-native-host', selected, setup, setupTrace, results }, null, 2)}\n`,
     { mode: 0o600 },
   );
 }
@@ -56,19 +103,36 @@ function bearer(persona: { authorization: string }): string {
 }
 
 async function activePersona(persona: 'alice' | 'bob'): Promise<CommunityFixture['owner']> {
-  const { accountId, email } = await stack.authPersona(persona);
-  const { status, value } = await communityKernel(origins, 'GET', '/v1/accounts', { query: { ids: accountId } });
+  const credential = observeSetup(`resolve ${persona} through native Auth`);
+  const { accountId, email } = await stack.authPersona(persona).catch((error: unknown) => {
+    credential.returned = false;
+    throw error;
+  });
+  credential.returned = true;
+  const observation = observeSetup(`read ${persona} public identity`, 'GET');
+  const { status, value } = await communityKernel(origins, 'GET', '/v1/accounts', { query: { ids: accountId } }).catch(
+    (error: unknown) => {
+      observation.returned = false;
+      throw error;
+    },
+  );
+  observeStatus(observation, status, value);
   const account = Array.isArray(value.accounts) && value.accounts.length === 1 ? value.accounts[0] : undefined;
-  if (
-    status !== 200 ||
-    account?.id !== accountId ||
-    account.state !== 'active' ||
-    account.kind !== 'actor' ||
-    account.automated !== false ||
-    typeof account.handle !== 'string' ||
-    !account.handle
-  )
+  const checks = {
+    status: status === 200,
+    exactAccount: account?.id === accountId,
+    active: account?.state === 'active',
+    actor: account?.kind === 'actor',
+    ordinary: account?.automated === false,
+    handle: typeof account?.handle === 'string' && account.handle.length > 0,
+  };
+  const failed = Object.entries(checks).find(([, ok]) => !ok);
+  if (failed) {
+    observation.account = 'unexpected';
+    observation.mismatch = failed[0];
     throw new Error('Native fixture account did not match its current public identity');
+  }
+  observation.account = 'expected';
   return { accountId, email, handle: account.handle };
 }
 
@@ -85,13 +149,15 @@ nativeBeforeAll(lifecycle, 600_000, async () => {
       native: stack.authIssuer,
       issuer: auth.origin,
     };
-    setup = 'ordinary community seed';
+    setup = 'current fixture identities';
     const [owner, outsider] = await Promise.all([activePersona('alice'), activePersona('bob')]);
     if (owner.accountId === outsider.accountId) throw new Error('Community fixture actors were not distinct');
+    setup = 'governor grants';
     await grantOrdinaryOwnerActions({
       accountId: owner.accountId,
       actions: communityOwnerActions,
       async post({ path, body, idempotencyKey }) {
+        const observation = observeSetup(`grant ${body.actions[0]}`, 'POST');
         const response = await stack.kernel(
           path,
           {
@@ -101,17 +167,30 @@ nativeBeforeAll(lifecycle, 600_000, async () => {
           },
           'governor',
         );
-        await response.body?.cancel();
+        observation.status = response.status;
+        if (response.status >= 400 && response.headers.get('content-type')?.startsWith('application/problem+json'))
+          observeStatus(observation, response.status, await response.json().catch(() => null));
+        else await response.body?.cancel();
         return { status: response.status, text: '' };
       },
     });
+    setup = 'scoped creator credential';
+    const credential = observeSetup('reissue Alice creator authorization');
     const creator = await stack.authPersona('alice', ownerScopes);
+    credential.account = creator.accountId === owner.accountId ? 'expected' : 'unexpected';
     if (creator.accountId !== owner.accountId) throw new Error('Native Auth changed the community creator');
+    setup = 'native community entities';
     seed = {
       owner,
       outsider,
       ...(await seedCommunityEntities(
-        (method, path, options) => communityKernel(origins, method, path, options),
+        async (method, path, options) => {
+          const action = seedActions[`${method} ${path.split('/')[2]}`] ?? 'other native seed request';
+          const observation = observeSetup(action, method);
+          const result = await communityKernel(origins, method, path, options);
+          observeStatus(observation, result.status, result.value);
+          return result;
+        },
         bearer(creator),
         owner.accountId,
       )),

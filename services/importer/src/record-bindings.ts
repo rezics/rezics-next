@@ -37,6 +37,7 @@ type Binding = {
   cover_key: string | null;
 };
 type Entry = Journal & { acknowledgement: string | null };
+type CommandState = Binding & (Entry | { key: null; bytes: null; signature: null; acknowledgement: null });
 type MediaEntry = Journal & { accepted: string | null; status: string | null };
 const BYTES = 65536;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -338,6 +339,16 @@ export class RecordBindings {
       key,
     );
   }
+  private commandState(o: Owner, key: string): CommandState | null {
+    return this.get(
+      `SELECT b.*,j.key,j.bytes,j.signature,j.acknowledgement FROM binding_records AS b
+      LEFT JOIN binding_journal AS j ON j.source=b.source AND j.external_id=b.external_id AND j.key=?
+      WHERE b.source=? AND b.external_id=?`,
+      key,
+      o.source,
+      o.external_id,
+    );
+  }
   private mediaEntry(o: Owner, key: string): MediaEntry | null {
     return this.get(
       'SELECT key, bytes, signature, accepted, status FROM binding_media WHERE source=? AND external_id=? AND key=?',
@@ -355,17 +366,15 @@ export class RecordBindings {
       id,
     );
   }
-  private changeCapacity(o: Owner, group: FieldGroup, delta: 1 | -1) {
+  private releaseCapacity(o: Owner, group: FieldGroup) {
     this.run(
-      'UPDATE binding_groups SET candidate_count=candidate_count+? WHERE source=? AND external_id=? AND field_group=?',
-      delta,
+      'UPDATE binding_groups SET candidate_count=candidate_count-1 WHERE source=? AND external_id=? AND field_group=?',
       o.source,
       o.external_id,
       group,
     );
     this.run(
-      'UPDATE binding_records SET candidate_count=candidate_count+? WHERE source=? AND external_id=?',
-      delta,
+      'UPDATE binding_records SET candidate_count=candidate_count-1 WHERE source=? AND external_id=?',
       o.source,
       o.external_id,
     );
@@ -386,9 +395,9 @@ export class RecordBindings {
     ensure(command.source.source === o.source && command.source.external_id === o.external_id);
     if (command.op === 'create') ensure(!Object.hasOwn(command.subject, 'statements'));
     return this.atomic(() => {
-      const binding = this.binding(o);
+      const binding = this.commandState(o, command.key);
       ensure(binding?.state !== 'taken-down');
-      const prior = this.entry(o, command.key);
+      const prior = binding ? (binding.key === null ? null : binding) : this.entry(o, command.key);
       if (prior) {
         ensure(prior.bytes === bytes && prior.signature === signature);
         return journal(prior);
@@ -409,22 +418,21 @@ export class RecordBindings {
         ensure(binding?.state === 'bound' && command.subject === binding.subject);
         const group = command.source.field_group;
         if (command.op === 'propose') {
-          const capacity = this.get<{ candidate_count: number }>(
-            'SELECT candidate_count FROM binding_groups WHERE source=? AND external_id=? AND field_group=?',
+          ensure(binding.candidate_count < 300);
+          const reserved = this.run(
+            `INSERT INTO binding_groups (source, external_id, field_group, candidate_count) VALUES (?, ?, ?, 1)
+            ON CONFLICT(source,external_id,field_group) DO UPDATE SET candidate_count=candidate_count+1
+            WHERE candidate_count<100`,
             o.source,
             o.external_id,
             group,
           );
-          ensure((capacity?.candidate_count ?? 0) < 100 && binding.candidate_count < 300);
-          if (!capacity)
-            this.run(
-              'INSERT INTO binding_groups (source, external_id, field_group, candidate_count) VALUES (?, ?, ?, ?)',
-              o.source,
-              o.external_id,
-              group,
-              0,
-            );
-          this.changeCapacity(o, group, 1);
+          ensure(reserved.changes === 1);
+          this.run(
+            'UPDATE binding_records SET candidate_count=candidate_count+1 WHERE source=? AND external_id=?',
+            o.source,
+            o.external_id,
+          );
         } else {
           const current = this.candidate(o, group, command.candidate);
           ensure(current && current.subject === command.subject);
@@ -461,16 +469,14 @@ export class RecordBindings {
     ensure(response.key === key && (response.status === 200 || response.status === 201) && 'value' in response);
     const returned = response.value;
     this.atomic(() => {
-      const binding = this.binding(o);
-      ensure(binding && binding.state !== 'taken-down');
-      const entry = this.entry(o, key);
-      ensure(entry);
-      const command = (JSON.parse(entry.bytes) as BatchWriteRequest).commands[0]!;
+      const binding = this.commandState(o, key);
+      ensure(binding && binding.state !== 'taken-down' && binding.key !== null);
+      const command = (JSON.parse(binding.bytes) as BatchWriteRequest).commands[0]!;
       const member = command.op === 'create' ? 'id' : command.op === 'propose' ? 'candidate' : null;
       ensure(Object.keys(returned).length === (member ? 2 : 1));
       if (member) ensure(member in returned);
-      if (entry.acknowledgement !== null) {
-        ensure(isDeepStrictEqual(snapshot(JSON.parse(entry.acknowledgement)).value, value));
+      if (binding.acknowledgement !== null) {
+        ensure(isDeepStrictEqual(snapshot(JSON.parse(binding.acknowledgement)).value, value));
         return;
       }
       if (command.op === 'create') {
@@ -500,7 +506,7 @@ export class RecordBindings {
                 isDeepStrictEqual(original.statement.value, command.statement.value) &&
                 isDeepStrictEqual(original.statement.qualifiers ?? [], command.statement.qualifiers ?? []),
             );
-            this.changeCapacity(o, group, -1);
+            this.releaseCapacity(o, group);
           } else {
             this.run(
               'INSERT INTO binding_candidates (source, external_id, field_group, candidate, subject, key, bytes, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -510,8 +516,8 @@ export class RecordBindings {
               returned.candidate,
               command.subject,
               key,
-              entry.bytes,
-              entry.signature,
+              binding.bytes,
+              binding.signature,
             );
           }
         } else {
@@ -524,7 +530,7 @@ export class RecordBindings {
             group,
             command.candidate,
           );
-          this.changeCapacity(o, group, -1);
+          this.releaseCapacity(o, group);
         }
       }
       this.run(

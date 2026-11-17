@@ -140,6 +140,16 @@ type Command = {
   envelope_index: number;
   done: number;
 };
+
+// The callers admit at most 300 keys. Bucket the bind count to keep the
+// statement cache bounded across arbitrary command and result sizes.
+function commandKeyParams(keys: string[]): { placeholders: string; parameters: (string | null)[] } {
+  const width = 2 ** Math.ceil(Math.log2(keys.length));
+  const parameters: (string | null)[] = [...keys];
+  while (parameters.length < width) parameters.push(null);
+  return { placeholders: '?,'.repeat(width - 1) + '?', parameters };
+}
+
 type Envelope = {
   record_key: string;
   envelope_index: number;
@@ -827,8 +837,8 @@ export class RunStore<Projection = BatchStatement[]> {
     }
   }
   /**
-   * Every SQL text is a literal, so the cache holds one statement per call site. Replacing the
-   * connection's prepare entry point (instrumentation installed or removed) starts a new cache.
+   * SQL texts are fixed except for bounded command-key bind counts. Replacing the connection's
+   * prepare entry point (instrumentation installed or removed) starts a new cache.
    */
   private query(sql: string) {
     if (this.closed) throw new Error('Run store is closed');
@@ -1974,6 +1984,22 @@ export class RunStore<Projection = BatchStatement[]> {
       identifier(o.securityRevision, 256, /^[1-9][0-9]*$/u);
       groups.add(o.field_group);
     }
+    if (multi && !commands.length && !omissions.length && !input.deferredCover) {
+      validateRun(run);
+      // A dispatch with no new proof can read a prepared plan that cannot resolve
+      // here. Check its exact generation lease and plan in the same SQLite view.
+      const prepared = this.get<{ kind: Kind; omissions_json: string }>(
+        `SELECT e.kind,e.omissions_json FROM run_generations AS g
+        JOIN run_entries AS e ON e.source=g.source AND e.run_id=g.id AND e.record_key=?
+        WHERE g.source=? AND g.id=? AND g.lease=? AND g.status='ready' AND e.kind IS NOT NULL
+          AND (e.remaining<>0 OR e.cover_pending<>0 OR e.resolved<>0)`,
+        key,
+        run.source,
+        run.id,
+        run.lease,
+      );
+      if (prepared) return { kind: prepared.kind, omissions: JSON.parse(prepared.omissions_json) };
+    }
     return this.transaction(() => {
       const g = this.generation(run);
       if (g.status !== 'ready') throw new Error('Run is not ready for classification');
@@ -2039,14 +2065,15 @@ export class RunStore<Projection = BatchStatement[]> {
         for (let i = 0; i < commands.length; i++) {
           const c = commands[i]!;
           const body = bodies[i]!;
-          const old = this.get<{ body: string }>(
-            'SELECT body FROM run_payloads WHERE source=? AND command_key=?',
+          const retained = this.write(
+            `INSERT INTO run_payloads(source,command_key,body) VALUES(?,?,?)
+            ON CONFLICT(source,command_key) DO UPDATE SET body=run_payloads.body
+            WHERE run_payloads.body=excluded.body`,
             run.source,
             c.key,
+            body,
           );
-          if (old && old.body !== body) throw new Error('Command key already has a different payload');
-          if (!old)
-            this.write('INSERT INTO run_payloads(source,command_key,body) VALUES(?,?,?)', run.source, c.key, body);
+          if (!retained.changes) throw new Error('Command key already has a different payload');
           this.write(
             `INSERT INTO run_commands(source,run_id,command_key,record_key,field_group,op,envelope_index,done)
             VALUES(?,?,?,?,?,?,?,?)`,
@@ -2124,6 +2151,7 @@ export class RunStore<Projection = BatchStatement[]> {
           run.id,
           key,
         );
+        const completed: Command[] = [];
         for (const commandKey of JSON.parse(e.keys_json) as string[]) {
           const c = this.get<Command>(
             'SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key=?',
@@ -2131,11 +2159,10 @@ export class RunStore<Projection = BatchStatement[]> {
             run.id,
             commandKey,
           )!;
-          if (!c.done && saved.some((o) => o.field_group === c.field_group)) {
-            this.completeCommand(run, c);
-            e.remaining--;
-          }
+          if (!c.done && saved.some((o) => o.field_group === c.field_group)) completed.push(c);
         }
+        this.completeCommands(run, completed);
+        e.remaining -= completed.length;
         this.write(
           'UPDATE run_entries SET remaining=? WHERE source=? AND run_id=? AND record_key=?',
           e.remaining,
@@ -2331,21 +2358,41 @@ export class RunStore<Projection = BatchStatement[]> {
       page.limit,
     ).map((m) => JSON.parse(m.row_json) as RecordRow);
   }
-  private completeCommand(run: Run, command: Command) {
+  private completeCommands(run: Run, commands: Command[]) {
+    const records = new Map<string, { count: number; envelopes: Map<number, number> }>();
+    if (!commands.length) return records;
+    const { placeholders, parameters } = commandKeyParams(commands.map((command) => command.command_key));
     this.write(
-      'UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key=?',
+      `UPDATE run_commands SET done=1 WHERE source=? AND run_id=? AND command_key IN (${placeholders})`,
       run.source,
       run.id,
-      command.command_key,
+      ...parameters,
     );
-    this.write(
-      `UPDATE run_envelopes SET remaining=remaining-1,pending=CASE WHEN remaining=1 THEN 0 ELSE 1 END
-      WHERE source=? AND run_id=? AND record_key=? AND envelope_index=?`,
-      run.source,
-      run.id,
-      command.record_key,
-      command.envelope_index,
-    );
+    for (const command of commands) {
+      let record = records.get(command.record_key);
+      if (!record) {
+        record = { count: 0, envelopes: new Map() };
+        records.set(command.record_key, record);
+      }
+      record.count++;
+      const index = command.envelope_index;
+      record.envelopes.set(index, (record.envelopes.get(index) ?? 0) + 1);
+    }
+    for (const [key, { envelopes }] of records) {
+      for (const [index, count] of envelopes) {
+        this.write(
+          `UPDATE run_envelopes SET remaining=remaining-?,pending=CASE WHEN remaining=? THEN 0 ELSE 1 END
+          WHERE source=? AND run_id=? AND record_key=? AND envelope_index=?`,
+          count,
+          count,
+          run.source,
+          run.id,
+          key,
+          index,
+        );
+      }
+    }
+    return records;
   }
   acknowledge(run: Run, result: ImportBatchResult, scope?: { recordKey: string }): void {
     boundedJson(result);
@@ -2357,16 +2404,20 @@ export class RunStore<Projection = BatchStatement[]> {
     this.transaction(() => {
       const g = this.generation(run, true);
       if (!['ready', 'complete'].includes(g.status)) throw new Error('Run is not ready');
+      if (!result.results.length) return;
       const completed: Command[] = [];
-      // Validate the response once and seek only keyed command metadata. No
-      // acknowledgement parses a record plan or searches its command array.
-      for (const r of result.results) {
-        const c = this.get<Command>(
-          'SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key=?',
+      // Check each receipt against exact indexed command metadata before changing any row.
+      const { placeholders, parameters } = commandKeyParams(result.results.map((r) => r.key));
+      const commands = new Map(
+        this.all<Command>(
+          `SELECT * FROM run_commands WHERE source=? AND run_id=? AND command_key IN (${placeholders})`,
           run.source,
           run.id,
-          r.key,
-        );
+          ...parameters,
+        ).map((command) => [command.command_key, command]),
+      );
+      for (const r of result.results) {
+        const c = commands.get(r.key);
         if (!c || (scope && c.record_key !== scope.recordKey)) throw new Error('Unknown or unowned command result');
         if (scope && 'value' in r) {
           const value = r.value;
@@ -2380,12 +2431,7 @@ export class RunStore<Projection = BatchStatement[]> {
         if (c.done || (r.status !== 200 && r.status !== 201)) continue;
         completed.push(c);
       }
-      const decrements = new Map<string, number>();
-      for (const c of completed) {
-        this.completeCommand(run, c);
-        decrements.set(c.record_key, (decrements.get(c.record_key) ?? 0) + 1);
-      }
-      for (const [key, count] of decrements) {
+      for (const [key, { count }] of this.completeCommands(run, completed)) {
         const entry = this.get<{ remaining: number }>(
           `UPDATE run_entries SET remaining=remaining-? WHERE source=? AND run_id=? AND record_key=?
           RETURNING remaining`,
@@ -2532,29 +2578,38 @@ export class RunStore<Projection = BatchStatement[]> {
     if (!isConversionDiagnosticPhase(input.phase)) throw new ConversionDiagnosticError();
     const diagnostics = sanitizeConversionDiagnostics(input.diagnostics);
     const payload = JSON.stringify(diagnostics);
-    this.transaction(() => {
-      this.generation(run);
-      const existing = this.get<{
-        digest: string;
-        converter_revision: string;
-        record_revision: string;
+    validateRun(run);
+    const retained = () => {
+      const current = this.get<{
+        digest: string | null;
+        converter_revision: string | null;
+        record_revision: string | null;
       }>(
-        `SELECT digest,converter_revision,record_revision FROM run_conversion_diagnostics
-        WHERE source=? AND run_id=? AND record_key=? AND phase=?`,
-        run.source,
-        run.id,
+        `SELECT d.digest,d.converter_revision,d.record_revision FROM run_generations AS g
+        LEFT JOIN run_conversion_diagnostics AS d
+          ON d.source=g.source AND d.run_id=g.id AND d.record_key=? AND d.phase=?
+        WHERE g.source=? AND g.id=? AND g.lease=? AND g.status IN ('staging','ready','finalizing')`,
         input.recordKey,
         input.phase,
+        run.source,
+        run.id,
+        run.lease,
       );
-      if (existing) {
-        if (
-          existing.digest !== input.digest ||
-          existing.converter_revision !== input.converterRevision ||
-          existing.record_revision !== input.recordRevision
-        )
-          throw new ConversionDiagnosticError('Conversion diagnostic identity does not match the retained attempt');
-        return;
-      }
+      if (!current) throw new Error('Run capability is stale or terminal');
+      if (current.digest === null) return false;
+      if (
+        current.digest !== input.digest ||
+        current.converter_revision !== input.converterRevision ||
+        current.record_revision !== input.recordRevision
+      )
+        throw new ConversionDiagnosticError('Conversion diagnostic identity does not match the retained attempt');
+      return true;
+    };
+    // The first observation is immutable. On a miss, recheck under the writer
+    // transaction before inserting it and changing the generation counters.
+    if (!this.database.inTransaction && retained()) return;
+    this.transaction(() => {
+      if (retained()) return;
       this.write(
         `INSERT INTO run_conversion_diagnostics(
           source,run_id,record_key,phase,digest,converter_revision,record_revision,diagnostic_count,diagnostics_json
