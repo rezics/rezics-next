@@ -138,13 +138,40 @@ async function stopChild(owner: NativeProcessOwnership | undefined): Promise<voi
   }
 }
 
+export async function prepareNativeAuthMessages(): Promise<void> {
+  const lifecycle = currentNativeLifecycle();
+  if (!lifecycle) throw new Error('Auth message preparation requires an active native test lifecycle');
+  lifecycle.assertOpen('prepare native Auth messages');
+  const child = spawn(process.execPath, ['scripts/generate.ts'], {
+    cwd: authRoot,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const owner = lifecycle.ownProcessGroup('native Auth messages preparation', child);
+  let output = '';
+  for (const stream of [child.stdout, child.stderr])
+    stream?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)));
+  try {
+    await new Promise<void>((resolveCompletion, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        if (code === 0) resolveCompletion();
+        else reject(new Error(`Native Auth messages preparation failed (${signal ?? code}): ${output}`));
+      });
+    });
+  } finally {
+    await stopChild(owner);
+    owner.release();
+  }
+}
+
 async function hydrate(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
 export async function startAuthStack(
   stack: NativeWebStack,
-  options: { nativeFixtureKey?: string; useHeadlessShell?: boolean } = {},
+  options: { nativeFixtureKey?: string; preparedMessages?: boolean; useHeadlessShell?: boolean } = {},
 ): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
@@ -210,6 +237,7 @@ export async function startAuthStack(
     env: {
       ...nativeViteEnvironment(process.env),
       REZICS_TEST_RUNTIME: '1',
+      REZICS_AUTH_PREPARED_MESSAGES: options.preparedMessages ? '1' : undefined,
       REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
       AUTH_ORIGIN: stack.authIssuer,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',

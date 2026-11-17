@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare, getLocalWorkerdCompatibilityDate } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
-import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { messageImports } from '../web/scripts/message-imports.ts';
 import { viteNonceMarker } from './src/security/headers.ts';
 import { dirname, resolve } from 'node:path';
@@ -13,8 +12,18 @@ import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const generatedMessages = normalizePath(resolve(appRoot, 'src/paraglide'));
 
-export default defineConfig((context) => {
+export default defineConfig(async (context) => {
   const { command } = context;
+  const testServe = command === 'serve' && process.env.REZICS_TEST_RUNTIME === '1';
+  const preparedMessages = testServe && process.env.REZICS_AUTH_PREPARED_MESSAGES === '1';
+  const messages = preparedMessages
+    ? []
+    : [
+        (await import('@inlang/paraglide-js')).paraglideVitePlugin({
+          project: './project.inlang',
+          outputStructure: 'message-modules',
+        }),
+      ];
   const persistence = createWorkerPersistence('auth', context, appRoot);
   return {
     base: command === 'serve' ? '/' : '/auth-assets/',
@@ -44,7 +53,8 @@ export default defineConfig((context) => {
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
     plugins: [
-      paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' }),
+      // The native harness owns the generated catalogue before this Worker is launched.
+      ...messages,
       messageImports(appRoot),
       tanstackStart({ router: { basepath: '/' } }),
       react(),

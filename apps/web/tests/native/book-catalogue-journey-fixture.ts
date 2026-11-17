@@ -16,7 +16,7 @@ import { createOpenSearch } from '../../../../services/kernel/src/search/opensea
 import { subjectPartition } from '../../../../services/kernel/src/search/source.ts';
 import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
 import { currentNativeLifecycle } from './lifecycle.ts';
-import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
 
@@ -644,6 +644,7 @@ export async function startBookCatalogueJourneyFixture(
   scope?: 'shelf-boundary',
 ): Promise<BookCatalogueJourneyFixture | BookShelfBoundaryFixture> {
   const shelfOnly = scope === 'shelf-boundary';
+  if (!shelfOnly) await prepareNativeAuthMessages();
   const searchContainer = shelfOnly ? undefined : await prepareSearch();
   const stack = await startNativeWebStack({
     writeRateOverrides,
@@ -739,7 +740,7 @@ export async function startBookCatalogueJourneyFixture(
 
     const search = await waitForNativeSearch(stack, marker, expected);
     const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
-    auth = await startAuthStack(stack, { useHeadlessShell: true });
+    auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({
