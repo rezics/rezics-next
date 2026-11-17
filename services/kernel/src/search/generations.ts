@@ -1240,7 +1240,7 @@ async function reconcileDiscoveryPage(
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
   emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
-  initialEmptyProbe: ReturnType<typeof initialMetadataEmptyIndexProbe>,
+  guardedEmptyProbe: ReturnType<typeof reconciliationEmptyIndexProbe>,
   coreReads: ReturnType<typeof coreReconciliationBatch>,
 ): Promise<boolean> {
   const { registry, target } = projection,
@@ -1254,7 +1254,7 @@ async function reconcileDiscoveryPage(
       checkCapability,
       indexedReads,
       emptyIndexProbe,
-      initialEmptyProbe,
+      guardedEmptyProbe,
     );
   }
   const entry =
@@ -1273,7 +1273,10 @@ async function reconcileDiscoveryPage(
     BigInt(row.claim_revision) !== witness.claimRevision;
   const after = reset ? null : row.after_id;
   const index = discoveryIndexName(target.prefix, target.generation);
-  const empty = await coreReads?.indexIsEmpty(row, census.count === 0 && after === null && (reset || indexed === 0n));
+  const empty = await guardedEmptyProbe?.isCoreEmpty(
+    row,
+    census.count === 0 && after === null && (reset || indexed === 0n),
+  );
   const hits = empty
     ? []
     : await readDiscoveryIndexHits(search, target, {
@@ -1420,7 +1423,7 @@ async function reconcileMetadataDiscoveryPage(
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
   emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
-  initialEmptyProbe: ReturnType<typeof initialMetadataEmptyIndexProbe>,
+  guardedEmptyProbe: ReturnType<typeof reconciliationEmptyIndexProbe>,
 ): Promise<boolean> {
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
@@ -1442,8 +1445,7 @@ async function reconcileMetadataDiscoveryPage(
       return false;
     }
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
-    if (
-      initialEmptyProbe &&
+    const initialEmpty =
       initialEmptyMetadataCandidate(row) &&
       page.position === 0n &&
       (kind !== 'collection' || page.epoch !== undefined) &&
@@ -1451,9 +1453,8 @@ async function reconcileMetadataDiscoveryPage(
       page.continuation === null &&
       page.keys.length === 0 &&
       page.records.length === 0 &&
-      actions.length === 0 &&
-      (await initialEmptyProbe.isEmpty(row))
-    ) {
+      actions.length === 0;
+    if (await guardedEmptyProbe?.isInitialMetadataEmpty(row, initialEmpty)) {
       await checkCapability();
       // Release the generation lock before acquiring the owner's current read connection.
       const current = await producer.read(row.partition, []);
@@ -1632,13 +1633,7 @@ async function discoveryScopesEmpty(
   return hits.length === 0;
 }
 
-function coreReconciliationBatch(
-  pool: Pool,
-  search: OpenSearch,
-  target: DiscoveryTarget,
-  batch: readonly Population[],
-) {
-  const rows = batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
+function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
   if (rows.length < 2) return undefined;
   function witnessBatch() {
     const partitions = new Set<number>();
@@ -1656,27 +1651,12 @@ function coreReconciliationBatch(
   }
   const before = witnessBatch();
   const after = witnessBatch();
-  const scopes: ReturnType<typeof discoveryIndexTerms>[] = [];
-  const probe = discoveryPageReadBatch(rows, async () => {
-    if (scopes.length < 2) return false;
-    return withDiscoveryTarget(pool, search, target, async (_client, index) => {
-      const empty = await discoveryScopesEmpty(search, target, scopes);
-      if (empty) await requireDiscoveryIndexFormat(search, index);
-      return empty;
-    });
-  });
   return {
     before,
     after,
     observed(row: Population) {
       before.observed(row);
-      probe.observed(row);
       after.observed(row);
-    },
-    async indexIsEmpty(row: Population, candidate: boolean) {
-      if (candidate) scopes.push(discoveryIndexTerms(row.partition, row.owner));
-      probe.observed(row);
-      return candidate && (await probe.checkEmptyPage());
     },
   };
 }
@@ -1695,36 +1675,60 @@ function initialEmptyMetadataCandidate(row: Population) {
   );
 }
 
-function initialMetadataEmptyIndexProbe(
+function reconciliationEmptyIndexProbe(
   pool: Pool,
   search: OpenSearch,
   target: DiscoveryTarget,
+  coreRows: readonly Population[],
   batch: readonly Population[],
 ) {
-  const rows = batch.filter(initialEmptyMetadataCandidate);
-  if (!rows.length) return undefined;
-  const scopes: ReturnType<typeof discoveryIndexTerms>[] = [];
-  const probe = discoveryPageReadBatch(rows, async () => {
+  const metadataRows = batch.filter(initialEmptyMetadataCandidate);
+  if (coreRows.length < 2 && metadataRows.length === 0) return undefined;
+  const coreScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
+  const metadataScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
+  const guardedEmpty = (scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) =>
+    withDiscoveryTarget(pool, search, target, async (_client, index) => {
+      const empty = await discoveryScopesEmpty(search, target, scopes);
+      if (empty) await requireDiscoveryIndexFormat(search, index);
+      return empty;
+    });
+  async function optionalEmpty(scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) {
     try {
-      return await withDiscoveryTarget(pool, search, target, async (_client, index) => {
-        const empty = await discoveryScopesEmpty(search, target, scopes);
-        if (empty) await requireDiscoveryIndexFormat(search, index);
-        return empty;
-      });
+      return await guardedEmpty(scopes);
     } catch (error) {
       if (error instanceof DiscoveryPhysicalTargetChangedError) throw error;
       searchTurns.getStore()?.check();
-      // Inconclusive shared proofs leave the ordinary raw and keyed passes available.
       return false;
     }
-  });
+  }
+  // Wait for the native observations before taking the lock. A hit or an inconclusive
+  // mixed response leaves each role's original probe and fallback in charge.
+  const probe = discoveryPageReadBatch(
+    [...(coreRows.length < 2 ? [] : coreRows), ...metadataRows],
+    async () =>
+      coreScopes.length >= 2 && metadataScopes.length > 0 && optionalEmpty([...coreScopes, ...metadataScopes]),
+  );
+  let coreEmpty: Promise<boolean> | undefined;
+  let metadataEmpty: Promise<boolean> | undefined;
   return {
     observed: probe.observed,
-    async isEmpty(row: Population) {
-      const kind = row.owner as DiscoveryMetadataKind;
-      scopes.push(discoveryIndexTerms(row.partition, kind === 'collection' ? 'commerce' : 'content', kind));
+    async isCoreEmpty(row: Population, candidate: boolean) {
+      if (coreRows.length < 2) return false;
+      if (candidate) coreScopes.push(discoveryIndexTerms(row.partition, row.owner));
       probe.observed(row);
-      return probe.checkEmptyPage();
+      if (!candidate) return false;
+      if (await probe.checkEmptyPage()) return true;
+      return coreScopes.length >= 2 && (await (coreEmpty ??= guardedEmpty(coreScopes)));
+    },
+    async isInitialMetadataEmpty(row: Population, candidate: boolean) {
+      if (candidate) {
+        const kind = row.owner as DiscoveryMetadataKind;
+        metadataScopes.push(discoveryIndexTerms(row.partition, kind === 'collection' ? 'commerce' : 'content', kind));
+      }
+      probe.observed(row);
+      if (!candidate) return false;
+      if (await probe.checkEmptyPage()) return true;
+      return (metadataEmpty ??= optionalEmpty(metadataScopes));
     },
   };
 }
@@ -2057,10 +2061,12 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               : undefined;
           const emptyIndexProbe =
             target.state === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
-          const initialEmptyProbe =
-            target.state === 'reconciling' ? initialMetadataEmptyIndexProbe(pool, search, target, batch) : undefined;
-          const coreReads =
-            target.state === 'reconciling' ? coreReconciliationBatch(pool, search, target, batch) : undefined;
+          const coreRows = reads ? [] : batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
+          const guardedEmptyProbe =
+            target.state === 'reconciling'
+              ? reconciliationEmptyIndexProbe(pool, search, target, coreRows, batch)
+              : undefined;
+          const coreReads = coreReconciliationBatch(pool, coreRows);
           return async (population) => {
             try {
               return await searchTurnCall(() =>
@@ -2074,7 +2080,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
                       checkCapability,
                       indexedReads,
                       emptyIndexProbe,
-                      initialEmptyProbe,
+                      guardedEmptyProbe,
                       coreReads,
                     ),
               );
@@ -2088,7 +2094,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               checkpoints?.observed(population);
               indexedReads?.observed(population);
               emptyIndexProbe?.observed(population);
-              initialEmptyProbe?.observed(population);
+              guardedEmptyProbe?.observed(population);
               coreReads?.observed(population);
             }
           };
