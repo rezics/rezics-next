@@ -219,6 +219,7 @@ export function searchTurnMetadataProducers(
   return Object.fromEntries(
     Object.entries(producers).flatMap(([kind, producer]) => {
       if (!producer) return [];
+      const readEmptyPositions = producer.readEmptyPositions?.bind(producer);
       return [
         [
           kind,
@@ -230,6 +231,10 @@ export function searchTurnMetadataProducers(
             read: (...args: Parameters<DiscoveryMetadataProducer['read']>) =>
               searchTurnCall(() => producer.read(...args)),
             position: (partition: number) => searchTurnCall(() => producer.position(partition)),
+            ...(readEmptyPositions && {
+              readEmptyPositions: (partitions: readonly number[]) =>
+                searchTurnCall(() => readEmptyPositions(partitions)),
+            }),
           },
         ] as const,
       ];
@@ -980,19 +985,118 @@ function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }:
   };
 }
 
-function discoveryPageReadBatch(rows: readonly Population[], checkEmpty: () => Promise<void>) {
+function discoveryPageReadBatch<Result>(rows: readonly Population[], checkEmpty: () => Promise<Result>) {
   const pending = new Set(rows);
   const settled = Promise.withResolvers<void>();
-  let emptyPageCheck: Promise<void> | undefined;
+  let emptyPageCheck: Promise<Result> | undefined;
   return {
     observed(row: Population) {
       pending.delete(row);
       if (pending.size === 0) settled.resolve();
     },
-    settled: settled.promise,
     checkEmptyPage() {
       // Start the shared check after all participating native observations have settled.
       return (emptyPageCheck ??= settled.promise.then(checkEmpty));
+    },
+  };
+}
+
+function reviewCertificationBatch(
+  rows: readonly { partition: number }[],
+  read: NonNullable<DiscoveryMetadataProducer['readEmptyPositions']>,
+) {
+  const pending = new Set(rows);
+  const requested = new Set<number>();
+  const settled = Promise.withResolvers<void>();
+  let positions: Promise<ReadonlyMap<number, bigint>> | undefined;
+  const observed = (row: { partition: number }) => {
+    pending.delete(row);
+    if (pending.size === 0) settled.resolve();
+  };
+  return {
+    observed,
+    async position(row: { partition: number }) {
+      requested.add(row.partition);
+      observed(row);
+      // Collection can short-circuit a row. Wait until the wave has identified every Review request.
+      positions ??= settled.promise.then(async () => {
+        const partitions = rows.filter(({ partition }) => requested.has(partition)).map(({ partition }) => partition);
+        const result = await read(partitions);
+        if (
+          result.size !== partitions.length ||
+          partitions.some((partition) => typeof result.get(partition) !== 'bigint')
+        )
+          throw new SearchUnavailableError('Discovery Review positions are incomplete');
+        return result;
+      });
+      return (await positions).get(row.partition)!;
+    },
+  };
+}
+
+type PopulationAdvance = {
+  partition_no: number;
+  owner: Population['owner'];
+  prior_id: string | null;
+  prior_continuation: string | null;
+  after_route: number | null;
+  after_id: string | null;
+  continuation: string | null;
+  native_epoch: number | null;
+  position: string;
+};
+
+function populationCheckpointBatch(pool: Pool, target: DiscoveryTarget, rows: readonly Population[]) {
+  const plans: PopulationAdvance[] = [];
+  const batch = discoveryPageReadBatch(rows, async () => {
+    await withSearchConnection(pool, async (client) => {
+      await client.query(
+        `WITH input AS MATERIALIZED (
+           SELECT * FROM jsonb_to_recordset($3::jsonb) AS i(
+             partition_no integer, owner text, prior_id uuid, prior_continuation jsonb,
+             after_route integer, after_id uuid, continuation jsonb, native_epoch integer, position bigint)
+         ), locked AS MATERIALIZED (
+           SELECT p.partition_no,p.owner
+           FROM search.discovery_population p JOIN input i
+             ON (p.partition_no,p.owner)=(i.partition_no,i.owner)
+           WHERE p.prefix=$1 AND p.generation=$2 AND NOT p.complete
+             AND p.after_id IS NOT DISTINCT FROM i.prior_id
+             AND (p.owner IN ('accounts','semantic') OR p.continuation IS NOT DISTINCT FROM i.prior_continuation)
+           ORDER BY p.partition_no,p.owner FOR UPDATE OF p
+         )
+         UPDATE search.discovery_population p
+         SET after_route=i.after_route,after_id=i.after_id,complete=i.after_id IS NULL,
+             position=GREATEST(p.position,i.position),
+             continuation=CASE WHEN p.owner IN ('accounts','semantic') THEN p.continuation ELSE i.continuation END,
+             native_epoch=CASE WHEN p.owner IN ('accounts','semantic') THEN p.native_epoch ELSE i.native_epoch END
+         FROM input i JOIN locked l ON (l.partition_no,l.owner)=(i.partition_no,i.owner)
+         WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
+        [target.prefix, target.generation, JSON.stringify(plans)],
+      );
+    });
+  });
+  return {
+    observed: batch.observed,
+    async save(
+      row: Population,
+      next: { route: number; id: string } | null,
+      position: bigint,
+      continuation: string | null = null,
+      nativeEpoch: number | null = null,
+    ) {
+      plans.push({
+        partition_no: row.partition,
+        owner: row.owner,
+        prior_id: row.after_id,
+        prior_continuation: row.continuation,
+        after_route: next?.route ?? null,
+        after_id: next?.id ?? null,
+        continuation,
+        native_epoch: nativeEpoch,
+        position: position.toString(),
+      });
+      batch.observed(row);
+      await batch.checkEmptyPage();
     },
   };
 }
@@ -1003,6 +1107,7 @@ async function populationPage(
   row: Population,
   checkCapability: () => Promise<void>,
   reads: ReturnType<typeof discoveryPageReadBatch>,
+  checkpoints: ReturnType<typeof populationCheckpointBatch>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
@@ -1054,10 +1159,14 @@ async function populationPage(
     next = page.next;
     position = page.position;
     // Empty native pages advance owner coverage without reserving an engine write.
-    if (actions.length > 0) {
-      await searchTurnCall(() => projection.applyNativeActions(actions));
-      await checkCapability();
-    } else await reads.checkEmptyPage();
+    if (actions.length === 0) {
+      await reads.checkEmptyPage();
+      await checkpoints.save(row, next, position, page.continuation, page.epoch ?? null);
+      return false;
+    }
+    checkpoints.observed(row);
+    await searchTurnCall(() => projection.applyNativeActions(actions));
+    await checkCapability();
     await withSearchConnection(pool, async (client) => {
       await client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
@@ -1083,9 +1192,12 @@ async function populationPage(
     return false;
   }
   reads.observed(row);
+  if (keys.length > 0) checkpoints.observed(row);
   await searchTurnCall(() => projection.project(partition, keys, 0n, true));
-  // Let PostgreSQL group the independently durable empty checkpoints after native reads.
-  if (keys.length === 0) await reads.settled;
+  if (keys.length === 0) {
+    await checkpoints.save(row, next, position);
+    return false;
+  }
   await withSearchConnection(pool, async (client) => {
     await client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
@@ -1114,11 +1226,20 @@ async function reconcileDiscoveryPage(
   row: Population,
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
+  emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
   if (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') {
-    return reconcileMetadataDiscoveryPage(pool, search, projection, row, checkCapability, indexedReads);
+    return reconcileMetadataDiscoveryPage(
+      pool,
+      search,
+      projection,
+      row,
+      checkCapability,
+      indexedReads,
+      emptyIndexProbe,
+    );
   }
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
@@ -1287,6 +1408,7 @@ async function reconcileMetadataDiscoveryPage(
   row: Population,
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
+  emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
 ): Promise<boolean> {
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
@@ -1344,23 +1466,15 @@ async function reconcileMetadataDiscoveryPage(
     return true;
   }
   const after = row.reconcile_position === null ? null : row.after_id;
-  const result = await search.request<unknown>(
-    'POST',
-    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
-    {
-      size: 100,
-      version: true,
-      query: { bool: { filter: [{ term: { partition: row.partition } }, { term: { owner } }, { term: { kind } }] } },
-      sort: [{ route: 'asc' }, { id: 'asc' }],
-      ...(after === null ? {} : { search_after: [row.after_route, after] }),
-    },
-    { query: { allow_partial_search_results: false } },
-  );
-  assertCompleteSearch(result.body);
-  if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
-    throw new TypeError('Invalid metadata discovery reconciliation page');
-  const hits = result.body.hits.hits;
-  if (hits.length > 100) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  const hits = (await emptyIndexProbe?.isEmpty(row))
+    ? []
+    : await readMetadataIndexHits(search, target, {
+        size: 100,
+        version: true,
+        query: { bool: { filter: metadataIndexTerms(row.partition, kind) } },
+        sort: [{ route: 'asc' }, { id: 'asc' }],
+        ...(after === null ? {} : { search_after: [row.after_route, after] }),
+      });
   // Release populated pages from the empty-page barrier before preparing their writes.
   if (hits.length > 0) indexedReads?.observed(row);
   const keys = hits.map((hit): { route: number; id: string } => {
@@ -1439,6 +1553,60 @@ function emptyIndexedMetadataCandidate(row: Population) {
     row.after_id === null &&
     row.reconcile_position !== null
   );
+}
+
+function metadataIndexTerms(partition: number, kind: DiscoveryMetadataKind) {
+  return [
+    { term: { partition } },
+    { term: { owner: kind === 'collection' ? 'commerce' : 'content' } },
+    { term: { kind } },
+  ];
+}
+
+async function readMetadataIndexHits(
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  body: Readonly<Record<string, unknown> & { size: number }>,
+) {
+  const result = await search.request<unknown>(
+    'POST',
+    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
+    body,
+    { query: { allow_partial_search_results: false } },
+  );
+  assertCompleteSearch(result.body);
+  if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
+    throw new TypeError('Invalid metadata discovery reconciliation page');
+  const hits: unknown[] = result.body.hits.hits;
+  if (hits.length > body.size) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  return hits;
+}
+
+function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, batch: readonly Population[]) {
+  const candidates = new Set(
+    batch.filter((row) => emptyIndexedMetadataCandidate(row) && row.reconcile_position === '0' && row.indexed === '0'),
+  );
+  if (candidates.size < 2) return undefined;
+  const reads = discoveryPageReadBatch([...candidates], async () => {
+    const should = [...candidates].map((row) => ({
+      bool: { filter: metadataIndexTerms(row.partition, row.owner as DiscoveryMetadataKind) },
+    }));
+    // No hit for the union proves every exact scope empty. Any hit keeps ordinary per-scope reconciliation.
+    const hits = await readMetadataIndexHits(search, target, {
+      size: 1,
+      _source: false,
+      query: { bool: { should, minimum_should_match: 1 } },
+    });
+    return hits.length === 0;
+  });
+  return {
+    observed: reads.observed,
+    async isEmpty(row: Population) {
+      if (!candidates.has(row)) return false;
+      reads.observed(row);
+      return reads.checkEmptyPage();
+    },
+  };
 }
 
 async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
@@ -1702,18 +1870,29 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
           const reads = target.state === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
+          const checkpoints = reads ? populationCheckpointBatch(pool, target, batch) : undefined;
           const indexedReads =
             target.state === 'reconciling'
               ? discoveryPageReadBatch(batch.filter(emptyIndexedMetadataCandidate), () =>
                   withDiscoveryTarget(pool, search, target, async () => {}),
                 )
               : undefined;
+          const emptyIndexProbe =
+            target.state === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
           return async (population) => {
             try {
               return await searchTurnCall(() =>
-                reads
-                  ? populationPage(pool, projection, population, checkCapability, reads)
-                  : reconcileDiscoveryPage(pool, search, projection, population, checkCapability, indexedReads),
+                reads && checkpoints
+                  ? populationPage(pool, projection, population, checkCapability, reads, checkpoints)
+                  : reconcileDiscoveryPage(
+                      pool,
+                      search,
+                      projection,
+                      population,
+                      checkCapability,
+                      indexedReads,
+                      emptyIndexProbe,
+                    ),
               );
             } catch (error) {
               if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
@@ -1722,7 +1901,9 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               return true;
             } finally {
               reads?.observed(population);
+              checkpoints?.observed(population);
               indexedReads?.observed(population);
+              emptyIndexProbe?.observed(population);
             }
           };
         },
@@ -1787,6 +1968,9 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
       ).rows,
   );
   if (observations.length !== 4096) throw new Error('Discovery population partitions are incomplete');
+  const readReviewPositions = requiredKinds.includes('review')
+    ? metadataProducers.review?.readEmptyPositions
+    : undefined;
   for (let offset = 0; offset < observations.length; offset += 100) {
     const chunk = observations.slice(offset, offset + 100);
     const witnesses = await searchTurnCall(() =>
@@ -1798,29 +1982,35 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
     const checks = await mapBounded(
       chunk,
       Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
-      () => (row) =>
-        searchTurnCall(async () => {
-          const witness = witnesses.get(row.partition);
-          const metadataPositions = {
-            collection: row.collection_position,
-            review: row.review_position,
-            space: row.space_position,
-          };
-          for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
-            if (!requiredKinds.includes(kind)) continue;
-            const observation = await metadataProducers[kind]!.read(row.partition, []);
-            if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
-              return { state: 'retire' as const };
-            if (metadataPositions[kind] !== observation.position.toString())
-              return { state: 'metadata' as const, partition: row.partition, kind };
-          }
-          return row.position === row.head &&
-            row.semantic_position === row.head &&
-            witness?.revision === BigInt(row.revision) &&
-            witness.claimRevision === BigInt(row.claim_revision)
-            ? { state: 'current' as const }
-            : { state: 'native' as const, partition: row.partition };
-        }),
+      (batch) => {
+        const review = readReviewPositions && reviewCertificationBatch(batch, readReviewPositions);
+        return (row) =>
+          searchTurnCall(async () => {
+            const witness = witnesses.get(row.partition);
+            const metadataPositions = {
+              collection: row.collection_position,
+              review: row.review_position,
+              space: row.space_position,
+            };
+            for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+              if (!requiredKinds.includes(kind)) continue;
+              const observation: { position: bigint; epoch?: number } =
+                kind === 'review' && review
+                  ? { position: await review.position(row) }
+                  : await metadataProducers[kind]!.read(row.partition, []);
+              if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
+                return { state: 'retire' as const };
+              if (metadataPositions[kind] !== observation.position.toString())
+                return { state: 'metadata' as const, partition: row.partition, kind };
+            }
+            return row.position === row.head &&
+              row.semantic_position === row.head &&
+              witness?.revision === BigInt(row.revision) &&
+              witness.claimRevision === BigInt(row.claim_revision)
+              ? { state: 'current' as const }
+              : { state: 'native' as const, partition: row.partition };
+          }).finally(() => review?.observed(row));
+      },
     );
     for (const check of checks) {
       if (check.state === 'retire') {

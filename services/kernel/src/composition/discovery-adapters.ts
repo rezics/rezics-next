@@ -267,6 +267,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
       if (!source) throw new TypeError('Content review discovery source is unavailable');
       return (await source.read(partition, [])).position;
     },
+    ...(source?.readEmptyPositions ? { readEmptyPositions: source.readEmptyPositions.bind(source) } : {}),
   };
 }
 

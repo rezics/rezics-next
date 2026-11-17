@@ -325,6 +325,8 @@ export type DiscoveryMetadataProducer = Readonly<{
     }>
   >;
   position(partition: number): Promise<bigint>;
+  /** Native position observations for certification requests that carry no identities. */
+  readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
 }>;
 export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
 
