@@ -33,7 +33,9 @@ function vocabularyPort(unavailable?: 'withdrawn' | 'wrong-scheme') {
             : {
                 'schema:url': [
                   {
+                    rank: 'normal',
                     value: {
+                      type: 'value',
                       content: `https://rezics.com/schemes/vndb/character-traits${id === scheme ? '' : `/${['i23', 'i30'][concepts.indexOf(id)]}`}`,
                     },
                   },
@@ -43,7 +45,9 @@ function vocabularyPort(unavailable?: 'withdrawn' | 'wrong-scheme') {
                   : {
                       'skos:inScheme': [
                         {
+                          rank: 'normal',
                           value: {
+                            type: 'value',
                             content: id === concepts[1] && unavailable === 'wrong-scheme' ? concepts[0] : scheme,
                           },
                         },
