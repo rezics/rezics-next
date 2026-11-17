@@ -126,25 +126,6 @@ async function reportBookSearchFailure(
   });
 }
 
-async function openLiteraryReader(page: Page, subject: BookCatalogueIdentity): Promise<string> {
-  const link = exactSearchLink(page, subject);
-  await browserExpect(link).toBeVisible();
-  const destination = await link.getAttribute('href');
-  expect(destination, `canonical Search supplied a destination for ${subject.id}`).toBeTruthy();
-  await link.click();
-  await page.waitForURL((url) => decodeURIComponent(url.pathname).includes(subject.id), {
-    waitUntil: 'domcontentloaded',
-  });
-  await pageReady(page, `reader ${subject.type}`);
-  const reader = page.getByRole('main');
-  await browserExpect(reader.locator('[data-slot="literary-overview-destinations"]')).toBeVisible();
-  await browserExpect(reader.getByRole('heading', { level: 1, name: subject.label, exact: true })).toBeVisible();
-  await browserExpect(reader.getByText(subject.text, { exact: true })).toBeVisible();
-  const shelf = reader.locator('[data-slot="literary-overview-destinations"] a[href*="/library?"]');
-  expect(exactType(new URL((await shelf.getAttribute('href'))!, fixture.stack.web).href)).toBe(subject.type);
-  return page.url();
-}
-
 async function openNewTabFromLink(page: Page, link: Locator, label: string): Promise<Page> {
   const newPage = page.context().waitForEvent('page');
   await link.click();
@@ -158,6 +139,75 @@ async function assertShelfPage(page: Page, type: BookCatalogueType): Promise<voi
   expect(new URL(page.url()).pathname).toBe('/en/library');
   expect(exactType(page.url())).toBe(type);
   await browserExpect(page.getByRole('main')).toBeVisible();
+}
+
+async function assertPlannedShelf(shelf: Page, type: BookCatalogueType): Promise<void> {
+  const { subjects, states } = fixture;
+  await assertShelfPage(shelf, type);
+  if (type === 'schema:Book') {
+    await browserExpect(shelf.getByRole('main')).toContainText(subjects.book.label);
+    await browserExpect(shelf.getByRole('main')).toContainText(states.bookPlanned.label);
+  }
+  if (type === 'bf:Instance') {
+    await browserExpect(shelf.getByRole('main')).toContainText(subjects.edition.label);
+    await browserExpect(shelf.getByRole('main')).toContainText(states.editionPlanned.label);
+  }
+  if (type === 'schema:BookSeries' && states.seriesPlanned) {
+    await browserExpect(shelf.getByRole('main')).toContainText(subjects.series.label);
+    await browserExpect(shelf.getByRole('main')).toContainText(states.seriesPlanned.label);
+  }
+}
+
+async function openReaderShelf(page: Page, subject: BookCatalogueIdentity) {
+  const link = exactSearchLink(page, subject);
+  await browserExpect(link).toBeVisible();
+  const destination = await link.getAttribute('href');
+  expect(destination, `canonical Search supplied a destination for ${subject.id}`).toBeTruthy();
+  await link.click();
+  await page.waitForURL((url) => decodeURIComponent(url.pathname).includes(subject.id), {
+    waitUntil: 'domcontentloaded',
+  });
+  await pageReady(page, `reader ${subject.type}`);
+  const reader = page.getByRole('main');
+  await browserExpect(reader.locator('[data-slot="literary-overview-destinations"]')).toBeVisible();
+  await browserExpect(reader.getByRole('heading', { level: 1, name: subject.label, exact: true })).toBeVisible();
+  await browserExpect(reader.getByText(subject.text, { exact: true })).toBeVisible();
+  const shelfDestination = reader.locator('[data-slot="literary-overview-destinations"] a[href*="/library?"]');
+  expect(exactType(new URL((await shelfDestination.getAttribute('href'))!, fixture.stack.web).href)).toBe(subject.type);
+  const readerUrl = page.url();
+  const { type } = subject;
+  stage('literary reader', {
+    id: subject.id,
+    type,
+    url: new URL(readerUrl).pathname,
+    originalText: subject.text,
+  });
+
+  const shelfLink = page.locator('[data-slot="literary-overview-destinations"] a[target="_blank"][href*="/library?"]');
+  await browserExpect(shelfLink).toBeVisible();
+  const href = await shelfLink.getAttribute('href');
+  expect(href).toBeTruthy();
+  expect(exactType(new URL(href!, fixture.stack.web).href)).toBe(type);
+  const shelf = await openNewTabFromLink(page, shelfLink, `reader shelf handoff ${type}`);
+  await assertPlannedShelf(shelf, type);
+  stage('reader exact-type shelf', {
+    type,
+    subjectId: subject.id,
+    address: `${new URL(shelf.url()).pathname}${new URL(shelf.url()).search}`,
+  });
+  return { readerUrl, shelf };
+}
+
+async function returnToSearch(page: Page, subject: BookCatalogueIdentity, marker: string) {
+  const { type } = subject;
+  await page.goBack({ waitUntil: 'domcontentloaded' });
+  await pageReady(page, `Search return after ${type} reader`);
+  const address = new URL(page.url());
+  expect(address.pathname).toBe('/en/search');
+  expect(address.searchParams.get('q')).toBe(marker);
+  expect(address.searchParams.get('type')).toBe(type);
+  await assertSearchResult(page, subject);
+  return { type, url: `${address.pathname}${address.search}` };
 }
 
 async function readNativeEntry(
@@ -200,11 +250,28 @@ nativeTest(
   async () => {
     const { stack, auth, marker, subjects, states } = fixture;
     const alice = await auth.signIn('alice', { returnTo: '/en/books' });
-    const books = alice.context.pages().at(-1)!;
+    const books = alice.continueOnPage();
     await pageReady(books, 'localized Books entry');
     expect(new URL(books.url()).pathname).toBe('/en/books');
     await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();
     stage('Books entry', { hydrated: true, url: new URL(books.url()).pathname, locale: 'en' });
+
+    const bookPageShelfLinks = books.locator('[data-slot="book-catalogue-personal"] a[href*="type="]');
+    expect(await bookPageShelfLinks.count()).toBe(3);
+    for (const type of types) {
+      const link = bookPageShelfLinks.nth(types.indexOf(type));
+      const href = await link.getAttribute('href');
+      expect(href).toBeTruthy();
+      expect(exactType(new URL(href!, stack.web).href)).toBe(type);
+      expect(await link.getAttribute('target')).toBe('_blank');
+      const shelf = await openNewTabFromLink(books, link, `Books shelf handoff ${type}`);
+      await assertPlannedShelf(shelf, type);
+      stage('Books exact-type shelf', {
+        type,
+        address: `${new URL(shelf.url()).pathname}${new URL(shelf.url()).search}`,
+      });
+      await shelf.close();
+    }
 
     const searchForm = books.locator('form[data-slot="book-catalogue-search"]');
     await searchForm.locator('input[name="q"]').fill(marker);
@@ -218,6 +285,7 @@ nativeTest(
       else if (url.pathname.startsWith('/_serverFn/'))
         browserResponses.push({ boundary: 'server function', status: response.status() });
     };
+    let formSearch: Page;
     books.context().on('response', observeSearchResponse);
     try {
       const submitted = books.context().waitForEvent('page');
@@ -225,7 +293,7 @@ nativeTest(
         if (!(form instanceof HTMLFormElement)) throw new Error('Books search form was not an HTML form');
         form.requestSubmit();
       });
-      const formSearch = await submitted;
+      formSearch = await submitted;
       await formSearch.waitForLoadState('domcontentloaded');
       await pageReady(formSearch, 'Books search handoff');
       const formSearchAddress = new URL(formSearch.url());
@@ -250,121 +318,11 @@ nativeTest(
       books.context().off('response', observeSearchResponse);
     }
 
-    const browsePages = new Map<BookCatalogueType, Page>();
-    for (const type of types) {
-      const row = books.locator(`[data-book-type="${type}"]`);
-      const browse = row.getByRole('link');
-      await browserExpect(browse).toBeVisible();
-      expect(await browse.getAttribute('target')).toBe('_blank');
-      const href = await browse.getAttribute('href');
-      expect(href).toBeTruthy();
-      expect(exactType(new URL(href!, stack.web).href)).toBe(type);
-      const browsePage = await openNewTabFromLink(books, browse, `released-type browse ${type}`);
-      const browseAddress = new URL(browsePage.url());
-      expect(browseAddress.pathname).toBe('/en/search');
-      expect(browseAddress.searchParams.get('type')).toBe(type);
-      browseAddress.searchParams.set('q', marker);
-      const queryResponse = await browsePage.goto(browseAddress.href, { waitUntil: 'domcontentloaded' });
-      if (queryResponse?.status() !== 200)
-        throw new Error(
-          `canonical Search for ${type} expected HTTP 200, received ${queryResponse?.status() ?? 'none'}`,
-        );
-      await pageReady(browsePage, `canonical Search for ${type}`);
-      const subject =
-        type === 'schema:Book' ? subjects.book : type === 'schema:BookSeries' ? subjects.series : subjects.edition;
-      await assertSearchResult(browsePage, subject);
-      browsePages.set(type, browsePage);
-      stage('released-type Search', {
-        type,
-        url: `${browseAddress.pathname}${browseAddress.search}`,
-        identity: { id: subject.id, type: subject.type },
-        response: queryResponse.status(),
-      });
-    }
+    // Keep the Book's Library popup for the write after checking Back on its Search tab.
+    const { readerUrl: bookReaderUrl, shelf: bookShelf } = await openReaderShelf(formSearch, subjects.book);
+    const searches = [await returnToSearch(formSearch, subjects.book, marker)];
+    await formSearch.close();
 
-    const searchPages = new Map<BookCatalogueType, Page>([
-      ['schema:Book', formSearch],
-      ['schema:BookSeries', browsePages.get('schema:BookSeries')!],
-      ['bf:Instance', browsePages.get('bf:Instance')!],
-    ]);
-    const readerUrls = new Map<BookCatalogueType, string>();
-    for (const type of types) {
-      const subject =
-        type === 'schema:Book' ? subjects.book : type === 'schema:BookSeries' ? subjects.series : subjects.edition;
-      const readerUrl = await openLiteraryReader(searchPages.get(type)!, subject);
-      readerUrls.set(type, readerUrl);
-      stage('literary reader', {
-        id: subject.id,
-        type: subject.type,
-        url: new URL(readerUrl).pathname,
-        originalText: subject.text,
-      });
-    }
-
-    const bookPageShelfLinks = books.locator('[data-slot="book-catalogue-personal"] a[href*="type="]');
-    expect(await bookPageShelfLinks.count()).toBe(3);
-    for (const type of types) {
-      const link = bookPageShelfLinks.nth(types.indexOf(type));
-      const href = await link.getAttribute('href');
-      expect(href).toBeTruthy();
-      expect(exactType(new URL(href!, stack.web).href)).toBe(type);
-      expect(await link.getAttribute('target')).toBe('_blank');
-      const shelf = await openNewTabFromLink(books, link, `Books shelf handoff ${type}`);
-      await assertShelfPage(shelf, type);
-      if (type === 'schema:Book') {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.book.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.bookPlanned.label);
-      }
-      if (type === 'bf:Instance') {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.edition.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.editionPlanned.label);
-      }
-      if (type === 'schema:BookSeries' && states.seriesPlanned) {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.series.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.seriesPlanned.label);
-      }
-      stage('Books exact-type shelf', {
-        type,
-        address: `${new URL(shelf.url()).pathname}${new URL(shelf.url()).search}`,
-      });
-      await shelf.close();
-    }
-
-    const readerShelfPages = new Map<BookCatalogueType, Page>();
-    for (const type of types) {
-      const readerPage = searchPages.get(type)!;
-      const shelfLink = readerPage.locator(
-        '[data-slot="literary-overview-destinations"] a[target="_blank"][href*="/library?"]',
-      );
-      await browserExpect(shelfLink).toBeVisible();
-      const href = await shelfLink.getAttribute('href');
-      expect(href).toBeTruthy();
-      expect(exactType(new URL(href!, stack.web).href)).toBe(type);
-      const shelf = await openNewTabFromLink(readerPage, shelfLink, `reader shelf handoff ${type}`);
-      const subject =
-        type === 'schema:Book' ? subjects.book : type === 'schema:BookSeries' ? subjects.series : subjects.edition;
-      await assertShelfPage(shelf, type);
-      if (type === 'schema:Book') {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.book.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.bookPlanned.label);
-      }
-      if (type === 'bf:Instance') {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.edition.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.editionPlanned.label);
-      }
-      if (type === 'schema:BookSeries' && states.seriesPlanned) {
-        await browserExpect(shelf.getByRole('main')).toContainText(subjects.series.label);
-        await browserExpect(shelf.getByRole('main')).toContainText(states.seriesPlanned.label);
-      }
-      readerShelfPages.set(type, shelf);
-      stage('reader exact-type shelf', {
-        type,
-        subjectId: subject.id,
-        address: `${new URL(shelf.url()).pathname}${new URL(shelf.url()).search}`,
-      });
-    }
-
-    const bookShelf = readerShelfPages.get('schema:Book')!;
     await browserExpect(bookShelf.getByRole('button', { name: `Actions for ${subjects.book.label}` })).toBeVisible();
     const requestStart = stack.kernelRequests().length;
     await bookShelf.getByRole('button', { name: `Actions for ${subjects.book.label}` }).click();
@@ -417,11 +375,56 @@ nativeTest(
       revision: readback.revision,
       originalBooksVisit: new URL(books.url()).pathname,
     });
+    await bookShelf.close();
+
+    for (const type of types) {
+      const row = books.locator(`[data-book-type="${type}"]`);
+      const browse = row.getByRole('link');
+      await browserExpect(browse).toBeVisible();
+      expect(await browse.getAttribute('target')).toBe('_blank');
+      const href = await browse.getAttribute('href');
+      expect(href).toBeTruthy();
+      expect(exactType(new URL(href!, stack.web).href)).toBe(type);
+      const browsePage = await openNewTabFromLink(books, browse, `released-type browse ${type}`);
+      const browseAddress = new URL(browsePage.url());
+      expect(browseAddress.pathname).toBe('/en/search');
+      expect(browseAddress.searchParams.get('type')).toBe(type);
+      browseAddress.searchParams.set('q', marker);
+      const queryResponse = await browsePage.goto(browseAddress.href, { waitUntil: 'domcontentloaded' });
+      if (queryResponse?.status() !== 200)
+        throw new Error(
+          `canonical Search for ${type} expected HTTP 200, received ${queryResponse?.status() ?? 'none'}`,
+        );
+      await pageReady(browsePage, `canonical Search for ${type}`);
+      const subject =
+        type === 'schema:Book' ? subjects.book : type === 'schema:BookSeries' ? subjects.series : subjects.edition;
+      await assertSearchResult(browsePage, subject);
+      stage('released-type Search', {
+        type,
+        url: `${browseAddress.pathname}${browseAddress.search}`,
+        identity: { id: subject.id, type: subject.type },
+        response: queryResponse.status(),
+      });
+      if (type !== 'schema:Book') {
+        const { shelf } = await openReaderShelf(browsePage, subject);
+        await shelf.close();
+        searches.push(await returnToSearch(browsePage, subject, marker));
+      }
+      await browsePage.close();
+    }
+
+    await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();
+    expect(new URL(books.url()).pathname).toBe('/en/books');
+    stage('initiating visits retained', {
+      books: new URL(books.url()).pathname,
+      searches,
+    });
+    await books.close();
 
     const anonymousContext = await auth.newContext('anonymous');
     const anonymousPage = await anonymousContext.newPage();
     const beforePublicRead = stack.kernelRequests().length;
-    const publicResponse = await anonymousPage.goto(readerUrls.get('schema:Book')!, { waitUntil: 'domcontentloaded' });
+    const publicResponse = await anonymousPage.goto(bookReaderUrl, { waitUntil: 'domcontentloaded' });
     if (publicResponse?.status() !== 200)
       throw new Error(`anonymous public Book detail expected HTTP 200, received ${publicResponse?.status() ?? 'none'}`);
     await pageReady(anonymousPage, 'anonymous public Book detail');
@@ -442,6 +445,7 @@ nativeTest(
       personalStateText: 'absent',
       privateEntryReads: anonymousPrivateReads.length,
     });
+    await anonymousContext.close();
 
     const signedOutContext = await auth.newContext('anonymous');
     const signedOutPage = await signedOutContext.newPage();
@@ -452,8 +456,9 @@ nativeTest(
     expect(signInAddress.searchParams.get('return_to')).toBe(shelfPath);
     stage('signed-out shelf sign-in return', { signInPath: signInAddress.pathname, returnTo: shelfPath });
 
+    await signedOutPage.close();
     const bob = await auth.signIn('bob', { returnTo: shelfPath, context: signedOutContext });
-    const bobPage = bob.context.pages().at(-1)!;
+    const bobPage = bob.continueOnPage();
     await pageReady(bobPage, 'signed-in exact shelf return');
     expect(new URL(bobPage.url()).pathname).toBe('/en/library');
     expect(new URL(bobPage.url()).searchParams.get('type')).toBe('schema:Book');
@@ -464,28 +469,7 @@ nativeTest(
       address: `${new URL(bobPage.url()).pathname}${new URL(bobPage.url()).search}`,
       aliceBookState: 'absent',
     });
-
-    for (const type of types) {
-      const page = searchPages.get(type)!;
-      await page.goBack({ waitUntil: 'domcontentloaded' });
-      await pageReady(page, `Search return after ${type} reader`);
-      const address = new URL(page.url());
-      expect(address.pathname).toBe('/en/search');
-      expect(address.searchParams.get('q')).toBe(marker);
-      expect(address.searchParams.get('type')).toBe(type);
-      const subject =
-        type === 'schema:Book' ? subjects.book : type === 'schema:BookSeries' ? subjects.series : subjects.edition;
-      await assertSearchResult(page, subject);
-    }
-    await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();
-    expect(new URL(books.url()).pathname).toBe('/en/books');
-    stage('initiating visits retained', {
-      books: new URL(books.url()).pathname,
-      searches: [...searchPages].map(([type, page]) => ({
-        type,
-        url: `${new URL(page.url()).pathname}${new URL(page.url()).search}`,
-      })),
-    });
+    await signedOutContext.close();
   },
   lifecycle,
 );
