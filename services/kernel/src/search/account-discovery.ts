@@ -442,6 +442,7 @@ export async function withDiscoveryTarget<T>(
   work: (client: PoolClient, index: string) => Promise<T>,
   purge = false,
   context?: DiscoveryProjectionContext,
+  requireCanonicalMapping?: (result: T) => boolean,
 ): Promise<T> {
   const index = discoveryIndexName(target.prefix, target.generation);
   const transport = projectionSearch(search, context);
@@ -467,7 +468,8 @@ export async function withDiscoveryTarget<T>(
       if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
       if (context) projectionRemaining(context);
       const value = await work(client, index);
-      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+      if (!(await discoveryPhysicalTargetMatches(transport, target, requireCanonicalMapping?.(value))))
+        throw new DiscoveryPhysicalTargetChangedError();
       return value;
     } finally {
       try {
