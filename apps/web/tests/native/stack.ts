@@ -34,6 +34,7 @@ import {
 import type { WorkClient } from '../../../../services/kernel/src/work/client.ts';
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
+import type { NativeArchivePreview, NativeArchiveStatus } from '../../src/library/archive-entry-recovery/native.ts';
 
 // Match the private browser bridge's request budget for forwarded Auth pages and assets.
 const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
@@ -51,6 +52,7 @@ export type NativeKernelRequest = {
   validLabelUndoRevision?: boolean;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
+  archiveEntry?: ArchiveEntryResponse;
   /** Only the subject selector is retained for observed Hosted checkpoint saves. */
   hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
@@ -79,6 +81,8 @@ export type NativeWebStackOptions = {
   writeRateOverrides?: string;
   /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
   observeBookSearchPreparation?: boolean;
+  /** Observe Entry upload and preview responses for the mounted Archive fixture. */
+  observeArchiveEntry?: boolean;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
   commerce?: {
     apiHost: string;
@@ -93,6 +97,62 @@ export type NativeWebStackOptions = {
   /** Initial offset for the isolated native Auth trusted clock. */
   authClockOffsetSeconds?: number;
 };
+
+const archiveEntrySections = ['entries', 'labels'] as const;
+type ArchiveEntryResponse = Awaited<ReturnType<typeof observeArchiveEntryResponse>>;
+
+async function observeArchiveEntryResponse(request: Request, url: URL, response: Response) {
+  const upload = request.method === 'POST' && url.pathname === '/v1/libraryArchiveMerges';
+  const preview = request.method === 'GET' && /^\/v1\/libraryArchiveMerges\/[^/]+\/preview$/u.test(url.pathname);
+  if (!upload && !preview) return;
+  const headers = {
+    json: response.headers.get('content-type')?.split(';')[0] === 'application/json',
+    privateNoStore: response.headers.get('cache-control') === 'private, no-store',
+  };
+  const operation = upload ? ('upload' as const) : ('preview' as const);
+  const firstPage = preview && url.searchParams.get('after') === '-1';
+  if (!response.ok || !headers.json) return { operation, firstPage, headers, result: null };
+  const body = (await response
+    .clone()
+    .json()
+    .catch(() => null)) as NativeArchiveStatus | NativeArchivePreview | null;
+  if (!body || !Array.isArray(body.coverage)) return { operation, firstPage, headers, result: null };
+  return {
+    operation,
+    firstPage,
+    headers,
+    result: {
+      state: ['ready', 'cancelled', 'expired'].includes(body.state) ? body.state : 'other',
+      expiry: 'expiresAt' in body ? (Date.parse(body.expiresAt) > Date.now() ? 'future' : 'invalid-or-past') : null,
+      coverage: archiveEntrySections.map((section) => {
+        const item = body.coverage.find((row) => row.section === section);
+        return {
+          section,
+          present: item?.capture === 'present',
+          requiresMapping: item?.treatment === 'requires-explicit-mapping',
+        };
+      }),
+      window:
+        'records' in body
+          ? {
+              rows: body.records.length,
+              hasNext: body.next !== null,
+              matches: archiveEntrySections.flatMap((section) =>
+                body.records
+                  .filter((row) => row.section === section)
+                  .map(({ ordinal, status }) => ({
+                    section,
+                    ordinal,
+                    status: ['unresolved', 'unsupported', 'applying', 'acknowledged'].includes(status)
+                      ? status
+                      : 'other',
+                  })),
+              ),
+            }
+          : null,
+    },
+  };
+}
 export type NativeWebStack = {
   /** Read-only observation clients must use these owned database addresses. */
   databaseUrl: string;
@@ -1265,6 +1325,9 @@ async function startStack(): Promise<
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           observed.responseStatus = response.status;
+          if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY === '1' && !observed.fixtureRequest) {
+            observed.archiveEntry = await observeArchiveEntryResponse(request, url, response).catch(() => undefined);
+          }
           if (request.method === 'POST' && /^\/v1\/libraryLabels\/[^/]+:unassign$/u.test(url.pathname)) {
             const revision = response.headers.get('Library-Label-Assignment-Revision');
             observed.validLabelUndoRevision =
@@ -1720,6 +1783,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
+    NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY: options.observeArchiveEntry ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
