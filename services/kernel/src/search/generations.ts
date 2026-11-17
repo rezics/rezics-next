@@ -1291,7 +1291,10 @@ async function reconcileDiscoveryPage(
   });
   let expected: DiscoveryIndexAction[];
   if (!empty) await requireDiscoveryIndexFormat(search, index);
-  if (entry.owner === 'accounts') {
+  // The guarded union and native zero census already prove this exact scope has no keyed data.
+  if (empty) {
+    expected = [];
+  } else if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
       await searchTurnCall(() =>
         entry.source.read(
