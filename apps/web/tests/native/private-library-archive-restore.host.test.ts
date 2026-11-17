@@ -933,6 +933,35 @@ async function restoreOwnerLibrary() {
     } | null;
     const displayedId = displayed?.label?.id;
     const appearsInPrefix = typeof displayedId === 'string' && currentLabels.some((label) => label.id === displayedId);
+    await stack.syncKernelRequests();
+    const resultRequest = stack
+      .kernelRequests()
+      .findLast(
+        ({ fixtureRequest, method, url, responseStatus }) =>
+          !fixtureRequest &&
+          method === 'GET' &&
+          responseStatus === 200 &&
+          /^\/v1\/libraryArchiveMerges\/[0-9a-f-]{36}\/results(?:\?|$)/u.test(url),
+      );
+    let nativeReceiptStatus: number | undefined;
+    let nativeReceiptId: unknown;
+    if (resultRequest) {
+      const response = await stack
+        .kernel(resultRequest.url, { signal: AbortSignal.timeout(2_000) }, 'alice')
+        .catch(() => undefined);
+      nativeReceiptStatus = response?.status;
+      if (response?.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          results?: { section?: unknown; ordinal?: unknown; status?: unknown; result?: { labelId?: unknown } }[];
+        } | null;
+        nativeReceiptId = body?.results?.find(
+          (item) => item.section === 'labels' && item.ordinal === labelOrdinal && item.status === 'acknowledged',
+        )?.result?.labelId;
+      } else {
+        await response?.body?.cancel();
+      }
+    }
+    const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
     const query = new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' });
     const point = await settledWithin(
       stack
@@ -967,6 +996,16 @@ async function restoreOwnerLibrary() {
         currentAppearsInPrefix: appearsInPrefix,
         currentNameMatches: displayed?.label?.name === prepared.labelName,
         currentRevision: typeof displayed?.label?.revision === 'number' ? displayed.label.revision : null,
+        rawReceiptIsUuid: uuid.test(restoredLabelId),
+        visibleReceiptIsUuid:
+          typeof visibleLabelMapping?.labelId === 'string' && uuid.test(visibleLabelMapping.labelId),
+      },
+      nativeReceipt: {
+        status: nativeReceiptStatus ?? null,
+        matchesResultText: nativeReceiptId === restoredLabelId,
+        matchesCurrentLabel: typeof nativeReceiptId === 'string' && nativeReceiptId === displayedId,
+        appearsInPrefix:
+          typeof nativeReceiptId === 'string' && currentLabels.some((label) => label.id === nativeReceiptId),
       },
       prefix: {
         status: 200,
