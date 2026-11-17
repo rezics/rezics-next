@@ -1,9 +1,11 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { developmentShowcaseSelection, runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
 import { cacheDumpAsset } from '../../../scripts/datasets/fetch-dumps.ts';
+import * as walkMemory from '../../../scripts/walk-memory.ts';
+import { VNDB_LIMITS } from '../../kernel/src/library/list-import-vndb-parser.ts';
 import { normalizeCrossMediaSeedOrigin } from '../src/cross-media-seed.ts';
 
 test('downloads a pinned dump once, verifies it, and reuses its cache', async () => {
@@ -13,23 +15,31 @@ test('downloads a pinned dump once, verifies it, and reuses its cache', async ()
   const temp = await mkdtemp(join(tempRoot, 'cross-media-local-seed-'));
   const bytes = Buffer.from('pinned public dump');
   const digest = createHash('sha256').update(bytes).digest('hex');
+  const url = 'https://example.test/dump.zip';
   let downloads = 0;
   try {
-    await mkdir(temp, { recursive: true });
     const path = join(temp, 'dump.zip');
     const fetchImpl: typeof fetch = Object.assign(
-      async () => {
+      async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        expect(input).toBe(url);
+        expect(init?.redirect).toBe('follow');
         downloads++;
         return new Response(bytes);
       },
       { preconnect() {} },
     );
-    expect(await cacheDumpAsset('https://example.test/dump.zip', path, digest, { fetchImpl })).toBe(digest);
-    expect(await cacheDumpAsset('https://example.test/dump.zip', path, digest, { fetchImpl })).toBe(digest);
+    expect(await cacheDumpAsset(url, path, digest, { fetchImpl })).toBe(digest);
+    // A cache hit can spend seconds reclaiming GiBs from the runner's cgroup.
+    const reclaim = spyOn(walkMemory, 'reclaimInactiveFileCache').mockImplementation(() => {});
+    try {
+      expect(await cacheDumpAsset(url, path, digest, { fetchImpl })).toBe(digest);
+    } finally {
+      reclaim.mockRestore();
+    }
     expect(downloads).toBe(1);
     expect(await readFile(path)).toEqual(bytes);
     await writeFile(path, 'corrupt cache');
-    expect(await cacheDumpAsset('https://example.test/dump.zip', path, digest, { fetchImpl })).toBe(digest);
+    expect(await cacheDumpAsset(url, path, digest, { fetchImpl })).toBe(digest);
     expect(downloads).toBe(2);
     expect(await readFile(path)).toEqual(bytes);
   } finally {
@@ -84,18 +94,31 @@ for (const configured of [true, false])
     const exportPath = join(keyDirectory, 'private-export.xml');
     await writeFile(exportPath, xml, { mode: 0o600 });
     const uploadId = '01900000-0000-4000-8000-000000000001';
-    const uploads: { path: string; authorization: string | null; key: string | null; body: unknown }[] = [];
+    const requests: {
+      method: string;
+      path: string;
+      authorization: string | null;
+      key: string | null;
+      body: unknown;
+    }[] = [];
     const server = Bun.serve({
       port: 0,
       hostname: '127.0.0.1',
       async fetch(request) {
-        uploads.push({
-          path: new URL(request.url).pathname,
+        const { pathname, search } = new URL(request.url);
+        const path = pathname + search;
+        const upload = request.method === 'POST' && path === '/v1/libraryImports/vndb:preview';
+        requests.push({
+          method: request.method,
+          path,
           authorization: request.headers.get('authorization'),
           key: request.headers.get('idempotency-key'),
-          body: await request.json(),
+          body: upload ? await request.json() : request.body,
         });
-        return Response.json({ uploadId, rows: 1 });
+        if (request.method === 'GET' && path === '/v1/definitions/active')
+          return Response.json({ digest: 'a'.repeat(64), head: 1 });
+        if (upload) return Response.json({ uploadId, rows: 1, limits: VNDB_LIMITS });
+        return new Response(null, { status: 400 });
       },
     });
     try {
@@ -150,18 +173,20 @@ for (const configured of [true, false])
       expect(result.personalList).toEqual(
         configured ? { state: 'uploaded', uploadId, rows: 1 } : { state: 'unavailable', code: 'export-not-configured' },
       );
-      expect(uploads).toEqual(
-        configured
+      expect(requests).toEqual([
+        { method: 'GET', path: '/v1/definitions/active', authorization: null, key: null, body: null },
+        ...(configured
           ? [
               {
+                method: 'POST',
                 path: '/v1/libraryImports/vndb:preview',
                 authorization: 'Bearer local-unit-credential',
-                key: expect.any(String),
+                key: expect.stringMatching(/^"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"$/),
                 body: { xml },
               },
             ]
-          : [],
-      );
+          : []),
+      ]);
       expect((await stat(join(root, '.temp/cross-media-seed'))).mode & 0o777).toBe(0o700);
       for (const name of ['showcase.sqlite', 'result.json'])
         expect((await stat(join(root, '.temp/cross-media-seed', name))).mode & 0o777).toBe(0o600);
