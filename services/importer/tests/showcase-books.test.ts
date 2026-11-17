@@ -498,7 +498,9 @@ test('fresh book seed publishes current authors and keeps grain, membership and 
           valueContent(command.statement) === first.identities['person:6023']?.id &&
           command.statement.qualifiers?.some(
             (qualifier) =>
-              qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === first.creditRoles![0]!.conceptId,
+              qualifier.property.id === 'wdt:P3831' &&
+              valueContent(qualifier) ===
+                first.creditRoles!.find((role) => role.code === '2001' && role.property === 'schema:author')!.conceptId,
           ),
       ),
     ).toBe(true);
@@ -803,7 +805,7 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
       publicClient: world.publicClient,
       ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
-    const role = first.creditRoles![0]!;
+    const role = first.creditRoles!.find((entry) => entry.code === '2001' && entry.property === 'schema:author')!;
     const concept = world.subjects.get(role.conceptId)!;
     concept.statements['schema:sameAs'] = concept.statements['schema:sameAs']!.map((statement) => ({
       ...statement,

@@ -1,3 +1,4 @@
+import type { ApiRuntimeFailure } from './api-runtime-support.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -94,11 +95,14 @@ test('selected-VN credits reach adopted current facts through exact current bind
   })();
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-credits-native-'));
   let journal: ShowcaseJournal | undefined;
+  let failure: ApiRuntimeFailure | undefined;
   try {
+    const tierKey = randomUUID();
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
+      { key: tierKey, tier: 'trusted' },
       identitySupport(runtime.identity).managementBearer,
+      tierKey,
     );
     expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
@@ -519,9 +523,15 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(reopenedWork.statements['schema:author']).toHaveLength(1);
     expect(reopenedWork.statements['wdt:P725']).toHaveLength(1);
     expect(reopenedWork.statements['schema:illustrator']).toBeUndefined();
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
     journal?.close();
-    await runtime.close();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await runtime.close(failure);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }, 180_000);

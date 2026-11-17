@@ -1,3 +1,4 @@
+import { importApiRequest, settleApiRuntime, type ApiRuntimeFailure } from './api-runtime-support.ts';
 import { Database } from 'bun:sqlite';
 import { decodeJwt } from 'jose';
 import { afterAll } from 'bun:test';
@@ -187,34 +188,37 @@ export async function openApiRuntime(
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let directory: string | undefined;
   let ending: Promise<void> | undefined;
-  const close = () =>
-    (ending ??= time('close', async () => {
-      try {
-        await importer?.close();
-      } finally {
+  const close = (failure?: ApiRuntimeFailure) =>
+    settleApiRuntime(
+      (ending ??= time('close', async () => {
         try {
-          await boundary?.close();
+          await importer?.close();
         } finally {
           try {
-            await work?.close();
+            await boundary?.close();
           } finally {
             try {
-              try {
-                await ownedIdentity?.close();
-              } finally {
-                try {
-                  await ownedDatabase?.close();
-                } finally {
-                  await namespace?.close();
-                }
-              }
+              await work?.close();
             } finally {
-              if (directory) await rm(directory, { recursive: true, force: true });
+              try {
+                try {
+                  await ownedIdentity?.close();
+                } finally {
+                  try {
+                    await ownedDatabase?.close();
+                  } finally {
+                    await namespace?.close();
+                  }
+                }
+              } finally {
+                if (directory) await rm(directory, { recursive: true, force: true });
+              }
             }
           }
         }
-      }
-    }));
+      })),
+      failure,
+    );
   try {
     const base = process.env.DATABASE_URL;
     if (!base) throw new Error('DATABASE_URL must name a migrated application database');
@@ -372,22 +376,11 @@ export async function openApiRuntime(
     // Observer fan-out shares one native pool; admit reads before HTTP deadlines start.
     let observerRequests = 0;
     const observerWaiting: (() => void)[] = [];
-    async function request(path: string, body?: unknown, bearer?: string, key = randomUUID()) {
+    async function request(path: string, body?: unknown, bearer?: string, key?: string) {
+      const envelope = importApiRequest(origin, path, body, bearer, key);
       if (observerRequests === 1) await new Promise<void>((resolve) => observerWaiting.push(resolve));
       else observerRequests++;
-      const send = () =>
-        dispatchNative(
-          new Request(`${origin}${path}`, {
-            method: body === undefined ? 'GET' : 'POST',
-            headers: {
-              ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-              ...(body === undefined
-                ? {}
-                : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          }),
-        );
+      const send = () => dispatchNative(envelope.clone());
       try {
         let response = await send();
         for (let attempt = 1; response.status === 503 && attempt < 3; attempt++) {
@@ -957,7 +950,7 @@ export async function openApiRuntime(
       },
     };
   } catch (error) {
-    await close();
+    await close({ error });
     throw error;
   }
 }

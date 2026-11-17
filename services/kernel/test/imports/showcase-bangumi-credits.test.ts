@@ -1,3 +1,4 @@
+import type { ApiRuntimeFailure } from './api-runtime-support.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -37,6 +38,7 @@ test('default anime staff and voice publication adopts exact cited endpoints and
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-credits-native-'));
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  let failure: ApiRuntimeFailure | undefined;
   try {
     const editor = await openApiObserver(runtime);
     const grant = await editor.http('/v1/grants', {
@@ -310,7 +312,7 @@ test('default anime staff and voice publication adopts exact cited endpoints and
         },
       );
     }
-    expect(refreshed.result.creditRoles?.[0]).toMatchObject({ conceptId: role.conceptId, schemeId: role.schemeId });
+    expect(refreshed.result.creditRoles?.find((entry) => entry.code === role.code)).toEqual(role);
 
     const roleRequirement = resolution!.requirements.find((item) => item.sourceKey === `bangumi.staff:${role.code}`)!;
     const wrongSchemeSource: Source = {
@@ -403,9 +405,15 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     });
     expect(replay.roles.map((entry) => entry.code).sort()).toEqual(['155', '20', '2001', '2004', '2007', '21', '32']);
     expect(journal.acknowledgedCommands()).toHaveLength(acknowledgedBeforeReplay);
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
     journal.close();
-    await runtime.close();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await runtime.close(failure);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }, 300_000);
