@@ -451,6 +451,54 @@ test('an ordinary member reserves and claims the opening image on its exact Glob
   expect(existingContainer.body.media.containerId).toBe(target.id);
 });
 
+test('a legacy opening image requires its original Board and committed reservation', async () => {
+  const legacyImage = async (threadKey: string) => {
+    const reserved = await reserveNewThread(threadKey);
+    expect(reserved.response.status).toBe(201);
+    const mediaId = reserved.body.media.id as string;
+    await markAvailable(mediaId);
+    await db.admin.query('UPDATE content.media SET reservation_board_id=NULL WHERE route=$1 AND media_id=$2', [
+      routeOf(mediaId),
+      mediaId,
+    ]);
+    return mediaId;
+  };
+  const key = randomUUID();
+  const target = threadTarget(routeKey, authorId, key);
+  const mediaId = await legacyImage(key);
+  const before = await rowCounts(target.route);
+  const wrongBoard = await call('POST', '/v1/threads', { ...threadInput([mediaId]), boardId: otherBoardId }, key);
+  expect([wrongBoard.response.status, wrongBoard.body.code]).toEqual([409, 'media_unavailable']);
+  expect(await rowCounts(target.route)).toEqual(before);
+  const created = await call('POST', '/v1/threads', threadInput([mediaId]), key);
+  expect(created.response.status, JSON.stringify(created.body)).toBe(201);
+  expect(created.body.thread.firstPost.mediaIds).toEqual([mediaId]);
+  const { rows } = await db.admin.query(
+    'SELECT reservation_board_id, claimed_item_id FROM content.media WHERE route=$1 AND media_id=$2',
+    [target.route, mediaId],
+  );
+  expect(rows[0]).toMatchObject({ reservation_board_id: boardId, claimed_item_id: created.body.thread.firstPost.id });
+
+  const uncoveredKey = randomUUID();
+  const uncoveredTarget = threadTarget(routeKey, authorId, uncoveredKey);
+  const covered = await legacyImage(uncoveredKey);
+  const uncovered = await seedMedia({
+    containerId: uncoveredTarget.id,
+    uploaderId: authorId,
+    state: 'available',
+    reservationRequestId: randomUUID(),
+  });
+  const beforeMissing = await rowCounts(uncoveredTarget.route);
+  const missingReceipt = await call('POST', '/v1/threads', threadInput([covered, uncovered]), uncoveredKey);
+  expect([missingReceipt.response.status, missingReceipt.body.code]).toEqual([409, 'media_unavailable']);
+  expect(await rowCounts(uncoveredTarget.route)).toEqual(beforeMissing);
+  const { rows: untouched } = await db.admin.query(
+    'SELECT reservation_board_id, claimed_item_id FROM content.media WHERE route=$1 AND media_id=$2',
+    [uncoveredTarget.route, covered],
+  );
+  expect(untouched[0]).toEqual({ reservation_board_id: null, claimed_item_id: null });
+});
+
 test('invalid ownership, reservation key, availability, and anonymous requests do not create or claim content', async () => {
   const otherKey = randomUUID();
   const otherTarget = threadTarget(routeKey, otherId, otherKey);

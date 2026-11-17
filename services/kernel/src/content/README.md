@@ -3276,8 +3276,10 @@ Before a discussion thread exists, `POST /v1/media` accepts `newThread: { boardI
 opening image. The credential needs the `media:create` scope. Reservation and replay use current
 `thread:create` authority on that discussion Board, including its visibility and Realm participation checks.
 Each reservation records that Board and the future thread identity derived from the authenticated account and
-thread key. The initial claim requires the same Board, thread and uploader. Older pending reservations without a
-recorded Board require a fresh reservation for initial thread creation. Existing post claims can still be revised.
+thread key. The initial claim requires the same Board, thread and uploader. For a pending reservation created before
+the Board column existed, the claim checks the original keyed reservation receipt and write basis against the exact
+Board and thread key. A successful claim records that Board in the same transaction. Existing post claims can still
+be revised.
 
 Decision: `mediaParentSnapshot` races checkout, transaction and partition reads, callbacks and cleanup against the
 original request deadline. A late checkout dispatches no SQL; expiry skips queued rollback and discards the client.
