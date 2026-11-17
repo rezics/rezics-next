@@ -9,7 +9,7 @@ import {
   type BookCatalogueType,
 } from './book-catalogue-journey-fixture.ts';
 import { assertShelfPage, exactType, openNewTabFromLink, pageReady, problemCode } from './book-catalogue-browser.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 
 const lifecycle = new NativeTestLifecycle('native Book catalogue journey');
 let fixture: BookCatalogueJourneyFixture;
@@ -113,12 +113,60 @@ async function assertPlannedShelf(shelf: Page, type: BookCatalogueType): Promise
   }
 }
 
-async function openReaderShelf(page: Page, subject: BookCatalogueIdentity) {
+async function openReaderShelf(page: Page, subject: BookCatalogueIdentity, observeClick = false) {
   const link = exactSearchLink(page, subject);
   await browserExpect(link).toBeVisible();
   const destination = await link.getAttribute('href');
   expect(destination, `canonical Search supplied a destination for ${subject.id}`).toBeTruthy();
-  await link.click();
+  const searchUrl = page.url();
+  let searchDocuments = 0;
+  const observeDocument = (response: Response) => {
+    if (response.request().isNavigationRequest() && response.url() === searchUrl) searchDocuments++;
+  };
+  if (observeClick) page.on('response', observeDocument);
+  const witness = observeClick
+    ? await settledWithin(watchBookResult(page, destination!), 1_000).catch(() => undefined)
+    : undefined;
+  let clicked = false;
+  try {
+    await link.click();
+    clicked = true;
+  } finally {
+    if (observeClick) page.off('response', observeDocument);
+    const dom =
+      witness &&
+      (await settledWithin(
+        witness.evaluate((stop) => stop()),
+        1_000,
+      ).catch(() => undefined));
+    void witness?.dispose().catch(() => {});
+    if (observeClick && !clicked) {
+      const { stack } = fixture;
+      const reader = await settledWithin(
+        stack.syncKernelRequests().then(() =>
+          stack
+            .kernelRequests()
+            .filter(
+              (request) =>
+                !request.fixtureRequest &&
+                request.method === 'GET' &&
+                request.url.split('?')[0] === `/v1/subjects/${subject.id}`,
+            )
+            .slice(-4)
+            .map((request) => ({
+              status: request.responseStatus ?? 'pending',
+              code: problemCode(request.failure?.body),
+            })),
+        ),
+        2_000,
+      ).catch(() => undefined);
+      stage('Book Search pointer', {
+        dom: dom ?? 'observation unavailable',
+        searchDocuments,
+        reader: reader ?? 'observation unavailable',
+      });
+    }
+  }
   await page.waitForURL((url) => decodeURIComponent(url.pathname).includes(subject.id), {
     waitUntil: 'domcontentloaded',
   });
@@ -151,6 +199,61 @@ async function openReaderShelf(page: Page, subject: BookCatalogueIdentity) {
     address: `${new URL(shelf.url()).pathname}${new URL(shelf.url()).search}`,
   });
   return { readerUrl, shelf };
+}
+
+function watchBookResult(page: Page, href: string) {
+  return page.evaluateHandle((href) => {
+    const selector = `#search-results a[data-slot="list-row-link"][href=${CSS.escape(href)}]`;
+    const report = {
+      replacements: 0,
+      detachments: 0,
+      frames: 0,
+      missingFrames: 0,
+      layoutChanges: 0,
+      longestStableRun: 0,
+    };
+    let current: Element | null = null;
+    let previous: Element | null = null;
+    let box: number[] | undefined;
+    let stableRun = 0;
+    let frameId: number;
+    const observe = () => {
+      const next = document.querySelector(selector);
+      if (next === current) return;
+      if (current && !current.isConnected) report.detachments++;
+      if (next && previous && next !== previous) report.replacements++;
+      if (next) previous = next;
+      current = next;
+      box = undefined;
+      stableRun = 0;
+    };
+    const sample = () => {
+      observe();
+      report.frames++;
+      if (current) {
+        const { x, y, width, height } = current.getBoundingClientRect();
+        const next = [x, y, width, height];
+        const unchanged = box && next.every((value, index) => value === box![index]);
+        if (box && !unchanged) report.layoutChanges++;
+        stableRun = width && height ? (unchanged ? stableRun + 1 : 1) : 0;
+        report.longestStableRun = Math.max(report.longestStableRun, stableRun);
+        box = next;
+      } else report.missingFrames++;
+      frameId = requestAnimationFrame(sample);
+    };
+    const observer = new MutationObserver(observe);
+    observe();
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    frameId = requestAnimationFrame(sample);
+    const stop = () => {
+      clearTimeout(deadline);
+      observer.disconnect();
+      cancelAnimationFrame(frameId);
+      return { ...report, visibility: document.visibilityState, focused: document.hasFocus() };
+    };
+    const deadline = window.setTimeout(stop, 45_000);
+    return stop;
+  }, href);
 }
 
 async function returnToSearch(page: Page, subject: BookCatalogueIdentity, marker: string) {
@@ -274,7 +377,7 @@ nativeTest(
     }
 
     // Keep the Book's Library popup for the write after checking Back on its Search tab.
-    const { readerUrl: bookReaderUrl, shelf: bookShelf } = await openReaderShelf(formSearch, subjects.book);
+    const { readerUrl: bookReaderUrl, shelf: bookShelf } = await openReaderShelf(formSearch, subjects.book, true);
     const searches = [await returnToSearch(formSearch, subjects.book, marker)];
     await formSearch.close();
 

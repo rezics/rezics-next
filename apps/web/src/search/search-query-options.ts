@@ -12,6 +12,7 @@ import type { SearchLoaderDeps } from './search-params';
 import { createSearchApplication, requestParams } from './search-application';
 import type { SearchPageData, SearchRequestParams } from './search-query-contract';
 import { validateSearchInput } from './search-query-input';
+import { isBookCatalogueSearch } from './search-request';
 
 /** Search composition captures the existing locale-scoped client provider once for every request path. */
 export const searchApplication = createSearchApplication({
@@ -59,7 +60,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     queryKey: searchApplication.queryKey(locale, params, reader),
     queryFn: async ({ signal: querySignal, client }) => {
       const retired = new AbortController();
-      const admission = typeof window === 'undefined' ? undefined : workspaceAdmission(client, []);
+      const admission =
+        typeof window !== 'undefined' && !isBookCatalogueSearch(params) ? workspaceAdmission(client, []) : undefined;
       const origin = admission?.read();
       const stop = admission?.subscribe(() => {
         if (admission.read() !== origin) retired.abort();

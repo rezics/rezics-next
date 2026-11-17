@@ -51,6 +51,7 @@ window.scrollTo = () => undefined;
 const globals = {
   window,
   document: window.document,
+  Element: window.Element,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
   scrollTo: window.scrollTo,
@@ -104,7 +105,7 @@ async function settle(page: SearchPageData) {
   });
 }
 
-async function show(session: BrowserSession, path = '/search?q=Mira') {
+async function show(session: BrowserSession, path = '/search?q=Mira', initialPage = unavailable) {
   reads.length = 0;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
@@ -126,7 +127,7 @@ async function show(session: BrowserSession, path = '/search?q=Mira') {
   await act(async () => {
     await Promise.resolve();
   });
-  if (reads.length) await settle(unavailable);
+  if (reads.length) await settle(initialPage);
   await loading;
   root ??= createRoot(host);
   await act(async () =>
@@ -174,6 +175,38 @@ test('the Search route retires pending Retry focus when the observed session cha
   });
   await settle(ready);
   expect(focusedResults()).toBe(false);
+});
+
+test('the exact public Book link survives signed-in reader enrollment', async () => {
+  setLocale('en', { reload: false });
+  const type = 'schema:Book';
+  const id = '5a522c45-d94f-4d36-8b2a-3ac80d988cff';
+  const client = await show(
+    { state: 'signed-out', subject: null, csrfToken: null },
+    '/search?q=Mira&type=schema%3ABook',
+    {
+      ...unavailable,
+      type,
+      queryState: { ...state, type },
+      recovery: { status: 'ready' },
+      result: {
+        subjects: [{ id, type, summary: null, labels: { en: 'Mira' } }],
+        next: null,
+        as_of: discoveryExample.as_of,
+      },
+    },
+  );
+  const selector = `#search-results a[href="/en/subjects/${id}/mira"]`;
+  const link = host.querySelector<HTMLAnchorElement>(selector);
+  expect(link?.textContent).toBe('Mira');
+  link!.focus();
+  const readsBefore = reads.length;
+  await act(async () => {
+    client.setQueryData(sessionQuery.queryKey, viewer());
+  });
+  expect(host.querySelector(selector) === link).toBe(true);
+  expect(document.activeElement === link).toBe(true);
+  expect(reads).toHaveLength(readsBefore);
 });
 
 test('stable session observation recovers focus on the current Refresh action', async () => {
