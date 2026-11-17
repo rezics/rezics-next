@@ -50,6 +50,7 @@ import {
 } from '../semantic/index.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { activeRelease, readRelease } from '../semantic/definitions.ts';
+import { hasVerifiedReleaseDigest } from '../semantic/definition-release-read.ts';
 import { identityEpochStore, recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/index.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
@@ -126,6 +127,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     createSubjectSourceKeyPages,
     currentReadSnapshot,
     deadlineClient,
+    hasVerifiedReleaseDigest,
     identityEpochStore,
     identityScopeAddress,
     joinNativePublicFilterRepair,

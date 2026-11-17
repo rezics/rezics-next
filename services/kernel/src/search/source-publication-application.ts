@@ -3,6 +3,7 @@ export { searchSourcePublicationApplication } from './source-publication-binding
 import type { Pool } from 'pg';
 import { createSearchGenerationPublication, type SearchGenerationPublication } from './generation-publication.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
+import { retainNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import type {
   SearchNativePublicationCompletionReader,
   SearchPublicFilterSourceBinding,
@@ -52,6 +53,7 @@ export function createSearchSourcePublicationApplication(
       const writerGuard = createSearchWriterGuard({ pool, search, ...writer });
       return createSearchGenerationPublication({
         ...generation,
+        meaning: retainNativePublicFilterMeaning(generation.meaning, port.hasVerifiedReleaseDigest),
         pool,
         search,
         binding,

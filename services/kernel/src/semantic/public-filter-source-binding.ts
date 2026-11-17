@@ -1494,21 +1494,27 @@ export function createNativePublicFilterSourceBinding(
     if (!current || current.owner_epoch !== source.epoch || BigInt(current.position) !== state.version)
       throw new BindingError('configuration_changed');
   }
+  let lastRepairBinding: { release: PublicFilterProjectionMeaning['release']; key: string; digest: string } | undefined;
   function repairChain(bootstrap: PublicSourceBootstrap, joined: Joined) {
     if (!joined.execution) throw new BindingError('execution_missing');
+    const basis = {
+      definition: bootstrap.definition,
+      consumer: bootstrap.consumer,
+      snapshot: bootstrap.snapshot,
+      covered: joined.covered,
+      queried: joined.queried,
+      execution: joined.execution,
+    };
+    // The native definition reader resolves the release before each call.
+    // Its frozen body can reuse the original chain digest for identical inputs.
+    const { release, ...meaning } = basis.definition.meaning;
+    const key = encode({ ...basis, definition: { ...basis.definition, meaning } });
+    if (lastRepairBinding?.release !== release || lastRepairBinding.key !== key)
+      lastRepairBinding = { release, key, digest: hash(encode(basis)) };
     return {
       bootstrap: nativeId(bootstrap.id),
       execution: joined.execution.id,
-      binding: hash(
-        encode({
-          definition: bootstrap.definition,
-          consumer: bootstrap.consumer,
-          snapshot: bootstrap.snapshot,
-          covered: joined.covered,
-          queried: joined.queried,
-          execution: joined.execution,
-        }),
-      ),
+      binding: lastRepairBinding.digest,
     };
   }
   async function accountRepairKey(state: RepairState, db: Pool, cost: BindingCost) {
