@@ -557,7 +557,18 @@ test('fixed changes retain indexed bounded costs across three state scales and s
       expect(result.code).toBe(0);
       expect(result.sql.length).toBeGreaterThan(0);
       for (const statement of result.sql) {
-        expect(statement.plan.join('\n')).not.toMatch(/\bSCAN (?!CONSTANT ROW)|USE TEMP B-TREE|AUTOMATIC/i);
+        // These exact destination catalog probes remain in the statement and row counts.
+        const destinationLookup =
+          statement.plan.length === 1 &&
+          statement.plan[0] === 'SCAN sqlite_schema' &&
+          ((statement.sql === 'SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?' &&
+            statement.parameters.length === 2 &&
+            statement.parameters[0] === 'table' &&
+            statement.parameters[1] === 'source_destinations') ||
+            (statement.sql === "SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='run_sources'" &&
+              statement.parameters.length === 0));
+        if (!destinationLookup)
+          expect(statement.plan.join('\n')).not.toMatch(/\bSCAN (?!CONSTANT ROW)|USE TEMP B-TREE|AUTOMATIC/i);
         for (const detail of statement.plan.filter((plan) => /\bSEARCH\b/i.test(plan))) {
           expect(detail).toMatch(
             /USING (?:COVERING )?(?:INDEX .+|INTEGER PRIMARY KEY|PRIMARY KEY)\s*\([^)]*[=<>][^)]*\)/i,

@@ -644,16 +644,13 @@ test('control characters are escaped and inspect/compare routing is unchanged', 
     expect(compareHelp.code).toBe(0);
     expect(compareHelp.stdout).toContain('preview-dir');
 
-    writeFileSync(join(fixture.directory, 'not-sqlite'), 'not a database');
-    const broken = await compare(join(fixture.directory, 'not-sqlite'), [
-      '--source',
-      'wikidata',
-      '--before',
-      '1',
-      '--after',
-      '2',
-    ]);
+    const invalidState = join(fixture.directory, 'not-sqlite\u001b');
+    writeFileSync(invalidState, 'not a database');
+    const broken = await compare(invalidState, ['--source', 'wikidata', '--before', '1', '--after', '2']);
     expect(broken.code).toBe(2);
+    expect(broken.stderr).toContain(
+      `State file is not a supported readable SQLite database: ${JSON.stringify(invalidState)}.`,
+    );
     expect(broken.stderr).not.toMatch(/\u001b/);
   } finally {
     fixture.close();

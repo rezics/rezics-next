@@ -397,7 +397,7 @@ test('a bearer expiring during a write is renewed once and replayed with the sam
     expect(execution.code).toBe(exit.success);
     await assertAuthFlow(h, execution);
     const attempts = writes(execution);
-    expect(attempts.length).toBe(2);
+    expect(attempts).toHaveLength(3);
     expect(attempts[0]!.responseStatus).toBe(401);
     expect(attempts[0]!.effectApplied).toBe(false);
     expect(attempts[1]!.responseStatus).toBe(200);
@@ -417,6 +417,12 @@ test('a bearer expiring during a write is renewed once and replayed with the sam
     expect(firstKeys.length > 0).toBe(true);
     expect(JSON.stringify(firstKeys) === JSON.stringify(replayKeys)).toBe(true);
     expect(attempts[0]!.authorization !== attempts[1]!.authorization).toBe(true);
+    const proposal = attempts[2]!;
+    expect(proposal).toMatchObject({ responseStatus: 200, effectApplied: true });
+    expect(proposal.body).not.toBe(attempts[1]!.body);
+    expect(JSON.parse(proposal.body!).commands).toEqual(
+      expect.arrayContaining([expect.objectContaining({ op: 'propose' })]),
+    );
     expect(execution.auth.requests.filter((request) => authPath(request) === '/signin/key')).toHaveLength(2);
     await assertNoSecrets(h, execution);
   });
