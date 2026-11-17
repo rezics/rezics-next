@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page, Response } from 'playwright';
+import { parseLegacySearchPage } from '../../src/search/discovery.ts';
 import {
   startBookCatalogueJourneyFixture,
   type BookCatalogueIdentity,
@@ -57,6 +58,54 @@ async function assertSearchResult(page: Page, subject: BookCatalogueIdentity): P
     const count = await exactSearchLink(page, other).count();
     expect(count, `${subject.type} Search excludes ${other.type} ${other.id}`).toBe(other.id === subject.id ? 1 : 0);
   }
+}
+
+function problemCode(body: unknown): string | undefined {
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return;
+    }
+  }
+  if (body === null || typeof body !== 'object' || !('code' in body)) return;
+  return typeof body.code === 'string' && /^[a-z0-9_]{1,64}$/u.test(body.code) ? body.code : undefined;
+}
+
+async function reportBookSearchFailure(
+  browserResponses: readonly { boundary: 'document' | 'server function'; status: number }[],
+) {
+  const { stack, marker, subjects } = fixture;
+  await stack.syncKernelRequests();
+  const kernelRequests = stack
+    .kernelRequests()
+    .filter((request) => !request.fixtureRequest && request.method === 'POST' && request.url === '/v1/subjects:search');
+  const browserToKernel = kernelRequests.slice(-6).map((request) => ({
+    status: request.responseStatus ?? null,
+    hasBearer: request.authorization !== null,
+    code: problemCode(request.failure?.body),
+  }));
+  stage('Books search transport', { browserResponses, browserToKernel });
+  const control = await stack.kernel('/v1/subjects:search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      filter: { type: { in: [subjects.book.type] } },
+      languages: ['en'],
+      descriptions: true,
+      limit: 20,
+      text: marker,
+    }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  const body: unknown = await control.json().catch(() => undefined);
+  const page = parseLegacySearchPage(body);
+  stage('Books search exact typed Kernel control', {
+    status: control.status,
+    code: problemCode(body),
+    parsed: page !== undefined,
+    expectedBook: page?.subjects.some(({ id, type }) => id === subjects.book.id && type === subjects.book.type),
+  });
 }
 
 async function openLiteraryReader(page: Page, subject: BookCatalogueIdentity): Promise<string> {
@@ -141,25 +190,47 @@ nativeTest(
 
     const searchForm = books.locator('form[data-slot="book-catalogue-search"]');
     await searchForm.locator('input[name="q"]').fill(marker);
-    const submitted = books.context().waitForEvent('page');
-    await searchForm.evaluate((form) => {
-      if (!(form instanceof HTMLFormElement)) throw new Error('Books search form was not an HTML form');
-      form.requestSubmit();
-    });
-    const formSearch = await submitted;
-    await formSearch.waitForLoadState('domcontentloaded');
-    await pageReady(formSearch, 'Books search handoff');
-    const formSearchAddress = new URL(formSearch.url());
-    expect(formSearchAddress.pathname).toBe('/en/search');
-    expect(formSearchAddress.searchParams.get('q')).toBe(marker);
-    expect(formSearchAddress.searchParams.get('type')).toBe('schema:Book');
-    await assertSearchResult(formSearch, subjects.book);
-    stage('Books search', {
-      url: `${formSearchAddress.pathname}${formSearchAddress.search}`,
-      type: formSearchAddress.searchParams.get('type'),
-      fixtureIdentity: { id: subjects.book.id, type: subjects.book.type },
-      nativeDefaultHits: fixture.search.subjects.map(({ id, type }) => ({ id, type })),
-    });
+    const origin = new URL(stack.web).origin;
+    const browserResponses: { boundary: 'document' | 'server function'; status: number }[] = [];
+    const observeSearchResponse = (response: Response) => {
+      const url = new URL(response.url());
+      if (url.origin !== origin || browserResponses.length >= 12) return;
+      if (url.pathname === '/en/search' && response.request().isNavigationRequest())
+        browserResponses.push({ boundary: 'document', status: response.status() });
+      else if (url.pathname.startsWith('/_serverFn/'))
+        browserResponses.push({ boundary: 'server function', status: response.status() });
+    };
+    books.context().on('response', observeSearchResponse);
+    try {
+      const submitted = books.context().waitForEvent('page');
+      await searchForm.evaluate((form) => {
+        if (!(form instanceof HTMLFormElement)) throw new Error('Books search form was not an HTML form');
+        form.requestSubmit();
+      });
+      const formSearch = await submitted;
+      await formSearch.waitForLoadState('domcontentloaded');
+      await pageReady(formSearch, 'Books search handoff');
+      const formSearchAddress = new URL(formSearch.url());
+      expect(formSearchAddress.pathname).toBe('/en/search');
+      expect(formSearchAddress.searchParams.get('q')).toBe(marker);
+      expect(formSearchAddress.searchParams.get('type')).toBe('schema:Book');
+      await assertSearchResult(formSearch, subjects.book);
+      stage('Books search', {
+        url: `${formSearchAddress.pathname}${formSearchAddress.search}`,
+        type: formSearchAddress.searchParams.get('type'),
+        fixtureIdentity: { id: subjects.book.id, type: subjects.book.type },
+        nativeDefaultHits: fixture.search.subjects.map(({ id, type }) => ({ id, type })),
+      });
+    } catch (error) {
+      await reportBookSearchFailure(browserResponses).catch((diagnosticError) =>
+        stage('Books search diagnostic', {
+          error: diagnosticError instanceof Error ? diagnosticError.name : 'unknown',
+        }),
+      );
+      throw error;
+    } finally {
+      books.context().off('response', observeSearchResponse);
+    }
 
     const browsePages = new Map<BookCatalogueType, Page>();
     for (const type of types) {
