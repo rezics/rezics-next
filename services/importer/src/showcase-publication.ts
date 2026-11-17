@@ -1194,6 +1194,10 @@ async function publishShowcasePhases(
   }
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const validated = new Map<string, CandidateRead>();
+  const unavailableParentAssertions = new Map<string, string>();
+  const retainUnavailableParent = (assertion: ShowcaseAssertion) => {
+    if (assertion.tagParentPath) unavailableParentAssertions.set(assertion.tagParentPath, assertion.candidateId);
+  };
   const currentTagMembershipCandidateDigests = new Set<string>();
   const blockedSubjects = new Set<string>();
   const blockedCoverCandidates = new Set<string>();
@@ -1348,6 +1352,7 @@ async function publishShowcasePhases(
       currentSubjectCache.set(id, current);
     }
     if (!current || !currentSourceRead(current, record)) {
+      if (!current) retainUnavailableParent(assertion);
       omissions.push({
         provider: record.provider,
         sourceKey: record.sourceKey,
@@ -1524,6 +1529,7 @@ async function publishShowcasePhases(
           pageCache,
         );
         candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
+        if (!candidate && !page.complete) retainUnavailableParent(assertion);
         if (page.complete && group.selected.size > 1) {
           const rows = new Map<string, CandidateRead>();
           for (const entry of page.candidates) if (group.selected.has(entry.id)) rows.set(entry.id, entry);
@@ -1531,6 +1537,7 @@ async function publishShowcasePhases(
         }
       }
     } catch {
+      retainUnavailableParent(assertion);
       omissions.push({
         provider: record.provider,
         sourceKey: record.sourceKey,
@@ -2019,7 +2026,13 @@ async function publishShowcasePhases(
     const edge = parentAssertions.find(({ assertion }) => assertion.tagParentPath === binding.path);
     const candidate = edge ? validated.get(edge.assertion.candidateId) : undefined;
     if (!edge || !candidate) {
-      setParentOutcome(binding, 'withheld', undefined, 'exact parent candidate is unavailable');
+      // The rebuilt manifest omits unverifiable proposals. Preserve uncertainty for their exact retained selections.
+      const unavailable = unavailableParentAssertions.get(binding.path);
+      if (unavailable) {
+        unavailableParentCandidateIds.add(unavailable);
+        unavailableParentPaths.add(binding.path);
+      }
+      setParentOutcome(binding, 'withheld', unavailable, 'exact parent candidate is unavailable');
       continue;
     }
     const fence = input.review.fence ? await showcaseTagParentSourceFence(input.review.fence, binding) : 'unavailable';
@@ -3142,10 +3155,7 @@ async function publishShowcasePhases(
     };
   });
   return {
-    status:
-      uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length
-        ? 'incomplete'
-        : 'published',
+    status: uniqueOmissions.length || published.length !== publicRecords.length ? 'incomplete' : 'published',
     manifest,
     published,
     vndbWorkRelations,
