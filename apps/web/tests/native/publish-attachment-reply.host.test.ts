@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { BrowserContext, Page } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
@@ -51,6 +51,33 @@ let originalImage: Buffer;
 let stack: NativeWebStack;
 let auth: NativeAuthStack;
 let board: PublishAttachmentWorkBoard;
+const sequence: string[] = [];
+
+async function writeBoardResult(result: object) {
+  const directory = resolve(import.meta.dir, '../../../../.temp/publish-attachment-reply');
+  await mkdir(directory, { recursive: true });
+  const pending = resolve(directory, 'walk.pending.json');
+  await writeFile(pending, `${JSON.stringify(result, null, 2)}\n`);
+  await rename(pending, resolve(directory, 'walk.json'));
+}
+
+async function withBoardResult(phase: 'setup' | 'journey', operation: () => Promise<void>) {
+  try {
+    await operation();
+  } catch (error) {
+    try {
+      await writeBoardResult({
+        outcome: 'failed',
+        phase,
+        sequence,
+        error: error instanceof Error ? error.name : typeof error,
+      });
+    } catch {
+      console.error('Could not write the native Board failure result');
+    }
+    throw error;
+  }
+}
 
 function kernelProblem(status: number, code: string, title: string, extra: Record<string, unknown> = {}) {
   return JSON.stringify({
@@ -136,17 +163,18 @@ function documentHas(value: unknown, needle: string): boolean {
   return JSON.stringify(value).includes(needle);
 }
 
-nativeBeforeAll(lifecycle, 900_000, async () => {
-  originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
-  stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
-  auth = await startAuthStack(stack);
-  board = await createPublishAttachmentWorkBoard(stack);
-});
+nativeBeforeAll(lifecycle, 900_000, () =>
+  withBoardResult('setup', async () => {
+    originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
+    stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
+    auth = await startAuthStack(stack);
+    board = await createPublishAttachmentWorkBoard(stack);
+  }),
+);
 
 nativeAfterAll(lifecycle, 180_000);
 
 async function publishAttachmentReply() {
-  const sequence: string[] = [];
   const author = await signUpMember(board.boardUrl);
   sequence.push(`signup-author:${author.accountId}`);
   const authorPage = author.page;
@@ -341,40 +369,32 @@ async function publishAttachmentReply() {
     }
   }
 
-  const evidenceDirectory = resolve(import.meta.dir, '../../../../.temp/publish-attachment-reply');
-  await mkdir(evidenceDirectory, { recursive: true });
-  await writeFile(
-    resolve(evidenceDirectory, 'walk.json'),
-    `${JSON.stringify(
-      {
-        stack: { kind: 'native-isolated', web: stack.web, kernel: stack.kernelOrigin },
-        personas: {
-          author: { role: 'ordinary-member', accountId: author.accountId, handle: author.handle },
-          replier: { role: 'ordinary-member', accountId: replier.accountId, handle: replier.handle },
-          anonymous: { role: 'anonymous-reader' },
-        },
-        board: { id: board.boardId, title: board.boardTitle, conceptId: board.conceptId },
-        thread: { id: threadId, title: threadRead.thread.title },
-        media: {
-          opening: { id: mediaId, byteCount: storedOpening.byteCount, state: storedOpening.state },
-          reply: { id: replyMediaId, byteCount: storedReply.byteCount, state: storedReply.state },
-        },
-        sequence,
-        nativePosts: posts.posts.map((post) => ({ id: post.id, mediaIds: post.mediaIds ?? [] })),
-      },
-      null,
-      2,
-    )}\n`,
-  );
-
   await author.context.close();
   await replier.context.close();
   await anonymous.close();
+
+  await writeBoardResult({
+    outcome: 'passed',
+    stack: { kind: 'native-isolated', web: stack.web, kernel: stack.kernelOrigin },
+    personas: {
+      author: { role: 'ordinary-member', accountId: author.accountId, handle: author.handle },
+      replier: { role: 'ordinary-member', accountId: replier.accountId, handle: replier.handle },
+      anonymous: { role: 'anonymous-reader' },
+    },
+    board: { id: board.boardId, title: board.boardTitle, conceptId: board.conceptId },
+    thread: { id: threadId, title: threadRead.thread.title },
+    media: {
+      opening: { id: mediaId, byteCount: storedOpening.byteCount, state: storedOpening.state },
+      reply: { id: replyMediaId, byteCount: storedReply.byteCount, state: storedReply.state },
+    },
+    sequence,
+    nativePosts: posts.posts.map((post) => ({ id: post.id, mediaIds: post.mediaIds ?? [] })),
+  });
 }
 
 nativeTest(
   'ordinary members publish a Work Board post with an attachment, reply, recover, replace, and leave a dirty draft',
   1_200_000,
-  publishAttachmentReply,
+  () => withBoardResult('journey', publishAttachmentReply),
   lifecycle,
 );
