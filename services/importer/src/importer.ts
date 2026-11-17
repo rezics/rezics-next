@@ -25,7 +25,7 @@ import type {
   SourceRegistration,
   StagingCheckpointRequest,
 } from './import-contract.ts';
-import { evaluateAdmission, insertSourceDestination, throwAdmissionRefusal } from './source-destination.ts';
+import { throwAdmissionRefusal } from './source-destination.ts';
 import { ImportTransportError } from './import-client.ts';
 import { reviewedCatalogueProblem } from './http.ts';
 import {
@@ -64,7 +64,7 @@ import {
 import type { ClassificationAssociation } from './import-contract.ts';
 import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
-import { ImportSession, type ImportOwnership, type ImportProcessIdentity } from './import-session.ts';
+import { ImportSession, type ImportOperation, type ImportProcessIdentity } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
 import type { AcquisitionMode, DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -288,6 +288,10 @@ type PlanFlight = {
   owner: object | undefined;
   promise: Promise<Planned | 'failed' | null>;
 };
+type ResolutionResult = {
+  status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume';
+  operationId: string;
+};
 
 // Native source keys are not normalized into different record identities. Compound
 // planner identities are hashed so their printable public keys remain bounded.
@@ -302,7 +306,8 @@ function operationKey(owner: Owner, identity: string): string {
 /** Ordinary API reconciliation; only the injected transport can perform catalogue effects. */
 export class Importer {
   readonly session: ImportSession;
-  private readonly running = new Set<Promise<ImportRunResult>>();
+  private readonly detachSession: () => void;
+  private readonly running = new Set<Promise<unknown>>();
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
   private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
@@ -331,6 +336,7 @@ export class Importer {
         ...(options.existing ? { existing: true } : {}),
         ...(options.processIdentity ? { processIdentity: options.processIdentity } : {}),
       });
+    this.detachSession = this.session.attachCoordinator();
   }
 
   /** The CLI binds session-dependent ports on the constructed importer, including through a decorated factory. */
@@ -340,23 +346,14 @@ export class Importer {
     Object.assign(this.options, dependencies);
   }
 
-  private takeOwnership(source: string, recordFirstUse = true): ImportOwnership | 'busy' {
-    const existing = this.session.heldOwnership(source);
-    if (existing) {
-      if (this.options.destination) {
-        const origin = this.options.destination.origin;
-        const decision = evaluateAdmission(this.session.store.database, source, origin);
-        if (decision === 'first-use') {
-          if (recordFirstUse) insertSourceDestination(this.session.store.database, source, origin, 'first-use');
-        } else if (decision !== 'match') throwAdmissionRefusal(source, origin, decision);
-      }
-      return existing;
-    }
-    if (!this.options.destination) return this.session.acquire(source);
-    const ownership = this.session.admit(source, this.options.destination.origin, { recordFirstUse });
-    if (ownership === 'busy') return 'busy';
-    if ('kind' in ownership) throwAdmissionRefusal(source, this.options.destination.origin, ownership);
-    return ownership;
+  private beginOperation(source: string, recordFirstUse = true): ImportOperation | 'busy' {
+    const destination = this.options.destination;
+    const operation = this.session.beginOperation(
+      source,
+      destination && { origin: destination.origin, recordFirstUse },
+    );
+    if (operation !== 'busy' && 'kind' in operation) throwAdmissionRefusal(source, destination!.origin, operation);
+    return operation;
   }
 
   async runDump(
@@ -395,11 +392,7 @@ export class Importer {
     records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
-    if (this.closing) return Promise.reject(new Error('Importer is closing'));
-    const task = this.run(registration, records, options);
-    this.running.add(task);
-    void task.finally(() => this.running.delete(task)).catch(() => {});
-    return task;
+    return this.trackOperation(() => this.run(registration, records, options));
   }
 
   /**
@@ -407,8 +400,12 @@ export class Importer {
    * or replaces acquisition, and never consumes dump or empty replacement input.
    */
   resumeExisting(registration: SourceRegistration, options: ResumeRunOptions = {}): Promise<ImportRunResult> {
+    return this.trackOperation(() => this.resumeSealed(registration, options));
+  }
+
+  private trackOperation<T>(operation: () => Promise<T>): Promise<T> {
     if (this.closing) return Promise.reject(new Error('Importer is closing'));
-    const task = this.resumeSealed(registration, options);
+    const task = Promise.resolve().then(operation);
     this.running.add(task);
     void task.finally(() => this.running.delete(task)).catch(() => {});
     return task;
@@ -418,7 +415,7 @@ export class Importer {
     this.closing = true;
     this.shutdown.abort();
     await Promise.allSettled(this.running);
-    this.session.close();
+    this.detachSession();
   }
 
   private convert(
@@ -1414,16 +1411,33 @@ export class Importer {
     return detail && !isIntendedClassification(detail.intended) ? detail : null;
   }
 
-  async resolveObservation(
+  resolveObservation(
     source: string,
     operationId: string,
     reviewedObservation: string,
-    signal: AbortSignal = this.shutdown.signal,
-  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    signal?: AbortSignal,
+  ): Promise<ResolutionResult> {
+    return this.trackOperation(() =>
+      this.resolveObservationOwned(
+        source,
+        operationId,
+        reviewedObservation,
+        signal ? AbortSignal.any([this.shutdown.signal, signal]) : this.shutdown.signal,
+      ),
+    );
+  }
+
+  private async resolveObservationOwned(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal,
+  ): Promise<ResolutionResult> {
     if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
       throw new TypeError('Observation resolution requires exact operation and reviewed digests');
-    const ownership = this.takeOwnership(source);
-    if (ownership === 'busy') return { status: 'busy', operationId };
+    if (signal.aborted) throw new Interrupted('Import was interrupted');
+    const operation = this.beginOperation(source);
+    if (operation === 'busy') return { status: 'busy', operationId };
     const write: Write = (operation) => operation();
     try {
       const run = this.session.store.activeRun(source);
@@ -1515,7 +1529,7 @@ export class Importer {
       });
       return { status: 'delivered', operationId: successor.operationId };
     } finally {
-      this.session.release(ownership);
+      operation.release();
     }
   }
 
@@ -1817,16 +1831,33 @@ export class Importer {
     return detail && isIntendedClassification(detail.intended) ? detail : null;
   }
 
-  async resolveClassification(
+  resolveClassification(
     source: string,
     operationId: string,
     reviewedObservation: string,
-    signal: AbortSignal = this.shutdown.signal,
-  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    signal?: AbortSignal,
+  ): Promise<ResolutionResult> {
+    return this.trackOperation(() =>
+      this.resolveClassificationOwned(
+        source,
+        operationId,
+        reviewedObservation,
+        signal ? AbortSignal.any([this.shutdown.signal, signal]) : this.shutdown.signal,
+      ),
+    );
+  }
+
+  private async resolveClassificationOwned(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal,
+  ): Promise<ResolutionResult> {
     if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
       throw new TypeError('Classification resolution requires exact operation and reviewed digests');
-    const ownership = this.takeOwnership(source);
-    if (ownership === 'busy') return { status: 'busy', operationId };
+    if (signal.aborted) throw new Interrupted('Import was interrupted');
+    const operation = this.beginOperation(source);
+    if (operation === 'busy') return { status: 'busy', operationId };
     const write: Write = (operation) => operation();
     try {
       const run = this.session.store.activeRun(source);
@@ -1937,7 +1968,7 @@ export class Importer {
       }
       return { status: 'delivered', operationId: successor.operationId };
     } finally {
-      this.session.release(ownership);
+      operation.release();
     }
   }
 
@@ -2772,15 +2803,16 @@ export class Importer {
       runController.signal,
       ...(options.signal ? [options.signal] : []),
     ]);
-    this.runControllers.set(signal, runController);
+    if (signal.aborted) return finish('interrupted', 'Import was interrupted');
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
-    const ownership = this.takeOwnership(registration.source, false);
-    if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
-    if (options.progress) this.progressObservers.set(signal, options.progress);
+    const operation = this.beginOperation(registration.source, false);
+    if (operation === 'busy') return finish('busy', 'Source has a live coordinator');
     try {
+      this.runControllers.set(signal, runController);
+      if (options.progress) this.progressObservers.set(signal, options.progress);
       if (this.session.store.localMaintenanceWork(registration.source))
         return finish('busy', RETENTION_LOCAL_MAINTENANCE);
-      const peeked = this.session.peekActive(ownership);
+      const peeked = this.session.peekActive(operation.ownership);
       if (!peeked)
         return finish(
           'invalid-dump',
@@ -2806,10 +2838,11 @@ export class Importer {
           return finish('invalid-dump', `${compatibility.reason} The generation was not replaced.`);
       }
       if (options.activateNetwork) await options.activateNetwork();
-      const run = this.session.reopen(ownership);
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      const run = this.session.reopen(operation);
       if (!run || run.id !== peeked.run.id)
         return finish('invalid-dump', 'Sealed acquisition changed after ownership was taken.');
-      const recheck = this.session.store.peekActive(ownership.source);
+      const recheck = this.session.store.peekActive(registration.source);
       if (!recheck || recheck.run.id !== run.id)
         return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
       if (recheck.status !== peeked.status && recheck.status !== 'finalizing' && recheck.status !== 'ready')
@@ -2849,7 +2882,7 @@ export class Importer {
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);
-      this.session.release(ownership);
+      operation.release();
     }
   }
 
@@ -2903,16 +2936,16 @@ export class Importer {
       runController.signal,
       ...(options.signal ? [options.signal] : []),
     ]);
-    this.runControllers.set(signal, runController);
+    if (signal.aborted) return finish('interrupted', 'Import was interrupted');
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
-    const existing = this.session.heldOwnership(registration.source);
-    const ownership = this.takeOwnership(registration.source);
-    if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
+    const operation = this.beginOperation(registration.source);
+    if (operation === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
-    if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
+      this.runControllers.set(signal, runController);
+      if (options.progress) this.progressObservers.set(signal, options.progress);
       if (store.localMaintenanceWork(registration.source)) return finish('busy', RETENTION_LOCAL_MAINTENANCE);
-      let run = this.session.reopen(ownership);
+      let run = this.session.reopen(operation);
       let resumed = !!run;
       let skipped = 0;
       let checkpointed = false;
@@ -2950,6 +2983,7 @@ export class Importer {
         options.progress?.onRun?.(run.id, true);
         const resuming = options.progress?.onPhase?.('resuming');
         if (resuming !== undefined) await resuming;
+        if (signal.aborted) throw new Interrupted('Import was interrupted');
         // Capture sealed accounting before finalization can mark or otherwise retire the run.
         skipped = store.skipped(run);
         result.skipped = skipped;
@@ -3040,7 +3074,7 @@ export class Importer {
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);
-      if (!existing) this.session.release(ownership);
+      operation.release();
     }
   }
 }

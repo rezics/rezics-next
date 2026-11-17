@@ -9,6 +9,7 @@ import { evaluateAdmission, insertSourceDestination, type SourceDestinationRefus
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;
+export type ImportOperation = Readonly<{ ownership: ImportOwnership; release(): void }>;
 export type ImportProcessIdentity = Readonly<{ pid: number; birth: string }>;
 export type ImportSessionOptions = {
   instrumentDatabase?: (database: Database) => Database;
@@ -90,6 +91,8 @@ export class ImportSession {
   private readonly pid: number;
   private readonly identity: string;
   private readonly held = new Map<string, ImportOwnership>();
+  private readonly operations = new Map<string, ImportOperation>();
+  private readonly coordinators = new Set<() => void>();
   private readonly descriptor: FileHandle | undefined;
   private closed = false;
 
@@ -171,6 +174,54 @@ export class ImportSession {
     return this.held.get(source);
   }
 
+  /** Close the session after the last attached coordinator has drained its work. */
+  attachCoordinator(): () => void {
+    if (this.closed) throw new Error('Import session is closed');
+    const detach = () => {
+      if (this.coordinators.delete(detach) && !this.coordinators.size) this.close();
+    };
+    this.coordinators.add(detach);
+    return detach;
+  }
+
+  /** A preadmitted owner stays held by its caller after the operation returns. */
+  beginOperation(
+    source: string,
+    destination?: { origin: string; recordFirstUse: boolean },
+  ): ImportOperation | 'busy' | SourceDestinationRefusal {
+    if (this.operations.has(source)) return 'busy';
+    const existing = this.held.get(source);
+    const ownership =
+      existing ?? (destination ? this.admit(source, destination.origin, destination) : this.acquire(source));
+    if (ownership === 'busy' || 'kind' in ownership) return ownership;
+    if (existing) {
+      if (destination) {
+        const db = this.store.database;
+        const refusal = db
+          .transaction(() => {
+            this.check(existing);
+            const decision = evaluateAdmission(db, source, destination.origin);
+            if (decision === 'first-use') {
+              if (destination.recordFirstUse) insertSourceDestination(db, source, destination.origin, 'first-use');
+            } else if (decision !== 'match') return decision;
+          })
+          .immediate();
+        if (refusal) return refusal;
+      } else this.check(existing);
+    }
+
+    const operation: ImportOperation = {
+      ownership,
+      release: () => {
+        if (this.operations.get(source) !== operation) return;
+        this.operations.delete(source);
+        if (!existing) this.release(ownership);
+      },
+    };
+    this.operations.set(source, operation);
+    return operation;
+  }
+
   acquire(source: string): ImportOwnership | 'busy' {
     if (this.closed) throw new Error('Import session is closed');
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
@@ -238,8 +289,8 @@ export class ImportSession {
   }
 
   /** Only the holder may obtain and rotate the durable run's previous lease. */
-  reopen(ownership: ImportOwnership): Run | null {
-    this.check(ownership);
+  reopen(holder: ImportOwnership | ImportOperation): Run | null {
+    const ownership = this.checkAvailable(holder);
     const active = this.store.activeRun(ownership.source);
     return active ? this.store.reopen(active) : null;
   }
@@ -264,9 +315,17 @@ export class ImportSession {
     if (row?.capability !== ownership.capability) throw new Error('Stale import ownership');
   }
 
-  /** Exact source capability still held by this session; used inside a later SQLite transaction. */
-  assertHeld(ownership: ImportOwnership): void {
+  private checkAvailable(holder: ImportOwnership | ImportOperation): ImportOwnership {
+    const ownership = 'ownership' in holder ? holder.ownership : holder;
+    if ((this.operations.get(ownership.source) ?? ownership) !== holder)
+      throw new Error('Import ownership is unavailable to this operation');
     this.check(ownership);
+    return ownership;
+  }
+
+  /** Check a direct caller's mutation capability inside a later SQLite transaction. */
+  assertHeld(ownership: ImportOwnership): void {
+    this.checkAvailable(ownership);
   }
 
   readOwner(source: string): { pid: number; birth: string } | null {
@@ -275,16 +334,16 @@ export class ImportSession {
   }
 
   release(ownership: ImportOwnership): void {
-    this.check(ownership);
+    this.checkAvailable(ownership);
     this.store.database
       .prepare('DELETE FROM import_owners WHERE source=? AND capability=?')
       .run(ownership.source, ownership.capability);
     this.held.delete(ownership.source);
   }
 
-  /** The coordinator waits for its operations before closing this handle. */
   close(): void {
     if (this.closed) return;
+    if (this.operations.size) throw new Error('Import session has active operations');
     for (const ownership of this.held.values()) this.release(ownership);
     this.bindings.close();
     this.store.close();
