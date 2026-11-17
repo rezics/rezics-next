@@ -11,6 +11,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { readPersonalLibraryCurrent } from '../../library/personal-library-server';
 import { loadCurrentLabelShelfPage, type CurrentLabelShelfData } from '../../library/label-shelf-read';
+import { labelUndoRevisionParam } from '../../library/labels-address';
 import { resolveShelfPresentation } from '../../library/shelf-preferences';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import type { SessionEnv } from '../../session/client';
@@ -40,6 +41,7 @@ const readLabelShelf = createServerFn({ method: 'GET' })
       typeof value.undoAssignmentId === 'string' &&
       typeof value.undoLabelId === 'string' &&
       typeof value.undoRevision === 'number' &&
+      Number.isSafeInteger(value.undoRevision) &&
       value.undoRevision > 0
         ? {
             subjectId: value.undoSubjectId,
@@ -123,16 +125,14 @@ export const Route = createFileRoute('/library/')({
     ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
     ...(typeof search.undoSubjectId === 'string' ? { undoSubjectId: search.undoSubjectId } : {}),
     ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
-    ...(typeof search.undoRevision === 'number' ||
-    (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
-      ? { undoRevision: Number(search.undoRevision) }
-      : {}),
+    undoRevision: labelUndoRevisionParam(search.undoRevision),
   }),
   // The router merges what the address says over what validation returns, so a value the validator dropped is still
   // there; reading through the validator again keeps only the documented values.
   // Columns, layout and size are display state; native reads and keysets depend only on the source below.
   loaderDeps: ({ search }) => {
     const { state, cursor, label, orderBy, direction, type } = validateShelfSearch(search);
+    const undoRevision = labelUndoRevisionParam(search.undoRevision);
     return {
       addressIssues: shelfAddressIssues(search),
       state,
@@ -144,11 +144,7 @@ export const Route = createFileRoute('/library/')({
       undoLabelId: typeof search.undoLabelId === 'string' ? search.undoLabelId : undefined,
       undoSubjectId: typeof search.undoSubjectId === 'string' ? search.undoSubjectId : undefined,
       undoAssignmentId: typeof search.undoAssignmentId === 'string' ? search.undoAssignmentId : undefined,
-      undoRevision:
-        typeof search.undoRevision === 'number' ||
-        (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
-          ? Number(search.undoRevision)
-          : undefined,
+      undoRevision: undoRevision === undefined ? undefined : Number(undoRevision),
       labelResult: typeof search.labelResult === 'string' ? search.labelResult : undefined,
       undoKey: typeof search.undoKey === 'string' ? search.undoKey : undefined,
     };

@@ -24,7 +24,10 @@ import {
   keepSearch,
   subjectPageQuery,
   subjectUrlForView,
+  readSubjectDocumentLabels,
+  subjectLabelUndoFromSearch,
 } from '../../features/pages/subject-queries';
+import { labelUndoRevisionParam } from '../../library/labels-address';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -206,12 +209,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     labelResult?: string;
     undoLabelId?: string;
     undoAssignmentId?: string;
-    undoRevision?: number;
+    undoRevision?: string;
     undoKey?: string;
   } => {
     const node = validatePageNode(search.node);
     const streamProperty = search.streamProperty;
     const streamDirection = search.streamDirection;
+    const undoRevision = labelUndoRevisionParam(search.undoRevision);
     if (
       (streamProperty !== undefined &&
         (typeof streamProperty !== 'string' ||
@@ -250,10 +254,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
         ? { undoKey: search.undoKey }
         : {}),
-      ...(typeof search.undoRevision === 'number' ||
-      (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
-        ? { undoRevision: Number(search.undoRevision) }
-        : {}),
+      ...(undoRevision === undefined ? {} : { undoRevision }),
     };
   },
   loaderDeps: ({ search }) => ({
@@ -267,9 +268,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     slot: search.slot,
     slotResult: search.slotResult,
     labelResult: search.labelResult,
-    undoLabelId: search.undoLabelId,
-    undoAssignmentId: search.undoAssignmentId,
-    undoRevision: search.undoRevision,
+    labelUndo: subjectLabelUndoFromSearch(search),
+    undoKey: search.undoKey,
   }),
   loader: async ({ params, deps, location, context, abortController }) => {
     const signal = abortController.signal;
@@ -323,8 +323,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
         ),
       );
     const type = subjectPageType(page.page);
-    const typeData = await awaitSubjectRoute(signal, () =>
-      context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
+    const [typeData, documentLabels] = await awaitSubjectRoute(signal, () =>
+      Promise.all([
+        context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
+        readSubjectDocumentLabels(page.page.subject!, getLocale(), deps.labelResult, deps.labelUndo, deps.undoKey),
+      ]),
     );
     return {
       ...data,
@@ -336,6 +339,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       communityQueryKey: pageQuery.queryKey,
       tabs: subjectTabs(page.page),
       type: typeData,
+      documentLabels,
     };
   },
   head: ({ loaderData, match }) =>

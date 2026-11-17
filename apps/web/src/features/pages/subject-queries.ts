@@ -2,10 +2,11 @@ import { capturePageRead, admitPageRead } from './page-read-failure';
 import { queryOptions } from '@tanstack/react-query';
 import { isView, type View } from '@rezics/composition';
 import { notFound } from '@tanstack/react-router';
-import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
+import { createIsomorphicFn, createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { personalRead, publicRead } from '../../kernel/query';
-import { loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
+import { labelUndoRevisionParam } from '../../library/labels-address';
+import { loadSubjectLabelDocument, loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
 import { loadSettingsPage } from '../../settings/preferences';
 import type { SessionEnv } from '../../session/client';
 import { defaultReader, type Reader } from '../../subject/reader';
@@ -359,6 +360,46 @@ const readSubjectLinks = createServerFn({ method: 'GET', strict: false })
     });
     return { status: result.status, body: result.data ?? {} };
   });
+
+export function subjectLabelUndoFromSearch({
+  undoLabelId,
+  undoAssignmentId,
+  undoRevision,
+}: {
+  undoLabelId?: string;
+  undoAssignmentId?: string;
+  undoRevision?: string | number;
+}): SubjectLabelUndo | undefined {
+  const revision = labelUndoRevisionParam(undoRevision);
+  if (
+    !undoLabelId ||
+    undoLabelId.length > 128 ||
+    !undoAssignmentId ||
+    undoAssignmentId.length > 128 ||
+    revision === undefined
+  )
+    return undefined;
+  return { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: Number(revision) };
+}
+
+/** Only the canonical document loader reads this snapshot, outside the route's query cache. */
+export const readSubjectDocumentLabels = createIsomorphicFn()
+  .server(async (id: string, locale: string, result?: string, undo?: SubjectLabelUndo, undoKey?: string) => {
+    const request = getRequest();
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../../kernel/client');
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadSubjectLabelDocument(
+      kernelClient(locale),
+      request,
+      env as Partial<SessionEnv>,
+      id,
+      result,
+      undo,
+      undoKey,
+    );
+  })
+  .client(() => undefined);
 
 const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {

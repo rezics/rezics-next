@@ -99,28 +99,30 @@ test('server-side public reads can be ensured without a request session', async 
   ).toBe(true);
 });
 
-test('the subject server loader only ensures public reads and personal reads are hydration gated', async () => {
+test('the subject loader reads the private HTML label snapshot outside the browser query', async () => {
   const route = await Bun.file(join(import.meta.dir, '../src/routes/subjects/$id_.$slug.tsx')).text();
-  expect(route).toContain('context.queryClient.ensureQueryData(pageQuery)');
+  const overview = await Bun.file(join(import.meta.dir, '../src/routes/subjects/-overview.tsx')).text();
+  expect(route).toContain('staticData: { publicCache: false }');
+  expect(route).toContain('context.queryClient.fetchQuery(pageQuery)');
   expect(route).toContain('context.queryClient.ensureQueryData(subjectFrameQuery');
-  expect(route).toContain('context.queryClient.ensureQueryData(subjectRelationsQuery');
-  expect(route).toContain('useSuspenseQuery(subjectPageQuery');
-  expect(route).toContain("enabled: session === 'signed-in'");
-  expect(route).toContain('useSubjectPersonalReader');
-  expect(route).toContain('useSubjectReactionReader');
-  expect(route).toContain("view: 'overview'");
-  expect(route).toContain('includeOwnRating: true');
+  expect(route).toContain('readSubjectDocumentLabels(page.page.subject!');
+  expect(overview).toContain('documentLabels={data.documentLabels}');
+  expect(overview).toContain("enabled: session === 'signed-in'");
+  expect(overview).toContain('useSubjectPersonalReader');
+  expect(overview).toContain('useSubjectReactionReader');
+  expect(overview).toContain("view: 'overview'");
+  expect(overview).toContain('includeOwnRating: true');
   expect(route).not.toContain('loadSubjectLibrarySlot(');
   expect(route).not.toContain('loadReader(');
   expect(route).not.toContain('loadSubjectReactions(');
   expect(route).not.toContain('loadSubjectRatings(');
   const view = await Bun.file(join(import.meta.dir, '../src/routes/subjects/$id_.$slug_.$view.tsx')).text();
-  expect(view).toMatch(/context\.queryClient\.ensureQueryData\(\s*subjectViewPagesQuery/);
+  expect(view).toContain('context.queryClient.fetchQuery(communityQuery)');
   expect(view).toContain('useSubjectPersonalReader');
   expect(view).toContain('enabled: currentReader');
   expect(view).not.toContain('loadReader(');
   const relations = await Bun.file(join(import.meta.dir, '../src/routes/subjects/$id_.$slug_.relations.tsx')).text();
-  expect(relations).toContain('context.queryClient.ensureQueryData(subjectPageQuery');
+  expect(relations).toContain('context.queryClient.fetchQuery(subjectPageQuery');
   expect(relations).toContain('context.queryClient.ensureQueryData(subjectRelationsQuery');
   expect(relations).toContain('useSubjectPersonalReader');
   expect(relations).toContain("view: 'relations'");

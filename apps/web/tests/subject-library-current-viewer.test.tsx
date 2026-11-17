@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState, type ComponentProps } from 'react';
+import { renderToString } from 'react-dom/server';
 import type {
   SubjectLibrarySlotData,
   SubjectLibraryMutationResponse,
@@ -99,7 +100,9 @@ const { useSession } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
 const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
 const { subjectHref } = await import('../src/subject/subject-href');
-const { loadSubjectLibrarySlot, loadSubjectLibraryCollections } = await import('../src/library/subject-slot');
+const { duringPublicCacheRender } = await import('../src/security/page-cache');
+const { loadSubjectLabelDocument, loadSubjectLibrarySlot, loadSubjectLibraryCollections } =
+  await import('../src/library/subject-slot');
 const { searchSubjectLabels: realSearch } = await import('../src/library/subject-labels');
 const { createKernelClient } = await import('@rezics/client');
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -284,6 +287,91 @@ afterAll(async () => {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('the private document renders admitted native label forms and retires them in the browser', async () => {
+  const env = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'subject-library',
+    WEBSITE_CLIENT_KEY: '{}',
+    SESSIONS: {
+      idFromName: (name: string) => name,
+      get: (name: string) => ({
+        credential: async () => ({ status: 'active', subject: name, csrfToken: 'document-csrf', accessToken: name }),
+      }),
+    },
+  } as unknown as Partial<SessionEnv>;
+  const nativeReads: string[] = [];
+  const native = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      const owner = request.headers.get('authorization')?.slice(7, 8);
+      nativeReads.push(`${owner} ${path}`);
+      if (path === '/v1/platform/exposure') return Response.json({ admitted: owner === 'c' ? [] : admitted });
+      return Response.json({
+        assignments: owner === 'a' ? [{ ...baseline().labels![0], label: { name: 'Document owner label' } }] : [],
+      });
+    }) as typeof fetch,
+  });
+  const undo = { assignmentId: id(23), labelId: id(24), revision: 5 };
+  const requestFor = (owner?: string) =>
+    new Request(`https://site.test${canonical}`, {
+      headers: owner ? { cookie: `__Host-rezics_session=${owner.repeat(43)}` } : {},
+    });
+  const read = (owner?: string) =>
+    loadSubjectLabelDocument(
+      native,
+      requestFor(owner),
+      env,
+      subject.id,
+      owner === 'a' ? 'label-removed' : undefined,
+      owner === 'a' ? undo : undefined,
+      owner === 'a' ? id(35) : undefined,
+    );
+  const documentClient = new QueryClient();
+  const html = () =>
+    renderToString(
+      <QueryClientProvider client={documentClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  const ownerDocument = await read('a');
+  props = { ...props, documentLabels: ownerDocument };
+  const document = html();
+  const template = window.document.createElement('template');
+  template.innerHTML = document;
+  expect(template.content.querySelector('[data-subject-label-picker-details] > summary')).not.toBeNull();
+  const form = template.content.querySelector('form[data-subject-label-picker]');
+  expect(form?.getAttribute('action')).toBe(canonical);
+  expect(form?.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(false);
+  expect(document).toContain('data-subject-label-remove');
+  expect(document).toContain('data-label-undo');
+  expect(document).toContain(`value="${id(35)}"`);
+  expect(document).toContain('value="document-csrf"');
+  expect(document).toContain('Document owner label');
+  props = { ...props, documentLabels: await read('b') };
+  expect(html()).not.toContain('Document owner label');
+  expect(await read()).toBeUndefined();
+  expect(await read('c')).toBeUndefined();
+  const publicRequest = requestFor('a');
+  await expect(
+    duringPublicCacheRender(publicRequest, () => loadSubjectLabelDocument(native, publicRequest, env, subject.id)),
+  ).rejects.toThrow('publicCache route');
+  expect(nativeReads).toEqual([
+    'a /v1/platform/exposure',
+    'a /v1/libraryLabelAssignments',
+    'b /v1/platform/exposure',
+    'b /v1/libraryLabelAssignments',
+    'c /v1/platform/exposure',
+  ]);
+  props = { ...props, documentLabels: ownerDocument };
+  client.setQueryData(['session'], viewer('B'));
+  await paint();
+  expect(host.textContent).not.toContain('Document owner label');
+  expect(host.querySelector('[data-label-undo]')).toBeNull();
 });
 
 test('Actual same-read provenance, including empty results, is required by the mounted owner and retired immediately on observed replacement', async () => {
