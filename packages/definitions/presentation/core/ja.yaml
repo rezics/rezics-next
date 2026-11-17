@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: '行政区域'
   schema:Event: 'イベント'
 properties:
+  wdt:P6942: 'アニメーター'
+  schema:editor: '編集者'
+  schema:lyricist: '作詞者'
   rezics:stylisticallyComparableTo: '作風の比較対象'
   rezics:penNameOf: '筆名の使用者'
   wdt:P186: 材料
@@ -83,6 +86,9 @@ properties:
   schema:startDate: '開始日'
   schema:endDate: '終了日'
 inverseProperties:
+  wdt:P6942: 'アニメーション担当作品'
+  schema:editor: '編集担当作品'
+  schema:lyricist: '作詞担当作品'
   rezics:stylisticallyComparableTo: 'この作品を比較対象とする作品'
   rezics:penNameOf: '筆名'
   wdt:P186: 使用先

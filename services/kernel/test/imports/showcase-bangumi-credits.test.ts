@@ -53,6 +53,8 @@ test('default anime staff and voice publication adopts exact cited endpoints and
           yield { id: 101, name: 'STEINS;GATE', type: 2 };
           yield { id: 102, name: 'CLANNAD', type: 2 };
           yield { id: 103, name: 'Fate/stay night', type: 2 };
+          yield { id: 104, name: 'STEINS;GATE Book', type: 1, platform: 1002, series: false };
+          yield { id: 105, name: 'STEINS;GATE Books', type: 1, platform: 1002, series: true };
         }
         if (provider === 'vndb' && table === 'vn_titles') {
           yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
@@ -72,12 +74,22 @@ test('default anime staff and voice publication adopts exact cited endpoints and
         if (provider === 'bangumi' && table === 'subject-persons') {
           yield { subject_id: 101, person_id: 11, position: 2, creditedAs: 'Chief Director' };
           yield { subject_id: 101, person_id: 99, position: 2 };
+          yield { subject_id: 101, person_id: 11, position: 20 };
+          yield { subject_id: 101, person_id: 11, position: 21 };
+          yield { subject_id: 101, person_id: 11, position: 32 };
+          yield { subject_id: 101, person_id: 11, position: 155 };
+          yield { subject_id: 104, person_id: 14, position: 2001 };
+          yield { subject_id: 104, person_id: 14, position: 2007 };
+          yield { subject_id: 104, person_id: 15, position: 2004 };
+          yield { subject_id: 105, person_id: 15, position: 2004 };
         }
         if (provider === 'bangumi' && table === 'person-characters')
           yield { subject_id: 101, person_id: 12, character_id: 21, summary: 'Association commentary.' };
         if (provider === 'bangumi' && table === 'person') {
           yield { id: 11, type: 1, name: 'Director' };
           yield { id: 12, type: 1, name: 'Voice performer' };
+          yield { id: 14, type: 1, name: 'Book author' };
+          yield { id: 15, type: 2, name: 'Series publisher' };
         }
         if (provider === 'bangumi' && table === 'character') yield { id: 21, name: 'Ari' };
       },
@@ -151,7 +163,7 @@ test('default anime staff and voice publication adopts exact cited endpoints and
         path: '/subject-persons/101/99/position',
       }),
     );
-    const role = first.result.creditRoles![0]!;
+    const role = first.result.creditRoles!.find((entry) => entry.code === '2')!;
     // First-pass seed readings precede adoption of the provider identifiers.
     function publishedBangumiId(key: string, type: string): string {
       const record = first.publication.published.find((row) => row.provider === 'bangumi' && row.sourceKey === key);
@@ -163,6 +175,8 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     const directorId = publishedBangumiId('person:11', 'schema:Person');
     const performerId = publishedBangumiId('person:12', 'schema:Person');
     const characterId = publishedBangumiId('character:21', 'wd:Q95074');
+    const authorId = publishedBangumiId('person:14', 'schema:Person');
+    const publisherId = publishedBangumiId('person:15', 'schema:Organization');
     const workRead = await publicClient.readSubject(workId);
     const workSubject = workRead.subject as {
       id: string;
@@ -196,6 +210,60 @@ test('default anime staff and voice publication adopts exact cited endpoints and
       ),
     ).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
+    expect(first.result.creditGaps).toContainEqual(
+      expect.objectContaining({
+        path: '/subject-persons/104/15/position',
+        requiredProfile: 'schema:Book',
+        reason: 'property_not_admitted',
+        property: 'schema:publisher',
+      }),
+    );
+    expect(first.publication.omissions).not.toContainEqual({
+      provider: 'bangumi',
+      sourceKey: 'person:15',
+      code: 'source-claim-withheld',
+    });
+
+    for (const [code, property] of [
+      ['20', 'wdt:P6942'],
+      ['21', 'wdt:P6942'],
+      ['32', 'schema:lyricist'],
+      ['155', 'schema:editor'],
+    ] as const) {
+      const bound = first.result.creditRoles!.find((entry) => entry.code === code)!;
+      expect(
+        work.statements[property]?.some(
+          (statement) =>
+            valueContent(statement) === directorId &&
+            statement.qualifiers?.some(
+              (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === bound.conceptId,
+            ),
+        ),
+      ).toBe(true);
+    }
+    for (const [key, type, property, code] of [
+      ['104', 'schema:Book', 'schema:author', '2001'],
+      ['104', 'schema:Book', 'schema:contributor', '2007'],
+      ['105', 'schema:BookSeries', 'schema:publisher', '2004'],
+    ] as const) {
+      const bookId = publishedBangumiId(key, type);
+      const book = (await publicClient.readSubject(bookId)).subject as {
+        type: string;
+        statements: Record<string, readonly BatchStatement[]>;
+      };
+      expect(book.type).toBe(type);
+      const bound = first.result.creditRoles!.find((entry) => entry.code === code)!;
+      expect(
+        book.statements[property]?.some(
+          (statement) =>
+            valueContent(statement) === (code === '2004' ? publisherId : authorId) &&
+            statement.qualifiers?.some(
+              (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === bound.conceptId,
+            ),
+        ),
+      ).toBe(true);
+    }
+
     const performerRead = await publicClient.readSubject(performerId);
     const characterRead = await publicClient.readSubject(characterId);
     const performer = performerRead.subject as {
@@ -230,6 +298,10 @@ test('default anime staff and voice publication adopts exact cited endpoints and
       ['person:11', directorId],
       ['person:12', performerId],
       ['character:21', characterId],
+      ['104', publishedBangumiId('104', 'schema:Book')],
+      ['105', publishedBangumiId('105', 'schema:BookSeries')],
+      ['person:14', authorId],
+      ['person:15', publisherId],
     ]) {
       expect(refreshed.result.readings.find((row) => row.source === 'bangumi' && row.externalId === key)).toMatchObject(
         {
@@ -329,7 +401,7 @@ test('default anime staff and voice publication adopts exact cited endpoints and
         }
       },
     });
-    expect(replay.roles).toEqual([]);
+    expect(replay.roles.map((entry) => entry.code).sort()).toEqual(['155', '20', '2001', '2004', '2007', '21', '32']);
     expect(journal.acknowledgedCommands()).toHaveLength(acknowledgedBeforeReplay);
   } finally {
     journal.close();

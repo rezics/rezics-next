@@ -659,18 +659,24 @@ function metadataOnlyPublicationGap(
   if (gap.reason === 'property_not_admitted') {
     const draft = plan.credits.find((row) => row.kind === 'staff' && row.path === gap.path);
     const record = manifest.records.find((row) => row.provider === gap.provider && row.sourceKey === draft?.work);
-    // The adopted BookSeries contract leaves series-grain individual credits as source metadata.
-    return (
+    const profile = requiredProfile && bundledRelease.types[requiredProfile];
+    const mappedCredit =
       gap.provider === 'bangumi' &&
-      requiredProfile === 'schema:BookSeries' &&
-      (gap.property === 'schema:author' || gap.property === 'schema:illustrator') &&
       draft?.workType === 1 &&
       gap.code === String(draft.roleCode) &&
       gap.endpoint === draft.person &&
-      showcaseBookFamilies.some((family) => family.seriesId === draft.work) &&
       record?.nativeType === requiredProfile &&
-      bundledRelease.types[requiredProfile]?.properties.includes(gap.property) === false &&
-      mapSourceEnumeration('bangumi', 'staff.1', draft.roleCode!)?.term === gap.property
+      profile &&
+      gap.property &&
+      !profile.properties.includes(gap.property) &&
+      mapSourceEnumeration('bangumi', 'staff.1', draft.roleCode!)?.term === gap.property;
+    if (!mappedCredit) return false;
+    // Edition publishers stay off a Book work; pinned series have no individual author/illustrator slot.
+    return (
+      (requiredProfile === 'schema:Book' && gap.property === 'schema:publisher') ||
+      (requiredProfile === 'schema:BookSeries' &&
+        (gap.property === 'schema:author' || gap.property === 'schema:illustrator') &&
+        showcaseBookFamilies.some((family) => family.seriesId === draft!.work))
     );
   }
   // A native admission failure cannot become optional because the record has other published facts.

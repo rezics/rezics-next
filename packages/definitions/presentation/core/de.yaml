@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: 'Verwaltungsgebiet'
   schema:Event: 'Ereignis'
 properties:
+  wdt:P6942: 'Animator'
+  schema:editor: 'Editor'
+  schema:lyricist: 'Liedtexter'
   rezics:stylisticallyComparableTo: 'Stilistisch vergleichbar mit'
   rezics:penNameOf: 'Pseudonym von'
   wdt:P186: hergestellt aus
@@ -83,6 +86,9 @@ properties:
   schema:startDate: 'Beginn'
   schema:endDate: 'Ende'
 inverseProperties:
+  wdt:P6942: 'Animationsarbeiten'
+  schema:editor: 'Bearbeitete Werke'
+  schema:lyricist: 'Liedtext-Credits'
   rezics:stylisticallyComparableTo: 'Mit diesem Werk verglichene Werke'
   rezics:penNameOf: 'Pseudonyme'
   wdt:P186: Verwendet in

@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: '行政区'
   schema:Event: '活动'
 properties:
+  wdt:P6942: '动画师'
+  schema:editor: '编辑'
+  schema:lyricist: '作词者'
   rezics:stylisticallyComparableTo: '风格参照作品'
   rezics:penNameOf: '笔名使用者'
   wdt:P186: 材料
@@ -83,6 +86,9 @@ properties:
   schema:startDate: '开始日期'
   schema:endDate: '结束日期'
 inverseProperties:
+  wdt:P6942: '动画参与作品'
+  schema:editor: '编辑参与作品'
+  schema:lyricist: '作词参与作品'
   rezics:stylisticallyComparableTo: '以此为参照的作品'
   rezics:penNameOf: '笔名'
   wdt:P186: 用于

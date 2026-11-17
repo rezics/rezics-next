@@ -150,7 +150,7 @@ edition (`schema:exampleOfWork`), member (`wdt:P179`), contained (`wdt:P361`, `s
 `wdt:P1433`) or credited work. Inverses are metadata, never properties or aliases; `wdt:P1889`
 is symmetric. Credits sort by position, admit credited-as, position and detailed role, and filter
 by `[wdt:P3831, wdt:P518]`; appearances sort by name and filter by role or arc, retaining a source ordinal in the optional schema:position qualifier. Their `wdt:P3629`
-age qualifier is work-specific, in years (`wd:Q577`). `rezics:relatedCharacterIdentity` (VNDB
+age qualifier is work-specific, in years (`wd:Q577`). The TVAnime profile admits the pinned wdt:P6942 animator, schema:editor and schema:lyricist staff mappings as separate credits with detailed source roles, credited names, ordinals and part qualifiers. The Game profile also admits its existing lyricist role. `rezics:relatedCharacterIdentity` (VNDB
 `chars.main`) differs from the `main` appearance role. Family, partner and rival associations
 target Character; unknown Bangumi codes stay omitted. Series members sort by position;
 follows and edition-of by date; others by name. Episode, edition and release credits retain
@@ -201,7 +201,7 @@ The music-context catalogue keeps `schema:Place` and `schema:Event` as concrete
 generic identities, with `schema:MusicVenue` and `schema:MusicEvent` as their
 music-specific refinements. `schema:AdministrativeArea` is a Place. The
 instrument identity is Wikidata `wd:Q34379`; `wdt:P1303` qualifies the exact
-`schema:performer` statement that records its use. No Schema.org
+`schema:performer` statement that records its use. Performer credits also admit the shared source ordinal and applies-to-part qualifiers, retaining their instrument slot key, instrument filter and name order. No Schema.org
 `MusicInstrument` Type is defined. Shared `schema:startDate` and `schema:endDate`
 are owned by `core` and preserve source precision and calendar for events and
 other supported subjects.

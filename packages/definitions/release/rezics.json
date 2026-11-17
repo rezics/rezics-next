@@ -518,12 +518,14 @@
         "schema:copyrightNotice",
         "schema:datePublished",
         "schema:director",
+        "schema:editor",
         "schema:endDate",
         "schema:genre",
         "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
         "schema:keywords",
+        "schema:lyricist",
         "schema:musicBy",
         "schema:name",
         "schema:numberOfEpisodes",
@@ -539,6 +541,7 @@
         "wdt:P449",
         "wdt:P5732",
         "wdt:P58",
+        "wdt:P6942",
         "wdt:P725",
         "wdt:P7937",
         "wdt:P973"
@@ -1303,6 +1306,7 @@
         "schema:image",
         "schema:inLanguage",
         "schema:keywords",
+        "schema:lyricist",
         "schema:musicBy",
         "schema:name",
         "schema:numberOfPlayers",
@@ -4301,6 +4305,47 @@
         "zh-Hant": "在相同背景下使用相同角色的另一種敘事版本。"
       }
     },
+    "wdt:P6942": {
+      "iri": "http://www.wikidata.org/prop/direct/P6942",
+      "labels": {
+        "de": "Animator",
+        "en": "animator",
+        "es": "animador",
+        "fr": "animateur ou animatrice",
+        "ja": "アニメーター",
+        "ko": "애니메이터",
+        "zh-Hans": "动画师",
+        "zh-Hant": "動畫師"
+      },
+      "mappings": ["wd:P6942"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:animatorOf",
+        "filter": ["wdt:P3831", "wdt:P518"],
+        "inverseLabels": {
+          "de": "Animationsarbeiten",
+          "en": "Animation credits",
+          "es": "Créditos de animación",
+          "fr": "Crédits d’animation",
+          "ja": "アニメーション担当作品",
+          "ko": "애니메이션 크레딧",
+          "zh-Hans": "动画参与作品",
+          "zh-Hant": "動畫參與作品"
+        }
+      },
+      "targets": ["schema:Organization", "schema:Person"],
+      "descriptions": {
+        "en": "A person or organization credited with animation, with the precise source role retained on the credit."
+      }
+    },
     "wdt:P3629": {
       "iri": "http://www.wikidata.org/prop/direct/P3629",
       "labels": {
@@ -5361,6 +5406,47 @@
         "zh-Hant": "書籍的其他版本或版次；這項對稱關聯不判定原版，也不表示作品到版本的方向。"
       }
     },
+    "schema:editor": {
+      "iri": "http://schema.org/editor",
+      "labels": {
+        "de": "Editor",
+        "en": "editor",
+        "es": "editor",
+        "fr": "éditeur ou éditrice",
+        "ja": "編集者",
+        "ko": "편집자",
+        "zh-Hans": "编辑",
+        "zh-Hant": "編輯"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:editorOf",
+        "filter": ["wdt:P3831", "wdt:P518"],
+        "inverseLabels": {
+          "de": "Bearbeitete Werke",
+          "en": "Editing credits",
+          "es": "Créditos de edición",
+          "fr": "Crédits de montage",
+          "ja": "編集担当作品",
+          "ko": "편집 크레딧",
+          "zh-Hans": "编辑参与作品",
+          "zh-Hant": "編輯參與作品"
+        }
+      },
+      "targets": ["schema:Organization", "schema:Person"],
+      "descriptions": {
+        "en": "A person or organization credited with editing, with the precise source role retained on the credit."
+      }
+    },
     "schema:endDate": {
       "iri": "http://schema.org/endDate",
       "labels": {
@@ -5895,6 +5981,47 @@
         "ko": "이 행사가 열리는 장소입니다. 행사 자체나 개별 공연을 뜻하지 않습니다.",
         "zh-Hans": "此活动发生的地点；它不代表活动本身或某一场演出。",
         "zh-Hant": "此活動發生的地點；它不代表活動本身或某一場演出。"
+      }
+    },
+    "schema:lyricist": {
+      "iri": "http://schema.org/lyricist",
+      "labels": {
+        "de": "Liedtexter",
+        "en": "lyricist",
+        "es": "letrista",
+        "fr": "parolier ou parolière",
+        "ja": "作詞者",
+        "ko": "작사가",
+        "zh-Hans": "作词者",
+        "zh-Hant": "作詞者"
+      },
+      "mappings": ["wd:P676"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "credit",
+        "order": "position",
+        "inverse": "rezics:lyricistOf",
+        "filter": ["wdt:P3831", "wdt:P518"],
+        "inverseLabels": {
+          "de": "Liedtext-Credits",
+          "en": "Lyric credits",
+          "es": "Créditos de letras",
+          "fr": "Crédits de paroles",
+          "ja": "作詞担当作品",
+          "ko": "작사 크레딧",
+          "zh-Hans": "作词参与作品",
+          "zh-Hant": "作詞參與作品"
+        }
+      },
+      "targets": ["schema:Organization", "schema:Person"],
+      "descriptions": {
+        "en": "A person or organization credited with writing lyrics, including a sourced theme-song role."
       }
     },
     "wdt:P186": {
@@ -7820,7 +7947,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["wdt:P1303", "wdt:P1932", "wdt:P3831"],
+      "qualifiers": ["schema:position", "wdt:P1303", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: 'administrative area'
   schema:Event: 'event'
 properties:
+  wdt:P6942: 'animator'
+  schema:editor: 'editor'
+  schema:lyricist: 'lyricist'
   rezics:stylisticallyComparableTo: 'Stylistically comparable to'
   rezics:penNameOf: 'pen name of'
   wdt:P186: made from material
@@ -83,6 +86,9 @@ properties:
   schema:startDate: 'start date'
   schema:endDate: 'end date'
 inverseProperties:
+  wdt:P6942: 'Animation credits'
+  schema:editor: 'Editing credits'
+  schema:lyricist: 'Lyric credits'
   rezics:stylisticallyComparableTo: 'Works compared to this work'
   rezics:penNameOf: 'pen names'
   wdt:P186: Used in
@@ -109,6 +115,9 @@ inverseProperties:
   rezics:releaseGroup: 'files from this release group'
   schema:containedInPlace: 'Contains places'
 propertyDescriptions:
+  wdt:P6942: 'A person or organization credited with animation, with the precise source role retained on the credit.'
+  schema:editor: 'A person or organization credited with editing, with the precise source role retained on the credit.'
+  schema:lyricist: 'A person or organization credited with writing lyrics, including a sourced theme-song role.'
   rezics:stylisticallyComparableTo: 'An exemplar Book or VideoGame Work used to describe this Work’s style, structure, mechanics, tone or experience. The comparison has a direction and does not assert influence or derivation. Genre and keyword classifications remain independent.'
   rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
   wdt:P186: 'A food or prepared recipe used as a material or component; qualify its quantity and list order where known.'

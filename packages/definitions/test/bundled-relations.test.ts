@@ -24,8 +24,13 @@ test('every bundled item property declares how it reads in both directions', () 
     }
     if (relation.group === 'credit') {
       expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
-      expect(relation.order).toBe('position');
-      expect(relation.filter).toEqual(['wdt:P3831', 'wdt:P518']);
+      if (key === 'schema:performer') {
+        expect(relation.order).toBe('name');
+        expect(relation.filter).toBe('wdt:P1303');
+      } else {
+        expect(relation.order).toBe('position');
+        expect(relation.filter).toEqual(['wdt:P3831', 'wdt:P518']);
+      }
     }
   }
   const canonical = {
@@ -126,7 +131,15 @@ test('credit properties are admitted on episodes and releases', () => {
     'wdt:P725',
   ];
   expect(credits.map(([term]) => term).sort()).toEqual(
-    [...oldRoles, 'marcrel:fds', 'schema:byArtist', 'schema:performer'].sort(),
+    [
+      ...oldRoles,
+      'marcrel:fds',
+      'schema:byArtist',
+      'schema:performer',
+      'schema:editor',
+      'schema:lyricist',
+      'wdt:P6942',
+    ].sort(),
   );
   const applicability = {
     'schema:Episode': oldRoles,
@@ -145,7 +158,7 @@ test('credit properties are admitted on episodes and releases', () => {
   }
   for (const [term, property] of credits) {
     if (term === 'schema:performer') {
-      expect(property.qualifiers).toEqual(['wdt:P1303', 'wdt:P1932', 'wdt:P3831']);
+      expect(property.qualifiers).toEqual(['schema:position', 'wdt:P1303', 'wdt:P1932', 'wdt:P3831', 'wdt:P518']);
       expect(property.relation?.order).toBe('name');
       expect(property.relation?.filter).toBe('wdt:P1303');
       continue;
@@ -188,4 +201,13 @@ test('story arcs are creative-work subjects held as ordered part ranges', () => 
     expect(properties[term]?.value).toEqual({ type: 'string', minLength: 1, maxLength: 1500 });
   }
   expect(properties['wdt:P518']).toMatchObject({ datatype: 'wikibase-item', targets: ['wd:Q2620972'] });
+});
+
+test('the anime staff profile admits the existing animation, editing and lyric roles', () => {
+  for (const term of ['wdt:P6942', 'schema:editor', 'schema:lyricist']) {
+    expect(types['schema:TVSeries']?.properties).toContain(term);
+    expect(properties[term]?.targets).toEqual(['schema:Organization', 'schema:Person']);
+    expect(properties[term]?.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
+  }
+  expect(types['schema:VideoGame']?.properties).toContain('schema:lyricist');
 });

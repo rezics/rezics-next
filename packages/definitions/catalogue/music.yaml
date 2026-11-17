@@ -43,7 +43,7 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs detailedRole instrumentUsed
+      qualifiers: creditedAs detailedRole instrumentUsed position appliesToPart
       relation_group: credit
       inverse: none
       relation_order: name

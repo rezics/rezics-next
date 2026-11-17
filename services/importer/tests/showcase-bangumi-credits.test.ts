@@ -26,6 +26,7 @@ import {
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
+import { creditSlot } from '../src/showcase-current-reads.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -62,6 +63,8 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         yield { id: 101, name: 'STEINS;GATE', type: 2 };
         yield { id: 102, name: 'CLANNAD', type: 2 };
         yield { id: 103, name: 'Fate/stay night', type: 2 };
+        yield { id: 104, name: 'STEINS;GATE Book', type: 1, platform: 1002, series: false };
+        yield { id: 105, name: 'STEINS;GATE Books', type: 1, platform: 1002, series: true };
       }
       if (provider === 'vndb' && table === 'vn_titles') {
         yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
@@ -82,6 +85,14 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         yield { subject_id: 101, person_id: 11, position: 2, creditedAs: 'Chief Director' };
         yield { subject_id: 101, person_id: 13, position: 41 };
         yield { subject_id: 101, person_id: 99, position: 2 };
+        yield { subject_id: 101, person_id: 11, position: 20 };
+        yield { subject_id: 101, person_id: 11, position: 21 };
+        yield { subject_id: 101, person_id: 11, position: 32 };
+        yield { subject_id: 101, person_id: 11, position: 155 };
+        yield { subject_id: 104, person_id: 14, position: 2001 };
+        yield { subject_id: 104, person_id: 14, position: 2007 };
+        yield { subject_id: 104, person_id: 15, position: 2004 };
+        yield { subject_id: 105, person_id: 15, position: 2004 };
       }
       if (provider === 'bangumi' && table === 'person-characters')
         yield {
@@ -93,6 +104,8 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       if (provider === 'bangumi' && table === 'person') {
         yield { id: 11, type: 1, name: 'Director' };
         yield { id: 12, type: 1, name: 'Voice performer' };
+        yield { id: 14, type: 1, name: 'Book author' };
+        yield { id: 15, type: 2, name: 'Series publisher' };
         yield { id: 13, type: 1, name: 'Assistant director' };
       }
       if (provider === 'bangumi' && table === 'character') yield { id: 21, name: 'Ari' };
@@ -170,13 +183,8 @@ test('selected anime staff and cast use the default acknowledged role adapter an
               statement.property.id !== query.property
             )
               return false;
-            const director = query.property === 'schema:director';
-            const voice = query.property === 'wdt:P725';
-            const target = director || voice ? valueContent(statement) : undefined;
-            const character = voice
-              ? valueContent(statement.qualifiers?.find(({ property }) => property.id === 'wdt:P453'))
-              : undefined;
-            return query.target === target && query.key === character;
+            const slot = creditSlot(statement);
+            return query.target === slot?.target && query.key === slot?.key;
           })
           .map((candidate) => ({
             ...candidate,
@@ -286,10 +294,14 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       if (!record) throw new Error(`Missing published Bangumi Subject for ${key}`);
       return record.subjectId;
     }
+    expect(plan.members.find((member) => member.key === 'person:15')?.kind).toBe('organization');
+    expect(publication.manifest.records.find((record) => record.sourceKey === 'person:15')?.kind).toBe('organization');
     const workId = publishedBangumiId('101');
     const directorId = publishedBangumiId('person:11');
     const performerId = publishedBangumiId('person:12');
     const characterId = publishedBangumiId('character:21');
+    const authorId = publishedBangumiId('person:14');
+    const publisherId = publishedBangumiId('person:15');
     const work = (await publicClient.readSubject(workId)).subject as {
       statements: Record<string, readonly BatchStatement[]>;
     };
@@ -298,7 +310,17 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === performerId);
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
-    expect(result.creditRoles?.map((item) => item.code)).toEqual(['2', '41']);
+    expect(result.creditRoles?.map((item) => item.code)).toEqual([
+      '155',
+      '2',
+      '20',
+      '2001',
+      '2004',
+      '2007',
+      '21',
+      '32',
+      '41',
+    ]);
     expect(publication.omissions).not.toContainEqual(
       expect.objectContaining({ sourceKey: '101', code: 'source-uri-not-current' }),
     );
@@ -327,6 +349,60 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       ),
     ).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
+    expect(result.creditGaps).toContainEqual(
+      expect.objectContaining({
+        path: '/subject-persons/104/15/position',
+        requiredProfile: 'schema:Book',
+        reason: 'property_not_admitted',
+        property: 'schema:publisher',
+      }),
+    );
+    expect(publication.omissions).not.toContainEqual({
+      provider: 'bangumi',
+      sourceKey: 'person:15',
+      code: 'source-claim-withheld',
+    });
+
+    for (const [code, property] of [
+      ['20', 'wdt:P6942'],
+      ['21', 'wdt:P6942'],
+      ['32', 'schema:lyricist'],
+      ['155', 'schema:editor'],
+    ] as const) {
+      const bound = result.creditRoles!.find((entry) => entry.code === code)!;
+      expect(
+        work.statements[property]?.some(
+          (statement) =>
+            valueContent(statement) === directorId &&
+            statement.qualifiers?.some(
+              (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === bound.conceptId,
+            ),
+        ),
+      ).toBe(true);
+    }
+    for (const [key, type, property, code] of [
+      ['104', 'schema:Book', 'schema:author', '2001'],
+      ['104', 'schema:Book', 'schema:contributor', '2007'],
+      ['105', 'schema:BookSeries', 'schema:publisher', '2004'],
+    ] as const) {
+      const bookId = publishedBangumiId(key);
+      const book = (await publicClient.readSubject(bookId)).subject as {
+        type: string;
+        statements: Record<string, readonly BatchStatement[]>;
+      };
+      expect(book.type).toBe(type);
+      const bound = result.creditRoles!.find((entry) => entry.code === code)!;
+      expect(
+        book.statements[property]?.some(
+          (statement) =>
+            valueContent(statement) === (code === '2004' ? publisherId : authorId) &&
+            statement.qualifiers?.some(
+              (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === bound.conceptId,
+            ),
+        ),
+      ).toBe(true);
+    }
+
     expect(result.creditGaps).toContainEqual(
       expect.objectContaining({
         reason: 'missing_identity',
@@ -387,10 +463,10 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       value.roles.map((item) => item.code).sort((left, right) => left.localeCompare(right));
 
     setRoleEvidence({ 'schema:url': 'preferred', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });
-    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+    expect(roleCodes(await readBindings())).toEqual(['155', '2', '20', '2001', '2004', '2007', '21', '32', '41']);
 
     setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
-    expect(roleCodes(await readBindings())).toEqual(['41']);
+    expect(roleCodes(await readBindings())).toEqual(['155', '20', '2001', '2004', '2007', '21', '32', '41']);
     const acknowledged = journal.acknowledgedCommands();
     const withheld = await preparation.prepare({
       plan,
@@ -402,16 +478,25 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       publicClient,
       read: async (id) => publicClient.readSubject(id),
     });
-    expect(roleCodes(withheld)).toEqual(['41']);
+    expect(roleCodes(withheld)).toEqual(['155', '20', '2001', '2004', '2007', '21', '32', '41']);
     expect(withheld.publication).toBe(resolution!.publication);
     expect(journal.acknowledgedCommands()).toEqual(acknowledged);
 
     setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'preferred', 'skos:inScheme': 'normal' }, true);
-    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+    expect(roleCodes(await readBindings())).toEqual(['155', '2', '20', '2001', '2004', '2007', '21', '32', '41']);
 
     setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });
-    expect(roleCodes(await readBindings(async (id) => (id === role.conceptId ? null : read(id))))).toEqual(['41']);
-    expect(roleCodes(await readBindings())).toEqual(['2', '41']);
+    expect(roleCodes(await readBindings(async (id) => (id === role.conceptId ? null : read(id))))).toEqual([
+      '155',
+      '20',
+      '2001',
+      '2004',
+      '2007',
+      '21',
+      '32',
+      '41',
+    ]);
+    expect(roleCodes(await readBindings())).toEqual(['155', '2', '20', '2001', '2004', '2007', '21', '32', '41']);
 
     const prior = resolution!.publication!;
     const acknowledgementCount = journal.acknowledgedCommands().length;
@@ -428,7 +513,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       subjectTypes: [2],
       read: async (id) => publicClient.readSubject(id),
     });
-    expect(roleCodes(reopened)).toEqual(['2', '41']);
+    expect(roleCodes(reopened)).toEqual(['155', '2', '20', '21', '32', '41']);
     expect(journal.acknowledgedCommands()).toHaveLength(acknowledgementCount);
     resolution = reopened;
 
@@ -462,7 +547,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       subjectTypes: [2],
       read: async (id) => publicClient.readSubject(id),
     });
-    expect(roleCodes(recovered)).toEqual(['2', '41']);
+    expect(roleCodes(recovered)).toEqual(['155', '2', '20', '21', '32', '41']);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

@@ -59,6 +59,7 @@ function selectedVn(voiceAliasId = '10') {
     ],
     vn_staff: [
       { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '10', role: 'scenario', eid: '5', note: 'Additional source staff grouping' },
       { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
     ],
     vn_seiyuu: [{ id: 'v1', aid: voiceAliasId, cid: 'c3', note: 'Voice Alias' }],

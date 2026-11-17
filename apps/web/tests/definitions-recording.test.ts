@@ -9,11 +9,14 @@ const workerEnv: { KERNEL_ORIGIN: string } = { KERNEL_ORIGIN: kernelOrigin };
 const recordingMessage =
   'Definitions recordings are generated output. Run `bun apps/web/scripts/record.ts definitions-active definitions-release` in the same change as the bundled release update; see the recordings section in apps/web/README.md.';
 
+mock.module('cloudflare:workers', () => ({ env: workerEnv }));
+const kernelModule = await import('../src/kernel/client.ts');
 mock.module('../src/kernel/client.ts', () => ({
+  ...kernelModule,
   requestLocale: () => 'en',
+  configuredKernelOrigin: () => workerEnv.KERNEL_ORIGIN,
   kernelClient: () => createKernelClient(workerEnv.KERNEL_ORIGIN),
 }));
-mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const { typeFrame } = await import('../src/subject/definitions.ts');
 
 type RecordedRelease = typeof recorded.release;
@@ -43,10 +46,10 @@ test('recorded release frames work descendants, people, music and recipes throug
     ['schema:Movie', '5:7'],
     ['schema:VideoGame', '5:7'],
     ['wd:Q689445', '5:7'],
-    ['wd:Q95074', '3:4'],
-    ['schema:Person', '3:4'],
-    ['schema:MusicAlbum', '1:1'],
-    ['schema:Recipe', '4:3'],
+    ['wd:Q95074', '5:7'],
+    ['schema:Person', '5:7'],
+    ['schema:MusicAlbum', '5:7'],
+    ['schema:Recipe', '5:7'],
   ]);
 
   const originalFetch = globalThis.fetch;

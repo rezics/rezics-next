@@ -1,3 +1,4 @@
+import { sourceDigest } from '@rezics/conversion/support';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,6 +14,7 @@ import {
 import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import {
   prepareShowcaseVndbCreditVocabulary,
+  planShowcaseVndbCredits,
   publishedShowcaseVndbCreditReferences,
 } from '../src/showcase-vndb-credits.ts';
 import { buildShowcaseManifest, showcaseDigest, type ShowcaseVocabularyRequirement } from '../src/showcase-manifest.ts';
@@ -54,6 +56,7 @@ function selectedVn() {
     ],
     vn_staff: [
       { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '10', role: 'scenario', eid: '5', note: 'Additional source staff grouping' },
       { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
     ],
     vn_seiyuu: [{ id: 'v1', aid: '10', cid: 'c3', note: 'Voice Alias' }],
@@ -131,6 +134,9 @@ function creditPort(commands: BatchCommand[], known: ReadonlyMap<string, Reviewe
 test('the selected-family seed qualifies staff and voice credits without alias identities or duplicate edges', async () => {
   const tables = selectedVn();
   const plan = await planCrossMediaSeed(tables);
+  expect(
+    planShowcaseVndbCredits(plan).credits.filter((credit) => credit.sourcePath === '/vn_staff/v1/10/scenario'),
+  ).toHaveLength(1);
   const schemeId = randomUUID();
   const scenarioId = randomUUID();
   const designId = randomUUID();
@@ -184,10 +190,35 @@ test('the selected-family seed qualifies staff and voice credits without alias i
     const proposals = credits.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> => command.op === 'propose',
     );
+    expect(proposals.filter((command) => command.statement.property.id === 'schema:author')).toHaveLength(1);
     const author = proposals.find((command) => command.statement.property.id === 'schema:author')!;
     const illustrator = proposals.find((command) => command.statement.property.id === 'schema:illustrator')!;
     const voice = proposals.find((command) => command.statement.property.id === 'wdt:P725')!;
     const qualifiers = (command: typeof author) => command.statement.qualifiers ?? [];
+    const sourceRows = plan.edges.filter(
+      (edge) =>
+        edge.source === 'vndb' &&
+        edge.table === 'vn_staff' &&
+        edge.record.aid === '10' &&
+        edge.record.role === 'scenario',
+    );
+    const rowDigests = sourceRows.map((edge) => sourceDigest(edge.record)).sort();
+    expect(author.source.digest).toBe(sourceDigest(rowDigests));
+    const reordered = planShowcaseVndbCredits({ ...plan, edges: [...plan.edges].reverse() });
+    expect(reordered.credits.find((credit) => credit.sourcePath === '/vn_staff/v1/10/scenario')?.sourceDigest).toBe(
+      author.source.digest,
+    );
+    const conflicting = planShowcaseVndbCredits({
+      ...plan,
+      edges: [...plan.edges, { ...sourceRows[0]!, target: 's999' }],
+    });
+    expect(conflicting.credits.some((credit) => credit.sourcePath === '/vn_staff/v1/10/scenario')).toBe(false);
+    expect(conflicting.diagnostics).toContainEqual({
+      provider: 'vndb',
+      path: '/vn_staff/v1/10/scenario',
+      reason: 'invalid_row',
+    });
+
     expect(author.source).toEqual(
       expect.objectContaining({
         external_id: 'v1',
@@ -231,7 +262,15 @@ test('the selected-family seed qualifies staff and voice credits without alias i
       'chardesign',
       'scenario',
     ]);
-    expect(result.vndbCreditDiagnostics).toEqual([]);
+    expect(result.vndbCreditDiagnostics).toEqual([
+      {
+        provider: 'vndb',
+        path: '/vn_staff/v1/10/scenario',
+        code: '5',
+        reason: 'unsupported_source_case',
+        property: 'vn_staff.eid',
+      },
+    ]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

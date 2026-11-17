@@ -695,7 +695,10 @@ export function buildShowcaseManifest(input: {
       rawDigest: sourceDigest(row.payload),
       semanticDigest: conversion.digest,
       converterRevision: conversion.converter_revision ?? registration.converter_revision,
-      kind: member?.kind ?? (bootstrap?.op === 'create' ? kindFromType(bootstrap.subject.type) : 'work'),
+      kind:
+        bootstrap?.op === 'create' && bootstrap.subject.type === 'schema:Organization'
+          ? 'organization'
+          : (member?.kind ?? (bootstrap?.op === 'create' ? kindFromType(bootstrap.subject.type) : 'work')),
       subjectId: subject?.id ?? null,
       nativeType: subject?.type ?? (bootstrap?.op === 'create' ? bootstrap.subject.type : null),
       readerRoute: reading?.route ?? null,

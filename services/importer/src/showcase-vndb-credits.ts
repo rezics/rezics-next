@@ -459,6 +459,8 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path ?? '/vn_staff', 'invalid_row'));
       continue;
     }
+    if (edge.table === 'vn_staff' && row.eid !== undefined && row.eid !== null && diagnostics.length < DIAGNOSTIC_LIMIT)
+      diagnostics.push({ ...gap(path, 'unsupported_source_case', diagnosticCode(row.eid)), property: 'vn_staff.eid' });
     const spelling = aliasNames.get(aliasId);
     if (spelling !== undefined && !validSpelling(spelling)) {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path, 'invalid_source_value'));
@@ -497,11 +499,16 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
   for (const credit of candidates) byPath.set(credit.sourcePath, [...(byPath.get(credit.sourcePath) ?? []), credit]);
   const unique: VndbStaffCredit[] = [];
   for (const [path, rows] of byPath) {
-    if (new Set(rows.map((row) => row.sourceDigest)).size > 1) {
+    const meanings = new Set(rows.map(({ sourceDigest: _digest, ...credit }) => sourceDigest(credit)));
+    if (meanings.size > 1) {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path, 'invalid_row'));
       continue;
     }
-    unique.push(rows[0]!);
+    const digests = [...new Set(rows.map((row) => row.sourceDigest))].sort();
+    unique.push({
+      ...rows[0]!,
+      sourceDigest: digests.length === 1 ? digests[0]! : sourceDigest(digests),
+    });
   }
 
   const perVn = new Map<string, VndbStaffCredit[]>();

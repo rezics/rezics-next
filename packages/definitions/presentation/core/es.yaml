@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: 'área administrativa'
   schema:Event: 'evento'
 properties:
+  wdt:P6942: 'animador'
+  schema:editor: 'editor'
+  schema:lyricist: 'letrista'
   rezics:stylisticallyComparableTo: 'Comparable en estilo con'
   rezics:penNameOf: 'seudónimo de'
   wdt:P186: hecho de
@@ -83,6 +86,9 @@ properties:
   schema:startDate: 'fecha de inicio'
   schema:endDate: 'fecha de finalización'
 inverseProperties:
+  wdt:P6942: 'Créditos de animación'
+  schema:editor: 'Créditos de edición'
+  schema:lyricist: 'Créditos de letras'
   rezics:stylisticallyComparableTo: 'Obras comparadas con esta obra'
   rezics:penNameOf: 'seudónimos'
   wdt:P186: Se usa en

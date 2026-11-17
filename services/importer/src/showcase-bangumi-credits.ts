@@ -477,7 +477,7 @@ export function createBangumiCreditPreparation(prior?: BangumiCreditPriorPublica
       return publication;
     },
     async prepare(input: Omit<BangumiCreditPreparation, 'prior'>) {
-      const evidence = prior ?? publication;
+      const evidence = publication;
       const current = await prepareBangumiCreatorCreditBindings({
         ...input,
         ...(evidence ? { prior: evidence } : {}),
@@ -492,7 +492,7 @@ export function createBangumiCreditPreparation(prior?: BangumiCreditPriorPublica
 export async function prepareBangumiCreatorCreditBindings(
   input: BangumiCreditPreparation,
 ): Promise<BangumiCreditVocabularyResolution> {
-  const roles = needsFor({ drafts: input.drafts, plan: input.plan, subjectTypes: input.subjectTypes ?? [2] });
+  const roles = needsFor({ drafts: input.drafts, plan: input.plan, subjectTypes: input.subjectTypes ?? [1, 2, 4] });
   if (!roles.length)
     return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
 

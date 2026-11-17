@@ -2020,11 +2020,17 @@ export async function planCrossMediaSeed(
       source: crossMediaAliases[provider],
       converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
     });
-    for (const row of [...plan.records[provider], ...plan.entities[provider]])
-      registration.convert(
+    for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
+      const converted = registration.convert(
         { external_id: row.key, record_revision: row.revision, record: row.payload },
         { source: registration.source },
       );
+      const bootstrap = converted.proposals.find((command) => command.op === 'create');
+      if (bootstrap?.op === 'create' && bootstrap.subject.type === 'schema:Organization') {
+        const member = plan.members.find((entry) => entry.source === provider && entry.key === row.key);
+        if (member) member.kind = 'organization';
+      }
+    }
     plan.records[provider].sort((a, b) => a.key.localeCompare(b.key));
     plan.entities[provider].sort((a, b) => a.key.localeCompare(b.key));
   }

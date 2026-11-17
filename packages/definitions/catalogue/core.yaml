@@ -659,6 +659,54 @@ slots:
       inverse: rezics:musicByOf
       relation_order: position
       relation_filter: [wdt:P3831, wdt:P518]
+  animator:
+    slot_uri: wdt:P6942
+    description: A person or organization credited with animation; the detailed role distinguishes key and second key animation.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P6942
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:animatorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+  editor:
+    slot_uri: schema:editor
+    description: A person or organization credited with editing, preserving the precise editing role from the source.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    close_mappings:
+      - wd:P98
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:editorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+  lyricist:
+    slot_uri: schema:lyricist
+    description: A person or organization credited with writing lyrics, including the sourced theme-song role.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P676
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:lyricistOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   producer:
     slot_uri: schema:producer
     description: A person or organization credited with production.

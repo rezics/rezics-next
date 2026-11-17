@@ -9,6 +9,9 @@ types:
   schema:AdministrativeArea: '행정 구역'
   schema:Event: '행사'
 properties:
+  wdt:P6942: '애니메이터'
+  schema:editor: '편집자'
+  schema:lyricist: '작사가'
   rezics:stylisticallyComparableTo: '작풍 비교 대상'
   rezics:penNameOf: '필명 사용자'
   wdt:P186: 재료
@@ -83,6 +86,9 @@ properties:
   schema:startDate: '시작일'
   schema:endDate: '종료일'
 inverseProperties:
+  wdt:P6942: '애니메이션 크레딧'
+  schema:editor: '편집 크레딧'
+  schema:lyricist: '작사 크레딧'
   rezics:stylisticallyComparableTo: '이 작품을 비교 대상으로 삼은 작품'
   rezics:penNameOf: '필명'
   wdt:P186: 사용되는 곳
