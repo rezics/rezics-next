@@ -1,7 +1,8 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sqliteEvidence } from '../../../specs/imports-vndb-tables-driver.ts';
@@ -40,10 +41,10 @@ async function* entries(change = false, lateInvalid = false, children?: number, 
 // Local protocol double only. Native Auth/API/receipt acceptance is owned by
 // vndb-materialization-native.test.ts, never inferred from these unit checks.
 async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'], registration?: SourceRegistration) {
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/vndb-materialization-unit-');
+  const directory = await mkdtemp(join(tmpdir(), 'vndb-materialization-unit-'));
   const calls: BatchWriteRequest[] = [];
   const statistics: Parameters<NonNullable<ImportTransport['writeSourceStatistic']>>[0][] = [];
+  const observations = sourceObservationFixture();
   let deny = false;
   let denyStatistics = false;
   const transport = {
@@ -70,8 +71,14 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'],
     async writeSourceStatistic(input: (typeof statistics)[number]) {
       statistics.push(structuredClone(input));
       if (denyStatistics) throw new Error('Unit statistic response unavailable');
+      observations.observe(input.subjectId, input.value);
     },
-    async clearSourceStatistic() {},
+    async readSourceObservationHead({ subjectId }: { subjectId: string }) {
+      return observations.read(subjectId);
+    },
+    async clearSourceStatistic(input: Parameters<NonNullable<ImportTransport['clearSourceStatistic']>>[0]) {
+      observations.observe(input.subjectId, { ...input.value, count: 0 });
+    },
   };
   const open = () =>
     new Importer({
