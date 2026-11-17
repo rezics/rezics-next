@@ -363,7 +363,11 @@ async function restoreOwnerLibrary() {
 
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('link', { name: 'Recover Collections', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: await message('en', 'library_archive_destinations'), exact: true })
+    .getByRole('link', { name: await message('en', 'library_export_restore_collections'), exact: true })
+    .click();
+  await page.waitForURL(`${stack.web}/en/library/recover-collections`);
   await hydrated(page);
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
@@ -446,28 +450,39 @@ async function restoreOwnerLibrary() {
   await hydrated(page);
   await page.getByRole('heading', { name: 'Recover from a Library archive' }).waitFor({ state: 'visible' });
   await page.getByLabel('Choose your completed Library archive').setInputFiles(archivePath);
-  await page.getByText('entries', { exact: true }).first().waitFor({ state: 'visible', timeout: 60_000 });
-  const entryForm = page.locator('article').filter({ hasText: '· entries ·' }).first();
-  await entryForm.getByLabel('Current canonical Subject ID').fill(prepared.subjectId);
+  const records = page.getByRole('region', { name: await message('en', 'library_archive_entry_records') });
+  const entryForm = records
+    .getByRole('article')
+    .filter({ hasText: await message('en', 'library_export_section_entries') })
+    .first();
+  await entryForm.waitFor({ state: 'visible', timeout: 60_000 });
+  await entryForm.getByLabel(await message('en', 'library_archive_entry_subject_id')).fill(prepared.subjectId);
   await entryForm.getByRole('button', { name: /Select record / }).click();
-  const labelForm = page.locator('article').filter({ hasText: '· labels ·' }).first();
-  await labelForm.getByLabel('Choose a label operation').selectOption('create');
+  const labelForm = records
+    .getByRole('article')
+    .filter({ hasText: await message('en', 'library_export_section_labels') })
+    .first();
+  await labelForm.getByRole('combobox', { name: await message('en', 'library_archive_entry_label_choice') }).click();
+  await page
+    .getByRole('option', { name: await message('en', 'library_archive_entry_create_label'), exact: true })
+    .click();
   await labelForm.getByRole('button', { name: /Select record / }).click();
   await page.getByRole('button', { name: 'Review selected changes', exact: true }).click();
   await page
-    .getByText('I confirm these exact displayed records, review revisions and choices.', { exact: false })
-    .waitFor({ state: 'visible' });
-  await page
     .getByRole('checkbox', {
-      name: 'I confirm these exact displayed records, review revisions and choices. A refreshed review requires confirmation again.',
+      name: await message('en', 'library_archive_entry_confirm'),
+      exact: true,
     })
     .check();
   await page.getByRole('button', { name: 'Apply confirmed changes', exact: true }).click();
-  await page.getByRole('button', { name: 'Read actual current facts' }).first().waitFor({
+  const readCurrent = page
+    .getByRole('button', { name: await message('en', 'library_archive_entry_read_current') })
+    .first();
+  await readCurrent.waitFor({
     state: 'visible',
     timeout: 60_000,
   });
-  await page.getByRole('button', { name: 'Read actual current facts' }).first().click();
+  await readCurrent.click();
   const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
     await stack.kernel(`/v1/libraryEntries/${prepared.subjectId}`, undefined, 'alice'),
     200,
@@ -483,15 +498,17 @@ async function restoreOwnerLibrary() {
     timeout: 60_000,
   });
   await page.getByRole('button', { name: 'Map this occurrence', exact: true }).click();
-  await page.getByLabel('Current canonical Subject UUID').fill(prepared.subjectId);
+  await page.getByLabel(await message('en', 'library_archive_progress_subject')).fill(prepared.subjectId);
   await page.getByRole('button', { name: 'Read current profile choices', exact: true }).click();
-  const pair = page.getByLabel('Current mode and unit');
+  const pair = page.getByRole('combobox', { name: await message('en', 'library_archive_progress_pair') });
   await pair.waitFor({ state: 'visible', timeout: 30_000 });
-  await pair.selectOption({ index: 1 });
+  await pair.click();
+  await page.getByRole('option', { name: /^Amount · pages?$/i }).click();
   await page.getByRole('button', { name: 'Review this exact mapping', exact: true }).click();
   await page
     .getByRole('checkbox', {
-      name: 'I reviewed this review ID and mapping and consent to one fresh private Session for this occurrence.',
+      name: await message('en', 'library_archive_progress_consent'),
+      exact: true,
     })
     .check();
   await page.getByRole('button', { name: 'Confirm and create this Session', exact: true }).click();
