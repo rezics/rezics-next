@@ -32,6 +32,16 @@ export async function createLibraryEntry(
   authorization: string,
   cataloguePersona = 'editor',
 ) {
+  const create = await prepareLibraryEntryCreator(stack, persona, authorization, cataloguePersona);
+  return create();
+}
+
+export async function prepareLibraryEntryCreator(
+  stack: NativeWebStack,
+  persona: string,
+  authorization: string,
+  cataloguePersona = 'editor',
+) {
   const openedLibrary = await stack.kernel(
     '/v1/platform/exposure/personal_library:open',
     { method: 'POST', headers: { 'idempotency-key': `"${crypto.randomUUID()}"` } },
@@ -39,17 +49,6 @@ export async function createLibraryEntry(
   );
   expect(openedLibrary.status).toBe(200);
 
-  const createdSubject = await stack.kernel(
-    '/v1/subjects',
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-      body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Native library member' } }),
-    },
-    cataloguePersona,
-  );
-  expect(createdSubject.status).toBe(201);
-  const { subject } = (await createdSubject.json()) as { subject: { id: string } };
   const activeDefinition = await stack.kernel('/v1/definitions/active');
   expect(activeDefinition.status).toBe(200);
   const { digest } = (await activeDefinition.json()) as { digest: string };
@@ -67,21 +66,34 @@ export async function createLibraryEntry(
     (state) => state.role === 'active',
   );
   expect(activeState, 'the accepted Library profile has its active state').toBeDefined();
-  const entry = await stack.kernel(
-    `/v1/libraryEntries/${subject.id}`,
-    {
-      method: 'PUT',
-      headers: {
-        authorization,
-        'content-type': 'application/json',
-        'idempotency-key': `"${crypto.randomUUID()}"`,
+  return async (label = 'Native library member', statements?: Record<string, unknown[]>) => {
+    const createdSubject = await stack.kernel(
+      '/v1/subjects',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
+        body: JSON.stringify({ type: 'schema:Book', labels: { en: label }, statements }),
       },
-      body: JSON.stringify({ state: activeState!.id }),
-    },
-    persona,
-  );
-  expect(entry.status, 'the reader creates the private state through the documented Library API').toBe(201);
-  return subject;
+      cataloguePersona,
+    );
+    expect(createdSubject.status, `create Catalogue Subject ${label}`).toBe(201);
+    const { subject } = (await createdSubject.json()) as { subject: { id: string } };
+    const entry = await stack.kernel(
+      `/v1/libraryEntries/${subject.id}`,
+      {
+        method: 'PUT',
+        headers: {
+          authorization,
+          'content-type': 'application/json',
+          'idempotency-key': `"${crypto.randomUUID()}"`,
+        },
+        body: JSON.stringify({ state: activeState!.id }),
+      },
+      persona,
+    );
+    expect(entry.status, 'the reader creates the private state through the documented Library API').toBe(201);
+    return subject;
+  };
 }
 
 export async function createLibraryNavigationFixture(stack: NativeWebStack) {

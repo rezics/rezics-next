@@ -43,8 +43,7 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W17',
     job: 'Built-in dynamic Collection → filters → native continuation → Subject',
     auth: 'signed-in',
-    missingFixture:
-      'The built-in Everything collection needs enough matching owned entries for a filtered native continuation to a known Subject.',
+    nativeHost: 'tests/native/first-public-personal.host.test.ts',
   },
   {
     id: 'W18',
