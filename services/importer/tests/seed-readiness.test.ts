@@ -63,7 +63,7 @@ test('development seed waits for network failure, boot 503 and HTTP 200 before c
   await mkdir(temp, { recursive: true });
   const root = await mkdtemp(join(temp, 'seed-readiness-'));
   const events: string[] = [];
-  const requests: Request[] = [];
+  const requests: { request: Request; init: RequestInit | undefined }[] = [];
   const time = clock();
   const stop = new Error('captured import handoff');
   try {
@@ -77,7 +77,7 @@ test('development seed waits for network failure, boot 503 and HTTP 200 before c
             ...input,
             ...time,
             fetch: readinessFetch(async (url, init) => {
-              requests.push(new Request(url, init));
+              requests.push({ request: new Request(url, init), init });
               events.push('probe');
               if (requests.length === 1) throw Object.assign(new Error('booting'), { code: 'ECONNREFUSED' });
               return new Response('{}', { status: requests.length === 2 ? 503 : 200 });
@@ -127,10 +127,12 @@ test('development seed waits for network failure, boot 503 and HTTP 200 before c
       }),
     ).rejects.toBe(stop);
     expect(events).toEqual(['probe', 'probe', 'probe', 'ready', 'dumps', 'token', 'catalogue', 'token', 'import']);
-    expect(requests.every((request) => request.url === `${origin}/v1/definitions/active`)).toBe(true);
-    expect(requests.every((request) => request.method === 'GET' && !request.headers.has('authorization'))).toBe(true);
-    expect(requests.every((request) => request.credentials === 'omit' && request.redirect === 'error')).toBe(true);
-    expect(requests.every((request) => request.cache === 'no-store')).toBe(true);
+    expect(requests.every(({ request }) => request.url === `${origin}/v1/definitions/active`)).toBe(true);
+    expect(requests.every(({ request }) => request.method === 'GET' && !request.headers.has('authorization'))).toBe(
+      true,
+    );
+    expect(requests.every(({ init }) => init?.credentials === 'omit' && init.redirect === 'error')).toBe(true);
+    expect(requests.every(({ init }) => init?.cache === 'no-store')).toBe(true);
     expect(time.timers.size).toBe(0);
   } finally {
     await rm(root, { recursive: true, force: true });
