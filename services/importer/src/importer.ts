@@ -8,6 +8,7 @@ import {
   type BatchCommand,
   type BatchWriteRequest,
   type BatchWriteResult,
+  type FieldGroup,
 } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkBatch, checkResult } from './accepted-checks.ts';
@@ -27,7 +28,7 @@ import type {
 } from './import-contract.ts';
 import { throwAdmissionRefusal } from './source-destination.ts';
 import { ImportTransportError } from './import-client.ts';
-import { reviewedCatalogueProblem } from './http.ts';
+import { reviewedCatalogueProblem, type ReviewedCatalogueProblem } from './http.ts';
 import {
   DIGEST,
   ObservationConflictError,
@@ -147,6 +148,10 @@ type RunFailure = Readonly<{
   keyDigest?: string;
   status?: number;
   problem?: string;
+  batch?: Pick<ReviewedCatalogueProblem, 'request_id' | 'command_index' | 'failure_stage' | 'phase'> & {
+    op?: BatchCommand['op'];
+    fieldGroup?: FieldGroup;
+  };
   mediaState?: 'reserved' | 'uploaded';
 }>;
 type FailureEvidence = { detail: RunFailure; transport?: ImportTransportError };
@@ -253,7 +258,7 @@ type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
 type CommandRefusal = Extract<BatchWriteResult['results'][number], { problem: unknown }>;
 type CoverOutcome =
   | { outcome: 'resolved' }
-  | { outcome: 'failed'; refusal?: CommandRefusal; error?: unknown; stopped?: boolean }
+  | { outcome: 'failed'; refusal?: CommandRefusal; request?: BatchWriteRequest; error?: unknown; stopped?: boolean }
   | { outcome: 'pending'; mediaState?: 'reserved' | 'uploaded'; failure?: ImportTransportError };
 type Write = (<T>(operation: () => Promise<T>) => Promise<T>) & {
   owner?: object;
@@ -1090,7 +1095,7 @@ export class Importer {
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
     const result = await this.send(request, signal, write);
     const refusal = result.results.find((entry) => 'problem' in entry);
-    if (refusal) this.retainCommandRefusal(signal, 'bootstrap', refusal);
+    if (refusal) this.retainCommandRefusal(signal, 'bootstrap', refusal, request);
     const acknowledgedEffects = this.acknowledge(owner, request, result);
     this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
@@ -1124,7 +1129,7 @@ export class Importer {
     });
     const result = await this.send(request, signal, write);
     const refusal = result.results.find((entry) => 'problem' in entry);
-    if (refusal) this.retainCommandRefusal(signal, phase, refusal);
+    if (refusal) this.retainCommandRefusal(signal, phase, refusal, request);
     // Returned identities must be durable before RunStore can resolve a record.
     const acknowledgedEffects = this.atomic(() => {
       const count = this.acknowledge(owner, request, result);
@@ -1152,11 +1157,35 @@ export class Importer {
     });
   }
 
-  private retainCommandRefusal(signal: AbortSignal, phase: RunFailure['phase'], refusal: CommandRefusal): void {
-    const problem = reviewedCatalogueProblem(refusal.problem).code;
+  private retainCommandRefusal(
+    signal: AbortSignal,
+    phase: RunFailure['phase'],
+    refusal: CommandRefusal,
+    request: BatchWriteRequest,
+  ): void {
+    const {
+      code,
+      request_id,
+      command_index,
+      failure_stage,
+      phase: dominantPhase,
+    } = reviewedCatalogueProblem(refusal.problem);
+    const command = request.commands.find(({ key }) => key === refusal.key);
     this.retainRunFailure(
       signal,
-      { phase, reason: 'command-refused', status: refusal.status, ...(problem ? { problem } : {}) },
+      {
+        phase,
+        reason: 'command-refused',
+        status: refusal.status,
+        ...(code ? { problem: code } : {}),
+        batch: {
+          ...(command ? { op: command.op, fieldGroup: command.source.field_group } : {}),
+          ...(request_id === undefined ? {} : { request_id }),
+          ...(command_index === undefined ? {} : { command_index }),
+          ...(failure_stage === undefined ? {} : { failure_stage }),
+          ...(dominantPhase === undefined ? {} : { phase: dominantPhase }),
+        },
+      },
       refusal.key,
     );
   }
@@ -2485,7 +2514,7 @@ export class Importer {
       const acknowledgedEffects = this.acknowledge(owner, request, result);
       this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
       const refusal = result.results.find((entry) => 'problem' in entry);
-      if (refusal) return { outcome: 'failed', refusal };
+      if (refusal) return { outcome: 'failed', refusal, request };
     }
     const result = this.session.store.resolveDeferredCover(run, row.recordKey);
     if (result.resolved) this.acknowledged(row.recordKey);
@@ -2553,7 +2582,8 @@ export class Importer {
             issue.key,
             issue.failure,
           );
-        else if (issue.refusal) this.retainCommandRefusal(signal, 'media', issue.refusal);
+        else if (issue.refusal && issue.request)
+          this.retainCommandRefusal(signal, 'media', issue.refusal, issue.request);
         else this.retainRunFailure(signal, { phase: 'media', reason: 'cover-failed' }, issue.key, issue.error);
         return false;
       }

@@ -1,4 +1,9 @@
-import type { BatchWriteResult } from '@rezics/definitions/bulk';
+import {
+  BATCH_LIMIT,
+  BATCH_WRITE_FAILURE_STAGES,
+  type BatchWriteFailureStage,
+  type BatchWriteResult,
+} from '@rezics/definitions/bulk';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import type { ImportRequestDiagnostics } from './import-fetch.ts';
 import type { SeedRemainingRequest } from './seed-remaining-request.ts';
@@ -23,6 +28,8 @@ export type ReviewedCatalogueProblem = Readonly<{
   partition?: number;
   phase?: string;
   contention_retries?: number;
+  command_index?: number;
+  failure_stage?: BatchWriteFailureStage;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,6 +63,10 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
   const partition = publicPartition(value.partition);
   const phase = publicString(value.phase, TRANSACTION_PHASE, 32);
   const contention_retries = publicRetries(value.contention_retries);
+  const index = value.command_index;
+  const command_index =
+    typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < BATCH_LIMIT ? index : undefined;
+  const failure_stage = BATCH_WRITE_FAILURE_STAGES.find((stage) => stage === value.failure_stage);
   return {
     ...(status === undefined ? {} : { status }),
     ...(type === undefined ? {} : { type }),
@@ -66,6 +77,8 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
     ...(partition === undefined ? {} : { partition }),
     ...(phase === undefined ? {} : { phase }),
     ...(contention_retries === undefined ? {} : { contention_retries }),
+    ...(command_index === undefined ? {} : { command_index }),
+    ...(failure_stage === undefined ? {} : { failure_stage }),
   };
 }
 

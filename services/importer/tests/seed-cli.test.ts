@@ -6,6 +6,7 @@ import { Importer } from '../src/importer.ts';
 import { formatSeedError, SeedFinalization, seedImportRunFailure } from '../src/seed-cli.ts';
 import { formatSeedFailure, remainingRequestFromPreparedCommand } from '../src/seed-remaining-request.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 test('seed phase wrappers retain the transport classifier, actual failure phase and private cause', () => {
   const cause = new Error('private response body');
@@ -96,6 +97,69 @@ test('a native command refusal includes its status and key digest in the seed fa
     const line = formatSeedError(seedImportRunFailure('bangumi', run));
     expect(line).toContain(
       `run{phase=bootstrap reason=command-refused keyDigest=${createHash('sha256').update(key).digest('hex')} status=422 problem=invalid_statement}`,
+    );
+    expect(line).not.toContain(key);
+    expect(line).not.toContain('private');
+  } finally {
+    await importer.close();
+  }
+});
+
+test('a staged Books command refusal keeps only bounded diagnostics for the rejected command', async () => {
+  const subject = '00000000-0000-7000-8000-000000000001';
+  let key = '';
+  const importer = new Importer({
+    path: new Database(':memory:'),
+    transport: {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
+      async readFence() {
+        return { fenced: false, securityRevision: null };
+      },
+      async batchWrite(request) {
+        return {
+          results: request.commands.map((command) => {
+            if (command.op === 'create') return { key: command.key, status: 201, value: { id: subject, revision: 1 } };
+            key ||= command.key;
+            return {
+              key: command.key,
+              status: 500,
+              problem: {
+                type: 'https://rezics.com/problems/internal_error',
+                title: 'private title',
+                detail: 'private provider text',
+                status: 500,
+                retryable: false,
+                code: 'internal_error',
+                request_id: 'books-request',
+                command_index: 0,
+                failure_stage: 'source_fence',
+                phase: 'transaction_body',
+              },
+            };
+          }),
+        };
+      },
+    },
+  });
+  try {
+    const run = await importer.runRecords(
+      createSourceRegistration('bangumi'),
+      (async function* () {
+        yield {
+          source: 'bangumi',
+          key: '999',
+          revision: null,
+          payload: { id: 999, type: 1, name: 'Book', summary: 'private summary' },
+        };
+      })(),
+    );
+    const line = formatSeedError(seedImportRunFailure('bangumi', run));
+    expect(line).toContain(
+      `run{phase=staged reason=command-refused keyDigest=${createHash('sha256').update(key).digest('hex')} status=500 problem=internal_error}`,
+    );
+    expect(line).toContain('batch{op=propose fieldGroup=facts');
+    expect(line).toContain(
+      'correlation=books-request index=0 failureStage=source_fence dominantPhase=transaction_body}',
     );
     expect(line).not.toContain(key);
     expect(line).not.toContain('private');
