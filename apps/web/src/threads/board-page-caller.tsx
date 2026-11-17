@@ -854,10 +854,12 @@ function useCallerLifecycle(
 function BoardPageVisit({
   result,
   input,
+  refreshForSession,
   children,
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
+  refreshForSession: boolean;
   children: (
     page: CommunityBoardPage,
     reactionOrigin: BoardOpeningReactionOrigin,
@@ -889,13 +891,13 @@ function BoardPageVisit({
   const reloadFor = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    const needsCurrentVisit = !lifecycle.current && (lifecycle.reason === 'session' || !caller);
+    const needsCurrentVisit = refreshForSession || (!lifecycle.current && (lifecycle.reason === 'session' || !caller));
     if (!needsCurrentVisit || router.state.isLoading) return;
     const key = `${result.caller?.id ?? 'missing'}:${lifecycle.reason ?? 'missing'}`;
     if (reloadFor.current === key) return;
     reloadFor.current = key;
     void router.invalidate();
-  }, [caller, lifecycle.current, lifecycle.reason, result.caller?.id, router]);
+  }, [caller, lifecycle.current, lifecycle.reason, refreshForSession, result.caller?.id, router]);
 
   if (
     !lifecycle.current &&
@@ -914,10 +916,12 @@ function BoardPageVisit({
 export function BoardPageCallerHost({
   result,
   input,
+  refreshForSession = false,
   children,
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
+  refreshForSession?: boolean;
   children: (
     page: CommunityBoardPage,
     reactionOrigin: BoardOpeningReactionOrigin,
@@ -925,7 +929,7 @@ export function BoardPageCallerHost({
   ) => ReactNode;
 }) {
   const key = result.caller?.id ?? currentPageKey(input);
-  return createElement(BoardPageVisit, { key, result, input, children });
+  return createElement(BoardPageVisit, { key, result, input, refreshForSession, children });
 }
 
 export function useBoardPageErrorLifecycle(error: unknown, input: BoardPageCallerInput): BoardPageCallerLifecycle {

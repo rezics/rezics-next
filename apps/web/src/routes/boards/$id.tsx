@@ -1,6 +1,9 @@
 import { CommunityRouteNotFound, readCommunityRoute } from '../../community/protected-route';
 import { realmReadingReturn } from '../../community/realm-reading-return';
+import { cachedBrowserSession } from '../../session/browser-state';
 import { useSession } from '../../session/query';
+import type { ReadCredentialMode } from '../../kernel/credential';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -24,6 +27,12 @@ import {
 
 export { boardSearch } from '../../threads/board-navigation';
 
+function boardReadMode(client: QueryClient, routeMode: ReadCredentialMode): ReadCredentialMode {
+  if (typeof window === 'undefined') return routeMode;
+  const session = cachedBrowserSession(client);
+  return session.state === 'signed-in' && session.subject ? 'session' : routeMode;
+}
+
 export const Route = createFileRoute('/boards/$id')({
   staticData: { publicCache: true },
   validateSearch: boardSearch,
@@ -32,8 +41,9 @@ export const Route = createFileRoute('/boards/$id')({
     const parsed = boardSearch(search);
     return { cursor: parsed.cursor, sort: parsed.sort };
   },
-  loader: ({ params, deps, abortController, context }) =>
-    readCommunityRoute(context.queryClient, context.credentialMode, async (credentialMode) => {
+  loader: ({ params, deps, abortController, context }) => {
+    const mode = boardReadMode(context.queryClient, context.credentialMode);
+    return readCommunityRoute(context.queryClient, mode, async (credentialMode) => {
       const caller = createBoardPageCaller(
         context.queryClient,
         {
@@ -72,7 +82,8 @@ export const Route = createFileRoute('/boards/$id')({
         caller.captureError(error);
         throw error;
       }
-    }),
+    });
+  },
   head: ({ loaderData }) =>
     loaderData?.caller.credentialMode === 'anonymous'
       ? boardPageHead(loaderData)
@@ -96,6 +107,7 @@ function BoardPage() {
   return (
     <BoardPageCallerHost
       result={page}
+      refreshForSession={credentialMode === 'anonymous' && session.state === 'signed-in' && !!session.subject}
       input={{
         id,
         ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
@@ -152,6 +164,7 @@ function BoardPage() {
 
 function BoardPageError({ error }: { error: unknown }) {
   const router = useRouter();
+  const client = useQueryClient();
   const id = Route.useParams().id;
   const search = Route.useSearch();
   const sort = boardSortFromSearch(search.sort);
@@ -160,7 +173,7 @@ function BoardPageError({ error }: { error: unknown }) {
     ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
     ...(sort === undefined ? {} : { sort }),
     locale: getLocale(),
-    credentialMode: router.options.context.credentialMode,
+    credentialMode: boardReadMode(client, router.options.context.credentialMode),
   });
   const canRetry = lifecycle.caller && lifecycle.current;
   const restart = isBoardPageCursorError(error);
