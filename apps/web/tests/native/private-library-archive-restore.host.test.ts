@@ -514,8 +514,24 @@ async function restoreOwnerLibrary() {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('button', { name: 'Read the current Collection', exact: true }).click();
-  const restored = page.locator('[data-receiving-collection]');
-  await restored.waitFor({ state: 'visible', timeout: 30_000 });
+  const receiving = page.locator('[data-receiving-collection]');
+  const restored = receiving.and(page.locator('[aria-busy="false"]:not([data-receiving-collection=""])'));
+  try {
+    await restored.waitFor({ state: 'visible', timeout: 30_000 });
+  } catch (error) {
+    const notices = await receiving
+      .getByRole('status')
+      .allTextContents()
+      .catch(() => []);
+    const observation = { notices };
+    console.info('Native Library Archive Collection readback boundary', observation);
+    await writeArchiveProvenance({
+      outcome: 'incomplete',
+      phase: 'waiting-for-collection-readback',
+      observation,
+    }).catch(() => undefined);
+    throw error;
+  }
   const restoredId = await restored.getAttribute('data-receiving-collection');
   expect(restoredId).toBeTruthy();
   expect(restoredId).not.toBe(prepared.collectionId);
