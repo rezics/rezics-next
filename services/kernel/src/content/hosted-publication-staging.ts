@@ -1546,6 +1546,7 @@ export async function advanceHostedPublicationLanguageTargets(
   const prepared = preparation.languageTargets;
   if (!prepared || prepared.locator.catalogueId !== locator.catalogueId || prepared.locator.stageId !== locator.stageId)
     throw stagingConflict('Language target preparation is unavailable');
+  await requireCurrentPinnedSource(client, stage);
   return applyHostedPublicationLanguageTargets(client, prepared, (observations) =>
     insertTargetObservations(client, stage, observations),
   );
