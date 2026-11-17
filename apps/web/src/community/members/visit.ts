@@ -192,6 +192,8 @@ export class RealmMembersVisit {
     let read: MemberPageRead;
     try {
       read = await this.source.readPage({ ...address });
+    } catch {
+      read = { kind: 'failed' };
     } finally {
       if (connection === this.connection && operation === this.pageOperation) this.pageBusy = false;
     }
@@ -341,7 +343,12 @@ export class RealmMembersVisit {
       },
     };
     this.emit();
-    const read = await this.source.readSelected({ ...address });
+    let read: MemberSelectionRead;
+    try {
+      read = await this.source.readSelected({ ...address });
+    } catch {
+      read = { kind: 'failed' };
+    }
     if (
       !this.admitted() ||
       connection !== this.connection ||

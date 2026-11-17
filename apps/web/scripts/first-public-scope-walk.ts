@@ -258,6 +258,7 @@ type CommunityWalkContext = WalkContext<CommunityFixture> & {
     ownerContext(): Promise<BrowserContext>;
     submitOwnerSignIn(page: Page): Promise<void>;
     freshOutsider(): Promise<{ accountId: string; bearer: string }>;
+    observeRosterRead?(realmId: string): Promise<(number | null)[] | null>;
   };
 };
 
@@ -649,6 +650,7 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
       observed.roster = await page
         .evaluate(() => {
           const statuses = new Map([
+            ['Loading members…', 'loading'],
             ['You cannot view members of this Realm.', 'denied'],
             ['Member management is not ready. Try again.', 'preparing'],
             ['This visit is out of date. Open Members again to get current access.', 'retired'],
@@ -658,8 +660,19 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
             ['The selected account is unavailable.', 'selection unavailable'],
             ['Account unavailable', 'identity concealed'],
           ]);
+          const routeState = document.querySelector('[data-route-state]')?.getAttribute('data-route-state');
+          const label = Array.from(document.querySelectorAll<HTMLLabelElement>('main label')).find(
+            (node) => node.textContent?.trim() === 'Exact account ID',
+          );
           return {
-            documentPath: location.pathname,
+            hydrated: document.documentElement.hasAttribute('data-hydrated'),
+            accountMenu: !!document.getElementById('account-menu-button'),
+            rosterHeading: Array.from(document.querySelectorAll('main h1')).some(
+              (node) => node.textContent?.trim() === 'Members',
+            ),
+            routeState:
+              routeState && ['error', 'missing', 'closed', 'unavailable'].includes(routeState) ? routeState : null,
+            labeledInput: label?.control instanceof HTMLInputElement,
             invalidInput: !!document.querySelector('main input[aria-invalid="true"]'),
             status: Array.from(document.querySelectorAll('main [role="status"], main p'))
               .map((node) => statuses.get(node.textContent?.trim() ?? ''))
@@ -668,6 +681,8 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
           };
         })
         .catch(() => null);
+      if (ctx.community?.observeRosterRead)
+        observed.rosterNativeReads = await ctx.community.observeRosterRead(realmId).catch(() => null);
       throw error;
     }
 
