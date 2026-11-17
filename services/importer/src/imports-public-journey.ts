@@ -2,21 +2,24 @@
  *
  *   bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts [--scope operators|catalogue|all] [--reopen-seed]
  *
+ * Use --reviewed-bootstrap alone for the released vocabulary and its independent current read.
  * Operators import licensed fixtures through the ordinary CLI, then separately accept/adopt and independently
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
-import { reviewedCatalogueProblem } from './http.ts';
+import { formatReviewedCatalogueSeedError, reviewedCatalogueProblem } from './http.ts';
+import { installReviewedCatalogueComposition, releasedReviewedVocabulary } from './showcase-cross-media.ts';
 import { createImportTransport, importTransportCause, ImportTransportError } from './import-client.ts';
+import { waitForKernelReadiness } from './seed-readiness.ts';
 import {
   readSeedRemainingRequest,
   remainingRequestFromPreparedJournal,
@@ -127,7 +130,7 @@ export function parseWalkSelection(args: readonly string[]): WalkSelection {
   const reopenSeed = flags.length === 1 && flags[0] === '--reopen-seed';
   if ((flags.length > 0 && !reopenSeed) || (selectedScope === 'operators' && reopenSeed))
     throw new Error(
-      'Usage: imports-public-journey.ts [--scope operators|catalogue|all] [--reopen-seed (catalogue or all)]',
+      'Usage: imports-public-journey.ts --reviewed-bootstrap | [--scope operators|catalogue|all] [--reopen-seed (catalogue or all)]',
     );
   return { scope: selectedScope ?? 'all', reopenSeed };
 }
@@ -1601,11 +1604,47 @@ async function walkRow(
   return row;
 }
 
+function requireCatalogueWalk() {
+  if (process.env.REZICS_WALK_IMPORT_CATALOGUE !== '1' || !walkStackAdmitted(process.env, root))
+    throw new Error('Use the admitted dev-stack.ts walk --import-catalogue fixture');
+}
+
+async function runReviewedBootstrap() {
+  requireCatalogueWalk();
+  const persona = await readPersona();
+  await grantOwner(persona);
+  await waitForKernelReadiness({ origin: persona.kernel });
+  const transport = createImportTransport({
+    origin: persona.kernel,
+    tokenProvider: await createAccountTokenProvider({
+      accountKeyPath: persona.accountKeyPath,
+      account: persona.account,
+      client: persona.client,
+      authOrigin: persona.auth,
+      issuerOrigin: persona.issuer,
+      scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
+    }),
+  });
+  const directory = await mkdtemp(resolve(root, '.temp/reviewed-bootstrap-'));
+  try {
+    const vocabulary = releasedReviewedVocabulary();
+    const path = resolve(directory, 'state.sqlite');
+    const catalogue = installReviewedCatalogueComposition({ vocabulary, transport, path });
+    const { subjects, facts } = await catalogue.seed().catch((error: unknown) => {
+      throw new Error(formatReviewedCatalogueSeedError(error));
+    });
+    assert.equal(new Set(Object.values(subjects)).size, vocabulary.inventory.length);
+    assert.equal(facts.length, vocabulary.inventory.reduce((count, seed) => count + seed.facts.length, 0));
+    console.log(`Reviewed catalogue bound records=${Object.keys(subjects).length} selectedFacts=${facts.length}`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 export async function runImportsPublicJourney(args: readonly string[] = []): Promise<WalkInventory> {
   const selection = parseWalkSelection(args);
   const commandLine = [retainedCommand, ...args].join(' ');
-  if (process.env.REZICS_WALK_IMPORT_CATALOGUE !== '1' || !walkStackAdmitted(process.env, root))
-    throw new Error('Use the admitted dev-stack.ts walk --import-catalogue fixture');
+  requireCatalogueWalk();
 
   const startedAt = new Date().toISOString();
   const revision = (await Bun.$`git rev-parse HEAD`.cwd(root).text()).trim();
@@ -1873,11 +1912,16 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
 }
 
 if (import.meta.main) {
-  const inventory = await runImportsPublicJourney(Bun.argv.slice(2));
-  if (
-    inventory.rows.some(({ result }) => result === 'failing' || result === 'unreached') ||
-    inventory.prerequisites.some(({ cause }) => cause !== null) ||
-    inventory.browserStageFailure
-  )
-    process.exitCode = 1;
+  const args = Bun.argv.slice(2);
+  if (args.length === 1 && args[0] === '--reviewed-bootstrap') {
+    await runReviewedBootstrap();
+  } else {
+    const inventory = await runImportsPublicJourney(args);
+    if (
+      inventory.rows.some(({ result }) => result === 'failing' || result === 'unreached') ||
+      inventory.prerequisites.some(({ cause }) => cause !== null) ||
+      inventory.browserStageFailure
+    )
+      process.exitCode = 1;
+  }
 }

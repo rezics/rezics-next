@@ -1,4 +1,10 @@
-import { observeSeedPreparation, seedPreparationFailure, type EnterSeedPreparation } from './seed-preparation.ts';
+import {
+  observeSeedPreparation,
+  seedPreparationFailure,
+  type EnterSeedPreparation,
+  type ReviewedBindingDetail,
+  type ReviewedBindingStep,
+} from './seed-preparation.ts';
 import type { Database } from 'bun:sqlite';
 import type { BatchCommand, BatchStatement, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { bangumiPublicTagScheme, reviewedReferenceKey, sourceDigest } from '@rezics/conversion/support';
@@ -395,6 +401,7 @@ async function seedReviewedCatalogueWith(
         new TypeError('Reviewed catalogue input or current binding is invalid'),
         'reviewed-current-read',
         binding.state === 'withdrawn' ? 'binding-withdrawn' : 'binding-unavailable',
+        binding.detail,
       );
     enter('reviewed-finalize');
     let final = store.finalize(run, 100);
@@ -412,7 +419,18 @@ async function inspect(
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
   port: ReviewedCataloguePort,
   signal?: AbortSignal,
-): Promise<ReviewedBangumiBindingStatus> {
+): Promise<
+  | Extract<ReviewedBangumiBindingStatus, { state: 'bound' }>
+  | { state: 'unavailable' | 'withdrawn'; detail: ReviewedBindingDetail }
+> {
+  let record = '';
+  let property: string | undefined;
+  let step: ReviewedBindingStep = 'claim';
+  const stop = (
+    state: 'unavailable' | 'withdrawn',
+    at: ReviewedBindingStep,
+    status: ReviewedBindingDetail['status'] = 'mismatch',
+  ) => ({ state, detail: { record, ...(property && { property }), step: at, status } });
   try {
     const subjects: Record<string, string> = {};
     const items: Record<
@@ -420,9 +438,13 @@ async function inspect(
       Extract<Awaited<ReturnType<ReviewedCataloguePort['readReviewedSubject']>>, { subject: unknown }>['subject']
     > = {};
     for (const seed of vocabulary.inventory) {
+      record = seed.key;
+      step = 'claim';
       const claim = bindings.claim(reviewedCatalogueSeedOwner(seed));
-      if (claim?.state !== 'bound') return { state: 'withdrawn' };
+      if (claim?.state !== 'bound') return stop('withdrawn', step);
+      step = 'fence';
       await openFence(port, seed, signal);
+      step = 'subject';
       const read = await port.readReviewedSubject(claim.subject, signal);
       if (
         !('subject' in read) ||
@@ -430,13 +452,15 @@ async function inspect(
         read.subject.type !== seed.type ||
         read.subject.context !== reviewedCatalogueSlot('schema:url').context
       )
-        return { state: 'withdrawn' };
+        return stop('withdrawn', step);
       subjects[seed.key] = claim.subject;
       items[seed.key] = read.subject;
     }
-    if (subjects['source-harem'] === subjects['canonical-harem']) return { state: 'withdrawn' };
+    record = 'source-harem';
+    if (subjects['source-harem'] === subjects['canonical-harem']) return stop('withdrawn', 'distinct-concepts');
+    step = 'source-equivalence';
     const sourceEquivalences = items['source-harem']!.statements['schema:sameAs'] ?? [];
-    if (sourceEquivalences.some((statement) => isCurrentReviewedRank(statement.rank))) return { state: 'withdrawn' };
+    if (sourceEquivalences.some((statement) => isCurrentReviewedRank(statement.rank))) return stop('withdrawn', step);
     const vocabularyRows = new Map<
       string,
       {
@@ -452,11 +476,16 @@ async function inspect(
     >();
     for (const seed of vocabulary.inventory)
       for (const fact of seed.facts) {
+        record = seed.key;
+        property = fact.property;
+        step = 'statement';
         const expected = reviewedCatalogueStatement(fact, subjects);
         assertReviewedCatalogue(expected.value.type === 'value' && typeof expected.value.content === 'string');
+        step = 'candidate-page';
         const page = await readReviewedCandidateSelection(port, subjects[seed.key]!, fact.property, signal);
-        if (!page.complete) return { state: 'unavailable' };
-        if (page.adoption?.mode !== 'replace') return { state: 'withdrawn' };
+        if (!page.complete) return stop('unavailable', step, 'incomplete');
+        if (page.adoption?.mode !== 'replace') return stop('withdrawn', 'adoption');
+        step = 'candidate';
         const content = expected.value.content;
         const currentCandidates = page.candidates.filter(
           (candidate): candidate is CurrentReviewedCandidate => 'statement' in candidate,
@@ -471,24 +500,24 @@ async function inspect(
             c.statement.value.type === 'value' &&
             c.statement.value.content === content,
         );
-        if (
-          selected.length !== 1 ||
-          !sameStatementProvenance(selected[0]!.statement, expected) ||
-          page.selection.some((c) => c.candidate !== selected[0]!.id) ||
-          !items[seed.key]!.statements[fact.property]?.some(
-            (s) => s.id === selected[0]!.id && isCurrentReviewedRank(s.rank),
-          )
-        )
-          return { state: 'withdrawn' };
+        if (selected.length !== 1) return stop('withdrawn', step);
+        const candidate = selected[0]!;
+        if (!sameStatementProvenance(candidate.statement, expected)) return stop('withdrawn', 'provenance');
+        if (page.selection.some((c) => c.candidate !== candidate.id)) return stop('withdrawn', 'selection');
+        step = 'public-statement';
+        const statements = items[seed.key]!.statements[fact.property];
+        if (!statements?.some((s) => s.id === candidate.id && isCurrentReviewedRank(s.rank))) return stop('withdrawn', step);
+        step = 'acknowledgement';
         const local = bindings.candidates(reviewedCatalogueSeedOwner(seed), 'facts', { limit: 100 });
-        const owned = local.find((c) => c.candidate === selected[0]!.id && c.subject === subjects[seed.key]);
-        if (!owned) return { state: 'withdrawn' };
+        const owned = local.find((c) => c.candidate === candidate.id && c.subject === subjects[seed.key]);
+        if (!owned) return stop('withdrawn', step);
         let command: BatchCommand;
         try {
           command = (JSON.parse(owned.bytes) as BatchWriteRequest).commands[0]!;
         } catch {
-          return { state: 'withdrawn' };
+          return stop('withdrawn', 'proposal-bytes', 'invalid-data');
         }
+        step = 'proposal';
         if (
           command.op !== 'propose' ||
           command.key !== owned.key ||
@@ -496,14 +525,15 @@ async function inspect(
           !currentReviewedCatalogueSource(command.source, seed, vocabulary.revision) ||
           !sameStatementProvenance(command.statement, expected)
         )
-          return { state: 'withdrawn' };
-        let entry = vocabularyRows.get(seed.key);
+          return stop('withdrawn', step);
+        step = 'vocabulary';
+        const entry = vocabularyRows.get(seed.key);
         if (!entry) {
           const sourceUri = seed.metadata.url;
-          if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://')) return { state: 'withdrawn' };
+          if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://')) return stop('withdrawn', step);
           const nativeType: ReviewedBangumiBindingEvidence['vocabulary'][number]['nativeType'] | null =
             seed.type === 'skos:Concept' ? seed.type : seed.type === 'skos:ConceptScheme' ? seed.type : null;
-          if (!nativeType) return { state: 'withdrawn' };
+          if (!nativeType) return stop('withdrawn', step);
           const schemeKey =
             seed.type === 'skos:Concept'
               ? vocabulary.inventory.find(
@@ -530,9 +560,9 @@ async function inspect(
             facts: [],
           };
           vocabularyRows.set(seed.key, created);
-          created.facts.push({ candidateId: selected[0]!.id, command });
+          created.facts.push({ candidateId: candidate.id, command });
         } else {
-          entry.facts.push({ candidateId: selected[0]!.id, command });
+          entry.facts.push({ candidateId: candidate.id, command });
         }
       }
     return {
@@ -544,12 +574,26 @@ async function inspect(
     };
   } catch (error) {
     signal?.throwIfAborted();
-    if (error instanceof ReviewedBindingFencedError) return { state: 'withdrawn' };
-    if (error instanceof ImportTransportError)
-      return error.retryable || error.status === undefined || error.status >= 500
-        ? { state: 'unavailable' }
-        : { state: 'withdrawn' };
-    if (error instanceof TypeError) return { state: 'unavailable' };
+    if (error instanceof ReviewedBindingFencedError) return stop('withdrawn', step, 'fenced');
+    if (error instanceof ImportTransportError) {
+      const state = error.retryable || error.status === undefined || error.status >= 500 ? 'unavailable' : 'withdrawn';
+      const phase = (['deadline', 'network', 'token', 'http', 'response', 'integrity'] as const).find(
+        (value) => value === error.failurePhase,
+      );
+      const failure = stop(state, step, phase ?? 'transport');
+      const problem = (['semantic_not_ready', 'overloaded', 'deadline_exceeded', 'partition_unavailable'] as const).find(
+        (code) => error.code === code || error.type === `https://rezics.com/problems/${code}`,
+      );
+      return {
+        state,
+        detail: {
+          ...failure.detail,
+          ...(error.status !== undefined && { http: error.status }),
+          ...(problem && { problem }),
+        },
+      };
+    }
+    if (error instanceof TypeError) return stop('unavailable', step, 'invalid-data');
     throw error;
   }
 }
@@ -578,8 +622,9 @@ export function createReviewedCatalogueApplication(input: {
         seedReviewedCatalogueWith(request.vocabulary ?? vocabulary, request, enter),
       );
     },
-    inspect(bindings, port, signal) {
-      return inspect(vocabulary, bindings, port, signal);
+    async inspect(bindings, port, signal) {
+      const result = await inspect(vocabulary, bindings, port, signal);
+      return result.state === 'bound' ? result : { state: result.state };
     },
     readBinding(bindings, port, signal) {
       return readBinding(vocabulary, bindings, port, signal);
