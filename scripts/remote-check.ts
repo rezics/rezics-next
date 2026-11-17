@@ -5535,6 +5535,9 @@ export function runScript(
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
   const wrapperDirectory = `${directory}/.temp/check-host`;
+  // Prepared-input attestation reserves root command controls for execution.
+  const preparationPhases = `${wrapperDirectory}/preparation-phases.tsv`;
+  const commandPhases = `${directory}/command-phases.tsv`;
   const statusFile = `${directory}/exit-status`;
   const gitManifestPath =
     gitManifestRelativePath === undefined ? undefined : resolve(directory, gitManifestRelativePath);
@@ -5573,7 +5576,10 @@ export function runScript(
         throw new Error('remote-check: preparation command is outside the prepared workspace or empty');
       return `if [ "$code" -eq 0 ]; then
         cd ${quote(absolute)} || code=$?
-        if [ "$code" -eq 0 ]; then ${prepareCommand.map(quote).join(' ')}; code=$?; fi
+        if [ "$code" -eq 0 ]; then
+          REZICS_CHECK_PHASES=${quote(preparationPhases)} ${prepareCommand.map(quote).join(' ')}
+          code=$?
+        fi
       fi`;
     })
     .join('\n');
@@ -5600,6 +5606,14 @@ ${runMemoryLimitShell(directory, memoryPerRunGiB)}
 ${artifactBudgetBytes === undefined ? '' : `export REMOTE_CHECK_ARTIFACT_BUDGET_BYTES=${quote(String(artifactBudgetBytes))}\n`}
 preparation_phase() {
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
+}
+report_phase_timings() {
+  [ -f "$2" ] && [ -r "$2" ] || return 0
+  awk -F '\t' -v stage="$1" 'NF != 3 || $1 == "" || ($2 != "start" && $2 != "end") || $3 !~ /^[0-9]+$/ { printf "remote-check: malformed %s phase line %d\\n", stage, NR > "/dev/stderr"; next }
+    $2 == "start" { if ($1 in started) printf "remote-check: malformed %s phase duplicate start %s\\n", stage, $1 > "/dev/stderr"; else started[$1]=$3; next }
+    !($1 in started) { printf "remote-check: malformed %s phase unmatched end %s\\n", stage, $1 > "/dev/stderr"; next }
+    { printf "remote-check: %s phase %s %.9f s\\n", stage, $1, ($3-started[$1])/1000000000; delete started[$1] }
+    END { for (phase in started) printf "remote-check: malformed %s phase unmatched start %s\\n", stage, phase > "/dev/stderr" }' "$2"
 }
 preparation_phase base-refresh
 ${refreshBaseScript(id, directory, gitArtifactRelativePath)}
@@ -5675,6 +5689,7 @@ host=$REMOTE_CHECK_HOST
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} generation
       ${preparationScript}
+      report_phase_timings preparation ${quote(preparationPhases)}
     fi
     ${preparedInputsEvidence}
     if [ "$code" -eq 0 ]; then
@@ -5731,7 +5746,7 @@ host=$REMOTE_CHECK_HOST
         esac
         ${fixedLifecycleExecution(command) ? `export REZICS_LIFECYCLE_REMOTE_RUN=${quote(id)}` : ''}
         reclaim_run_file_cache
-        "$@" &
+        REZICS_CHECK_PHASES=${quote(commandPhases)} "$@" &
         command_pid=$!
         (
           while kill -0 "$command_pid" 2>/dev/null; do
@@ -5757,16 +5772,10 @@ host=$REMOTE_CHECK_HOST
         command_finished=$(date +%s%N)
         awk -v elapsed="$((command_finished - command_started))" -v host="$host" 'BEGIN { printf "remote-check: command %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
         ${installedPackageCacheCheck(directory, hostName)}
+        report_phase_timings command ${quote(commandPhases)}
       fi
     fi
     run_finished=$(date +%s%N)
-    if [ -r "$REZICS_CHECK_PHASES" ]; then
-      awk -F '\t' 'NF != 3 || $1 == "" || ($2 != "start" && $2 != "end") || $3 !~ /^[0-9]+$/ { printf "remote-check: malformed command phase line %d\\n", NR > "/dev/stderr"; next }
-        $2 == "start" { if ($1 in started) printf "remote-check: malformed command phase duplicate start %s\\n", $1 > "/dev/stderr"; else started[$1]=$3; next }
-        !($1 in started) { printf "remote-check: malformed command phase unmatched end %s\\n", $1 > "/dev/stderr"; next }
-        { printf "remote-check: command phase %s %.9f s\\n", $1, ($3-started[$1])/1000000000; delete started[$1] }
-        END { for (phase in started) printf "remote-check: malformed command phase unmatched start %s\\n", phase > "/dev/stderr" }' "$REZICS_CHECK_PHASES"
-    fi
     slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
     case "$slice_cgroup" in /*)
       usage=$(awk '$1 == "usage_usec" { print $2 }' "/sys/fs/cgroup$slice_cgroup/cpu.stat" 2>/dev/null)
@@ -5783,7 +5792,7 @@ host=$REMOTE_CHECK_HOST
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 ${CROSS_MEDIA_DUMP_CACHE_ENV}=${quote(CHECK_HOST_DUMP_CACHE)} REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
-export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
+unset REZICS_CHECK_PHASES
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
 touch ${quote(`${directory}/.alive`)}
