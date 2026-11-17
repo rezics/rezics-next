@@ -73,6 +73,7 @@ import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { validateObservation } from './indexer.ts';
 import { validateRefreshResponse } from './write-actions.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 
 export type GenerationPublicationJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
 export type SearchGenerationPublication = Readonly<{
@@ -124,6 +125,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
   clock: KernelClock;
   meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
+  creditSearch?: CreditSearchSource;
   registry?: DiscoveryRegistry;
 }>;
 
@@ -519,6 +521,7 @@ export function createSearchGenerationPublication(
         meaning,
         context,
         physicalTarget: job.physical_target,
+        ...(config.creditSearch === undefined ? {} : { creditSearch: config.creditSearch }),
         ...(registry ? { registry } : {}),
       },
       {

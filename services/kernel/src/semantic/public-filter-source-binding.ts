@@ -525,6 +525,7 @@ export type NativePublicFilterPublicationCompletion =
       publication: NativePublicFilterPublication;
       reason: PublicFilterBindingFailure['reason'];
       advanced?: boolean;
+      ackAttempted?: true;
       cost: PublicFilterCost;
     }>
   | Readonly<{
@@ -2430,7 +2431,8 @@ export function createNativePublicFilterSourceBinding(
       deadline = context.deadline;
     const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
     if (joined.status !== 'joined') return joined;
-    return run({ deadline }, async (cost, db) => {
+    let ackAttempted = false;
+    const result = await run({ deadline }, async (cost, db) => {
       addCost(cost, joined.cost);
       const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
       if (
@@ -2521,11 +2523,15 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('owner_unavailable');
       };
-      await verify();
+      // A fully acknowledged publication has an immutable terminal seal and
+      // no open Source window. Verify its terminal page once after Search's
+      // independent settlement, where we still recheck live Source custody.
+      if (!publicationCost || seal.after !== 4096) await verify();
       const authority = async (range: readonly PublicFilterCreationWindow[]) => {
         if (!range.length) return [];
-        // Reserve each of the six native relation points once, independently
-        // of whether the join succeeds or returns no current authority.
+        // Drive owner reads from the retained windows. The bounded lateral lookup
+        // keeps the partition authority keyed to each enrolled home.
+        // Reserve each of the six native relation points even when a check fails.
         const { rows } = await db.query<
           PublicFilterRepairHome & {
             registration: string;
@@ -2537,6 +2543,13 @@ export function createNativePublicFilterSourceBinding(
           }
         >(
           `/* semantic.native-keyed:${6 * range.length}:${9 * range.length} */
+             WITH enrolled AS MATERIALIZED (
+               SELECT e.*,x.epoch AS window_epoch,x.through
+               FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
+               JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
+               WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
+                 AND e.creation_consumer=$3 AND e.read_definition=$4
+             )
              SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
                e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
                e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
@@ -2545,16 +2558,17 @@ export function createNativePublicFilterSourceBinding(
                e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
                c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
                b.state,b.coverage_sealed,b.coverage_after
-             FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
-             JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
-             JOIN core.partition p ON p.partition_no=e.partition_no
+             FROM enrolled e
+             JOIN LATERAL (
+               SELECT epoch,write_state,position FROM core.partition
+               WHERE partition_no=e.partition_no OFFSET 0
+             ) p ON TRUE
              JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
              JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
              JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
-             WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
-               AND e.creation_consumer=$3 AND p.position>=x.through
-               AND e.read_definition=$4 AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=x.epoch
+             WHERE p.position>=e.through
+               AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=e.window_epoch
                AND h.owner_epoch=p.epoch AND h.position>=e.source_position
                AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
                AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
@@ -2645,6 +2659,7 @@ export function createNativePublicFilterSourceBinding(
           physicalTarget: settled.queried.consumer.physicalTarget,
           incarnation: settled.queried.consumer.incarnation,
         };
+        ackAttempted = publicationCost !== undefined;
         await acknowledgePublicFilterRepairBaseline(
           db,
           baseline,
@@ -2664,7 +2679,10 @@ export function createNativePublicFilterSourceBinding(
         cost.frontierWrites++;
         if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home, after.length)))
           throw new BindingError('owner_unavailable');
-        if (seal.home + after.length < 4096) return { ...fail('owner_unavailable', cost), advanced: true as const };
+        // Publication's next turn funds the original population-start and fence
+        // proofs. The last ACK page can spend the same allowance as any other page.
+        if (publicationCost || seal.home + after.length < 4096)
+          return { ...fail('owner_unavailable', cost), advanced: true as const };
       }
       return {
         ...joined,
@@ -2673,6 +2691,10 @@ export function createNativePublicFilterSourceBinding(
         cost,
       };
     });
+    // An uncertain receiver commit or frontier reply resumes settlement of the same terminal.
+    return ackAttempted && result.status !== 'joined' && !('advanced' in result)
+      ? { ...result, ackAttempted: true as const }
+      : result;
   }
 
   function boundSubjectPublication(
@@ -3036,6 +3058,16 @@ export function createNativePublicFilterSourceBinding(
           !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
+        const closedHome =
+          record.input.phase === 'bridge' &&
+          record.input.bridge &&
+          record.input.bridge.position > record.input.bridge.through &&
+          record.next.phase === 'window' &&
+          record.next.partition === record.input.partition + 1
+            ? record.input.partition
+            : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
+              ? record.windowBatch.from
+              : undefined;
         await retainPublicFilterRepairVerification(
           db,
           chain,
@@ -3046,15 +3078,11 @@ export function createNativePublicFilterSourceBinding(
             complete: row.complete,
             inputLimit: row.input_limit,
             digests: row.repair_locator_digests!,
-            ...(record.input.phase === 'bridge' &&
-            record.input.bridge &&
-            record.input.bridge.position > record.input.bridge.through &&
-            record.next.phase === 'window' &&
-            record.next.partition === record.input.partition + 1
-              ? { closedHome: record.input.partition }
-              : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
-                ? { closedHome: record.windowBatch.from }
-                : {}),
+            closedHome,
+            alreadyVerified:
+              subjectPublication &&
+              row.verified_root !== null &&
+              (closedHome === undefined || row.verified_home === closedHome),
           },
           { deadline },
           (controls) => {
@@ -3581,6 +3609,7 @@ export function createNativePublicFilterSourceBinding(
           publication,
           reason: settled.reason,
           ...('advanced' in settled && settled.advanced === true ? { advanced: true as const } : {}),
+          ...('ackAttempted' in settled ? { ackAttempted: true as const } : {}),
           cost,
         };
       // Clean current population alone cannot replace the independently verified original
