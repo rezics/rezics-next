@@ -12,6 +12,7 @@ type StartOptions = {
   env: NodeJS.ProcessEnv;
   progress?: boolean;
   outputFile?: string;
+  privateReply?: (message: unknown) => void;
 };
 
 export type StackFixtureChild = {
@@ -73,15 +74,16 @@ export class StackFixtureLifetime {
     const started = performance.now();
     // Keep the boot/start lower bound if a very short-lived leader exits before procfs admission.
     const parent = processIdentity()!;
-    const log = options.outputFile ? openSync(options.outputFile, 'w') : undefined;
+    const log = options.outputFile && !options.privateReply ? openSync(options.outputFile, 'w') : undefined;
     const child = (() => {
       try {
         return Bun.spawn(args, {
           cwd: options.cwd,
           env: options.env,
           stdin: 'ignore',
-          stdout: 'pipe',
-          stderr: options.progress && log === undefined ? 'inherit' : 'pipe',
+          ...(options.privateReply
+            ? { ipc: options.privateReply, serialization: 'json' as const, stdout: 'ignore', stderr: 'ignore' }
+            : { stdout: 'pipe', stderr: options.progress && log === undefined ? 'inherit' : 'pipe' }),
           detached: true,
         });
       } catch (error) {
@@ -101,8 +103,10 @@ export class StackFixtureLifetime {
       return '';
     };
     const output = Promise.all([
-      read(child.stdout as ReadableStream<Uint8Array>),
-      options.progress && log === undefined ? '' : read(child.stderr as ReadableStream<Uint8Array>, options.progress),
+      options.privateReply ? '' : read(child.stdout as ReadableStream<Uint8Array>),
+      options.privateReply || (options.progress && log === undefined)
+        ? ''
+        : read(child.stderr as ReadableStream<Uint8Array>, options.progress),
     ])
       .then(([stdout, stderr]) => ({ stdout, stderr }))
       .finally(() => {

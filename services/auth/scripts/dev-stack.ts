@@ -45,6 +45,7 @@ import {
   walkStackLimit,
   walkStackLogPath,
   SEEDED_WEB_READY_PATH,
+  WALK_READY_DEADLINE_MS,
   walkStackNames,
   walkStackPorts,
   WALK_DOCKER_REMOVE_MS,
@@ -63,6 +64,7 @@ import {
   prepareDevelopmentNative,
   withDevelopmentDatabase,
 } from './dev-stack-native.ts';
+import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -1268,19 +1270,37 @@ export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   return child;
 }
 
-/** Trusted launch inputs captured before runtime DDL changes the native analysis schema. */
-export function developmentFrontendProcess(
+type FrontendInputs = {
+  environment: NodeJS.ProcessEnv;
+  kernelEnvironment: Readonly<Record<string, string | undefined>>;
+  website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+  keys: DevelopmentKeys;
+};
+
+function developmentFrontendBindings(
+  action: 'pages' | 'web',
+  { environment, website, keys, kernelEnvironment }: FrontendInputs,
+) {
+  return {
+    AUTH_ORIGIN: origins.native,
+    ...developmentWebsiteBindings(keys, website, {
+      AUTH_MANAGEMENT_PAGE_ROUTES: environment.AUTH_MANAGEMENT_PAGE_ROUTES,
+    }),
+    ...developmentMediaBindings(kernelEnvironment, keys),
+    ...(action === 'pages' ? developmentAuthPageBindings(website) : {}),
+    PUBLIC_ORIGIN: origins.web,
+    TURNSTILE_SITE_KEY: 'local',
+    TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
+  };
+}
+
+function frontendProcess(
   action: 'pages' | 'web',
   args: readonly string[],
-  inputs: {
-    environment: NodeJS.ProcessEnv;
-    kernelEnvironment: Readonly<Record<string, string | undefined>>;
-    website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
-    keys: DevelopmentKeys;
-  },
+  environment: NodeJS.ProcessEnv,
+  bindings: NodeJS.ProcessEnv,
 ): { command: string[]; environment: NodeJS.ProcessEnv } {
   const pages = action === 'pages';
-  const { environment, website, keys } = inputs;
   return {
     command: [
       'bun',
@@ -1297,29 +1317,94 @@ export function developmentFrontendProcess(
     ],
     environment: {
       ...(pages ? environment : webLaunchEnvironment(environment)),
-      AUTH_ORIGIN: origins.native,
-      ...developmentWebsiteBindings(keys, website, {
-        AUTH_MANAGEMENT_PAGE_ROUTES: environment.AUTH_MANAGEMENT_PAGE_ROUTES,
-      }),
-      ...developmentMediaBindings(inputs.kernelEnvironment, keys),
-      ...(pages ? developmentAuthPageBindings(website) : {}),
-      PUBLIC_ORIGIN: origins.web,
-      TURNSTILE_SITE_KEY: 'local',
-      TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
+      ...bindings,
     },
   };
 }
 
-async function launch(action: 'pages' | 'web', args: string[]) {
-  const memory = action === 'web' && process.env[webStartupMemoryOptIn] === '1' && walkStackAdmitted(process.env, root);
-  if (memory) logWebStartupMemory('declarations-before', 'webPreparer');
+/** Shared projection for the startup supervisor and the disposable post-seed preparer. */
+export function developmentFrontendProcess(action: 'pages' | 'web', args: readonly string[], inputs: FrontendInputs) {
+  return frontendProcess(action, args, inputs.environment, developmentFrontendBindings(action, inputs));
+}
+
+async function currentFrontendInputs(): Promise<FrontendInputs> {
   const kernel = await kernelEnvironment();
-  const launch = developmentFrontendProcess(action, args, {
+  return {
     environment: process.env,
     kernelEnvironment: kernel,
     website: await developmentWebsiteConfiguration(kernel),
     keys: await developmentKeys(),
-  });
+  };
+}
+
+const maximumWebBindingReplyBytes = 64 * 1024;
+
+async function sendAdmittedWebBindings(): Promise<void> {
+  if (!process.send || !process.connected || !firstPublicWebWalk() || !walkStackAdmitted(process.env, root))
+    throw new Error('Private Web binding preparer requires an admitted first-public Web walk');
+  const parentGone = () => process.kill(process.pid, 'SIGTERM');
+  process.once('disconnect', parentGone);
+  try {
+    const reply = JSON.stringify(developmentFrontendBindings('web', await currentFrontendInputs()));
+    if (Buffer.byteLength(reply) > maximumWebBindingReplyBytes)
+      throw new Error('Private Web binding reply exceeded its bound');
+    await new Promise<void>((resolve, reject) => {
+      process.send!(reply, (error) => (error ? reject(new Error('Private Web binding reply failed')) : resolve()));
+    });
+  } finally {
+    process.off('disconnect', parentGone);
+  }
+  process.disconnect?.();
+}
+
+async function prepareAdmittedWebBindings(): Promise<NodeJS.ProcessEnv> {
+  const lifetime = new StackFixtureLifetime(WALK_READY_DEADLINE_MS);
+  let reply: string | undefined;
+  let invalid = false;
+  try {
+    await lifetime.command('web-bindings', [process.execPath, import.meta.path, 'prepare-admitted-web'], {
+      cwd: root,
+      env: process.env,
+      privateReply(message) {
+        if (
+          reply !== undefined ||
+          typeof message !== 'string' ||
+          Buffer.byteLength(message) > maximumWebBindingReplyBytes
+        )
+          invalid = true;
+        else reply = message;
+      },
+    });
+    if (invalid || reply === undefined)
+      throw new Error('Private Web binding preparer did not return one bounded reply');
+    const bindings: unknown = JSON.parse(reply);
+    if (
+      !bindings ||
+      typeof bindings !== 'object' ||
+      Array.isArray(bindings) ||
+      !('WEBSITE_CLIENT_KEY' in bindings) ||
+      !('WEBSITE_SCOPES' in bindings) ||
+      Object.entries(bindings).some(([key, value]) => !/^[A-Z_]+$/.test(key) || typeof value !== 'string')
+    )
+      throw new Error('Invalid private Web binding reply');
+    return bindings as NodeJS.ProcessEnv;
+  } catch {
+    throw new Error('Admitted Web binding preparation failed');
+  } finally {
+    await lifetime.close();
+  }
+}
+
+async function launch(action: 'pages' | 'web', args: string[]) {
+  const isolated = action === 'web' && firstPublicWebWalk();
+  const observe = action === 'web' && process.env[webStartupMemoryOptIn] === '1';
+  const admitted = (isolated || observe) && walkStackAdmitted(process.env, root);
+  const memory = observe && admitted;
+  if (memory) logWebStartupMemory('declarations-before', 'webPreparer');
+  const launch =
+    isolated && admitted
+      ? frontendProcess('web', args, process.env, await prepareAdmittedWebBindings())
+      : developmentFrontendProcess(action, args, await currentFrontendInputs());
   delete launch.environment[webStartupMemoryAdmitted];
   if (memory) {
     logWebStartupMemory('declarations-after', 'webPreparer');
@@ -1917,6 +2002,12 @@ if (import.meta.main) {
         printPersona(composition.keys, person.accountId);
       } finally {
         await composition.stop();
+      }
+    } else if (action === 'prepare-admitted-web') {
+      try {
+        await sendAdmittedWebBindings();
+      } catch {
+        process.exitCode = 1;
       }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
     else if (action === 'start') await start();

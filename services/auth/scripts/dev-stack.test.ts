@@ -30,6 +30,29 @@ test('Worker readiness survives split writes and a coalesced trailing log chunk'
   expect(receive('')).toBe(true);
 });
 
+test('private Web binding child replies are available after exit and never captured as process logs', async () => {
+  const lifetime = new StackFixtureLifetime(5_000);
+  const messages: unknown[] = [];
+  const options = { cwd: root, env: process.env, privateReply: (message: unknown) => messages.push(message) };
+  const fixture = `
+    console.log('stdout was discarded');
+    console.error('stderr was discarded');
+    if (!process.connected || !process.send) throw new Error('missing private IPC');
+    await new Promise((done, fail) => process.send('fixture binding', (err) => err ? fail(err) : done()));
+    process.disconnect?.();
+  `;
+  try {
+    expect(await lifetime.command('private-test', [process.execPath, '-e', fixture], options)).toBe('');
+    expect(messages).toEqual(['fixture binding']);
+    await expect(
+      lifetime.command('private-refusal', [process.execPath, '-e', 'process.exit(7)'], options),
+    ).rejects.toThrow('Local stack private-refusal exited (7)');
+    expect(messages).toEqual(['fixture binding']);
+  } finally {
+    await lifetime.close();
+  }
+});
+
 test('the live fixture journal retains stdout and stderr phase markers before process exit', async () => {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(root, '.temp/stack-journal-'));
