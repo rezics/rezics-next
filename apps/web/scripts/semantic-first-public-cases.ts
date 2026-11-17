@@ -20,7 +20,6 @@ import {
   readActiveDefinitions,
   readSubject,
   readZonePage,
-  requireId,
   requireStatus,
   restoreCandidate,
   restoreZone,
@@ -28,6 +27,8 @@ import {
   saveZoneConfiguration,
   searchType,
   subjectHref,
+  subjectId,
+  subjectRevision,
   takedownZone,
   type Json,
 } from './semantic-first-public-native.ts';
@@ -209,16 +210,37 @@ export function semanticFirstPublicCases(session: SemanticFirstPublicSession, to
       run: () =>
         journey(session, 'catalogue-browsing', async () => {
           if (!session.editor) throw new Error(session.editorCause ?? 'catalogue fixture author is unavailable');
-          const fixture = await createSubject(call, session.editor, 'schema:Book', `Walk catalogue ${token}`);
-          const searched = await searchType(call, 'schema:Book', 8);
-          if (searched.status !== 200)
-            throw new Error(`catalogue search HTTP ${searched.status}: ${JSON.stringify(searched.body).slice(0, 400)}`);
-          const subjects = (searched.body.subjects as { id?: string; labels?: Record<string, string> }[]) ?? [];
+          const type = 'schema:Book';
+          const label = `Walk catalogue ${token}`;
+          const fixture = await createSubject(call, session.editor, type, label);
+          const searched = await searchType(call, type, 8, { expectedId: fixture.id, signal: session.signal });
+          const page = requireStatus(searched, 200, `catalogue Search for ${fixture.id}`);
+          const subjects = page.subjects as { id: string; type: string; labels?: Record<string, string> }[];
           const selected = subjects.find(({ id }) => id === fixture.id);
-          const id = requireId(selected?.id, 'current catalogue fixture Book');
-          const publicRead = await readSubject(call, id);
-          requireStatus(publicRead, 200, 'catalogue Book');
-          const label = (publicRead.body.subject as { labels?: Record<string, string> }).labels?.en ?? 'book';
+          const freshness = (page.freshness as Json | undefined)?.state;
+
+          session.signal?.throwIfAborted();
+          const publicRead = await call('GET', `/v1/subjects/${fixture.id}`, { redirect: 'manual' });
+          session.signal?.throwIfAborted();
+          const current = requireStatus(publicRead, 200, `anonymous catalogue Book ${fixture.id}`);
+          const subject = current.subject as { type?: string; labels?: Record<string, string> };
+          const revision = subjectRevision(current);
+          if (
+            subjectId(current) !== fixture.id ||
+            revision !== fixture.revision ||
+            subject.type !== type ||
+            subject.labels?.en !== label
+          )
+            throw new Error(`Anonymous catalogue Book ${fixture.id} did not resolve to the created revision and terms`);
+          if (!selected || freshness !== 'current')
+            throw new Error(
+              `Catalogue Search did not return Book ${fixture.id} on a current page before its deadline ` +
+                `(freshness ${String(freshness)}, ${subjects.length} hits, continuation ${typeof page.next === 'string'}). ` +
+                `Anonymous Subject read returned revision ${revision}.`,
+            );
+          if (selected.type !== type || selected.labels?.en !== label)
+            throw new Error(`Catalogue Search returned incorrect type or label for Book ${fixture.id}`);
+          const id = selected.id;
           const profile = await visit(session, `${stack.web}/en/catalogue/literary`, { width: 1280 });
           const reader = await visit(session, `${stack.web}${subjectHref(id, label)}`, { width: 390, theme: 'dark' });
           return { native: { id, count: subjects.length }, browser: { profile, reader } };
