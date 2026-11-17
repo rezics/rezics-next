@@ -61,6 +61,7 @@ import {
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { walkStackLogPath, withWalkResources } from '../../../scripts/walk-stack.ts';
+import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
@@ -68,6 +69,7 @@ const editorEmail = 'developer@rezics.test';
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
+type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
 
 type Result = {
   id: FirstPublicJourneyId;
@@ -78,6 +80,7 @@ type Result = {
   native?: unknown;
   commands?: NativeObservation[];
   browser?: unknown;
+  mountedSubject?: MountedSubjectDiagnostic;
   failure?: { transition: string; expected: string; actual: string; owner: string };
 };
 
@@ -173,15 +176,27 @@ async function openPage(
   href: string,
   viewport: { width: number; height: number },
   theme: 'light' | 'dark',
+  onMountedSubject?: (diagnostic: MountedSubjectDiagnostic) => void,
 ): Promise<{ page: Page; status: number; url: string }> {
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
   await page.setViewportSize(viewport);
   await page.emulateMedia({ colorScheme: theme });
-  const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
-  await hydrated(page);
-  await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
-  return { page, status: response?.status() ?? 0, url: page.url() };
+  if (onMountedSubject) await page.setExtraHTTPHeaders({ [mountedSubjectReadHeader]: '1' });
+  try {
+    const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
+    const status = response?.status() ?? 0;
+    if (onMountedSubject) {
+      const header = await response?.headerValue(mountedSubjectReadHeader);
+      onMountedSubject({ status, native: mountedSubjectReads(header ?? null) });
+    }
+    await hydrated(page);
+    await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
+    return { page, status, url: page.url() };
+  } catch (error) {
+    await page.close();
+    throw error;
+  }
 }
 
 function ownerOf(error: string): string {
@@ -225,17 +240,34 @@ type Session = {
   member: BrowserContext;
   revision: string;
   frontendCause?: string;
+  mountedSubject?: MountedSubjectDiagnostic;
   refreshEditor?: () => Promise<void>;
 };
 
 async function visit(
   session: Session,
   href: string,
-  options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member'; expectedStatus?: number } = {},
+  options: {
+    width?: number;
+    theme?: 'light' | 'dark';
+    persona?: 'anonymous' | 'member';
+    expectedStatus?: number;
+    mountedSubject?: boolean;
+  } = {},
 ) {
   if (session.frontendCause) throw new Error(session.frontendCause);
   const context = options.persona === 'member' ? session.member : session.anonymous;
-  const opened = await openPage(context, href, { width: options.width ?? 1280, height: 900 }, options.theme ?? 'light');
+  const opened = await openPage(
+    context,
+    href,
+    { width: options.width ?? 1280, height: 900 },
+    options.theme ?? 'light',
+    options.mountedSubject ? (diagnostic) => (session.mountedSubject = diagnostic) : undefined,
+  );
+  if (options.mountedSubject && opened.status !== (options.expectedStatus ?? 200)) {
+    await opened.page.close();
+    throw new Error(`${href} returned HTTP ${opened.status}`);
+  }
   const title = await opened.page.title();
   const heading = await opened.page
     .locator('h1, h2')
@@ -262,6 +294,8 @@ async function journey(
   const meta = FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!;
   const started = Date.now();
   const traceOffset = session.trace.length;
+  const mountedSubjectEvidence = () =>
+    id === 'generic-creation' && session.mountedSubject ? { mountedSubject: session.mountedSubject } : {};
   try {
     await session.refreshEditor?.();
     const observed = await run();
@@ -274,6 +308,7 @@ async function journey(
       native: observed.native,
       commands: session.trace.slice(traceOffset),
       browser: observed.browser,
+      ...mountedSubjectEvidence(),
     };
   } catch (error) {
     const actual = error instanceof Error ? error.message : String(error);
@@ -284,6 +319,7 @@ async function journey(
       ms: Date.now() - started,
       persona: 'editor+anonymous',
       commands: session.trace.slice(traceOffset),
+      ...mountedSubjectEvidence(),
       failure: fail(
         session.trace.at(-1)?.status && session.trace.at(-1)!.status! >= 400
           ? `${session.trace.at(-1)!.method} ${session.trace.at(-1)!.url}`
@@ -325,14 +361,8 @@ async function releasedDefinitions(session: Session): Promise<{ native: unknown;
   return { native: { digest, typeStatus: types.status, author: true }, browser };
 }
 
-async function createAndRead(
-  session: Session,
-  type: string,
-  label: string,
-  pagePath: string,
-  statements?: Record<string, unknown[]>,
-) {
-  const created = await createSubject(session.call, session.editor, type, label, statements);
+async function createAndRead(session: Session, type: string, label: string, pagePath: string, mountedSubject = false) {
+  const created = await createSubject(session.call, session.editor, type, label);
   const publicRead = await readSubject(session.call, created.id);
   requireStatus(publicRead, 200, `anonymous ${type}`);
   if ((publicRead.body.subject as { type: string }).type !== type) throw new Error(`${type} public type mismatch`);
@@ -341,7 +371,10 @@ async function createAndRead(
     theme: type.includes('VideoGame') ? 'dark' : 'light',
     persona: 'member',
   });
-  const reader = await visit(session, `${session.stack.web}${subjectHref(created.id, label)}`, { width: 1440 });
+  const reader = await visit(session, `${session.stack.web}${subjectHref(created.id, label)}`, {
+    width: 1440,
+    mountedSubject,
+  });
   return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
@@ -666,7 +699,7 @@ async function main(nativeBoundaries: boolean) {
       } else {
         results.push(
           await journey(session, 'generic-creation', () =>
-            createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new'),
+            createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new', true),
           ),
         );
         results.push(
