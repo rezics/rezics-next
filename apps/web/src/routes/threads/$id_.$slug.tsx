@@ -24,6 +24,7 @@ import { ThreadPostReadingBody } from '../../threads/post-reading-body';
 import type { DocumentMentions } from '../../document-body';
 import type { ThreadDocumentMedia } from '../../threads/document-media-read';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { cachedBrowserSession } from '../../session/browser-state';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter, useRouterState } from '@tanstack/react-router';
 import {
@@ -87,8 +88,14 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   staticData: { publicCache: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => threadSearch(search),
-  loader: ({ params, deps, context }) =>
-    readCommunityRoute(context.queryClient, context.credentialMode, async (mode, reader) => {
+  loader: ({ params, deps, context }) => {
+    const browserSession =
+      context.credentialMode === 'anonymous' && typeof window !== 'undefined'
+        ? cachedBrowserSession(context.queryClient)
+        : undefined;
+    const subject = browserSession?.state === 'signed-in' ? (browserSession.subject ?? undefined) : undefined;
+    const credentialMode = subject ? 'session' : context.credentialMode;
+    return readCommunityRoute(context.queryClient, credentialMode, async (mode, reader = subject) => {
       const known = rememberedThreadSlug(params.id);
       const expectedSlug = known !== undefined && slugMatches(params.slug, known) ? undefined : params.slug;
       const query = threadPageQuery(params.id, deps.cursor, mode, expectedSlug, deps.post, reader);
@@ -161,7 +168,8 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
           page.thread.availability === 'available' &&
           page.thread.firstPost.availability === 'available',
       };
-    }),
+    });
+  },
   head: ({ loaderData }) =>
     loaderData?.callerAdmission.identity.credentialMode === 'anonymous'
       ? threadPageHead(loaderData)
@@ -301,6 +309,7 @@ function ThreadPage() {
   const { state: session, subject } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
+  const routeLoading = useRouterState({ select: (state) => state.isLoading });
   const location = useLocation();
   const id = Route.useParams().id;
   const slug = Route.useParams().slug;
@@ -357,6 +366,19 @@ function ThreadPage() {
     (pageIsPrivate &&
       activePage.viewerId !== undefined &&
       (session !== 'signed-in' || activePage.viewerId !== subject));
+  const rereadForSession =
+    session === 'signed-in' &&
+    !!subject &&
+    !currentPageUnavailable &&
+    activeAdmission.identity.credentialMode === 'anonymous' &&
+    activePage.composed?.viewer.kind === 'anonymous';
+  const rereadAdmission = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!rereadForSession || routeLoading || rereadAdmission.current === activeAdmission.id) return;
+    // The public page can render immediately. Reply advice needs a page read for the current account.
+    rereadAdmission.current = activeAdmission.id;
+    void router.invalidate({ filter: (match) => match.routeId === Route.id });
+  }, [activeAdmission.id, rereadForSession, routeLoading, router]);
   const page = activePage;
   const personalOptions = useMemo(() => threadPersonalQuery(id, cursor, postIds), [id, cursor, postIds]);
   const personalAttempt = useMemo(() => {
