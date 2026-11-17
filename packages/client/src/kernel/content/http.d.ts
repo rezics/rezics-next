@@ -20106,6 +20106,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
+                                            readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
                                         };
                                         413: Response | {
                                             type: unknown;
@@ -20254,6 +20255,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
+                                            readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
                                         };
                                         413: Response | {
                                             type: unknown;
@@ -20402,6 +20404,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             request_id: string;
                                             detail: unknown;
                                             errors: unknown;
+                                            readonly reason?: "catalogue_not_public" | "chapter_not_eligible";
                                         };
                                         413: Response | {
                                             type: unknown;

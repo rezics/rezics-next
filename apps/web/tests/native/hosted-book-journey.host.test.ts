@@ -593,21 +593,14 @@ async function pickDraft(page: Page, title: string) {
   }
 }
 
-async function associateChapterLanguage(
-  page: Page,
-  chapterTitle: string,
-  language: string,
-  title: string,
-  makeDefault = false,
-) {
+async function chapterLanguageForm(page: Page, chapterTitle: string) {
   const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
   await outline.getByRole('button', { name: `Organize ${chapterTitle}`, exact: true }).click();
   await page.getByRole('menuitem', { name: 'Chapter body languages', exact: true }).click();
-  const form = page.getByRole('form', { name: 'Chapter body languages', exact: true });
-  await form.getByLabel('Language code', { exact: true }).fill(language);
-  await form.getByLabel('Chapter title in this language', { exact: true }).fill(title);
-  if (makeDefault)
-    await form.getByRole('button', { name: 'Declare this language as the default', exact: true }).click();
+  return page.getByRole('form', { name: 'Chapter body languages', exact: true });
+}
+
+async function permitChapterLanguageSource(form: ReturnType<Page['getByRole']>) {
   const consent = form.getByRole('region', { name: 'Permission for this saved version', exact: true });
   await consent.getByRole('button', { name: 'Permit this version for this Book', exact: true }).click();
   await consent
@@ -615,26 +608,74 @@ async function associateChapterLanguage(
       exact: true,
     })
     .waitFor({ state: 'visible' });
+}
+
+async function associateChapterLanguage(
+  page: Page,
+  chapterTitle: string,
+  language: string,
+  title: string,
+  { makeDefault, permit }: { makeDefault?: boolean; permit?: boolean } = {},
+) {
+  const form = await chapterLanguageForm(page, chapterTitle);
+  await form.getByLabel('Language code', { exact: true }).fill(language);
+  await form.getByLabel('Chapter title in this language', { exact: true }).fill(title);
+  if (makeDefault)
+    await form.getByRole('button', { name: 'Declare this language as the default', exact: true }).click();
+  if (permit) await permitChapterLanguageSource(form);
   await form.getByRole('button', { name: 'Attach saved version', exact: true }).click();
   await form.waitFor({ state: 'hidden' });
 }
 
+async function publishCatalogueOpening(page: Page, opening: JourneyPost) {
+  await page.goto(new URL(chapterStudioPath(opening), stack.web).href, { waitUntil: 'domcontentloaded' });
+  await hydrate(page);
+  const publication = page.getByRole('region', { name: 'Prepare and publish', exact: true });
+  await publication.getByRole('button', { name: 'Prepare and publish', exact: true }).click();
+  await publication.getByRole('button', { name: 'Review publication…', exact: true }).click();
+  const review = publication.getByRole('region', { name: 'Review before publishing', exact: true });
+  await review.getByRole('heading', { name: opening.title, exact: true }).waitFor({ state: 'visible' });
+  expect(await review.innerText()).toContain(opening.revisionId);
+  await review
+    .getByRole('checkbox', {
+      name: 'I have reviewed this exact saved revision and want to publish it.',
+      exact: true,
+    })
+    .click();
+  await review.getByRole('button', { name: 'Publish reviewed article', exact: true }).click();
+  await publication.getByText(/^Published snapshot /u).waitFor({ state: 'visible' });
+}
+
+function preparedActivation(page: Page) {
+  return page.getByRole('region', { name: 'Activate this prepared Book release', exact: true });
+}
+
+async function assertActivationRefusal(page: Page, message: string) {
+  const activation = preparedActivation(page);
+  await activation.getByRole('button', { name: 'Check this sealed candidate', exact: true }).click();
+  await activation.getByRole('button', { name: 'Check next targets', exact: true }).click();
+  await activation.getByRole('alert').filter({ hasText: message }).waitFor({ state: 'visible' });
+  expect(await activation.getByRole('button', { name: 'Activate this exact release', exact: true }).count()).toBe(0);
+}
+
 async function activatePreparedBook(page: Page) {
-  const activation = page.getByRole('region', { name: 'Activate this prepared Book release', exact: true });
+  const activation = preparedActivation(page);
   await activation.getByRole('button', { name: 'Check this sealed candidate', exact: true }).click();
   const confirm = activation.getByRole('button', { name: 'Activate this exact release', exact: true });
   const next = activation.getByRole('button', { name: 'Check next targets', exact: true });
-  // The witness has exactly two selected body targets; this is bounded explicit advancement, never a body/Book scan.
+  const restart = activation.getByRole('button', { name: 'Restart authority checks', exact: true });
+  const receipt = activation.getByText('Activation acknowledged for this exact release.', { exact: true }).first();
   for (let step = 0; step < 4; step++) {
-    await confirm.or(next).waitFor({ state: 'visible' });
-    if (await confirm.isVisible()) break;
-    await next.click();
+    await confirm.or(next).or(restart).or(receipt).waitFor({ state: 'visible' });
+    if (await receipt.isVisible()) break;
+    if (await restart.isVisible()) await restart.click();
+    else if (await confirm.isVisible()) {
+      await confirm.click();
+      await receipt.or(restart).waitFor({ state: 'visible' });
+    } else await next.click();
+    await activation.locator('[aria-busy="false"]').waitFor({ state: 'visible' });
   }
-  await confirm.click();
-  await activation
-    .getByText('Activation acknowledged for this exact release.', { exact: true })
-    .first()
-    .waitFor({ state: 'visible' });
+  await receipt.waitFor({ state: 'visible' });
   await activation.getByRole('button', { name: 'Read current publication and verify reader', exact: true }).click();
   await activation
     .getByText('The current publication and anonymous exact reader are verified.', { exact: true })
@@ -666,11 +707,16 @@ async function assertPublishedLanguage(
     throw new Error(`Exact ${language} body returned HTTP ${result.status}`);
   const value = result.data as {
     selectedLanguage: string | null;
-    occurrence: { availability: string; target?: { postId: string; revisionId: string; sha256: string } };
+    occurrence: {
+      availability: string;
+      title?: string;
+      target?: { postId: string; revisionId: string; sha256: string };
+    };
     document: { canonicalBytes: string; sha256: string; licence: string } | null;
   };
   expect(value.selectedLanguage).toBe(language);
   expect(value.occurrence.availability).toBe('available');
+  expect(value.occurrence.title).toBe(expected.title);
   expect(value.occurrence.target).toMatchObject({
     postId: expected.postId,
     revisionId: expected.revisionId,
@@ -1178,7 +1224,10 @@ nativeTest(
           async () => {
             await openBookStudio(page, catalogueId!);
             await page.getByRole('button', { name: chapterOneTitle!, exact: true }).click();
-            await associateChapterLanguage(page, chapterOneTitle!, 'en', chapterOneTitle!, true);
+            await associateChapterLanguage(page, chapterOneTitle!, 'en', chapterOneTitle!, {
+              makeDefault: true,
+              permit: true,
+            });
             await pickDraft(page, seed!.chapterFrench.title);
             await associateChapterLanguage(page, chapterOneTitle!, 'fr', frenchTitle);
             const current = await readStructure(seed!.author, catalogueId!);
@@ -1375,6 +1424,7 @@ nativeTest(
         catalogueId &&
         chapterOne &&
         chapterTwo &&
+        chapterFrench &&
         chapterOneOccurrence &&
         chapterTwoOccurrence &&
         partTitle &&
@@ -1382,14 +1432,80 @@ nativeTest(
         preparationOperands &&
         candidateSealed
       ) {
+        const preparationHref = page.url();
+        await journal.run(
+          'publish the catalogue opening explicitly and recheck the same sealed candidate',
+          async () => {
+            await assertActivationRefusal(
+              page,
+              'Publish the catalogue opening as an article in Studio, then reopen this sealed candidate.',
+            );
+            expect(
+              (await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!)).item.publicationId,
+            ).toBeNull();
+            expect((await seed!.anonymous.posts({ id: catalogueId! }).get()).status).toBe(404);
+
+            await publishCatalogueOpening(page, seed!.opening);
+            const opening = await readNativePost(seed!.anonymous, catalogueId!);
+            expect(opening.revisionId).not.toBe(seed!.opening.revisionId);
+            expect(opening.sha256).toBe(seed!.opening.sha256);
+            const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
+            expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            expect(owner.item.publicationId).toBeNull();
+            expect((await seed!.anonymous.hostedCatalogues({ id: catalogueId! }).get()).status).toBe(404);
+            return {
+              value: opening,
+              observation: `privateCatalogue=refused cataloguePost=200 openingRevision=${opening.revisionId} currentRelease=null`,
+            };
+          },
+          () => pageObservation(page),
+        );
+        await journal.run(
+          'permit the already bound French version after the sealed check refuses it',
+          async () => {
+            await page.goto(preparationHref, { waitUntil: 'domcontentloaded' });
+            await hydrate(page);
+            await assertActivationRefusal(
+              page,
+              'Review permission for the exact saved chapter versions in this Book, then reopen this sealed candidate.',
+            );
+            expect(
+              (await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!)).item.publicationId,
+            ).toBeNull();
+
+            await openBookStudio(page, catalogueId!);
+            await pickDraft(page, seed!.chapterFrench.title);
+            const form = await chapterLanguageForm(page, chapterOneTitle!);
+            const exact = await form.innerText();
+            expect(exact).toContain(chapterFrench!.revisionId);
+            expect(exact).toContain(chapterFrench!.sha256);
+            await permitChapterLanguageSource(form);
+            const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
+            expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            expect(owner.item.publicationId).toBeNull();
+            expect((await seed!.anonymous.posts({ id: chapterFrench!.id }).get()).status).toBe(404);
+            return {
+              value: true,
+              observation: `missingConsent=refused exactFrench=${chapterFrench!.revisionId} sha256=${chapterFrench!.sha256} directPost=404 currentRelease=null`,
+            };
+          },
+          () => pageObservation(page),
+        );
         await journal.run(
           'activate the selected private candidate through mounted checks and explicit publication',
           async () => {
+            await page.goto(preparationHref, { waitUntil: 'domcontentloaded' });
+            await hydrate(page);
             await activatePreparedBook(page);
             const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
             if (!owner.item.publicationId) throw new Error('Mounted activation did not produce a current release');
             authorRelease = owner.item.publicationId;
             expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            const catalogue = await seed!.anonymous.hostedCatalogues({ id: catalogueId! }).get({
+              query: { kind: 'publication', revisionId: authorRelease, includeTitle: '1' },
+            });
+            expect(catalogue.status).toBe(200);
+            expect(catalogue.data).toMatchObject({ title: seed!.opening.title, revisionId: authorRelease });
             return {
               value: authorRelease,
               observation: `activatedRelease=${authorRelease} sourceHead=${owner.item.headRevisionId} selected=${chapterOneOccurrence} languages=en,fr`,
@@ -1470,12 +1586,14 @@ nativeTest(
               expect(laterFrench.post.revisionId).not.toBe(chapterFrench!.revisionId);
               const frozenEnglish = {
                 ...seed!.chapterOne,
+                title: chapterOneTitle!,
                 revisionId: chapterOne!.revisionId,
                 sha256: chapterOne!.sha256,
                 body: chapterOne!.body,
               };
               const frozenFrench = {
                 ...seed!.chapterFrench,
+                title: frenchTitle,
                 revisionId: chapterFrench!.revisionId,
                 sha256: chapterFrench!.sha256,
                 body: chapterFrench!.body,
@@ -1708,6 +1826,8 @@ nativeTest(
         'start Book, add and reorder chapters, create a part, and move chapters under it',
         'review, recover, and seal an exact selected private candidate',
         'later private edit and move isolation',
+        'publish the catalogue opening explicitly and recheck the same sealed candidate',
+        'permit the already bound French version after the sealed check refuses it',
         'activate the selected private candidate through mounted checks and explicit publication',
         'later private French edits do not change either frozen published language',
         'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',

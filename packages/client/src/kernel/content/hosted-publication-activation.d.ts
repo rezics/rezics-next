@@ -23,7 +23,8 @@ export declare class HostedPublicationActivationConflictError extends Error {
     constructor(message?: string);
 }
 export declare class HostedPublicationActivationIneligibleError extends Error {
-    constructor();
+    readonly reason: 'catalogue_not_public' | 'chapter_not_eligible';
+    constructor(reason: 'catalogue_not_public' | 'chapter_not_eligible');
 }
 /** Begin currentness checks for one immutable, sealed candidate. The full
  * installed vector is captured before any fresh target or container read. */

@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import type { StudioResult } from './contract';
+import type { StudioFailure } from './contract';
 import {
   hostedId,
   hostedKey,
@@ -37,18 +37,22 @@ export const activationRequest = v.strictObject({
 });
 export type ActivationRequest = Readonly<v.InferOutput<typeof activationRequest>>;
 export type ActivationKind = ActivationRequest['kind'];
+export type ActivationFailure = StudioFailure & {
+  reason?: 'catalogue_not_public' | 'chapter_not_eligible';
+};
+type ActivationResult<T> = { ok: true; value: T } | { ok: false; error: ActivationFailure };
 export type ActivationCommand = (
   input: ActivationRequest,
   signal: AbortSignal,
   csrfToken: string,
-) => Promise<StudioResult<ActivationProgress>>;
+) => Promise<ActivationResult<ActivationProgress>>;
 
 /** The generated server transport and illustrative consumers share this operation boundary. */
 export type ActivationOperation = (
   input: Omit<ActivationRequest, 'kind'>,
   signal: AbortSignal,
   csrfToken: string,
-) => Promise<StudioResult<unknown>>;
+) => Promise<ActivationResult<unknown>>;
 export type ActivationReads = Pick<HostedBookNative, 'readOwn'> &
   Pick<HostedPublicationPointNative, 'readMetadata'> & { admitPublic: HostedReleaseReaderAdmission };
 export type HostedReleaseActivationOperations = ActivationReads & {

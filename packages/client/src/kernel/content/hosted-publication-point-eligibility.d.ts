@@ -23,8 +23,8 @@ export type HostedPointDisclosureEligibility = Readonly<{
  */
 export declare function prepareHostedPointPublicEligibility(deps: HostedDependencies, catalogueOpening: HostedChapterTarget, newlySelectedTargets: readonly HostedChapterTarget[], context: ReadContext): Promise<HostedPointPublicEligibility | null>;
 /**
- * Observe one exact target through current anonymous public eligibility or
- * exact catalogue consent. It reads metadata only, then records every native
+ * Observe one exact target through current anonymous public eligibility. Only
+ * chapters can use exact Book-scoped consent. Record every native
  * home whose state can close the proof: source, account, Board, Realm and Space.
  * The caller must have captured its fixed home vector before calling this.
  */
@@ -36,7 +36,7 @@ export declare function observeHostedPublicationActivationTarget(deps: HostedDep
     additionalAuthorityIds?: readonly string[];
     expectedAuthorId?: string;
     expectedLicence?: string;
-    opening?: boolean;
+    catalogueOpening?: boolean;
 }>, context: ReadContext): Promise<HostedPublicationAuthorityObservation | null>;
 /**
  * Prepare the public catalogue opening and each changed exact target. Public

@@ -111,12 +111,13 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
       throw new ProblemError('forbidden');
+    if (error instanceof HostedPublicationActivationIneligibleError)
+      throw new ProblemError('precondition_failed', { extensions: { reason: error.reason } });
     if (
       error instanceof RevisionPreconditionError ||
       error instanceof HostedPublicationStagingConflictError ||
       error instanceof HostedPublicationStagingExpiredError ||
-      error instanceof HostedPublicationActivationConflictError ||
-      error instanceof HostedPublicationActivationIneligibleError
+      error instanceof HostedPublicationActivationConflictError
     )
       throw new ProblemError('precondition_failed');
     if (error instanceof HostedPublicationStagingCheckpointUnavailableError)
@@ -143,6 +144,9 @@ function activationResponse() {
   return memoizedValue(activationResponse, () => ({
     200: withHeaders(strictContentSchema(HostedPublicationActivationProgressSchema()), responseHeaders),
     ...failures(),
+    412: problemSchema('precondition_failed', {
+      reason: t.Optional(t.Union([t.Literal('catalogue_not_public'), t.Literal('chapter_not_eligible')])),
+    }),
   }));
 }
 
