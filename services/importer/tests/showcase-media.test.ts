@@ -18,6 +18,7 @@ import {
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import { bangumiAppearanceSource } from '../src/cross-media-bindings.ts';
 import { ImportTransportError } from '../src/import-client.ts';
+import { failedCoverContinuation } from '../src/imports-public-journey.ts';
 import type { ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
@@ -393,6 +394,7 @@ test(
       expect(statusReads).toBe(2);
 
       const transitions: string[] = [];
+      const progress = new SeedFinalization('record-import', (line) => transitions.push(line));
       const reseed = () =>
         seedCrossMedia(
           resumedPlan,
@@ -404,16 +406,24 @@ test(
             recordConcurrency: 1,
             mediaDeadlineMs: 0,
             bangumiGenrePort: port as unknown as ReviewedCataloguePort,
-            recordImportProgress: new SeedFinalization('record-import', (line) => transitions.push(line)),
+            recordImportProgress: progress,
           },
           bindings,
         );
       const beforeReseed = journal.acknowledgedCommands();
       const pendingFailure = await reseed().catch((error: unknown) => error);
+      progress.failed(pendingFailure);
       const recordDigest = createHash('sha256').update('101').digest('hex');
-      expect(formatSeedError(pendingFailure)).toContain(
-        `kind=bulk-failed generation=${initial.runs.bangumi?.runId} run{phase=media reason=cover-pending keyDigest=${recordDigest} mediaState=uploaded}`,
-      );
+      const failure = formatSeedError(pendingFailure);
+      const identity = { generation: initial.runs.bangumi?.runId, keyDigest: recordDigest };
+      expect(failedCoverContinuation(failure)).toEqual({ ...identity, mediaState: 'uploaded' });
+      expect(failedCoverContinuation(failure.replace('mediaState=uploaded', 'mediaState=reserved'))).toEqual({
+        ...identity,
+        mediaState: 'reserved',
+      });
+      expect(
+        failedCoverContinuation(failure.replace('phase=bangumi-cover-continuation', 'phase=bangumi-records')),
+      ).toBeUndefined();
       expect(transitions.at(-1)).toContain('phase=bangumi-cover-continuation');
       expect(journal.acknowledgedCommands()).toEqual(beforeReseed);
       expect(statusReads).toBe(4);
