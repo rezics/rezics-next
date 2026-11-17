@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { sampleNativeMemory } from './native/native-memory';
+import { sampleNativeMemory, sampleWebStartupMemory } from './native/native-memory';
 
 function files() {
   const values = new Map<string, string>([
@@ -109,4 +109,65 @@ test('owned process traversal has an explicit 32-row ceiling and does not probe 
   expect(result.processes.rows).toHaveLength(32);
   expect(result.processes.truncated).toBe(true);
   expect(f.reads.some((path) => path.startsWith('/proc/101/'))).toBe(false);
+});
+
+test('Web startup memory attributes PSS only to roles in the exact owned slice', () => {
+  const f = files();
+  const run = 'abc12-1234abcd';
+  const slice = 'rezics-check-abc12_1234abcd.slice';
+  const membership = `/jobs/${slice}`;
+  const scopeName = `rezics-check-${run}.scope`;
+  const scope = `${membership}/${scopeName}`;
+  const cgroup = '/sys/fs/cgroup';
+  const env = { REZICS_CHECK_RUN: run, REZICS_CHECK_SLICE: slice };
+  f.values.set('/proc/self/cgroup', `0::${scope}\n`);
+  f.values.set(`${cgroup}${membership}/memory.current`, '7890');
+  f.values.set(`${cgroup}${membership}/memory.max`, '8589934592');
+  f.values.set(`${cgroup}${membership}/memory.stat`, 'anon 4000\nfile 2000\nshmem 1000\nkernel 90\n');
+  f.values.set(`${cgroup}${membership}/memory.events`, 'high 0\nmax 2\noom 3\noom_kill 4\n');
+  f.values.set(`${cgroup}${membership}/cgroup.procs`, '');
+  f.values.set(`${cgroup}${scope}/cgroup.procs`, '10\n11\n12\n13\n');
+  for (const pid of [10, 11, 12, 13]) f.process(pid, 1);
+  for (const pid of [10, 11, 12]) f.values.set(`/proc/${pid}/cgroup`, `0::${scope}\n`);
+  f.values.set('/proc/13/cgroup', '0::/jobs/other.scope\n');
+  f.values.set('/proc/10/smaps_rollup', 'Pss: 25 kB\n');
+  f.values.set('/proc/11/cmdline', '/usr/bin/bun\0services/auth/scripts/dev-stack.ts\0web\0PRIVATE');
+  f.values.set('/proc/11/smaps_rollup', 'Pss: 12 kB\n');
+  f.values.set('/proc/12/cmdline', '/private/chrome-headless-shell\0--private\0');
+  const children = (path: string) => ({
+    names: path === cgroup + membership ? [scopeName] : [],
+    truncated: false,
+  });
+  const result = sampleWebStartupMemory('vite', env, f.read, children, () => '', 10);
+  expect(result).toMatchObject({
+    status: 'observed',
+    memory: {
+      currentBytes: 7890,
+      maxBytes: 8589934592,
+      anonBytes: 4000,
+      fileBytes: 2000,
+      shmemBytes: 1000,
+      kernelBytes: 90,
+      cumulativeEvents: { oom: 3, oomKill: 4 },
+    },
+    processes: {
+      partial: false,
+      unavailableCount: 1,
+      roles: {
+        vite: { count: 1, pssCount: 1, pssBytes: 25600 },
+        webPreparer: { count: 1, pssCount: 1, pssBytes: 12288 },
+        chromium: { count: 1, pssCount: 0, pssBytes: null },
+      },
+    },
+  });
+  expect(f.reads).not.toContain('/proc/13/smaps_rollup');
+  expect(JSON.stringify(result)).not.toContain('PRIVATE');
+
+  f.reads.length = 0;
+  f.values.set('/proc/self/cgroup', `0::${membership}/other.scope\n`);
+  expect(sampleWebStartupMemory('vite', env, f.read, children)).toMatchObject({
+    status: 'unavailable',
+    reason: 'owned_run_slice_unavailable',
+  });
+  expect(f.reads).toEqual(['/proc/self/cgroup', '/proc/self/mountinfo']);
 });

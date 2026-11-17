@@ -20,6 +20,11 @@ import { developmentPersonalListScopes } from '../../importer/src/showcase-perso
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import {
+  logWebStartupMemory,
+  webStartupMemoryAdmitted,
+  webStartupMemoryOptIn,
+} from '../../../apps/web/tests/native/native-memory.ts';
+import {
   ownerProcessIdentity,
   runDocker,
   retainOriginalAndCleanupFailure,
@@ -1306,6 +1311,8 @@ export function developmentFrontendProcess(
 }
 
 async function launch(action: 'pages' | 'web', args: string[]) {
+  const memory = action === 'web' && process.env[webStartupMemoryOptIn] === '1' && walkStackAdmitted(process.env, root);
+  if (memory) logWebStartupMemory('declarations-before', 'webPreparer');
   const kernel = await kernelEnvironment();
   const launch = developmentFrontendProcess(action, args, {
     environment: process.env,
@@ -1313,6 +1320,11 @@ async function launch(action: 'pages' | 'web', args: string[]) {
     website: await developmentWebsiteConfiguration(kernel),
     keys: await developmentKeys(),
   });
+  delete launch.environment[webStartupMemoryAdmitted];
+  if (memory) {
+    logWebStartupMemory('declarations-after', 'webPreparer');
+    launch.environment[webStartupMemoryAdmitted] = '1';
+  }
   const child = Bun.spawn(launch.command, {
     cwd: root,
     env: launch.environment,
