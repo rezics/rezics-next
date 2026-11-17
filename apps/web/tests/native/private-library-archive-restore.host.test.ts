@@ -1105,14 +1105,18 @@ async function restoreOwnerLibrary() {
   });
   await labelResult.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
   const labelEvidence = labelResult.locator('pre');
-  const labelMapping = JSON.parse((await labelEvidence.textContent()) ?? 'null');
-  const visibleLabelMapping = JSON.parse(await labelEvidence.innerText());
-  expect(labelMapping).toMatchObject({
-    ordinal: labelOrdinal,
-    section: 'labels',
-    status: 'acknowledged',
-    labelId: expect.any(String),
-  });
+  const labelMapping = JSON.parse((await labelEvidence.textContent()) ?? 'null') as {
+    ordinal?: unknown;
+    section?: unknown;
+    status?: unknown;
+    labelId?: unknown;
+  } | null;
+  const visibleLabelMapping = JSON.parse(await labelEvidence.innerText()) as { labelId?: unknown } | null;
+  expect(labelMapping?.ordinal).toBe(labelOrdinal);
+  expect(labelMapping?.section).toBe('labels');
+  expect(labelMapping?.status).toBe('acknowledged');
+  const displayedResultLabelId = labelMapping?.labelId;
+  expect(typeof displayedResultLabelId).toBe('string');
   await stack.syncKernelRequests();
   const applyRequest = stack
     .kernelRequests()
@@ -1134,11 +1138,12 @@ async function restoreOwnerLibrary() {
     }[];
   }>(await stack.kernel(resultPath, { signal: AbortSignal.timeout(2_000) }, 'alice'), 200, 'owner Archive result');
   const applied = appliedRows.find((item) => item.section === 'labels' && item.ordinal === labelOrdinal);
-  expect(applied).toMatchObject({
-    status: 'acknowledged',
-    result: { effect: 'label.create', labelId: expect.any(String) },
-  });
-  const restoredLabelId = applied!.result!.labelId!;
+  expect(applied?.status).toBe('acknowledged');
+  expect(applied?.result?.effect).toBe('label.create');
+  const restoredLabelId = applied?.result?.labelId;
+  if (typeof restoredLabelId !== 'string' || restoredLabelId.length === 0) {
+    throw new Error('The acknowledged native Archive result has no created label ID');
+  }
   expect(restoredLabelId).not.toBe(prepared.labelId);
 
   await readCurrent.click();
@@ -1201,11 +1206,11 @@ async function restoreOwnerLibrary() {
     bffApplyObserved: typeof bffApplyId === 'string',
     bffApplyMatchesNativeVisit: !!bffApplied && bffApplied.uploadId === applyRequest.archiveLabel?.uploadId,
     bffApplyMatchesNativeApply: bffApplyId && nativeApplyId ? bffApplyId === nativeApplyId : null,
-    displayedMatchesBffApply: labelMapping.labelId === bffApplyId,
+    displayedMatchesBffApply: displayedResultLabelId === bffApplyId,
     bffCurrentObserved: typeof bffCurrentId === 'string',
     bffCurrentMatchesDisplayed: bffCurrentId ? bffCurrentId === displayed?.label?.id : null,
-    displayedCurrentMatchesApply: displayed?.label?.id === labelMapping.labelId,
-    currentRequestMatchesApply: currentRequestId === labelMapping.labelId,
+    displayedCurrentMatchesApply: displayed?.label?.id === displayedResultLabelId,
+    currentRequestMatchesApply: currentRequestId === displayedResultLabelId,
     nativeCurrentMatchesDisplayed: nativeCurrent?.archiveLabel?.labelId === displayed?.label?.id,
     prefixMatchesDisplayed: currentLabels.some((row) => row.id === displayed?.label?.id),
     nativePrefixMatchesResults: nativePrefix?.archiveLabel?.labelIds.includes(restoredLabelId) ?? null,
@@ -1228,7 +1233,7 @@ async function restoreOwnerLibrary() {
       phase: 'owner-label-prefix-readback',
       identity,
       browser: {
-        labelEvidenceMatchesNative: labelMapping.labelId === restoredLabelId,
+        labelEvidenceMatchesNative: displayedResultLabelId === restoredLabelId,
         visibleEvidenceMatchesNative: visibleLabelMapping?.labelId === restoredLabelId,
         currentMatchesNative: displayed?.label?.id === restoredLabelId,
         currentNameMatches: displayed?.label?.name === prepared.labelName,
@@ -1243,7 +1248,7 @@ async function restoreOwnerLibrary() {
     await writeArchiveProvenance(labelDisagreement);
   }
   const assertLabelReadbacks = () => {
-    expect(labelMapping.labelId).toBe(restoredLabelId);
+    expect(displayedResultLabelId).toBe(restoredLabelId);
     expect(visibleLabelMapping?.labelId).toBe(restoredLabelId);
     expect(pointResponse.status).toBe(200);
     expect(point?.label?.id).toBe(restoredLabelId);
