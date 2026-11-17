@@ -1,16 +1,15 @@
-import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test';
+import { expect } from 'bun:test';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import { startAuthStack } from './auth-stack.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
-const stacks: NativeWebStack[] = [];
-const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
+let stack: NativeWebStack;
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
 const evidence = resolve(import.meta.dir, '../../../../.temp/private-library-archive-restore');
 const provenance = resolve(evidence, 'provenance.json');
@@ -34,26 +33,16 @@ async function writeArchiveProvenance(result: object) {
   await rename(pending, provenance);
 }
 
-setDefaultTimeout(300_000);
-
 nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
   await prepareNativeWebSearch('library-archive');
-  const stack = await startNativeWebStack();
-  stacks.push(stack);
+  stack = await startNativeWebStack();
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
   const generation = await waitForSubjectPublication(stack, signal);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-owner-library', generation });
 });
 
-afterEach(async () => {
-  for (const auth of authStacks.splice(0).reverse()) await auth.stop();
-}, 180_000);
-
-afterAll(async () => {
-  for (const stack of stacks.splice(0).reverse()) await stack.stop();
-}, 180_000);
 nativeAfterAll(lifecycle, 180_000);
 
 function key() {
@@ -348,12 +337,10 @@ async function downloadArchive(page: Page) {
   return archivePath;
 }
 
-test('owner exports a populated Library and restores Collection, Entry and progress through actual pages', async () => {
-  const stack = stacks[0]!;
+async function restoreOwnerLibrary() {
   const prepared = await prepareOwnerLibrary(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
   const auth = await startAuthStack(stack);
-  authStacks.push(auth);
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
   const page = signedIn.context.pages().at(-1)!;
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -576,4 +563,11 @@ test('owner exports a populated Library and restores Collection, Entry and progr
       progressSessionCount: sessions.progressSessions.length,
     },
   });
-});
+}
+
+nativeTest(
+  'owner exports a populated Library and restores Collection, Entry and progress through actual pages',
+  300_000,
+  restoreOwnerLibrary,
+  lifecycle,
+);
