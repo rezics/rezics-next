@@ -6,6 +6,7 @@ import compareAdvanceCheckpoint from './compare-advance-checkpoint.sql';
 import ensureCheckpoint from './ensure-checkpoint.sql';
 import lockCheckpoint from './lock-checkpoint.sql';
 import readLog from './read-log.sql';
+import takeCheckpoint from './take-checkpoint.sql';
 
 export { EVENT_TYPES } from './catalogue.ts';
 
@@ -170,11 +171,9 @@ async function readSnapshot(
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     try {
-      await ensureCheckpoint.run(client, { partition_no: options.partition, consumer: options.consumer });
-      const checkpoint = await lockCheckpoint.run(client, {
-        partition_no: options.partition,
-        consumer: options.consumer,
-      });
+      const key = { partition_no: options.partition, consumer: options.consumer };
+      // A concurrent insert can win the conflict before it becomes visible to the statement's snapshot.
+      const checkpoint = (await takeCheckpoint.run(client, key)) ?? (await lockCheckpoint.run(client, key));
       if (!checkpoint) {
         await client.query('COMMIT');
         return undefined;
