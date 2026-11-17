@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import { CrossMediaGraph, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
@@ -20,8 +20,8 @@ import {
 } from '../src/cross-media-seed.ts';
 import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
-import { createPublicBulkClient } from '../src/public-bulk-client.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { createPublicBulkClient, GLOBAL_CONTEXT } from '../src/public-bulk-client.ts';
+import { reviewedStatementFixture, reviewedSubjectFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -324,38 +324,31 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
     'character:3': '00000000-0000-4000-8000-000000000003',
   };
   const canonicalPerson = '00000000-0000-4000-8000-000000000018';
-  const current = new Map<string, unknown>([
-    [
-      bound['1']!,
-      {
-        subject: {
-          id: bound['1'],
-          type: 'schema:TVSeries',
-          statements: { 'wdt:P5732': [{ value: { type: 'value', content: '1' } }] },
+  const endpoints = [
+    [bound['1'], bound['1'], 'schema:TVSeries', 'wdt:P5732', '1'],
+    [bound['person:8'], canonicalPerson, 'schema:Person', 'wdt:P6298', '8'],
+    [bound['character:3'], bound['character:3'], 'wd:Q95074', 'wdt:P6296', '3'],
+  ] as const;
+  const current = new Map<string, ReviewedSubjectRead>(
+    endpoints.map(([binding, id, type, property, content]) => [
+      binding,
+      reviewedSubjectFixture({
+        id,
+        type,
+        context: GLOBAL_CONTEXT,
+        labels: {},
+        statements: {
+          [property]: [
+            reviewedStatementFixture(randomUUID(), 'normal', {
+              property: { id: property },
+              value: { type: 'value', content },
+              references: [],
+            }),
+          ],
         },
-      },
-    ],
-    [
-      bound['person:8']!,
-      {
-        subject: {
-          id: canonicalPerson,
-          type: 'schema:Person',
-          statements: { 'wdt:P6298': [{ value: { type: 'value', content: '8' } }] },
-        },
-      },
-    ],
-    [
-      bound['character:3']!,
-      {
-        subject: {
-          id: bound['character:3'],
-          type: 'wd:Q95074',
-          statements: { 'wdt:P6296': [{ value: { type: 'value', content: '3' } }] },
-        },
-      },
-    ],
-  ]);
+      }),
+    ]),
+  );
   const commands: Extract<BatchCommand, { op: 'propose' }>[] = [];
   let metadata = { digest: 'a'.repeat(64), recordRevision: 'authored', recordUrl: 'https://bgm.tv/subject/1' };
   const deliver = () =>
@@ -378,7 +371,9 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
         return { fenced: false };
       },
       async read(id) {
-        return current.get(id) as ReviewedSubjectRead;
+        const subject = current.get(id);
+        if (!subject) throw new ImportTransportError(404);
+        return subject;
       },
       expectedNativeType(externalId) {
         return externalId === '1'
@@ -421,6 +416,7 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
     recordUrl: 'https://bgm.tv/subject/1?refresh=1',
   };
   const refreshed = await deliver();
+  expect(refreshed.gaps).toEqual([]);
   expect(refreshed.identities['person:8']).toMatchObject({ id: bound['person:8'], type: 'schema:Person' });
   expect(refreshed.canonicalPersons['person:8']).toBe(canonicalPerson);
   expect(commands).toHaveLength(2);
@@ -430,6 +426,7 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
     record_revision: 'refreshed',
     digest: 'b'.repeat(64),
   });
+  expect(commands[1]!.statement.value).toEqual({ type: 'value', content: bound['person:8'] });
   expect(
     commands[1]!.statement.references
       ?.flatMap((reference) => reference.parts)

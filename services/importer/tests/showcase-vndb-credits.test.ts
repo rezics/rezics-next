@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
+import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   creditTypeConceptUri,
   creditTypeSchemeUri,
@@ -14,13 +15,18 @@ import {
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
 } from '../src/showcase-vndb-credits.ts';
-import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
+import { buildShowcaseManifest, showcaseDigest, type ShowcaseVocabularyRequirement } from '../src/showcase-manifest.ts';
 import {
   captureShowcaseCommands,
   ShowcaseJournal,
   type ShowcasePublicationResult,
 } from '../src/showcase-publication.ts';
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import {
+  reviewedStatementFixture,
+  reviewedSubjectReadbackFixture,
+  reviewedVocabularySubjectFixture,
+  sourceRecordMetadataFixture,
+} from './transport-driver.ts';
 
 function selectedVn() {
   const bangumiRows: Record<string, Record<string, unknown>[]> = {
@@ -65,126 +71,45 @@ function selectedVn() {
   };
 }
 
-function publicSubjects(schemeId: string, concepts: { code: string; id: string }[]) {
-  return new Map<string, unknown>([
+function currentVocabulary(schemeId: string, concepts: { code: string; id: string }[]) {
+  return new Map([
     [
       schemeId,
-      {
-        subject: {
-          id: schemeId,
-          type: 'skos:ConceptScheme',
-          statements: { 'schema:url': [{ value: { content: creditTypeSchemeUri } }] },
-        },
-      },
+      reviewedVocabularySubjectFixture(schemeId, 'skos:ConceptScheme', creditTypeSchemeUri, {
+        'schema:url': creditTypeSchemeUri,
+      }),
     ],
-    ...concepts.map(
-      ({ code, id }) =>
-        [
-          id,
-          {
-            subject: {
-              id,
-              type: 'skos:Concept',
-              statements: {
-                'schema:url': [{ value: { content: creditTypeConceptUri(code) } }],
-                'skos:inScheme': [{ value: { content: schemeId } }],
-              },
-            },
-          },
-        ] as const,
-    ),
+    ...concepts.map(({ code, id }) => {
+      const uri = creditTypeConceptUri(code);
+      return [
+        id,
+        reviewedVocabularySubjectFixture(id, 'skos:Concept', uri, {
+          'schema:url': uri,
+          'skos:inScheme': schemeId,
+        }),
+      ] as const;
+    }),
   ]);
 }
 
-function currentIdentityStatements(externalId: string, nativeType: string) {
-  if (nativeType !== 'schema:Person' || !/^s[1-9][0-9]*$/u.test(externalId)) return {};
-  return { 'wdt:P3180': [{ value: { type: 'value' as const, content: externalId } }] };
-}
-
-function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMediaPort {
+function creditPort(commands: BatchCommand[], known: ReadonlyMap<string, ReviewedSubjectRead> = new Map()) {
   const metadata = sourceRecordMetadataFixture();
-  const created = new Map<string, { id: string; type: string; externalId: string }>();
-  return {
-    async batch(request) {
-      commands.push(...request.commands);
-      return {
-        results: request.commands.map((command) => {
-          if (command.op === 'create') {
-            const id = randomUUID();
-            created.set(command.source.external_id, {
-              id,
-              type: command.subject.type,
-              externalId: command.source.external_id,
-            });
-            return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
-          }
-          return {
-            key: command.key,
-            status: 201 as const,
-            value: command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
-          };
-        }),
-      };
-    },
-    setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence() {
-      return { fenced: false, securityRevision: null };
-    },
-    async writeSourceStatistic() {},
-    async clearSourceStatistic() {},
-    async readReviewedSubject(id) {
-      const subject = known.get(id);
-      if (subject) return subject as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-      const entry = [...created.values()].find((candidate) => candidate.id === id);
-      return {
-        subject: {
-          id,
-          type: entry?.type,
-          labels: { en: entry?.type ?? 'Imported subject' },
-          statements: entry ? currentIdentityStatements(entry.externalId, entry.type) : {},
-        },
-      } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
-    },
-  };
-}
-
-function journalPort(commands: BatchCommand[]) {
-  type Subject = {
-    subject: {
-      id: string;
-      type: string;
-      labels: Record<string, string>;
-      statements: Record<string, { value: { type?: 'value'; content: unknown } }[]>;
-    };
-  };
-  const subjects = new Map<string, Subject>();
-  const metadata = sourceRecordMetadataFixture();
+  const readback = reviewedSubjectReadbackFixture();
   const port: CrossMediaPort = {
     async batch(request) {
       commands.push(...request.commands);
       return {
         results: request.commands.map((command) => {
           if (command.op === 'create') {
-            const id = randomUUID();
-            subjects.set(id, {
-              subject: {
-                id,
-                type: command.subject.type,
-                labels: command.subject.labels,
-                statements: currentIdentityStatements(command.source.external_id, command.subject.type),
-              },
-            });
+            const id = readback.ids.get(command.source.external_id) ?? randomUUID();
+            readback.created(command, id);
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
           if (command.op === 'propose') {
-            const subject = subjects.get(command.subject);
-            const value = command.statement.value;
-            if (subject && value.type === 'value') {
-              const rows = subject.subject.statements[command.statement.property.id] ?? [];
-              rows.push({ value: { type: 'value' as const, content: value.content } });
-              subject.subject.statements[command.statement.property.id] = rows;
-            }
-            return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+            const candidate = randomUUID();
+            const property = command.statement.property.id;
+            if (property === 'wdt:P5732' || property === 'wdt:P3180') readback.select(command, candidate);
+            return { key: command.key, status: 201 as const, value: { candidate, revision: 1 } };
           }
           return { key: command.key, status: 201 as const, value: { revision: 1 } };
         }),
@@ -197,10 +122,10 @@ function journalPort(commands: BatchCommand[]) {
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      return (subjects.get(id) ?? null) as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      return known.get(id) ?? readback.readReviewedSubject(id);
     },
   };
-  return { port, subjects };
+  return { port, readback };
 }
 
 test('the selected-family seed qualifies staff and voice credits without alias identities or duplicate edges', async () => {
@@ -209,30 +134,37 @@ test('the selected-family seed qualifies staff and voice credits without alias i
   const schemeId = randomUUID();
   const scenarioId = randomUUID();
   const designId = randomUUID();
-  const known = publicSubjects(schemeId, [
+  const known = currentVocabulary(schemeId, [
     { code: 'scenario', id: scenarioId },
     { code: 'chardesign', id: designId },
   ]);
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-credits-'));
   try {
-    const result = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands, known), undefined, {
-      vndbCreditReferences: {
-        schemeId,
-        concepts: [
-          { code: 'scenario', id: scenarioId },
-          { code: 'chardesign', id: designId },
-        ],
+    const result = await seedCrossMedia(
+      plan,
+      join(directory, 'state.sqlite'),
+      creditPort(commands, known).port,
+      undefined,
+      {
+        vndbCreditReferences: {
+          schemeId,
+          concepts: [
+            { code: 'scenario', id: scenarioId },
+            { code: 'chardesign', id: designId },
+          ],
+        },
+        mediaDeadlineMs: 0,
       },
-      mediaDeadlineMs: 0,
-    });
-    const readings = new Map(result.readings.map((reading) => [reading.externalId, reading.subject.subject.id]));
-    const person = readings.get('s4');
-    const character = readings.get('c3');
+    );
+    const readings = new Map(result.readings.map((reading) => [reading.externalId, reading.subject.subject]));
+    const person = readings.get('s4')?.id;
+    const character = readings.get('c3')?.id;
     expect(plan.franchises.clannad.vndb).toEqual(['v1']);
     expect(plan.entities.vndb.filter((row) => row.key === 's4')).toHaveLength(1);
     expect(person).toBeTruthy();
     expect(character).toBeTruthy();
+    expect(readings.get('v1')?.type).toBe('wd:Q689445');
 
     const credits = commands.filter(
       (command) =>
@@ -309,12 +241,19 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
   const tables = selectedVn();
   const plan = await planCrossMediaSeed(tables);
   const commands: BatchCommand[] = [];
-  const { port: rawPort, subjects } = journalPort(commands);
+  const { port: rawPort, readback } = creditPort(commands);
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-credit-journal-'));
   const journalPath = join(directory, 'showcase.sqlite');
   const statePath = join(directory, 'state.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   let captured = captureShowcaseCommands(rawPort, journal);
+  const selectVocabulary = (requirements: readonly ShowcaseVocabularyRequirement[]) => {
+    const sourceIds = new Set(requirements.map(({ source }) => source.external_id));
+    for (const { command, candidateId } of journal.acknowledgedCommands()) {
+      if (command.op === 'propose' && candidateId && sourceIds.has(command.source.external_id))
+        readback.select(command, candidateId);
+    }
+  };
   try {
     const first = await seedCrossMedia(plan, statePath, captured, undefined, { mediaDeadlineMs: 0 });
     const schemes = await prepareShowcaseVndbCreditVocabulary({ plan, port: captured, journal, stage: 'schemes' });
@@ -323,70 +262,53 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     journal = new ShowcaseJournal(journalPath);
     captured = captureShowcaseCommands(rawPort, journal);
 
+    selectVocabulary(schemes.requirements);
     const concepts = await prepareShowcaseVndbCreditVocabulary({ plan, port: captured, journal, stage: 'concepts' });
     expect(concepts.requirements.map((requirement) => requirement.sourceKey)).toEqual([
       'vndb.credit_type',
       'vndb.credit_type:chardesign',
       'vndb.credit_type:scenario',
     ]);
-    const acknowledgements = journal.acknowledgedCommands();
-    const designRequirement = concepts.requirements.find((requirement) =>
-      requirement.sourceKey.endsWith(':chardesign'),
-    )!;
-    const designCreate = acknowledgements.find(
-      (entry) =>
-        entry.command.op === 'create' && entry.command.source.external_id === designRequirement.source.external_id,
-    )!;
-    const designSubject = subjects.get(designCreate.subjectId!)!;
-    designSubject.subject.statements['skos:inScheme'] = [{ value: { content: randomUUID() } }];
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     captured = captureShowcaseCommands(rawPort, journal);
+    selectVocabulary(concepts.requirements);
 
-    const published = concepts.requirements
-      .filter((requirement) => requirement !== designRequirement)
-      .flatMap((requirement) => {
-        const create = acknowledgements.find(
-          (entry) =>
-            entry.command.op === 'create' && entry.command.source.external_id === requirement.source.external_id,
-        );
-        if (!create?.subjectId) return [];
-        const read = subjects.get(create.subjectId);
-        if (!read || read.subject.type !== requirement.nativeType) return [];
-        const publishedAssertion = (property: string, digest: string) => {
-          const candidateId = randomUUID();
-          return {
-            candidateId,
-            property,
-            digest,
-            adoption: { head: 1, candidateId, rank: 'normal' as const },
-            readback: null,
-          };
-        };
-        return [
-          {
-            provider: 'vndb' as const,
-            sourceKey: requirement.sourceKey,
-            subjectId: create.subjectId,
-            nativeType: requirement.nativeType,
-            readerRoute: `/subjects/${create.subjectId}/credit`,
-            assertions:
-              requirement.nativeType === 'skos:ConceptScheme'
-                ? [publishedAssertion('schema:url', 'a'.repeat(64))]
-                : [
-                    publishedAssertion('schema:url', 'b'.repeat(64)),
-                    publishedAssertion('skos:inScheme', 'c'.repeat(64)),
-                  ],
-          },
-        ];
-      });
     const manifest = buildShowcaseManifest({
       plan,
       readings: first.readings,
-      acknowledgements,
+      acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
       vocabularyRequirements: concepts.requirements,
     });
+    const publicReads = new Map<string, ReviewedSubjectRead>();
+    const published = await Promise.all(
+      manifest.vocabulary.map(async ({ provider, sourceKey, subjectId, nativeType, assertions }) => {
+        const read = await rawPort.readReviewedSubject(subjectId);
+        publicReads.set(subjectId, read);
+        return {
+          provider,
+          sourceKey,
+          subjectId,
+          nativeType,
+          readerRoute: `/subjects/${subjectId}/credit`,
+          assertions: assertions.map(({ candidateId, property, candidateDigest }) => {
+            const selected = read.subject.statements[property]?.find(
+              ({ id, rank }) => id === candidateId && rank === 'normal',
+            );
+            if (!selected) throw new Error(`Missing selected vocabulary candidate ${candidateId}`);
+            return {
+              candidateId,
+              property,
+              digest: candidateDigest,
+              adoption: { head: 1, candidateId, rank: 'normal' as const },
+              readback: selected,
+            };
+          }),
+        };
+      }),
+    );
+    const design = published.find(({ sourceKey }) => sourceKey === 'vndb.credit_type:chardesign')!;
     const publication = {
       status: 'incomplete' as const,
       manifest,
@@ -395,14 +317,31 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       omissions: [],
       unresolvedCharacterDependencies: [],
     } satisfies ShowcasePublicationResult;
+    const partialPublication = { ...publication, published: published.filter((record) => record !== design) };
+    expect(publishedShowcaseVndbCreditReferences(partialPublication, journal, concepts.requirements)?.concepts).toEqual(
+      [expect.objectContaining({ code: 'scenario' })],
+    );
     const references = publishedShowcaseVndbCreditReferences(publication, journal, concepts.requirements)!;
-    expect(references.concepts).toEqual([expect.objectContaining({ code: 'scenario' })]);
+    expect(references.concepts).toEqual([
+      { code: 'chardesign', id: design.subjectId },
+      expect.objectContaining({ code: 'scenario' }),
+    ]);
+
+    // The public membership changed after the publication result was recorded.
+    const designRead = publicReads.get(design.subjectId)!;
+    designRead.subject.statements['skos:inScheme'] = [
+      reviewedStatementFixture(randomUUID(), 'normal', {
+        property: { id: 'skos:inScheme' },
+        value: { type: 'value', content: randomUUID() },
+        references: [],
+      }),
+    ];
 
     const current = await seedCrossMedia(plan, statePath, captured, undefined, {
       mediaDeadlineMs: 0,
       vndbCreditReferences: references,
       readPublicSubject: async (id) => {
-        const read = await rawPort.readReviewedSubject(id);
+        const read = publicReads.get(id);
         if (!read) throw new Error('Public test subject is unavailable');
         return read;
       },
