@@ -439,6 +439,14 @@ async function withOwnerPage<T>(
     if (login.status !== 200 || loginUrl.origin !== stack.issuer || loginUrl.pathname !== '/login')
       throw new Error('Auth did not open the login form');
     stage = 'Sign in through Auth as the seeded owner';
+    let exactCallback = false;
+    page.on('response', (response) => {
+      const url = new URL(response.url());
+      if (url.origin !== stack.web || url.pathname !== '/auth/callback') return;
+      observed.webCallbackStatus = response.status();
+      const next = response.headers().location;
+      exactCallback = response.status() === 303 && !!next && returned(new URL(next, url));
+    });
     const [response] = await Promise.all([
       page.waitForResponse(
         (response) =>
@@ -449,8 +457,7 @@ async function withOwnerPage<T>(
       fillPasswordSignIn(page, seed.owner.email),
     ]);
     observed.authStatus = response.status();
-    if (response.status() !== 200 || (await response.json()).account_id !== seed.owner.accountId)
-      throw new Error('Auth did not acknowledge the exact owner');
+    if (response.status() !== 200) throw new Error('Auth did not acknowledge sign-in');
     stage = 'Return from Auth to the exact signed-in page';
     await page.waitForURL((url) => returned(url) || consent(url), { waitUntil: 'domcontentloaded' });
     if (consent(new URL(page.url()))) {
@@ -460,8 +467,20 @@ async function withOwnerPage<T>(
     }
     stage = 'Return from Auth to the exact signed-in page';
     await page.waitForURL(returned, { waitUntil: 'domcontentloaded' });
+    if (!exactCallback) throw new Error('Auth did not complete the exact Web callback');
     await hydrated(page);
     await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+    stage = 'Verify the browser’s current Auth account';
+    // The browser context owns the issuer cookie. This independent response stays readable after the redirect.
+    const identity = await context.request.post(new URL('/account-identity', stack.issuer).href, {
+      headers: { origin: stack.issuer },
+      data: {},
+      maxRedirects: 0,
+      timeout: 30_000,
+    });
+    observed.ownerIdentityStatus = identity.status();
+    if (identity.status() !== 200 || (await identity.json())?.account_id !== seed.owner.accountId)
+      throw new Error('The browser’s current Auth account did not match the seeded owner');
     signedIn = true;
     return await witness(page, (next) => {
       stage = next;
