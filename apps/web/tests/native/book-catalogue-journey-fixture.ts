@@ -18,6 +18,7 @@ import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../service
 import { currentNativeLifecycle } from './lifecycle.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
+import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
 
 export type BookCatalogueType = 'schema:Book' | 'schema:BookSeries' | 'bf:Instance';
 export type BookCatalogueIdentity = {
@@ -588,22 +589,29 @@ async function waitForNativeSearch(
   );
   let workerOutput = 'unavailable';
   let readiness = 'unavailable';
+  let frontier: unknown;
   try {
     const lifecycle = currentNativeLifecycle();
     if (!lifecycle) throw new Error('Catalogue Search diagnostics require an active native lifecycle');
-    const [worker, snapshot] = await lifecycle.run(
+    const [worker, snapshot, repair] = await lifecycle.run(
       'read catalogue Search diagnostics',
       5_000,
-      () => Promise.allSettled([stack.workerLogs(), readSearchFailureSnapshot(stack, expected)]),
+      () =>
+        Promise.allSettled([
+          stack.workerLogs(),
+          readSearchFailureSnapshot(stack, expected),
+          readSubjectPublicationFrontier(stack, Date.now() + 4_000),
+        ]),
       false,
     );
     workerOutput = worker.status === 'fulfilled' ? worker.value : 'unavailable';
     readiness = snapshot.status === 'fulfilled' ? snapshot.value : 'unavailable';
+    frontier = repair.status === 'fulfilled' ? repair.value : undefined;
   } catch (error) {
     workerOutput = `Worker diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`;
   }
   throw new Error(
-    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nSubject Search readiness: ${readiness}\nDurable Search worker output:\n${workerOutput}`,
+    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nSubject Search readiness: ${readiness}\nSubject publication frontier: ${JSON.stringify(frontier ?? null)}\nDurable Search worker output:\n${workerOutput}`,
   );
 }
 

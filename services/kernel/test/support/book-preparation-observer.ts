@@ -9,6 +9,7 @@ import {
   type BookRepairOutcome,
   type BookRepairStage,
   type BookSourceOutcome,
+  type BookPreparationTiming,
 } from '../../src/search/book-preparation-timing.ts';
 
 type Sample = { n: number; ms: number };
@@ -23,6 +24,7 @@ type Turn = BookPreparationTurn & {
   source?: BookSourceOutcome;
   repairStage?: BookRepairStage;
   repair?: BookRepairOutcome;
+  sourcePageRefusal?: Parameters<BookPreparationTiming['sourcePageRefusal']>[0];
   threw?: true;
 };
 
@@ -83,6 +85,10 @@ export function createBookPreparationObserver(
     repairOutcome(repair: BookRepairOutcome) {
       const turn = context.getStore();
       if (turn) turn.repair = repair;
+    },
+    sourcePageRefusal(reason: Parameters<BookPreparationTiming['sourcePageRefusal']>[0]) {
+      const turn = context.getStore();
+      if (turn) turn.sourcePageRefusal = reason;
     },
     flush(sample: 'interval' | 'cutoff' | 'exit') {
       if (sample !== 'cutoff' && !finished.length && !active.size && !dropped) return;

@@ -2700,8 +2700,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               context,
             ),
           );
-          if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete')
+          if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete') {
+            timing?.sourcePageRefusal(sourcePage.reason);
             return m.unavailable('source_pending');
+          }
           // An actual owner successor resolves both nonempty items and the empty final step.
           // Source callbacks/brands/frontier equality do not certify its original retained window.
           timing?.repairStage('page-verification');

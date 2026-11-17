@@ -8,6 +8,7 @@ import { startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
+import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
 
 let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
@@ -35,6 +36,7 @@ async function writeArchiveProvenance(result: object) {
 }
 
 nativeBeforeAll(lifecycle, 600_000, async (signal) => {
+  const setupDeadline = Date.now() + 600_000;
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
   await prepareNativeWebSearch('library-archive');
@@ -42,7 +44,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
-  const generation = await waitForSubjectPublication(stack, signal);
+  const generation = await waitForSubjectPublication(stack, signal, setupDeadline);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-owner-library', generation });
 });
 
@@ -62,18 +64,29 @@ async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
-async function waitForSubjectPublication(stack: NativeWebStack, signal: AbortSignal) {
+async function waitForSubjectPublication(stack: NativeWebStack, signal: AbortSignal, setupDeadline: number) {
   const url = process.env.OPENSEARCH_URL;
   const prefix = stack.searchWorker?.prefix;
   if (!url || !prefix) throw new Error('Native Library Archive Search setup has no owned Subject worker');
   const search = createOpenSearch(url, { timeoutMs: 1_500 });
   console.info('Native Library Archive setup: waiting for ordinary Subject publication');
+  let observed = false;
   for (;;) {
     signal.throwIfAborted();
     const { active } = await subjectGenerations(search, prefix, undefined, signal);
     if (active !== null) {
       console.info('Native Library Archive setup: ordinary Subject publication ready', { generation: active });
       return active;
+    }
+    if (!observed && Date.now() >= setupDeadline - 5_000) {
+      observed = true;
+      const frontier = await readSubjectPublicationFrontier(stack, setupDeadline - 2_000).catch(() => undefined);
+      console.info('Native Library Archive setup: Subject publication frontier', frontier ?? null);
+      await writeArchiveProvenance({
+        outcome: 'incomplete',
+        phase: 'waiting-for-subject-publication',
+        frontier: frontier ?? null,
+      });
     }
     await Bun.sleep(1_000);
   }

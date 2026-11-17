@@ -1,4 +1,7 @@
-import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
+import type {
+  NativePublicFilterPublicationCompletion,
+  PublicFilterBindingFailure,
+} from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterConsumerUnavailable } from '../semantic/source-binding-port.ts';
 import type { PublicFilterConsumerRepair } from './public-filter-consumer-contract.ts';
 
@@ -78,6 +81,7 @@ export type BookPreparationTiming = {
   sourceOutcome(source: BookSourceOutcome): void;
   repairStage(stage: BookRepairStage): void;
   repairOutcome(repair: BookRepairOutcome): void;
+  sourcePageRefusal(reason: PublicFilterBindingFailure['reason']): void;
 };
 
 export let bookPreparationTiming: BookPreparationTiming | undefined;
