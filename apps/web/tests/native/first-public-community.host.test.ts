@@ -20,7 +20,15 @@ import { startNativeWebStack } from './stack.ts';
 
 const lifecycle = new NativeTestLifecycle('first-public native community');
 const evidencePath = resolve(import.meta.dir, '../../../../.temp/goal/web/community-native-host/evidence.json');
-const ownerScopes = ['subject:create', 'thread:create', ...communityOwnerActions];
+// Realm creation checks the host Space and Context before reading back the newly created Realm.
+const ownerScopes = [
+  'subject:create',
+  'thread:create',
+  'space:manage',
+  'context:read',
+  'realm:read',
+  ...communityOwnerActions,
+];
 const rosterScopes = ['realm:read', 'realm:manage'];
 const selected = ['W29', 'W31'] as const;
 type Case = (typeof selected)[number];
