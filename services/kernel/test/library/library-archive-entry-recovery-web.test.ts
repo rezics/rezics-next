@@ -128,8 +128,20 @@ test('Native producer file passes mounted receiving selection, preserved Entry, 
       state: 'in_progress',
       revision: original.revision,
     });
+    const restored = journey.snapshot().state!.results!.rows.find((row) => row.ordinal === label.ordinal);
+    expect(restored).toMatchObject({ status: 'acknowledged', labelId: expect.any(String) });
+    const labelId = restored!.labelId!;
+    const listed = await f.send(owner.bearer, 'GET', '/v1/libraryLabels?q=Archived+private+label&limit=3');
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).labels).toContainEqual({ id: labelId, name: 'Archived private label', revision: 1 });
+    const point = new URLSearchParams({ labelId, view: 'FULL', limit: '1' });
+    const current = await f.send(owner.bearer, 'GET', `/v1/libraryLabelAssignments?${point}`);
+    expect(current.status).toBe(200);
+    expect(await current.json()).toMatchObject({ label: { id: labelId, name: 'Archived private label', revision: 1 } });
     await journey.readCurrent(label.ordinal);
-    expect(journey.snapshot().readback?.value).toMatchObject({ label: { name: 'Archived private label' } });
+    expect(journey.snapshot().readback?.value).toMatchObject({
+      label: { id: labelId, name: 'Archived private label' },
+    });
     journey.unselect(entry.ordinal);
     journey.unselect(label.ordinal);
     journey.choose({ ordinal: assignment.ordinal, kind: 'assignment', subjectId, action: 'assign' });
