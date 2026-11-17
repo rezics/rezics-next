@@ -420,10 +420,11 @@ export async function startAuthStack(
         await hydrate(page);
         assertActive('submit native Auth sign-up form');
         const handle = `newcomer-${crypto.randomUUID().slice(0, 8)}`;
-        await page.getByLabel('Handle', { exact: true }).fill(handle);
-        await page.getByLabel('Email', { exact: true }).fill(email);
-        await page.getByLabel('Password', { exact: true }).fill(formPassword);
-        await page.getByLabel('Confirm password', { exact: true }).fill(formPassword);
+        const fields = page.locator('#signup-form input');
+        await fields.and(page.getByLabel('Handle', { exact: true })).fill(handle);
+        await fields.and(page.getByLabel('Email', { exact: true })).fill(email);
+        await fields.and(page.getByLabel('Password', { exact: true })).fill(formPassword);
+        await fields.and(page.getByLabel('Confirm password', { exact: true })).fill(formPassword);
         await page.getByText('Loading the security check…', { exact: true }).waitFor({ state: 'hidden' });
         // Capture the native registration receipt separately from the automatic sign-in response.
         const signupResponse = page.waitForResponse(
