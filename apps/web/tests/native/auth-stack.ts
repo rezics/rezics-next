@@ -18,6 +18,7 @@ import {
 export type AuthPersona =
   | 'alice'
   | 'bob'
+  | 'editor'
   | 'governor'
   | 'suspended'
   | 'newcomer'

@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
-import { mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
+import { chromium } from 'playwright';
+import { createAndRead, type SemanticBrowserSession } from '../scripts/semantic-first-public-browser.ts';
+import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
 import {
   kernelDeadlineTimings,
   nativeWalkCall,
@@ -389,3 +391,111 @@ test('inventory replaces multiline failures and binds both outcomes without chan
   expect(actual).toContain('Keep the owner contract.');
   expect(updateFirstPublicInventory(actual, '123456789012abcdef', '2026-11-07T09:00:00.000Z', results)).toBe(actual);
 });
+
+test.each([false, true])(
+  'the shared generic case retains native writes, browser personas and current public type (%s)',
+  async (wrongPublicType) => {
+    const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/semantic-generic-browser-'));
+    const id = '018f0000-0000-7000-8000-000000000031';
+    const label = 'Shared generic Book';
+    const browserRequests: { path: string; cookie: string | null; diagnostic: string | null }[] = [];
+    const nativeRequests: { method: string; path: string; authorization: string | null }[] = [];
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request) {
+        const path = new URL(request.url).pathname;
+        if (path === '/v1/subjects' || path === `/v1/subjects/${id}`) {
+          nativeRequests.push({ method: request.method, path, authorization: request.headers.get('authorization') });
+          const subject = { id, revision: 1, type: 'schema:Book', labels: { en: label } };
+          if (request.method === 'POST') {
+            expect(await request.json()).toEqual({ type: subject.type, labels: subject.labels });
+            return Response.json({ subject }, { status: 201, headers: { location: `/v1/subjects/${id}` } });
+          }
+          return Response.json({ subject: wrongPublicType ? { ...subject, type: 'schema:Person' } : subject });
+        }
+        browserRequests.push({
+          path,
+          cookie: request.headers.get('cookie'),
+          diagnostic: request.headers.get(mountedSubjectReadHeader),
+        });
+        const reader = path.startsWith('/en/subjects/');
+        return new Response(
+          '<!doctype html><html data-hydrated><title>Shared catalogue fixture</title><main><h1>Shared Book</h1><p>' +
+            'Shared browser fixture. '.repeat(64) +
+            '</p></main></html>',
+          {
+            status: 200,
+            headers: {
+              'content-type': 'text/html',
+              ...(reader
+                ? {
+                    [mountedSubjectReadHeader]: 'subject 200, page 200',
+                  }
+                : {}),
+            },
+          },
+        );
+      },
+    });
+    const browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: directory } });
+    try {
+      const member = await browser.newContext();
+      const anonymous = await browser.newContext();
+      await member.addCookies([{ url: server.url.origin, name: 'fixture-account', value: 'editor' }]);
+      const session: SemanticBrowserSession = {
+        stack: {
+          web: server.url.origin,
+          kernel: server.url.origin,
+          native: server.url.origin,
+          issuer: server.url.origin,
+        },
+        call: nativeWalkCall(server.url.origin, []),
+        editor: 'ordinary-editor-fixture-token',
+        member,
+        anonymous,
+        evidenceDir: directory,
+      };
+      const run = () => createAndRead(session, 'schema:Book', label, '/en/catalogue/new', true);
+      if (!wrongPublicType) {
+        const observed = await run();
+        expect(observed.native).toEqual({ id, type: 'schema:Book', public: 200 });
+        expect(observed.browser.create.status).toBe(200);
+        expect(observed.browser.reader.status).toBe(200);
+        expect(await Bun.file(observed.browser.reader.screenshot).exists()).toBe(true);
+      } else {
+        await expect(run()).rejects.toThrow('schema:Book public type mismatch');
+      }
+      expect(nativeRequests).toEqual([
+        { method: 'POST', path: '/v1/subjects', authorization: 'Bearer ordinary-editor-fixture-token' },
+        { method: 'GET', path: `/v1/subjects/${id}`, authorization: null },
+      ]);
+      if (wrongPublicType) {
+        expect(browserRequests).toHaveLength(0);
+        expect(session.mountedSubject).toBeUndefined();
+        return;
+      }
+      expect(browserRequests.filter(({ path }) => path === '/en/catalogue/new')).toEqual([
+        { path: '/en/catalogue/new', cookie: 'fixture-account=editor', diagnostic: null },
+      ]);
+      const readers = browserRequests.filter(({ path }) => path.startsWith('/en/subjects/'));
+      expect(readers).toHaveLength(1);
+      expect(readers[0]).toMatchObject({ cookie: null, diagnostic: '1' });
+      expect(session.mountedSubject).toEqual({
+        status: 200,
+        native: [
+          { route: 'GET /v1/subjects/:id', stage: 'response', status: 200 },
+          {
+            route: 'POST /v1/pages:read',
+            stage: 'response',
+            status: 200,
+          },
+        ],
+      });
+    } finally {
+      await browser.close();
+      await server.stop(true);
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Browser } from 'playwright';
 import {
   firstPublicWebWalk,
   readLocalDeveloperAccountId,
@@ -61,7 +61,13 @@ import {
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { walkStackLogPath, withWalkResources } from '../../../scripts/walk-stack.ts';
-import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
+import {
+  createAndRead,
+  hydrated,
+  visit,
+  type MountedSubjectDiagnostic,
+  type SemanticBrowserSession,
+} from './semantic-first-public-browser.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
@@ -69,7 +75,6 @@ const editorEmail = 'developer@rezics.test';
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
-type MountedSubjectDiagnostic = { status: number; native: ReturnType<typeof mountedSubjectReads> };
 
 type Result = {
   id: FirstPublicJourneyId;
@@ -167,38 +172,6 @@ async function prepareSeededEditorAgent(call: KernelCall, editor: string) {
   if ((await child.exited) !== 0) throw new Error('seeded editor Agent fixture synchronization was blocked');
 }
 
-async function hydrated(page: Page): Promise<void> {
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 180_000 });
-}
-
-async function openPage(
-  context: BrowserContext,
-  href: string,
-  viewport: { width: number; height: number },
-  theme: 'light' | 'dark',
-  onMountedSubject?: (diagnostic: MountedSubjectDiagnostic) => void,
-): Promise<{ page: Page; status: number; url: string }> {
-  const page = await context.newPage();
-  page.setDefaultTimeout(60_000);
-  await page.setViewportSize(viewport);
-  await page.emulateMedia({ colorScheme: theme });
-  if (onMountedSubject) await page.setExtraHTTPHeaders({ [mountedSubjectReadHeader]: '1' });
-  try {
-    const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
-    const status = response?.status() ?? 0;
-    if (onMountedSubject) {
-      const header = await response?.headerValue(mountedSubjectReadHeader);
-      onMountedSubject({ status, native: mountedSubjectReads(header ?? null) });
-    }
-    await hydrated(page);
-    await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 });
-    return { page, status, url: page.url() };
-  } catch (error) {
-    await page.close();
-    throw error;
-  }
-}
-
 function ownerOf(error: string): string {
   if (/playwright|hydrat|locator|html\[data-hydrated\]|heap out of memory/i.test(error)) return 'web';
   if (/search|opensearch|index/i.test(error)) return 'search';
@@ -230,61 +203,12 @@ async function recordInventory(revision: string, utc: string, results: Result[])
   await writeFile(join(evidenceDir, 'inventory.md'), next, { mode: 0o600 });
 }
 
-type Session = {
-  stack: Stack;
-  call: KernelCall;
+type Session = SemanticBrowserSession & {
   trace: NativeObservation[];
-  editor: string;
   outsider?: string;
-  anonymous: BrowserContext;
-  member: BrowserContext;
   revision: string;
-  frontendCause?: string;
-  mountedSubject?: MountedSubjectDiagnostic;
   refreshEditor?: () => Promise<void>;
 };
-
-async function visit(
-  session: Session,
-  href: string,
-  options: {
-    width?: number;
-    theme?: 'light' | 'dark';
-    persona?: 'anonymous' | 'member';
-    expectedStatus?: number;
-    mountedSubject?: boolean;
-  } = {},
-) {
-  if (session.frontendCause) throw new Error(session.frontendCause);
-  const context = options.persona === 'member' ? session.member : session.anonymous;
-  const opened = await openPage(
-    context,
-    href,
-    { width: options.width ?? 1280, height: 900 },
-    options.theme ?? 'light',
-    options.mountedSubject ? (diagnostic) => (session.mountedSubject = diagnostic) : undefined,
-  );
-  if (options.mountedSubject && opened.status !== (options.expectedStatus ?? 200)) {
-    await opened.page.close();
-    throw new Error(`${href} returned HTTP ${opened.status}`);
-  }
-  const title = await opened.page.title();
-  const heading = await opened.page
-    .locator('h1, h2')
-    .first()
-    .textContent()
-    .catch(() => null);
-  const screenshot = join(
-    evidenceDir,
-    'screenshots',
-    `${randomUUID()}-${options.width ?? 1280}-${options.theme ?? 'light'}.png`,
-  );
-  await opened.page.screenshot({ path: screenshot, fullPage: true });
-  await opened.page.close();
-  if (opened.status !== (options.expectedStatus ?? 200))
-    throw new Error(`${href} returned HTTP ${opened.status}; screenshot ${screenshot}`);
-  return { url: opened.url, status: opened.status, title, heading, screenshot };
-}
 
 async function journey(
   session: Session,
@@ -359,23 +283,6 @@ async function releasedDefinitions(session: Session): Promise<{ native: unknown;
     );
   }
   return { native: { digest, typeStatus: types.status, author: true }, browser };
-}
-
-async function createAndRead(session: Session, type: string, label: string, pagePath: string, mountedSubject = false) {
-  const created = await createSubject(session.call, session.editor, type, label);
-  const publicRead = await readSubject(session.call, created.id);
-  requireStatus(publicRead, 200, `anonymous ${type}`);
-  if ((publicRead.body.subject as { type: string }).type !== type) throw new Error(`${type} public type mismatch`);
-  const browser = await visit(session, `${session.stack.web}${pagePath}`, {
-    width: type.endsWith('Recipe') || type.includes('Q95074') ? 390 : 1280,
-    theme: type.includes('VideoGame') ? 'dark' : 'light',
-    persona: 'member',
-  });
-  const reader = await visit(session, `${session.stack.web}${subjectHref(created.id, label)}`, {
-    width: 1440,
-    mountedSubject,
-  });
-  return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
 async function runNativeBoundaries(stack: Stack, revision: string, stackLog: string) {
@@ -458,6 +365,15 @@ async function main(scope: WalkScope) {
   const stack = stackOrigins();
   const stackLog = walkStackLogPath(root, walkId);
   const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
+  if (scope === 'mounted-subject' || scope === 'statement-consent') {
+    await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(evidenceDir, `${scope}.json`),
+      JSON.stringify({ scope, revision, utc: new Date().toISOString(), phase: 'preparing', result: null }, null, 2) +
+        String.fromCharCode(10),
+      { mode: 0o600 },
+    );
+  }
   if (scope === 'native-boundaries') return runNativeBoundaries(stack, revision, stackLog);
 
   return withWalkResources(async (own) => {
@@ -578,6 +494,7 @@ async function main(scope: WalkScope) {
             anonymous,
             member,
             revision,
+            evidenceDir,
             ...(frontendCause === undefined ? {} : { frontendCause }),
             ...(keys
               ? {
@@ -747,6 +664,7 @@ async function main(scope: WalkScope) {
           scope,
           revision,
           utc: new Date().toISOString(),
+          phase: 'completed',
           result,
           kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
         };
