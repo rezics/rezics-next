@@ -281,7 +281,7 @@ async function publishZone(
   return created.zone.id;
 }
 
-async function publishTypeLists(
+export async function publishTypeLists(
   fixture: ReleasedDiscoveryFixture,
   routes: readonly Readonly<{ route: string; document: CompositionDocument }>[],
 ): Promise<void> {
@@ -303,7 +303,7 @@ async function publishTypeLists(
       discoveryKey(),
     ),
     201,
-    'Publish Book and Recipe TypeList routes',
+    'Publish TypeList routes',
   );
   const active = requireStatus(
     await fixture.request('anonymous', 'GET', '/v1/presentation/active'),
@@ -319,7 +319,7 @@ async function publishTypeLists(
       discoveryKey(),
     ),
     200,
-    'Activate Book and Recipe TypeList routes',
+    'Activate TypeList routes',
   );
 }
 

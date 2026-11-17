@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { observeComposedReads, observeEngineRequest } from './composed-page-cost.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../../../src/request/access.ts';
 import { composeSearchNativePorts } from '../../../src/composition/search-native.ts';
@@ -105,7 +106,7 @@ export function releasedDiscoveryRuntime(
     }));
   const search: OpenSearch = {
     async request<T>(...args: Parameters<OpenSearch['request']>) {
-      return (await connect()).request<T>(...args);
+      return observeEngineRequest<T>(await connect(), ...args);
     },
     async bulk<T>(...args: Parameters<OpenSearch['bulk']>) {
       return (await connect()).bulk<T>(...args);
@@ -338,7 +339,7 @@ export function releasedDiscoveryRuntime(
         ratings,
         cursors: config.tokens,
         clock: config.clock ?? systemClock,
-        publicFilters: native,
+        publicFilters: () => observeComposedReads(native()),
         async preparePublic(job) {
           await retain(job);
         },
