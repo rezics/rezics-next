@@ -285,7 +285,7 @@ test('native homonyms retain qualified Work, Release and Recording context throu
   expect(html).toContain('作品のコンテキスト · 作品');
   expect(html).toContain('作品のコンテキスト · リリース');
   expect(html).toContain('作品のコンテキスト · 録音');
-  expect(html).toContain('2009年');
+  expect(html).toContain('<span>刊行日: </span>2009</p>');
   expect(html).toContain('2010年2月');
   expect(html).toContain('2011年3月');
   expect(html).toContain('2012年4月5日');
