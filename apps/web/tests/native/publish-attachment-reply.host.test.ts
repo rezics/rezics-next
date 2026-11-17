@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { BrowserContext, Page } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
   createPublishAttachmentWorkBoard,
   trustAccount,
@@ -11,7 +12,7 @@ import {
 } from './publish-attachment-reply-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
-setDefaultTimeout(1_200_000);
+const lifecycle = new NativeTestLifecycle('native discussion Board publishing and attachments');
 
 const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
 const touchedLabels = [
@@ -165,22 +166,16 @@ function documentHas(value: unknown, needle: string): boolean {
   return JSON.stringify(value).includes(needle);
 }
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 900_000, async () => {
   originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
   stack = await startNativeWebStack({ localShowcaseBoardCreation: true });
   auth = await startAuthStack(stack);
   board = await createPublishAttachmentWorkBoard(stack);
-}, 900_000);
+});
 
-afterAll(async () => {
-  try {
-    await auth?.stop();
-  } finally {
-    await stack?.stop();
-  }
-}, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
-test('ordinary members publish a Work Board post with an attachment, reply, recover, replace, and leave a dirty draft', async () => {
+async function publishAttachmentReply() {
   const sequence: string[] = [];
   const author = await signUpMember(board.boardUrl);
   sequence.push(`signup-author:${author.accountId}`);
@@ -405,4 +400,11 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   await author.context.close();
   await replier.context.close();
   await anonymous.close();
-});
+}
+
+nativeTest(
+  'ordinary members publish a Work Board post with an attachment, reply, recover, replace, and leave a dirty draft',
+  1_200_000,
+  publishAttachmentReply,
+  lifecycle,
+);
