@@ -338,15 +338,19 @@ function webMemoryRole(args: string[], cwd: () => string): WebMemoryRole {
     cwd().endsWith('/services/kernel')
   )
     return 'kernelHttp';
-  if (args.some((arg) => posix.basename(arg) === 'vite.config.ts') && cwd().endsWith('/apps/auth')) return 'authPages';
+  if (args.some((arg) => posix.basename(arg) === 'vite.config.ts')) {
+    const directory = cwd();
+    if (directory.endsWith('/apps/auth')) return 'authPages';
+    if (directory.endsWith('/apps/web')) return 'vite';
+  }
   return 'other';
 }
 
 /** Inspect only the slice and command scope named by the owning physical run. Process totals are PSS observations;
  * cgroup charges (including file cache) are independent. Only aggregate roles leave this reader.
  */
-export function sampleWebStartupMemory(
-  selfRole: 'webPreparer' | 'vite',
+export function sampleOwnedWebRunMemory(
+  selfRole: WebMemoryRole,
   env = process.env,
   read: Read = boundedRead,
   readChildren: ReadChildren = boundedCgroupChildren,
@@ -426,7 +430,7 @@ export function logWebStartupMemory(checkpoint: WebMemoryCheckpoint, selfRole: '
   if (webMemoryCheckpoints.has(checkpoint)) return;
   webMemoryCheckpoints.add(checkpoint);
   const sampledAt = new Date().toISOString();
-  const observation = optional(() => sampleWebStartupMemory(selfRole)) ?? {
+  const observation = optional(() => sampleOwnedWebRunMemory(selfRole)) ?? {
     status: 'unavailable',
     reason: 'memory_sample_unavailable',
   };

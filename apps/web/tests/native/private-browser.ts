@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
@@ -34,13 +36,27 @@ type BridgeResponse = {
   body: string;
 };
 
+function headlessShellExecutable(): string {
+  // The namespace wrapper supplies a custom executable path, bypassing Playwright's usual headless program selection.
+  const requirePlaywright = createRequire(import.meta.resolve('playwright'));
+  const { registry } = requirePlaywright('playwright-core/lib/coreBundle') as {
+    registry: { registry: { findExecutable(name: string): { executablePath(): string | undefined } | undefined } };
+  };
+  const executable = registry.registry.findExecutable('chromium-headless-shell')?.executablePath();
+  if (!executable || !existsSync(executable))
+    throw new Error('The private Book browser requires the Playwright-installed Chromium headless shell');
+  return executable;
+}
+
 export async function launchPrivateBrowser(
   allowedOrigins: readonly string[],
   moduleFailureTrace?: WebModuleFailureTrace,
+  useHeadlessShell = false,
 ): Promise<PrivateBrowser> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Private browser startup requires an active native test lifecycle');
   lifecycle.assertOpen('start private browser');
+  const executable = useHeadlessShell ? headlessShellExecutable() : chromium.executablePath();
 
   const probe = Bun.spawnSync(['unshare', '--user', '--map-root-user', '--net', 'true'], {
     stdin: 'ignore',
@@ -382,7 +398,7 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
       env: {
         ...process.env,
         NATIVE_BROWSER_BUN: process.execPath,
-        NATIVE_BROWSER_CHROMIUM: chromium.executablePath(),
+        NATIVE_BROWSER_CHROMIUM: executable,
         NATIVE_BROWSER_NAMESPACE_SCRIPT: namespaceScript,
         NATIVE_BROWSER_PROXY: resolve(import.meta.dir, 'private-browser-host.ts'),
         NATIVE_BROWSER_PROXY_PORT: String(localProxyPort),

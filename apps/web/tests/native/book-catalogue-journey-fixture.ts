@@ -739,7 +739,7 @@ export async function startBookCatalogueJourneyFixture(
 
     const search = await waitForNativeSearch(stack, marker, expected);
     const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
-    auth = await startAuthStack(stack);
+    auth = await startAuthStack(stack, { useHeadlessShell: true });
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({

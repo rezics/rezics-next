@@ -144,7 +144,7 @@ async function hydrate(page: Page): Promise<void> {
 
 export async function startAuthStack(
   stack: NativeWebStack,
-  options: { nativeFixtureKey?: string } = {},
+  options: { nativeFixtureKey?: string; useHeadlessShell?: boolean } = {},
 ): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
@@ -253,7 +253,11 @@ export async function startAuthStack(
       process.env.WEB_TEST_MODULE_FAILURE_TRACE === '1'
         ? traceWebModuleFailure(stack.web, stack.memoryObservation?.())
         : undefined;
-    privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin], moduleFailureTrace);
+    privateBrowser = await launchPrivateBrowser(
+      [stack.web, origin, turnstile.url.origin],
+      moduleFailureTrace,
+      options.useHeadlessShell,
+    );
     lifecycle.assertOpen('finish private Auth browser startup');
     browser = privateBrowser.browser;
     const cdp = await browser.newBrowserCDPSession();
