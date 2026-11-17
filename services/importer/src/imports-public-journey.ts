@@ -533,6 +533,8 @@ export async function retireWalkJournals(repository = root): Promise<void> {
 
 const SEED_PHASE_LINE =
   /^Cross-media seed finalization state=(?:started|completed|failed) scope=(?:seed|record-import|publication|books)(?: phase=[a-z-]+)? remaining=[a-z,-]+$/;
+const RESERVED_COVER_CONTINUATION =
+  /^Cross-media seed import failed provider=bangumi kind=bulk-failed generation=([1-9][0-9]{0,19}) run\{phase=media reason=cover-pending keyDigest=([a-f0-9]{64}) mediaState=reserved\}[^\n]* finalization\{scope=record-import phase=bangumi-cover-continuation /m;
 
 export async function captureSeedStderr(
   stream: ReadableStream<Uint8Array>,
@@ -561,7 +563,29 @@ async function command(name: string, args: string[], env: NodeJS.ProcessEnv = pr
     captureSeedStderr(child.stderr),
     child.exited,
   ]);
-  await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}`, { mode: 0o600 });
+  let diagnostic = '';
+  const reserved = name === 'seed' && code !== 0 ? RESERVED_COVER_CONTINUATION.exec(stderr) : null;
+  if (reserved) {
+    // The admitted walk still owns PostgreSQL here. Keep the observation with the returned seed log.
+    let evidence: object;
+    try {
+      const { readCoverContinuation } = await import('../../kernel/scripts/read-cover-continuation.ts');
+      evidence = await readCoverContinuation({
+        journal: resolve(root, '.temp/cross-media-seed/state.sqlite'),
+        generation: reserved[1]!,
+        keyDigest: reserved[2]!,
+        account: env.REZICS_DEV_PERSONA_ACCOUNT!,
+        databasePort: process.env.KERNEL_DATABASE_PORT!,
+        kernelEnvironment: await parseEnv(resolve(root, 'services/kernel/.env')),
+      });
+    } catch {
+      evidence = { state: 'unavailable' };
+    }
+    const line = `Cover continuation diagnostic ${JSON.stringify(evidence)}`;
+    console.error(line);
+    diagnostic = `\n${line}\n`;
+  }
+  await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}${diagnostic}`, { mode: 0o600 });
   if (code !== 0) throw walkChildFailure(name, code, stdout, stderr);
 }
 
