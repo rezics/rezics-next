@@ -1,3 +1,4 @@
+import { bangumiCharacterKind } from '@rezics/conversion/cross-media-entities';
 import { importCommandPages } from './import-client.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
@@ -102,7 +103,7 @@ function selectedNeed(plan: CrossMediaPlan, workTypes: readonly SupportedWorkTyp
     .sort((left, right) => left.key.localeCompare(right.key));
   for (const record of characterRecords) {
     if (!record.payload || typeof record.payload !== 'object') continue;
-    const evidence = mappingEvidence('bangumi.character.role', record.payload.type, record.key);
+    const evidence = mappingEvidence('bangumi.character.role', bangumiCharacterKind(record.payload), record.key);
     if (evidence) concepts.set(`${evidence.taxonomy}\0${evidence.code}`, evidence);
   }
   const orderedAppearances = appearances

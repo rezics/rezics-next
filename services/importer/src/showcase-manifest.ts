@@ -666,6 +666,11 @@ export function buildShowcaseManifest(input: {
         ...(ownerKey === undefined ? {} : { ownerKey }),
         ...(graphTarget ? { graphTarget } : {}),
       };
+      const existing = sourceAssertions.findIndex((entry) => entry.candidateId === assertion.candidateId);
+      if (existing !== -1) {
+        if (graphTarget) sourceAssertions[existing] = ownedAssertion;
+        continue;
+      }
       if (sourceAssertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
         candidateOverflow = true;
         continue;
@@ -781,6 +786,7 @@ export function buildShowcaseManifest(input: {
         continue;
       const assertion = candidateAssertion(entry);
       if (!assertion) continue;
+      if (assertions.some((entry) => entry.candidateId === assertion.candidateId)) continue;
       if (assertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
         candidateOverflow = true;
         continue;

@@ -592,7 +592,7 @@ test('mixed Bangumi proposal envelopes fit native bytes and resume without ackno
         source: 'bangumi_cross_media',
         external_id: String(index + 1),
         record_revision: 'unversioned',
-        converter_revision: 'cross-media-entities@15+bangumi@17',
+        converter_revision: 'cross-media-entities@16+bangumi@17',
         digest: 'a'.repeat(64),
         field_group: 'facts',
       },

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { BatchCommand } from '@rezics/definitions/bulk';
+import { showcaseLimits } from '../src/showcase-contract.ts';
 import { GLOBAL_CONTEXT } from '../src/public-bulk-client.ts';
 import { preferCurrentCandidateAcknowledgements, ShowcaseJournal } from '../src/showcase-publication.ts';
 
@@ -60,6 +61,75 @@ test('a later reciprocal receipt cannot displace the current native candidate ci
     expect(await preferCurrentCandidateAcknowledgements(acks, review, cache, journal)).toEqual(selected);
     expect(reads).toBe(1);
     expect(journal.acknowledgedCommands()).toEqual(acks);
+  } finally {
+    journal.close();
+  }
+});
+
+test('exact command keys survive native candidate reuse through publication', async () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const original: BatchCommand = {
+      op: 'propose',
+      key: 'original',
+      subject: id(1),
+      source: {
+        source: 'bangumi_cross_media',
+        external_id: '26',
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'book-membership@1',
+        field_group: 'facts',
+      },
+      statement: { property: { id: 'wdt:P179' }, value: { type: 'value', content: id(2) }, references: [] },
+    };
+    const replay = { ...original, key: 'later-generation' };
+    for (const command of [original, replay]) {
+      journal.prepareCommand(command);
+      journal.acknowledgeCommand(command, { key: command.key, status: 200, value: { candidate: id(3), revision: 4 } });
+    }
+    const selected = await preferCurrentCandidateAcknowledgements(
+      journal.acknowledgedCommands(),
+      {
+        reviewedCandidates() {
+          throw new Error('Equal proposal bodies need no citation arbitration');
+        },
+      },
+      new Map(),
+    );
+    expect(selected.map(({ command }) => command.key).sort()).toEqual(['later-generation', 'original']);
+  } finally {
+    journal.close();
+  }
+});
+
+test('an exact selected command remains addressable beyond the historical acknowledgement page', () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const command: BatchCommand = {
+      op: 'create',
+      key: 'z-selected',
+      source: {
+        source: 'bangumi_cross_media',
+        external_id: '26',
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'book@1',
+        field_group: 'facts',
+      },
+      subject: { type: 'schema:Book', labels: { und: 'Selected volume' } },
+    };
+    journal.prepareCommand(command);
+    journal.acknowledgeCommand(command, { key: command.key, status: 201, value: { id: id(1), revision: 1 } });
+    const expected = journal.acknowledgedCommand(command.key);
+    for (let n = 0; n < showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary; n++) {
+      const older = { ...command, key: `a-history-${n}` };
+      journal.prepareCommand(older);
+      journal.acknowledgeCommand(older, { key: older.key, status: 201, value: { id: id(1), revision: 1 } });
+    }
+    expect(journal.acknowledgedCommands().some((entry) => entry.command.key === command.key)).toBe(false);
+    expect(journal.acknowledgedCommand(command.key)).toEqual(expected);
+    expect(journal.acknowledgedCommand('unseen')).toBeNull();
   } finally {
     journal.close();
   }

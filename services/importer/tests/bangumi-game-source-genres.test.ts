@@ -1,3 +1,4 @@
+import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
 import { expect, test } from 'bun:test';
 import type { ReviewedCandidatePage, ReviewedSubjectRead } from '../src/import-client.ts';
 import {
@@ -9,6 +10,7 @@ import { converter_revision } from '@rezics/conversion/bangumi';
 import {
   createShowcaseBangumiGameGenreLookup,
   parseBangumiGameGenreBindings,
+  reviewedBangumiGameGenreBindings,
 } from '../src/showcase-bangumi-game-genres.ts';
 import { isUnavailableIdentifierResolution, type ImportIdentifierResolution } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -272,4 +274,23 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   expect(adapter.bindingFor(literal)?.id).toBe(ids[0]);
   expect(adapter.diagnostics()).toEqual([]);
   expectReads(5);
+});
+
+test('the development catalogue hands its exact unsplit Game genre to current binding inspection', () => {
+  const result = reviewedBangumiGameGenreBindings(releasedReviewedVocabulary(), {
+    'bangumi-game-genres-scheme': schemeId,
+    'bangumi-game-genre-science-adventure': conceptId,
+  });
+  expect(result).toEqual({
+    schemeId,
+    schemeUri: bangumiGameSourceGenreScheme,
+    concepts: [
+      {
+        literal: '想定科学ADV',
+        id: conceptId,
+        sourceUri: 'https://bgm.tv/subject/3154#/infobox/游戏类型/0',
+      },
+    ],
+  });
+  expect(reviewedBangumiGameGenreBindings(releasedReviewedVocabulary(), {})).toBeUndefined();
 });

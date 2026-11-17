@@ -238,6 +238,15 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       .run(subjectId, candidateId, command.key);
   }
 
+  acknowledgedCommand(key: string): ShowcaseAcknowledgement | null {
+    const row = this.#db
+      .query<JournalCommandRow, [string]>(
+        "SELECT command_key,command_digest,command_json,state,subject_id,candidate_id FROM showcase_command WHERE command_key=? AND state='acknowledged'",
+      )
+      .get(key);
+    return row ? commandAcknowledgement(row) : null;
+  }
+
   acknowledgedCommands(sources?: readonly BatchCommand['source'][]): ShowcaseAcknowledgement[] {
     if (sources) {
       const bound = showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary;

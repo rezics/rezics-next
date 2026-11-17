@@ -21,7 +21,7 @@ import {
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
 } from '../src/showcase-manifest.ts';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
+import { sourceDigest, vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -452,7 +452,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
               decision: rejected.has(candidate.id) ? 'rejected' : accepted.has(candidate.id) ? 'accepted' : null,
               rank: rejected.has(candidate.id)
                 ? 'deprecated'
-                : adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
+                : (adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null),
             }))
             .concat([{ id: randomUUID(), deleted: true }] as never),
           next: null,
@@ -1191,9 +1191,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(adopted.get(`${membership.command.subject}\0schema:genre`)?.selection).toContainEqual(
       expect.objectContaining({ candidate: membershipCandidateId }),
     );
-    expect(
-      publicReads.get(membership.command.subject)?.subject?.statements?.['schema:genre'] ?? [],
-    ).not.toContainEqual(expect.objectContaining({ id: membershipCandidateId }));
+    expect(publicReads.get(membership.command.subject)?.subject?.statements?.['schema:genre'] ?? []).not.toContainEqual(
+      expect.objectContaining({ id: membershipCandidateId }),
+    );
     const rejectedMembershipPage = await review.reviewedCandidates(membership.command.subject, {
       context: globalContext,
       property: 'schema:genre',
@@ -1247,7 +1247,41 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     selectedSynopsisOverride = undefined;
     const recoveredCurrentSynopsis = await publishShowcase({
       plan,
-      result,
+      result: {
+        ...result,
+        status: 'imported-with-gaps',
+        gaps: [
+          ...result.gaps,
+          {
+            source: 'vndb',
+            fields: ['vn_extlinks.site'],
+            record: { id: 'v1' },
+            reason: 'Unsupported external link site; retained as source metadata only',
+          },
+        ],
+        vndbCreditDiagnostics: [
+          {
+            provider: 'vndb',
+            path: '/chars/bloodt',
+            code: 'unknown',
+            reason: 'invalid_row',
+            property: 'chars.bloodt',
+          },
+        ],
+        mediaOutcomes: [
+          ...result.mediaOutcomes,
+          {
+            sourceAlias: crossMediaAliases.bangumi,
+            externalId: '101',
+            sourceRevision: 'unversioned',
+            archiveDigest: sourceDigest(plan.records.bangumi.find((row) => row.key === '101')!.payload),
+            endpoint: 'https://api.bgm.tv/v0/subjects/101',
+            sourceStatus: 'absent',
+            status: 'absent',
+            containerId: workId,
+          },
+        ],
+      },
       aliases: crossMediaAliases,
       journal,
       review,
@@ -1255,9 +1289,72 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(recoveredCurrentSynopsis.status).toBe('published');
+    expect(recoveredCurrentSynopsis.omissions).toContainEqual({
+      provider: 'bangumi',
+      sourceKey: '101',
+      code: 'cover-source-absent',
+    });
     expect(
       recoveredCurrentSynopsis.published.some((record) => record.provider === 'bangumi' && record.sourceKey === '101'),
     ).toBe(true);
+
+    for (const reason of ['property_not_admitted', 'invalid_row'] as const) {
+      const missingRequiredProperty = await publishShowcase({
+        plan,
+        result: {
+          ...result,
+          characterDiagnostics: [
+            {
+              provider: 'bangumi',
+              path: '/subject/101/summary',
+              endpoint: '101',
+              reason,
+              property: 'schema:abstract',
+              requiredProfile: 'schema:TVSeries',
+            },
+          ],
+        },
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        ...tagOptions,
+      });
+      expect(missingRequiredProperty.published.some((record) => record.sourceKey === '101')).toBe(true);
+      expect(missingRequiredProperty.status).toBe('incomplete');
+      expect(missingRequiredProperty.omissions).toContainEqual({
+        provider: 'bangumi',
+        sourceKey: '101',
+        code: 'source-claim-withheld',
+      });
+    }
+
+    const missingRequiredBinding = await publishShowcase({
+      plan,
+      result: {
+        ...result,
+        characterDiagnostics: [
+          {
+            provider: 'bangumi',
+            path: '/subject-characters/0/type',
+            code: '1',
+            reason: 'missing_scheme',
+            property: 'skos:ConceptScheme',
+          },
+        ],
+      },
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(missingRequiredBinding.status).toBe('incomplete');
+    expect(missingRequiredBinding.omissions).toContainEqual({
+      provider: 'bangumi',
+      sourceKey: 'selected-family',
+      code: 'source-claim-withheld',
+    });
 
     const reopenedSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
     const reopenedSubject = [...subjects.values()].find(
@@ -1867,9 +1964,7 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
           const rows = [...candidates.values()].filter((candidate) => candidate.statement.property.id === property);
           const paginated = property === 'schema:name';
           const page = paginated
-            ? rows.filter((candidate) =>
-                query.cursor ? candidate.id === editorialId : candidate.id !== editorialId,
-              )
+            ? rows.filter((candidate) => (query.cursor ? candidate.id === editorialId : candidate.id !== editorialId))
             : rows;
           return {
             candidates: page.map((candidate) => ({
@@ -2029,7 +2124,11 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
         expect(withheld.status).toBe('incomplete');
         expect(withheld.published.some((record) => record.sourceKey === 'v1')).toBe(false);
         expect(withheld.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'review-http-503' });
-        expect(withheld.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'source-uri-not-current' });
+        expect(withheld.omissions).toContainEqual({
+          provider: 'vndb',
+          sourceKey: 'v1',
+          code: 'source-uri-not-current',
+        });
         expect(adoptionWrites).toHaveLength(writesBeforeIdentityFailure);
       }
     } finally {

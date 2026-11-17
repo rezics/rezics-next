@@ -870,5 +870,60 @@
         "citations": ["https://vndb.org/g249"]
       }
     ]
+  },
+  {
+    "key": "bangumi-game-genres-scheme",
+    "schemeURI": "https://rezics.com/schemes/bangumi/genres",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Bangumi Game source genres"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi Game source genre scheme",
+      "url": "https://rezics.com/schemes/bangumi/genres",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/genres",
+        "citations": ["https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-game-genre-science-adventure",
+    "schemeURI": "https://rezics.com/schemes/bangumi/genres",
+    "literalMember": "想定科学ADV",
+    "type": "skos:Concept",
+    "labels": {
+      "und": "想定科学ADV"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi Game source genre",
+      "url": "https://bgm.tv/subject/3154#/infobox/游戏类型/0",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-game-genres-scheme",
+        "citations": ["https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://bgm.tv/subject/3154#/infobox/游戏类型/0",
+        "citations": ["https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"]
+      }
+    ]
   }
 ]

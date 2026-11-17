@@ -1,8 +1,10 @@
+import { showcaseBookFamilies } from './showcase-book-series.ts';
+import { graphEdgeCommandKey } from './cross-media-bindings.ts';
 import { SeedFinalization } from './seed-cli.ts';
 import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
-import { bundledDigest } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { ImportTransportError, importCommandPages, type ReviewedSubjectRead } from './import-client.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
@@ -32,6 +34,7 @@ import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFrom
 import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
 import {
   bangumiRecordUrl,
+  bangumiCharacterKind,
   converter_revision as entityRevision,
   crossMediaCoverDigest,
   mapSourceEnumeration,
@@ -647,13 +650,37 @@ function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): 
   }
 }
 
-function safeGapKey(value: Record<string, unknown>): string {
-  for (const field of ['id', 'subject_id', 'vid', 'person_id', 'character_id', 'episode_id']) {
-    const entry = value[field];
-    if ((typeof entry === 'string' || typeof entry === 'number') && /^[A-Za-z0-9:_-]{1,64}$/u.test(String(entry)))
-      return String(entry);
+function metadataOnlyPublicationGap(
+  gap: CrossMediaSeedResult['creditGaps'][number],
+  plan: CrossMediaPlan,
+  manifest: ShowcaseManifest,
+): boolean {
+  const requiredProfile = 'requiredProfile' in gap ? gap.requiredProfile : undefined;
+  if (gap.reason === 'property_not_admitted') {
+    const draft = plan.credits.find((row) => row.kind === 'staff' && row.path === gap.path);
+    const record = manifest.records.find((row) => row.provider === gap.provider && row.sourceKey === draft?.work);
+    // The adopted BookSeries contract leaves series-grain individual credits as source metadata.
+    return (
+      gap.provider === 'bangumi' &&
+      requiredProfile === 'schema:BookSeries' &&
+      (gap.property === 'schema:author' || gap.property === 'schema:illustrator') &&
+      draft?.workType === 1 &&
+      gap.code === String(draft.roleCode) &&
+      gap.endpoint === draft.person &&
+      showcaseBookFamilies.some((family) => family.seriesId === draft.work) &&
+      record?.nativeType === requiredProfile &&
+      bundledRelease.types[requiredProfile]?.properties.includes(gap.property) === false &&
+      mapSourceEnumeration('bangumi', 'staff.1', draft.roleCode!)?.term === gap.property
+    );
   }
-  return 'selected-family';
+  // A native admission failure cannot become optional because the record has other published facts.
+  if (requiredProfile !== undefined || gap.property?.includes(':')) return false;
+  const mapping = gap.property && gap.code ? mapSourceEnumeration(gap.provider, gap.property, gap.code) : undefined;
+  if (gap.reason === 'unknown_code') return !mapping || mapping.status === 'omitted';
+  if (gap.reason === 'unsupported_source_case') return true;
+  if (gap.reason === 'invalid_row' || gap.reason === 'invalid_source_value')
+    return gap.property !== undefined && !mapping?.term && !mapping?.concept;
+  return false;
 }
 
 async function candidatePage(
@@ -759,7 +786,7 @@ export async function preferCurrentCandidateAcknowledgements(
     if (
       candidateId &&
       command.op === 'propose' &&
-      group.some((entry) => entry.commandDigest !== fallback.commandDigest)
+      group.some((entry) => proposalIdentity(entry.command) !== proposalIdentity(command))
     ) {
       try {
         const page = await candidatePage(
@@ -785,7 +812,8 @@ export async function preferCurrentCandidateAcknowledgements(
         // The normal publication validation below still owns unavailable/mismatched readback diagnostics.
       }
     }
-    selected.push(exact ?? fallback);
+    const current = proposalIdentity((exact ?? fallback).command);
+    selected.push(...group.filter((entry) => proposalIdentity(entry.command) === current));
   }
   return selected;
 }
@@ -1068,6 +1096,20 @@ async function publishShowcasePhases(
       });
       acknowledgements = input.journal.acknowledgedCommands();
     }
+    // Exact current graph operations cannot fall out of the historical journal's bounded page.
+    const graphKeys = new Set([
+      ...input.plan.edges.flatMap((edge) => {
+        const key = graphEdgeCommandKey(edge);
+        return [key, `${edge.alias}:${edge.holder}:${key}`];
+      }),
+      ...(input.result.workRelations ?? []).flatMap((entry) => (entry.command ? [entry.command.key] : [])),
+    ]);
+    const byCommandKey = new Map(acknowledgements.map((entry) => [entry.command.key, entry]));
+    for (const key of graphKeys) {
+      const exact = input.journal.acknowledgedCommand(key);
+      if (exact) byCommandKey.set(key, exact);
+    }
+    acknowledgements = [...byCommandKey.values()];
     recovered = await resolveLegacyCandidates({
       plan: input.plan,
       result,
@@ -1157,16 +1199,24 @@ async function publishShowcasePhases(
   ].slice(0, showcaseLimits.omissions);
   if (!manifest.records.length && !manifest.vocabulary.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-read-missing' });
-  if (result.status === 'imported-with-gaps')
-    omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
-  for (const gap of result.gaps.slice(0, showcaseLimits.omissions))
-    omissions.push({ provider: gap.source, sourceKey: safeGapKey(gap.record), code: 'source-claim-withheld' });
+  // Acquisition limits and unsupported source metadata remain on result.gaps.
+  // The manifest independently checks every selected identity and delivered assertion.
   for (const unresolved of result.unresolved.slice(0, showcaseLimits.omissions))
     omissions.push({ provider: 'bangumi', sourceKey: unresolved.holder, code: 'source-claim-withheld' });
-  if (result.creditGaps.length || result.characterDiagnostics.length)
-    omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
-  if (gameGenre?.diagnostics.length)
-    for (const item of gameGenre.diagnostics.slice(0, showcaseLimits.omissions - omissions.length))
+  for (const gap of [...result.creditGaps, ...result.vndbCreditDiagnostics, ...result.characterDiagnostics]) {
+    if (metadataOnlyPublicationGap(gap, input.plan, manifest)) continue;
+    omissions.push({
+      provider: gap.provider,
+      sourceKey: ('endpoint' in gap ? gap.endpoint : undefined) ?? 'selected-family',
+      code: 'source-claim-withheld',
+    });
+  }
+  if (result.vndbCreditVocabularyUnavailable.length)
+    omissions.push({ provider: 'vndb', sourceKey: 'selected-family', code: 'vocabulary-binding-missing' });
+  for (const item of genre?.diagnostics ?? [])
+    omissions.push({ provider: 'bangumi', sourceKey: item.sourceKey, code: 'source-claim-withheld' });
+  for (const item of gameGenre?.diagnostics ?? [])
+    if (item.code !== 'source-field-unsupported')
       omissions.push({ provider: 'bangumi', sourceKey: item.sourceKey, code: 'source-claim-withheld' });
   const assertionsFor = (selectedManifest: ShowcaseManifest) =>
     [
@@ -3122,7 +3172,7 @@ async function publishShowcasePhases(
         appearanceIndex === undefined
           ? undefined
           : input.plan.characterAppearances?.find((row) => row.sourceIndex === Number(appearanceIndex));
-      const characterCode = /^\/character\/([1-9][0-9]*)\/type$/u.exec(gap.path)?.[1];
+      const characterCode = /^\/character\/([1-9][0-9]*)\/(?:role|type)$/u.exec(gap.path)?.[1];
       const characterKey = appearance
         ? `character:${appearance.characterId}`
         : characterCode
@@ -3139,7 +3189,8 @@ async function publishShowcasePhases(
       const characterRecord = [...input.plan.records.bangumi, ...input.plan.entities.bangumi].find(
         (record) => record.key === characterKey,
       );
-      const code = appearance?.roleCode ?? (characterRecord?.payload as Record<string, unknown> | undefined)?.type;
+      const code =
+        appearance?.roleCode ?? (characterRecord ? bangumiCharacterKind(characterRecord.payload) : undefined);
       const group = appearance ? 'subject-characters.type' : 'character.role';
       const enumeration =
         typeof code === 'number' || typeof code === 'string' ? mapSourceEnumeration('bangumi', group, code) : undefined;
@@ -3202,7 +3253,10 @@ async function publishShowcasePhases(
     };
   });
   return {
-    status: uniqueOmissions.length || published.length !== publicRecords.length ? 'incomplete' : 'published',
+    status:
+      omissions.some((item) => item.code !== 'cover-source-absent') || published.length !== publicRecords.length
+        ? 'incomplete'
+        : 'published',
     manifest,
     published,
     vndbWorkRelations,

@@ -1,3 +1,4 @@
+import { bangumiCharacterKind } from '@rezics/conversion/cross-media-entities';
 import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
@@ -309,7 +310,7 @@ async function lookupCharacterImage(
         typeof character.name === 'string' &&
         Number.isSafeInteger(character.type) &&
         [1, 2, 3, 4].includes(character.type as number) &&
-        character.type === (row.payload as { type?: unknown }).type,
+        character.type === bangumiCharacterKind(row.payload),
       'Bangumi CharacterDetail identity or type did not match the selected archive row',
     );
     const imagesValue = character.images;

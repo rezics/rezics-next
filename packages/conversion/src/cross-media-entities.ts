@@ -45,7 +45,12 @@ import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './ba
 import { liveActionWorkType } from './bangumi-subject-profile.ts';
 export { liveActionWorkType };
 
-export const converter_revision = 'cross-media-entities@15';
+export const converter_revision = 'cross-media-entities@16';
+
+/** Archive role and CharacterDetail type carry the same source enumeration in different fields. */
+export function bangumiCharacterKind(record: Readonly<Record<string, unknown>>): unknown {
+  return Object.hasOwn(record, 'role') ? record.role : record.type;
+}
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -1497,6 +1502,8 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     };
     const characterKind = own(raw, 'type', '/type');
     if (characterKind !== undefined) normalized.type = characterKind;
+    const archiveRole = own(raw, 'role', '/role');
+    if (archiveRole !== undefined) normalized.role = archiveRole;
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
     const characterMeasurements = projectBangumiCharacterMeasurements(own(raw, 'infobox', '/infobox'));

@@ -1,3 +1,4 @@
+import { reviewedSchemeIndex, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
@@ -133,6 +134,25 @@ function publicUrl(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+/** The released inventory supplies lookup IDs, which the ordinary lookup independently reads before use. */
+export function reviewedBangumiGameGenreBindings(
+  vocabulary: ReviewedVocabularyPort,
+  subjects: Readonly<Record<string, string>>,
+): BangumiGameGenreBindings | undefined {
+  const { scheme, concepts } = reviewedSchemeIndex(vocabulary.inventory, bangumiGameSourceGenreScheme);
+  const schemeId = scheme && subjects[scheme.key];
+  if (!schemeId) return undefined;
+  return parseBangumiGameGenreBindings({
+    schemeId,
+    schemeUri: bangumiGameSourceGenreScheme,
+    concepts: concepts.flatMap((seed) => {
+      const id = subjects[seed.key];
+      const url = seed.facts.find((fact) => fact.property === 'schema:url' && 'value' in fact);
+      return id && url && 'value' in url ? [{ literal: seed.literalMember, id, sourceUri: url.value }] : [];
+    }),
+  });
 }
 
 export function parseBangumiGameGenreBindings(value: unknown): BangumiGameGenreBindings {
@@ -277,8 +297,7 @@ export function createShowcaseBangumiGameGenreLookup(
     if (!pending) {
       pending = readCurrentCandidatePages(
         {
-          reviewedCandidates: (subjectId, query) =>
-            port.reviewedCandidates(subjectId, { ...query, target: value }),
+          reviewedCandidates: (subjectId, query) => port.reviewedCandidates(subjectId, { ...query, target: value }),
         },
         id,
         property,

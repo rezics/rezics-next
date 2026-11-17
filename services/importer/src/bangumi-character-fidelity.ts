@@ -1,3 +1,4 @@
+import { bangumiCharacterKind } from '@rezics/conversion/cross-media-entities';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type {
   NativeIdentity,
@@ -290,18 +291,19 @@ export async function runBangumiCharacterFidelity(input: {
     const rows: SourceVocabularyRow[] = [];
     if (characterKeys.has(record.key) && record.payload && typeof record.payload === 'object') {
       const character = identities.get(record.key);
-      const roleCode = sourceCode((record.payload as Record<string, unknown>).type);
+      const kindField = Object.hasOwn(record.payload, 'role') ? 'role' : 'type';
+      const roleCode = sourceCode(bangumiCharacterKind(record.payload as Record<string, unknown>));
       if (roleCode !== null)
         rows.push({
           kind: 'character-kind',
-          path: `/character/${record.key.slice('character:'.length)}/type`,
+          path: `/character/${record.key.slice('character:'.length)}/${kindField}`,
           ...(character ? { character } : {}),
           code: roleCode,
         });
       else
         inputGaps.push({
           provider: 'bangumi',
-          path: `/character/${record.key.slice('character:'.length)}/type`,
+          path: `/character/${record.key.slice('character:'.length)}/${kindField}`,
           endpoint: record.key,
           reason: 'invalid_row',
           property: 'schema:keywords',

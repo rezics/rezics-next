@@ -261,7 +261,10 @@ test('default local adapter keeps character kinds separate from each anime appea
       subject: workOneId,
       statement: {
         value: { content: characterId },
-        qualifiers: [{ property: { id: 'wdt:P3831' }, value: { content: main?.id } }],
+        qualifiers: [
+          { property: { id: 'wdt:P3831' }, value: { content: main?.id } },
+          { property: { id: 'schema:position' }, value: { type: 'value', content: '1' } },
+        ],
       },
     });
     expect(mainAppearance?.source).toEqual(
