@@ -1054,6 +1054,7 @@ test('pinned real light-novel families publish through the reviewed world and re
       publicClient: world.publicClient,
       ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
+    expect(publication.omissions.some((omission) => omission.code === 'source-claim-withheld')).toBe(false);
     const seriesId = first.identities['2815']!.id;
     const animeId = first.identities['233']!.id;
     const read = async (id: string) =>

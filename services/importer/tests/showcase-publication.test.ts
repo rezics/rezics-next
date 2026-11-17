@@ -1259,6 +1259,15 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
             reason: 'Unsupported external link site; retained as source metadata only',
           },
         ],
+        vndbCreditDiagnostics: [
+          {
+            provider: 'vndb',
+            path: '/chars/bloodt',
+            code: 'unknown',
+            reason: 'invalid_row',
+            property: 'chars.bloodt',
+          },
+        ],
         mediaOutcomes: [
           ...result.mediaOutcomes,
           {
@@ -1270,17 +1279,6 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
             sourceStatus: 'absent',
             status: 'absent',
             containerId: workId,
-          },
-        ],
-        creditGaps: [
-          ...result.creditGaps,
-          {
-            provider: 'bangumi',
-            path: '/subject-persons/499/6023/position',
-            code: '2001',
-            reason: 'property_not_admitted',
-            property: 'schema:author',
-            requiredProfile: 'schema:BookSeries',
           },
         ],
       },
@@ -1299,6 +1297,37 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(
       recoveredCurrentSynopsis.published.some((record) => record.provider === 'bangumi' && record.sourceKey === '101'),
     ).toBe(true);
+
+    for (const reason of ['property_not_admitted', 'invalid_row'] as const) {
+      const missingRequiredProperty = await publishShowcase({
+        plan,
+        result: {
+          ...result,
+          characterDiagnostics: [
+            {
+              provider: 'bangumi',
+              path: '/subject/101/summary',
+              endpoint: '101',
+              reason,
+              property: 'schema:abstract',
+              requiredProfile: 'schema:TVSeries',
+            },
+          ],
+        },
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        ...tagOptions,
+      });
+      expect(missingRequiredProperty.published.some((record) => record.sourceKey === '101')).toBe(true);
+      expect(missingRequiredProperty.status).toBe('incomplete');
+      expect(missingRequiredProperty.omissions).toContainEqual({
+        provider: 'bangumi',
+        sourceKey: '101',
+        code: 'source-claim-withheld',
+      });
+    }
 
     const missingRequiredBinding = await publishShowcase({
       plan,
