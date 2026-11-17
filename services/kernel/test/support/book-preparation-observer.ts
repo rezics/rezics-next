@@ -71,6 +71,7 @@ export function createBookPreparationObserver(
     mark(phase: BookPreparationMark, count?: number) {
       const turn = context.getStore();
       if (turn) (turn.marks ??= []).push({ phase, atMs: now(), count });
+      else emit(`book-search-timing ${JSON.stringify({ stage: 'publication-mark', phase, atMs: now(), count })}`);
     },
     outcome(outcome: BookPublicationOutcome) {
       const turn = context.getStore();

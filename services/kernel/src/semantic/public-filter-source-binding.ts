@@ -1528,21 +1528,27 @@ export function createNativePublicFilterSourceBinding(
     if (!current || current.owner_epoch !== source.epoch || BigInt(current.position) !== state.version)
       throw new BindingError('configuration_changed');
   }
+  let lastRepairBinding: { release: PublicFilterProjectionMeaning['release']; key: string; digest: string } | undefined;
   function repairChain(bootstrap: PublicSourceBootstrap, joined: Joined) {
     if (!joined.execution) throw new BindingError('execution_missing');
+    const basis = {
+      definition: bootstrap.definition,
+      consumer: bootstrap.consumer,
+      snapshot: bootstrap.snapshot,
+      covered: joined.covered,
+      queried: joined.queried,
+      execution: joined.execution,
+    };
+    // The native definition reader resolves the release before each call.
+    // Its frozen body can reuse the original chain digest for identical inputs.
+    const { release, ...meaning } = basis.definition.meaning;
+    const key = encode({ ...basis, definition: { ...basis.definition, meaning } });
+    if (lastRepairBinding?.release !== release || lastRepairBinding.key !== key)
+      lastRepairBinding = { release, key, digest: hash(encode(basis)) };
     return {
       bootstrap: nativeId(bootstrap.id),
       execution: joined.execution.id,
-      binding: hash(
-        encode({
-          definition: bootstrap.definition,
-          consumer: bootstrap.consumer,
-          snapshot: bootstrap.snapshot,
-          covered: joined.covered,
-          queried: joined.queried,
-          execution: joined.execution,
-        }),
-      ),
+      binding: lastRepairBinding.digest,
     };
   }
   async function accountRepairKey(state: RepairState, db: Pool, cost: BindingCost) {
@@ -1745,7 +1751,18 @@ export function createNativePublicFilterSourceBinding(
     )
       throw new BindingError('binding_mismatch');
     const chain = repairChain(bootstrap, joined);
-    if (request.frontier !== null && !(await readPublicFilterRepairVerification(db, chain, request.frontier))) {
+    async function readVerifiedFrontier(step: string) {
+      const row = await nativeSourceQuery(db, repairState, {
+        bootstrap: id,
+        execution: request.execution,
+        step,
+      });
+      return row?.verified_binding === chain.binding && row.verified_root !== null && row.verified_ordinal !== null
+        ? row
+        : null;
+    }
+    let previous = request.frontier === null ? null : await readVerifiedFrontier(request.frontier);
+    if (request.frontier !== null && !previous) {
       const tip = await readPublicFilterRepairVerificationTip(db, chain);
       if (tip?.complete) throw new BindingError('binding_mismatch');
       const verified = await bootstrapBinding.readRepairStep!(
@@ -1758,8 +1775,9 @@ export function createNativePublicFilterSourceBinding(
         context,
       );
       addCost(cost, verified.cost);
-      if (verified.status !== 'verified' || !(await readPublicFilterRepairVerification(db, chain, request.frontier)))
-        return fail('owner_unavailable', cost);
+      if (verified.status !== 'verified') return fail('owner_unavailable', cost);
+      previous = await readVerifiedFrontier(request.frontier);
+      if (!previous) return fail('owner_unavailable', cost);
     }
     const old = await nativeSourceQuery(db, repairRead, {
       bootstrap: id,
@@ -1774,13 +1792,8 @@ export function createNativePublicFilterSourceBinding(
     const step = old?.step ?? randomUUID();
     let state: RepairState;
     if (replay) state = replay.input;
-    else if (request.frontier !== null) {
-      const previous = await nativeSourceQuery(db, repairState, {
-        bootstrap: id,
-        execution: request.execution,
-        step: request.frontier,
-      });
-      if (!previous || previous.complete) throw new BindingError('binding_mismatch');
+    else if (previous) {
+      if (previous.complete) throw new BindingError('binding_mismatch');
       state = decode<RepairRecord>(previous.state).next;
     } else
       state = {
@@ -1816,12 +1829,7 @@ export function createNativePublicFilterSourceBinding(
         // Every original scan, enrollment/pin and captured event successor was
         // independently checked before extending this native prefix. Completion
         // closes that captured window; it grants neither receiver ACK nor serving.
-        if (
-          !terminalRepairState(state) ||
-          request.frontier === null ||
-          !(await readPublicFilterRepairVerification(db, chain, request.frontier))
-        )
-          throw new BindingError('owner_unavailable');
+        if (!terminalRepairState(state) || !previous) throw new BindingError('owner_unavailable');
         complete = true;
       } else if ('representation' in bootstrap.definition.capture && state.owner !== 'accounts') {
         next = {
@@ -2120,11 +2128,11 @@ export function createNativePublicFilterSourceBinding(
       ? { status: 'complete', repairs, frontier: null, cost }
       : { status: 'progress', repairs, frontier: step, cost };
   }
-  async function joinNative(
+  async function joinNativeCut(
     request: Parameters<PublicFilterSourceBinding['join']>[0],
     context: PublicFilterConsumerContext,
-    maintenance = false,
-  ): ReturnType<PublicFilterSourceBinding['join']> {
+    maintenance: boolean,
+  ) {
     let input: typeof request;
     try {
       input = structuredClone(request);
@@ -2201,9 +2209,20 @@ export function createNativePublicFilterSourceBinding(
         queried: retained.queried,
         covered: retained.covered,
         execution: retained.execution,
+        cut,
         cost,
       };
     });
+  }
+  async function joinNative(
+    request: Parameters<PublicFilterSourceBinding['join']>[0],
+    context: PublicFilterConsumerContext,
+    maintenance = false,
+  ): ReturnType<PublicFilterSourceBinding['join']> {
+    const joined = await joinNativeCut(request, context, maintenance);
+    if (joined.status !== 'joined') return joined;
+    const { cut: _cut, ...result } = joined;
+    return result;
   }
   function ownsSource(source: PublicFilterSource) {
     const origin = ports.sourceOrigin(source);
@@ -2565,11 +2584,14 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('owner_unavailable');
       };
-      await verify();
+      // The completed seal has no open window. Its current terminal verification
+      // follows Search's independent settlement on this same allowance.
+      if (!publicationCost || seal.after !== 4096) await verify();
       const authority = async (range: readonly PublicFilterCreationWindow[]) => {
         if (!range.length) return [];
-        // Reserve each of the six native relation points once, independently
-        // of whether the join succeeds or returns no current authority.
+        // Drive owner reads from the retained windows. The bounded lateral lookup
+        // keeps the partition authority keyed to each enrolled home.
+        // Reserve each of the six native relation points even when a check fails.
         const { rows } = await db.query<
           PublicFilterRepairHome & {
             registration: string;
@@ -2581,6 +2603,13 @@ export function createNativePublicFilterSourceBinding(
           }
         >(
           `/* semantic.native-keyed:${6 * range.length}:${9 * range.length} */
+             WITH enrolled AS MATERIALIZED (
+               SELECT e.*,x.epoch AS window_epoch,x.through
+               FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
+               JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
+               WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
+                 AND e.creation_consumer=$3 AND e.read_definition=$4
+             )
              SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
                e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
                e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
@@ -2589,16 +2618,17 @@ export function createNativePublicFilterSourceBinding(
                e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
                c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
                b.state,b.coverage_sealed,b.coverage_after
-             FROM jsonb_to_recordset($1::jsonb) AS x(home integer,epoch integer,receipt text,base bigint,through bigint)
-             JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(x.home,$2)
-             JOIN core.partition p ON p.partition_no=e.partition_no
+             FROM enrolled e
+             JOIN LATERAL (
+               SELECT epoch,write_state,position FROM core.partition
+               WHERE partition_no=e.partition_no OFFSET 0
+             ) p ON TRUE
              JOIN semantic.public_filter_privacy_head h ON h.partition_no=e.partition_no
              JOIN access.account_discovery_population a ON a.partition_no=e.partition_no
              JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,e.bootstrap)
-             WHERE e.complete AND e.receipt=x.receipt AND e.creation_position=x.base
-               AND e.creation_consumer=$3 AND p.position>=x.through
-               AND e.read_definition=$4 AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=x.epoch
+             WHERE p.position>=e.through
+               AND p.write_state='active' AND p.epoch=e.owner_epoch AND p.epoch=e.window_epoch
                AND h.owner_epoch=p.epoch AND h.position>=e.source_position
                AND c.position<=e.creation_position AND (c.epoch IS NULL OR c.epoch=p.epoch)
                AND b.state='adopted' AND b.coverage_sealed AND b.coverage_after=4096
@@ -2709,7 +2739,10 @@ export function createNativePublicFilterSourceBinding(
         cost.frontierWrites++;
         if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home, after.length)))
           throw new BindingError('owner_unavailable');
-        if (seal.home + after.length < 4096) return { ...fail('owner_unavailable', cost), advanced: true as const };
+        bookPreparationTiming?.mark('ackAdvanced', seal.home + after.length);
+        // The next turn funds the original population-start and publication-fence proofs.
+        if (publicationCost || seal.home + after.length < 4096)
+          return { ...fail('owner_unavailable', cost), advanced: true as const };
       }
       return {
         ...joined,
@@ -2751,11 +2784,12 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         const bootstrapId = nativeId(input.bootstrap);
-        const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
+        const joined = await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true);
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
-        const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
+        const { cut } = joined;
         if (
+          cut.bootstrap.id !== input.bootstrap ||
           cut.row.state !== 'adopted' ||
           cut.row.queried !== joined.queried.snapshot.observation ||
           encode(cut.bootstrap.covered) !== encode(joined.covered)
@@ -3364,15 +3398,16 @@ export function createNativePublicFilterSourceBinding(
         deadline = context.deadline;
       if (!Number.isInteger(input.inputLimit) || input.inputLimit < 1 || input.inputLimit > 256)
         throw new RangeError('Repair inputLimit must be 1 through 256');
-      const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
+      const joined = await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true);
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
-        const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
+        const { cut } = joined;
         if (
+          cut.bootstrap.id !== input.bootstrap ||
           cut.row.state !== 'adopted' ||
           cut.row.queried !== joined.queried.snapshot.observation ||
-          encode(joined.covered) !== encode(cut.bootstrap.covered)
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
         if (
