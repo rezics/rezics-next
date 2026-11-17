@@ -51,6 +51,7 @@ type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
   origin: string;
+  browserMemoryObservation(): { sampledAt: number; rssBytes: number; peakRssBytes: number } | null;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
   submitSignIn(page: Page, persona: 'alice' | 'bob'): Promise<void>;
@@ -137,13 +138,40 @@ async function stopChild(owner: NativeProcessOwnership | undefined): Promise<voi
   }
 }
 
+export async function prepareNativeAuthMessages(): Promise<void> {
+  const lifecycle = currentNativeLifecycle();
+  if (!lifecycle) throw new Error('Auth message preparation requires an active native test lifecycle');
+  lifecycle.assertOpen('prepare native Auth messages');
+  const child = spawn(process.execPath, ['scripts/generate.ts'], {
+    cwd: authRoot,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const owner = lifecycle.ownProcessGroup('native Auth messages preparation', child);
+  let output = '';
+  for (const stream of [child.stdout, child.stderr])
+    stream?.on('data', (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12_000)));
+  try {
+    await new Promise<void>((resolveCompletion, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        if (code === 0) resolveCompletion();
+        else reject(new Error(`Native Auth messages preparation failed (${signal ?? code}): ${output}`));
+      });
+    });
+  } finally {
+    await stopChild(owner);
+    owner.release();
+  }
+}
+
 async function hydrate(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
 export async function startAuthStack(
   stack: NativeWebStack,
-  options: { nativeFixtureKey?: string } = {},
+  options: { nativeFixtureKey?: string; preparedMessages?: boolean; useHeadlessShell?: boolean } = {},
 ): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
@@ -209,6 +237,7 @@ export async function startAuthStack(
     env: {
       ...nativeViteEnvironment(process.env),
       REZICS_TEST_RUNTIME: '1',
+      REZICS_AUTH_PREPARED_MESSAGES: options.preparedMessages ? '1' : undefined,
       REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
       AUTH_ORIGIN: stack.authIssuer,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
@@ -224,6 +253,7 @@ export async function startAuthStack(
   let privateBrowser: PrivateBrowser | undefined;
   let stopping: Promise<void> | undefined;
   let browserPeakMemoryBytes = 0;
+  let browserMemory: ReturnType<NativeAuthStack['browserMemoryObservation']> = null;
   let memorySampler: ReturnType<typeof setInterval> | undefined;
   let sampling = false;
   let sampleMemory = async () => {};
@@ -251,7 +281,11 @@ export async function startAuthStack(
       process.env.WEB_TEST_MODULE_FAILURE_TRACE === '1'
         ? traceWebModuleFailure(stack.web, stack.memoryObservation?.())
         : undefined;
-    privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin], moduleFailureTrace);
+    privateBrowser = await launchPrivateBrowser(
+      [stack.web, origin, turnstile.url.origin],
+      moduleFailureTrace,
+      options.useHeadlessShell,
+    );
     lifecycle.assertOpen('finish private Auth browser startup');
     browser = privateBrowser.browser;
     const cdp = await browser.newBrowserCDPSession();
@@ -286,6 +320,7 @@ export async function startAuthStack(
             .map(Number)
             .reduce((sum, rss) => sum + rss * 1024, 0);
           browserPeakMemoryBytes = Math.max(browserPeakMemoryBytes, bytes);
+          browserMemory = { sampledAt: Date.now(), rssBytes: bytes, peakRssBytes: browserPeakMemoryBytes };
         }
       } finally {
         sampling = false;
@@ -621,6 +656,7 @@ export async function startAuthStack(
     });
     return {
       origin,
+      browserMemoryObservation: () => browserMemory,
       context,
       async newContext(_persona) {
         const owner = currentNativeLifecycle() ?? lifecycle;

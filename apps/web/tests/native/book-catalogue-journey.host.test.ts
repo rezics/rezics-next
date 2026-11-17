@@ -10,6 +10,7 @@ import {
 } from './book-catalogue-journey-fixture.ts';
 import { assertShelfPage, exactType, openNewTabFromLink, pageReady, problemCode } from './book-catalogue-browser.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
+import { sampleNativeMemory, sampleOwnedWebRunMemory } from './native-memory.ts';
 
 const lifecycle = new NativeTestLifecycle('native Book catalogue journey');
 let fixture: BookCatalogueJourneyFixture;
@@ -24,6 +25,19 @@ const types = ['schema:Book', 'schema:BookSeries', 'bf:Instance'] as const;
 
 function stage(name: string, evidence: Record<string, unknown>): void {
   console.info('book-catalogue-journey-stage', JSON.stringify({ stage: name, ...evidence }));
+}
+
+function readerMemory(stageName: string, page: Page): void {
+  if (process.env.NATIVE_WEB_BOOK_MEMORY !== '1') return;
+  const browser = fixture.auth.browserMemoryObservation();
+  const { sampledAt, cgroup } = sampleNativeMemory([]);
+  stage(stageName, {
+    pages: page.context().pages().length,
+    browser,
+    sampledAt,
+    command: cgroup.command,
+    run: sampleOwnedWebRunMemory('other'),
+  });
 }
 
 function exactSearchLink(page: Page, subject: BookCatalogueIdentity) {
@@ -191,7 +205,11 @@ async function openReaderShelf(page: Page, subject: BookCatalogueIdentity, obser
   const href = await shelfLink.getAttribute('href');
   expect(href).toBeTruthy();
   expect(exactType(new URL(href!, fixture.stack.web).href)).toBe(type);
-  const shelf = await openNewTabFromLink(page, shelfLink, `reader shelf handoff ${type}`);
+  readerMemory('before reader Library popup', page);
+  const shelf = await openNewTabFromLink(page, shelfLink, `reader shelf handoff ${type}`, (popup) =>
+    readerMemory('reader Library popup opened', popup),
+  );
+  readerMemory('reader Library popup hydrated', shelf);
   await assertPlannedShelf(shelf, type);
   stage('reader exact-type shelf', {
     type,
@@ -259,12 +277,14 @@ function watchBookResult(page: Page, href: string) {
 async function returnToSearch(page: Page, subject: BookCatalogueIdentity, marker: string) {
   const { type } = subject;
   await page.goBack({ waitUntil: 'domcontentloaded' });
+  if (type === 'schema:Book') readerMemory('reader Back arrived at Search', page);
   await pageReady(page, `Search return after ${type} reader`);
   const address = new URL(page.url());
   expect(address.pathname).toBe('/en/search');
   expect(address.searchParams.get('q')).toBe(marker);
   expect(address.searchParams.get('type')).toBe(type);
   await assertSearchResult(page, subject);
+  if (type === 'schema:Book') readerMemory('reader Back restored typed Search', page);
   return { type, url: `${address.pathname}${address.search}` };
 }
 

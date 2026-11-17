@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { sampleNativeMemory, sampleWebStartupMemory } from './native/native-memory';
+import { sampleNativeMemory, sampleOwnedWebRunMemory } from './native/native-memory';
 
 function files() {
   const values = new Map<string, string>([
@@ -126,9 +126,9 @@ test('Web startup memory attributes PSS only to roles in the exact owned slice',
   f.values.set(`${cgroup}${membership}/memory.stat`, 'anon 4000\nfile 2000\nshmem 1000\nkernel 90\n');
   f.values.set(`${cgroup}${membership}/memory.events`, 'high 0\nmax 2\noom 3\noom_kill 4\n');
   f.values.set(`${cgroup}${membership}/cgroup.procs`, '');
-  f.values.set(`${cgroup}${scope}/cgroup.procs`, '10\n11\n12\n13\n');
-  for (const pid of [10, 11, 12, 13]) f.process(pid, 1);
-  for (const pid of [10, 11, 12]) f.values.set(`/proc/${pid}/cgroup`, `0::${scope}\n`);
+  f.values.set(`${cgroup}${scope}/cgroup.procs`, '10\n11\n12\n13\n14\n');
+  for (const pid of [10, 11, 12, 13, 14]) f.process(pid, 1);
+  for (const pid of [10, 11, 12, 14]) f.values.set(`/proc/${pid}/cgroup`, `0::${scope}\n`);
   f.values.set('/proc/13/cgroup', '0::/jobs/other.scope\n');
   f.values.set('/proc/10/smaps_rollup', 'Pss: 25 kB\n');
   f.values.set('/proc/11/cmdline', '/usr/bin/bun\0services/auth/scripts/dev-stack.ts\0web\0PRIVATE');
@@ -138,7 +138,9 @@ test('Web startup memory attributes PSS only to roles in the exact owned slice',
     names: path === cgroup + membership ? [scopeName] : [],
     truncated: false,
   });
-  const result = sampleWebStartupMemory('vite', env, f.read, children, () => '', 10);
+  f.values.set('/proc/14/cmdline', '/usr/bin/node\0vite\0--config\0vite.config.ts\0');
+  f.values.set('/proc/14/smaps_rollup', 'Pss: 50 kB\n');
+  const result = sampleOwnedWebRunMemory('other', env, f.read, children, () => '/private/apps/web', 10);
   expect(result).toMatchObject({
     status: 'observed',
     memory: {
@@ -154,7 +156,8 @@ test('Web startup memory attributes PSS only to roles in the exact owned slice',
       partial: false,
       unavailableCount: 1,
       roles: {
-        vite: { count: 1, pssCount: 1, pssBytes: 25600 },
+        vite: { count: 1, pssCount: 1, pssBytes: 51200 },
+        other: { count: 1, pssCount: 1, pssBytes: 25600 },
         webPreparer: { count: 1, pssCount: 1, pssBytes: 12288 },
         chromium: { count: 1, pssCount: 0, pssBytes: null },
       },
@@ -165,7 +168,7 @@ test('Web startup memory attributes PSS only to roles in the exact owned slice',
 
   f.reads.length = 0;
   f.values.set('/proc/self/cgroup', `0::${membership}/other.scope\n`);
-  expect(sampleWebStartupMemory('vite', env, f.read, children)).toMatchObject({
+  expect(sampleOwnedWebRunMemory('vite', env, f.read, children)).toMatchObject({
     status: 'unavailable',
     reason: 'owned_run_slice_unavailable',
   });
