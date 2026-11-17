@@ -38,8 +38,8 @@ test('the real request builder carries the complete URL predicate and opaque con
   expect(
     searchFormFields({ q: state.query, cursor, kinds: state.kinds, language: state.languages }),
   ).not.toContainEqual(['cursor', cursor]);
-  expect(v.safeParse(searchParams, { q: '星'.repeat(170) }).success).toBe(true);
-  expect(v.safeParse(searchParams, { q: '星'.repeat(171) }).success).toBe(false);
+  expect(searchLoaderDeps({ q: '星'.repeat(170) }).invalidInput).toBeUndefined();
+  expect(searchLoaderDeps({ q: '星'.repeat(171) }).invalidInput?.key).toBe('q');
   const body = discoveryRequest(state, ['en']);
   expect(body.filter).toEqual({
     and: [
@@ -48,7 +48,7 @@ test('the real request builder carries the complete URL predicate and opaque con
       { kind: { in: state.kinds } },
     ],
   });
-  expect(body.kindCountLeaf).toBeUndefined();
+  expect(body.kindCountLeaf).toBe(2);
   const calls: unknown[] = [];
   const client = createKernelClient('http://kernel.local', {
     fetch: async (_input, init) => {
@@ -78,6 +78,37 @@ test('unknown factual cards retain native descriptions, aliases, direct facts an
   expect(parseLegacySearchPage(discoveryExample)).toBeUndefined();
   expect(parseDiscoveryPage({ subjects: [], next: null, as_of: page!.as_of })).toBeUndefined();
   expect(parseLegacySearchPage({ subjects: [], next: null, as_of: page!.as_of })?.subjects).toEqual([]);
+});
+
+test('the Subject catalogue directory keeps native labels, count evidence and the opaque continuation', () => {
+  const book = {
+    value: 'schema:Book',
+    label: { value: 'Book', language: 'en' },
+    icon: null,
+    count: { value: 1, exact: false },
+  };
+  const edition = { value: 'bf:Instance', label: { value: 'Édition', language: 'fr' }, icon: 'book' };
+  const body = {
+    subjects: [{ id: 'book', type: 'schema:Book', labels: { en: 'Atlas' }, summary: null }],
+    next: null,
+    as_of: discoveryExample.as_of,
+    kinds: { values: [book, edition], next: 'opaque+/=' },
+  };
+  const result = parseLegacySearchPage(body);
+  expect(result?.subjects[0]?.id).toBe('book');
+  expect(result?.kinds).toEqual({
+    values: [
+      {
+        id: 'schema:Book',
+        labels: { en: 'Book' },
+        icon: 'catalogue',
+        count: { kind: 'schema:Book', value: 1, exact: false },
+      },
+      { id: 'bf:Instance', labels: { fr: 'Édition' }, icon: 'book' },
+    ],
+    next: 'opaque+/=',
+  });
+  expect(parseLegacySearchPage({ ...body, kinds: { ...body.kinds, values: [book, book] } })).toBeUndefined();
 });
 
 test('kind metadata continuation makes one bounded metadata-only call and distinguishes unknown, zero and positive evidence', async () => {

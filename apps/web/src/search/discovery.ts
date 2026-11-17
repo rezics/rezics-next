@@ -323,6 +323,26 @@ const kinds = v.object({
   omitted: v.exactOptional(v.pipe(v.array(omittedKind), v.maxLength(3))),
   next: v.nullable(v.string()),
 });
+const positiveKindCount = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(Number.MAX_SAFE_INTEGER));
+const catalogueKinds = v.object({
+  values: v.pipe(
+    v.array(
+      v.object({
+        value: v.string(),
+        label: v.object({ value: v.string(), language: v.string() }),
+        icon: v.nullable(v.string()),
+        count: v.exactOptional(
+          v.union([
+            v.object({ value: positiveKindCount, exact: v.literal(true) }),
+            v.object({ value: positiveKindCount, exact: v.literal(false) }),
+          ]),
+        ),
+      }),
+    ),
+    v.maxLength(8),
+  ),
+  next: v.nullable(v.string()),
+}) satisfies v.GenericSchema<NonNullable<NativePage['kinds']>>;
 const kindPage = v.object({ kinds, as_of: v.string() });
 const viewerQuestion = v.strictObject({
   id: resourceId,
@@ -662,9 +682,18 @@ function validKinds(value: DiscoveryKinds): boolean {
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
   let directory: DiscoveryKinds | undefined;
   if (value !== null && typeof value === 'object' && !Array.isArray(value) && 'kinds' in value) {
-    const parsedKinds = v.safeParse(kinds, value.kinds);
-    if (!parsedKinds.success || !validKinds(parsedKinds.output)) return;
-    directory = parsedKinds.output;
+    const parsedKinds = v.safeParse(catalogueKinds, value.kinds);
+    if (!parsedKinds.success) return;
+    directory = {
+      next: parsedKinds.output.next,
+      values: parsedKinds.output.values.map(({ value: id, label, icon, count }) => ({
+        id,
+        labels: { [label.language]: label.value },
+        icon: icon ?? 'catalogue',
+        ...(count ? { count: { kind: id, ...count } } : {}),
+      })),
+    };
+    if (!validKinds(directory)) return;
   }
   const parsed = v.safeParse(legacyPage, normalizeMissingEvidence(value, true));
   if (!parsed.success) return;
