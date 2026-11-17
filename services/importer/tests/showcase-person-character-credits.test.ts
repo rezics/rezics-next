@@ -8,7 +8,7 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { MediaVariantDecision, ReviewedSubjectRead } from '../src/import-client.ts';
 import { ImportTransportError } from '../src/import-client.ts';
-import { PublicSubjectGetUnavailable, ReviewedSubjectNotReady } from '../src/public-bulk-client.ts';
+import { GLOBAL_CONTEXT, PublicSubjectGetUnavailable, ReviewedSubjectNotReady } from '../src/public-bulk-client.ts';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import {
   characterIdentityForSource,
@@ -25,6 +25,7 @@ import {
   type ReviewedPersonMergeTransport,
 } from '../src/showcase-person-identity.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
+import { reviewedStatementFixture, reviewedSubjectFixture } from './transport-driver.ts';
 
 const bangumiOriginal = '00000000-0000-4000-8000-00000000000a';
 const vndbOriginal = '00000000-0000-4000-8000-00000000000b';
@@ -201,13 +202,21 @@ test('Publish reviewed Person identities with Character and credit reads through
       async read(id) {
         if (id === yui) return characterRead();
         if (id === bangumiOriginal || id === vndbOriginal) return publicPerson(survivor);
-        return {
-          subject: {
-            id: angelBeats,
-            type: 'schema:TVSeries',
-            statements: { 'wdt:P5732': [{ value: { type: 'value', content: '1851' } }] },
+        return reviewedSubjectFixture({
+          id: angelBeats,
+          type: 'schema:TVSeries',
+          context: GLOBAL_CONTEXT,
+          labels: {},
+          statements: {
+            'wdt:P5732': [
+              reviewedStatementFixture('00000000-0000-4000-8000-0000000000d2', 'normal', {
+                property: { id: 'wdt:P5732' },
+                value: { type: 'value', content: '1851' },
+                references: [],
+              }),
+            ],
           },
-        } as unknown as ReviewedSubjectRead;
+        });
       },
       expectedNativeType(externalId) {
         return externalId === '1851'
