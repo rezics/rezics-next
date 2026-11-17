@@ -19,6 +19,7 @@ import { spawnSync } from 'node:child_process';
 import {
   currentCheckSourceManifest,
   parseCheckRunArguments,
+  preparationCommands,
   prepareCheckRunInvocation,
   prepareCandidateSnapshot,
   reconcileRegisteredCheckRun,
@@ -53,6 +54,77 @@ import {
 
 const repository = resolve(import.meta.dir, '..');
 const temporary: string[] = [];
+
+test('native Web host preparation uses the fingerprinted Kernel SQL producer before the setup clock', () => {
+  const command = ['bun', 'test', './tests/native/auth-stack.host.test.ts', '-t', 'native actors'];
+  expect(preparationCommands(repository, 'apps/web', command)).toEqual([
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'services/kernel', 'prepare:analysis'] },
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate'] },
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate:routes'] },
+  ]);
+  expect(
+    preparationCommands(repository, '.', [
+      'bun',
+      'run',
+      '--cwd',
+      'apps/web',
+      'check',
+      '--host',
+      'tests/native/auth-stack.host.test.ts',
+    ]),
+  ).toEqual(preparationCommands(repository, 'apps/web', command));
+  expect(preparationCommands(repository, '.', ['bun', './apps/web/tests/native/auth-stack.host.test.ts'])).toEqual(
+    preparationCommands(repository, 'apps/web', command),
+  );
+  expect(preparationCommands(repository, 'apps/web/tests/native', ['bun', 'test', 'auth-stack.host.test.ts'])).toEqual(
+    preparationCommands(repository, 'apps/web', command),
+  );
+  expect(preparationCommands(repository, 'apps/web', ['bun', 'scripts/check.ts', '--host'])[0]?.command).toEqual([
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'prepare:analysis',
+  ]);
+});
+
+test('older native Web candidates keep their declared preparation without an unsupported Kernel CLI action', () => {
+  const older = candidate({ web: true });
+  mkdirSync(join(older.root, 'services/kernel'), { recursive: true });
+  writeFileSync(
+    join(older.root, 'services/kernel/package.json'),
+    JSON.stringify({
+      scripts: { derived: 'bun scripts/derived.ts' },
+    }),
+  );
+  expect(
+    preparationCommands(older.root, 'apps/web', ['bun', 'test', './tests/native/auth-stack.host.test.ts']),
+  ).toEqual([
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate'] },
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate:routes'] },
+  ]);
+});
+
+test('non-native Web selections retain their original generated-input preparation', () => {
+  const expected = [
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate'] },
+    { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate:routes'] },
+  ];
+  expect(
+    preparationCommands(repository, 'apps/web', ['bun', 'test', './tests/book-catalogue-acceptance.test.ts']),
+  ).toEqual(expected);
+  expect(preparationCommands(repository, 'apps/web', ['bun', 'scripts/check.ts', '--auth-binding-host'])).toEqual(
+    expected,
+  );
+  expect(
+    preparationCommands(repository, 'apps/web', [
+      'bun',
+      'scripts/check.ts',
+      '--host',
+      'tests/auth-binding.host.test.ts',
+    ]),
+  ).toEqual(expected);
+});
 
 test('the original launcher admits only the closed named output profile alongside ordinary schema returns', () => {
   const args = [

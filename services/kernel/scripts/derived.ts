@@ -423,10 +423,10 @@ function recordOpenApiGeneration(): void {
  */
 export async function withThrowawayDatabase<T>(
   work: (env: NodeJS.ProcessEnv) => Promise<T> | T,
-  options: { reuse?: boolean; analysis?: boolean } = {},
+  options: { reuse?: boolean; analysis?: boolean; requireAnalysis?: boolean } = {},
 ): Promise<T> {
   const reuse = options.reuse ?? false;
-  const analysis = options.analysis ?? true;
+  const analysis = options.requireAnalysis === true || (options.analysis ?? true);
   let container = '';
   let disposeAnalysis: (() => void) | undefined;
   let derivedListenStop: (() => void) | undefined;
@@ -476,8 +476,19 @@ export async function withThrowawayDatabase<T>(
     process.env.DATABASE_URL = url;
     const env: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
     if (analysis) {
-      const prepared = await withCommandPhase('sql-analysis', () => prepareReyloAnalysisCache(env), env);
+      if (options.requireAnalysis) delete env.REYLO_CONFIG;
+      const prepared = await withCommandPhase(
+        'sql-analysis',
+        () => prepareReyloAnalysisCache(env, { requireAnalysis: options.requireAnalysis === true }),
+        env,
+      );
       disposeAnalysis = prepared.dispose;
+      if (options.requireAnalysis && !prepared.available)
+        throw new Error('Required Kernel SQL analysis is unavailable');
+      if (options.requireAnalysis)
+        console.info(
+          `Kernel SQL analysis ready ${prepared.analyzedFiles}/${prepared.totalFiles}, entries ${prepared.writtenEntries}`,
+        );
       const reyloConfig = prepared.environment.REYLO_CONFIG;
       if (reyloConfig !== undefined) {
         env.REYLO_CONFIG = reyloConfig;
@@ -501,9 +512,10 @@ export async function withThrowawayDatabase<T>(
   }
 }
 
-function derivedAction(args: readonly string[]): 'schema' | 'contracts' {
+export function derivedAction(args: readonly string[]): 'schema' | 'contracts' | 'analysis' {
   if (args.length === 0) return 'contracts';
   if (args.length === 1 && args[0] === 'schema') return 'schema';
+  if (args.length === 1 && args[0] === 'analysis') return 'analysis';
   throw new Error(`Unsupported derived arguments: ${args.join(' ')}`);
 }
 
@@ -523,6 +535,10 @@ async function main(): Promise<void> {
   const action = derivedAction(process.argv.slice(2));
   const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrations, new Date());
+  if (action === 'analysis') {
+    await withThrowawayDatabase(() => console.info('Kernel SQL analysis prepared'), { requireAnalysis: true });
+    return;
+  }
   if (action === 'schema') {
     // Schema dumps read the catalogue only; they never load a Kernel module, so they skip the analysis cache.
     await withThrowawayDatabase(writeSchemaDumps, { reuse: true, analysis: false });

@@ -642,7 +642,7 @@ function relocateEnvironment(
   return relocated;
 }
 
-function preparationCommands(
+export function preparationCommands(
   workspace: string,
   cwd: string,
   argv: readonly string[],
@@ -650,21 +650,31 @@ function preparationCommands(
   const referencedDirectories = new Set<string>([cwd]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
+    const pathArgument = argument.replaceAll('\\', '/').replace(/^\.\//u, '');
     if (argument === '--cwd' && argv[index + 1]) referencedDirectories.add(argv[index + 1]!);
     else if (argument.startsWith('--cwd=')) referencedDirectories.add(argument.slice('--cwd='.length));
-    if (argument === 'apps/web' || argument.startsWith('apps/web/')) referencedDirectories.add('apps/web');
-    if (argument === 'apps/auth' || argument.startsWith('apps/auth/')) referencedDirectories.add('apps/auth');
+    if (pathArgument === 'apps/web' || pathArgument.startsWith('apps/web/')) referencedDirectories.add('apps/web');
+    if (pathArgument === 'apps/auth' || pathArgument.startsWith('apps/auth/')) referencedDirectories.add('apps/auth');
   }
+  const directories = [...referencedDirectories].map((directory) =>
+    directory.replaceAll('\\', '/').replace(/^\.\//u, ''),
+  );
   const packages = ['apps/web', 'apps/auth'].filter((path) =>
-    [...referencedDirectories].some((directory) => directory === path || directory.startsWith(`${path}/`)),
+    directories.some((directory) => directory === path || directory.startsWith(`${path}/`)),
   );
   const commands: NonNullable<RemoteCheck['prepare']> = [];
-  for (const path of packages) {
+  const hostFiles = argv.filter((argument) => /\.host\.test\.[cm]?[jt]sx?$/u.test(argument));
+  const nativeWebHost =
+    packages.includes('apps/web') &&
+    ([cwd, ...argv].some((argument) => /(?:^|\/)tests\/native(?:\/|$)/u.test(argument.replaceAll('\\', '/'))) ||
+      (argv.includes('--host') && hostFiles.length === 0));
+  for (const path of nativeWebHost ? ['services/kernel', ...packages] : packages) {
     const manifestPath = join(workspace, path, 'package.json');
     let stat;
     try {
       stat = lstatSync(manifestPath);
-    } catch {
+    } catch (error) {
+      if (path === 'services/kernel' && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
       throw new CheckRunUnavailable(`check-run: required generated-input package is missing: ${path}`);
     }
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 1024 * 1024)
@@ -679,7 +689,9 @@ function preparationCommands(
         `check-run: generated-input package manifest is invalid for ${path}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    for (const script of ['generate', 'generate:routes']) {
+    for (const script of path === 'services/kernel' ? ['prepare:analysis'] : ['generate', 'generate:routes']) {
+      // Older frozen candidates retain their original preparation contract.
+      if (path === 'services/kernel' && parsed.scripts?.[script] === undefined) continue;
       if (typeof parsed.scripts?.[script] !== 'string')
         throw new CheckRunUnavailable(`check-run: ${path} does not declare ${script} preparation`);
       commands.push({ cwd: '.', command: ['bun', 'run', '--cwd', path, script] });

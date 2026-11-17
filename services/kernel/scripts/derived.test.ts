@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
   KERNEL_DERIVED_NONCE_LABEL,
+  derivedAction,
   migrationFingerprint,
   openApiCacheMatches,
   openApiSourceFingerprint,
@@ -14,6 +15,13 @@ import { cleanupStale } from './check.ts';
 import { dockerNetworkArgs } from '../../../scripts/compiler-database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
+
+test('SQL-only preparation retains the existing schema and contract actions', () => {
+  expect(derivedAction([])).toBe('contracts');
+  expect(derivedAction(['schema'])).toBe('schema');
+  expect(derivedAction(['analysis'])).toBe('analysis');
+  expect(() => derivedAction(['analysis', 'schema'])).toThrow('Unsupported derived arguments');
+});
 
 test('derived caches invalidate on migration, source, output, and container changes', () => {
   mkdirSync(resolve(repository, '.temp'), { recursive: true });

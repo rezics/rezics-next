@@ -174,8 +174,12 @@ It checks migration versions, migrates a throwaway PostgreSQL container, and wri
 dump `db/<module>/schema.sql`, using all current migrations, the pinned PostgreSQL image and the same dump
 normalization as database checks. The command uses that container's `DATABASE_URL` and `KERNEL_DATABASE_CONTAINER`,
 so an inherited development URL or container is ignored. It does not construct the kernel, read Auth or runtime secrets,
-write the OpenAPI document or client, or touch the development database. Any other argument is rejected before a
-database starts.
+write the OpenAPI document or client, or touch the development database. Argument validation runs before database startup.
+
+`bun run derived analysis` compiles the current SQL source through the shared migration/schema/compiler-fingerprinted
+Reylo analysis owner and removes its one-run database. Native Web host check preparation runs this action before
+the test process. The native fixture validates its migrated schema against that analysis and owns real Auth, Kernel
+and Worker startup within its declared setup budget.
 
 Derived generation keeps one throwaway database per checkout in a container labeled with that checkout's cache key.
 It reuses the container only while the pinned PostgreSQL image and migration fingerprint match, and recreates only that

@@ -12,6 +12,7 @@
     "openapi": "bun scripts/openapi.ts",
     "client": "bun scripts/client.ts",
     "derived": "bun scripts/derived.ts",
+    "prepare:analysis": "bun scripts/derived.ts analysis",
     "construct": "bun scripts/construct.ts",
     "analyse": "bun scripts/analyse.ts",
     "check": "bun scripts/check.ts",
