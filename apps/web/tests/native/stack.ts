@@ -9,6 +9,7 @@ import { nativeViteEnvironment } from './vite-environment.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { Pool } from 'pg';
 import {
   createOwnedPostgresSocketDirectory,
@@ -50,6 +51,8 @@ export type NativeKernelRequest = {
   validLabelUndoRevision?: boolean;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
+  /** Only the subject selector is retained for observed Hosted checkpoint saves. */
+  hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
   authorizationDecision?: { status: number; body: string };
   /** Observed at the installed production Access methods, never inferred from HTTP success. */
@@ -74,6 +77,8 @@ export type NativeWebStackOptions = {
   localShowcaseBoardCreation?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
   writeRateOverrides?: string;
+  /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
+  observeBookSearchPreparation?: boolean;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
   commerce?: {
     apiHost: string;
@@ -98,8 +103,11 @@ export type NativeWebStack = {
   /** The canonical issuer advertised by discovery, before the optional proxy listener. */
   issuerOrigin: string;
   web: string;
-  /** Read fixture identity for form entry, without creating a website session. */
-  authPersona(persona: string): Promise<{ accountId: string; email: string; authorization: string }>;
+  /** Read fixture identity for form entry. Explicit scopes request a fresh native Auth credential for that account. */
+  authPersona(
+    persona: string,
+    scopes?: readonly string[],
+  ): Promise<{ accountId: string; email: string; authorization: string }>;
   /** Confirm the production Auth host has its native operation boundary configured. */
   enableAccountOperations(): Promise<void>;
   /** Read real Auth /session proofs observed on account-operation requests. */
@@ -350,7 +358,10 @@ function errorDetails(error: unknown): string {
   return details.join('\n');
 }
 
-async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
+async function startDurableWorker(
+  environment: NodeJS.ProcessEnv,
+  observeBookSearch: boolean,
+): Promise<{
   pid?: number | undefined;
   identity?: NativeProcessIdentity | undefined;
   logs(): string;
@@ -365,6 +376,7 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
       resolve(webRoot, 'tests/native/native-media-storage-fetch.ts'),
       '--preload',
       './test/support/fixture-event-types.ts',
+      ...(observeBookSearch ? ['--preload', './test/support/book-preparation-observer.ts'] : []),
       'src/worker.ts',
     ],
     {
@@ -382,11 +394,17 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
     failed = reject;
   });
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-  for (const stream of [child.stdout, child.stderr])
-    stream?.on('data', (chunk: Buffer) => {
-      output = (output + chunk).slice(-12_000);
-      if (output.includes('Worker ready')) started();
+  const capture = (chunk: Buffer | string) => {
+    output = (output + chunk).slice(-12_000);
+    if (output.includes('Worker ready')) started();
+  };
+  child.stderr?.on('data', capture);
+  if (observeBookSearch && child.stdout) {
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      if (line.startsWith('book-search-timing ')) reportStackProgress(line);
+      else capture(line + '\n');
     });
+  } else child.stdout?.on('data', capture);
   child.once('error', failed);
   child.once('exit', (code, signal) => failed(new Error(`Durable worker exited ${code ?? signal}: ${output}`)));
   const timer = setTimeout(() => failed(new Error(`Durable worker startup timed out: ${output}`)), 120_000);
@@ -416,7 +434,16 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{
     })());
   try {
     await ready;
-    return { pid: child.pid, identity, logs: () => output, stop };
+    return {
+      pid: child.pid,
+      identity,
+      logs() {
+        // Book reads worker logs only at the existing Search timeout. Flush the timing buffer alongside that snapshot.
+        if (observeBookSearch && child.exitCode === null && child.signalCode === null) child.kill('SIGUSR2');
+        return output;
+      },
+      stop,
+    };
   } catch (error) {
     await stop();
     throw error;
@@ -928,7 +955,10 @@ async function startStack(): Promise<
           forwarded.headers.set('x-native-auth-url', serviceRequest.url);
           return fetch(forwarded, { redirect: 'manual' });
         }
-        if (pageOrigin && serviceRequest.method === 'POST' && url.pathname === '/signup')
+        if (
+          pageOrigin &&
+          ((serviceRequest.method === 'POST' && url.pathname === '/signup') || url.pathname === '/registration-page')
+        )
           return signupHandler!(serviceRequest);
         if (
           serviceRequest.method === 'POST' &&
@@ -1142,6 +1172,13 @@ async function startStack(): Promise<
     const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
     const nativeMediaStorageToken = randomBytes(32).toString('base64url');
     const testWriteRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
+    const observeBookSearch = process.env.NATIVE_BOOK_SEARCH_TIMING === '1';
+    const markBookReady = (stage: 'durable-worker-ready' | 'web-worker-ready') => {
+      if (observeBookSearch)
+        reportStackProgress(
+          `book-search-timing ${JSON.stringify({ stage, atMs: performance.timeOrigin + performance.now() })}`,
+        );
+    };
     const executorId = `native-web-${randomBytes(8).toString('hex')}`;
     const workerEnv = {
       ...workerTestEnv({
@@ -1162,7 +1199,8 @@ async function startStack(): Promise<
       ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
     };
     reportStackProgress('Native web stack startup: starting durable-work worker');
-    durableWorker = await startDurableWorker(workerEnv);
+    durableWorker = await startDurableWorker(workerEnv, observeBookSearch);
+    markBookReady('durable-worker-ready');
     reportStackProgress('Native web stack startup: durable-work worker ready');
     sampleMemory('durable-worker-ready');
 
@@ -1188,6 +1226,13 @@ async function startStack(): Promise<
               ? { body: await request.clone().text() }
               : {}),
         };
+        if (request.method === 'PUT' && url.pathname === '/v1/libraryHostedReading' && !observed.fixtureRequest) {
+          const command = (await request
+            .clone()
+            .json()
+            .catch(() => null)) as { subjectId?: unknown } | null;
+          if (typeof command?.subjectId === 'string') observed.hostedReadingSubjectId = command.subjectId;
+        }
         requests.push(observed);
         const createdReadFailure = request.method === 'GET' ? createdSubjectReadFailures.get(url.pathname) : undefined;
         if (createdReadFailure) {
@@ -1344,6 +1389,7 @@ async function startStack(): Promise<
     };
     reportStackProgress('Native web stack startup: starting production web Worker');
     webProcess = await launch();
+    markBookReady('web-worker-ready');
     reportStackProgress('Native web stack startup: production web Worker ready');
     sampleMemory('web-worker-ready');
 
@@ -1355,8 +1401,10 @@ async function startStack(): Promise<
       authIssuer: authServer.url.origin,
       issuerOrigin: auth.issuer,
       web: webOrigin,
-      async authPersona(persona) {
-        const { accountId, bearer } = await getAccount(persona);
+      async authPersona(persona, scopes) {
+        const account = await getAccount(persona);
+        const { accountId, bearer } =
+          scopes === undefined ? account : await driver!.fixtures.scopeVariant(account, scopes);
         const result = await auth.database.query<{ email: string }>('SELECT email FROM "user" WHERE id=$1', [
           accountId,
         ]);
@@ -1560,6 +1608,7 @@ type HostCall = {
   method:
     | 'credentials'
     | 'authPersona'
+    | 'scopedAuthPersona'
     | 'enableAccountOperations'
     | 'accountOperationActors'
     | 'createAutomatedActor'
@@ -1670,6 +1719,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
@@ -1934,9 +1984,13 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         lifecycle.assertOpen('read native account credentials');
         return credentials(persona);
       },
-      async authPersona(persona) {
+      async authPersona(persona, scopes) {
         lifecycle.assertOpen('read native account identity');
-        return (await call('authPersona', persona)) as {
+        const result =
+          scopes === undefined
+            ? await call('authPersona', persona)
+            : await call('scopedAuthPersona', JSON.stringify({ persona, scopes }));
+        return result as {
           accountId: string;
           email: string;
           authorization: string;
@@ -2127,7 +2181,10 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
-        else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
+        else if (method === 'scopedAuthPersona') {
+          const input = JSON.parse(argument!) as { persona: string; scopes: string[] };
+          value = await stack.authPersona(input.persona, input.scopes);
+        } else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
         else if (method === 'accountOperationActors') value = stack.accountOperationActors();
         else if (method === 'createAutomatedActor') {
           const input = JSON.parse(argument!) as {

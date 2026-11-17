@@ -64,7 +64,7 @@ function stackOrigins(): Stack {
   };
 }
 
-function publicFields(value: unknown): unknown {
+export function publicFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.slice(0, 24).map(publicFields);
   if (!value || typeof value !== 'object') return value;
   const output: Json = {};
@@ -86,7 +86,7 @@ async function child(command: string[], logPath: string, env: NodeJS.ProcessEnv)
   return code ?? 1;
 }
 
-async function sourceRevision(): Promise<string> {
+export async function sourceRevision(): Promise<string> {
   const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], { cwd: root, stdout: 'pipe', stderr: 'ignore' });
   const text = (await new Response(proc.stdout).text()).trim();
   await proc.exited;
@@ -120,6 +120,8 @@ async function kernel(stack: Stack, method: string, path: string, options: Kerne
   }
   return { status: response.status, body: value, value, headers: response.headers };
 }
+
+export { kernel as communityKernel };
 
 async function http(url: string): Promise<{ status: number; headers: Record<string, string>; text: string }> {
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000), redirect: 'manual' });
@@ -217,7 +219,7 @@ async function pageRead(stack: Stack, subject: string, view?: string): Promise<{
   return { status: result.status, value: result.value };
 }
 
-async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string }> {
+export async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string }> {
   const issuerJwks = await http(`${stack.issuer}/.well-known/jwks.json`);
   const nativeJwks = await http(`${stack.native}/.well-known/jwks.json`);
   const discovery = await http(`${stack.issuer}/.well-known/openid-configuration`);
@@ -249,6 +251,14 @@ type WalkContext<Fixture extends CommunityFixture = WebFixture> = {
   seed: Fixture;
   page: Page;
   signIn: { ok: boolean; detail: string };
+};
+
+type CommunityWalkContext = WalkContext<CommunityFixture> & {
+  community?: {
+    ownerContext(): Promise<BrowserContext>;
+    submitOwnerSignIn(page: Page): Promise<void>;
+    freshOutsider(): Promise<{ accountId: string; bearer: string }>;
+  };
 };
 
 async function walkW01(ctx: WalkContext): Promise<unknown> {
@@ -415,15 +425,20 @@ async function walkW18(ctx: WalkContext): Promise<unknown> {
 }
 
 async function withOwnerPage<T>(
-  ctx: WalkContext<CommunityFixture>,
+  ctx: CommunityWalkContext,
   returnUrl: string,
   observed: Json,
   witness: (page: Page, enter: (stage: string) => void) => Promise<T>,
 ): Promise<T> {
   if (!ctx.signIn.ok) throw Object.assign(new Error(ctx.signIn.detail), { unreached: true, observed });
   const { stack, seed } = ctx;
-  const context = await ctx.page.context().browser()!.newContext({ locale: 'en-US', viewport: desktop });
-  const page = await context.newPage();
+  const context = ctx.community
+    ? await ctx.community.ownerContext()
+    : await ctx.page.context().browser()!.newContext({ locale: 'en-US', viewport: desktop });
+  const page = await context.newPage().catch(async (error: unknown) => {
+    await context.close();
+    throw error;
+  });
   page.setDefaultTimeout(60_000);
   const target = new URL(returnUrl);
   const returned = (url: URL) =>
@@ -454,7 +469,7 @@ async function withOwnerPage<T>(
           new URL(response.url()).pathname === '/signin' &&
           response.request().method() === 'POST',
       ),
-      fillPasswordSignIn(page, seed.owner.email),
+      ctx.community ? ctx.community.submitOwnerSignIn(page) : fillPasswordSignIn(page, seed.owner.email),
     ]);
     observed.authStatus = response.status();
     if (response.status() !== 200) throw new Error('Auth did not acknowledge sign-in');
@@ -492,13 +507,13 @@ async function withOwnerPage<T>(
       signedIn && error instanceof Error
         ? error.message
         : `stopped at ${path}${observed.authStatus === undefined ? '' : ` after Auth HTTP ${observed.authStatus}`}`;
-    throw Object.assign(new Error(`${stage}: ${detail}`), { observed: { ...observed, mountedPath: path } });
+    throw Object.assign(new Error(`${stage}: ${detail}`), { stage, observed: { ...observed, mountedPath: path } });
   } finally {
     await context.close();
   }
 }
 
-async function walkW29(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
+async function walkW29(ctx: CommunityWalkContext): Promise<unknown> {
   if (!ctx.seed.boardId || !ctx.seed.threadId) throw new Error('seed published no board or thread');
   const board = await gotoPage(ctx.page, `${ctx.stack.web}/en/boards/${ctx.seed.boardId}`);
   if (board.status >= 400) throw new Error(`board HTTP ${board.status}`);
@@ -592,7 +607,7 @@ async function walkW29(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
   });
 }
 
-async function walkW31(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
+async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
   const { realmId, spaceAddress } = ctx.seed;
   const opened = await gotoPage(ctx.page, `${ctx.stack.web}/en/realms/${realmId}`);
   const expected = spaceAddress ? `/en/spaces/${encodeURIComponent(spaceAddress)}` : `/en/realms/${realmId}`;
@@ -623,12 +638,19 @@ async function walkW31(ctx: WalkContext<CommunityFixture>): Promise<unknown> {
     await addition.getByText(realmId, { exact: true }).waitFor({ state: 'visible' });
 
     enter('Authenticate the seeded nonmember for independent native reads');
-    const [bindings, { website }] = await Promise.all([parseEnv(join(root, 'apps/web/.dev.vars')), developmentKeys()]);
-    // Use a fresh ordinary website token so expiry during earlier walks cannot look like a membership failure.
-    const auth = await websiteToken(ctx.stack, outsider, bindings, website).catch(() => {
+    const auth = await (async () => {
+      if (ctx.community) return ctx.community.freshOutsider();
+      const [bindings, { website }] = await Promise.all([
+        parseEnv(join(root, 'apps/web/.dev.vars')),
+        developmentKeys(),
+      ]);
+      // Use a fresh ordinary website token so expiry during earlier walks cannot look like a membership failure.
+      const { session, bearer } = await websiteToken(ctx.stack, outsider, bindings, website);
+      return { accountId: session.accountId, bearer };
+    })().catch(() => {
       throw new Error('Ordinary Auth could not issue the nonmember’s website token');
     });
-    if (auth.session.accountId !== outsider.accountId) throw new Error('Auth returned a different nonmember');
+    if (auth.accountId !== outsider.accountId) throw new Error('Auth returned a different nonmember');
 
     enter('Independently read the nonmember and protected roster boundary');
     const rosterPath = `/v1/realms/${realmId}/members`;
@@ -750,6 +772,9 @@ type Walkers<Fixture extends CommunityFixture> = Partial<
 >;
 
 const communityWalkers: Walkers<CommunityFixture> = { W29: walkW29, W31: walkW31 };
+export function walkCommunityPath(id: 'W29' | 'W31', context: CommunityWalkContext): Promise<unknown> {
+  return id === 'W29' ? walkW29(context) : walkW31(context);
+}
 const walkers: Walkers<WebFixture> = {
   ...communityWalkers,
   W01: walkW01,
