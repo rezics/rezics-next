@@ -268,9 +268,10 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
   };
 }
 
-async function resolveRead(index: number, label: string) {
+async function resolveRead(index: number, label: string, createThread?: CommunityBoardPage['actions']['createThread']) {
   const call = calls[index]!;
   const page = await pageFor(call.input, label);
+  if (createThread) page.actions = { ...page.actions, createThread };
   const session = call.session;
   const readerOrigin =
     call.input.credentialMode === 'anonymous'
@@ -330,11 +331,11 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
   await setLocale('en', { reload: false });
 
   // The server-produced anonymous page crosses one real render/hydration boundary and remains public.
-  const anonymousClient = makeQueryClient({ state: 'signed-in', subject: accountId, csrfToken: 'original-csrf' });
+  const anonymousClient = makeQueryClient({ state: 'signed-out', csrfToken: null });
   const anonymousRouter = makeRouter(anonymousClient, {
     id: boardA,
     mode: 'anonymous',
-    session: { state: 'signed-in', subject: accountId, csrfToken: 'original-csrf' },
+    session: { state: 'signed-out', csrfToken: null },
   });
   const { pending: anonymousLoad } = await noWindowAsync(() => start(() => anonymousRouter.load()));
   expect(calls).toHaveLength(1);
@@ -357,21 +358,31 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
   await act(async () => anonymousRoot.render(app(anonymousClient, anonymousRouter)));
   visible(anonymousHost, 'Anonymous public');
 
-  // Root's existing anonymous-to-session refresh changes the read mode and starts a new caller visit.
+  expect(anonymousHost.querySelector('[data-slot="create-thread"]')).toBeNull();
+
+  // Hydration discovers the signed-in viewer while router context stays anonymous.
   const privateRefresh = resolved(anonymousRouter);
-  anonymousRouter.update({ context: { queryClient: anonymousClient, credentialMode: 'session' } });
-  const { pending: privateLoad } = await start(() => anonymousRouter.invalidate());
+  await act(async () => {
+    anonymousClient.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: accountId,
+      csrfToken: 'original-csrf',
+    });
+  });
   absent(anonymousHost, 'Anonymous public');
   expect(calls).toHaveLength(2);
   expect(calls[1]!.input).toEqual({ id: boardA, credentialMode: 'session' });
   await resolveRead(1, 'Signed in initial');
-  await privateLoad;
   await privateRefresh;
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
   visible(anonymousHost, 'Signed in initial');
+  const startThread = anonymousHost.querySelector('[data-slot="create-thread"]');
+  expect(startThread?.textContent).toBe('Start a new thread');
+  expect(startThread?.getAttribute('href')).toBe('/boards/' + boardA + '/new');
+  expect(anonymousRouter.options.context.credentialMode).toBe('anonymous');
 
   // A same-account CSRF replacement retires the ready result and its private query entry, then a fresh visit works.
   const replacementDone = resolved(anonymousRouter);
@@ -387,13 +398,14 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
   expect(calls[2]!.input).toEqual({ id: boardA, credentialMode: 'session' });
   const boardPages = anonymousClient.getQueryCache().findAll({ queryKey: ['board-page', boardA] });
   expect(boardPages.filter((query) => query.queryKey[4] === 'session')).toHaveLength(1);
-  await resolveRead(2, 'Signed in replacement');
+  await resolveRead(2, 'Signed in replacement', 'denied');
   await replacementDone;
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
   visible(anonymousHost, 'Signed in replacement');
+  expect(anonymousHost.querySelector('[data-slot="create-thread"]')).toBeNull();
 
   // Query cache updates are monotonic across signed-out and away/back batches, even for the same account.
   const signOutDone = resolved(anonymousRouter);
@@ -404,6 +416,7 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
   expect(calls).toHaveLength(3);
   await signOutDone;
 
+  const restoredDone = resolved(anonymousRouter);
   await act(async () => {
     anonymousClient.setQueryData(sessionQuery.queryKey, {
       state: 'signed-in',
@@ -411,12 +424,9 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
       csrfToken: 'replacement-csrf',
     });
   });
-  const restoredDone = resolved(anonymousRouter);
-  const { pending: restoredLoad } = await start(() => anonymousRouter.invalidate());
   expect(calls).toHaveLength(4);
   expect(calls[3]!.input.credentialMode).toBe('session');
   await resolveRead(3, 'Signed in after sign out');
-  await restoredLoad;
   await restoredDone;
   await act(async () => {
     await Promise.resolve();
