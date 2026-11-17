@@ -37,6 +37,26 @@ function subjectReactions(item: FeedItem | undefined) {
     : undefined;
 }
 
+function reportMixedHomeFinalization(output: string, prefix: string) {
+  const marker = 'Mixed Home finalization ';
+  let latest: Record<string, unknown> | undefined;
+  let lastOutcome: Record<string, unknown> | undefined;
+  let maintenanceFailure: string | undefined;
+  for (const line of output.split(/\r?\n/)) {
+    if (line.includes('Discovery maintenance failed')) maintenanceFailure = line.slice(0, 300);
+    if (!line.startsWith(marker)) continue;
+    try {
+      const event = JSON.parse(line.slice(marker.length));
+      if (event?.prefix !== prefix) continue;
+      latest = event;
+      if (event.outcome) lastOutcome = event;
+    } catch {
+      // Either edge of the child's retained output may contain a partial line.
+    }
+  }
+  console.info('Mixed Home worker finalization', JSON.stringify({ latest, lastOutcome, maintenanceFailure }));
+}
+
 async function readMixedDiscoveryProgress(databaseUrl: string, prefix: string) {
   const pool = new Pool({ connectionString: databaseUrl, max: 1, connectionTimeoutMillis: 1_500 });
   try {
@@ -174,6 +194,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
       OPENSEARCH_URL: endpoint,
       KERNEL_SEARCH_PREFIX: prefix,
       KERNEL_PORT: '0',
+      ...(process.env.REZICS_MIXED_HOME_TIMING === '1' ? { REZICS_MIXED_HOME_TIMING: '1' } : {}),
     });
     if (process.env.REZICS_MIXED_HOME_TIMING === '1')
       console.info(
@@ -250,6 +271,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
         Date.now() >= readProgressAt
       ) {
         observedDiscoveryProgress = true;
+        if (worker) reportMixedHomeFinalization(worker.recentOutput, prefix);
         const elapsedMs = Date.now() - startedAt;
         try {
           const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
@@ -333,6 +355,10 @@ test('Default mixed feed composes real discovery, current Following and Continue
     expect((await page(viewer)).feedItems.some((item) => item.key.id === book)).toBe(false);
     if (mixed.next)
       expect((await page(viewer, 'home', mixed.next)).feedItems.some((item) => item.key.id === book)).toBe(false);
+  } catch (error) {
+    if (process.env.REZICS_MIXED_HOME_TIMING === '1' && worker)
+      reportMixedHomeFinalization(worker.recentOutput, prefix);
+    throw error;
   } finally {
     try {
       await server?.stop();
