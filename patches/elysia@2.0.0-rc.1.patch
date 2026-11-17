@@ -1,0 +1,100 @@
+# Elysia 2.0.0-rc.1 repeatedly compiles closed union reference graphs during exact-mirror construction.
+# Reproducer and validation acceptance: services/kernel/test/http/response-mirror-compilation.test.ts.
+# Reuse the existing full schema fingerprint only within one mirror build; opaque schemas remain uncached.
+# Remove when the pinned upstream supplies equivalent scoped compilation reuse and these controls pass.
+diff --git a/dist/type/validator/index.js b/dist/type/validator/index.js
+index 89ef68cf571eb213126b0441bca45c196fa982c3..33c51fe2c866aff55f1455e8aabf5fecaf9511cb 100644
+--- a/dist/type/validator/index.js
++++ b/dist/type/validator/index.js
+@@ -17,6 +17,23 @@ const require_type_validator_exact_mirror = require('./exact-mirror.js');
+ const require_type_validator_validator_cache = require('./validator-cache.js');
+ 
+ //#region src/type/validator/index.ts
++function createCachedMirror(createMirror, schema, options) {
++	const compiled = new Map();
++	try {
++		return createMirror(schema, {
++			...options,
++			Compile(member) {
++				const meta = require_type_validator_validator_cache.computeSchemaMeta(member, false);
++				if (!meta.special && compiled.has(meta.key)) return compiled.get(meta.key);
++				const validator = require_type_typebox_value.SchemaCompile(member);
++				if (!meta.special) compiled.set(meta.key, validator);
++				return validator;
++			}
++		});
++	} finally {
++		compiled.clear();
++	}
++}
+ const moduleCache = /* @__PURE__ */ new WeakMap();
+ let activeRefineValidation;
+ const refinementGroups = /* @__PURE__ */ new WeakMap();
+@@ -415,7 +432,7 @@ var TypeBoxValidator = class extends require_validator_index.Validator {
+ 					} else {
+ 						if (aot && slot && require_compile_aot.inAotBuild() && require_compile_aot.captureImpl) require_compile_aot.captureImpl.captureMirror(schema, aot, slot, options?.sanitize);
+ 						const createMirror = require_type_validator_exact_mirror.getExactMirror();
+-						this.Clean = !createMirror ? typeboxClean : createMirror(schema, {
++						this.Clean = !createMirror ? typeboxClean : createCachedMirror(createMirror, schema, {
+ 							Compile: require_type_typebox_value.SchemaCompile,
+ 							sanitize: options?.sanitize
+ 						});
+@@ -484,7 +501,7 @@ var TypeBoxValidator = class extends require_validator_index.Validator {
+ 		const createMirror = require_type_validator_exact_mirror.getExactMirror();
+ 		if (!createMirror) return;
+ 		try {
+-			return createMirror(schema, {
++			return createCachedMirror(createMirror, schema, {
+ 				Compile: require_type_typebox_value.SchemaCompile,
+ 				sanitize: options?.sanitize,
+ 				...dirOpt
+diff --git a/dist/type/validator/index.mjs b/dist/type/validator/index.mjs
+index a3319fceec093d65a0fd9240c4cb15c3674fde02..0b4ed20b2d6426699da06f4f7c930a864183d964 100644
+--- a/dist/type/validator/index.mjs
++++ b/dist/type/validator/index.mjs
+@@ -14,9 +14,26 @@ import { ASYNC_REFINE, collectFileTypeChecks, isAsyncPredicate, takeFileTypeChec
+ import { applyPrecomputed, createDefaultCloner, createMergerFromSource, createObjectDefaultMerger, precomputeCompileFailures, verifyPreallocatableDefault } from "./default-precompute.mjs";
+ import { buildFindCustomError } from "./custom-error.mjs";
+ import { exactMirrorRequired, getExactMirror } from "./exact-mirror.mjs";
+-import { TypeBoxValidatorCache, mayHaveFileType } from "./validator-cache.mjs";
++import { TypeBoxValidatorCache, computeSchemaMeta, mayHaveFileType } from "./validator-cache.mjs";
+ 
+ //#region src/type/validator/index.ts
++function createCachedMirror(createMirror, schema, options) {
++	const compiled = new Map();
++	try {
++		return createMirror(schema, {
++			...options,
++			Compile(member) {
++				const meta = computeSchemaMeta(member, false);
++				if (!meta.special && compiled.has(meta.key)) return compiled.get(meta.key);
++				const validator = SchemaCompile(member);
++				if (!meta.special) compiled.set(meta.key, validator);
++				return validator;
++			}
++		});
++	} finally {
++		compiled.clear();
++	}
++}
+ const moduleCache = /* @__PURE__ */ new WeakMap();
+ let activeRefineValidation;
+ const refinementGroups = /* @__PURE__ */ new WeakMap();
+@@ -415,7 +432,7 @@ var TypeBoxValidator = class extends Validator {
+ 					} else {
+ 						if (aot && slot && inAotBuild() && captureImpl) captureImpl.captureMirror(schema, aot, slot, options?.sanitize);
+ 						const createMirror = getExactMirror();
+-						this.Clean = !createMirror ? typeboxClean : createMirror(schema, {
++						this.Clean = !createMirror ? typeboxClean : createCachedMirror(createMirror, schema, {
+ 							Compile: SchemaCompile,
+ 							sanitize: options?.sanitize
+ 						});
+@@ -484,7 +501,7 @@ var TypeBoxValidator = class extends Validator {
+ 		const createMirror = getExactMirror();
+ 		if (!createMirror) return;
+ 		try {
+-			return createMirror(schema, {
++			return createCachedMirror(createMirror, schema, {
+ 				Compile: SchemaCompile,
+ 				sanitize: options?.sanitize,
+ 				...dirOpt

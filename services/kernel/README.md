@@ -715,6 +715,20 @@ cursor lifetime, before retiring it; public cursors also reset when that key is 
 Every new list uses `encodeListCursor`. An existing list moves when its owner next touches it. `encodeCursor` stays
 only for lists that have not yet moved.
 
+## HTTP schema compilation
+
+Decision: retain Elysia's validation, coercion and exact-mirror normalization. Its pinned dependency patch reuses
+successful TypeBox union-member compilations only during one synchronous mirror build. The key is the existing
+complete `computeSchemaMeta` fingerprint, recomputed for every member so a mutable schema cannot reuse an earlier
+shape. Opaque refinements and codecs bypass reuse; reference definitions and function identity retain the owner's
+fingerprint rules. The local map clears on success or failure and introduces no process-wide cache or timer.
+
+The defect is repeated compilation of identical closed reference graphs while building recursive response mirrors.
+The response/ref/format/unknown-field and function/codec controls live in
+`test/http/response-mirror-compilation.test.ts`. Remove the package-manager patch when the pinned upstream provides
+equivalent scoped reuse and these controls pass. Later published TypeBox, exact-mirror and Elysia prereleases were
+checked before choosing this focused patch; their mirror compile callback still performed the same repeated work.
+
 ## HTTP ingress body bounds
 
 The shared reader enforces a 1 MiB default wire limit before JSON parsing and schema validation. Route owners keep

@@ -4,3 +4,6 @@ packages/client/src/kernel/** linguist-generated
 packages/definitions/release/*.json linguist-generated
 apps/web/src/kernel/recorded/definitions-active.json linguist-generated
 apps/web/src/kernel/recorded/definitions-release.json linguist-generated
+
+# Unified patch context retains whitespace as data.
+patches/*.patch -whitespace
