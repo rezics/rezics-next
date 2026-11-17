@@ -2755,7 +2755,8 @@ export function createNativePublicFilterSourceBinding(
         if (
           cut.bootstrap.id !== input.bootstrap ||
           cut.row.state !== 'adopted' ||
-          cut.row.queried !== joined.queried.snapshot.observation
+          cut.row.queried !== joined.queried.snapshot.observation ||
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
         const row = await nativeSourceQuery(db, repairRead, {
@@ -3103,7 +3104,7 @@ export function createNativePublicFilterSourceBinding(
             complete: row.complete,
             inputLimit: row.input_limit,
             digests: row.repair_locator_digests!,
-            closedHome,
+            ...(closedHome === undefined ? {} : { closedHome }),
             alreadyVerified:
               subjectPublication &&
               row.verified_root !== null &&
@@ -3353,7 +3354,8 @@ export function createNativePublicFilterSourceBinding(
         if (
           cut.bootstrap.id !== input.bootstrap ||
           cut.row.state !== 'adopted' ||
-          cut.row.queried !== joined.queried.snapshot.observation
+          cut.row.queried !== joined.queried.snapshot.observation ||
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
         if (
