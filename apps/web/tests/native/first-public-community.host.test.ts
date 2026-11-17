@@ -252,10 +252,32 @@ for (const id of selected) {
                   (request) =>
                     !request.fixtureRequest &&
                     request.method === 'GET' &&
-                    request.url === `/v1/realms/${realmId}/members`,
+                    request.url.split('?')[0] === `/v1/realms/${realmId}/members`,
                 )
                 .slice(0, 6)
                 .map(({ responseStatus }) => responseStatus ?? null);
+            },
+            async observeSelectedRoster(realmId, accountId) {
+              const owner = await stack.authPersona('alice', rosterScopes);
+              const query = new URLSearchParams({ accountId });
+              const response = await stack.kernel(
+                `/v1/realms/${realmId}/members?${query}`,
+                { headers: { authorization: owner.authorization }, signal: AbortSignal.timeout(2_000) },
+                'alice',
+              );
+              const value = (await response.json().catch(() => null)) as {
+                state?: unknown;
+                selected?: { accountId?: unknown; membership?: unknown };
+              } | null;
+              return {
+                status: response.status,
+                state: value?.state === 'ready' || value?.state === 'preparing' ? value.state : 'other',
+                exactAccount: value?.selected?.accountId === accountId,
+                membership:
+                  value?.selected?.membership === 'member' || value?.selected?.membership === 'none'
+                    ? value.selected.membership
+                    : 'other',
+              };
             },
             async freshOutsider() {
               const outsider = await stack.authPersona('bob', rosterScopes);

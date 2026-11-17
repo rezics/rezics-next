@@ -259,6 +259,15 @@ type CommunityWalkContext = WalkContext<CommunityFixture> & {
     submitOwnerSignIn(page: Page): Promise<void>;
     freshOutsider(): Promise<{ accountId: string; bearer: string }>;
     observeRosterRead?(realmId: string): Promise<(number | null)[] | null>;
+    observeSelectedRoster?(
+      realmId: string,
+      accountId: string,
+    ): Promise<{
+      status: number;
+      state: 'ready' | 'preparing' | 'other';
+      exactAccount: boolean;
+      membership: 'member' | 'none' | 'other';
+    }>;
   };
 };
 
@@ -759,6 +768,8 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
       await selected.getByText('Current member', { exact: true }).waitFor({ state: 'visible' });
     } catch (error) {
       observed.rosterHttpAfterStatus = (await ctx.community?.observeRosterRead?.(realmId)) ?? null;
+      observed.nativeSelectedAfterStatus =
+        (await ctx.community?.observeSelectedRoster?.(realmId, outsider.accountId).catch(() => null)) ?? null;
       observed.rosterStatus = await page
         .evaluate(() => {
           const recognized = new Set([
