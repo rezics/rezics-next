@@ -400,18 +400,20 @@ export function createReviewDiscoveryReceiving(options: {
           },
         });
       };
-      await connection(
+      return await connection(
         pool,
         deadline,
-        (owned) => {
+        async (owned) => {
           publishing = onSession(pool, owned, (session) =>
             withDiscoveryTarget(session, search, target, apply, false, projectionContext),
           );
-          return publishing;
+          await publishing;
+          // Custody and its post-validation have ended. Read the current frontier in a fresh statement
+          // on this still-bounded checkout, including any wakeup committed since acknowledgement.
+          return read(owned, target, home);
         },
         () => publishing,
       );
-      return await frontier();
     } catch (error) {
       if (attempted && Date.now() < deadline) {
         try {
