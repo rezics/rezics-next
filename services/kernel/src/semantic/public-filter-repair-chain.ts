@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import type { Pool } from 'pg';
 import { withConnection, discardConnection, withBoundedReadConnection } from '../database/pool.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
@@ -263,6 +264,7 @@ export async function retainPublicFilterRepairVerification(
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
+      if (page.complete && current.root === null) bookPreparationTiming?.mark('terminalRepair', Number(ordinal));
       return current.root === null;
     } catch (error) {
       try {

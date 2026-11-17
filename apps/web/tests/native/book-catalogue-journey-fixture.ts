@@ -519,7 +519,18 @@ async function waitForNativeSearch(
   const input = { text: marker, languages: ['en'] } satisfies NativeSearchRequest;
   const deadline = performance.now() + 90_000;
   let last = 'no response';
+  let first = true;
   while (performance.now() < deadline) {
+    if (first) {
+      first = false;
+      console.info(
+        `book-search-timing ${JSON.stringify({
+          stage: 'first-search-post',
+          atMs: performance.timeOrigin + performance.now(),
+          deadlineAtMs: performance.timeOrigin + deadline,
+        })}`,
+      );
+    }
     const response = await stack.kernel('/v1/subjects:search', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -542,11 +553,26 @@ async function waitForNativeSearch(
           const hit = found.get(subject.id);
           return hit?.type === subject.type && hit.labels.en === subject.label;
         })
-      )
+      ) {
+        console.info(
+          `book-search-timing ${JSON.stringify({
+            stage: 'search-match',
+            atMs: performance.timeOrigin + performance.now(),
+            count: expected.length,
+          })}`,
+        );
         return parsed;
+      }
     }
     await Bun.sleep(250);
   }
+  console.info(
+    `book-search-timing ${JSON.stringify({
+      stage: 'search-cutoff',
+      atMs: performance.timeOrigin + performance.now(),
+      deadlineAtMs: performance.timeOrigin + deadline,
+    })}`,
+  );
   let workerOutput = 'unavailable';
   let readiness = 'unavailable';
   try {
@@ -570,7 +596,7 @@ async function waitForNativeSearch(
 
 export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJourneyFixture> {
   const searchContainer = await prepareSearch();
-  const stack = await startNativeWebStack({ writeRateOverrides });
+  const stack = await startNativeWebStack({ writeRateOverrides, observeBookSearchPreparation: true });
   let auth: NativeAuthStack | undefined;
   try {
     const active = await responseJson<{ digest: string }>(
@@ -621,6 +647,13 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     await readCreatedSubject(stack, series);
     await readCreatedSubject(stack, book, { property: 'wdt:P179', target: series.id });
     await readCreatedSubject(stack, edition, { property: 'schema:exampleOfWork', target: book.id });
+    console.info(
+      `book-search-timing ${JSON.stringify({
+        stage: 'anonymous-readbacks-complete',
+        atMs: performance.timeOrigin + performance.now(),
+        count: expected.length,
+      })}`,
+    );
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({

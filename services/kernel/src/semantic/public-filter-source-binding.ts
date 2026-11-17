@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { nativePopulationStartId, readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import {
@@ -2660,7 +2661,8 @@ export function createNativePublicFilterSourceBinding(
           incarnation: settled.queried.consumer.incarnation,
         };
         ackAttempted = publicationCost !== undefined;
-        await acknowledgePublicFilterRepairBaseline(
+        const endReceiver = bookPreparationTiming?.start('ackReceiver');
+        const pendingReceiver = acknowledgePublicFilterRepairBaseline(
           db,
           baseline,
           after.map(({ home, epoch, receipt, source_position, enqueue, revision, claim_revision }) => ({
@@ -2674,11 +2676,15 @@ export function createNativePublicFilterSourceBinding(
           })),
           deadline,
         );
+        await (endReceiver ? pendingReceiver.finally(endReceiver) : pendingReceiver);
         // The Source frontier is adopted only after the actual registration
         // ACK commit. A crash before this CAS repeats that same prefix safely.
         cost.frontierWrites++;
-        if (!(await advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home, after.length)))
-          throw new BindingError('owner_unavailable');
+        const endCursor = bookPreparationTiming?.start('ackCursor');
+        const pendingCursor = advancePublicFilterRepairAckFrontier(db, chain, seal.terminal, seal.home, after.length);
+        const advanced = await (endCursor ? pendingCursor.finally(endCursor) : pendingCursor);
+        if (!advanced) throw new BindingError('owner_unavailable');
+        bookPreparationTiming?.mark('ackAdvanced', seal.home + after.length);
         // Publication's next turn funds the original population-start and fence
         // proofs. The last ACK page can spend the same allowance as any other page.
         if (publicationCost || seal.home + after.length < 4096)

@@ -16,6 +16,7 @@ import repairPage from './public-filter-custody-repair-page.sql';
 import repairPages from './public-filter-custody-repair-pages.sql';
 import repairState from './public-filter-custody-repair-state.sql';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { bookPreparationTiming } from './book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
@@ -597,6 +598,9 @@ export async function readPublicFilterRepairSettlement(
   const allowance = repairAllowance.getStore();
   const spent = allowance?.spent ?? cost();
   const input = structuredClone(request);
+  const timing = bookPreparationTiming;
+  const endSettlement = timing?.start('settlement');
+  let endPhase: (() => void) | undefined;
   try {
     check(context);
     queried(input.queried);
@@ -635,10 +639,18 @@ export async function readPublicFilterRepairSettlement(
         meter.engineRequests++;
         meter.bytes += Buffer.byteLength(path) + Buffer.byteLength(encode(body));
         if (path.endsWith('/_search')) meter.engineSearches++;
-        const result = await transport.request(method, path, body, {
+        const endTransport = timing?.start(
+          path.endsWith('/_refresh')
+            ? 'engineRefresh'
+            : path === `/${input.queried.consumer.physicalTarget}`
+              ? 'enginePhysical'
+              : 'engineOther',
+        );
+        const pending = transport.request(method, path, body, {
           ...options,
           timeoutMs: Math.max(1, context.deadline - Date.now()),
         });
+        const result = await (endTransport ? pending.finally(endTransport) : pending);
         meter.bytes += Buffer.byteLength(encode(result.body));
         if (path.endsWith('/_search')) {
           const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
@@ -652,7 +664,10 @@ export async function readPublicFilterRepairSettlement(
       },
     };
     // Resolve wide immutable release authority without holding Search's retained checkout.
+    endPhase = timing?.start('initialAuthority');
     const initial = await read(pool, input, context, meter);
+    endPhase?.();
+    endPhase = undefined;
     admit();
     const q = input.queried;
     const home = partition(q.snapshot.observation);
@@ -950,7 +965,10 @@ export async function readPublicFilterRepairSettlement(
         },
       };
     };
+    endPhase = timing?.start('savedLocal');
     const staged = await local(load);
+    endPhase?.();
+    endPhase = timing?.start('releasedForeign');
     // No held Search checkout, transaction, writer lock or foreign-home lease crosses this boundary.
     for (const entry of staged.basis.pages) {
       await withRequestDeadline(context.deadline, () =>
@@ -969,6 +987,8 @@ export async function readPublicFilterRepairSettlement(
         ),
       );
     }
+    endPhase?.();
+    endPhase = timing?.start('freshLocal');
     return await local(async (db, raw) => {
       const final = await load(db, raw);
       if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
@@ -1069,6 +1089,9 @@ export async function readPublicFilterRepairSettlement(
     });
   } catch (error) {
     return failure(error, meter);
+  } finally {
+    endPhase?.();
+    endSettlement?.();
   }
 }
 

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { bookPreparationTiming } from './book-preparation-timing.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -135,8 +136,13 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const context = { deadline: deliveryDeadline - populationHandoffMs };
     const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false, sourceAdvanced = false) => {
       const continueInline = ready && mayContinue(sourceAdvanced);
-      const revision = await store.advance(record, locator, delayMs, deliveryDeadline, continueInline);
-      return continueInline ? (revision ?? undefined) : undefined;
+      const endAdvance = bookPreparationTiming?.start('advance');
+      try {
+        const revision = await store.advance(record, locator, delayMs, deliveryDeadline, continueInline);
+        return continueInline ? (revision ?? undefined) : undefined;
+      } finally {
+        endAdvance?.();
+      }
     };
     const search = searchWithin(context.deadline);
     const index = subjectIndexName(options.prefix, state.generation);
@@ -202,7 +208,13 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
-      const reconciliation = await options.runtime.publication.step(job, context, { enrollSource: true });
+      const endPublication = bookPreparationTiming?.start('publication');
+      const pending = options.runtime.publication.step(job, context, { enrollSource: true });
+      const reconciliation = await (endPublication ? pending.finally(endPublication) : pending);
+      bookPreparationTiming?.outcome(
+        reconciliation.status,
+        reconciliation.status !== 'unavailable' && reconciliation.sourceAdvanced,
+      );
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';
@@ -213,7 +225,10 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         ready && reconciliation.sourceAdvanced === true,
       );
     }
-    const activated = await options.runtime.publication.activate(job, context);
+    const endPublication = bookPreparationTiming?.start('publication');
+    const pending = options.runtime.publication.activate(job, context);
+    const activated = await (endPublication ? pending.finally(endPublication) : pending);
+    bookPreparationTiming?.outcome(activated.status, activated.status === 'preparing' && activated.sourceAdvanced);
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated' || activated.status === 'superseded') return advance(null);
@@ -298,19 +313,32 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           }
           try {
             if (record.locator.kind === 'population') {
-              const next = await population(record, record.locator, context.deadline, (sourceAdvanced) => {
-                const now = Date.now();
-                longestTurnMs = Math.max(longestTurnMs, now - started);
-                // Cold Source preparation needs hundreds of metered turns. Keep its
-                // committed successor on this delivery while there is room to claim it.
-                // Leave time for both the handoff write and a turn of the observed cost.
-                return (
-                  !paused &&
-                  !stopped &&
-                  (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
-                  now + 2 * longestTurnMs < context.deadline - populationHandoffMs
-                );
-              });
+              const locator = record.locator;
+              const run = () =>
+                population(record, locator, context.deadline, (sourceAdvanced) => {
+                  const now = Date.now();
+                  longestTurnMs = Math.max(longestTurnMs, now - started);
+                  // Cold Source preparation needs hundreds of metered turns. Keep its
+                  // committed successor on this delivery while there is room to claim it.
+                  // Leave time for both the handoff write and a turn of the observed cost.
+                  return (
+                    !paused &&
+                    !stopped &&
+                    (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
+                    now + 2 * longestTurnMs < context.deadline - populationHandoffMs
+                  );
+                });
+              const next = await (bookPreparationTiming?.turn(
+                {
+                  startedAtMs: started,
+                  claimMs: Date.now() - started,
+                  inputRevision: revision,
+                  revision: record.revision,
+                  phase: locator.phase,
+                  deliveryDeadlineMs: context.deadline,
+                },
+                run,
+              ) ?? run());
               failures.delete(record.locator.kind);
               if (next === undefined) return;
               revision = next;
