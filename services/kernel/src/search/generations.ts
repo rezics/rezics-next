@@ -980,10 +980,10 @@ function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }:
   };
 }
 
-function discoveryPageReadBatch(rows: readonly Population[], checkEmpty: () => Promise<void>) {
+function discoveryPageReadBatch<Result>(rows: readonly Population[], checkEmpty: () => Promise<Result>) {
   const pending = new Set(rows);
   const settled = Promise.withResolvers<void>();
-  let emptyPageCheck: Promise<void> | undefined;
+  let emptyPageCheck: Promise<Result> | undefined;
   return {
     observed(row: Population) {
       pending.delete(row);
@@ -1114,11 +1114,20 @@ async function reconcileDiscoveryPage(
   row: Population,
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
+  emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
   if (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') {
-    return reconcileMetadataDiscoveryPage(pool, search, projection, row, checkCapability, indexedReads);
+    return reconcileMetadataDiscoveryPage(
+      pool,
+      search,
+      projection,
+      row,
+      checkCapability,
+      indexedReads,
+      emptyIndexProbe,
+    );
   }
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
@@ -1287,6 +1296,7 @@ async function reconcileMetadataDiscoveryPage(
   row: Population,
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
+  emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
 ): Promise<boolean> {
   const { target, registry } = projection;
   const kind = row.owner as DiscoveryMetadataKind;
@@ -1344,23 +1354,15 @@ async function reconcileMetadataDiscoveryPage(
     return true;
   }
   const after = row.reconcile_position === null ? null : row.after_id;
-  const result = await search.request<unknown>(
-    'POST',
-    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
-    {
-      size: 100,
-      version: true,
-      query: { bool: { filter: [{ term: { partition: row.partition } }, { term: { owner } }, { term: { kind } }] } },
-      sort: [{ route: 'asc' }, { id: 'asc' }],
-      ...(after === null ? {} : { search_after: [row.after_route, after] }),
-    },
-    { query: { allow_partial_search_results: false } },
-  );
-  assertCompleteSearch(result.body);
-  if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
-    throw new TypeError('Invalid metadata discovery reconciliation page');
-  const hits = result.body.hits.hits;
-  if (hits.length > 100) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  const hits = (await emptyIndexProbe?.isEmpty(row))
+    ? []
+    : await readMetadataIndexHits(search, target, {
+        size: 100,
+        version: true,
+        query: { bool: { filter: metadataIndexTerms(row.partition, kind) } },
+        sort: [{ route: 'asc' }, { id: 'asc' }],
+        ...(after === null ? {} : { search_after: [row.after_route, after] }),
+      });
   // Release populated pages from the empty-page barrier before preparing their writes.
   if (hits.length > 0) indexedReads?.observed(row);
   const keys = hits.map((hit): { route: number; id: string } => {
@@ -1439,6 +1441,60 @@ function emptyIndexedMetadataCandidate(row: Population) {
     row.after_id === null &&
     row.reconcile_position !== null
   );
+}
+
+function metadataIndexTerms(partition: number, kind: DiscoveryMetadataKind) {
+  return [
+    { term: { partition } },
+    { term: { owner: kind === 'collection' ? 'commerce' : 'content' } },
+    { term: { kind } },
+  ];
+}
+
+async function readMetadataIndexHits(
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  body: Readonly<Record<string, unknown> & { size: number }>,
+) {
+  const result = await search.request<unknown>(
+    'POST',
+    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
+    body,
+    { query: { allow_partial_search_results: false } },
+  );
+  assertCompleteSearch(result.body);
+  if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
+    throw new TypeError('Invalid metadata discovery reconciliation page');
+  const hits: unknown[] = result.body.hits.hits;
+  if (hits.length > body.size) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  return hits;
+}
+
+function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, batch: readonly Population[]) {
+  const candidates = new Set(
+    batch.filter((row) => emptyIndexedMetadataCandidate(row) && row.reconcile_position === '0' && row.indexed === '0'),
+  );
+  if (candidates.size < 2) return undefined;
+  const reads = discoveryPageReadBatch([...candidates], async () => {
+    const should = [...candidates].map((row) => ({
+      bool: { filter: metadataIndexTerms(row.partition, row.owner as DiscoveryMetadataKind) },
+    }));
+    // No hit for the union proves every exact scope empty. Any hit keeps ordinary per-scope reconciliation.
+    const hits = await readMetadataIndexHits(search, target, {
+      size: 1,
+      _source: false,
+      query: { bool: { should, minimum_should_match: 1 } },
+    });
+    return hits.length === 0;
+  });
+  return {
+    observed: reads.observed,
+    async isEmpty(row: Population) {
+      if (!candidates.has(row)) return false;
+      reads.observed(row);
+      return reads.checkEmptyPage();
+    },
+  };
 }
 
 async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
@@ -1708,12 +1764,22 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
                   withDiscoveryTarget(pool, search, target, async () => {}),
                 )
               : undefined;
+          const emptyIndexProbe =
+            target.state === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
           return async (population) => {
             try {
               return await searchTurnCall(() =>
                 reads
                   ? populationPage(pool, projection, population, checkCapability, reads)
-                  : reconcileDiscoveryPage(pool, search, projection, population, checkCapability, indexedReads),
+                  : reconcileDiscoveryPage(
+                      pool,
+                      search,
+                      projection,
+                      population,
+                      checkCapability,
+                      indexedReads,
+                      emptyIndexProbe,
+                    ),
               );
             } catch (error) {
               if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
@@ -1723,6 +1789,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
             } finally {
               reads?.observed(population);
               indexedReads?.observed(population);
+              emptyIndexProbe?.observed(population);
             }
           };
         },
