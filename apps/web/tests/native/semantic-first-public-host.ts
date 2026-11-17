@@ -10,6 +10,7 @@ import {
 import { nativeWalkCall, type NativeObservation } from '../../scripts/semantic-first-public-request.ts';
 import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
+import { prepareNativeWebSearch } from './search-fixture.ts';
 
 /** Original case bodies use one ordinary native Web/Auth/Kernel fixture and its real editor. */
 export async function prepareSemanticFirstPublicHost(
@@ -18,10 +19,17 @@ export async function prepareSemanticFirstPublicHost(
   trace: NativeObservation[],
   stage: (value: string) => void,
   allCases = false,
+  services: { search?: boolean } = {},
 ) {
   await prepareNativeAuthMessages();
+  if (services.search) {
+    stage('native Search service');
+    await prepareNativeWebSearch('semantic-first-public');
+  }
   stage('native Web stack');
   const stack = await startNativeWebStack({ semanticFirstPublicEditor: allCases });
+  if (services.search && (!stack.searchWorker?.prefix || !stack.searchWorker.executorId))
+    throw new Error('Selected Semantic catalogue browsing requires the configured native Search worker');
   const call = nativeWalkCall(stack.kernelOrigin, trace);
   stage('active Definitions');
   const release = await readActiveDefinitions(call);
@@ -110,5 +118,5 @@ export async function prepareSemanticFirstPublicHost(
     await session.editorAgent();
   }
   stage('ready');
-  return { session, editorAccountId };
+  return { session, editorAccountId, searchWorker: stack.searchWorker };
 }

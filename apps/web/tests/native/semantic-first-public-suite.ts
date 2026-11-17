@@ -8,6 +8,7 @@ import {
 } from '../../scripts/semantic-first-public-cases.ts';
 import { summarizeBoundaryRequest, type NativeObservation } from '../../scripts/semantic-first-public-request.ts';
 import { nativeAfterAll, nativeBeforeAll, nativeTest, NativeTestLifecycle } from './lifecycle.ts';
+import type { NativeWebStack } from './stack.ts';
 import { prepareSemanticFirstPublicHost } from './semantic-first-public-host.ts';
 
 type OriginalSelection = {
@@ -25,6 +26,7 @@ export function registerSemanticFirstPublicHost(selection?: OriginalSelection) {
   const selectedIds = selection
     ? new Set([...selection.requested, ...Object.values(selection.dependencies).flat()])
     : new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.id));
+  const requiresSearch = selectedIds.has('catalogue-browsing');
   const evidenceDir = resolve(import.meta.dir, '../../../../.temp/semantic-first-public-native-host');
   const root = resolve(import.meta.dir, '../../../..');
   const trace: NativeObservation[] = [];
@@ -33,6 +35,7 @@ export function registerSemanticFirstPublicHost(selection?: OriginalSelection) {
   let revision: string | null = null;
   let phase = 'preparing';
   let editorAccountId: string;
+  let searchWorker: NativeWebStack['searchWorker'];
 
   async function retain() {
     await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
@@ -48,6 +51,8 @@ export function registerSemanticFirstPublicHost(selection?: OriginalSelection) {
           dependencies: selection?.dependencies ?? {},
           selectedIds: FIRST_PUBLIC_JOURNEYS.filter((row) => selectedIds.has(row.id)).map((row) => row.id),
           phase,
+          serviceDependencies: requiresSearch ? ['search'] : [],
+          searchWorker,
           editorAccountId,
           completed: results.filter((row) => row.status !== 'Aborted').length,
           aborted: results.filter((row) => row.status === 'Aborted').length,
@@ -76,10 +81,12 @@ export function registerSemanticFirstPublicHost(selection?: OriginalSelection) {
         trace,
         (stage) => (phase = stage),
         true,
+        { search: requiresSearch },
       );
       session = prepared.session;
       session.observePage = retain;
       editorAccountId = prepared.editorAccountId;
+      searchWorker = prepared.searchWorker;
     } finally {
       await retain();
     }
