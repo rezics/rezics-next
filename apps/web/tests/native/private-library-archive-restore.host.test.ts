@@ -978,7 +978,9 @@ async function restoreOwnerLibrary() {
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
   const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
-  const page = signedIn.context.pages().at(-1)!;
+  const page = signedIn.continueOnPage();
+  await auth.settlePageApp();
+  expect(auth.pageAppProcess(), 'Auth UI retired before the owner Archive journey').toBeUndefined();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${stack.web}/en/library/export`, { waitUntil: 'domcontentloaded' });
   await hydrated(page);
@@ -1330,12 +1332,6 @@ async function restoreOwnerLibrary() {
     await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
-  const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
-  const bobPage = bob.context.pages().at(-1)!;
-  await bobPage.goto(`${stack.web}/en/collections/${restoredId}`, { waitUntil: 'domcontentloaded' });
-  await hydrated(bobPage);
-  expect(await bobPage.getByRole('heading', { name: prepared.collectionTitle }).count()).toBe(0);
-
   const headings: Record<string, string> = {};
   for (const locale of locales) {
     await page.goto(`${stack.web}/${locale}/library/export`, { waitUntil: 'domcontentloaded' });
@@ -1354,6 +1350,15 @@ async function restoreOwnerLibrary() {
   await page.getByRole('heading', { name: await message('ja', 'library_archive_title') }).waitFor({
     state: 'visible',
   });
+
+  // Finish Alice's localized visits before opening Bob's separate context.
+  await signedIn.context.close();
+  const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
+  const bobPage = bob.continueOnPage();
+  await bobPage.goto(`${stack.web}/en/collections/${restoredId}`, { waitUntil: 'domcontentloaded' });
+  await hydrated(bobPage);
+  expect(await bobPage.getByRole('heading', { name: prepared.collectionTitle }).count()).toBe(0);
+  await auth.stop();
 
   assertLabelReadbacks();
   await writeArchiveProvenance({
