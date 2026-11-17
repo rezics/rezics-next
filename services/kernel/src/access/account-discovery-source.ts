@@ -194,14 +194,11 @@ export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
  * native reduction binding in its registered Source, including ownership epochs.
  */
 export async function readAccountDiscoveryWitness(pool: Pool, partitions: readonly number[]) {
-  // Preserve the existing writer API's empty batch; it is not query evidence.
-  if (partitions.length === 0) return new Map<number, { revision: bigint; claimRevision: bigint }>();
+  if (partitions.length === 0) return new Map<number, Omit<AccountDiscoveryReductionHead, 'partition'>>();
   const binding = await readAccountDiscoveryReductionBinding(pool, partitions, {
     deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
   });
-  return new Map(
-    binding.heads.map(({ partition, revision, claimRevision }) => [partition, { revision, claimRevision }]),
-  );
+  return new Map(binding.heads.map(({ partition, ...head }) => [partition, head]));
 }
 
 /** Source bindings for the index writer. An unconsumed exact claim is never

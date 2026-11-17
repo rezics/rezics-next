@@ -7,10 +7,12 @@ export declare function accountDiscoverySource(pool: Pool): AccountDiscoverySour
 /** Current writer witness only. Immutable query admission must retain the complete
  * native reduction binding in its registered Source, including ownership epochs.
  */
-export declare function readAccountDiscoveryWitness(pool: Pool, partitions: readonly number[]): Promise<Map<number, {
+export declare function readAccountDiscoveryWitness(pool: Pool, partitions: readonly number[]): Promise<Map<number, Omit<Readonly<{
+    partition: number;
+    epoch: number;
     revision: bigint;
     claimRevision: bigint;
-}>>;
+}>, "partition">>>;
 /** Source bindings for the index writer. An unconsumed exact claim is never
  * certified for publication: redrive its native intent, then resnapshot.
  */

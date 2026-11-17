@@ -58,6 +58,9 @@ frontiers and settles them in groups of at most eight. Every page remains bounde
 its own cursor only after the exact target actions settle; a failed group is drained before its error is retried. This
 amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
 Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
+For zero-count Account and Semantic frontiers at the start of an indexed pass, one complete search under physical
+generation custody can prove absence across the wave's exact scopes. Counts, positions, ownership epochs and
+Account and claim revisions are checked before and after that search. A hit in the union requires keyed reconciliation.
 A changed observation restarts that producer's native pass. The durable `native_complete` flag distinguishes raw
 completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner revisions move. Publication requires every
 producer population to be complete, replay to be current, all reconciliation partitions to be certified and the

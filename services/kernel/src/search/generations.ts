@@ -1227,6 +1227,7 @@ async function reconcileDiscoveryPage(
   checkCapability: () => Promise<void>,
   indexedReads: ReturnType<typeof discoveryPageReadBatch> | undefined,
   emptyIndexProbe: ReturnType<typeof metadataEmptyIndexProbe>,
+  coreReads: ReturnType<typeof coreReconciliationBatch>,
 ): Promise<boolean> {
   const { registry, target } = projection,
     partition = row.partition;
@@ -1245,7 +1246,9 @@ async function reconcileDiscoveryPage(
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
   if (!entry || entry.owner !== row.owner) throw new Error('Both native discovery producers are required');
   const census = await searchTurnCall(() => entry.source.count(partition));
-  const witness = (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+  const witness = coreReads
+    ? await coreReads.before.read(row)
+    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
   if (!witness) throw new Error('Native Account/claim witness is absent');
   const indexed = BigInt(row.indexed);
   const reset =
@@ -1254,27 +1257,17 @@ async function reconcileDiscoveryPage(
     BigInt(row.revision) !== witness.revision ||
     BigInt(row.claim_revision) !== witness.claimRevision;
   const after = reset ? null : row.after_id;
-  const page = await search.request<unknown>(
-    'POST',
-    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
-    {
-      size: 100,
-      version: true,
-      query: { bool: { filter: [{ term: { partition } }, { term: { owner: row.owner } }] } },
-      sort: [{ route: 'asc' }, { id: 'asc' }],
-      ...(after === null ? {} : { search_after: [row.after_route, after] }),
-    },
-    { query: { allow_partial_search_results: false } },
-  );
-  assertCompleteSearch(page.body);
-  if (
-    !record(page.body) ||
-    !record(page.body.hits) ||
-    !Array.isArray(page.body.hits.hits) ||
-    page.body.hits.hits.length > 100
-  )
-    throw new Error('Discovery reconciliation page is malformed');
-  const hits = page.body.hits.hits;
+  const index = discoveryIndexName(target.prefix, target.generation);
+  const empty = await coreReads?.indexIsEmpty(row, census.count === 0 && after === null && (reset || indexed === 0n));
+  const hits = empty
+    ? []
+    : await readDiscoveryIndexHits(search, target, {
+        size: 100,
+        version: true,
+        query: { bool: { filter: discoveryIndexTerms(partition, row.owner) } },
+        sort: [{ route: 'asc' }, { id: 'asc' }],
+        ...(after === null ? {} : { search_after: [row.after_route, after] }),
+      });
   const keys: DiscoveryKey[] = hits.map((hit) => {
     const key = parseDiscoveryHitIdentity(registry, hit);
     if ((key.owner !== 'accounts' && key.owner !== 'semantic') || key.owner !== row.owner)
@@ -1282,7 +1275,7 @@ async function reconcileDiscoveryPage(
     return key;
   });
   let expected: DiscoveryIndexAction[];
-  await requireDiscoveryIndexFormat(search, discoveryIndexName(target.prefix, target.generation));
+  if (!empty) await requireDiscoveryIndexFormat(search, index);
   if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
       await searchTurnCall(() =>
@@ -1319,7 +1312,7 @@ async function reconcileDiscoveryPage(
     );
     expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
   }
-  expected = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), expected);
+  expected = await prepareBoundedSortKeys(search, index, expected);
   let mismatch = false;
   for (let offset = 0; offset < hits.length; offset++) {
     const hit = hits[offset],
@@ -1342,12 +1335,15 @@ async function reconcileDiscoveryPage(
     await searchTurnCall(() => projection.project(partition, keys, 0n, true));
     return false;
   }
-  const finish = await searchTurnCall(() => entry.source.count(partition)),
-    end = (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
+  const finish = await searchTurnCall(() => entry.source.count(partition));
+  const end = coreReads
+    ? await coreReads.after.read(row)
+    : (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
   const stable =
     finish.position === census.position &&
     finish.count === census.count &&
-    end?.revision === witness.revision &&
+    end?.epoch === witness.epoch &&
+    end.revision === witness.revision &&
     end.claimRevision === witness.claimRevision;
   const total = (reset ? 0n : indexed) + BigInt(hits.length),
     exhausted = hits.length < 100;
@@ -1468,10 +1464,10 @@ async function reconcileMetadataDiscoveryPage(
   const after = row.reconcile_position === null ? null : row.after_id;
   const hits = (await emptyIndexProbe?.isEmpty(row))
     ? []
-    : await readMetadataIndexHits(search, target, {
+    : await readDiscoveryIndexHits(search, target, {
         size: 100,
         version: true,
-        query: { bool: { filter: metadataIndexTerms(row.partition, kind) } },
+        query: { bool: { filter: discoveryIndexTerms(row.partition, owner, kind) } },
         sort: [{ route: 'asc' }, { id: 'asc' }],
         ...(after === null ? {} : { search_after: [row.after_route, after] }),
       });
@@ -1555,15 +1551,11 @@ function emptyIndexedMetadataCandidate(row: Population) {
   );
 }
 
-function metadataIndexTerms(partition: number, kind: DiscoveryMetadataKind) {
-  return [
-    { term: { partition } },
-    { term: { owner: kind === 'collection' ? 'commerce' : 'content' } },
-    { term: { kind } },
-  ];
+function discoveryIndexTerms(partition: number, owner: string, kind?: DiscoveryMetadataKind) {
+  return [{ term: { partition } }, { term: { owner } }, ...(kind ? [{ term: { kind } }] : [])];
 }
 
-async function readMetadataIndexHits(
+async function readDiscoveryIndexHits(
   search: OpenSearch,
   target: DiscoveryTarget,
   body: Readonly<Record<string, unknown> & { size: number }>,
@@ -1576,10 +1568,73 @@ async function readMetadataIndexHits(
   );
   assertCompleteSearch(result.body);
   if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
-    throw new TypeError('Invalid metadata discovery reconciliation page');
+    throw new TypeError('Invalid Discovery reconciliation page');
   const hits: unknown[] = result.body.hits.hits;
-  if (hits.length > body.size) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  if (hits.length > body.size) throw new RangeError('Discovery reconciliation exceeded its page bound');
   return hits;
+}
+
+async function discoveryScopesEmpty(
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  scopes: readonly ReturnType<typeof discoveryIndexTerms>[],
+) {
+  // A complete empty union proves absence in every exact scope. Any hit keeps the keyed path.
+  const hits = await readDiscoveryIndexHits(search, target, {
+    size: 1,
+    _source: false,
+    query: { bool: { should: scopes.map((filter) => ({ bool: { filter } })), minimum_should_match: 1 } },
+  });
+  return hits.length === 0;
+}
+
+function coreReconciliationBatch(
+  pool: Pool,
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  batch: readonly Population[],
+) {
+  const rows = batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
+  if (rows.length < 2) return undefined;
+  function witnessBatch() {
+    const partitions = new Set<number>();
+    const reads = discoveryPageReadBatch(rows, () =>
+      searchTurnCall(() => readAccountDiscoveryWitness(pool, [...partitions])),
+    );
+    return {
+      observed: reads.observed,
+      async read(row: Population) {
+        partitions.add(row.partition);
+        reads.observed(row);
+        return (await reads.checkEmptyPage()).get(row.partition);
+      },
+    };
+  }
+  const before = witnessBatch();
+  const after = witnessBatch();
+  const scopes: ReturnType<typeof discoveryIndexTerms>[] = [];
+  const probe = discoveryPageReadBatch(rows, async () => {
+    if (scopes.length < 2) return false;
+    return withDiscoveryTarget(pool, search, target, async (_client, index) => {
+      const empty = await discoveryScopesEmpty(search, target, scopes);
+      if (empty) await requireDiscoveryIndexFormat(search, index);
+      return empty;
+    });
+  });
+  return {
+    before,
+    after,
+    observed(row: Population) {
+      before.observed(row);
+      probe.observed(row);
+      after.observed(row);
+    },
+    async indexIsEmpty(row: Population, candidate: boolean) {
+      if (candidate) scopes.push(discoveryIndexTerms(row.partition, row.owner));
+      probe.observed(row);
+      return candidate && (await probe.checkEmptyPage());
+    },
+  };
 }
 
 function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, batch: readonly Population[]) {
@@ -1587,18 +1642,14 @@ function metadataEmptyIndexProbe(search: OpenSearch, target: DiscoveryTarget, ba
     batch.filter((row) => emptyIndexedMetadataCandidate(row) && row.reconcile_position === '0' && row.indexed === '0'),
   );
   if (candidates.size < 2) return undefined;
-  const reads = discoveryPageReadBatch([...candidates], async () => {
-    const should = [...candidates].map((row) => ({
-      bool: { filter: metadataIndexTerms(row.partition, row.owner as DiscoveryMetadataKind) },
-    }));
-    // No hit for the union proves every exact scope empty. Any hit keeps ordinary per-scope reconciliation.
-    const hits = await readMetadataIndexHits(search, target, {
-      size: 1,
-      _source: false,
-      query: { bool: { should, minimum_should_match: 1 } },
-    });
-    return hits.length === 0;
-  });
+  const scopes = [...candidates].map((row) =>
+    discoveryIndexTerms(
+      row.partition,
+      row.owner === 'collection' ? 'commerce' : 'content',
+      row.owner as DiscoveryMetadataKind,
+    ),
+  );
+  const reads = discoveryPageReadBatch([...candidates], () => discoveryScopesEmpty(search, target, scopes));
   return {
     observed: reads.observed,
     async isEmpty(row: Population) {
@@ -1879,6 +1930,8 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               : undefined;
           const emptyIndexProbe =
             target.state === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
+          const coreReads =
+            target.state === 'reconciling' ? coreReconciliationBatch(pool, search, target, batch) : undefined;
           return async (population) => {
             try {
               return await searchTurnCall(() =>
@@ -1892,6 +1945,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
                       checkCapability,
                       indexedReads,
                       emptyIndexProbe,
+                      coreReads,
                     ),
               );
             } catch (error) {
@@ -1904,6 +1958,7 @@ async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<v
               checkpoints?.observed(population);
               indexedReads?.observed(population);
               emptyIndexProbe?.observed(population);
+              coreReads?.observed(population);
             }
           };
         },

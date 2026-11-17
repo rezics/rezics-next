@@ -16,7 +16,7 @@ Search policy. Native Account production does not grant query admission or certi
   revalidated after foreign hydration; an intervening change withholds the whole candidate. Classified
   unavailability of an optional owner omits that owner's avatar/verification fields. Unexpected errors and
   the overall request deadline still fail the read, and native Account revalidation must succeed.
-- `readAccountDiscoveryWitness(pool, partitions)` returns native `{revision, claimRevision}` heads for up to
+- `readAccountDiscoveryWitness(pool, partitions)` returns native `{epoch, revision, claimRevision}` heads for up to
   100 partitions, including empty/excluded populations. This remains a current writer witness; it does not bind
   a registered immutable whole-query capture. Its nonempty reads use the native reduction reader below.
 - `readAccountDiscoveryBindings(pool, partition, ids)` returns native Account revision, the exact live claim's
