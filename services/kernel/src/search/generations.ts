@@ -1319,7 +1319,10 @@ async function reconcileDiscoveryPage(
   });
   let expected: DiscoveryIndexAction[];
   if (!empty) await timeDiscovery('physical reads', () => requireDiscoveryIndexFormat(search, index));
-  if (entry.owner === 'accounts') {
+  if (empty) {
+    // The guarded empty scope and bracketing native censuses carry no keys to hydrate.
+    expected = [];
+  } else if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
       await timeDiscovery('native keyed', () =>
         searchTurnCall(() =>
