@@ -629,15 +629,47 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
 
     const { outsider } = ctx.seed;
     observed.selectedAccountId = outsider.accountId;
-    enter('Inspect the exact seeded nonmember on the owner’s roster');
-    await page.getByRole('textbox', { name: 'Exact account ID', exact: true }).fill(outsider.accountId);
-    await page.getByRole('button', { name: 'Look up account', exact: true }).click();
+    const accountField = page.getByRole('textbox', { name: 'Exact account ID', exact: true });
     const selected = page.getByRole('region', { name: 'Selected account', exact: true });
-    await selected.getByText('Not a current member', { exact: true }).waitFor({ state: 'visible' });
+    const nonmember = selected.getByText('Not a current member', { exact: true });
     const addition = selected.getByRole('group', { name: 'Add member', exact: true });
-    await addition.getByRole('button', { name: 'Add member', exact: true }).click();
-    await addition.getByText(outsider.accountId, { exact: true }).waitFor({ state: 'visible' });
-    await addition.getByText(realmId, { exact: true }).waitFor({ state: 'visible' });
+    try {
+      enter('Enter the exact account ID in the owner’s roster');
+      await accountField.fill(outsider.accountId);
+      enter('Submit the owner’s exact account lookup');
+      await page.getByRole('button', { name: 'Look up account', exact: true }).click();
+      enter('Read the exact nonmember in the owner’s selection');
+      await nonmember.waitFor({ state: 'visible' });
+      enter('Open the explicit Add member review');
+      await addition.getByRole('button', { name: 'Add member', exact: true }).click();
+      enter('Read exact Account and Realm references in the review');
+      await addition.getByText(outsider.accountId, { exact: true }).waitFor({ state: 'visible' });
+      await addition.getByText(realmId, { exact: true }).waitFor({ state: 'visible' });
+    } catch (error) {
+      observed.roster = await page
+        .evaluate(() => {
+          const statuses = new Map([
+            ['You cannot view members of this Realm.', 'denied'],
+            ['Member management is not ready. Try again.', 'preparing'],
+            ['This visit is out of date. Open Members again to get current access.', 'retired'],
+            ['This page could not be loaded. Retry the same page.', 'page failed'],
+            ['Member management is currently unavailable.', 'page unavailable'],
+            ['The selected account could not be loaded. Retry this account.', 'selection failed'],
+            ['The selected account is unavailable.', 'selection unavailable'],
+            ['Account unavailable', 'identity concealed'],
+          ]);
+          return {
+            documentPath: location.pathname,
+            invalidInput: !!document.querySelector('main input[aria-invalid="true"]'),
+            status: Array.from(document.querySelectorAll('main [role="status"], main p'))
+              .map((node) => statuses.get(node.textContent?.trim() ?? ''))
+              .filter((value) => value !== undefined)
+              .slice(0, 6),
+          };
+        })
+        .catch(() => null);
+      throw error;
+    }
 
     enter('Authenticate the seeded nonmember for independent native reads');
     const auth = await (async () => {
