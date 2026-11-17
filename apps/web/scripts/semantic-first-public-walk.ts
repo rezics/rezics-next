@@ -504,10 +504,13 @@ async function main(scope: WalkScope) {
       personaCause ??= error instanceof Error ? error.message : String(error);
     }
     let editor = '';
+    let editorIssued = 0;
     let editorCause: string | undefined;
     if (keys) {
       try {
+        const issued = Date.now();
         editor = await accessToken(stack, editorEmail, keys.password);
+        editorIssued = issued;
       } catch (error) {
         editorCause = error instanceof Error ? error.message : String(error);
       }
@@ -554,7 +557,6 @@ async function main(scope: WalkScope) {
     const member = browser
       ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
       : undefined;
-    let editorIssued = editor ? Date.now() : 0;
     const session: Session | undefined =
       anonymous && member
         ? {
@@ -570,10 +572,11 @@ async function main(scope: WalkScope) {
               ? {
                   async refreshEditor() {
                     if (editor && Date.now() - editorIssued < 240_000) return;
+                    const issued = Date.now();
                     const token = await accessToken(stack, editorEmail, keys.password);
                     editor = token;
                     session!.editor = token;
-                    editorIssued = Date.now();
+                    editorIssued = issued;
                   },
                 }
               : {}),
