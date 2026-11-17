@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
+import { hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -285,10 +286,11 @@ export function createSearchGenerationPublication(
       config.writerGuard &&
       typeof config.writerGuard.write === 'function',
   );
-  requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
+  const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
+  if (!nativeMeaning) requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, readPublicationCompletion, writerGuard, registry } = config;
   bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion);
-  const meaning = structuredClone(config.meaning);
+  const meaning = nativeMeaning ? config.meaning : structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
     : Object.keys(meaning.release.types)

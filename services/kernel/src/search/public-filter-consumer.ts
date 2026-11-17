@@ -1,4 +1,4 @@
-import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { hasExactPublicFilterMeaning, hasNativePublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCaptureDependencies, validateCatalogueCoverage } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
@@ -803,8 +803,9 @@ export async function advanceNativeGenerationSource(
 export const createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory = async (config) => {
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
     throw new TypeError('Consumer requires its injected native owners');
-  const meaning = freeze(structuredClone(config.meaning));
-  if (!hasExactPublicFilterMeaning(meaning))
+  const nativeMeaning = hasNativePublicFilterMeaning(config.meaning);
+  const meaning = nativeMeaning ? config.meaning : freeze(structuredClone(config.meaning));
+  if (!nativeMeaning && !hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');

@@ -17,6 +17,10 @@ type SemanticSearchSourceApi = Pick<
   'readIdentitySourceProjection' | 'prepareRetainedIdentitySourceProjections' | 'subjectSource'
 >;
 type SemanticDefinitionReadApi = Pick<typeof import('../semantic/definitions.ts'), 'activeRelease' | 'readRelease'>;
+type SemanticDefinitionDigestApi = Pick<
+  typeof import('../semantic/definition-release-read.ts'),
+  'hasVerifiedReleaseDigest'
+>;
 type SemanticPublicFilterBindingApi = Pick<
   typeof import('../semantic/public-filter-source-binding.ts'),
   | 'PublicFilterSourceDefinitionError'
@@ -53,6 +57,7 @@ export type SearchSemanticSourcePort = Readonly<
     SemanticIdentityReadApi &
     SemanticSearchSourceApi &
     SemanticDefinitionReadApi &
+    SemanticDefinitionDigestApi &
     SemanticPublicFilterBindingApi &
     SemanticPublicFilterOriginApi &
     SemanticReadApi &
