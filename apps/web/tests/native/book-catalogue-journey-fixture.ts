@@ -332,13 +332,16 @@ function releasedState(
   return { id: state.id, label };
 }
 
-async function openPersonalLibrary(stack: NativeWebStack): Promise<void> {
-  const response = await stack.kernel(
-    '/v1/platform/exposure/personal_library:open',
-    { method: 'POST', headers: { 'idempotency-key': idempotencyKey() } },
-    'governor',
-  );
-  await responseJson(response, 200, 'POST /v1/platform/exposure/personal_library:open');
+async function openLibraryGates(stack: NativeWebStack): Promise<void> {
+  for (const group of ['personal_library', 'reading_progress', 'collections'] as const) {
+    const path = `/v1/platform/exposure/${group}:open`;
+    const response = await stack.kernel(
+      path,
+      { method: 'POST', headers: { 'idempotency-key': idempotencyKey() } },
+      'governor',
+    );
+    await responseJson(response, 200, `POST ${path}`);
+  }
 }
 
 async function createLibraryEntry(
@@ -690,17 +693,26 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     const bookCompleted = releasedState(release, book.type, 'completed', true)!;
     const editionPlanned = releasedState(release, edition.type, 'planned', true)!;
     const seriesPlanned = releasedState(release, series.type, 'planned', false);
-    await openPersonalLibrary(stack);
+    await openLibraryGates(stack);
     const initialBookEntry = await createLibraryEntry(stack, book, bookPlanned);
     await createLibraryEntry(stack, edition, editionPlanned);
     if (seriesPlanned) await createLibraryEntry(stack, series, seriesPlanned);
 
     const search = await waitForNativeSearch(stack, marker, expected);
+    const shelfPath = `/v1/libraryEntries?view=FULL&limit=20&orderBy=lastActivity&direction=desc&type=${encodeURIComponent(book.type)}`;
+    const shelf = await responseJson<{ libraryEntries: LibraryEntryRead[] }>(
+      await stack.kernel(shelfPath, undefined, 'alice'),
+      200,
+      `GET ${shelfPath} as fixture Alice`,
+    );
+    if (!shelf.libraryEntries.some(({ subjectId, state }) => subjectId === book.id && state === bookPlanned.id))
+      throw new Error('Fixture Alice’s sorted Book shelf did not contain the planned Book');
     auth = await startAuthStack(stack);
     console.info(
       'book-catalogue-journey-fixture',
       JSON.stringify({
         stage: 'fixture preparation',
+        directBookShelfStatus: 200,
         definitions: active.digest,
         defaultSearchStatus: 200,
         defaultSearchIdentities: expected.map(({ id, type, label }) => ({ id, type, label })),
