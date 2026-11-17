@@ -2522,10 +2522,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     state: RetainedRepairSettlement,
     previous: string | null,
     m: Meter,
+    emptyPage?: { ordinal: number; intent: string },
   ): Promise<string> {
     const next = encodeState(work);
     if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
     const q = work.queried!;
+    if (emptyPage) {
+      // The final UPDATE reports only its own row. Reserve the retained
+      // page insert and the additional execution lock before dispatch.
+      m.cost.resultWrites++;
+      m.cost.rows++;
+      m.cost.inputKeys++;
+      m.cost.dependencyPoints++;
+    }
     const saved = await repairSave.run(m.pool, {
       partition_no: work.registration.partition,
       observation: q.snapshot.observation,
@@ -2534,6 +2543,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       execution: work.execution!,
       settlement: encodeNative(state),
       previous: previous ?? '',
+      empty_page_ordinal: emptyPage?.ordinal ?? 0,
+      empty_page_intent: emptyPage?.intent ?? '',
     });
     if (saved.length !== 1) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
@@ -2660,6 +2671,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         };
         let page = await repairPageSql.run(m.pool, keys);
         let verifiedIntent: RetainedRepairPage | undefined;
+        let emptyPage: { ordinal: number; intent: string } | undefined;
         const charge = (cost?: PublicFilterCost) => {
           if (cost) m.add(cost);
           m.check();
@@ -2703,13 +2715,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             subjectPublication,
           );
           const body = encodeNative(intent);
-          const saved = await repairPageSave.run(m.pool, {
-            ...keys,
-            has_repairs: intent.repairs.length > 0 || intent.account !== undefined,
-            intent: body,
-          });
-          page = saved ?? (await repairPageSql.run(m.pool, keys));
-          if (!page || page.intent !== body) return m.unavailable('source_pending');
+          const hasRepairs = intent.repairs.length > 0 || intent.account !== undefined;
+          if (subjectPublication && !intent.complete && !hasRepairs) {
+            // With no dispatch, retain the verified page in the same commit as its frontier.
+            emptyPage = { ordinal: keys.ordinal, intent: body };
+          } else {
+            const saved = await repairPageSave.run(m.pool, {
+              ...keys,
+              has_repairs: hasRepairs,
+              intent: body,
+            });
+            page = saved ?? (await repairPageSql.run(m.pool, keys));
+            if (!page || page.intent !== body) return m.unavailable('source_pending');
+          }
           verifiedIntent = intent;
         }
         const intent =
@@ -2803,7 +2821,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           frontier: intent.frontier,
           closed: complete,
         };
-        encoded = await saveRepair(work, encoded, state, previous, m);
+        encoded = await saveRepair(work, encoded, state, previous, m, emptyPage);
         if (!subjectPublication && !complete) return progress();
         previous = encodeNative(state);
         advanced++;
