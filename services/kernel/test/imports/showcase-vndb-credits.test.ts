@@ -17,7 +17,7 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import { vndbStaffCreditConverterRevision } from '../../../importer/src/vndb-staff-credits.ts';
+import { creditTypeTaxonomy, vndbStaffCreditConverterRevision } from '../../../importer/src/vndb-staff-credits.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -131,6 +131,20 @@ test('selected-VN credits reach adopted current facts through exact current bind
         { preconnect() {} },
       ),
     });
+    async function currentSchemeIds(conceptId: string) {
+      const response = await publicClient.readSubject(conceptId);
+      const concept = response.subject as {
+        id: string;
+        type: string;
+        statements: Record<string, { rank?: string; value: { content?: unknown } }[]>;
+      };
+      expect(concept.id).toBe(conceptId);
+      expect(concept.type).toBe('skos:Concept');
+      return (concept.statements['skos:inScheme'] ?? [])
+        .filter((statement) => statement.rank === 'normal' || statement.rank === 'preferred')
+        .map((statement) => statement.value.content);
+    }
+
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     let port = captureShowcaseCommands(runtime.importTransport, journal);
     const plan = await planCrossMediaSeed(selectedVn());
@@ -205,7 +219,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       'vndb.credit_type:chardesign',
       'vndb.credit_type:scenario',
     ]);
-    await publishShowcase({
+    const completeConceptPublication = await publishShowcase({
       plan,
       result,
       aliases: crossMediaAliases,
@@ -217,6 +231,18 @@ test('selected-VN credits reach adopted current facts through exact current bind
 
     const designRequirement = conceptRequirements.find((requirement) => requirement.sourceKey.endsWith(':chardesign'))!;
     const designId = acknowledgedCreate(designRequirement.source.external_id);
+    const scenarioCreateId = acknowledgedCreate(
+      conceptRequirements.find((requirement) => requirement.sourceKey === `${creditTypeTaxonomy}:scenario`)!.source
+        .external_id,
+    );
+    expect(publishedShowcaseVndbCreditReferences(completeConceptPublication, journal, concepts.requirements)).toEqual({
+      schemeId,
+      concepts: [
+        { code: 'chardesign', id: designId },
+        { code: 'scenario', id: scenarioCreateId },
+      ],
+    });
+
     const authored = {
       source: 'authored-vndb-credit-types',
       record_revision: 'unversioned',
@@ -272,6 +298,8 @@ test('selected-VN credits reach adopted current facts through exact current bind
       );
     }
 
+    expect(await currentSchemeIds(designId)).toEqual([wrongSchemeId]);
+
     const vocabularyAcks = journal.acknowledgedCommands().length;
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -279,6 +307,14 @@ test('selected-VN credits reach adopted current facts through exact current bind
     const reopenedConcepts = await prepareShowcaseVndbCreditVocabulary({ plan, port, journal, stage: 'concepts' });
     expect(journal.acknowledgedCommands()).toHaveLength(vocabularyAcks);
     expect(reopenedConcepts.requirements).toEqual(concepts.requirements);
+    const selectedReviewRequirements = reopenedConcepts.requirements.filter(
+      (requirement) =>
+        requirement.sourceKey === creditTypeTaxonomy || requirement.sourceKey === `${creditTypeTaxonomy}:scenario`,
+    );
+    expect(selectedReviewRequirements.map((requirement) => requirement.sourceKey)).toEqual([
+      creditTypeTaxonomy,
+      `${creditTypeTaxonomy}:scenario`,
+    ]);
 
     let vocabularyPublication = await publishShowcase({
       plan,
@@ -287,8 +323,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
       journal,
       review,
       publicClient,
-      vocabularyRequirements: reopenedConcepts.requirements,
+      vocabularyRequirements: selectedReviewRequirements,
     });
+    expect(await currentSchemeIds(designId)).toEqual([wrongSchemeId]);
     const publishedReferences = publishedShowcaseVndbCreditReferences(
       vocabularyPublication,
       journal,
@@ -298,6 +335,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     if (!publishedReferences) throw new Error('Expected current published VNDB credit bindings');
     const references = publishedReferences;
     const scenarioId = references.concepts.find((concept) => concept.code === 'scenario')!.id;
+    expect(scenarioId).toBe(scenarioCreateId);
     expect(references).toEqual({
       schemeId,
       concepts: [
@@ -333,7 +371,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       journal,
       review,
       publicClient,
-      vocabularyRequirements: reopenedConcepts.requirements,
+      vocabularyRequirements: selectedReviewRequirements,
     });
     const pendingCredits = pendingPublication.manifest.records
       .find((record) => record.sourceKey === 'v1')!
@@ -378,6 +416,20 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(result.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
+    await publishShowcase({
+      plan: correctedPlan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      vocabularyRequirements: selectedReviewRequirements,
+    });
+    result = await seedCrossMedia(correctedPlan, statePath, port, destination, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: references,
+      readPublicSubject: (id) => publicClient.readSubject(id),
+    });
     const correctedIdentities = new Map(result.readings.map((row) => [row.externalId, row.subject.subject.id]));
     const correctedVoiceId = correctedIdentities.get('s5')!;
     expect(correctedIdentities.get('v1')).toBe(workId);
@@ -392,7 +444,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       journal,
       review,
       publicClient,
-      vocabularyRequirements: reopenedConcepts.requirements,
+      vocabularyRequirements: selectedReviewRequirements,
     });
     const currentCredits = vocabularyPublication.manifest.records
       .find((record) => record.sourceKey === 'v1')!
@@ -460,7 +512,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       journal,
       review,
       publicClient,
-      vocabularyRequirements: reopenedConcepts.requirements,
+      vocabularyRequirements: selectedReviewRequirements,
     });
     const read = async (id: string) => {
       const response = await publicClient.readSubject(id);
@@ -507,7 +559,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     ).toBe(true);
     expect(await read(personId)).toMatchObject({ id: personId, type: 'schema:Person' });
     expect(await read(correctedVoiceId)).toMatchObject({ id: correctedVoiceId, type: 'schema:Person' });
-    expect(await read(characterId)).toMatchObject({ id: characterId, type: 'schema:Character' });
+    expect(await read(characterId)).toMatchObject({ id: characterId, type: 'wd:Q95074' });
     for (const otherWorkKey of ['v2', 'v3']) {
       const otherWorkId = correctedIdentities.get(otherWorkKey)!;
       const otherWork = await read(otherWorkId);
@@ -532,6 +584,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(reopenedWork.statements['schema:author']).toHaveLength(1);
     expect(reopenedWork.statements['wdt:P725']).toHaveLength(1);
     expect(reopenedWork.statements['schema:illustrator']).toBeUndefined();
+    expect(await currentSchemeIds(designId)).toEqual([wrongSchemeId]);
   } catch (error) {
     failure = { error };
     throw error;
