@@ -399,7 +399,8 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
              j.phase, j.home, j.pass, j.native_incarnation,
              b.state AS source_state, b.owner_epoch AS source_epoch, b.publication_job IS NOT NULL AS source_pinned,
              b.coverage_after, b.coverage_sealed, repair.verified_ordinal AS repair_pages,
-             repair.verified_home AS repair_window_home, repair.terminal AS source_terminal_repair, repair.ack_after,
+             repair.verified_home AS repair_window_home, repair.next_frontier AS repair_next_frontier,
+             repair.terminal AS source_terminal_repair, repair.ack_after,
              g.publication_home AS writer_home, g.publication_fence IS NOT NULL AS writer_fenced,
              g.publication_fence::text=j.fence AS writer_fence_matches,
              (SELECT jsonb_agg(jsonb_build_object(
@@ -459,7 +460,19 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
              ORDER BY (b.publication_job IS NOT NULL) DESC LIMIT 1
            ) b ON true
            LEFT JOIN LATERAL (
-             SELECT verified_ordinal, verified_home, complete AS terminal, CASE WHEN complete THEN ack_after END AS ack_after
+             SELECT verified_ordinal, verified_home, complete AS terminal,
+                    CASE WHEN complete THEN ack_after END AS ack_after,
+                    (SELECT jsonb_object_agg(field->>0, field->1->1)
+                     FROM jsonb_array_elements((
+                       SELECT entry->1->1 FROM jsonb_array_elements(t.state::jsonb->1) AS entry
+                       WHERE entry->>0='next' AND entry->1->>0='object'
+                     )) AS field
+                     WHERE field->1->>0='value' AND (
+                       (field->>0='phase' AND field->1->>1 IN ('scan','advance','project','account','window','bridge'))
+                       OR (field->>0='owner' AND field->1->>1 IN ('semantic','accounts'))
+                       OR (field->>0='partition' AND jsonb_typeof(field->1->1)='number'
+                         AND field->1->1 BETWEEN '0'::jsonb AND '4096'::jsonb)
+                     )) AS next_frontier
              FROM semantic.public_filter_repair_step t
              WHERE t.partition_no=b.partition_no AND t.bootstrap=b.bootstrap
                AND t.execution=b.publication_execution AND t.verified_root IS NOT NULL AND t.verified_next IS NULL
