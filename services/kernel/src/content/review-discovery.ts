@@ -757,6 +757,10 @@ export function createReviewDiscoverySource(
   makeAnonymousContext: () => ReadContext,
 ): NativeReviewDiscoverySource {
   async function readCurrent(partition: number, ids: readonly string[]) {
+    if (ids.length === 0) {
+      const positions = await source.readEmptyPositions([partition]);
+      return { position: positions.get(partition)!, hydrated: new Map<string, VersionedReview>() };
+    }
     const context = checkedContext(makeAnonymousContext);
     const native = await withReadTransaction(
       dependencies.pool,
@@ -982,7 +986,7 @@ export function createReviewDiscoverySource(
     },
   });
 
-  return Object.freeze({
+  const source: NativeReviewDiscoverySource = {
     async readEmptyPositions(partitions) {
       if (!Array.isArray(partitions) || partitions.length > REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT)
         throw new RangeError(`At most ${REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT} Review discovery partitions`);
@@ -1149,5 +1153,6 @@ export function createReviewDiscoverySource(
       );
     },
     pageWithCut: coherentPage,
-  });
+  };
+  return Object.freeze(source);
 }
