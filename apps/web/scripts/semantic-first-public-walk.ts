@@ -442,7 +442,7 @@ async function runNativeBoundaries(stack: Stack, revision: string, stackLog: str
   if (passing !== checks.length) process.exitCode = 1;
 }
 
-type WalkScope = 'all' | 'native-boundaries' | 'mounted-subject';
+type WalkScope = 'all' | 'native-boundaries' | 'mounted-subject' | 'statement-consent';
 
 async function main(scope: WalkScope) {
   const walkId = walkAcceptanceId(process.env);
@@ -674,11 +674,59 @@ async function main(scope: WalkScope) {
         journey(session, 'generic-creation', () =>
           createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new', true),
         );
-      if (scope === 'mounted-subject') {
+      const statementConsent = () =>
+        journey(session, 'statement-consent', async () => {
+          if (editorAgentCause) throw new Error(editorAgentCause);
+          const { id: target } = await seededEditorAgent(call, editor);
+          const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
+          const property = 'rezics:penNameOf';
+          const proposal = await propose(call, editor, person.id, {
+            property: { id: property },
+            value: { type: 'value', content: target },
+            references: [],
+            qualifiers: [],
+          });
+          const selected = (body: Json) =>
+            ((body.subject as Json).statements as Record<string, { id: string }[]>)[property]?.some(
+              (row) => row.id === proposal.candidate,
+            ) ?? false;
+          const before = await readSubject(call, person.id);
+          requireStatus(before, 200, 'private consent public read');
+          if (selected(before.body)) throw new Error('private consent assertion leaked before disclosure');
+          const browser = await visit(
+            session,
+            `${stack.web}${subjectHref(person.id, `Walk consent identity ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent(property)}&candidate=${proposal.candidate}&target=${target}`,
+            { persona: 'member' },
+          );
+          requireStatus(
+            await discloseStatement(call, editor, proposal.candidate),
+            200,
+            'disclose own private assertion',
+          );
+          const disclosed = await readSubject(call, person.id);
+          requireStatus(disclosed, 200, 'disclosed public read');
+          if (!selected(disclosed.body)) {
+            const query = new URLSearchParams({ property, target });
+            const current = await call('GET', `/v1/subjects/${person.id}/candidates?${query}`, { bearer: editor });
+            const candidates = Array.isArray(current.body.candidates) ? (current.body.candidates as Json[]) : [];
+            const exact = candidates.find((row) => row.id === proposal.candidate);
+            const decision = ['accepted', 'pending', 'rejected'].find((value) => value === exact?.decision);
+            throw new Error(
+              `disclosed assertion absent from public read; current owner candidates HTTP ${current.status}, exact decision ${decision ?? 'unavailable'}`,
+            );
+          }
+          requireStatus(await retractStatement(call, editor, proposal.candidate), 200, 'retract own disclosure');
+          const retracted = await readSubject(call, person.id);
+          requireStatus(retracted, 200, 'retracted public read');
+          if (selected(retracted.body)) throw new Error('retracted assertion remained public');
+          return { native: { id: person.id, target, candidate: proposal.candidate }, browser };
+        });
+      if (scope === 'mounted-subject' || scope === 'statement-consent') {
+        const id = scope === 'mounted-subject' ? 'generic-creation' : 'statement-consent';
         const result = editor
-          ? await genericBook()
+          ? await (scope === 'mounted-subject' ? genericBook() : statementConsent())
           : failingRow(
-              FIRST_PUBLIC_JOURNEYS.find((row) => row.id === 'generic-creation')!,
+              FIRST_PUBLIC_JOURNEYS.find((row) => row.id === id)!,
               setupCause ?? 'The ordinary catalogue author is unavailable',
             );
         const evidence = {
@@ -688,7 +736,7 @@ async function main(scope: WalkScope) {
           result,
           kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
         };
-        await writeFile(join(evidenceDir, 'mounted-subject.json'), `${JSON.stringify(evidence, null, 2)}\n`, {
+        await writeFile(join(evidenceDir, `${scope}.json`), `${JSON.stringify(evidence, null, 2)}\n`, {
           mode: 0o600,
         });
         if (result.status === 'Failing') process.exitCode = 1;
@@ -1020,45 +1068,7 @@ async function main(scope: WalkScope) {
             };
           }),
         );
-        results.push(
-          await journey(session, 'statement-consent', async () => {
-            if (editorAgentCause) throw new Error(editorAgentCause);
-            const { id: target } = await seededEditorAgent(call, editor);
-            const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
-            const property = 'rezics:penNameOf';
-            const proposal = await propose(call, editor, person.id, {
-              property: { id: property },
-              value: { type: 'value', content: target },
-              references: [],
-              qualifiers: [],
-            });
-            const selected = (body: Json) =>
-              ((body.subject as Json).statements as Record<string, { id: string }[]>)[property]?.some(
-                (row) => row.id === proposal.candidate,
-              ) ?? false;
-            const before = await readSubject(call, person.id);
-            requireStatus(before, 200, 'private consent public read');
-            if (selected(before.body)) throw new Error('private consent assertion leaked before disclosure');
-            const browser = await visit(
-              session,
-              `${stack.web}${subjectHref(person.id, `Walk consent identity ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent(property)}&candidate=${proposal.candidate}&target=${target}`,
-              { persona: 'member' },
-            );
-            requireStatus(
-              await discloseStatement(call, editor, proposal.candidate),
-              200,
-              'disclose own private assertion',
-            );
-            const disclosed = await readSubject(call, person.id);
-            requireStatus(disclosed, 200, 'disclosed public read');
-            if (!selected(disclosed.body)) throw new Error('disclosed assertion absent from public read');
-            requireStatus(await retractStatement(call, editor, proposal.candidate), 200, 'retract own disclosure');
-            const retracted = await readSubject(call, person.id);
-            requireStatus(retracted, 200, 'retracted public read');
-            if (selected(retracted.body)) throw new Error('retracted assertion remained public');
-            return { native: { id: person.id, target, candidate: proposal.candidate }, browser };
-          }),
-        );
+        results.push(await statementConsent());
         results.push(
           await journey(session, 'subject-lifecycle', async () => {
             const owned = await createSubject(call, editor, 'schema:Book', `Walk lifecycle ${token}`);
@@ -1192,8 +1202,13 @@ async function main(scope: WalkScope) {
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const scope = args.length === 2 && args[0] === '--scope' ? args[1] : args.length === 0 ? 'all' : null;
-  if (scope !== 'all' && scope !== 'native-boundaries' && scope !== 'mounted-subject') {
-    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries|mounted-subject]');
+  if (
+    scope !== 'all' &&
+    scope !== 'native-boundaries' &&
+    scope !== 'mounted-subject' &&
+    scope !== 'statement-consent'
+  ) {
+    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries|mounted-subject|statement-consent]');
     process.exit(1);
   }
   try {
