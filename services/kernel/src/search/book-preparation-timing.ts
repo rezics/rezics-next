@@ -7,6 +7,22 @@ import type { PublicFilterConsumerRepair } from './public-filter-consumer-contra
 
 export type BookPreparationSpan =
   | 'publication'
+  | 'publicationCheckout'
+  | 'publicationLock'
+  | 'publicationLoad'
+  | 'publicationAdopt'
+  | 'publicationHeld'
+  | 'publicationPhysical'
+  | 'publicationRefresh'
+  | 'publicationPitOpen'
+  | 'publicationPitPage'
+  | 'publicationEngineHome'
+  | 'publicationPitClose'
+  | 'publicationValidate'
+  | 'publicationMetadata'
+  | 'publicationSave'
+  | 'publicationAliasRead'
+  | 'publicationAliasWrite'
   | 'nativeSource'
   | 'advance'
   | 'settlement'
@@ -46,6 +62,13 @@ export type BookPublicationStatus =
   | 'superseded'
   | 'preparing';
 
+export type BookPublicationOutcome = {
+  status: BookPublicationStatus;
+  advanced: boolean;
+  sourceAdvanced: boolean;
+  reason?: PublicFilterConsumerUnavailable['reason'];
+};
+
 export type BookSourceOutcome = {
   status:
     | NativePublicFilterPublicationCompletion['status']
@@ -77,7 +100,7 @@ export type BookPreparationTiming = {
   turn<T>(turn: BookPreparationTurn, run: () => Promise<T>): Promise<T>;
   start(span: BookPreparationSpan): (() => void) | undefined;
   mark(phase: BookPreparationMark, count?: number): void;
-  outcome(status: BookPublicationStatus, advanced: boolean, sourceAdvanced?: boolean): void;
+  outcome(outcome: BookPublicationOutcome): void;
   sourceOutcome(source: BookSourceOutcome): void;
   repairStage(stage: BookRepairStage): void;
   repairOutcome(repair: BookRepairOutcome): void;
@@ -88,4 +111,15 @@ export let bookPreparationTiming: BookPreparationTiming | undefined;
 
 export function installBookPreparationTiming(observer: BookPreparationTiming): void {
   bookPreparationTiming = observer;
+}
+
+export function measureBookPreparation<T>(span: BookPreparationSpan, run: () => Promise<T>): Promise<T> {
+  const end = bookPreparationTiming?.start(span);
+  if (!end) return run();
+  try {
+    return run().finally(end);
+  } catch (error) {
+    end();
+    throw error;
+  }
 }

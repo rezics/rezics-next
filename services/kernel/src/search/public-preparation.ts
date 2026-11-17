@@ -214,7 +214,12 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
       else unavailable.delete('step');
       const ready = reconciliation.status === 'progress' || reconciliation.status === 'reconciled';
-      bookPreparationTiming?.outcome(reconciliation.status, ready, ready && reconciliation.sourceAdvanced === true);
+      bookPreparationTiming?.outcome({
+        status: reconciliation.status,
+        advanced: ready,
+        sourceAdvanced: ready && reconciliation.sourceAdvanced === true,
+        ...('reason' in reconciliation ? { reason: reconciliation.reason } : {}),
+      });
       return advance(
         { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
         ready ? 0 : 1000,
@@ -225,11 +230,12 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const endPublication = bookPreparationTiming?.start('publication');
     const pending = options.runtime.publication.activate(job, context);
     const activated = await (endPublication ? pending.finally(endPublication) : pending);
-    bookPreparationTiming?.outcome(
-      activated.status,
-      activated.status === 'preparing' && activated.advanced === true,
-      activated.status === 'preparing' && activated.sourceAdvanced === true,
-    );
+    bookPreparationTiming?.outcome({
+      status: activated.status,
+      advanced: activated.status === 'preparing' && activated.advanced === true,
+      sourceAdvanced: activated.status === 'preparing' && activated.sourceAdvanced === true,
+      ...('reason' in activated ? { reason: activated.reason } : {}),
+    });
     if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
     else unavailable.delete('activate');
     if (activated.status === 'activated' || activated.status === 'superseded') return advance(null);

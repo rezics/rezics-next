@@ -5,7 +5,7 @@ import {
   type BookPreparationMark,
   type BookPreparationSpan,
   type BookPreparationTurn,
-  type BookPublicationStatus,
+  type BookPublicationOutcome,
   type BookRepairOutcome,
   type BookRepairStage,
   type BookSourceOutcome,
@@ -20,7 +20,7 @@ type Turn = BookPreparationTurn & {
   marks?: Mark[];
   open: Map<BookPreparationSpan, number>;
   finishedAtMs?: number;
-  publication?: { status: BookPublicationStatus; advanced: boolean; sourceAdvanced: boolean };
+  publication?: BookPublicationOutcome;
   source?: BookSourceOutcome;
   repairStage?: BookRepairStage;
   repair?: BookRepairOutcome;
@@ -70,9 +70,9 @@ export function createBookPreparationObserver(
       const turn = context.getStore();
       if (turn) (turn.marks ??= []).push({ phase, atMs: now(), count });
     },
-    outcome(status: BookPublicationStatus, advanced: boolean, sourceAdvanced?: boolean) {
+    outcome(outcome: BookPublicationOutcome) {
       const turn = context.getStore();
-      if (turn) turn.publication = { status, advanced, sourceAdvanced: sourceAdvanced === true };
+      if (turn) turn.publication = outcome;
     },
     sourceOutcome(source: BookSourceOutcome) {
       const turn = context.getStore();

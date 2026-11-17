@@ -3,7 +3,7 @@ import { withBoundedReadOnlyTransaction } from '../../../../services/kernel/src/
 import { subjectIndexName } from '../../../../services/kernel/src/search/indices.ts';
 import type { NativeWebStack } from './stack.ts';
 
-/** Compare only the next certified Source window with its original retained home. */
+/** Read the durable publication checkpoint and its next certified Source window. */
 export async function readSubjectPublicationFrontier(stack: NativeWebStack, deadline: number): Promise<unknown> {
   if (!stack.searchWorker) return;
   const target = subjectIndexName(stack.searchWorker.prefix, 1);
@@ -12,12 +12,15 @@ export async function readSubjectPublicationFrontier(stack: NativeWebStack, dead
     return await withBoundedReadOnlyTransaction(pool, deadline, async (client) => {
       const result = await client.query<{ observation: unknown }>(
         `WITH publication AS MATERIALIZED (
-           SELECT job,source_home,phase,fence FROM search.generation_publication
+           SELECT job,source_home,phase,home,pass,revision,fence,fenced_pass,pit IS NOT NULL AS pit_open,
+                  engine_after IS NOT NULL AS engine_has_cursor
+           FROM search.generation_publication
            WHERE partition_no=0 AND physical_target=$1 AND family='subjects'
            ORDER BY (fence IS NOT NULL) DESC,activated_at DESC LIMIT 1
          ), source AS MATERIALIZED (
            SELECT b.partition_no,b.bootstrap,b.state,b.coverage_after,b.coverage_sealed,b.coverage_publication,
-                  b.publication_execution,p.phase,p.fence
+                  b.publication_execution,p.phase,p.home AS publication_home,p.pass,p.revision,p.fence,p.fenced_pass,
+                  p.pit_open,p.engine_has_cursor
            FROM publication p JOIN semantic.public_filter_bootstrap b
              ON (b.partition_no,b.publication_job)=(p.source_home,p.job)
            WHERE b.state='adopted' LIMIT 1
@@ -43,7 +46,9 @@ export async function readSubjectPublicationFrontier(stack: NativeWebStack, dead
            FROM tip t
          )
          SELECT jsonb_build_object(
-           'phase',s.phase,'fenced',s.fence IS NOT NULL,'sourceState',s.state,
+           'phase',s.phase,'publicationHome',s.publication_home,'pass',s.pass::text,'publicationRevision',s.revision::text,
+           'fenced',s.fence IS NOT NULL,'fencedPass',s.fenced_pass,'pitOpen',s.pit_open,
+           'engineHasCursor',s.engine_has_cursor,'sourceState',s.state,
            'coverage',s.coverage_after,'sealed',s.coverage_sealed,
            'publicationCoverage',s.coverage_publication IS NOT NULL,
            'verifiedPages',f.verified_ordinal,'terminal',f.complete,'next',f.next,

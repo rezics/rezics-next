@@ -75,7 +75,7 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { validateObservation } from './indexer.ts';
 import { validateRefreshResponse } from './write-actions.ts';
 import type { CreditSearchSource } from './credit-search.ts';
-import { bookPreparationTiming } from './book-preparation-timing.ts';
+import { bookPreparationTiming, measureBookPreparation } from './book-preparation-timing.ts';
 
 export type GenerationPublicationJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
 export type SearchGenerationPublication = Readonly<{
@@ -605,7 +605,9 @@ export function createSearchGenerationPublication(
   async function held(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     guardAvailable();
     if (!job.fence) throw new Pending('source_pending');
-    const result = await writerGuard.adoptPublication(fence(job), context);
+    const result = await measureBookPreparation('publicationHeld', () =>
+      writerGuard.adoptPublication(fence(job), context),
+    );
     add(meter, result.cost);
     if (result.status !== 'held') throw new Pending(result.reason);
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
@@ -615,7 +617,8 @@ export function createSearchGenerationPublication(
     return adopt(job, context, meter, { confirmSource: true, heldSource: await held(job, context, meter) });
   }
   async function save(client: PoolClient, job: Job, meter: Meter) {
-    const result = await client.query(
+    const end = bookPreparationTiming?.start('publicationSave');
+    const pending = client.query(
       `UPDATE search.generation_publication SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
        pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,
        bootstrap=$16,queried=$17,execution=$18,revision=revision+1
@@ -641,6 +644,7 @@ export function createSearchGenerationPublication(
         job.execution,
       ],
     );
+    const result = await (end ? pending.finally(end) : pending);
     if (!result.rows[0]) throw new Pending('observation_lost');
     job.revision = result.rows[0].revision;
     meter.frontierWrites++;
@@ -674,7 +678,7 @@ export function createSearchGenerationPublication(
     try {
       return await withBoundedReadLifetime(
         async (read) => {
-          const raw = await pool.connect();
+          const raw = await measureBookPreparation('publicationCheckout', () => pool.connect());
           connection = raw;
           try {
             return await read(raw);
@@ -692,23 +696,25 @@ export function createSearchGenerationPublication(
           // lifetime has already retired its session and returned the turn's deadline failure.
           withRequestDeadline(context.deadline, async () => {
             mayOwnLock = true;
-            const lock = await client.query<{ locked: boolean }>(
-              'SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked',
-              [lockKey],
+            const lock = await measureBookPreparation('publicationLock', () =>
+              client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(hashtextextended($1,2)) AS locked', [
+                lockKey,
+              ]),
             );
             mayOwnLock = lock.rows[0]?.locked !== false;
             if (lock.rows[0]?.locked !== true) throw new Pending('source_pending');
             try {
               const {
                 rows: [job],
-              } = await client.query<Job>(
-                'SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1',
-                [ref.job],
+              } = await measureBookPreparation('publicationLoad', () =>
+                client.query<Job>('SELECT * FROM search.generation_publication WHERE partition_no=0 AND job=$1', [
+                  ref.job,
+                ]),
               );
               if (!job || !same(job.consumer, ref.consumer)) throw new Pending('registration_missing');
               const physical =
                 phase === 'activate' && target.family === 'subjects' && job.phase !== 'active'
-                  ? await native(job.consumer, context)
+                  ? await measureBookPreparation('publicationPhysical', () => native(job.consumer, context))
                   : undefined;
               // The native inventory already proves absence during cold preparation. An existing
               // alias still needs exact options and target readback, as does every switch or rollback.
@@ -723,7 +729,7 @@ export function createSearchGenerationPublication(
                 await native(job.consumer, context);
               } else {
                 try {
-                  await adopt(job, context, meter, { physical });
+                  await measureBookPreparation('publicationAdopt', () => adopt(job, context, meter, { physical }));
                 } catch (error) {
                   if (
                     error instanceof Pending &&
@@ -1056,7 +1062,9 @@ export function createSearchGenerationPublication(
   async function discardPit(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
     if (!job.pit) return;
     try {
-      await engine(context, meter, 'DELETE', '/_search/point_in_time', { pit_id: [job.pit] });
+      await measureBookPreparation('publicationPitClose', () =>
+        engine(context, meter, 'DELETE', '/_search/point_in_time', { pit_id: [job.pit] }),
+      );
     } catch (error) {
       if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
     }
@@ -1179,16 +1187,20 @@ export function createSearchGenerationPublication(
       }
     } else if (job.phase === 'engine') {
       if (!job.pit) {
-        const refreshed = await engine(context, meter, 'POST', `/${job.physical_target}/_refresh`);
+        const refreshed = await measureBookPreparation('publicationRefresh', () =>
+          engine(context, meter, 'POST', `/${job.physical_target}/_refresh`),
+        );
         validateRefreshResponse(refreshed.status, refreshed.body);
-        const opened = await engine<{
-          pit_id?: string;
-          _shards?: { total: number; successful: number; failed: number };
-        }>(
-          context,
-          meter,
-          'POST',
-          `/${job.physical_target}/_search/point_in_time?keep_alive=5m&allow_partial_pit_creation=false`,
+        const opened = await measureBookPreparation('publicationPitOpen', () =>
+          engine<{
+            pit_id?: string;
+            _shards?: { total: number; successful: number; failed: number };
+          }>(
+            context,
+            meter,
+            'POST',
+            `/${job.physical_target}/_search/point_in_time?keep_alive=5m&allow_partial_pit_creation=false`,
+          ),
         );
         if (
           typeof opened.body.pit_id !== 'string' ||
@@ -1207,7 +1219,8 @@ export function createSearchGenerationPublication(
       }));
       let response: { status: number; body: unknown };
       try {
-        response = await engine<unknown>(context, meter, 'POST', '/_search', {
+        const end = bookPreparationTiming?.start('publicationPitPage');
+        const pending = engine<unknown>(context, meter, 'POST', '/_search', {
           // OpenSearch 3.9 flags size-zero count-free searches as terminated early.
           // Keep one metadata-only hit and use only the composite buckets for reconciliation.
           size: 1,
@@ -1221,6 +1234,7 @@ export function createSearchGenerationPublication(
             },
           },
         });
+        response = await (end ? pending.finally(end) : pending);
       } catch (error) {
         if (error instanceof OpenSearchError && error.status === 404) {
           // An expired enumeration PIT restarts this finite pass, never skips to its old frontier.
@@ -1295,7 +1309,9 @@ export function createSearchGenerationPublication(
           job.family === 'subjects'
             ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
             : undefined;
-        const remembered = await remember(job, before, client, meter, verifyChanged);
+        const remembered = await measureBookPreparation('publicationEngineHome', () =>
+          remember(job, before, client, meter, verifyChanged),
+        );
         if (remembered === 'rewound') return;
         if (remembered === 'verified') continue;
         const discoveryKeys =
@@ -1303,7 +1319,9 @@ export function createSearchGenerationPublication(
             ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
             : undefined;
         if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
-        await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
+        await measureBookPreparation('publicationEngineHome', () =>
+          reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter),
+        );
         if (!same(before, await head(group.partition, context))) throw new Pending('source_pending');
       }
       job.engine_after = (next as Record<string, unknown> | undefined) ?? null;
@@ -1324,7 +1342,8 @@ export function createSearchGenerationPublication(
       // An empty Subject home without writer custody can be witnessed at its current position.
       // The completed engine pass accounted for existing keys. Occupied homes and homes that
       // may own an engine copy still replay on any change.
-      const compared = await client.query<
+      const endValidation = bookPreparationTiming?.start('publicationValidate');
+      const comparison = client.query<
         Home & {
           current_epoch: number | null;
           current_position: string | null;
@@ -1362,6 +1381,7 @@ export function createSearchGenerationPublication(
           ORDER BY homes.partition`,
         [job.home, end, job.job, job.pass, job.family === 'subjects' ? job.physical_target : null],
       );
+      const compared = await (endValidation ? comparison.finally(endValidation) : comparison);
       meter.inputKeys += compared.rows.length;
       meter.frontierWrites += compared.rows.filter(({ refreshed }) => refreshed).length;
       if (compared.rows.length !== end - job.home) throw new Pending('routing_incomplete');
@@ -1398,7 +1418,7 @@ export function createSearchGenerationPublication(
       job.home = end;
       if (job.home === 4096) job.phase = 'reconciled';
     }
-    await native(job.consumer, context);
+    await measureBookPreparation('publicationPhysical', () => native(job.consumer, context));
     await save(client, job, meter);
   }
   function alias(job: Job) {
@@ -1407,7 +1427,9 @@ export function createSearchGenerationPublication(
   async function aliasTarget(job: Job, context: PublicFilterConsumerContext, meter: Meter): Promise<string | null> {
     let response: { status: number; body: unknown };
     try {
-      response = await engine(context, meter, 'GET', `/_alias/${alias(job)}`);
+      response = await measureBookPreparation('publicationAliasRead', () =>
+        engine(context, meter, 'GET', `/_alias/${alias(job)}`),
+      );
     } catch (error) {
       if (error instanceof OpenSearchError && error.status === 404) return null;
       throw error;
@@ -1707,23 +1729,24 @@ export function createSearchGenerationPublication(
                 ...search,
                 request: (method, path, body) => engine(context, meter, method, path, body),
               };
-              await markSubjectCalendarReady(
-                activationSearch,
-                job.prefix,
-                Number(job.generation),
-                job.native_incarnation,
+              await measureBookPreparation('publicationMetadata', () =>
+                markSubjectCalendarReady(activationSearch, job.prefix, Number(job.generation), job.native_incarnation),
               );
-              await publishSubjectActivationMetadata(activationSearch, job.physical_target, job.activated_at);
+              await measureBookPreparation('publicationMetadata', () =>
+                publishSubjectActivationMetadata(activationSearch, job.physical_target, job.activated_at),
+              );
             }
             if (before !== job.physical_target) {
               await observedWrite(
                 () =>
-                  search.request('POST', '/_aliases', {
-                    actions: [
-                      ...(job.previous_target ? [{ remove: { index: job.previous_target, alias: alias(job) } }] : []),
-                      { add: { index: job.physical_target, alias: alias(job) } },
-                    ],
-                  }),
+                  measureBookPreparation('publicationAliasWrite', () =>
+                    search.request('POST', '/_aliases', {
+                      actions: [
+                        ...(job.previous_target ? [{ remove: { index: job.previous_target, alias: alias(job) } }] : []),
+                        { add: { index: job.physical_target, alias: alias(job) } },
+                      ],
+                    }),
+                  ),
                 async () => (await aliasTarget(job, context, meter)) === job.physical_target,
                 'Generation publication alias could not be established',
               );
