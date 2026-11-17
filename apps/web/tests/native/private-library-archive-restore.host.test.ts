@@ -377,14 +377,13 @@ async function prepareOwnerLibrary(stack: NativeWebStack) {
   };
 }
 
-async function readOwnerLabels(prefix: string) {
+async function readOwnerLabelPage(prefix: string) {
   const query = new URLSearchParams({ q: prefix, limit: '3' });
-  const { labels } = await json<{ labels: { id: string; name: string; revision: number }[] }>(
+  return json<{ labels: { id: string; name: string; revision: number }[]; next: string | null }>(
     await stack.kernel(`/v1/libraryLabels?${query}`, undefined, 'alice'),
     200,
     'owner label readback',
   );
-  return labels;
 }
 
 async function downloadArchive(page: Page) {
@@ -819,7 +818,9 @@ async function restoreOwnerLibrary() {
   const collection = entryOnly ? null : await restoreCollection(page, archivePath, prepared);
 
   // Free the downloaded name while keeping the source label and its identity live.
-  const [sourceLabel] = await readOwnerLabels(prepared.labelName);
+  const {
+    labels: [sourceLabel],
+  } = await readOwnerLabelPage(prepared.labelName);
   expect(sourceLabel).toMatchObject({ id: prepared.labelId, name: prepared.labelName });
   const renamedLabelName = `${prepared.labelName} (source)`;
   const { label: renameReceipt } = await json<{ label: { id: string; revision: number } }>(
@@ -919,9 +920,52 @@ async function restoreOwnerLibrary() {
     has: page.getByRole('heading', { name: await message('en', 'library_archive_entry_current'), exact: true }),
   });
   await currentLabel.getByText(prepared.labelName, { exact: true }).waitFor({ state: 'visible' });
-  const currentLabels = await readOwnerLabels(prepared.labelName);
+  const { labels: currentLabels, next } = await readOwnerLabelPage(prepared.labelName);
   const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
   const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
+  if (restoredLabel?.name !== prepared.labelName) {
+    const query = new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' });
+    const point = await settledWithin(
+      stack
+        .kernel(
+          `/v1/libraryLabelAssignments?${query}`,
+          { headers: { 'accept-language': 'en' }, signal: AbortSignal.timeout(2_000) },
+          'alice',
+        )
+        .then(async (response) => {
+          const { label, code } = ((await response.json().catch(() => null)) ?? {}) as {
+            label?: { id?: unknown; name?: unknown; revision?: unknown };
+            code?: string;
+          };
+          return {
+            status: response.status,
+            exactId: label?.id === restoredLabelId,
+            exactName: label?.name === prepared.labelName,
+            revision: typeof label?.revision === 'number' ? label.revision : null,
+            problem: ['not_found', 'forbidden', 'invalid_request', 'deadline_exceeded', 'dependency_unavailable'].find(
+              (known) => known === code,
+            ),
+          };
+        }),
+      2_000,
+    ).catch(() => undefined);
+    await writeArchiveProvenance({
+      outcome: 'incomplete',
+      phase: 'owner-label-prefix-readback',
+      prefix: {
+        status: 200,
+        count: currentLabels.length,
+        hasNext: typeof next === 'string',
+        rows: currentLabels.slice(0, 3).map((label) => ({
+          identity: label.id === prepared.labelId ? 'source' : label.id === restoredLabelId ? 'restored' : 'other',
+          archivedName: label.name === prepared.labelName,
+          renamedName: label.name === renamedLabelName,
+          revision: label.revision,
+        })),
+      },
+      exactOwnerPoint: point ?? 'unavailable',
+    });
+  }
   expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
   expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
 
