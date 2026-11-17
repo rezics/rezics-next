@@ -751,9 +751,31 @@ async function walkW31(ctx: CommunityWalkContext): Promise<unknown> {
       );
     observed.membership = { state, since };
 
-    enter('Confirm current membership on the owner’s roster');
+    enter('Activate the owner’s exact member status check');
+    observed.rosterHttpBeforeStatus = (await ctx.community?.observeRosterRead?.(realmId)) ?? null;
     await addition.getByRole('button', { name: 'Check member status', exact: true }).click();
-    await selected.getByText('Current member', { exact: true }).waitFor({ state: 'visible' });
+    enter('Read the selected Account’s current membership in the owner’s roster');
+    try {
+      await selected.getByText('Current member', { exact: true }).waitFor({ state: 'visible' });
+    } catch (error) {
+      observed.rosterHttpAfterStatus = (await ctx.community?.observeRosterRead?.(realmId)) ?? null;
+      observed.rosterStatus = await page
+        .evaluate(() => {
+          const recognized = new Set([
+            'The selected account could not be loaded. Retry this account.',
+            'The selected account is unavailable.',
+            'The request to add this member was accepted. Membership is still pending confirmation.',
+            'This visit is out of date. Open Members again to get current access.',
+            'Current member',
+          ]);
+          return Array.from(document.querySelectorAll('main [role="status"], main p'))
+            .map((node) => node.textContent?.trim() ?? '')
+            .filter((text) => recognized.has(text))
+            .slice(0, 6);
+        })
+        .catch(() => null);
+      throw error;
+    }
 
     enter('Read the protected roster boundary as the newly admitted member');
     const memberRoster = await readRoster();
