@@ -125,78 +125,72 @@ export async function retainPublicFilterRepairVerification(
     await client.query('BEGIN');
     try {
       await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(context.deadline - Date.now()))}ms'`);
-      const owner = (
-        await client.query<{ epoch: number; write_state: string }>(
-          `/* semantic.native-keyed:1:1 */
-           SELECT epoch,write_state FROM core.partition WHERE partition_no=0 FOR SHARE`,
+      // Keep the lock order owner, bootstrap, predecessor, then current page.
+      // Each CTE uses the previous lock's result before locking the next row.
+      const proof = (
+        await client.query<{
+          admitted: boolean;
+          parent_root: string | null;
+          parent_ordinal: string | null;
+          parent_next: string | null;
+          step: string | null;
+          binding: string | null;
+          root: string | null;
+          ordinal: string | null;
+        }>(
+          `/* semantic.native-keyed:4:11 */
+           WITH owner AS MATERIALIZED (
+             SELECT epoch FROM core.partition
+             WHERE partition_no=0 AND write_state='active' FOR SHARE
+           ), cut AS MATERIALIZED (
+             SELECT b.bootstrap FROM owner o
+             JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,$1)
+             WHERE b.state='adopted' AND b.owner_epoch=o.epoch FOR SHARE OF b
+           ), parent AS MATERIALIZED (
+             SELECT p.step,p.verified_root,p.verified_ordinal,p.verified_next
+             FROM cut b JOIN semantic.public_filter_repair_step p
+               ON (p.partition_no,p.bootstrap,p.execution,p.step)=(0,b.bootstrap,$2,$4::uuid)
+             WHERE NOT p.complete AND p.verified_binding=$9
+               AND p.verified_root IS NOT NULL AND p.verified_ordinal IS NOT NULL
+               AND (p.verified_next IS NULL OR p.verified_next=$3)
+             FOR UPDATE OF p
+           ), page AS MATERIALIZED (
+             SELECT c.step,c.verified_binding,c.verified_root,c.verified_ordinal
+             FROM cut b JOIN semantic.public_filter_repair_step c
+               ON (c.partition_no,c.bootstrap,c.execution,c.step)=(0,b.bootstrap,$2,$3)
+             WHERE ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM parent))
+               AND c.predecessor IS NOT DISTINCT FROM $4::uuid
+               AND c.state=$5 AND c.complete=$6 AND c.input_limit=$7 AND c.receipt_protocol=1
+               AND c.repair_locator_digests=decode($8,'hex')
+             FOR UPDATE OF c
+           )
+           SELECT admission.admitted,p.verified_root AS parent_root,p.verified_ordinal::text AS parent_ordinal,
+             p.verified_next::text AS parent_next,c.step::text,c.verified_binding AS binding,
+             c.verified_root AS root,c.verified_ordinal::text AS ordinal
+           FROM (SELECT EXISTS(SELECT 1 FROM cut) AS admitted) admission
+           LEFT JOIN parent p ON true LEFT JOIN page c ON true`,
+          [
+            chain.bootstrap,
+            chain.execution,
+            page.step,
+            page.predecessor,
+            page.state,
+            page.complete,
+            page.inputLimit,
+            page.digests,
+            chain.binding,
+          ],
         )
       ).rows[0];
-      const bootstrap = (
-        await client.query<{ owner_epoch: number; state: string }>(
-          `/* semantic.native-keyed:1:2 */
-           SELECT owner_epoch,state FROM semantic.public_filter_bootstrap
-         WHERE (partition_no,bootstrap)=(0,$1) FOR SHARE`,
-          [chain.bootstrap],
-        )
-      ).rows[0];
-      if (
-        !owner ||
-        owner.write_state !== 'active' ||
-        !bootstrap ||
-        bootstrap.state !== 'adopted' ||
-        bootstrap.owner_epoch !== owner.epoch
-      )
-        throw new CommandUnavailableError('fenced', 0);
-      let parent: Proof | undefined;
-      if (page.predecessor !== null) {
-        parent = (
-          await client.query<Proof>(
-            `/* semantic.native-keyed:1:4 */
-             SELECT step::text,predecessor::text,verified_binding AS binding,verified_root AS root,
-             verified_ordinal::text AS ordinal,verified_next::text AS next,complete
-           FROM semantic.public_filter_repair_step
-           WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) FOR UPDATE`,
-            [chain.bootstrap, chain.execution, page.predecessor],
-          )
-        ).rows[0];
-        if (
-          !parent ||
-          parent.complete ||
-          parent.binding !== chain.binding ||
-          !parent.root ||
-          !parent.ordinal ||
-          (parent.next !== null && parent.next !== page.step)
-        )
-          throw new CommandUnavailableError('contention', 0);
-      }
-      const current = (
-        await client.query<Proof & { state: string; input_limit: number; receipt_protocol: number; digests: string }>(
-          `/* semantic.native-keyed:1:4 */
-           SELECT step::text,predecessor::text,state,complete,input_limit,receipt_protocol,
-           encode(repair_locator_digests,'hex') AS digests,verified_binding AS binding,
-           verified_root AS root,verified_ordinal::text AS ordinal,verified_next::text AS next
-         FROM semantic.public_filter_repair_step
-         WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) FOR UPDATE`,
-          [chain.bootstrap, chain.execution, page.step],
-        )
-      ).rows[0];
-      if (
-        !current ||
-        current.state !== page.state ||
-        current.complete !== page.complete ||
-        current.predecessor !== page.predecessor ||
-        current.input_limit !== page.inputLimit ||
-        current.receipt_protocol !== 1 ||
-        current.digests !== page.digests
-      )
-        throw new CommandUnavailableError('contention', 0);
-      const ordinal = parent ? BigInt(parent.ordinal!) + 1n : 1n;
-      const root = pageRoot(parent?.root ?? chain.binding, page);
-      if (current.root !== null) {
-        if (current.binding !== chain.binding || current.root !== root || BigInt(current.ordinal!) !== ordinal)
+      if (!proof?.admitted) throw new CommandUnavailableError('fenced', 0);
+      if (proof.step === null) throw new CommandUnavailableError('contention', 0);
+      const ordinal = proof.parent_ordinal === null ? 1n : BigInt(proof.parent_ordinal) + 1n;
+      const root = pageRoot(proof.parent_root ?? chain.binding, page);
+      if (proof.root !== null) {
+        if (proof.binding !== chain.binding || proof.root !== root || BigInt(proof.ordinal!) !== ordinal)
           throw new CommandUnavailableError('contention', 0);
       } else {
-        if (parent && parent.next === null) {
+        if (page.predecessor !== null && proof.parent_next === null) {
           // Admit the immutable-page trigger's child seek and successor FK
           // point before submission, including a submission that later fails.
           chargeControls({
@@ -217,11 +211,11 @@ export async function retainPublicFilterRepairVerification(
              UPDATE semantic.public_filter_repair_step SET verified_next=$4
              WHERE (partition_no,bootstrap,execution,step)=(0,$1,$2,$3) AND verified_next IS NULL
              RETURNING verified_next::text`,
-            [chain.bootstrap, chain.execution, parent.step, page.step],
+            [chain.bootstrap, chain.execution, page.predecessor, page.step],
           );
           if (linked.rowCount !== 1) throw new CommandUnavailableError('contention', 0);
         }
-        if (parent) {
+        if (page.predecessor !== null) {
           // The new prefix member's trigger independently reads its parent.
           // These are design-visible keyed controls, not MVCC visibility work.
           chargeControls({
@@ -230,11 +224,11 @@ export async function retainPublicFilterRepairVerification(
             bytes: Buffer.byteLength(
               JSON.stringify({
                 key: [0, chain.bootstrap, chain.execution, page.predecessor],
-                complete: parent.complete,
-                root: parent.root,
-                binding: parent.binding,
+                complete: false,
+                root: proof.parent_root,
+                binding: chain.binding,
                 next: page.step,
-                ordinal: parent.ordinal,
+                ordinal: proof.parent_ordinal,
               }),
             ),
           });
@@ -264,8 +258,8 @@ export async function retainPublicFilterRepairVerification(
       }
       requireAccessDeadline(context.deadline);
       await client.query('COMMIT');
-      if (page.complete && current.root === null) bookPreparationTiming?.mark('terminalRepair', Number(ordinal));
-      return current.root === null;
+      if (page.complete && proof.root === null) bookPreparationTiming?.mark('terminalRepair', Number(ordinal));
+      return proof.root === null;
     } catch (error) {
       try {
         await client.query('ROLLBACK');
