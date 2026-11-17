@@ -2,10 +2,7 @@ import { expect, test } from 'bun:test';
 import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import {
-  discoveryCapabilityWitnesses,
-  DiscoveryPopulationCutChangedError,
-} from '../../src/search/generations.ts';
+import { discoveryCapabilityWitnesses, DiscoveryProducerCoverageError } from '../../src/search/generations.ts';
 
 test('review population readiness follows native pageWithCut and omits a preparing producer', async () => {
   const page = (state: 'ready' | 'preparing' | 'unavailable') => ({
@@ -32,6 +29,7 @@ test('review population readiness follows native pageWithCut and omits a prepari
       access: {} as never,
       reviewSource: source(state),
     });
+    expect(producers.metadataProducers.review?.initialPopulationWitness).toBeUndefined();
     expect(await producers.metadataProducers.review?.readiness()).toBe(state);
   }
   const preparing = createDiscoveryProducerEntry({
@@ -48,7 +46,20 @@ test('review population readiness follows native pageWithCut and omits a prepari
   expect(classification.omittedKinds).toContainEqual({ kind: 'review', state: 'preparing' });
 });
 
-test('a preparing review page retires the generation instead of claiming the kind is unsupported', async () => {
+test('the production entry opts only native status probes out of initial page fences', () => {
+  const { metadataProducers } = createDiscoveryProducerEntry({
+    clock: () => new Date(),
+    pool: {} as never,
+    routeKey: new Uint8Array(32),
+    access: {} as never,
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32)]]) },
+  });
+  expect(metadataProducers.review?.initialPopulationWitness).toBe('none');
+  expect(metadataProducers.collection?.initialPopulationWitness).toBe('none');
+  expect(metadataProducers.space?.initialPopulationWitness).toBeUndefined();
+});
+
+test('a pending lifecycle invalidation blocks the first Review population page', async () => {
   const producers = createDiscoveryProducerEntry({
     clock: () => new Date(),
     pool: {} as never,
@@ -69,8 +80,9 @@ test('a preparing review page retires the generation instead of claiming the kin
     } as never,
   });
   expect(await discoveryCapabilityWitnesses({ review: producers.metadataProducers.review! })).toEqual({});
-  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
-    DiscoveryPopulationCutChangedError,
+  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toHaveProperty(
+    'constructor',
+    DiscoveryProducerCoverageError,
   );
 });
 
