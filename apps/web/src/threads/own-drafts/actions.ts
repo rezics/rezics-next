@@ -27,7 +27,7 @@ function publishInput(value: unknown) {
   if (!value || typeof value !== 'object' || !('body' in value) || !checkDocument(value.body))
     throw new Error('Invalid own-draft publication');
   const body = value.body as DocumentSnapshot;
-  if (body.profile !== 'blocks' || !hasDocumentContent(body)) throw new Error('Invalid own-draft publication');
+  if (!hasDocumentContent(body)) throw new Error('Invalid own-draft publication');
   if (
     !('revisionId' in value) ||
     typeof value.revisionId !== 'string' ||
