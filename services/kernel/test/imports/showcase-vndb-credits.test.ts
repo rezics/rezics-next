@@ -1,13 +1,15 @@
 import type { ApiRuntimeFailure } from './api-runtime-support.ts';
 import { expect, test } from 'bun:test';
-import { createImportTransport } from '../../../importer/src/import-client.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { createImportTransport, type ReviewedCandidatePage } from '../../../importer/src/import-client.ts';
+import { currentCandidates, fixtureFetch, valueContent } from './type-helpers.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
+import type { ShowcaseAssertion } from '../../../importer/src/showcase-contract.ts';
+import { creditSlot, statementOnPublicRead } from '../../../importer/src/showcase-current-reads.ts';
 import {
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
@@ -17,24 +19,17 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import { creditTypeTaxonomy, vndbStaffCreditConverterRevision } from '../../../importer/src/vndb-staff-credits.ts';
+import {
+  creditTypeTaxonomy,
+  readCreditTypeBindingsDetailed,
+  vndbStaffCreditConverterRevision,
+} from '../../../importer/src/vndb-staff-credits.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
-type Candidate = {
-  id: string;
-  head: number | null;
-  retracted: number | null;
-  statement: {
-    value: { content: unknown };
-    rank?: 'normal' | 'preferred';
-    qualifiers?: { property: { id: string }; value: { content: unknown } }[];
-    references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[];
-  };
-  source?: unknown;
-};
+type Candidate = Exclude<ReviewedCandidatePage['candidates'][number], { deleted: true }>;
 
 function selectedVn(voiceAliasId = '10') {
   const bangumiRows: Record<string, Record<string, unknown>[]> = {
@@ -131,18 +126,14 @@ test('selected-VN credits reach adopted current facts through exact current bind
         { preconnect() {} },
       ),
     });
+    const read = async (id: string) => (await publicClient.readSubject(id)).subject;
     async function currentSchemeIds(conceptId: string) {
-      const response = await publicClient.readSubject(conceptId);
-      const concept = response.subject as {
-        id: string;
-        type: string;
-        statements: Record<string, { rank?: string; value: { content?: unknown } }[]>;
-      };
+      const concept = await read(conceptId);
       expect(concept.id).toBe(conceptId);
       expect(concept.type).toBe('skos:Concept');
       return (concept.statements['skos:inScheme'] ?? [])
         .filter((statement) => statement.rank === 'normal' || statement.rank === 'preferred')
-        .map((statement) => statement.value.content);
+        .map((statement) => valueContent(statement.value));
     }
 
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -152,33 +143,67 @@ test('selected-VN credits reach adopted current facts through exact current bind
     const destination = { origin: runtime.origin };
     let result = await seedCrossMedia(plan, statePath, port, destination, { mediaDeadlineMs: 0 });
 
-    async function acceptAdopt(
+    async function reviewSlot(subjectId: string, property: string, slot?: ReturnType<typeof creditSlot>) {
+      const listing = await review.reviewedCandidates(subjectId, {
+        property,
+        ...slot,
+        context: GLOBAL_CONTEXT,
+        limit: 100,
+      });
+      expect(listing.next).toBeNull();
+      return { ...listing, candidates: currentCandidates(listing.candidates) };
+    }
+
+    async function adoptVocabularyCandidate(
       subjectId: string,
       property: string,
-      matches: (candidate: Candidate) => boolean = (candidate) => Boolean(candidate.source),
+      matches: (candidate: Candidate) => boolean,
     ) {
-      const page = await editor.http(
-        `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: GLOBAL_CONTEXT, limit: '100' })}`,
+      const { candidates, adoption } = await reviewSlot(subjectId, property);
+      const candidate = candidates.find(matches);
+      if (!candidate?.source) throw new Error(`Expected source candidate for ${property} on ${subjectId}`);
+      await acceptAndAdopt(subjectId, property, candidate, adoption?.head ?? null);
+    }
+
+    async function acceptAndAdopt(
+      subjectId: string,
+      property: string,
+      candidate: Candidate,
+      adoptionHead: number | null,
+      slot?: ReturnType<typeof creditSlot>,
+    ) {
+      expect(candidate.retracted).toBeNull();
+      const accepted = await review.acceptReviewedCandidate(
+        subjectId,
+        candidate.id,
+        { context: GLOBAL_CONTEXT, expected_head: candidate.head },
+        randomUUID(),
       );
-      expect(page.status).toBe(200);
-      const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-      const candidate = listing.candidates.find((item) => item.source && matches(item));
-      expect(candidate).toBeDefined();
-      if (!candidate) throw new Error(`Expected source candidate for ${property} on ${subjectId}`);
-      const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
-        context: GLOBAL_CONTEXT,
-        expected_head: candidate.head,
-      });
-      expect(accepted.status).toBe(200);
-      const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-        context: GLOBAL_CONTEXT,
-        property,
-        mode: 'replace',
-        expected_head: listing.adoption?.head ?? null,
-        selection: [{ candidate: candidate.id, rank: candidate.statement.rank ?? 'normal' }],
-      });
-      expect(adopted.status).toBe(200);
-      return candidate;
+      expect(accepted.acceptance.candidate).toBe(candidate.id);
+      const selection = [{ candidate: candidate.id, rank: 'normal' as const }];
+      const adopted = await review.adoptReviewedCandidates(
+        subjectId,
+        { ...slot, context: GLOBAL_CONTEXT, property, mode: 'replace', expected_head: adoptionHead, selection },
+        randomUUID(),
+      );
+      expect(adopted.adoption.selection).toEqual(selection);
+    }
+
+    async function adoptCredit(workId: string, assertion: ShowcaseAssertion, target: string, key?: string) {
+      const slot = creditSlot(assertion.statement);
+      expect(slot).toEqual({ target, ...(key === undefined ? {} : { key }) });
+      const { candidates, adoption } = await reviewSlot(workId, assertion.property, slot);
+      const candidate = candidates.find((row) => row.id === assertion.candidateId);
+      if (!candidate) throw new Error(`Expected sealed ${assertion.property} candidate ${assertion.candidateId}`);
+      expect(candidate.source).toEqual(assertion.source);
+      expect(statementOnPublicRead(candidate.statement, assertion.statement)).toBe(true);
+      await acceptAndAdopt(workId, assertion.property, candidate, adoption?.head ?? null, slot);
+    }
+
+    function expectPublicCredit(work: Awaited<ReturnType<typeof read>>, assertion: ShowcaseAssertion) {
+      const statement = work.statements[assertion.property]?.find((row) => row.id === assertion.candidateId);
+      expect(statement?.rank).toBe('normal');
+      expect(statementOnPublicRead(statement, assertion.statement)).toBe(true);
     }
 
     function acknowledgedCreate(externalId: string): string {
@@ -206,7 +231,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
     });
     const schemeRequirement = schemes.requirements[0]!;
     const schemeId = acknowledgedCreate(schemeRequirement.source.external_id);
-    await acceptAdopt(schemeId, 'schema:url');
+    await adoptVocabularyCandidate(
+      schemeId,
+      'schema:url',
+      (candidate) => valueContent(candidate.statement.value) === schemeRequirement.sourceUri,
+    );
 
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -235,13 +264,19 @@ test('selected-VN credits reach adopted current facts through exact current bind
       conceptRequirements.find((requirement) => requirement.sourceKey === `${creditTypeTaxonomy}:scenario`)!.source
         .external_id,
     );
-    expect(publishedShowcaseVndbCreditReferences(completeConceptPublication, journal, concepts.requirements)).toEqual({
+    const completeReferences = publishedShowcaseVndbCreditReferences(
+      completeConceptPublication,
+      journal,
+      concepts.requirements,
+    );
+    expect(completeReferences).toEqual({
       schemeId,
       concepts: [
         { code: 'chardesign', id: designId },
         { code: 'scenario', id: scenarioCreateId },
       ],
     });
+    if (!completeReferences) throw new Error('Expected both role bindings before changing the design Scheme');
 
     const authored = {
       source: 'authored-vndb-credit-types',
@@ -285,20 +320,32 @@ test('selected-VN credits reach adopted current facts through exact current bind
         },
       ],
     });
-    expect(wrongBinding.results[0]?.status).toBe(201);
+    const wrongCandidate = wrongBinding.results[0];
+    expect(wrongCandidate?.status).toBe(201);
+    if (!wrongCandidate || !('value' in wrongCandidate) || !('candidate' in wrongCandidate.value))
+      throw new Error('Expected the acknowledged wrong-Scheme candidate');
+    const wrongCandidateId = wrongCandidate.value.candidate;
 
     for (const requirement of conceptRequirements) {
       const subjectId = acknowledgedCreate(requirement.source.external_id);
-      await acceptAdopt(subjectId, 'schema:url');
-      const expectedScheme = requirement.sourceKey.endsWith(':chardesign') ? wrongSchemeId : schemeId;
-      await acceptAdopt(
+      await adoptVocabularyCandidate(
         subjectId,
-        'skos:inScheme',
-        (candidate) => candidate.statement.value.content === expectedScheme,
+        'schema:url',
+        (candidate) => valueContent(candidate.statement.value) === requirement.sourceUri,
+      );
+      await adoptVocabularyCandidate(subjectId, 'skos:inScheme', (candidate) =>
+        subjectId === designId ? candidate.id === wrongCandidateId : valueContent(candidate.statement.value) === schemeId,
       );
     }
 
     expect(await currentSchemeIds(designId)).toEqual([wrongSchemeId]);
+    const rereadBindings = await readCreditTypeBindingsDetailed(port, completeReferences, (id) =>
+      publicClient.readSubject(id),
+    );
+    expect(rereadBindings.bindings.concepts.map(({ code, id }) => ({ code, id }))).toEqual([
+      { code: 'scenario', id: scenarioCreateId },
+    ]);
+    expect(rereadBindings.unavailable).toEqual([]);
 
     const vocabularyAcks = journal.acknowledgedCommands().length;
     journal.close();
@@ -377,16 +424,22 @@ test('selected-VN credits reach adopted current facts through exact current bind
       .find((record) => record.sourceKey === 'v1')!
       .assertions.filter((assertion) => assertion.source.converter_revision === vndbStaffCreditConverterRevision);
     expect(pendingCredits.map((assertion) => assertion.property).sort()).toEqual(['schema:author', 'wdt:P725']);
+    const oldVoice = pendingCredits.find((assertion) => assertion.property === 'wdt:P725')!;
+    expect(valueContent(oldVoice.statement.value)).toBe(personId);
+    expect(oldVoice.citations).toContain('https://vndb.org/v1#/vn_seiyuu/v1/10/c3');
+    await adoptCredit(workId, oldVoice, personId, characterId);
+    expectPublicCredit(await read(workId), oldVoice);
 
-    const pendingCreditKeys = journal
-      .acknowledgedCommands()
-      .filter(
-        (acknowledgement) =>
-          acknowledgement.command.op === 'propose' &&
-          acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision,
-      )
-      .map((acknowledgement) => acknowledgement.command.key)
-      .sort();
+    const creditProposalKeys = () =>
+      journal!
+        .acknowledgedCommands()
+        .filter(
+          ({ command }) =>
+            command.op === 'propose' && command.source.converter_revision === vndbStaffCreditConverterRevision,
+        )
+        .map(({ command }) => command.key)
+        .sort();
+    const pendingCreditKeys = creditProposalKeys();
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     port = captureShowcaseCommands(runtime.importTransport, journal);
@@ -395,17 +448,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
       vndbCreditReferences: references,
       readPublicSubject: (id) => publicClient.readSubject(id),
     });
-    const replayCreditKeys = journal
-      .acknowledgedCommands()
-      .filter(
-        (acknowledgement) =>
-          acknowledgement.command.op === 'propose' &&
-          acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision,
-      )
-      .map((acknowledgement) => acknowledgement.command.key)
-      .sort();
-    expect(replayCreditKeys).toEqual(pendingCreditKeys);
+    expect(creditProposalKeys()).toEqual(pendingCreditKeys);
     expect(new Map(replay.readings.map((row) => [row.externalId, row.subject.subject.id])).get('v1')).toBe(workId);
+    expectPublicCredit(await read(workId), oldVoice);
 
     const correctedPlan = await planCrossMediaSeed(selectedVn('30'));
     result = await seedCrossMedia(correctedPlan, statePath, port, destination, {
@@ -449,61 +494,39 @@ test('selected-VN credits reach adopted current facts through exact current bind
     const currentCredits = vocabularyPublication.manifest.records
       .find((record) => record.sourceKey === 'v1')!
       .assertions.filter((assertion) => assertion.source.converter_revision === vndbStaffCreditConverterRevision);
-    expect(currentCredits).toEqual(
+    expect(currentCredits.map((assertion) => assertion.property).sort()).toEqual(['schema:author', 'wdt:P725']);
+    const author = currentCredits.find((assertion) => assertion.property === 'schema:author')!;
+    const voice = currentCredits.find((assertion) => assertion.property === 'wdt:P725')!;
+    expect(valueContent(author.statement.value)).toBe(personId);
+    expect(valueContent(voice.statement.value)).toBe(correctedVoiceId);
+    expect(voice.candidateId).not.toBe(oldVoice.candidateId);
+    expect(author.statement.qualifiers).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          property: 'schema:author',
-          statement: expect.objectContaining({ value: { type: 'value', content: personId } }),
-        }),
-        expect.objectContaining({
-          property: 'wdt:P725',
-          statement: expect.objectContaining({ value: { type: 'value', content: correctedVoiceId } }),
-        }),
+        expect.objectContaining({ property: { id: 'wdt:P3831' }, value: { content: scenarioId } }),
+        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Writer Alias' } }),
       ]),
     );
-    expect(
-      currentCredits.some(
-        (assertion) =>
-          assertion.property === 'wdt:P725' &&
-          assertion.statement.value.type === 'value' &&
-          assertion.statement.value.content === personId,
-      ),
-    ).toBe(false);
-    expect(currentCredits.some((assertion) => assertion.property === 'schema:illustrator')).toBe(false);
-
-    const byQualifier = (candidate: Candidate, property: string, content: unknown) =>
-      candidate.statement.qualifiers?.some(
-        (qualifier) => qualifier.property.id === property && qualifier.value.content === content,
-      ) ?? false;
-    const byCitation = (candidate: Candidate, uri: string) =>
-      candidate.statement.references?.some((reference) =>
-        reference.parts.some((part) => part.property.id === 'schema:url' && part.value.content === uri),
-      ) ?? false;
-    const authorCandidate = await acceptAdopt(
-      workId,
-      'schema:author',
-      (candidate) =>
-        candidate.statement.value.content === personId &&
-        byQualifier(candidate, 'wdt:P3831', scenarioId) &&
-        byQualifier(candidate, 'wdt:P1932', 'Writer Alias') &&
-        byCitation(candidate, 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
-    );
-    const voiceCandidate = await acceptAdopt(
-      workId,
-      'wdt:P725',
-      (candidate) =>
-        candidate.statement.value.content === correctedVoiceId &&
-        byQualifier(candidate, 'wdt:P453', characterId) &&
-        byQualifier(candidate, 'wdt:P1932', 'Corrected Voice Alias') &&
-        byCitation(candidate, 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
-    );
-    expect(authorCandidate.statement.references).toBeDefined();
-    expect(voiceCandidate.statement.qualifiers).toEqual(
+    expect(voice.statement.qualifiers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ property: { id: 'wdt:P453' }, value: { content: characterId } }),
         expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Corrected Voice Alias' } }),
       ]),
     );
+    expect(author.citations).toContain('https://vndb.org/v1#/vn_staff/v1/10/scenario');
+    expect(voice.citations).toContain('https://vndb.org/v1#/vn_seiyuu/v1/30/c3');
+    await adoptCredit(workId, author, personId);
+    await adoptCredit(workId, voice, correctedVoiceId, characterId);
+
+    const oldVoiceSlot = await reviewSlot(workId, 'wdt:P725', creditSlot(oldVoice.statement));
+    const withdrawnVoice = oldVoiceSlot.candidates.find((candidate) => candidate.id === oldVoice.candidateId);
+    expect(withdrawnVoice).toMatchObject({
+      source: oldVoice.source,
+      retracted: expect.any(Number),
+      retraction: {
+        source: { source: oldVoice.source.source, external_id: 'v1', field_group: 'facts' },
+      },
+    });
+    expect(withdrawnVoice?.retraction?.references).toEqual(oldVoice.statement.references);
 
     await publishShowcase({
       plan: correctedPlan,
@@ -514,49 +537,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
       publicClient,
       vocabularyRequirements: selectedReviewRequirements,
     });
-    const read = async (id: string) => {
-      const response = await publicClient.readSubject(id);
-      return response.subject as {
-        id: string;
-        type: string;
-        statements: Record<
-          string,
-          {
-            value: { content: unknown };
-            qualifiers?: { property: { id: string }; value: { content: unknown } }[];
-            references?: Candidate['statement']['references'];
-          }[]
-        >;
-      };
-    };
     const current = await read(workId);
-    const author = current.statements['schema:author']?.find((statement) => statement.value.content === personId);
-    const voice = current.statements['wdt:P725']?.find((statement) => statement.value.content === correctedVoiceId);
-    expect(author).toBeDefined();
-    expect(voice).toBeDefined();
-    expect(author?.qualifiers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ property: { id: 'wdt:P3831' }, value: { content: scenarioId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Writer Alias' } }),
-      ]),
-    );
-    expect(voice?.qualifiers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ property: { id: 'wdt:P453' }, value: { content: characterId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Corrected Voice Alias' } }),
-      ]),
-    );
+    expectPublicCredit(current, author);
+    expectPublicCredit(current, voice);
+    expect(current.statements['wdt:P725']?.map((statement) => valueContent(statement.value))).toEqual([correctedVoiceId]);
     expect(current.statements['schema:illustrator']).toBeUndefined();
-    expect(
-      author?.references?.some((reference) =>
-        reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
-      ),
-    ).toBe(true);
-    expect(
-      voice?.references?.some((reference) =>
-        reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
-      ),
-    ).toBe(true);
     expect(await read(personId)).toMatchObject({ id: personId, type: 'schema:Person' });
     expect(await read(correctedVoiceId)).toMatchObject({ id: correctedVoiceId, type: 'schema:Person' });
     expect(await read(characterId)).toMatchObject({ id: characterId, type: 'wd:Q95074' });
@@ -567,6 +552,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       expect(otherWork.statements['wdt:P725']).toBeUndefined();
     }
 
+    const correctedCreditKeys = creditProposalKeys();
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     port = captureShowcaseCommands(runtime.importTransport, journal);
@@ -580,7 +566,10 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(reopenedIdentities.get('s4')).toBe(personId);
     expect(reopenedIdentities.get('s5')).toBe(correctedVoiceId);
     expect(reopenedIdentities.get('c3')).toBe(characterId);
+    expect(creditProposalKeys()).toEqual(correctedCreditKeys);
     const reopenedWork = await read(workId);
+    expectPublicCredit(reopenedWork, author);
+    expectPublicCredit(reopenedWork, voice);
     expect(reopenedWork.statements['schema:author']).toHaveLength(1);
     expect(reopenedWork.statements['wdt:P725']).toHaveLength(1);
     expect(reopenedWork.statements['schema:illustrator']).toBeUndefined();
