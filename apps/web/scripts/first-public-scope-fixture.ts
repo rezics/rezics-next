@@ -1,17 +1,15 @@
 import { join } from 'node:path';
+import { fromPlainText } from '@rezics/document';
 import { decodeJwt } from 'jose';
 import { developmentKeys, firstPublicWebOwnerActions } from '../../../services/auth/scripts/dev-stack.ts';
 import { createAccountTokenProvider } from '../../../services/importer/src/credentials.ts';
 import type { CrossMediaSeedReport } from '../../../services/importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT, grantOrdinaryOwnerActions } from '../../../services/importer/src/ordinary-owner-grants.ts';
-import { ShowcaseJournal } from '../../../services/importer/src/showcase-publication.ts';
-import {
-  createDevelopmentShowcaseClient,
-  seedDevelopmentCommunity,
-} from '../../../scripts/datasets/showcase-community.ts';
 import { parseEnv, readOrdinaryAuthSession, resolveFollowTarget, signup, websiteToken } from './accounts-goal-walk.ts';
 import {
   createStaticZone,
+  createSubject,
+  readSubject,
   publishZone,
   readZonePage,
   requireId,
@@ -21,23 +19,34 @@ import {
   type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
 
-export type WebFixture = {
-  owner: { accountId: string; handle: string; email: string; subjectId: string };
+export type CommunityFixture = {
+  owner: { accountId: string; handle: string; email: string };
   outsider: { accountId: string; handle: string; email: string };
-  workId: string;
-  releaseId: string;
+  conceptId: string;
   boardId: string;
   threadId: string;
   openingPostId: string;
   openingRevisionId: string;
-  collectionId: string;
-  collectionMembers: { id: string; subjectId: string }[];
   spaceId: string;
   spaceAddress: string | null;
   realmId: string;
+};
+
+export type WebFixture = CommunityFixture & {
+  owner: CommunityFixture['owner'] & { subjectId: string };
+  workId: string;
+  releaseId: string;
+  collectionId: string;
+  collectionMembers: { id: string; subjectId: string }[];
   zone: { id: string; route: string; text: string };
   closed: { operation: string; anonymous: number; owner: number; outsider: number }[];
 };
+
+const communityOwnerActions = [
+  'board:create',
+  'space:create',
+  'realm:create',
+] as const satisfies readonly (typeof firstPublicWebOwnerActions)[number][];
 
 function expectStatus(result: { status: number; body: Json }, expected: number, operation: string): Json {
   if (result.status !== expected)
@@ -52,7 +61,12 @@ export async function readFirstPublicCatalogueReport(root: string) {
   return report;
 }
 
-async function proveClosedScope(call: KernelCall, outsider: { accountId: string; bearer: string }, workId: string) {
+async function proveClosedScope(
+  call: KernelCall,
+  ownerBearer: string,
+  outsider: { accountId: string; bearer: string },
+  workId: string,
+) {
   // Use reads and a read-only Search query so a misconfigured gate cannot create anything.
   const probes = [
     ['subject offers', 'GET', `/v1/subjects/${workId}/offers`],
@@ -89,15 +103,23 @@ async function proveClosedScope(call: KernelCall, outsider: { accountId: string;
   return evidence;
 }
 
-export async function seedFirstPublicWeb(
-  root: string,
-  stack: WalkStackOrigins,
-  call: KernelCall,
-  catalogue: CrossMediaSeedReport,
-): Promise<WebFixture> {
+async function readCatalogueSubjects(call: KernelCall, catalogue: CrossMediaSeedReport) {
   const published = catalogue.showcase?.published ?? [];
   const work = published.find((row) => row.provider === 'vndb' && row.sourceKey === 'v2002');
   const workId = requireId(work?.subjectId, 'published VNDB v2002 work');
+  const reading = catalogue.readings.find(
+    (entry) => entry.source === 'vndb' && entry.externalId === 'v2002' && entry.selection === 'selected',
+  );
+  const readWork = (reading?.subject as { subject?: { id?: unknown } } | undefined)?.subject?.id;
+  const handoff = catalogue.workLinks.find(
+    (entry) => entry.source.provider === 'vndb' && entry.source.externalId === 'v2002',
+  )?.source;
+  if (
+    readWork !== workId ||
+    typeof reading?.route !== 'string' ||
+    (handoff && (handoff.subject?.subjectId !== workId || handoff.subject.route !== reading.route))
+  )
+    throw new Error('Published VNDB v2002 did not match the imported work readback');
   const secondWorkId = requireId(
     published.find((row) => row.provider === 'vndb' && row.sourceKey === 'v4')?.subjectId,
     'published VNDB v4 work',
@@ -124,7 +146,10 @@ export async function seedFirstPublicWeb(
     );
   });
   const releaseId = requireId(release?.subject, 'currently disclosed imported release');
+  return { workId, secondWorkId, releaseId };
+}
 
+async function seedOwner(root: string, stack: WalkStackOrigins, actions: readonly string[]) {
   const [bindings, { website }, seedEnv] = await Promise.all([
     parseEnv(join(root, 'apps/web/.dev.vars')),
     developmentKeys(),
@@ -144,19 +169,18 @@ export async function seedFirstPublicWeb(
   )
     throw new Error('The independently authenticated Web fixture identities did not match');
 
-  const subjectId = await resolveFollowTarget(stack, owner, 'public Web fixture owner');
   const grantor = await createAccountTokenProvider({
     accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
-    account: requireId(seedEnv.REZICS_DEV_PERSONA_ACCOUNT, 'catalogue fixture account'),
+    account: requireId(seedEnv.REZICS_DEV_PERSONA_ACCOUNT, 'development grantor account'),
     client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
     authOrigin: stack.native,
     issuerOrigin: stack.issuer,
-    scopes: ['access:grant', ...firstPublicWebOwnerActions],
+    scopes: ['access:grant', ...actions],
   });
   const grantBearer = await grantor();
   await grantOrdinaryOwnerActions({
     accountId: owner.accountId,
-    actions: firstPublicWebOwnerActions,
+    actions,
     post: async ({ path, body, idempotencyKey }) => {
       const response = await fetch(new URL(path, stack.kernel), {
         method: 'POST',
@@ -173,95 +197,84 @@ export async function seedFirstPublicWeb(
     },
   });
 
-  const bearer = ownerAuth.bearer;
-  const closed = await proveClosedScope(
-    call,
-    bearer,
-    { accountId: outsider.accountId, bearer: outsiderAuth.bearer },
-    workId,
-  );
-  const journal = new ShowcaseJournal(join(root, '.temp/cross-media-seed/showcase.sqlite'));
-  const actor = { accountId: owner.accountId, clientId: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website' };
-  const community = await (async () => {
-    try {
-      return await seedDevelopmentCommunity({
-        result: catalogue,
-        actor,
-        client: createDevelopmentShowcaseClient({
-          origin: stack.kernel,
-          actor,
-          credential: { sessionId },
-          tokenProvider: async () => bearer,
-          journal,
-        }),
-      });
-    } finally {
-      journal.close();
-    }
-  })();
-  if (community.state !== 'published')
-    throw new Error(`Community fixture ${community.operation}: ${community.state} (${community.code ?? 'no-code'})`);
-  if (community.source.subjectId !== workId) throw new Error('Board fixture selected a different imported work');
+  return { owner, outsider, bearer: ownerAuth.bearer, outsiderBearer: outsiderAuth.bearer };
+}
 
-  const created = expectStatus(
-    await call('POST', '/v1/collections', {
+export async function seedCommunityEntities(
+  call: KernelCall,
+  bearer: string,
+  accountId: string,
+  importedWorkId?: string,
+): Promise<Omit<CommunityFixture, 'owner' | 'outsider'>> {
+  const boardTitle = 'First-public Web Discussion';
+  const concept = await createSubject(call, bearer, 'skos:Concept', boardTitle);
+  const conceptId = concept.id;
+  const topic = expectStatus(await readSubject(call, conceptId), 200, 'read exact public Board Concept').subject as
+    | Json
+    | undefined;
+  if (topic?.id !== conceptId || topic.type !== 'skos:Concept' || (topic.labels as Json | undefined)?.en !== boardTitle)
+    throw new Error('Public Board Concept did not match the ordinary authored Subject');
+
+  const board = expectStatus(
+    await call('POST', '/v1/boards', {
       bearer,
-      body: { title: 'First-public Web Collection', visibility: 'private' },
+      body: { conceptId, title: boardTitle, purpose: 'discussion', visibility: 'published' },
     }),
     201,
-    'owner creates private Collection',
-  ).collection as Json;
-  const collectionId = requireId(created.id, 'Collection');
-  const path = `/v1/collections/${collectionId}`;
-  const collectionMembers = [];
-  for (const subjectId of [workId, secondWorkId]) {
-    const member = expectStatus(
-      await call('POST', `${path}/members`, {
-        bearer,
-        body: { subjectId },
-      }),
-      201,
-      'owner adds exact Collection member',
-    ).member as Json;
-    if (member.subjectId !== subjectId) throw new Error('Collection member resolved to a different Subject');
-    collectionMembers.push({ id: requireId(member.id, 'Collection member'), subjectId });
-  }
-  expectStatus(await call('GET', path), 404, 'private Collection anonymous read');
-  expectStatus(await call('GET', path, { bearer: outsiderAuth.bearer }), 404, 'private Collection outsider read');
-  const privateRead = expectStatus(await call('GET', path, { bearer }), 200, 'private Collection owner read')
-    .collection as Json;
-  if (privateRead.curatorAccountId !== owner.accountId || privateRead.visibility !== 'private')
-    throw new Error('Collection owner or private visibility did not match');
-  expectStatus(
-    await call('PATCH', path, {
-      bearer,
-      body: { revision: privateRead.revision, visibility: 'public' },
-    }),
+    'owner creates public Global Board',
+  ).board as Json | undefined;
+  const boardId = requireId(board?.id, 'Board');
+  const isPublicBoard = (row: Json) =>
+    row.id === boardId &&
+    row.realmId === null &&
+    row.title === boardTitle &&
+    row.purpose === 'discussion' &&
+    row.visibility === 'published' &&
+    row.availability === 'available';
+  if (!board || !isPublicBoard(board)) throw new Error('Board creation did not acknowledge the exact public Board');
+
+  const directory = expectStatus(
+    await call('GET', '/v1/boards', { query: { purpose: 'discussion', limit: '100' } }),
     200,
-    'owner explicitly publishes Collection',
+    'read public Global Board directory',
   );
-  for (const viewer of [bearer, outsiderAuth.bearer, undefined]) {
-    const current = expectStatus(await call('GET', path, { bearer: viewer }), 200, 'published Collection read')
-      .collection as Json;
-    const members = expectStatus(
-      await call('GET', `${path}/members`, { bearer: viewer }),
-      200,
-      'published Collection members',
-    );
-    if (
-      current.id !== collectionId ||
-      current.curatorAccountId !== owner.accountId ||
-      current.visibility !== 'public' ||
-      members.next !== null ||
-      !Array.isArray(members.members) ||
-      members.members.length !== collectionMembers.length ||
-      collectionMembers.some(({ id, subjectId }, index) => {
-        const member = (members.members as Json[])[index];
-        return member?.id !== id || member.subjectId !== subjectId;
-      })
-    )
-      throw new Error('Published Collection owner, visibility or member readback did not match');
-  }
+  if (!Array.isArray(directory.boards) || !(directory.boards as Json[]).some(isPublicBoard))
+    throw new Error('The exact published Board was absent from the public Global Board directory');
+
+  const discussionSubjectId = importedWorkId ?? conceptId;
+  const licence = 'CC-BY-4.0';
+  const thread = expectStatus(
+    await call('POST', '/v1/threads', {
+      bearer,
+      body: {
+        boardId,
+        kind: 'discussion',
+        title: 'A note for the first-public discussion',
+        body: fromPlainText('This original note opens the first-public discussion.'),
+        licence,
+        subjectIds: [discussionSubjectId],
+        visibility: 'published',
+      },
+    }),
+    201,
+    'owner authors public discussion opening',
+  ).thread as Json | undefined;
+  const opening = thread?.firstPost as Json | undefined;
+  const threadId = requireId(thread?.id, 'Thread');
+  const openingPostId = requireId(opening?.id, 'Opening post');
+  const openingRevisionId = requireId(opening?.revisionId, 'Opening revision');
+  if (
+    thread?.boardId !== boardId ||
+    thread.kind !== 'discussion' ||
+    opening?.authorId !== accountId ||
+    opening.licence !== licence ||
+    typeof opening.sha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(opening.sha256) ||
+    !Array.isArray(opening.subjectIds) ||
+    opening.subjectIds.length !== 1 ||
+    opening.subjectIds[0] !== discussionSubjectId
+  )
+    throw new Error('Thread creation did not acknowledge the exact authored opening');
 
   const space = expectStatus(
     await call('POST', '/v1/spaces', {
@@ -290,6 +303,95 @@ export async function seedFirstPublicWeb(
     throw new Error('Public Space did not disclose its exact Realm');
   const spaceAddress = typeof currentSpace.address === 'string' ? currentSpace.address : null;
 
+  return { conceptId, boardId, threadId, openingPostId, openingRevisionId, spaceId, spaceAddress, realmId };
+}
+
+export async function seedCommunityWeb(
+  root: string,
+  stack: WalkStackOrigins,
+  call: KernelCall,
+): Promise<CommunityFixture> {
+  const { owner, outsider, bearer } = await seedOwner(root, stack, communityOwnerActions);
+  return { owner, outsider, ...(await seedCommunityEntities(call, bearer, owner.accountId)) };
+}
+
+export async function seedFirstPublicWeb(
+  root: string,
+  stack: WalkStackOrigins,
+  call: KernelCall,
+  catalogue: CrossMediaSeedReport,
+): Promise<WebFixture> {
+  const { workId, secondWorkId, releaseId } = await readCatalogueSubjects(call, catalogue);
+  const { owner, outsider, bearer, outsiderBearer } = await seedOwner(root, stack, firstPublicWebOwnerActions);
+  const subjectId = await resolveFollowTarget(stack, owner, 'public Web fixture owner');
+  const closed = await proveClosedScope(
+    call,
+    bearer,
+    { accountId: outsider.accountId, bearer: outsiderBearer },
+    workId,
+  );
+  const community = await seedCommunityEntities(call, bearer, owner.accountId, workId);
+
+  const created = expectStatus(
+    await call('POST', '/v1/collections', {
+      bearer,
+      body: { title: 'First-public Web Collection', visibility: 'private' },
+    }),
+    201,
+    'owner creates private Collection',
+  ).collection as Json;
+  const collectionId = requireId(created.id, 'Collection');
+  const path = `/v1/collections/${collectionId}`;
+  const collectionMembers = [];
+  for (const subjectId of [workId, secondWorkId]) {
+    const member = expectStatus(
+      await call('POST', `${path}/members`, {
+        bearer,
+        body: { subjectId },
+      }),
+      201,
+      'owner adds exact Collection member',
+    ).member as Json;
+    if (member.subjectId !== subjectId) throw new Error('Collection member resolved to a different Subject');
+    collectionMembers.push({ id: requireId(member.id, 'Collection member'), subjectId });
+  }
+  expectStatus(await call('GET', path), 404, 'private Collection anonymous read');
+  expectStatus(await call('GET', path, { bearer: outsiderBearer }), 404, 'private Collection outsider read');
+  const privateRead = expectStatus(await call('GET', path, { bearer }), 200, 'private Collection owner read')
+    .collection as Json;
+  if (privateRead.curatorAccountId !== owner.accountId || privateRead.visibility !== 'private')
+    throw new Error('Collection owner or private visibility did not match');
+  expectStatus(
+    await call('PATCH', path, {
+      bearer,
+      body: { revision: privateRead.revision, visibility: 'public' },
+    }),
+    200,
+    'owner explicitly publishes Collection',
+  );
+  for (const viewer of [bearer, outsiderBearer, undefined]) {
+    const current = expectStatus(await call('GET', path, { bearer: viewer }), 200, 'published Collection read')
+      .collection as Json;
+    const members = expectStatus(
+      await call('GET', `${path}/members`, { bearer: viewer }),
+      200,
+      'published Collection members',
+    );
+    if (
+      current.id !== collectionId ||
+      current.curatorAccountId !== owner.accountId ||
+      current.visibility !== 'public' ||
+      members.next !== null ||
+      !Array.isArray(members.members) ||
+      members.members.length !== collectionMembers.length ||
+      collectionMembers.some(({ id, subjectId }, index) => {
+        const member = (members.members as Json[])[index];
+        return member?.id !== id || member.subjectId !== subjectId;
+      })
+    )
+      throw new Error('Published Collection owner, visibility or member readback did not match');
+  }
+
   const route = 'about';
   const text = '關於網站的公開指南';
   const zone = await createStaticZone(call, bearer, 'First-public Web Zone', 'Welcome to the public Zone.', text);
@@ -298,19 +400,13 @@ export async function seedFirstPublicWeb(
   expectStatus(await readZonePage(call, zone.id, route), 200, 'read configured public Zone address');
 
   return {
+    ...community,
     owner: { ...owner, subjectId },
     outsider,
     workId,
     releaseId,
-    boardId: community.board.id,
-    threadId: community.thread.threadId,
-    openingPostId: community.thread.postId,
-    openingRevisionId: community.thread.revisionId,
     collectionId,
     collectionMembers,
-    spaceId,
-    spaceAddress,
-    realmId,
     zone: { id: zone.id, route, text },
     closed,
   };
