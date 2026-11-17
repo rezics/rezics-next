@@ -115,7 +115,7 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
             }}
           />
         </label>
-        <Button variant="outline" className={action} disabled={locked}>
+        <Button type="submit" variant="outline" className={action} disabled={locked}>
           {m.library_archive_progress_profile()}
         </Button>
       </form>

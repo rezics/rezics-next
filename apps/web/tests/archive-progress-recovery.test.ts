@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MappingPanel } from '../src/library/archive-progress-recovery/mapping-panel';
+import type { ProgressChoices } from '../src/library/progress-profile';
 import { archiveBase64, ProgressRecoveryJourney } from '../src/library/archive-progress-recovery/controller';
 import { progressRecoveryNative, type Review, type ReviewInput } from '../src/library/archive-progress-recovery/native';
 import type { ProgressRecoveryPort as Port } from '../src/library/archive-progress-recovery/native';
@@ -78,6 +82,48 @@ async function prepare(journey: ProgressRecoveryJourney) {
   await journey.upload(new File(['{}'], 'archive.json'));
   await journey.review(input);
 }
+
+test('the Archive mapping action submits the current profile form', () => {
+  const base = port(async () => {
+    throw new Error('The unsubmitted fixture has no write');
+  });
+  const native: Port<ProgressChoices> = {
+    ...base,
+    choices: async () => ({ kind: 'ok', value: [] }),
+  };
+  const journey = new ProgressRecoveryJourney(native, crypto.randomUUID(), () => true);
+  const html = renderToStaticMarkup(
+    createElement(MappingPanel, {
+      journey,
+      snap: {
+        ...journey.snapshot(),
+        selected: {
+          section: 'sessions',
+          session_id: id,
+          subject_id: id,
+          subject_id_reference: { id, href: `/subjects/${id}` },
+          version_subject_id: null,
+          mode: 'scalar_amount',
+          unit: 'page',
+          total: '12',
+          amount: '0',
+          additional_measures: [],
+          locator: null,
+          position: null,
+          completed_unit_count: 0,
+          episode_completed_count: 0,
+          state: 'active',
+          revision: 1,
+          library_profile_pin: null,
+          started_at: '2024-02-01T00:00:00.000Z',
+          completed_at: null,
+          last_changed_at: '2024-02-01T00:00:00.000Z',
+        },
+      },
+    }),
+  );
+  expect(html.match(/<form[\s\S]*?<\/form>/u)?.[0]).toMatch(/<button[^>]+type="submit"/u);
+});
 
 test('generated native transport sends original JSON bytes and quotes each logical key exactly once', async () => {
   const bytes = new TextEncoder().encode(' { "manifest": {},\n "records": ["🦊"] } ');
