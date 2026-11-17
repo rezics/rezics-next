@@ -35,6 +35,8 @@ import {
 import {
   readPublicFilterCreationWindow,
   readPublicFilterCreationEvent,
+  readPublicFilterCreationEvents,
+  publicFilterCreationAction,
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
@@ -1017,6 +1019,7 @@ export function createNativePublicFilterSourceBinding(
     } | null;
     account?: AccountDiscoveryRepairObservation;
     scan?: Readonly<{ kind: 'semantic' | 'accounts'; homes: number; digest: string }>;
+    bridgeEvents?: Readonly<{ count: number; digest: string }>;
     windowBatch?: Readonly<{
       from: number;
       count: number;
@@ -1217,8 +1220,13 @@ export function createNativePublicFilterSourceBinding(
     context: PublicFilterConsumerContext,
     accounts: boolean,
     cost: BindingCost,
-    retained?: RepairState,
-  ): Promise<RepairState> {
+    options: Readonly<{
+      inputLimit: number;
+      batch: boolean;
+      retained?: Pick<RepairRecord, 'next' | 'bridgeEvents'>;
+    }>,
+  ): Promise<Readonly<{ next: RepairState; receipt?: RepairRecord['bridgeEvents'] }>> {
+    const { inputLimit, batch, retained } = options;
     if (state.resumeBridge || state.subject !== null || state.projection !== null)
       throw new BindingError('binding_mismatch');
     if (state.phase === 'window') {
@@ -1231,9 +1239,9 @@ export function createNativePublicFilterSourceBinding(
         db,
         { bootstrap: nativeId(bootstrap), partition: state.partition },
         context,
-        retained?.bridge,
+        retained?.next.bridge,
       );
-      return { ...state, epoch: window.epoch, phase: 'bridge', bridge: window };
+      return { next: { ...state, epoch: window.epoch, phase: 'bridge', bridge: window } };
     }
     const window = state.bridge;
     if (state.phase !== 'bridge' || !window || state.epoch !== window.epoch) throw new BindingError('binding_mismatch');
@@ -1249,52 +1257,59 @@ export function createNativePublicFilterSourceBinding(
         window.sequence !== 0)
     )
       throw new BindingError('binding_mismatch');
-    // An exhausted interval still revalidates all three binding rows. A live
-    // event additionally reads its exact outbox point; neither is a packed-row
-    // exemption from native control/point accounting.
-    const extraRows = window.position > window.through ? 2 : 3;
-    cost.rows += extraRows;
-    cost.dependencyPoints += extraRows;
-    cost.inputKeys++;
-    const result = await readPublicFilterCreationEvent(db, { bootstrap: nativeId(bootstrap), window }, context);
-    if (result.event === null) {
-      const { bridge: _bridge, ...rest } = state;
-      return {
-        ...rest,
-        partition: home + 1,
-        epoch: null,
-        phase: 'window',
-      };
+    const exhausted = window.position > window.through;
+    const input = { bootstrap: nativeId(bootstrap), window };
+    const retainedCount = retained?.bridgeEvents?.count;
+    let receipt: RepairRecord['bridgeEvents'];
+    let result: Awaited<ReturnType<typeof readPublicFilterCreationEvent>>;
+    if (!exhausted && (retained ? retained.bridgeEvents !== undefined : batch)) {
+      const range = await readPublicFilterCreationEvents(
+        db,
+        { ...input, accounts, inputLimit, ...(retainedCount === undefined ? {} : { retainedCount }) },
+        context,
+        cost,
+      );
+      result = range;
+      receipt = { count: range.envelopes.length, digest: hash(encode(range.envelopes)) };
+    } else {
+      // Retained single-event steps replay the exact old read. Closing an
+      // exhausted window still revalidates the three original binding rows.
+      const extraRows = exhausted ? 2 : 3;
+      cost.rows += extraRows;
+      cost.dependencyPoints += extraRows;
+      cost.inputKeys++;
+      result = await readPublicFilterCreationEvent(db, input, context);
     }
     const event = result.event;
-    const subject = event.type.startsWith('com.rezics.subject.') || event.type.startsWith('com.rezics.statement.');
-    const account =
-      accounts &&
-      [
-        'com.rezics.access.account-updated.v1',
-        'com.rezics.access.account-tombstoned.v1',
-        'com.rezics.access.account-discovery-changed.v1',
-      ].includes(event.type);
-    if (!subject && !account) return { ...state, partition: home, bridge: result.next };
+    if (event === null) {
+      const { bridge: _bridge, ...rest } = state;
+      return { next: { ...rest, partition: home + 1, epoch: null, phase: 'window' } };
+    }
+    const action = publicFilterCreationAction(event.type, accounts);
+    if (action === null) return { next: { ...state, partition: home, bridge: result.next }, receipt };
     const route = event.subject === null ? null : routeOf(event.subject);
-    if (route === null || (subject && partitionOf(route) !== home)) throw new BindingError('binding_mismatch');
+    if (route === null || (action === 'semantic' && partitionOf(route) !== home))
+      throw new BindingError('binding_mismatch');
     // The event home and the Account home may differ (claim delivery). Resolve
     // the owner on the next bounded step; no foreign home is joined here.
     const { bridge: _bridge, ...rest } = state;
     const owner = await readPartition(db, partitionOf(route));
     if (!owner || owner.writeState !== 'active') throw new BindingError('owner_unavailable');
     return {
-      ...rest,
-      owner: account ? 'accounts' : 'semantic',
-      partition: partitionOf(route),
-      epoch: owner.epoch,
-      subject: event.subject,
-      after: null,
-      phase: account ? 'account' : 'advance',
-      advance: retained?.advance ?? randomUUID(),
-      version: null,
-      projection: null,
-      resumeBridge: result.next,
+      next: {
+        ...rest,
+        owner: action,
+        partition: partitionOf(route),
+        epoch: owner.epoch,
+        subject: event.subject,
+        after: null,
+        phase: action === 'accounts' ? 'account' : 'advance',
+        advance: retained?.next.advance ?? randomUUID(),
+        version: null,
+        projection: null,
+        resumeBridge: result.next,
+      },
+      receipt,
     };
   }
   async function scanPublicationCreationPrefix(
@@ -1790,6 +1805,7 @@ export function createNativePublicFilterSourceBinding(
       account: AccountDiscoveryRepairObservation | undefined,
       scan: RepairRecord['scan'],
       windowBatch: RepairRecord['windowBatch'],
+      bridgeEvents: RepairRecord['bridgeEvents'],
       complete = false;
     if (state.partition === 4096) {
       if (state.phase === 'window') {
@@ -1828,15 +1844,21 @@ export function createNativePublicFilterSourceBinding(
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
-      next = await advanceCreationBridge(
+      const bridge = await advanceCreationBridge(
         bootstrap.id,
         state,
         db,
         context,
         'representation' in bootstrap.definition.capture,
         cost,
-        replay?.next,
+        {
+          inputLimit,
+          batch: request.homeLimit !== undefined,
+          ...(replay ? { retained: replay } : {}),
+        },
       );
+      next = bridge.next;
+      bridgeEvents = bridge.receipt;
     } else if (state.phase === 'scan' && (!replay || replay.scan)) {
       if (state.owner === 'accounts') {
         const scanned = await scanAccountHomes(state, inputLimit, db, cost);
@@ -2062,6 +2084,7 @@ export function createNativePublicFilterSourceBinding(
       output,
       ...(scan ? { scan } : {}),
       ...(windowBatch ? { windowBatch } : {}),
+      ...(bridgeEvents ? { bridgeEvents } : {}),
       ...(account ? { account } : {}),
     };
     if (replay && encode(record) !== encode(replay)) throw new BindingError('binding_mismatch');
@@ -2805,6 +2828,7 @@ export function createNativePublicFilterSourceBinding(
         let expected: RepairState | undefined;
         let expectedScan: RepairRecord['scan'];
         let expectedWindowBatch: RepairRecord['windowBatch'];
+        let expectedBridgeEvents: RepairRecord['bridgeEvents'];
         if (row.complete) {
           if (
             !terminalRepairState(record.input) ||
@@ -2963,15 +2987,18 @@ export function createNativePublicFilterSourceBinding(
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
           } else {
-            expected = await advanceCreationBridge(
+            if (record.bridgeEvents !== undefined && !subjectPublication) throw new BindingError('binding_mismatch');
+            const bridge = await advanceCreationBridge(
               input.bootstrap,
               record.input,
               db,
               { deadline },
               'representation' in cut.definition.capture,
               cost,
-              record.next,
+              { inputLimit: row.input_limit, batch: false, retained: record },
             );
+            expected = bridge.next;
+            expectedBridgeEvents = bridge.receipt;
           }
         } else if ((record.input.phase !== 'scan' && record.input.phase !== 'advance') || receiptDigests.length !== 0) {
           throw new BindingError('owner_unavailable');
@@ -3074,7 +3101,8 @@ export function createNativePublicFilterSourceBinding(
           !expected ||
           encode(expected) !== encode(record.next) ||
           encode(expectedScan ?? null) !== encode(record.scan ?? null) ||
-          encode(expectedWindowBatch ?? null) !== encode(record.windowBatch ?? null)
+          encode(expectedWindowBatch ?? null) !== encode(record.windowBatch ?? null) ||
+          encode(expectedBridgeEvents ?? null) !== encode(record.bridgeEvents ?? null)
         )
           throw new BindingError('binding_mismatch');
         const current = await loadBootstrap(input.bootstrap, db);

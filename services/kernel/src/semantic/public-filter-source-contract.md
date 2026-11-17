@@ -185,11 +185,15 @@ admitting the original home receipt. `readPublicFilterCreationWindow(pool, input
 context, retained?)` captures a finite native home interval; replay validates the
 same retained interval rather than extending its through-position.
 `readPublicFilterCreationEvent(pool, {bootstrap, window}, context)` reads one exact
-outbox event and preserves its event-count/sequence boundary. Missing positions,
-changed ownership, missing pins and partial event groups remain unavailable.
-The repair producer routes actual Subject and Account change events through their
-separate native repair phases before returning to that retained successor. These
-window readers feed the independently verified terminal chain and native settlement/ACK described below.
+outbox event and preserves its event-count/sequence boundary. Ordinary Subject publication
+uses `readPublicFilterCreationEvents` to read consecutive unrelated events within that pin
+in one bounded step, stopping at the first repair action. It retains the count and digest
+of the ordered event envelopes. Independent verification reads that exact count and derives
+the same successor. Older steps retain their single-event replay. Missing positions, changed
+ownership, missing pins and partial event groups remain unavailable. The repair producer routes
+actual Subject and Account change events through their separate native repair phases before
+returning to that retained successor. These readers feed the independently verified terminal
+chain and native settlement/ACK described below.
 They do not independently establish receiver settlement or eligibility of an old served observation.
 
 ## Complete bounded selected facets
