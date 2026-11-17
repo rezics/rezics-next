@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
+import { semanticFirstPublicCases, type SemanticFirstPublicSession } from '../scripts/semantic-first-public-cases.ts';
 import { chromium } from 'playwright';
 import { createAndRead, type SemanticBrowserSession } from '../scripts/semantic-first-public-browser.ts';
 import { mountedSubjectReadHeader, mountedSubjectReads } from '../src/subject/mounted-read-diagnostic.ts';
@@ -86,6 +87,42 @@ test('the first-public walk names each of the 31 catalogue and Zone journeys onc
   expect(FIRST_PUBLIC_JOURNEYS).toHaveLength(31);
   expect(new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.id)).size).toBe(31);
   expect(new Set(FIRST_PUBLIC_JOURNEYS.map((row) => row.name)).size).toBe(31);
+});
+
+test('both hosts receive the same ordered original 31 cases and each refreshes its actual editor', async () => {
+  const browser = {
+    async newPage() {
+      throw new Error('selected browser case');
+    },
+  } as unknown as SemanticFirstPublicSession['anonymous'];
+  let refreshes = 0;
+  const session: SemanticFirstPublicSession = {
+    stack,
+    anonymous: browser,
+    member: browser,
+    editor: 'initial-editor',
+    evidenceDir: '/unused',
+    revision: 'source',
+    trace: [],
+    async editorAgent() {
+      throw new Error('selected current Agent case');
+    },
+    async refreshEditor() {
+      refreshes++;
+      session.editor = 'refreshed-editor';
+    },
+    async call(method, _path, options) {
+      if (method !== 'GET') expect(options?.bearer).toBe('refreshed-editor');
+      throw new Error('selected native case');
+    },
+  };
+  const cases = semanticFirstPublicCases(session, 'same-original-fixture');
+  expect(cases.map((item) => item.id)).toEqual(FIRST_PUBLIC_JOURNEYS.map((row) => row.id));
+  const results = [];
+  for (const item of cases) results.push(await item.run());
+  expect(refreshes).toBe(31);
+  expect(results.map((row) => row.id)).toEqual(FIRST_PUBLIC_JOURNEYS.map((row) => row.id));
+  expect(results.every((row) => row.status === 'Failing')).toBe(true);
 });
 
 const fixtureSubjectId = 'abea4570-a90c-8fd8-a148-3ada6997936e';
