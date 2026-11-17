@@ -1,5 +1,7 @@
 import type { ApiRuntimeFailure } from './api-runtime-support.ts';
 import { expect, test } from 'bun:test';
+import { createImportTransport } from '../../../importer/src/import-client.ts';
+import { fixtureFetch } from './type-helpers.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -113,6 +115,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
       valid: '(,)',
     });
     expect(grant.status).toBe(201);
+    const review = createImportTransport({
+      origin: runtime.origin,
+      tokenProvider: async () => editor.bearer,
+      fetch: fixtureFetch(async (input, init) => runtime.replay(new Request(input, init))),
+    });
 
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
@@ -179,7 +186,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: schemes.requirements,
     });
@@ -203,7 +210,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: concepts.requirements,
     });
@@ -278,7 +285,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: reopenedConcepts.requirements,
     });
@@ -312,6 +319,8 @@ test('selected-VN credits reach adopted current facts through exact current bind
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
     const identities = new Map(first.readings.map((row) => [row.externalId, row.subject.subject.id]));
+    for (const key of ['v1', 's4', 'c3'])
+      expect(identities.get(key), `Current native VNDB identity ${key} is absent from the seed readings`).toBeTruthy();
     const workId = identities.get('v1')!;
     const personId = identities.get('s4')!;
     const characterId = identities.get('c3')!;
@@ -322,7 +331,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result: first,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: reopenedConcepts.requirements,
     });
@@ -381,7 +390,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: reopenedConcepts.requirements,
     });
@@ -449,7 +458,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       result,
       aliases: crossMediaAliases,
       journal,
-      review: runtime.importTransport,
+      review,
       publicClient,
       vocabularyRequirements: reopenedConcepts.requirements,
     });
