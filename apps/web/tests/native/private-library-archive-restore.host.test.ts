@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import type { Locator, Page, Response } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
-import { startAuthStack } from './auth-stack.ts';
+import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -45,6 +45,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   const setupDeadline = Date.now() + 600_000;
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
+  await prepareNativeAuthMessages();
   await prepareNativeWebSearch('library-archive');
   stack = await startNativeWebStack({ observeBookSearchPreparation: !entryOnly, observeArchiveEntry: true });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
@@ -778,7 +779,7 @@ async function restoreCollection(
 async function restoreOwnerLibrary() {
   const prepared = await prepareOwnerLibrary(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
-  const auth = await startAuthStack(stack);
+  const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
   const page = signedIn.context.pages().at(-1)!;
   await page.setViewportSize({ width: 1440, height: 900 });
