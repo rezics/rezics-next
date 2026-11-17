@@ -5,7 +5,13 @@ import type { Page, Response } from 'playwright';
 import { expect as browserExpect } from 'playwright/test';
 import { PROBLEMS } from '../../../../services/kernel/src/http/problem-error.ts';
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
-import { assertShelfPage, exactType, openNewTabFromLink, problemCode } from './book-catalogue-browser.ts';
+import {
+  assertShelfPage,
+  exactShelfRow,
+  exactType,
+  openNewTabFromLink,
+  problemCode,
+} from './book-catalogue-browser.ts';
 import { startBookCatalogueJourneyFixture, type BookShelfBoundaryFixture } from './book-catalogue-journey-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 
@@ -113,12 +119,8 @@ nativeTest(
       phase = 'checking mounted shelf';
       await assertShelfPage(shelf, book.type);
       expect(new URL(shelf.url()).origin).toBe(origin);
-      const main = shelf.getByRole('main');
-      const exactBook = shelf
-        .getByRole('link', { name: book.label, exact: true })
-        .and(shelf.locator(`a[href^="/en/subjects/${encodeURIComponent(book.id)}/"]`));
       phase = 'checking exact planned Book';
-      const row = main.locator('[data-slot="list-row"], [data-slot="cover-card"], tr').filter({ has: exactBook });
+      const row = exactShelfRow(shelf, book);
       await browserExpect(row.getByRole('link', { name: book.label, exact: true })).toBeVisible();
       await browserExpect(row.getByText(bookPlanned.label, { exact: true })).toBeVisible();
       await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();

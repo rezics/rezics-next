@@ -8,7 +8,14 @@ import {
   type BookCatalogueJourneyFixture,
   type BookCatalogueType,
 } from './book-catalogue-journey-fixture.ts';
-import { assertShelfPage, exactType, openNewTabFromLink, pageReady, problemCode } from './book-catalogue-browser.ts';
+import {
+  assertShelfPage,
+  exactShelfRow,
+  exactType,
+  openNewTabFromLink,
+  pageReady,
+  problemCode,
+} from './book-catalogue-browser.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { sampleNativeMemory, sampleOwnedWebRunMemory } from './native-memory.ts';
 
@@ -113,17 +120,13 @@ async function reportBookSearchFailure(
 async function assertPlannedShelf(shelf: Page, type: BookCatalogueType): Promise<void> {
   const { subjects, states } = fixture;
   await assertShelfPage(shelf, type);
-  if (type === 'schema:Book') {
-    await browserExpect(shelf.getByRole('main')).toContainText(subjects.book.label);
-    await browserExpect(shelf.getByRole('main')).toContainText(states.bookPlanned.label);
-  }
-  if (type === 'bf:Instance') {
-    await browserExpect(shelf.getByRole('main')).toContainText(subjects.edition.label);
-    await browserExpect(shelf.getByRole('main')).toContainText(states.editionPlanned.label);
-  }
-  if (type === 'schema:BookSeries' && states.seriesPlanned) {
-    await browserExpect(shelf.getByRole('main')).toContainText(subjects.series.label);
-    await browserExpect(shelf.getByRole('main')).toContainText(states.seriesPlanned.label);
+  const subject = type === 'schema:Book' ? subjects.book : type === 'bf:Instance' ? subjects.edition : subjects.series;
+  const state =
+    type === 'schema:Book' ? states.bookPlanned : type === 'bf:Instance' ? states.editionPlanned : states.seriesPlanned;
+  if (state) {
+    const row = exactShelfRow(shelf, subject);
+    await browserExpect(row.getByRole('link', { name: subject.label, exact: true })).toBeVisible();
+    await browserExpect(row.getByText(state.label, { exact: true })).toBeVisible();
   }
 }
 
@@ -408,7 +411,9 @@ nativeTest(
     const completedChoice = bookShelf.getByRole('menuitemradio', { name: states.bookCompleted.label, exact: true });
     await browserExpect(completedChoice).toBeVisible();
     await completedChoice.click();
-    await browserExpect(bookShelf.getByRole('main')).toContainText(states.bookCompleted.label);
+    await browserExpect(
+      exactShelfRow(bookShelf, subjects.book).getByText(states.bookCompleted.label, { exact: true }),
+    ).toBeVisible();
     await bookShelf.keyboard.press('Escape');
     await bookShelf.keyboard.press('Escape');
     await stack.syncKernelRequests();
@@ -443,8 +448,9 @@ nativeTest(
     );
     const currentShelf = await openNewTabFromLink(bookShelf, updatedShelfLink, 'return to current Book shelf');
     await assertShelfPage(currentShelf, 'schema:Book');
-    await browserExpect(currentShelf.getByRole('main')).toContainText(subjects.book.label);
-    await browserExpect(currentShelf.getByRole('main')).toContainText(states.bookCompleted.label);
+    const currentRow = exactShelfRow(currentShelf, subjects.book);
+    await browserExpect(currentRow.getByRole('link', { name: subjects.book.label, exact: true })).toBeVisible();
+    await browserExpect(currentRow.getByText(states.bookCompleted.label, { exact: true })).toBeVisible();
     await currentShelf.close();
     stage('return to current personal state', {
       book: subjects.book.id,
@@ -541,7 +547,7 @@ nativeTest(
     expect(new URL(bobPage.url()).pathname).toBe('/en/library');
     expect(new URL(bobPage.url()).searchParams.get('type')).toBe('schema:Book');
     await browserExpect(bobPage.getByRole('main')).not.toContainText(subjects.book.label);
-    await browserExpect(bobPage.getByRole('main')).not.toContainText(states.bookCompleted.label);
+    await browserExpect(exactShelfRow(bobPage, subjects.book)).toHaveCount(0);
     stage('other-person exact shelf', {
       persona: 'bob',
       address: `${new URL(bobPage.url()).pathname}${new URL(bobPage.url()).search}`,

@@ -2,11 +2,14 @@ import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { PersonalLibraryEntry, LibraryMutationResult } from '../src/library/entries-read';
 import type { PersonalLibraryCurrentRead } from '../src/library/personal-library-server';
 import type { SearchPageData } from '../src/search/search';
 import { literaryGrainExample } from '../src/features/catalogue/literary-reader/examples';
+import type { SessionEnv } from '../src/session/client';
+import { newCsrfToken } from '../src/session/csrf';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { Window } = await import(
@@ -65,6 +68,7 @@ const { PersonalLibraryCurrent } = await import('../src/library/personal-library
 const server = await import('../src/library/personal-library-server');
 const rows = await import('../src/library/shelf-rows');
 const actions = await import('../src/library/entries-actions');
+const { changePersonalLibraryEntry } = await import('../src/library/entries-read');
 const { libraryContinueQuery } = await import('../src/library/continue-read');
 const { PageVisitBinding } = await import('../src/subject/page-visit-binding');
 const { LibraryApplicationBoundary } = await import('../src/session/library-application');
@@ -326,7 +330,7 @@ test.each(bookCatalogueTypes)(
   },
 );
 
-test('book shelf safe sign-in, native page bound, existing entry action/readback and viewer retirement', async () => {
+test('book shelf safe sign-in, native page bound, rendered entry command acknowledgement and viewer retirement', async () => {
   setLocale('en', { reload: false });
   const href = shelfHref('en', { type: 'schema:Book' });
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
@@ -335,7 +339,8 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
     location: { publicHref: href },
   }).catch((error: unknown) => error);
   expect(denied).toMatchObject({ options: { href: `/auth/sign-in?return_to=${encodeURIComponent(href)}` } });
-  client.setQueryData(['session'], viewer('A'));
+  const csrf = newCsrfToken();
+  client.setQueryData(['session'], { ...viewer('A'), csrfToken: csrf });
   client.setQueryData(['exposure', 'anonymous'], []);
   const viewerLifetime = viewerExposureLifetime(client);
   const releaseViewer = viewerLifetime.subscribe(() => {});
@@ -348,13 +353,17 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
   const entry: PersonalLibraryEntry = {
     subjectId: id(1),
     state: 'planned',
+    stateLabel: 'Planned',
     revision: 7,
     incarnationId: id(2),
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
     changeKey: id(3),
     removeKey: id(4),
-    stateOptions: ['planned', 'completed'].map((id) => ({ id, label: { text: id, lang: 'en' } })),
+    stateOptions: ['planned', 'completed'].map((id) => ({
+      id,
+      label: { text: id === 'planned' ? 'Planned' : 'Completed', lang: 'en' },
+    })),
     subject: { id: id(1), type: 'schema:Book', types: ['schema:Book'], label: 'The harbour', cover: null },
   };
   const search = validateShelfSearch(Object.fromEntries(new URL(href, 'https://site.test').searchParams));
@@ -375,7 +384,58 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
     return pending.promise;
   });
   const saved = deferred<LibraryMutationResult>();
-  const write = spyOn(actions, 'savePersonalLibraryEntry').mockImplementation(() => saved.promise);
+  const credential = deferred<void>();
+  const arrived = deferred<void>();
+  const commands: { method: string; path: string; authorization: string | null; body: unknown }[] = [];
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  const native = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      commands.push({
+        method: request.method,
+        path: new URL(request.url).pathname,
+        authorization: request.headers.get('authorization'),
+        body: await request.json(),
+      });
+      arrived.resolve();
+      const result = await saved.promise;
+      return result.ok
+        ? Response.json({ libraryEntry: { ...result.entry, createdAt: entry.createdAt } })
+        : Response.json({}, { status: 503 });
+    },
+  });
+  const sessionEnv = {
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://api.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'shelf-test',
+    WEBSITE_CLIENT_KEY: 'unused-by-session-read',
+    SITE_ORIGINS: 'https://site.test',
+    SESSIONS: {
+      idFromName: (value: string) => value,
+      get: () => ({
+        async credential() {
+          await credential.promise;
+          return { status: 'active', subject: 'A', accessToken: 'shelf-token', csrfToken: csrf };
+        },
+      }),
+    },
+  } as unknown as Partial<SessionEnv>;
+  const nativeClient = createKernelClient(native.url.origin, { fetch: nativeFetch });
+  let delivered: Promise<LibraryMutationResult> | undefined;
+  const write = spyOn(actions, 'savePersonalLibraryEntry').mockImplementation((input) => {
+    const headers = new Headers(input.headers);
+    headers.set('cookie', `__Host-rezics_session=${'a'.repeat(43)}`);
+    headers.set('origin', 'https://site.test');
+    delivered = changePersonalLibraryEntry(
+      nativeClient,
+      new Request('https://site.test/en/library', { method: 'POST', headers }),
+      sessionEnv,
+      input.data,
+    );
+    return delivered;
+  });
   const fetch = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}, { status: 503 }));
   try {
     await render(
@@ -383,18 +443,56 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
     );
     expect(host.textContent).toContain('The harbour');
     expect(reads).toHaveBeenCalledTimes(0);
+    expect(host.textContent).toContain('Completed');
+    expect(host.querySelector('[data-slot="shelf-list-row-status"]')?.textContent).toBe('Planned');
     await act(async () => {
-      void controls.changeState(id(1), 'completed');
+      host.querySelector<HTMLButtonElement>('button[aria-label="Actions for The harbour"]')!.click();
+      await tick();
+    });
+    await act(async () => {
+      const status = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Change status',
+      );
+      expect(status).toBeDefined();
+      status!.click();
+      await tick();
+    });
+    await act(async () => {
+      const completed = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent === 'Completed',
+      );
+      expect(completed).toBeDefined();
+      completed!.click();
+      await tick();
     });
     expect(write).toHaveBeenCalledTimes(1);
     expect(write.mock.calls[0]?.[0].data).toMatchObject({ subjectId: id(1), state: 'completed', revision: 7 });
+    // Summary navigation already names Completed while session preparation has not sent the command.
+    expect(host.textContent).toContain('Completed');
+    expect(commands).toHaveLength(0);
+    expect(host.querySelector('[data-slot="shelf-list-row-status"]')?.textContent).toBe('Planned');
+    await act(async () => {
+      credential.resolve();
+      await arrived.promise;
+    });
+    expect(commands).toEqual([
+      {
+        method: 'PUT',
+        path: `/v1/libraryEntries/${id(1)}`,
+        authorization: 'Bearer shelf-token',
+        body: { state: 'completed', revision: 7, incarnationId: id(2) },
+      },
+    ]);
+    expect(host.querySelector('[data-slot="shelf-list-row-status"]')?.textContent).toBe('Planned');
     await act(async () => {
       saved.resolve({
         ok: true,
         entry: { subjectId: id(1), state: 'completed', revision: 8, incarnationId: id(2), updatedAt: '2026-02-01' },
       });
+      await delivered;
     });
     expect(controls.rows[0]?.entry).toMatchObject({ state: 'completed', revision: 8 });
+    expect(host.querySelector('[data-slot="shelf-list-row-status"]')?.textContent).toBe('Completed');
     await act(async () => {
       void client.refetchQueries({ queryKey: ['personal-library-current'], type: 'active' });
       await tick();
@@ -427,6 +525,10 @@ test('book shelf safe sign-in, native page bound, existing entry action/readback
     });
     expect(host.textContent).not.toContain('The harbour');
   } finally {
+    credential.resolve();
+    saved.resolve({ ok: false, reason: 'unavailable' });
+    await native.stop(true);
+    await delivered;
     observed.mockRestore();
     reads.mockRestore();
     write.mockRestore();

@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
 import type { Locator, Page } from 'playwright';
-import type { BookCatalogueType } from './book-catalogue-journey-fixture.ts';
+import type { BookCatalogueIdentity, BookCatalogueType } from './book-catalogue-journey-fixture.ts';
 
 export async function pageReady(page: Page, stageName: string): Promise<void> {
   page.setDefaultTimeout(45_000);
@@ -51,4 +51,15 @@ export async function assertShelfPage(page: Page, type: BookCatalogueType): Prom
   expect(new URL(page.url()).pathname).toBe('/en/library');
   expect(exactType(page.url())).toBe(type);
   await browserExpect(page.getByRole('main')).toBeVisible();
+}
+
+/** Shelf navigation names every state; only the exact subject row witnesses its personal state. */
+export function exactShelfRow(page: Page, subject: Pick<BookCatalogueIdentity, 'id' | 'label'>): Locator {
+  const primary = page
+    .getByRole('link', { name: subject.label, exact: true })
+    .and(page.locator(`a[href^="/en/subjects/${encodeURIComponent(subject.id)}/"]`));
+  return page
+    .getByRole('main')
+    .locator('[data-slot="list-row"], [data-slot="cover-card"], tr')
+    .filter({ has: primary });
 }
