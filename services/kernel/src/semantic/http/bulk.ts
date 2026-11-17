@@ -278,6 +278,7 @@ export function bulkRoutes(
           for (let start = 0; start < jobs.length; start++) {
             const pending = jobs[start]!;
             const key = typeof pending.command?.key === 'string' ? pending.command.key : '';
+            let fenceFailure: { error: unknown } | undefined;
             try {
               if (fatal.has(pending.index)) throw fatal.get(pending.index);
               if (pending.errors.length) throw new ProblemError('invalid_request', { errors: pending.errors });
@@ -303,12 +304,17 @@ export function bulkRoutes(
                 pending.command,
                 pending.route,
                 async (tx) => {
-                  await enforceSourceFence(
-                    tx,
-                    plan,
-                    partitionOf(pending.route!),
-                    sourceTuple(routeKey, pending.command.source),
-                  );
+                  try {
+                    await enforceSourceFence(
+                      tx,
+                      plan,
+                      partitionOf(pending.route!),
+                      sourceTuple(routeKey, pending.command.source),
+                    );
+                  } catch (error) {
+                    fenceFailure = { error };
+                    throw error;
+                  }
                   if (pending.unavailable) throw new ProblemError('invalid_request', { errors: [pending.unavailable] });
                 },
               );
@@ -341,6 +347,11 @@ export function bulkRoutes(
                   requestId,
                   commandIndex: pending.index,
                   op: pending.command?.op,
+                  failureStage: fatal.has(pending.index)
+                    ? 'cover_probe'
+                    : fenceFailure && Object.is(fenceFailure.error, error)
+                      ? 'source_fence'
+                      : 'command_execution',
                 })),
               };
             }
@@ -374,6 +385,7 @@ export function bulkRoutes(
               requestId,
               commandIndex: pending.index,
               op: pending.command?.op,
+              failureStage: 'fence_retry',
             })),
           };
         }

@@ -77,3 +77,23 @@ test('bulk create and propose actions stay distinct and diagnostics omit unknown
   expect(JSON.stringify(schema)).toContain('transaction_retry_exhausted');
   expect(JSON.stringify(schema)).toContain('partition_unavailable');
 });
+
+test('bulk internal failures expose only the supplied stage and the response command index', async () => {
+  const requestId = Bun.randomUUIDv7();
+  const log = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const result = await bulkWriteCommandProblem(new Error('private provider text'), {
+      requestId,
+      commandIndex: 4,
+      op: 'retract',
+      failureStage: 'source_fence',
+    });
+    expect(result).toMatchObject({
+      status: 500,
+      problem: { code: 'internal_error', request_id: requestId, command_index: 4, failure_stage: 'source_fence' },
+    });
+    expect(JSON.stringify(result.problem)).not.toContain('private provider text');
+  } finally {
+    log.mockRestore();
+  }
+});

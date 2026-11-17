@@ -262,6 +262,7 @@ function formatSeedCause(error: unknown): string {
       const failure = seedTransportError(error);
       const detail = importRunFailure(run.result);
       const generation = run.result.runId;
+      const batch = detail?.batch;
       return (
         `Cross-media seed import failed provider=${run.provider} kind=${run.result.status}` +
         (generation && /^[1-9][0-9]{0,19}$/u.test(generation) ? ` generation=${generation}` : '') +
@@ -272,6 +273,11 @@ function formatSeedCause(error: unknown): string {
             (detail.problem ? ` problem=${detail.problem}` : '') +
             (detail.mediaState ? ` mediaState=${detail.mediaState}` : '') +
             '}'
+          : '') +
+        (batch
+          ? ` batch{op=${batch.op ?? 'none'} fieldGroup=${batch.fieldGroup ?? 'none'}` +
+            ` correlation=${batch.request_id ?? 'none'} index=${batch.command_index ?? 'none'}` +
+            ` failureStage=${batch.failure_stage ?? 'none'} dominantPhase=${batch.phase ?? 'none'}}`
           : '') +
         (failure ? ` ${formatImportTransportError(failure)}` : '')
       );

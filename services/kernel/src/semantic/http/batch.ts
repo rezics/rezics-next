@@ -1,3 +1,4 @@
+import type { BatchWriteFailureStage } from '@rezics/definitions/bulk';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { commandTimingSnapshot } from '../../command/timing.ts';
@@ -45,6 +46,8 @@ export type BulkWriteProblemBody = {
   partition?: number;
   phase?: BulkWriteTransactionPhase;
   contention_retries?: number;
+  command_index?: number;
+  failure_stage?: BatchWriteFailureStage;
   redirect?: { from: string; to: string };
 };
 
@@ -156,7 +159,12 @@ function mapBulkWriteError(
 
 export async function bulkWriteCommandProblem(
   error: unknown,
-  options: { requestId: string; commandIndex: number; op: string | undefined },
+  options: {
+    requestId: string;
+    commandIndex: number;
+    op: string | undefined;
+    failureStage?: BatchWriteFailureStage;
+  },
 ): Promise<{ status: number; problem: BulkWriteProblemBody }> {
   const action = bulkWriteAction(options.op);
   const mapped = mapBulkWriteError(error, options.commandIndex, options.op);
@@ -180,6 +188,9 @@ export async function bulkWriteCommandProblem(
   const problem: BulkWriteProblemBody = {
     ...(payload as BulkWriteProblemBody),
     ...bulkWriteDiagnostics(error, action),
+    ...(response.status === 500
+      ? { command_index: options.commandIndex, failure_stage: options.failureStage ?? 'command_execution' }
+      : {}),
     ...(mapped.redirect ? { redirect: mapped.redirect } : {}),
   };
   if (
