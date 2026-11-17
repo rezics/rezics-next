@@ -35,6 +35,7 @@ import type { WorkClient } from '../../../../services/kernel/src/work/client.ts'
 import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import type { ReyloAnalysisPreparation } from '../../../../services/kernel/scripts/reylo-cache.ts';
 import type { NativeArchivePreview, NativeArchiveStatus } from '../../src/library/archive-entry-recovery/native.ts';
+import { observeArchiveProgressResponse, type ArchiveProgressResponse } from './archive-progress-observation.ts';
 
 // Match the private browser bridge's request budget for forwarded Auth pages and assets.
 const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
@@ -53,6 +54,7 @@ export type NativeKernelRequest = {
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
   archiveEntry?: ArchiveEntryResponse;
+  archiveProgress?: ArchiveProgressResponse;
   /** Only the subject selector is retained for observed Hosted checkpoint saves. */
   hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
@@ -83,6 +85,8 @@ export type NativeWebStackOptions = {
   observeBookSearchPreparation?: boolean;
   /** Observe Entry upload and preview responses for the mounted Archive fixture. */
   observeArchiveEntry?: boolean;
+  /** Observe Progress intake and the first retained evidence readers in the mounted Archive fixture. */
+  observeArchiveProgress?: boolean;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
   commerce?: {
     apiHost: string;
@@ -1328,6 +1332,9 @@ async function startStack(): Promise<
           if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY === '1' && !observed.fixtureRequest) {
             observed.archiveEntry = await observeArchiveEntryResponse(request, url, response).catch(() => undefined);
           }
+          if (process.env.NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS === '1' && !observed.fixtureRequest) {
+            observed.archiveProgress = await observeArchiveProgressResponse(request, response).catch(() => undefined);
+          }
           if (request.method === 'POST' && /^\/v1\/libraryLabels\/[^/]+:unassign$/u.test(url.pathname)) {
             const revision = response.headers.get('Library-Label-Assignment-Revision');
             observed.validLabelUndoRevision =
@@ -1784,6 +1791,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY: options.observeArchiveEntry ? '1' : undefined,
+    NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS: options.observeArchiveProgress ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',

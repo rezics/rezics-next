@@ -9,6 +9,7 @@ import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settl
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
+import { archiveProgressOperation } from './archive-progress-observation.ts';
 
 let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
@@ -47,7 +48,11 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
   await prepareNativeAuthMessages();
   await prepareNativeWebSearch('library-archive');
-  stack = await startNativeWebStack({ observeBookSearchPreparation: !entryOnly, observeArchiveEntry: true });
+  stack = await startNativeWebStack({
+    observeBookSearchPreparation: !entryOnly,
+    observeArchiveEntry: true,
+    observeArchiveProgress: true,
+  });
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
@@ -598,6 +603,147 @@ async function startCollectionPreview(page: Page, archivePath?: string) {
   }
 }
 
+function progressUploadObservation(page: Page, ordinal: number, mapOccurrence: Locator) {
+  const posts: { status: number; serialized: boolean; privateNoStore: boolean; json: boolean }[] = [];
+  const pageErrors = new Set<string>();
+  const observeError = (error: Error) => {
+    const known = ['Archive viewer changed', 'Archive sender changed', 'Invalid archive command'];
+    if (pageErrors.size < 8)
+      pageErrors.add(
+        known.includes(error.message) ? error.message : error.name === 'SyntaxError' ? 'invalid-json' : 'other',
+      );
+  };
+  page.on('pageerror', observeError);
+  return {
+    inspect(response: Response) {
+      const headers = response.headers();
+      posts.push({
+        status: response.status(),
+        serialized: headers['x-tss-serialized'] === 'true',
+        privateNoStore: headers['cache-control'] === 'private, no-store',
+        json: headers['content-type']?.split(';')[0] === 'application/json',
+      });
+    },
+    async record(stage: string, matched: boolean) {
+      const synchronized = await settledWithin(
+        stack.syncKernelRequests().then(() => true),
+        2_000,
+      ).catch(() => false);
+      const native = stack
+        .kernelRequests()
+        .flatMap(({ fixtureRequest, url, method, responseStatus, archiveProgress }) => {
+          const operation = archiveProgressOperation(method, url.split('?')[0]!);
+          if (fixtureRequest || operation === null) return [];
+          const { ordinals, ...result } = archiveProgress?.result ?? {};
+          return [
+            {
+              operation,
+              method,
+              status: responseStatus ?? null,
+              response: archiveProgress
+                ? {
+                    ...archiveProgress,
+                    result: archiveProgress.result && {
+                      ...result,
+                      matchingOrdinal: ordinals?.includes(ordinal) ?? null,
+                    },
+                  }
+                : null,
+            },
+          ];
+        })
+        .slice(-8);
+      const ui = await settledWithin(
+        (async () => {
+          const noticeKeys = [
+            'preparing',
+            'ready',
+            'uncertain',
+            'recoverable',
+            'refused',
+            'expired',
+            'oversize',
+            'cancelled',
+            'removed',
+          ] as const;
+          const notices = await Promise.all(
+            noticeKeys.map(async (name) =>
+              (await page
+                .getByRole('status')
+                .filter({ hasText: await message('en', `library_archive_progress_${name}`) })
+                .first()
+                .isVisible())
+                ? name
+                : null,
+            ),
+          );
+          const controls = {
+            chooser: page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
+            occurrences: page.getByRole('region', {
+              name: await message('en', 'library_archive_progress_occurrences'),
+              exact: true,
+            }),
+            coverage: page.getByRole('region', {
+              name: await message('en', 'library_archive_recovery_coverage_title'),
+              exact: true,
+            }),
+            inspect: page.getByRole('button', {
+              name: await message('en', 'library_archive_progress_inspect'),
+              exact: true,
+            }),
+            retry: page.getByRole('button', {
+              name: await message('en', 'library_archive_progress_retry'),
+              exact: true,
+            }),
+            mapOccurrence,
+          };
+          const visible = await Promise.all(
+            Object.entries(controls).map(async ([name, locator]) => {
+              const count = await locator.count();
+              return [
+                name,
+                {
+                  count,
+                  visible: await locator.first().isVisible(),
+                  enabled: count === 1 ? await locator.isEnabled() : null,
+                },
+              ];
+            }),
+          );
+          return {
+            controls: Object.fromEntries(visible),
+            notices: notices.filter(Boolean),
+            unavailable: await page
+              .getByRole('status')
+              .filter({ hasText: await message('en', 'library_archive_unavailable') })
+              .first()
+              .isVisible(),
+            empty: await page
+              .getByText(await message('en', 'library_archive_progress_empty'), { exact: true })
+              .isVisible(),
+          };
+        })(),
+        2_000,
+      ).catch(() => undefined);
+      const observation = {
+        recovery: 'progress',
+        stage,
+        matched,
+        posts,
+        readerSynchronized: synchronized === true,
+        native,
+        ui: ui ?? null,
+        pageErrors: [...pageErrors],
+      };
+      console.info('Native Library Archive Progress upload boundary', observation);
+      await writeArchiveProvenance(observation, resolve(evidence, 'progress-boundary.json'));
+      if (!matched)
+        await writeArchiveProvenance({ outcome: 'incomplete', phase: 'uploading-recovery-archive', observation });
+    },
+    stop: () => page.off('pageerror', observeError),
+  };
+}
+
 async function uploadRecoveryArchive(
   page: Page,
   archivePath: string,
@@ -605,10 +751,13 @@ async function uploadRecoveryArchive(
   chooser: Locator,
   records: readonly Locator[],
   entryOrdinals?: EntryOrdinals,
+  progressOrdinal?: number,
 ) {
   const responses: number[] = [];
   const entry = entryOrdinals ? entryUploadObservation(page, entryOrdinals, records) : undefined;
-  const stopObserving = observeArchiveServerPosts(page, responses, entry?.inspect);
+  const progress =
+    progressOrdinal === undefined ? undefined : progressUploadObservation(page, progressOrdinal, records[0]!);
+  const stopObserving = observeArchiveServerPosts(page, responses, entry?.inspect ?? progress?.inspect);
   const deadline = performance.now() + 60_000;
   const remaining = () => Math.max(1, Math.ceil(deadline - performance.now()));
   const enabledChooser = chooser.and(page.locator('input[type="file"]:enabled:visible'));
@@ -624,7 +773,7 @@ async function uploadRecoveryArchive(
     await Promise.all(records.map((record) => record.waitFor({ state: 'visible', timeout: remaining() })));
     matched = true;
   } catch (error) {
-    if (entry) throw error;
+    if (entry || progress) throw error;
     await settledWithin(stack.syncKernelRequests(), 2_000).catch(() => undefined);
     const observation = {
       recovery,
@@ -642,6 +791,10 @@ async function uploadRecoveryArchive(
     if (entry) {
       entry.stop();
       observation = await entry.record(stage, matched).catch(() => undefined);
+    }
+    if (progress) {
+      progress.stop();
+      await progress.record(stage, matched).catch(() => undefined);
     }
   }
   if (entryOnly && entry) {
@@ -1016,6 +1169,8 @@ async function restoreOwnerLibrary() {
     'progress',
     page.getByLabel(await message('en', 'library_archive_progress_file'), { exact: true }),
     [mapOccurrence],
+    undefined,
+    sessionOrdinal,
   );
   await mapOccurrence.click();
   await page.getByLabel(await message('en', 'library_archive_progress_subject')).fill(prepared.subjectId);
