@@ -3272,6 +3272,13 @@ Cost per operation:
 
 ## Media claims
 
+Before a discussion thread exists, `POST /v1/media` accepts `newThread: { boardId, idempotencyKey }` for its
+opening image. The credential needs the `media:create` scope. Reservation and replay use current
+`thread:create` authority on that discussion Board, including its visibility and Realm participation checks.
+Each reservation records that Board and the future thread identity derived from the authenticated account and
+thread key. The initial claim requires the same Board, thread and uploader. Older pending reservations without a
+recorded Board require a fresh reservation for initial thread creation. Existing post claims can still be revised.
+
 Decision: `mediaParentSnapshot` races checkout, transaction and partition reads, callbacks and cleanup against the
 original request deadline. A late checkout dispatches no SQL; expiry skips queued rollback and discards the client.
 Successful read-only repeatable-read snapshots still commit against the same current-disclosure checks.

@@ -254,6 +254,7 @@ export async function reserveMedia(
   const newThread = 'newThread' in input ? input.newThread : undefined;
   if (Boolean(newThread) !== Boolean(newThreadTarget)) throw new TypeError('Invalid new-thread media target');
   if (newThread) {
+    if (!owner.scopes.includes('media:create')) throw new GrantDeniedError();
     requestKey(newThread.idempotencyKey);
     if (newThreadTarget!.boardId !== newThread.boardId) throw new TypeError('Invalid new-thread board');
   }
@@ -297,13 +298,12 @@ export async function reserveMedia(
   let boardRealmId: string | null = null;
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let boardRead: AccessCheck | undefined;
-  let threadCreate: AccessCheck | undefined;
   let knowledgeUpdate: AccessCheck | undefined;
   const board = newThreadTarget ? { route: route(newThreadTarget.boardId), id: newThreadTarget.boardId } : undefined;
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: realm ? 'realm:manage' : 'media:create',
+    action: board ? 'thread:create' : realm ? 'realm:manage' : 'media:create',
     parent: {
       resource: knowledge ? ownerResource : (board ?? { route: r, id: containerId }),
       async validate(client, time) {
@@ -322,10 +322,10 @@ export async function reserveMedia(
           const partition = await readPartition(client, partitionOf(board.route));
           if (!partition || partition.writeState === 'moved') return false;
           const current = await mediaParentBoard(client, board.id);
+          if (current.purpose !== 'discussion') return false;
           if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
             throw new GrantDeniedError();
-          if (current.visibility !== 'published' && !(await boardRead!(client, time))) return false;
-          return threadCreate!(client, time);
+          return current.visibility === 'published' || (await boardRead!(client, time));
         }
         const current = await mediaParentChain(client, containerId);
         if (current.length !== preparedChain.length) return false;
@@ -383,10 +383,6 @@ export async function reserveMedia(
       if (avatar || realm) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
-          pool: dependencies.pool,
-          deadline: context.deadline,
-        });
-        threadCreate = await accessCheck(dependencies.access, actor, 'thread:create', board, {
           pool: dependencies.pool,
           deadline: context.deadline,
         });
@@ -480,6 +476,7 @@ export async function reserveMedia(
         container_id: containerId,
         uploader_id: owner.accountId,
         reservation_request_id: context.idempotencyKey,
+        reservation_board_id: board?.id ?? null,
         purpose: body.purpose,
         media_type: body.mediaType,
         byte_count: body.byteCount,

@@ -5,7 +5,7 @@ WITH input AS NOT MATERIALIZED (
          :authorization_resource_id::uuid AS authorization_resource_id, :new_thread::boolean AS new_thread
 ), locked AS MATERIALIZED (
   SELECT m.route, m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
-         m.erased, m.collection_pending, m.taken_down, m.claimed_at, m.claimed_item_id
+         m.erased, m.collection_pending, m.taken_down, m.claimed_at, m.claimed_item_id, m.reservation_board_id
   FROM content.media m CROSS JOIN input i
   WHERE m.route = i.route AND m.media_id = ANY(i.media_ids)
   ORDER BY m.media_id
@@ -23,10 +23,12 @@ WITH input AS NOT MATERIALIZED (
       JOIN content.thread t ON t.route = i.route AND t.thread_id = p.thread_id
       WHERE p.route = i.route AND p.post_id = i.item_id
         AND (
-          (i.new_thread AND i.container_id = p.thread_id AND i.authorization_resource_id = t.board_id)
+          (i.new_thread AND i.container_id = p.thread_id AND i.authorization_resource_id = t.board_id
+            AND m.reservation_board_id = t.board_id)
           OR
           (NOT i.new_thread AND i.container_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
-            AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id))
+            AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
+            AND (m.reservation_board_id IS NULL OR m.reservation_board_id = t.board_id))
         )
         AND p.availability = 'available' AND p.visibility <> 'taken_down' AND r.availability = 'available'
     )
