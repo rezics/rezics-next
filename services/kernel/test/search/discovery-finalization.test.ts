@@ -6,7 +6,10 @@ import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts
 import { createPool } from '../../src/database/pool.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { discoveryFinalizationTrace } from '../../src/search/discovery-finalization-trace.ts';
+import {
+  discoveryFailureObservation,
+  discoveryFinalizationTrace,
+} from '../../src/search/discovery-finalization-trace.ts';
 import { resolveDiscoveryOwnerAdapters } from '../../src/search/discovery-owner-registry.ts';
 import {
   admitSearchTurn,
@@ -19,6 +22,7 @@ import {
   searchTurnMetadataProducers,
 } from '../../src/search/generations.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
+import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
@@ -75,6 +79,7 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     // Omitted homes have no rows and cannot pass the full generation's inventory check.
     await pool.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND partition_no >= $2', [prefix, homes]);
     const owners = ['accounts', 'collection', 'review', 'semantic', 'space'];
+    let heldReview = false;
     for (let turn = 0; turn < 16; turn++) {
       const counts = await pool.query<{ owner: string; certified: number }>(
         `SELECT owner,count(*) FILTER (WHERE complete AND certified)::int AS certified FROM search.discovery_population
@@ -83,8 +88,34 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       );
       expect(counts.rows.map((row) => row.owner)).toEqual(owners);
       if (counts.rows.every((row) => row.certified === homes)) break;
-      await advanceDiscovery(options);
+      if (!heldReview && (await discoveryGenerations(pool, prefix))[0]?.state === 'reconciling') {
+        const review = resolved.metadataProducers.review!;
+        await expect(
+          advanceDiscovery({
+            ...options,
+            metadataProducers: {
+              ...resolved.metadataProducers,
+              review: {
+                ...review,
+                page: (partition, ...args) => {
+                  if (partition === 0) throw new DiscoveryReviewFrontierError();
+                  return review.page(partition, ...args);
+                },
+              },
+            },
+          }),
+        ).rejects.toBeInstanceOf(DiscoveryReviewFrontierError);
+        const progress = await pool.query<{ held: boolean; later: boolean }>(
+          `SELECT bool_or(partition_no=0 AND NOT certified AND NOT native_complete) AS held,
+                  bool_or(partition_no>=8 AND certified) AS later
+           FROM search.discovery_population WHERE prefix=$1 AND generation=$2 AND owner='review'`,
+          [prefix, generation],
+        );
+        expect(progress.rows[0]).toEqual({ held: true, later: true });
+        heldReview = true;
+      } else await advanceDiscovery(options);
     }
+    expect(heldReview).toBe(true);
     await expect(advanceDiscovery(options)).rejects.toThrow('Discovery population partitions are incomplete');
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
@@ -103,7 +134,7 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
         });
         return { checks, native: observed!.native };
       } catch (error) {
-        trace.report({ outcome: 'error', error: String(error) });
+        trace.report({ outcome: 'error', error: discoveryFailureObservation(error) });
         throw error;
       } finally {
         turn.close();

@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { DiscoveryReviewInvalidationPendingError } from '../../src/search/operation-outcomes.ts';
+import { ReviewDiscoverySourceError } from '../../src/content/review-discovery.ts';
+import { discoveryFailureObservation } from '../../src/search/discovery-finalization-trace.ts';
+import {
+  DiscoveryReviewFrontierError,
+  DiscoveryReviewInvalidationPendingError,
+} from '../../src/search/operation-outcomes.ts';
 import { classifyDiscoveryMetadataProducers } from '../../src/search/discovery-readiness.ts';
 import type { Pool } from 'pg';
 import {
@@ -315,6 +320,13 @@ test('Review population waits for invalidation and rejects a changed signed cut'
     routeKey: new Uint8Array(32),
     access: {} as never,
     reviewSource: {
+      read: async () => {
+        throw new ReviewDiscoverySourceError(
+          state,
+          state === 'preparing' ? 'lifecycle-invalidation' : 'private detail',
+          'empty-position',
+        );
+      },
       pageWithCut: async () => ({
         state,
         position: 7n,
@@ -330,11 +342,26 @@ test('Review population waits for invalidation and rejects a changed signed cut'
   expect(await review.readiness()).toBe('preparing');
   expect(await review.readiness('population')).toBe('ready');
   await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryReviewInvalidationPendingError);
+  await expect(review.position(0)).rejects.toBeInstanceOf(DiscoveryReviewInvalidationPendingError);
   state = 'changed';
-  await expect(review.page(0, null, null, 100)).rejects.toHaveProperty('constructor', DiscoveryProducerCoverageError);
+  await expect(review.page(0, null, null, 100)).rejects.toBeInstanceOf(DiscoveryReviewFrontierError);
+  const refusal = await review.read(0, []).catch((error: unknown) => error);
+  expect(refusal).toBeInstanceOf(DiscoveryReviewFrontierError);
+  expect(discoveryFailureObservation(refusal)).toEqual({
+    name: 'DiscoveryReviewFrontierError',
+    source: 'ReviewDiscoverySourceError',
+    state: 'changed',
+    observation: 'empty-position',
+    missing: undefined,
+  });
   await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryPopulationCutChangedError);
   state = 'unavailable';
   expect(await review.readiness('population')).toBe('unavailable');
+  expect(discoveryFailureObservation(await review.read(0, []).catch((error: unknown) => error))).toMatchObject({
+    name: 'DiscoveryReviewFrontierError',
+    state: 'unavailable',
+    observation: 'empty-position',
+  });
 });
 
 test.each([true, false])('metadata reconciliation retains the raw frontier (%s)', async (statusOnly) => {

@@ -1,3 +1,4 @@
+import { discoveryFailureObservation } from './discovery-finalization-trace.ts';
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import type { ReviewDiscoverySource } from '../content/index.ts';
 import { discardConnection } from '../database/pool.ts';
@@ -641,7 +642,11 @@ export function startDiscoveryIndexing(options: {
     const { queued, result } = queueSearchTurn(running, context, lifetime.signal, step);
     running = queued.catch((error) => {
       delay = options.intervalMs ?? 100;
-      if (!stopped) console.error('Discovery maintenance failed', error);
+      if (!stopped)
+        console.error(
+          'Discovery maintenance failed',
+          process.env.REZICS_MIXED_HOME_TIMING === '1' ? JSON.stringify(discoveryFailureObservation(error)) : error,
+        );
     });
     return result;
   };
