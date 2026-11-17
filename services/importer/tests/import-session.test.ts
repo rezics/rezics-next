@@ -122,6 +122,70 @@ test('same-file live owners exclude another connection while independent sources
   }
 });
 
+test('shared-session operations return a preadmitted owner intact after contention and cancellation', async () => {
+  const path = ':memory:';
+  const session = new ImportSession(path);
+  const f = fake();
+  const entered = defer();
+  const release = defer();
+  const cancel = new AbortController();
+  const origin = 'https://first.example';
+  const digest = 'a'.repeat(64);
+  const options = { path, session, transport: f.transport };
+  const a = new Importer({
+    ...options,
+    destination: { origin },
+    afterBulkSuccess() {
+      entered.resolve();
+      return release.promise;
+    },
+  });
+  const b = new Importer({ ...options, destination: { origin: 'https://second.example' } });
+  try {
+    const owner = session.admit(registration.source, origin);
+    if (owner === 'busy' || 'kind' in owner) throw new Error('Expected preadmission');
+    await expect(b.runRecords(registration, records(row()))).rejects.toMatchObject({ code: 'mismatch' });
+    const pending = a.runRecords(registration, records(row()), { signal: cancel.signal });
+    try {
+      await entered.promise;
+      const active = session.store.activeRun(registration.source);
+      const requests = f.requests.length;
+      const fences = f.fenceCalls;
+      expect(await b.runRecords(registration, records(row()))).toMatchObject({
+        status: 'busy',
+        diagnostic: 'Source has a live coordinator',
+      });
+      expect((await a.resolveObservation(registration.source, digest, digest)).status).toBe('busy');
+      expect((await b.resolveClassification(registration.source, digest, digest)).status).toBe('busy');
+      expect(() => session.reopen(owner)).toThrow('Import ownership is unavailable');
+      expect(() => session.assertHeld(owner)).toThrow('Import ownership is unavailable');
+      expect(() => session.release(owner)).toThrow('Import ownership is unavailable');
+      await b.close();
+      cancel.abort();
+      expect((await a.resumeExisting(registration)).status).toBe('busy');
+      expect(session.heldOwnership(registration.source)).toBe(owner);
+      expect(session.store.activeRun(registration.source)).toEqual(active);
+      expect(f.requests).toHaveLength(requests);
+      expect(f.fenceCalls).toBe(fences);
+    } finally {
+      release.resolve();
+      await pending;
+    }
+    expect((await pending).status).toBe('interrupted');
+    expect(session.heldOwnership(registration.source)).toBe(owner);
+    expect((await a.resumeExisting(registration)).status).toBe('committed');
+    expect(session.store.source(registration.source).count).toBe(1);
+    expect((await a.resolveObservation(registration.source, digest, digest)).status).toBe('unknown');
+    expect((await a.resolveClassification(registration.source, digest, digest)).status).toBe('unknown');
+    expect(session.heldOwnership(registration.source)).toBe(owner);
+    session.release(owner);
+    expect(session.readOwner(registration.source)).toBeNull();
+  } finally {
+    await b.close();
+    await a.close();
+  }
+});
+
 test('guard release permits capability rotation and fences old RunStore handles', () => {
   const dir = directory(),
     a = new ImportSession(`${dir}/state.sqlite`),

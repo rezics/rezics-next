@@ -585,9 +585,9 @@ test('crash after API acknowledgement replays stable keys after durable reopen w
 test('concurrent identical same-source runs cannot duplicate commands or lose committed rows', async () => {
   await withLedger(async (h) => {
     const dump = await fixture();
-    const results = await Promise.all([h.run(dump), h.run(dump)]);
-    expect(results.some((r) => r.status === 'committed')).toBe(true);
-    expect(results.every((r) => ['committed', 'busy'].includes(r.status))).toBe(true);
+    const [first, second] = await Promise.all([h.run(dump), h.run(dump)]);
+    committed(first, { new: keys });
+    expect(second.status).toBe('busy');
     expect((await h.driver.observe(source)).rows.map((r) => r.recordKey)).toEqual(keys);
     const byRecord = new Map<string, Set<string>>();
     for (const c of h.commands()) {
@@ -596,6 +596,7 @@ test('concurrent identical same-source runs cannot duplicate commands or lose co
       byRecord.get(identity)!.add(c.idempotencyKey);
     }
     expect([...byRecord.values()].every((ids) => ids.size === 1)).toBe(true);
+    expect(h.commands()).toHaveLength(byRecord.size);
     expect(h.effects.size).toBe(byRecord.size);
     committed(await h.run(dump), { unchanged: keys });
   });
