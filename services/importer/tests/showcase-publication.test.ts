@@ -38,6 +38,7 @@ import {
 import { prepareShowcaseTagParentPublications, prepareShowcaseTags } from '../src/showcase-tags.ts';
 import { finalizeSeedResult, formatSeedArtifactHandoff, formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
+import { seedVndbPublicationFixture } from './showcase-vndb-publication-fixture.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
@@ -1704,17 +1705,6 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
           ),
         },
       });
-    const tables: CrossMediaTables = {
-      async *rows(provider, table) {
-        if (provider !== 'vndb') return;
-        if (table === 'vn_titles') {
-          yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
-          yield { id: 'v1', lang: 'en', official: 't', title: 'Steins;Gate', latin: null };
-        }
-        if (table === 'vn') yield { id: 'v1', olang: 'ja', alias: null };
-        if (table === 'entry_meta') yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
-      },
-    };
     const metadata = sourceRecordMetadataFixture();
     const port = {
       async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
@@ -1755,16 +1745,11 @@ for (const siblingDecision of ['accepted', 'undecided'] as const) {
       },
     } as unknown as CrossMediaPort;
     try {
-      const plan = await planCrossMediaSeed(tables);
+      const { plan, result } = await seedVndbPublicationFixture(
+        join(directory, 'import.sqlite'),
+        captureShowcaseCommands(port, journal),
+      );
       expect(plan.records.vndb.map((record) => record.key)).toEqual(['v1']);
-      const result = await seedShowcaseVndbReleases({
-        tables,
-        plan,
-        path: join(directory, 'import.sqlite'),
-        port: captureShowcaseCommands(port, journal),
-        destination: { origin: 'https://fixture.test' },
-        extras: { providers: ['vndb'], mediaDeadlineMs: 0 },
-      });
       const names = [...candidates.values()]
         .filter((candidate) => candidate.statement.property.id === 'schema:name')
         .sort((left, right) => left.id.localeCompare(right.id));
