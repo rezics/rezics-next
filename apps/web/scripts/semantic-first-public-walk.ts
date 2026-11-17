@@ -2,7 +2,7 @@
 /**
  * First-public Semantic catalogue and Zone walk. Run under `dev-stack.ts walk --first-public-web`.
  * Uses the admitted catalogue editor and authors the fixture through the native API.
- * Every row retains native writes, independent readback and mounted pages.
+ * The full walk retains native writes, independent readback and mounted pages.
  */
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   firstPublicWebWalk,
+  readLocalDeveloperAccountId,
   semanticWalkClientRegistration,
   startSeededFrontends,
 } from '../../../services/auth/scripts/dev-stack.ts';
@@ -20,6 +21,7 @@ import {
   cited,
   citedDocument,
   citedQuantity,
+  createAndReadNativeBook,
   createContext,
   createStaticZone,
   createSubject,
@@ -30,10 +32,12 @@ import {
   patchTerms,
   propose,
   publishZone,
+  readActiveDefinitions,
   readSubject,
   readZonePage,
   requireId,
   requireStatus,
+  resolveEditorAgent,
   restoreCandidate,
   restoreZone,
   retractStatement,
@@ -48,13 +52,19 @@ import {
   type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
 
-import { nativeWalkCall, type NativeObservation } from './semantic-first-public-request.ts';
+import {
+  kernelDeadlineTimings,
+  nativeWalkCall,
+  summarizeBoundaryRequest,
+  type NativeObservation,
+} from './semantic-first-public-request.ts';
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
-import { withWalkResources } from '../../../scripts/walk-stack.ts';
+import { walkStackLogPath, withWalkResources } from '../../../scripts/walk-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
+const editorEmail = 'developer@rezics.test';
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
@@ -131,6 +141,14 @@ function describeProbe(probe: TypedProbe, expected: string): string {
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
   const client = semanticWalkClientRegistration();
   return nativeWalkAccessToken(stack, { email, password, clientId: client.clientId, scopes: client.scopes });
+}
+
+async function personaKeys(): Promise<{ password: string }> {
+  return JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+}
+
+async function seededEditorAgent(call: KernelCall, editor: string) {
+  return resolveEditorAgent(call, editor, requireId(await readLocalDeveloperAccountId(), 'seeded editor account'));
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -265,9 +283,7 @@ async function journey(
 }
 
 async function releasedDefinitions(session: Session): Promise<{ native: unknown; browser: unknown }> {
-  const active = await session.call('GET', '/v1/definitions/active');
-  requireStatus(active, 200, 'active definitions');
-  const digest = String(active.body.digest);
+  const { digest } = await readActiveDefinitions(session.call);
   const release = await session.call('GET', `/v1/definitions/releases/${encodeURIComponent(digest)}`);
   requireStatus(release, 200, 'release');
   const book = (
@@ -316,8 +332,67 @@ async function createAndRead(
   return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
-async function main() {
+async function runNativeBoundaries(stack: Stack, revision: string, stackLog: string) {
+  const trace: NativeObservation[] = [];
+  let editor: Promise<string> | undefined;
+  const getEditor = () =>
+    (editor ??= personaKeys()
+      .catch(() => {
+        throw new Error('seeded editor keys could not be read');
+      })
+      .then(({ password }) => accessToken(stack, editorEmail, password)));
+  const checks = [
+    ['active-definitions', readActiveDefinitions],
+    [
+      'book-create-read',
+      async (call) => createAndReadNativeBook(call, await getEditor(), `Walk boundary Book ${token}`),
+    ],
+    ['editor-agent', async (call) => seededEditorAgent(call, await getEditor())],
+  ] satisfies [string, (call: KernelCall) => Promise<unknown>][];
+  const results = [];
+  for (const [id, check] of checks) {
+    const offset = trace.length;
+    const started = Date.now();
+    const outcome = await check(nativeWalkCall(stack.kernel, trace)).then(
+      (native) => ({ status: 'Passing' as const, native }),
+      (error: unknown) => {
+        const request = trace.length > offset ? trace.at(-1) : undefined;
+        const failure =
+          request?.status !== undefined && request.status >= 300
+            ? `${request.method} ${new URL(request.url).pathname} returned HTTP ${request.status}`
+            : error instanceof SyntaxError
+              ? 'native response could not be decoded'
+              : (error instanceof Error ? error.message : 'native boundary failed').slice(0, 800);
+        return { status: 'Failing' as const, failure };
+      },
+    );
+    results.push({
+      id,
+      ...outcome,
+      ms: Date.now() - started,
+      requests: trace.slice(offset).map(summarizeBoundaryRequest),
+    });
+  }
+  const passing = results.filter(({ status }) => status === 'Passing').length;
+  const evidence = {
+    scope: 'native-boundaries',
+    revision,
+    utc: new Date().toISOString(),
+    results,
+    kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
+  };
+  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+  await writeFile(join(evidenceDir, 'native-boundaries.json'), `${JSON.stringify(evidence, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  console.log(`semantic native boundaries ${passing}/${checks.length}`);
+  if (passing !== checks.length) process.exitCode = 1;
+}
+
+async function main(nativeBoundaries: boolean) {
+  const walkId = walkAcceptanceId(process.env);
   if (
+    !walkId ||
     !firstPublicWebWalk() ||
     !walkAcceptanceId(process.env, 'native') ||
     !walkAcceptanceId(process.env, 'browser') ||
@@ -325,10 +400,13 @@ async function main() {
   )
     throw new Error('Use dev-stack.ts walk --first-public-web with native and browser acceptance');
 
+  const stack = stackOrigins();
+  const stackLog = walkStackLogPath(root, walkId);
+  const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
+  if (nativeBoundaries) return runNativeBoundaries(stack, revision, stackLog);
+
   return withWalkResources(async (own) => {
-    const stack = stackOrigins();
     await mkdir(join(evidenceDir, 'screenshots'), { recursive: true, mode: 0o700 });
-    const revision = (roundRevision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim());
     const readinessUrls = walkReadinessUrls(stack);
     const readiness = {
       jwks: await typedProbe(readinessUrls.jwks, 'identity'),
@@ -379,7 +457,7 @@ async function main() {
     let keys: { password: string } | undefined;
     let personaCause: string | undefined;
     try {
-      keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+      keys = await personaKeys();
     } catch (error) {
       personaCause ??= error instanceof Error ? error.message : String(error);
     }
@@ -387,7 +465,7 @@ async function main() {
     let editorCause: string | undefined;
     if (keys) {
       try {
-        editor = await accessToken(stack, 'developer@rezics.test', keys.password);
+        editor = await accessToken(stack, editorEmail, keys.password);
       } catch (error) {
         editorCause = error instanceof Error ? error.message : String(error);
       }
@@ -429,7 +507,7 @@ async function main() {
               ? {
                   async refreshEditor() {
                     if (editor && Date.now() - editorIssued < 240_000) return;
-                    const token = await accessToken(stack, 'developer@rezics.test', keys.password);
+                    const token = await accessToken(stack, editorEmail, keys.password);
                     editor = token;
                     session!.editor = token;
                     editorIssued = Date.now();
@@ -444,7 +522,7 @@ async function main() {
       if (editor && !frontendCause && keys) {
         try {
           const signIn = await session.member.newPage();
-          const accountEmail = 'developer@rezics.test';
+          const accountEmail = editorEmail;
           const returnTo = '/en/catalogue/new';
           const destination = new URL(returnTo, stack.web).href;
           let callbackAccepted = false;
@@ -505,7 +583,8 @@ async function main() {
               const email = signIn.locator('input[type="email"]');
               if (await email.count()) {
                 if ((await email.inputValue()) !== accountEmail) {
-                  if (!(await email.isEditable())) throw new Error('Auth presented a different readonly sign-in account');
+                  if (!(await email.isEditable()))
+                    throw new Error('Auth presented a different readonly sign-in account');
                   await email.fill(accountEmail);
                 }
                 accountConfirmed = true;
@@ -515,7 +594,8 @@ async function main() {
               await signIn.locator('form button[type="submit"]:enabled').first().click();
             }
             await signIn.waitForURL(destination, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-            if (!accountConfirmed || !callbackAccepted) throw new Error('Auth did not confirm the expected account and Web callback');
+            if (!accountConfirmed || !callbackAccepted)
+              throw new Error('Auth did not confirm the expected account and Web callback');
             await hydrated(signIn);
             await signIn.locator('#account-menu-button').waitFor({ state: 'visible', timeout: 30_000 });
           } finally {
@@ -859,10 +939,7 @@ async function main() {
         );
         results.push(
           await journey(session, 'statement-consent', async () => {
-            const identity = await call('GET', '/v1/accounts', { query: { handle: 'developer' } });
-            requireStatus(identity, 200, 'discover consent account agent');
-            const account = (identity.body.accounts as { subject?: { id?: string } | null }[])[0];
-            const target = requireId(account?.subject?.id, 'developer account agent');
+            const { id: target } = await seededEditorAgent(call, editor);
             const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
             const property = 'rezics:penNameOf';
             const proposal = await propose(call, editor, person.id, {
@@ -1015,6 +1092,7 @@ async function main() {
         ? { id: slowest.id, ms: slowest.ms, owner: slowest.failure?.owner, detail: slowest.failure }
         : null,
       results,
+      kernelDeadlineTimings: await kernelDeadlineTimings(stackLog, trace),
     };
     await writeFile(join(evidenceDir, 'evidence.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
     await recordInventory(revision, summary.utc, results);
@@ -1028,10 +1106,20 @@ async function main() {
 }
 
 if (import.meta.main) {
+  const args = process.argv.slice(2);
+  const nativeBoundaries = args.length === 2 && args[0] === '--scope' && args[1] === 'native-boundaries';
+  if (args.length && !nativeBoundaries) {
+    console.error('Usage: semantic-first-public-walk.ts [--scope native-boundaries]');
+    process.exit(1);
+  }
   try {
-    await main();
+    await main(nativeBoundaries);
   } catch (error) {
     const actual = error instanceof Error ? error.message : String(error);
+    if (nativeBoundaries) {
+      console.error(actual);
+      process.exit(1);
+    }
     const utc = new Date().toISOString();
     const revision = roundRevision || (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
     const completed = new Set(roundResults.map((row) => row.id));
