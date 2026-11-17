@@ -139,6 +139,39 @@ test('projectBatch keeps the checkpoint when apply fails and stops where readBat
   expect(await checkpoint(consumer, partition)).toBe(String(position));
 });
 
+test('projectBatch reads progress from a competing checkpoint insert', async () => {
+  const partition = freshPartition();
+  const consumer = freshConsumer();
+  const first = await append(partition);
+  const second = await append(partition);
+  const locker = await admin.connect();
+  let batch: ReturnType<typeof projectBatch> | undefined;
+  try {
+    await locker.query('BEGIN');
+    await locker.query(
+      `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+       SELECT partition_no, $2, epoch, $3 FROM core.partition WHERE partition_no = $1`,
+      [partition, consumer, first],
+    );
+    batch = projectBatch(pool, { consumer, partition, apply: async () => {} });
+    void batch.catch(() => {});
+    await until(async () => {
+      const { rows } = await locker.query<{ blocked: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM pg_locks WHERE NOT granted AND pg_backend_pid() = ANY(pg_blocking_pids(pid))
+         ) AS blocked`,
+      );
+      return rows[0]!.blocked;
+    }, 2000);
+    await locker.query('COMMIT');
+    expect(await batch).toEqual({ status: 'read', envelopes: 1, position: second });
+  } finally {
+    await locker.query('ROLLBACK');
+    locker.release();
+    await batch?.catch(() => {});
+  }
+});
+
 test('relays run every partition past its checkpoint until it is caught up', async () => {
   const consumer = freshConsumer();
   const [long, short] = [freshPartition(), freshPartition()];
