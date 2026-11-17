@@ -72,7 +72,7 @@ async function mixedManifest(
   await writeFile(
     path,
     JSON.stringify({
-      version: 2,
+      version: 1,
       source: 'openlibrary',
       members: [
         { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
