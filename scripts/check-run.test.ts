@@ -360,17 +360,17 @@ test('native shared-tree capture uses its committed checkpoint while newer edits
 test('committed capture with returns retains caller permissions across a different checkout umask', async () => {
   const fixture = candidate();
   const sourcePath = join(fixture.root, 'src/input.ts');
+  const executablePath = join(fixture.root, 'src/probe.sh');
   const defaultMode = 0o666 & ~process.umask();
+  const defaultExecutableMode = 0o777 & ~process.umask();
   chmodSync(sourcePath, defaultMode === 0o640 ? 0o644 : 0o640);
+  writeFileSync(executablePath, '#!/bin/sh\nexit 0\n');
+  chmodSync(executablePath, defaultExecutableMode === 0o750 ? 0o755 : 0o750);
+  git(fixture.root, 'add', 'src/probe.sh');
+  git(fixture.root, 'commit', '--quiet', '-m', 'add executable source');
+  const revision = git(fixture.root, 'rev-parse', 'HEAD');
   const returns = ['.temp/result.json'];
-  const snapshot = await prepareCandidateSnapshot(
-    fixture.root,
-    fixture.revision,
-    undefined,
-    returns,
-    undefined,
-    'committed',
-  );
+  const snapshot = await prepareCandidateSnapshot(fixture.root, revision, undefined, returns, undefined, 'committed');
   try {
     const original = await currentCheckSourceManifest(fixture.root, returns);
     expect(snapshot.sourceHash).toBe(original.sourceSha256);
