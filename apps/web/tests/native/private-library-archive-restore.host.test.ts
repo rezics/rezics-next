@@ -905,7 +905,9 @@ async function restoreOwnerLibrary() {
     timeout: 60_000,
   });
   await labelResult.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
-  const labelMapping = JSON.parse(await labelResult.locator('pre').innerText());
+  const labelEvidence = labelResult.locator('pre');
+  const labelMapping = JSON.parse((await labelEvidence.textContent()) ?? 'null');
+  const visibleLabelMapping = JSON.parse(await labelEvidence.innerText());
   expect(labelMapping).toMatchObject({
     ordinal: labelOrdinal,
     section: 'labels',
@@ -923,7 +925,14 @@ async function restoreOwnerLibrary() {
   const { labels: currentLabels, next } = await readOwnerLabelPage(prepared.labelName);
   const renamedSourceLabel = currentLabels.find((label) => label.id === prepared.labelId);
   const restoredLabel = currentLabels.find((label) => label.id === restoredLabelId);
+  let labelDisagreement: object | undefined;
   if (restoredLabel?.name !== prepared.labelName) {
+    await currentLabel.getByText(await message('en', 'library_archive_entry_evidence'), { exact: true }).click();
+    const displayed = JSON.parse((await currentLabel.locator('pre').textContent()) ?? 'null') as {
+      label?: { id?: unknown; name?: unknown; revision?: unknown };
+    } | null;
+    const displayedId = displayed?.label?.id;
+    const appearsInPrefix = typeof displayedId === 'string' && currentLabels.some((label) => label.id === displayedId);
     const query = new URLSearchParams({ labelId: restoredLabelId, view: 'FULL', limit: '1' });
     const point = await settledWithin(
       stack
@@ -949,9 +958,16 @@ async function restoreOwnerLibrary() {
         }),
       2_000,
     ).catch(() => undefined);
-    await writeArchiveProvenance({
+    labelDisagreement = {
       outcome: 'incomplete',
       phase: 'owner-label-prefix-readback',
+      browser: {
+        visibleReceiptMatchesText: visibleLabelMapping?.labelId === restoredLabelId,
+        currentMatchesReceipt: displayedId === restoredLabelId,
+        currentAppearsInPrefix: appearsInPrefix,
+        currentNameMatches: displayed?.label?.name === prepared.labelName,
+        currentRevision: typeof displayed?.label?.revision === 'number' ? displayed.label.revision : null,
+      },
       prefix: {
         status: 200,
         count: currentLabels.length,
@@ -964,10 +980,13 @@ async function restoreOwnerLibrary() {
         })),
       },
       exactOwnerPoint: point ?? 'unavailable',
-    });
+    };
+    await writeArchiveProvenance(labelDisagreement);
   }
-  expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
-  expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+  const assertLabelReadbacks = () => {
+    expect(renamedSourceLabel).toEqual({ ...renameReceipt, name: renamedLabelName });
+    expect(restoredLabel).toMatchObject({ id: restoredLabelId, name: prepared.labelName });
+  };
 
   const entryRead = await json<{ libraryEntry: { subjectId: string; state: string } }>(
     await stack.kernel(`/v1/libraryEntries/${prepared.subjectId}`, undefined, 'alice'),
@@ -977,6 +996,7 @@ async function restoreOwnerLibrary() {
   expect(entryRead.libraryEntry).toMatchObject({ subjectId: prepared.subjectId, state: prepared.stateId });
 
   if (!collection) {
+    assertLabelReadbacks();
     await writeArchiveProvenance({
       outcome: 'passed',
       phase: 'entry-readback',
@@ -1035,6 +1055,8 @@ async function restoreOwnerLibrary() {
   );
   expect(sessions.progressSessions.some((row) => row.id === prepared.sessionId)).toBe(true);
   expect(sessions.progressSessions.length).toBeGreaterThan(1);
+  if (labelDisagreement)
+    await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
   const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
@@ -1062,6 +1084,7 @@ async function restoreOwnerLibrary() {
     state: 'visible',
   });
 
+  assertLabelReadbacks();
   await writeArchiveProvenance({
     outcome: 'passed',
     stack: { kernel: stack.kernelOrigin, web: stack.web },
