@@ -34,14 +34,21 @@ const sender = (request: Request) => {
   const url = new URL(request.url);
   return url.origin + url.pathname;
 };
+type StoredCapture = Omit<Capture, 'authorization'> & {
+  authorization: string | [header: string, compressedClaims: string, signature: string];
+};
+
 const domain = 'rezics.subject-label-step.v1';
 const tokenLimit = 3200;
+const ivBytes = 12;
+const tagBytes = 16;
+const text = new TextEncoder();
 
 // Reuse the deployment's private web credential to protect client-carried command data. No server state,
 // outcome lookup or new key configuration is introduced; rotation retires existing continuations.
 async function encryptionKey(env: Partial<SessionEnv>) {
   if (!env.WEBSITE_CLIENT_KEY) throw new Error('Missing web credential');
-  const bytes = new TextEncoder().encode(`${domain}\n${env.WEBSITE_CLIENT_KEY}`);
+  const bytes = text.encode(`${domain}\n${env.WEBSITE_CLIENT_KEY}`);
   return crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', bytes), 'AES-GCM', false, [
     'encrypt',
     'decrypt',
@@ -55,21 +62,41 @@ const encode = (bytes: Uint8Array) =>
 const decode = (token: string) =>
   Uint8Array.from(atob(token.replace(/-/g, '+').replace(/_/g, '/')), (value) => value.charCodeAt(0));
 function context(env: Partial<SessionEnv>) {
-  return new TextEncoder().encode(JSON.stringify([domain, env.AUTH_ISSUER, env.API_RESOURCE, env.WEBSITE_CLIENT_ID]));
+  return text.encode(JSON.stringify([domain, env.AUTH_ISSUER, env.API_RESOURCE, env.WEBSITE_CLIENT_ID]));
 }
+async function captureBytes(capture: Capture): Promise<Uint8Array<ArrayBuffer>> {
+  // Leave room for the next step's returned identity and the ordinary form's other fields.
+  const limit = capture.kind === 'create' ? tokenLimit - 200 : tokenLimit;
+  const plaintextLimit = Math.floor((limit * 3) / 4) - ivBytes - tagBytes;
+  const original = text.encode(JSON.stringify(capture));
+  if (original.length <= plaintextLimit) return original;
+
+  // Compress the website JWT claims on their own, away from the user-supplied Label name.
+  // The continuation still reconstructs the exact signed credential when Auth refreshes the session.
+  const [, header, claims, signature] =
+    /^(Bearer [A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(capture.authorization) ?? [];
+  if (!header || !claims || !signature) throw new Error('Label continuation exceeds form bound');
+  const bytes = decode(claims);
+  if (encode(bytes) !== claims) throw new Error('Label continuation exceeds form bound');
+
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  const compressed = encode(new Uint8Array(await new Response(stream).arrayBuffer()));
+  const stored: StoredCapture = { ...capture, authorization: [header, compressed, signature] };
+  const compact = text.encode(JSON.stringify(stored));
+  if (compact.length > plaintextLimit) throw new Error('Label continuation exceeds form bound');
+  return compact;
+}
+
 async function seal(capture: Capture, env: Partial<SessionEnv>): Promise<SubjectLabelStep> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = crypto.getRandomValues(new Uint8Array(ivBytes));
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: context(env) },
       await encryptionKey(env),
-      new TextEncoder().encode(JSON.stringify(capture)),
+      await captureBytes(capture),
     ),
   );
   const token = encode(new Uint8Array([...iv, ...ciphertext]));
-  // Leave room for the ordinary form's CSRF and intent fields under its existing transport bound.
-  if (token.length > (capture.kind === 'create' ? tokenLimit - 200 : tokenLimit))
-    throw new Error('Label continuation exceeds form bound');
   return {
     kind: capture.kind,
     subjectId: capture.subjectId,
@@ -83,11 +110,16 @@ async function open(token: string, env: Partial<SessionEnv>): Promise<Capture> {
   if (!/^[A-Za-z0-9_-]+$/.test(token) || token.length > tokenLimit) throw new Error('Invalid label continuation');
   const bytes = decode(token);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: bytes.slice(0, 12), additionalData: context(env) },
+    { name: 'AES-GCM', iv: bytes.slice(0, ivBytes), additionalData: context(env) },
     await encryptionKey(env),
-    bytes.slice(12),
+    bytes.slice(ivBytes),
   );
-  return JSON.parse(new TextDecoder().decode(plaintext)) as Capture;
+  const { authorization, ...capture } = JSON.parse(new TextDecoder().decode(plaintext)) as StoredCapture;
+  if (typeof authorization === 'string') return { ...capture, authorization };
+  const [header, compressedClaims, signature] = authorization;
+  const stream = new Blob([decode(compressedClaims)]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const claims = encode(new Uint8Array(await new Response(stream).arrayBuffer()));
+  return { ...capture, authorization: `${header}.${claims}.${signature}` };
 }
 
 /** Resolve a name once, before any write. Repeating a lost preparation response cannot repeat a write. */

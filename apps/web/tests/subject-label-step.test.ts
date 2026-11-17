@@ -7,6 +7,7 @@ import { applySubjectLabelMutation } from '../src/library/subject-labels.ts';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const labelId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
 const replacement = '0192f3a0-6c1e-7b2a-9d4e-000000000302';
+const assignmentId = '0192f3a0-6c1e-7b2a-9d4e-000000000303';
 const csrf = 'AAAAAAAAAAAAAAAAAAAAAA';
 const calls: { path: string; method: string; body: unknown; key: string | null; authorization: string | null }[] = [];
 let found = false;
@@ -35,7 +36,7 @@ const kernel = Bun.serve({
     }
     return kind === 'create'
       ? Response.json({ label: { id: labelId, revision: 1 } }, { status: 201 })
-      : Response.json({ assignment: { id: labelId, revision: 1 } });
+      : Response.json({ assignment: { id: assignmentId, revision: 1 } });
   },
 });
 afterAll(() => kernel.stop(true));
@@ -63,14 +64,14 @@ const request = (token = csrf) =>
       'X-CSRF-Token': token,
     },
   });
-const begin = () =>
+const begin = (name = ' Reading ') =>
   applySubjectLabelMutation(
     request(),
     env,
     {
       intent: 'create-and-assign',
       subjectId,
-      name: ' Reading ',
+      name,
       createKey: crypto.randomUUID(),
       idempotencyKey: crypto.randomUUID(),
     },
@@ -170,4 +171,54 @@ test('missing create key does not dispatch; uniqueness refusal never selects a r
   expect(await run(create)).toMatchObject({ ok: false, reason: 'conflict' });
   expect(calls.map((call) => call.method)).toEqual(['GET', 'POST']);
   closed = false;
+});
+
+test('a website JWT with a mounted scope catalogue fits both ordinary label continuation forms', async () => {
+  found = false;
+  calls.length = 0;
+  const scope =
+    'subject edition collection library_entry library_label account organization realm copy loan record report post board media'
+      .split(' ')
+      .flatMap((resource) =>
+        'read list create update assign delete review restore publish manage'
+          .split(' ')
+          .map((action) => `${resource}:${action}`),
+      )
+      .join(' ');
+  const segment = (data: unknown) => Buffer.from(JSON.stringify(data)).toString('base64url');
+  const header = segment({ alg: 'ES256', kid: 'test' });
+  const claims = segment({ sub: subjectId, client_id: 'rezics-website', scope });
+  credential = [header, claims, 'a'.repeat(86)].join('.');
+  const original = 'Bearer ' + credential;
+  const name = Array.from({ length: 100 }, (_, index) => String.fromCodePoint(0x1f300 + index)).join('');
+  try {
+    const create = continuation(await begin(name));
+    credential = 'renewed-token';
+    const submit = async (step: ReturnType<typeof continuation>) => {
+      const html = await subjectLabelStepForm(request(), step, csrf).text();
+      const token = /name="token" value="([^"]+)"/.exec(html)![1]!;
+      const body = new URLSearchParams({ intent: 'label-step', subjectId, token, csrf_token: csrf });
+      const post = request();
+      post.headers.delete('X-CSRF-Token');
+      return applySubjectLabelMutation(
+        new Request(post, { body }),
+        env,
+        { intent: 'label-step', subjectId, token },
+        client,
+      );
+    };
+    const assign = continuation(await submit(create));
+    expect(await submit(assign)).toMatchObject({
+      ok: true,
+      label: { id: labelId, name },
+      assignment: { id: assignmentId, revision: 1 },
+    });
+    expect(calls.slice(1)).toMatchObject([
+      { method: 'POST', path: '/v1/libraryLabels', authorization: original },
+      { method: 'POST', path: `/v1/libraryLabels/${labelId}:assign`, authorization: original, body: { subjectId } },
+    ]);
+    expect(calls[1]?.key).not.toBe(calls[2]?.key);
+  } finally {
+    credential = 'original-token';
+  }
 });
