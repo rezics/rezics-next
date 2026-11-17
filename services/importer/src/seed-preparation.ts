@@ -1,5 +1,7 @@
 import { types } from 'node:util';
 import { CredentialInputError } from './credentials.ts';
+import type { ImportFailurePhase } from './import-fetch.ts';
+import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
 
 type SeedPreparationPhase =
   | 'environment'
@@ -50,19 +52,50 @@ type PreparationReason =
   | 'table-changed'
   | 'table-invalid';
 
-const failures = new WeakMap<object, { phase: SeedPreparationPhase; reason?: PreparationReason }>();
+export type ReviewedBindingStep =
+  | 'claim'
+  | 'fence'
+  | 'subject'
+  | 'distinct-concepts'
+  | 'source-equivalence'
+  | 'statement'
+  | 'candidate-page'
+  | 'adoption'
+  | 'candidate'
+  | 'provenance'
+  | 'selection'
+  | 'public-statement'
+  | 'acknowledgement'
+  | 'proposal-bytes'
+  | 'proposal'
+  | 'vocabulary';
+
+export type ReviewedBindingDetail = {
+  record: string;
+  property?: string;
+  step: ReviewedBindingStep;
+  status: 'mismatch' | 'incomplete' | 'invalid-data' | 'fenced' | 'transport' | ImportFailurePhase;
+  http?: number;
+  problem?: 'semantic_not_ready' | 'overloaded' | 'deadline_exceeded' | 'partition_unavailable';
+};
+
+const failures = new WeakMap<
+  object,
+  { phase: SeedPreparationPhase; reason?: PreparationReason; binding?: ReviewedBindingDetail }
+>();
 
 /** Preserve the innermost failed operation and the original error used by journal and transport callers. */
 export function seedPreparationFailure(
   error: unknown,
   phase: SeedPreparationPhase,
   reason?: PreparationReason,
+  binding?: ReviewedBindingDetail,
 ): object {
   const failure =
     error !== null && (typeof error === 'object' || typeof error === 'function')
       ? error
       : new Error('Seed preparation failed', { cause: error });
-  if (!failures.has(failure)) failures.set(failure, { phase, ...(reason && { reason }) });
+  if (!failures.has(failure)) failures.set(failure, { phase, ...(reason && { reason }), ...(binding && { binding }) });
   return failure;
 }
 
@@ -85,7 +118,18 @@ export function seedPreparationDetail(error: unknown): string | undefined {
   if (error === null || (typeof error !== 'object' && typeof error !== 'function')) return undefined;
   const failure = failures.get(error);
   if (!failure) return undefined;
-  return `phase=${failure.phase} reason=${failure.reason ?? localFailureReason(error)}`;
+  const detail = `phase=${failure.phase} reason=${failure.reason ?? localFailureReason(error)}`;
+  const binding = failure.binding;
+  if (!binding) return detail;
+  const seed = releasedReviewedVocabulary().inventory.find(({ key }) => key === binding.record);
+  const property = seed?.facts.find((fact) => fact.property === binding.property)?.property;
+  const http = binding.http;
+  return (
+    `${detail} record=${seed?.key ?? 'unknown'} step=${binding.step} status=${binding.status}` +
+    (property ? ` property=${property}` : '') +
+    (http !== undefined && Number.isInteger(http) && http >= 400 && http <= 599 ? ` http=${http}` : '') +
+    (binding.problem ? ` problem=${binding.problem}` : '')
+  );
 }
 
 function localFailureReason(error: object): string {

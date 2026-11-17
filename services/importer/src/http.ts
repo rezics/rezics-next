@@ -7,6 +7,7 @@ import {
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import type { ImportRequestDiagnostics } from './import-fetch.ts';
 import type { SeedRemainingRequest } from './seed-remaining-request.ts';
+import { seedPreparationDetail } from './seed-preparation.ts';
 
 export type ReviewedCatalogueCommandKind = 'bootstrap' | 'proposal';
 
@@ -141,5 +142,6 @@ export function throwReviewedCatalogueBatchFailure(
 export function formatReviewedCatalogueSeedError(error: unknown): string {
   if (error instanceof ReviewedCatalogueCommandError) return formatReviewedCatalogueCommandError(error);
   if (error instanceof ImportTransportError) return formatImportTransportError(error);
-  return 'Reviewed vocabulary seeding failed.';
+  const detail = seedPreparationDetail(error);
+  return detail ? `Reviewed vocabulary seeding failed preparation{${detail}}` : 'Reviewed vocabulary seeding failed.';
 }
