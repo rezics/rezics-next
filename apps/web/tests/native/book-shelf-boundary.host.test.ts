@@ -73,6 +73,8 @@ nativeTest(
     const alice = await auth.signIn('alice', { returnTo: '/en/books' });
     const signInStatus = (await alice.response()).status();
     const books = alice.continueOnPage();
+    await auth.settlePageApp();
+    expect(auth.pageAppProcess()).toBeUndefined();
     const origin = new URL(stack.web).origin;
     await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();
     expect(new URL(books.url()).origin).toBe(origin);

@@ -367,6 +367,8 @@ async function runBookCatalogueJourney(): Promise<void> {
   const { stack, auth, marker, subjects, states } = fixture;
   const alice = await auth.signIn('alice', { returnTo: '/en/books' });
   const books = alice.continueOnPage();
+  await auth.settlePageApp();
+  expect(auth.pageAppProcess(), 'Auth UI retired before opening the Books shelves').toBeUndefined();
   await pageReady(books, 'localized Books entry');
   expect(new URL(books.url()).pathname).toBe('/en/books');
   await browserExpect(books.locator('[data-slot="book-catalogue"]')).toBeVisible();
@@ -576,6 +578,8 @@ async function runBookCatalogueJourney(): Promise<void> {
   await signedOutPage.close();
   const bob = await auth.signIn('bob', { returnTo: shelfPath, context: signedOutContext });
   const bobPage = bob.continueOnPage();
+  await auth.settlePageApp();
+  expect(auth.pageAppProcess(), 'Auth UI retired after returning Bob to his shelf').toBeUndefined();
   await pageReady(bobPage, 'signed-in exact shelf return');
   expect(new URL(bobPage.url()).pathname).toBe('/en/library');
   expect(new URL(bobPage.url()).searchParams.get('type')).toBe('schema:Book');

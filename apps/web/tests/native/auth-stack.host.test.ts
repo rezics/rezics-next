@@ -104,12 +104,15 @@ describe('native Auth and web stack', () => {
       await writeControl({ outcome: 'incomplete', phase: 'alice-retired', before, after, commandBefore, commandAfter });
       const resumedPage = await fetch(`${auth.origin}/login`, { headers: { accept: 'text/html' } });
       expect(resumedPage.status).toBe(200);
+      // The issuer's fallback login is plain text and also contains "Sign in".
+      expect(resumedPage.headers.get('content-type')).toContain('text/html');
       expect(await resumedPage.text()).toContain('Sign in');
-      expect(auth.pageAppProcess()?.pid).not.toBe(firstApp.pid);
       await auth.settlePageApp();
       expect(auth.pageAppProcess()).toBeUndefined();
       const bob = await auth.signIn('bob');
       const secondApp = auth.pageAppProcess()!;
+      expect(secondApp).toBeDefined();
+      expect(secondApp).not.toEqual(firstApp);
       const bobPage = bob.continueOnPage();
       await auth.settlePageApp();
       expect(await groupExited(secondApp)).toBe(true);
@@ -129,8 +132,13 @@ describe('native Auth and web stack', () => {
       }
       const aliceSession = await alice.context.request.get(`${auth.origin}/session`);
       const bobSession = await bob.context.request.get(`${auth.origin}/session`);
-      expect((await aliceSession.json()).account_id).toBe((await stack.authPersona('alice')).accountId);
-      expect((await bobSession.json()).account_id).toBe((await stack.authPersona('bob')).accountId);
+      expect(aliceSession.status()).toBe(200);
+      expect(bobSession.status()).toBe(200);
+      const aliceActor = (await aliceSession.json()).account_id;
+      const bobActor = (await bobSession.json()).account_id;
+      expect(aliceActor).toBe((await stack.authPersona('alice')).accountId);
+      expect(bobActor).toBe((await stack.authPersona('bob')).accountId);
+      expect(aliceActor).not.toBe(bobActor);
       const context = await auth.context('alice');
       expect(context).toBe(alice.context);
       expect(context).not.toBe(await auth.context('bob'));
@@ -149,8 +157,8 @@ describe('native Auth and web stack', () => {
           origin: new URL(page.url()).origin,
         })),
         issuer: discovery.issuer,
-        aliceActor: (await stack.authPersona('alice')).accountId,
-        bobActor: (await stack.authPersona('bob')).accountId,
+        aliceActor,
+        bobActor,
       };
       await writeControl(control);
       console.info('native-auth-page-lifetime', JSON.stringify(control));
