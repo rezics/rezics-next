@@ -178,6 +178,8 @@ export function createCommunityWorkModule(ambient: CommunityAmbient): WorkModule
   };
 }
 
+const SPACE_DEPENDENCY_UPKEEP = 'community.space-dependencies.upkeep';
+
 /** A workflow performs at most twenty native pages. Continuations and periodic
  * recovery carry locators only; the durable owner frontier decides completion.
  */
@@ -249,7 +251,7 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
   const continueInitialization = DBOS.registerStep(
     async () => {
       await context.client.enqueue({
-        workflowName: 'community.space-dependencies.upkeep',
+        workflowName: SPACE_DEPENDENCY_UPKEEP,
         queueName: 'maintenance',
         workflowID: `space-dependencies:init:${createHash('sha256').update(DBOS.workflowID!).digest('hex')}`,
         workflowIDReusePolicy: 'return-existing',
@@ -269,16 +271,23 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
       }
       await continueInitialization();
     },
-    { name: 'community.space-dependencies.upkeep' },
+    { name: SPACE_DEPENDENCY_UPKEEP },
   );
   await context.client.applySchedules([
     {
       scheduleName: 'community.space-dependencies.every-minute',
-      workflowName: 'community.space-dependencies.upkeep',
+      workflowName: SPACE_DEPENDENCY_UPKEEP,
       schedule: '* * * * *',
       queueName: 'maintenance',
       cronTimezone: 'UTC',
       automaticBackfill: false,
     },
   ]);
+  // Provision the first upkeep during registration. Every executor converges on the same durable launch.
+  await context.client.enqueue({
+    workflowName: SPACE_DEPENDENCY_UPKEEP,
+    queueName: 'maintenance',
+    workflowID: `${SPACE_DEPENDENCY_UPKEEP}:bootstrap`,
+    workflowIDReusePolicy: 'return-existing',
+  });
 }

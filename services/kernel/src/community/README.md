@@ -614,13 +614,16 @@ Decision: the default publisher proves empty provenance only for the current nat
 `space-discovery-publisher.ts` installs the authored-head capability and publishes one retained native owner per
 maintenance step. It reads both exact current revisions and the real partition epoch/position from one released
 snapshot, then rechecks that placement/position and the heads inside the publication command. Missing revision
-rows and changed owner cuts withhold publication. Native authored revision schemas accept no imported provenance;
+rows and changed owner cuts withhold publication. If the active owner's position advances in the same epoch,
+the existing Work step retry captures a fresh snapshot. Native authored revision schemas accept no imported provenance;
 their explicit empty tuple set is independent of protected, removed or filtered public results. This capability
 does not infer absence for imported relationship producers. A separately registered producer retains its generation,
 cut and explicit tuple inventory.
 
-The existing minute recovery workflow first repairs tuple edges and initializes dependency inventory, then runs at
-most twenty native witness steps before continuing. The pending-witness index supplies one locator; each step adds
+Worker registration enqueues the first upkeep on the maintenance queue with a shared workflow ID, so concurrent or
+restarted workers reuse it. The minute schedule also runs upkeep for recovery. Each workflow repairs tuple edges
+and initializes dependency inventory before publishing native witnesses, with at most twenty pages before continuing.
+The pending-witness index supplies one locator. Each witness step adds
 one producer point read/registration, one locator seek, one placement read and one exact Space/Realm head query,
 plus the existing bounded publication transaction. No source pages, member census or individual card hydration are
 used. Only the existing final owner/fence reader grants `complete: true`; publication acknowledgement remains
