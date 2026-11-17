@@ -899,7 +899,7 @@ async function walkPaths<Fixture extends CommunityFixture>(
           job: path.job,
           auth: path.auth,
           status: 'FAIL-unreached',
-          persona: 'mixed',
+          persona: path.auth,
           elapsedMs: Math.round(performance.now() - started),
           source,
           evidence: { cause },
@@ -926,6 +926,7 @@ async function walkPaths<Fixture extends CommunityFixture>(
       }
       const walker = walkers[path.id];
       if (!walker) {
+        const cause = !ctx.signIn.ok ? ctx.signIn.detail : 'missingFixture' in path ? path.missingFixture : 'no walker';
         results.push({
           id: path.id,
           job: path.job,
@@ -934,8 +935,8 @@ async function walkPaths<Fixture extends CommunityFixture>(
           persona: path.auth === 'anonymous' ? 'anonymous' : 'signed-in',
           elapsedMs: Math.round(performance.now() - started),
           source,
-          evidence: { cause: ctx.signIn.ok ? 'no walker' : ctx.signIn.detail },
-          firstWrong: ctx.signIn.ok ? 'no walker' : ctx.signIn.detail,
+          evidence: { cause },
+          firstWrong: cause,
         });
         hourly(results, paths.length);
         continue;
@@ -1039,7 +1040,7 @@ export async function run(args: readonly string[] = []): Promise<PathResult[]> {
         job: path.job,
         auth: path.auth,
         status: 'FAIL-unreached',
-        persona: 'nativeHost' in path ? 'mixed' : 'setup',
+        persona: 'nativeHost' in path ? path.auth : 'setup',
         elapsedMs: 0,
         source,
         ...('nativeHost' in path

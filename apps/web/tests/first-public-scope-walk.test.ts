@@ -40,24 +40,40 @@ test('historical web.capabilities evidence retains every original active path', 
   const text = readFileSync(capabilities, 'utf8');
   const rows = text.split('\n').map((line) => line.split('|').map((cell) => cell.trim()));
   for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
-    if ('nativeHost' in path) continue;
+    if (path.id === 'W36' || path.id === 'W37' || path.id === 'W38') continue;
     const matches = rows.filter((cells) => cells[1] === path.id);
     expect(matches).toHaveLength(1);
     expect(['PASS', 'FAIL-unreached', 'FAIL']).toContain(matches[0]![5]);
   }
 });
 
-test('required Book and knowledge paths identify real separate native/browser suites without claiming a seeded-walk pass', () => {
-  const paths = FIRST_PUBLIC_SCOPE_PATHS.flatMap((path) => ('nativeHost' in path ? [path] : []));
-  expect(paths.map(({ id, nativeHost }) => [id, nativeHost])).toEqual([
+test('external paths retain their exact native/browser suites without claiming a seeded-walk pass', () => {
+  const external = FIRST_PUBLIC_SCOPE_PATHS.flatMap((path) => ('nativeHost' in path ? [path] : []));
+  expect(external.map(({ id, nativeHost }) => [id, nativeHost])).toEqual([
+    ['W14', 'tests/native/first-public-personal.host.test.ts'],
+    ['W15', 'tests/native/first-public-personal.host.test.ts'],
+    ['W16', 'tests/native/native-curated-collections.host.test.ts'],
+    ['W19', 'tests/native/first-public-personal.host.test.ts'],
+    ['W20', 'tests/native/first-public-personal.host.test.ts'],
+    ['W21', 'tests/native/native-following.host.test.ts'],
+    ['W22', 'tests/native/native-auth-security.host.test.ts'],
+    ['W24', 'tests/native/native-auth-security.host.test.ts'],
+    ['W25', 'tests/native/first-public-personal.host.test.ts'],
+    ['W26', 'tests/native/private-library-archive-restore.host.test.ts'],
+    ['W30', 'tests/native/subject-rating.host.test.ts'],
+    ['W32', 'tests/native/native-moderation.host.test.ts'],
+    ['W33', 'tests/native/native-notifications.host.test.ts'],
     ['W36', 'tests/native/book-catalogue-journey.host.test.ts'],
     ['W37', 'tests/native/hosted-book-journey.host.test.ts'],
     ['W38', 'tests/native/knowledge-journey.host.test.ts'],
   ]);
-  for (const path of paths) {
+  for (const path of external) {
     const source = readFileSync(resolve(import.meta.dir, '..', path.nativeHost), 'utf8');
-    expect(source).toContain('nativeTest(');
-    expect(source).toContain('nativeBeforeAll(');
+    if (path.nativeHost === 'tests/native/first-public-personal.host.test.ts') expect(source).toContain(`'${path.id} `);
+    if (path.id === 'W36' || path.id === 'W37' || path.id === 'W38') {
+      expect(source).toContain('nativeTest(');
+      expect(source).toContain('nativeBeforeAll(');
+    }
   }
   const walk = readFileSync(resolve(import.meta.dir, '../scripts/first-public-scope-walk.ts'), 'utf8');
   expect(walk).toContain("if ('nativeHost' in path)");
