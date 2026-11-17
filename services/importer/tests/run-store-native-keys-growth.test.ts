@@ -98,6 +98,16 @@ test('native slash key stage/get and page/ack stay indexed across same-source hi
         run_commands: 0,
         run_payloads: 0,
         run_envelopes: 0,
+        run_conversion_diagnostics: 0,
+        run_conversion_diagnostic_records: 0,
+        run_aggregate_operations: 0,
+        run_aggregate_heads: 0,
+        run_classification_heads: 0,
+        run_staging_checkpoints: 0,
+        run_staging_prefix: 0,
+        run_retention_work: 0,
+        run_disappearance_stops: 0,
+        run_disappearance_missing: 0,
       });
       console.info(
         'slash-key seed',
