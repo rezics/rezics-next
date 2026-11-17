@@ -213,11 +213,8 @@ export async function startAuthStack(
   const pendingPageResponses = new Set<Promise<void>>();
   let retirementRequested = false;
   const observedContexts = new Set<BrowserContext>();
-  const canRetirePages = () =>
-    retirementRequested &&
-    activeJourneys === 0 &&
-    pendingPageResponses.size === 0 &&
-    ![...new Set([...browser!.contexts(), ...observedContexts])].some((context) =>
+  const hasIssuerFrame = () =>
+    [...new Set([...browser!.contexts(), ...observedContexts])].some((context) =>
       context.pages().some((page) =>
         page.frames().some((frame) => {
           const address = frame.url();
@@ -225,6 +222,8 @@ export async function startAuthStack(
         }),
       ),
     );
+  const canRetirePages = () =>
+    retirementRequested && activeJourneys === 0 && pendingPageResponses.size === 0 && !hasIssuerFrame();
   const retirePages = () => {
     if (browser && canRetirePages()) void pageApp.retire(canRetirePages).catch(() => {});
   };
@@ -687,9 +686,21 @@ export async function startAuthStack(
       origin,
       pageAppProcess: () => pageApp.process(),
       async settlePageApp() {
-        while (pendingPageResponses.size) await Promise.all(pendingPageResponses);
-        retirePages();
-        await pageApp.settled();
+        // A new request can start a generation while the previous one retires.
+        do {
+          assertActive('settle native Auth page app');
+          while (pendingPageResponses.size) await Promise.all(pendingPageResponses);
+          retirePages();
+          await pageApp.settled();
+        } while (pendingPageResponses.size || (pageApp.process() && canRetirePages()));
+        const resident = pageApp.process();
+        if (resident)
+          console.info('Native Auth page app retained', {
+            pid: resident.pid,
+            retirementRequested,
+            activeJourneys,
+            issuerFrame: hasIssuerFrame(),
+          });
       },
       browserMemoryObservation: () => browserMemory,
       context,

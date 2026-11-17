@@ -27,6 +27,14 @@ import { join } from 'node:path';
 const eventsPath = process.env.AUTH_PAGE_APP_EVENTS;
 const previous = readFileSync(eventsPath, 'utf8').trim().split('\\n').filter(Boolean).map(line => JSON.parse(line));
 const first = previous.length === 0;
+if (first && process.env.AUTH_PAGE_APP_HOLD_STOP === '1') {
+  // The dev command can lose an intermediate parent before group shutdown.
+  // Its orphan stays in the group and must be reaped before the next generation.
+  const fork = Bun.spawnSync(['python3', '-c', 'import os, signal\\nif os.fork() == 0: signal.pause()'], {
+    stdout: 'ignore', stderr: 'ignore',
+  });
+  if (fork.exitCode !== 0) throw new Error('Could not create orphaned Auth child');
+}
 const persistence = await mkdtemp(join(tmpdir(), 'rezics-auth-worker-resource-test-'));
 await mkdir(join(persistence, 'state'));
 const stat = readFileSync('/proc/self/stat', 'utf8');

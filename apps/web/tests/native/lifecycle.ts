@@ -222,9 +222,9 @@ export class NativeTestLifecycle {
       void descendantsStopped;
       signal('SIGKILL');
       if (!(await waitForExit(this.forceGraceMs))) {
-        const observation = processGroupIdentities(identity);
-        const details = observation.status === 'unavailable' ? `; observation unavailable: ${observation.detail}` : '';
-        throw new Error(`Owned ${label} process group survived SIGKILL for ${this.forceGraceMs}ms${details}`);
+        throw new Error(
+          `Owned ${label} process group survived SIGKILL for ${this.forceGraceMs}ms: ${describeNativeProcessGroup(identity)}`,
+        );
       }
     };
     const release = this.register({ label, close, force });
@@ -442,6 +442,17 @@ export function nativeProcessGroupIsGone(identity: NativeProcessIdentity): boole
 
 export function inspectNativeProcessGroup(identity: NativeProcessIdentity): ProcessGroupObservation {
   return processGroupIdentities(identity);
+}
+
+export function describeNativeProcessGroup(identity: NativeProcessIdentity): string {
+  const observation = processGroupIdentities(identity);
+  if (observation.status === 'unavailable') return `pgid=${identity.pgid} ${observation.detail}`;
+  const members = observation.identities.slice(0, 12).map(({ pid, startTime }) => {
+    const current = processIdentity(pid);
+    if (current?.startTicks !== startTime || current.pgrp !== identity.pgid) return { pid, startTime };
+    return { pid, startTime, state: current.state, ppid: current.ppid };
+  });
+  return JSON.stringify({ leader: identity, count: observation.identities.length, members });
 }
 
 function readProcessIdentity(pid: number | undefined): NativeProcessIdentity | undefined {
