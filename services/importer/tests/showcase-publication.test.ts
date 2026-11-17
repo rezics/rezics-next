@@ -209,7 +209,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const statements = Object.fromEntries(
       Object.entries(subject.statements).map(([property, rows]) => [
         property,
-        rows.map((row) => nativeRow(property, row)),
+        rows.map((row) => nativeRow(property, row)).filter((row) => typeof row.id !== 'string' || !rejected.has(row.id)),
       ]),
     );
     if (/^[vr][1-9][0-9]*$/u.test(subject.sourceExternalId)) {
@@ -959,12 +959,21 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(resumedAcknowledgedCalls).toContainEqual(membership.command);
     expect(candidates.has(interruptedSynopsis.id)).toBe(true);
     expect(candidates.has(membershipCandidateId)).toBe(true);
+    const dependencyOnly = replayed.manifest.vocabulary.filter(
+      (record) => record.provenance === 'source-parent-binding' && record.assertions.length === 0,
+    );
+    expect(dependencyOnly.map(({ subjectId }) => subjectId).sort()).toEqual(
+      [graphParentBinding.parentId, graphParentBinding.schemeId].sort(),
+    );
+    expect(
+      replayed.published.some(({ subjectId }) => dependencyOnly.some((record) => record.subjectId === subjectId)),
+    ).toBe(false);
     expect(
       replayed.status,
       JSON.stringify({
         omissions: replayed.omissions.map(({ code }) => code),
         published: replayed.published.length,
-        expected: replayed.manifest.records.length + replayed.manifest.vocabulary.length,
+        expected: replayed.manifest.records.length + replayed.manifest.vocabulary.length - dependencyOnly.length,
       }),
     ).toBe('published');
     expect(publicationPhases).toHaveLength(12);
@@ -1056,7 +1065,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         candidateId: candidate.id,
         property: 'schema:abstract',
         citations: [`https://bgm.tv/subject/${candidate.source?.external_id}`],
-        adoption: { head: 1, candidateId: candidate.id, rank: 'normal' },
+        adoption: { head: subject.id === workId ? 2 : 1, candidateId: candidate.id, rank: 'normal' },
         readback: {
           id: candidate.id,
           rank: 'normal',
@@ -1126,9 +1135,12 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(adoptionWrites.slice(beforeRejectedRefresh).flatMap((write) => write.body.selection)).not.toContainEqual(
       expect.objectContaining({ candidate: membershipCandidateId }),
     );
-    expect(adopted.get(`${membership.command.subject}\0schema:genre`)?.selection).not.toContainEqual(
+    expect(adopted.get(`${membership.command.subject}\0schema:genre`)?.selection).toContainEqual(
       expect.objectContaining({ candidate: membershipCandidateId }),
     );
+    expect(
+      publicReads.get(membership.command.subject)?.subject?.statements?.['schema:genre'] ?? [],
+    ).not.toContainEqual(expect.objectContaining({ id: membershipCandidateId }));
     const rejectedMembershipPage = await review.reviewedCandidates(membership.command.subject, {
       context: globalContext,
       property: 'schema:genre',
@@ -1198,7 +1210,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const reopenedSubject = [...subjects.values()].find(
       (item) => item.sourceExternalId === reopenedSynopsis.source?.external_id,
     )!;
-    adopted.set(`${reopenedSubject.id}\0schema:abstract`, { head: 2, selection: [] });
+    adopted.set(`${reopenedSubject.id}\0schema:abstract`, { head: 3, selection: [] });
     delete reopenedSubject.statements['schema:abstract'];
     const restored = await publishShowcase({
       plan,
@@ -1218,7 +1230,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       candidateId: reopenedSynopsis.id,
       property: 'schema:abstract',
       citations: ['https://bgm.tv/subject/101'],
-      adoption: { head: 3, candidateId: reopenedSynopsis.id, rank: 'normal' },
+      adoption: { head: 4, candidateId: reopenedSynopsis.id, rank: 'normal' },
       readback: {
         id: reopenedSynopsis.id,
         rank: 'normal',
