@@ -341,9 +341,11 @@ export class RecordBindings {
   }
   private commandState(o: Owner, key: string): CommandState | null {
     return this.get(
-      `SELECT b.*,j.key,j.bytes,j.signature,j.acknowledgement FROM binding_records AS b
-      LEFT JOIN binding_journal AS j ON j.source=b.source AND j.external_id=b.external_id AND j.key=?
-      WHERE b.source=? AND b.external_id=?`,
+      `SELECT binding_records.*,binding_journal.key,binding_journal.bytes,binding_journal.signature,binding_journal.acknowledgement
+      FROM binding_records
+      LEFT JOIN binding_journal ON binding_journal.source=binding_records.source
+        AND binding_journal.external_id=binding_records.external_id AND binding_journal.key=?
+      WHERE binding_records.source=? AND binding_records.external_id=?`,
       key,
       o.source,
       o.external_id,
