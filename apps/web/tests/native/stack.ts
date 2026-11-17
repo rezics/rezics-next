@@ -79,6 +79,8 @@ export type NativeWebStackOptions = {
   observePersonalAccess?: boolean;
   /** Give the isolated showcase governor the native Global Board-creation grant. */
   localShowcaseBoardCreation?: boolean;
+  /** Admit the original Semantic editor's native actions and synchronize its Account Agent. */
+  semanticFirstPublicEditor?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
   writeRateOverrides?: string;
   /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
@@ -1212,6 +1214,18 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
     sampleMemory('kernel-auth-ready');
 
+    if (process.env.NATIVE_WEB_SEMANTIC_FIRST_PUBLIC_EDITOR === '1') {
+      const editor = await getAccount('editor');
+      await driver.fixtures.grantAccount(editor, [
+        'context:accept',
+        'context:adopt',
+        'zone:create',
+        'moderation:takedown',
+      ]);
+      const { synchronizeAccountAgent } =
+        await import('../../../../services/kernel/src/access/account-agent-effect.ts');
+      await synchronizeAccountAgent(driver.fixtures.pool, editor.accountId);
+    }
     await driver.fixtures.openFeatures(['search']);
     authServer = Bun.serve({
       hostname: '127.0.0.1',
@@ -1794,6 +1808,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS: options.observeArchiveProgress ? '1' : undefined,
     WEB_VITE_CACHE_DIR: viteCache.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
+    NATIVE_WEB_SEMANTIC_FIRST_PUBLIC_EDITOR: options.semanticFirstPublicEditor ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
     NATIVE_WEB_OBSERVE_PERSONAL_ACCESS: options.observePersonalAccess ? '1' : '0',
     ...(options.commerce
