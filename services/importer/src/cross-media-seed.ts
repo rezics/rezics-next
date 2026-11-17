@@ -2966,13 +2966,20 @@ export async function seedCrossMedia(
     });
     progress?.enter('current-reads');
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
-    const sourceIdentityGaps: CrossMediaGap[] = [];
-    const personReviewSources: PersonReviewSource[] = [];
-    for (const record of keys) {
+    const boundRecords = keys.flatMap((record) => {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
       const sourceAlias = crossMediaAliases[provider];
       const claim = importer.session.bindings.claim({ source: sourceAlias, external_id: record.key });
-      if (claim?.state !== 'bound') continue;
+      return claim?.state === 'bound' ? [{ record, provider, sourceAlias, claim }] : [];
+    });
+    const subjectIds = [...new Set(boundRecords.map(({ claim }) => claim.subject))];
+    // Independent current reads share the native Subject lane with other callers.
+    const readWidth = 4;
+    for (let offset = 0; offset < subjectIds.length; offset += readWidth)
+      await Promise.all(subjectIds.slice(offset, offset + readWidth).map(readCurrent));
+    const sourceIdentityGaps: CrossMediaGap[] = [];
+    const personReviewSources: PersonReviewSource[] = [];
+    for (const { record, provider, sourceAlias, claim } of boundRecords) {
       const evidence = personSourceEvidence.get(`${sourceAlias}\u0000${record.key}`);
       if (evidence) {
         const reviewSource = personReviewSource({
@@ -4219,8 +4226,13 @@ export async function runCrossMediaSeedCli(
       | Awaited<ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>>['requirements']
       | undefined;
     const reseedWithCurrentVocabulary = async (nextCharacterBindings: SourceVocabularyBindings) => {
+      finalization.enter('reseed-reviewed-vocabulary');
       if (reviewedSelection) await refreshReviewedCharacterVocabulary();
+      finalization.enter('reseed-career-bindings');
       bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(nextCharacterBindings, importPort);
+      finalization.enter('reseed-record-import');
+      recordImportProgress = new SeedFinalization('record-import');
+      recordImportProgress.enter('plan-copy');
       publicationPlan = structuredClone(plan);
       const releaseContext = selectedReleaseContext!;
       result = await seedShowcaseVndbReleases({
@@ -4233,9 +4245,11 @@ export async function runCrossMediaSeedCli(
         bindings: releaseContext.bindings,
         destination: { origin: api },
         ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-        extras: seedExtras(currentVndbCreditReferences),
+        extras: { ...seedExtras(currentVndbCreditReferences), recordImportProgress },
         characterBindings: nextCharacterBindings,
       });
+      recordImportProgress.complete();
+      recordImportProgress = undefined;
     };
     finalization.enter('bangumi-character-vocabulary');
     if (journal && publicClient && !characterBindingsPath) {
@@ -4270,6 +4284,7 @@ export async function runCrossMediaSeedCli(
         vocabularyRequirements: concepts.requirements,
       });
       bangumiVocabularyRequirements = concepts.requirements;
+      finalization.enter('bangumi-character-binding-read');
       const currentCharacterBindings = await readShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
         port,
