@@ -211,6 +211,9 @@ export function startOutcomeWorkerProcess(
   return {
     rpc,
     ready,
+    get recentOutput() {
+      return output;
+    },
     get exited() {
       return exited;
     },
