@@ -126,7 +126,11 @@ function result(commands: BatchCommand[], rejected = false): BatchWriteResult {
   const value: BatchWriteResult = {
     results: commands.map((command, i) =>
       rejected
-        ? { key: command.key, status: 409, problem: { type: 'conflict', title: 'Conflict', status: 409 } }
+        ? {
+            key: command.key,
+            status: 409,
+            problem: { type: 'conflict', title: 'Conflict', status: 409, retryable: false },
+          }
         : {
             key: command.key,
             status: 200,

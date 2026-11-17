@@ -1,19 +1,21 @@
 import * as production from '../services/importer/src/import-fetch';
 
-/** Exact future adapter signature in services/importer/src/import-fetch.ts.
+/** Adapter signature in services/importer/src/import-fetch.ts.
  * All optional limits are safe integers: byte/wait limits >=0, deadline >=1,
  * attempts >=1. Defaults equal the exported hard ceilings below except attempts
  * (default 3). Configuration can only lower a ceiling. Bulk's 64KiB wrapper
  * remains separate; this service transport accepts at most 2MiB of request bytes.
  * schedule defaults to cancellable native setTimeout, and is used for BOTH the
  * whole-operation deadline and native retry sleeps. now/sleep/schedule are IO
- * seams, never alternative retry or body implementations. The deadline starts
- * before request-body/token IO and covers every attempt, wait and response read.
+ * seams, never alternative retry or body implementations. The generic deadline
+ * includes request-body and initial token IO. POST /v1/subjects:batchWrite starts
+ * its deadline at the first upstream request and honors caller cancellation during
+ * preparation. Both deadlines cover every attempt, token refresh, wait and response read.
  * sleep is abort-raced even if an injected implementation ignores cancellation.
  */
 export interface ImportHttpOptions {
   origin: string;
-  token: () => Promise<string>;
+  token: (fresh?: boolean) => Promise<string>;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -53,7 +55,8 @@ export interface HttpBoundsDriver {
  * release dead stores. An abusive incoming backing must be rejected before copy.
  * No VM heap sampling, expected counters or fixture substitution. Fake ONLY remote
  * fetch; real createImportFetch and real createKernelClient consume actual bodies.
- * No database is needed. N, U*t and partitions are inaccessible here. With A<=5,
+ * No database is needed. N, U*t and partitions are inaccessible here. With A<=5
+ * ordinary attempts plus at most one 401 replay,
  * M<=2MiB request/1MiB decoded response, byte work is O(A*M), retention O(M),
  * single waits <=30s, operation waits <=60s, deadline <=120s; no wall-time oracle.
  * Dump/source streaming is unrelated to the HTTP response budget.

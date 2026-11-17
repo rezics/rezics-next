@@ -24,6 +24,8 @@ const R = 3;
 const P = 4;
 const DELAY = 250;
 const NOW = Date.UTC(2026, 0, 1);
+const TOKEN = 'ordinary-automated-account';
+const RENEWED_TOKEN = 'renewed-automated-account';
 const tuple = { source: 'bangumi', externalId: '1 /?&雪', fieldGroup: 'cover' as const };
 const source = {
   source: 'bangumi',
@@ -106,7 +108,8 @@ interface Exchange {
 }
 /** Fake REMOTE API only. Counters derive from actual fetch callbacks and consumed bodies.
  * No SQL/partitions/index reads occur locally; no claim about server growth or policy.
- * Encode/validate O(bytes+M), rows O(M), R<=5 per batch/fence, media <=P*R.
+ * Encode/validate O(bytes+M), rows O(M), R<=5 ordinary attempts per request,
+ * with at most one additional 401 replay. Media status reads have at most P polls.
  * N and U*t are unavailable here. PostgreSQL/shared SQLite proofs belong elsewhere. */
 async function setup(
   reply: (exchange: Exchange, index: number) => Response | Promise<Response> = () => success(),
@@ -115,9 +118,13 @@ async function setup(
   const exchanges: Exchange[] = [];
   const waits: number[] = [];
   const sessions: string[] = [];
+  const tokenRequests: boolean[] = [];
   const options: TransportOptions = {
     origin: ORIGIN,
-    tokenProvider: async () => 'ordinary-automated-account',
+    tokenProvider: async (fresh = false) => {
+      tokenRequests.push(fresh);
+      return fresh ? RENEWED_TOKEN : TOKEN;
+    },
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const bytes = new Uint8Array(await request.clone().arrayBuffer());
@@ -125,7 +132,7 @@ async function setup(
       exchanges.push(exchange);
       expect(new URL(request.url).origin).toBe(ORIGIN);
       expect(new URL(request.url).pathname.startsWith('/v1/')).toBe(true);
-      expect(request.headers.get('authorization')).toBe('Bearer ordinary-automated-account');
+      expect(request.headers.get('authorization')).toBe(`Bearer ${tokenRequests.at(-1) ? RENEWED_TOKEN : TOKEN}`);
       expect(request.headers.has('cookie')).toBe(false);
       expect(request.redirect).toBe('manual');
       return reply(exchange, exchanges.length - 1);
@@ -143,7 +150,7 @@ async function setup(
     },
     ...overrides,
   };
-  return { driver: await loadImportTransport(options), exchanges, waits, sessions };
+  return { driver: await loadImportTransport(options), exchanges, waits, sessions, tokenRequests };
 }
 const wire = (exchange: Exchange) => new TextDecoder().decode(exchange.bytes);
 function batchRequest(exchange: Exchange, expected: BatchWriteRequest, cap = CAP) {
@@ -167,7 +174,11 @@ test('ordered partial results preserve each command acknowledgement and terminal
   const request = { commands: [command(0), command(1), command(2)] };
   const results = [
     receipt(command(0).key),
-    { key: command(1).key, status: 404, problem: { type: 'about:blank', title: 'Not found', status: 404 } },
+    {
+      key: command(1).key,
+      status: 404,
+      problem: { type: 'about:blank', title: 'Not found', status: 404, retryable: false },
+    },
     receipt(command(2).key, 200),
   ];
   const f = await setup(() => ok({ results }));
@@ -188,6 +199,7 @@ test('entire bulk result rejects malformed missing duplicate unexpected reordere
     { results: [{ ...valid, value: { id: 'invented-id', revision: 1 } }] },
     { results: [{ ...valid, value: { id: SUBJECT } }] },
     { results: [{ key: valid.key, status: 403 }] },
+    { results: [{ key: valid.key, status: 403, problem: { type: 'about:blank', title: 'Denied', status: 403 } }] },
     { results: [{ ...valid, unexpected: 'hidden malformed data' }] },
   ];
   for (const response of invalid) {
@@ -354,11 +366,18 @@ test('5xx and network retries use bounded existing adapter backoff without hotlo
   expect(f.waits).toEqual([1000, 2000]);
 });
 
-test('401 403 404 and validation failures are terminal with no retry', async () => {
+test('401 replays the sealed batch once while other denials and validation failures are terminal', async () => {
   for (const code of [400, 401, 403, 404, 422]) {
-    const f = await setup(() => ok({ title: 'terminal', status: code }, code));
-    await expect(f.driver.batch(body())).rejects.toThrow();
-    expect(f.exchanges).toHaveLength(1);
+    const f = await setup(() => ok({ title: 'terminal', status: code }, code), { session: 'sealed-session' });
+    const batch = body();
+    await expect(f.driver.batch(batch)).rejects.toMatchObject({ status: code });
+    expect(f.tokenRequests).toEqual(code === 401 ? [false, true] : [false]);
+    expect(f.exchanges).toHaveLength(code === 401 ? 2 : 1);
+    for (const exchange of f.exchanges) {
+      batchRequest(exchange, batch);
+      expect(exchange.request.headers.get(SESSION_HEADER)).toBe('sealed-session');
+    }
+    if (code === 401) expect(f.exchanges[1]!.bytes).toEqual(f.exchanges[0]!.bytes);
     expect(f.waits).toEqual([]);
   }
 });
@@ -511,16 +530,22 @@ test('later takedown refresh performs fresh fence lookup and prevents next media
 test('fence nullable revision is preserved and malformed or denied lookup never falls back anonymously', async () => {
   const f = await setup(() => ok({ fenced: false, securityRevision: null }));
   expect(await f.driver.fence(tuple)).toEqual({ fenced: false, securityRevision: null });
-  for (const reply of [
-    () => ok({ fenced: false }),
-    () => ok({ fenced: 'false', securityRevision: 1 }),
-    () => ok({}, 401),
-    () => ok({}, 403),
-    () => ok({}, 404),
-  ]) {
-    const denied = await setup(reply);
+  for (const [value, code] of [
+    [{ fenced: false }, 200],
+    [{ fenced: 'false', securityRevision: 1 }, 200],
+    [{}, 401],
+    [{}, 403],
+    [{}, 404],
+  ] as const) {
+    const denied = await setup(() => ok(value, code));
     await expect(denied.driver.refreshCover(tuple, image(), 'key')).rejects.toThrow();
-    expect(denied.exchanges).toHaveLength(1);
+    expect(denied.tokenRequests).toEqual(code === 401 ? [false, true] : [false]);
+    expect(denied.exchanges).toHaveLength(code === 401 ? 2 : 1);
+    for (const { request } of denied.exchanges) {
+      expect(request.method).toBe('GET');
+      expect(new URL(request.url).pathname).toBe('/v1/sourceFences:check');
+      expect(request.url).toBe(denied.exchanges[0]!.request.url);
+    }
     expect(denied.waits).toEqual([]);
   }
 });
@@ -549,7 +574,7 @@ test('media POST202 uses actual portable credit provenance container and idempot
   expect(f.exchanges).toHaveLength(4);
 });
 
-test('media retries preserve idempotency body and terminal status authorization failures never repoll', async () => {
+test('media retries preserve idempotency and a status denial ends polling after any 401 replay', async () => {
   const f = await setup((_, index) => (index === 0 ? ok({}, 503) : index === 1 ? accepted() : ok(status('available'))));
   await f.driver.media(image(), 'stable-media');
   expect(wire(f.exchanges[0]!)).toBe(wire(f.exchanges[1]!));
@@ -558,8 +583,16 @@ test('media retries preserve idempotency body and terminal status authorization 
   expect(f.waits).toEqual([1000]);
   for (const code of [401, 403, 404]) {
     const denied = await setup((_, index) => (index === 0 ? accepted() : ok({}, code)));
-    await expect(denied.driver.media(image(), 'denied')).rejects.toThrow();
-    expect(denied.exchanges).toHaveLength(2);
+    await expect(denied.driver.media(image(), 'denied')).rejects.toMatchObject({ status: code });
+    expect(denied.tokenRequests).toEqual(code === 401 ? [false, false, true] : [false, false]);
+    expect(denied.exchanges).toHaveLength(code === 401 ? 3 : 2);
+    const [upload, ...reads] = denied.exchanges;
+    expect(upload!.request.method).toBe('POST');
+    expect(new URL(upload!.request.url).pathname).toBe('/v1/media:importFromUrl');
+    for (const { request } of reads) {
+      expect(request.method).toBe('GET');
+      expect(request.url).toBe(`${ORIGIN}/v1/media/${MEDIA}:importStatus`);
+    }
     expect(denied.waits).toEqual([]);
   }
 });

@@ -7,6 +7,8 @@ export const MAX_IMPORT_TOTAL_WAIT_MS = 60000;
 export const MAX_IMPORT_DEADLINE_MS = 120000;
 export const MAX_IMPORT_ATTEMPTS = 5;
 
+const BULK_WRITE_PATH = '/v1/subjects:batchWrite';
+
 /** Local retry admission only: no remote body, header text or credential is retained. */
 export type ImportRetryState = Readonly<{
   notBefore?: number;
@@ -178,7 +180,7 @@ function mayRetry(request: Request, body: Uint8Array | null): boolean {
     );
   if (request.method !== 'POST') return false;
   if (hasIdempotencyKey(request.headers.get('idempotency-key'))) return true;
-  if (new URL(request.url).pathname !== '/v1/subjects:batchWrite' || body === null) return false;
+  if (new URL(request.url).pathname !== BULK_WRITE_PATH || body === null) return false;
   try {
     const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
     if (typeof value !== 'object' || value === null || !('commands' in value)) return false;
@@ -616,6 +618,13 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     let requestStarted = false;
     let clearDeadline: (() => void) | undefined;
     let activeRequest: Request | undefined;
+    const startDeadline = (startedAt: number) => {
+      deadline = startedAt + deadlineMs;
+      clearDeadline = schedule(
+        () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
+        Math.max(0, deadline - now()),
+      );
+    };
     try {
       signal.throwIfAborted();
       checkBodySize(init?.body, maxBodyBytes);
@@ -639,6 +648,10 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
             })
           : new Request(url.href, { ...init, signal, redirect: 'manual' });
       activeRequest = request;
+      // Bulk capture starts its budget at the first send. Other requests also
+      // bound the body read and initial credential acquisition.
+      const bulkCapture = request.method === 'POST' && url.pathname === BULK_WRITE_PATH;
+      if (!bulkCapture) startDeadline(now());
       const source = input instanceof Request && init?.body == null ? input.body : request.body;
       if (source !== null && (request.method === 'GET' || request.method === 'HEAD'))
         throw new TypeError('GET/HEAD import requests cannot have a body');
@@ -669,11 +682,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
             if (!requestStarted) {
               requestStarted = true;
               const startedAt = now();
-              deadline = startedAt + deadlineMs;
-              clearDeadline = schedule(
-                () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
-                Math.max(0, deadline - now()),
-              );
+              if (bulkCapture) startDeadline(startedAt);
               notifyImportRequestStart(caller ?? signal, startedAt);
             }
             const result = await upstream(next);

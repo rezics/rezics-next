@@ -111,7 +111,11 @@ const ack = (keys: string[]): BatchWriteResult => ({
   results: keys.map((key) => ({ key, status: 200, value: { revision: 1 } })),
 });
 const reject = (keys: string[]): BatchWriteResult => ({
-  results: keys.map((key) => ({ key, status: 409, problem: { type: 'conflict', title: 'Conflict', status: 409 } })),
+  results: keys.map((key) => ({
+    key,
+    status: 409,
+    problem: { type: 'conflict', title: 'Conflict', status: 409, retryable: false },
+  })),
 });
 async function safeRejection(operation: Promise<unknown>) {
   let rejected = false;
