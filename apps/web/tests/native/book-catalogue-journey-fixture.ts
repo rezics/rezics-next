@@ -19,6 +19,7 @@ import { currentNativeLifecycle } from './lifecycle.ts';
 import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
+import { BookColdSearchTimeoutError } from './book-catalogue-acceptance.ts';
 
 export type BookCatalogueType = 'schema:Book' | 'schema:BookSeries' | 'bf:Instance';
 export type BookCatalogueIdentity = {
@@ -72,6 +73,14 @@ export type BookCatalogueJourneyFixture = {
   initialBookEntry: LibraryEntryRead;
   search: NativeSearchPage;
   searchContainer?: string;
+};
+
+type BookCatalogueJourneyOptions = {
+  setupDeadline: number;
+  signal: AbortSignal;
+  recordColdSearch: (
+    verdict: { outcome: 'running' | 'passed' } | { outcome: 'failed'; error: unknown },
+  ) => Promise<void>;
 };
 
 const writeRateOverrides = JSON.stringify({
@@ -535,6 +544,40 @@ async function readSearchFailureSnapshot(stack: NativeWebStack, expected: readon
   }
 }
 
+async function readNativeSearch(
+  stack: NativeWebStack,
+  input: NativeSearchRequest,
+  expected: readonly BookCatalogueIdentity[],
+): Promise<{ page?: NativeSearchPage; last: string }> {
+  const response = await stack.kernel('/v1/subjects:search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const text = await response.text();
+  const last = `HTTP ${response.status}: ${text.slice(0, 400)}`;
+  if (response.status === 200) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      throw new Error(`POST /v1/subjects:search returned invalid JSON: ${text.slice(0, 400)}`, { cause: error });
+    }
+    if (!isSearchPage(parsed))
+      throw new Error(`POST /v1/subjects:search returned an invalid default response: ${text.slice(0, 400)}`);
+    const found = searchSubjectMap(parsed);
+    if (
+      expected.every((subject) => {
+        const hit = found.get(subject.id);
+        return hit?.type === subject.type && hit.labels.en === subject.label;
+      })
+    ) {
+      return { page: parsed, last };
+    }
+  }
+  return { last };
+}
+
 async function waitForNativeSearch(
   stack: NativeWebStack,
   marker: string,
@@ -555,38 +598,17 @@ async function waitForNativeSearch(
         })}`,
       );
     }
-    const response = await stack.kernel('/v1/subjects:search', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const text = await response.text();
-    last = `HTTP ${response.status}: ${text.slice(0, 400)}`;
-    if (response.status === 200) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch (error) {
-        throw new Error(`POST /v1/subjects:search returned invalid JSON: ${text.slice(0, 400)}`, { cause: error });
-      }
-      if (!isSearchPage(parsed))
-        throw new Error(`POST /v1/subjects:search returned an invalid default response: ${text.slice(0, 400)}`);
-      const found = searchSubjectMap(parsed);
-      if (
-        expected.every((subject) => {
-          const hit = found.get(subject.id);
-          return hit?.type === subject.type && hit.labels.en === subject.label;
-        })
-      ) {
-        console.info(
-          `book-search-timing ${JSON.stringify({
-            stage: 'search-match',
-            atMs: performance.timeOrigin + performance.now(),
-            count: expected.length,
-          })}`,
-        );
-        return parsed;
-      }
+    const observation = await readNativeSearch(stack, input, expected);
+    last = observation.last;
+    if (observation.page) {
+      console.info(
+        `book-search-timing ${JSON.stringify({
+          stage: 'search-match',
+          atMs: performance.timeOrigin + performance.now(),
+          count: expected.length,
+        })}`,
+      );
+      return observation.page;
     }
     await Bun.sleep(250);
   }
@@ -620,9 +642,43 @@ async function waitForNativeSearch(
   } catch (error) {
     workerOutput = `Worker diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`;
   }
-  throw new Error(
+  throw new BookColdSearchTimeoutError(
     `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nSubject Search readiness: ${readiness}\nSubject publication frontier: ${JSON.stringify(frontier ?? null)}\nDurable Search worker output:\n${workerOutput}`,
   );
+}
+
+async function waitForNativeSearchBeforeSetupDeadline(
+  stack: NativeWebStack,
+  marker: string,
+  expected: readonly BookCatalogueIdentity[],
+  options: BookCatalogueJourneyOptions,
+): Promise<NativeSearchPage> {
+  const input = { text: marker, languages: ['en'] } satisfies NativeSearchRequest;
+  let last = 'no response';
+  while (Date.now() < options.setupDeadline) {
+    options.signal.throwIfAborted();
+    try {
+      const observation = await readNativeSearch(stack, input, expected);
+      last = observation.last;
+      options.signal.throwIfAborted();
+      if (Date.now() >= options.setupDeadline) break;
+      if (observation.page) {
+        console.info(
+          `book-search-timing ${JSON.stringify({
+            stage: 'search-ready-after-cold-failure',
+            atMs: performance.timeOrigin + performance.now(),
+            count: expected.length,
+          })}`,
+        );
+        return observation.page;
+      }
+    } catch (error) {
+      options.signal.throwIfAborted();
+      last = `Search read exception: ${error instanceof Error ? error.message.slice(0, 400) : 'unavailable'}`;
+    }
+    await Bun.sleep(250);
+  }
+  throw new Error(`Native Book Search did not become ready within the setup budget; last response ${last}`);
 }
 
 async function readPlannedBookShelf(stack: NativeWebStack, book: BookCatalogueIdentity, planned: NativeState) {
@@ -638,10 +694,12 @@ async function readPlannedBookShelf(stack: NativeWebStack, book: BookCatalogueId
   return { status: response.status, subjectId: bookEntry.subjectId, state: bookEntry.state };
 }
 
-export function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJourneyFixture>;
+export function startBookCatalogueJourneyFixture(
+  options: BookCatalogueJourneyOptions,
+): Promise<BookCatalogueJourneyFixture>;
 export function startBookCatalogueJourneyFixture(scope: 'shelf-boundary'): Promise<BookShelfBoundaryFixture>;
 export async function startBookCatalogueJourneyFixture(
-  scope?: 'shelf-boundary',
+  scope: 'shelf-boundary' | BookCatalogueJourneyOptions,
 ): Promise<BookCatalogueJourneyFixture | BookShelfBoundaryFixture> {
   const shelfOnly = scope === 'shelf-boundary';
   if (!shelfOnly) await prepareNativeAuthMessages();
@@ -738,7 +796,17 @@ export async function startBookCatalogueJourneyFixture(
     await createLibraryEntry(stack, edition, editionPlanned);
     if (seriesPlanned) await createLibraryEntry(stack, series, seriesPlanned);
 
-    const search = await waitForNativeSearch(stack, marker, expected);
+    await scope.recordColdSearch({ outcome: 'running' });
+    let search: NativeSearchPage | undefined;
+    try {
+      search = await waitForNativeSearch(stack, marker, expected);
+    } catch (error) {
+      await scope.recordColdSearch({ outcome: 'failed', error });
+      scope.signal.throwIfAborted();
+    }
+    if (search === undefined) {
+      search = await waitForNativeSearchBeforeSetupDeadline(stack, marker, expected, scope);
+    } else await scope.recordColdSearch({ outcome: 'passed' });
     const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
     auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
     console.info(
