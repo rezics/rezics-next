@@ -151,6 +151,19 @@ async function seededEditorAgent(call: KernelCall, editor: string) {
   return resolveEditorAgent(call, editor, requireId(await readLocalDeveloperAccountId(), 'seeded editor account'));
 }
 
+async function prepareSeededEditorAgent(call: KernelCall, editor: string) {
+  const release = await readActiveDefinitions(call).catch(() => {
+    throw new Error('seeded editor Agent fixture requires a current native Definitions release');
+  });
+  const child = Bun.spawn([process.execPath, resolve(import.meta.dir, 'semantic-first-public-editor-agent.ts')], {
+    cwd: root,
+    stdin: new Blob([JSON.stringify({ bearer: editor, ...release })]),
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  if ((await child.exited) !== 0) throw new Error('seeded editor Agent fixture synchronization was blocked');
+}
+
 async function hydrated(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 180_000 });
 }
@@ -347,7 +360,14 @@ async function runNativeBoundaries(stack: Stack, revision: string, stackLog: str
       'book-create-read',
       async (call) => createAndReadNativeBook(call, await getEditor(), `Walk boundary Book ${token}`),
     ],
-    ['editor-agent', async (call) => seededEditorAgent(call, await getEditor())],
+    [
+      'editor-agent',
+      async (call) => {
+        const editor = await getEditor();
+        await prepareSeededEditorAgent(call, editor);
+        return seededEditorAgent(call, editor);
+      },
+    ],
   ] satisfies [string, (call: KernelCall) => Promise<unknown>][];
   const results = [];
   for (const [id, check] of checks) {
@@ -441,19 +461,6 @@ async function main(nativeBoundaries: boolean) {
         )}\n`,
         { mode: 0o600 },
       );
-    let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
-    let frontendCause: string | undefined;
-    try {
-      frontends = await startSeededFrontends();
-      own('frontends', () => frontends.stop());
-    } catch (error) {
-      frontendCause = error instanceof Error ? error.message : String(error);
-      await writeFile(
-        join(evidenceDir, 'frontend-failure.json'),
-        `${JSON.stringify({ utc: new Date().toISOString(), error: frontendCause, stack, readiness }, null, 2)}\n`,
-        { mode: 0o600 },
-      );
-    }
     let keys: { password: string } | undefined;
     let personaCause: string | undefined;
     try {
@@ -474,6 +481,27 @@ async function main(nativeBoundaries: boolean) {
     }
     const trace: NativeObservation[] = [];
     const call = nativeWalkCall(stack.kernel, trace);
+    let editorAgentCause = editorCause;
+    if (editor) {
+      try {
+        await prepareSeededEditorAgent(call, editor);
+      } catch (error) {
+        editorAgentCause = error instanceof Error ? error.message : 'seeded editor Agent fixture failed';
+      }
+    }
+    let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
+    let frontendCause: string | undefined;
+    try {
+      frontends = await startSeededFrontends();
+      own('frontends', () => frontends.stop());
+    } catch (error) {
+      frontendCause = error instanceof Error ? error.message : String(error);
+      await writeFile(
+        join(evidenceDir, 'frontend-failure.json'),
+        `${JSON.stringify({ utc: new Date().toISOString(), error: frontendCause, stack, readiness }, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+    }
     const browserTemp = join(evidenceDir, 'browser');
     await mkdir(browserTemp, { recursive: true, mode: 0o700 });
     const results = roundResults;
@@ -939,6 +967,7 @@ async function main(nativeBoundaries: boolean) {
         );
         results.push(
           await journey(session, 'statement-consent', async () => {
+            if (editorAgentCause) throw new Error(editorAgentCause);
             const { id: target } = await seededEditorAgent(call, editor);
             const person = await createSubject(call, editor, 'schema:Person', `Walk consent identity ${token}`);
             const property = 'rezics:penNameOf';
