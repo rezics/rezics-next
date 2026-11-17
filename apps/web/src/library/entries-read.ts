@@ -8,7 +8,11 @@ import {
   type ShelfSort,
 } from './shelf-params';
 export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-params';
-import { captureEntryRestoreCredential, originalEntryRestoreCredential } from './entry-restore-credential';
+import {
+  captureLibraryEntryRestoreCredential,
+  isLibraryEntryRestoreCredential,
+  originalEntryRestoreCredential,
+} from './entry-restore-credential';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
@@ -143,8 +147,7 @@ export function validateLibraryRestoreInput(input: unknown): LibraryRestoreInput
     (value.revision as number) < 1 ||
     typeof value.idempotencyKey !== 'string' ||
     !restoreKeyPattern.test(value.idempotencyKey) ||
-    (value.credential !== undefined &&
-      (typeof value.credential !== 'string' || !/^[A-Za-z0-9_-]{1,3200}$/.test(value.credential)))
+    (value.credential !== undefined && !isLibraryEntryRestoreCredential(value.credential))
   )
     throw new Error('Invalid library restore');
   return {
@@ -152,7 +155,7 @@ export function validateLibraryRestoreInput(input: unknown): LibraryRestoreInput
     deletionId: value.deletionId,
     revision: value.revision as number,
     idempotencyKey: value.idempotencyKey,
-    ...(value.credential ? { credential: value.credential as string } : {}),
+    ...(value.credential ? { credential: value.credential } : {}),
   };
 }
 export type LibraryRestoreResult =
@@ -388,7 +391,7 @@ export async function loadPersonalLibrary(
       next: null,
     };
   }
-  const credential = await captureEntryRestoreCredential(request, sessionEnv);
+  const credential = await captureLibraryEntryRestoreCredential(request, sessionEnv);
   return {
     signedIn: true,
     ...(type ? { type } : {}),
@@ -538,7 +541,7 @@ export async function removePersonalLibraryEntry(
       const deletionId = headers?.get('Library-Entry-Deletion-Id');
       const revision = Number(headers?.get('Library-Entry-Deletion-Revision'));
       if (!deletionId || !Number.isSafeInteger(revision) || revision < 1) return { ok: true };
-      const credential = input.credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
+      const credential = input.credential ?? (await captureLibraryEntryRestoreCredential(request, sessionEnv));
       return {
         ok: true,
         undo: { deletionId, revision, idempotencyKey: crypto.randomUUID(), ...(credential ? { credential } : {}) },

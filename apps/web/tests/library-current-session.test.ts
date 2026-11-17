@@ -16,6 +16,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 const { loadShelfTypes } = await import('../src/library/shelf-types-read');
 const { libraryEntryFormResponse } = await import('../src/library/entry-form');
+const { loadPersonalLibraryCurrent } = await import('../src/library/personal-library-server');
 
 const origin = 'https://site.test';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
@@ -41,6 +42,10 @@ function session() {
   let accessToken = 'current-viewer';
   let subject = 'owner';
   const csrfToken = newCsrfToken();
+  const credential = async () => {
+    reads++;
+    return status === 'active' ? { status, accessToken, subject, csrfToken } : { status, csrfToken };
+  };
   const env = {
     AUTH_ISSUER: 'https://auth.test',
     API_RESOURCE: 'https://kernel.test',
@@ -50,12 +55,7 @@ function session() {
     SITE_ORIGINS: origin,
     SESSIONS: {
       idFromName: (id: string) => id,
-      get: () => ({
-        credential: async () => {
-          reads++;
-          return status === 'active' ? { status, accessToken, subject, csrfToken } : { status, csrfToken };
-        },
-      }),
+      get: () => ({ credential, credentialIfFresh: credential }),
     },
   } as unknown as Partial<SessionEnv>;
   return {
@@ -296,13 +296,34 @@ test('current credentials keep bounded keyset reads, restrictive transport, exac
   }
 });
 
-test('script-free restore keeps original native credentials through renewal and current admission gates replay', async () => {
+test('a typed Book shelf keeps its exact row with unavailable siblings and preserves script-free Undo through renewal', async () => {
   const current = session();
+  // The mounted Website scope JWT in archive-sender-credential.test.ts exceeds the old form envelope.
+  const accessToken = 'a'.repeat(3_200);
+  current.renew(accessToken);
   let admitted = true;
   const writes: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: (async (input, init) => {
       const call = new Request(input, init);
+      const url = new URL(call.url);
+      if (url.pathname === '/v1/libraryEntries') {
+        expect(call.headers.get('authorization') === `Bearer ${accessToken}`).toBe(true);
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+          view: 'FULL',
+          limit: '20',
+          type: 'schema:Book',
+          orderBy: 'lastActivity',
+          direction: 'desc',
+        });
+        return Response.json({ libraryEntries: [{ ...entry, state: 'planned' }], next: null });
+      }
+      if (url.pathname === '/v1/libraryContinue')
+        return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+      if (url.pathname === '/v1/collections') return Response.json({ code: 'semantic_not_ready' }, { status: 503 });
+      if (url.pathname === '/v1/openapi.json')
+        return Response.json({ paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } });
+      if (url.pathname === '/v1/libraryPins') return Response.json({ pins: [], revision: 1, next: null });
       if (call.url.endsWith('/platform/exposure'))
         return Response.json({ admitted: admitted ? ['library_entry.delete', 'library_entry.restore'] : [] });
       if (call.method === 'DELETE')
@@ -322,22 +343,36 @@ test('script-free restore keeps original native credentials through renewal and 
     Object.fromEntries(
       [...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)].map((match) => [match[1]!, match[2]!]),
     );
-  const removed = fields(
-    await (await libraryEntryFormResponse(current.request(removeForm), current.env, client)).text(),
-  );
+  const request = new Request(`${origin}/en/library?type=schema%3ABook`, { headers: current.request().headers });
+  const shelf = await loadPersonalLibraryCurrent(client, request, current.env, { type: 'schema:Book' });
+  expect(shelf).toMatchObject({
+    sessionSubject: 'owner',
+    page: { signedIn: true, type: 'schema:Book', entries: [{ subjectId, state: 'planned' }], next: null },
+    continueEntries: { state: 'unavailable', status: 503 },
+    navigation: { pins: { state: 'loaded' }, collectionsState: 'unavailable' },
+  });
+  if (!shelf.page.signedIn) throw new Error('Expected a signed-in shelf');
+  const credential = shelf.page.entries[0]?.removeCredential;
+  expect(credential?.length).toBeGreaterThan(4_096);
+  const submit = (form: Record<string, string>) => {
+    const request = current.request(form);
+    request.headers.delete('x-csrf-token');
+    return libraryEntryFormResponse(request, current.env, client);
+  };
+  const removed = fields(await (await submit({ ...removeForm, credential: credential! })).text());
   expect(removed.idempotencyKey).not.toBe(idempotencyKey);
   expect(removed.credential).toBeTruthy();
-  const first = await libraryEntryFormResponse(current.request(removed), current.env, client);
+  const first = await submit(removed);
   const retry = fields(await first.text());
   expect(retry).toEqual(removed);
   current.renew('renewed-viewer');
   admitted = false;
-  expect((await libraryEntryFormResponse(current.request(retry), current.env, client)).status).toBe(403);
+  expect((await submit(retry)).status).toBe(403);
   expect(writes).toHaveLength(1);
   admitted = true;
-  const restored = await libraryEntryFormResponse(current.request(retry), current.env, client);
+  const restored = await submit(retry);
   expect(await restored.text()).toContain('data-restored-entry');
-  expect(writes[1]!.headers.get('authorization')).toBe('Bearer current-viewer');
+  expect(writes[1]!.headers.get('authorization') === `Bearer ${accessToken}`).toBe(true);
   expect([...writes[1]!.headers]).toEqual([...writes[0]!.headers]);
   expect(await writes[1]!.text()).toBe(await writes[0]!.text());
   current.renew('foreign-viewer', 'another-owner');

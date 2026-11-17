@@ -14,7 +14,7 @@ const formTokenLimit = 3200;
 // the Bearer prefix, 2 KiB for the serialized origin, the 43-character session
 // cookie and the expected reader's 128 UTF-16 units (up to 6 JSON bytes each).
 // The limit applies to the entire sealed JSON envelope.
-const archiveSenderLimit = base64urlLength(
+const websiteCredentialLimit = base64urlLength(
   16 * 1024 +
     'Bearer '.length +
     2048 +
@@ -25,11 +25,14 @@ const archiveSenderLimit = base64urlLength(
     gcmTagBytes,
 );
 
+export function isLibraryEntryRestoreCredential(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= websiteCredentialLimit && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
 export function readArchiveSender(input: object): string | undefined {
   const sender = 'sender' in input ? input.sender : undefined;
   if (sender === undefined) return undefined;
-  if (typeof sender !== 'string' || sender.length > archiveSenderLimit || !/^[A-Za-z0-9_-]+$/.test(sender))
-    throw new Error('Invalid archive sender');
+  if (!isLibraryEntryRestoreCredential(sender)) throw new Error('Invalid archive sender');
   return sender;
 }
 
@@ -56,8 +59,13 @@ export function captureEntryRestoreCredential(request: Request, env: Partial<Ses
   return captureCredential(request, env, formTokenLimit, 'Restore credential exceeds form bound');
 }
 
+/** Single-entry Remove and Undo accept the full Website credential envelope. */
+export function captureLibraryEntryRestoreCredential(request: Request, env: Partial<SessionEnv>) {
+  return captureCredential(request, env, websiteCredentialLimit, 'Restore credential exceeds envelope bound');
+}
+
 export function captureArchiveSenderCredential(request: Request, env: Partial<SessionEnv>) {
-  return captureCredential(request, env, archiveSenderLimit, 'Archive sender exceeds JSON bound');
+  return captureCredential(request, env, websiteCredentialLimit, 'Archive sender exceeds JSON bound');
 }
 
 async function captureCredential(request: Request, env: Partial<SessionEnv>, limit: number, overflow: string) {

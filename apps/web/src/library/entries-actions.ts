@@ -23,6 +23,7 @@ import {
   type ReloadedLibraryEntry,
 } from './entries-read';
 import { libraryStateLabel, libraryStateOptions } from './profiles';
+import { isLibraryEntryRestoreCredential } from './entry-restore-credential';
 
 async function nameConflict(result: LibraryMutationResult): Promise<LibraryMutationResult> {
   if (!result.ok && result.reason === 'conflict') {
@@ -123,9 +124,9 @@ function validateRemove(input: unknown): LibraryRemoveInput {
   const identity = readIdentity(input as Record<string, unknown>);
   if (!identity) throw new Error('Invalid library entry');
   const credential = (input as Record<string, unknown>).credential;
-  if (credential !== undefined && (typeof credential !== 'string' || !/^[A-Za-z0-9_-]{1,3200}$/.test(credential)))
+  if (credential !== undefined && !isLibraryEntryRestoreCredential(credential))
     throw new Error('Invalid library entry');
-  return { ...identity, ...(credential ? { credential: credential as string } : {}) };
+  return { ...identity, ...(credential ? { credential } : {}) };
 }
 
 export const readPersonalLibrary = createServerFn({ method: 'GET' })

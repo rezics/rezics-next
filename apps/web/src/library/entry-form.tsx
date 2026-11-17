@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { libraryEntryFormLimit } from '../session/csrf';
 import { locales } from '../paraglide/runtime.js';
 import { paraglideMiddleware } from '../paraglide/server.js';
 import { m } from '../paraglide/messages.js';
@@ -15,7 +16,11 @@ import {
   type LibraryRestoreInput,
   type LibraryRestoreResult,
 } from './entries-read';
-import { captureEntryRestoreCredential, originalEntryRestoreCredential } from './entry-restore-credential';
+import {
+  captureLibraryEntryRestoreCredential,
+  isLibraryEntryRestoreCredential,
+  originalEntryRestoreCredential,
+} from './entry-restore-credential';
 import { EntryFormPage } from './entry-undo';
 
 async function boundedForm(request: Request): Promise<URLSearchParams> {
@@ -30,7 +35,7 @@ async function boundedForm(request: Request): Promise<URLSearchParams> {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 4096) {
+      if (size > libraryEntryFormLimit) {
         await reader.cancel();
         throw problem(413, 'invalid_request', 'Invalid Request');
       }
@@ -72,7 +77,7 @@ export async function libraryEntryFormResponse(
     const credential = form.has('credential') ? single('credential') : undefined;
     if (
       (credential !== undefined &&
-        (!/^[A-Za-z0-9_-]{1,3200}$/.test(credential) || form.getAll('credential').length !== 1)) ||
+        (!isLibraryEntryRestoreCredential(credential) || form.getAll('credential').length !== 1)) ||
       !subjectId ||
       subjectId.length > 128 ||
       !Number.isSafeInteger(revision) ||
@@ -125,7 +130,7 @@ export async function libraryEntryFormResponse(
       };
       const original = await originalEntryRestoreCredential(request, sessionEnv, credential);
       if (!original) return problemResponse(problem(403, 'forbidden', 'Forbidden'));
-      const captured = credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
+      const captured = credential ?? (await captureLibraryEntryRestoreCredential(request, sessionEnv));
       // The document boundary has consumed and authenticated the form already.
       const result = await removePersonalLibraryEntry(
         client,
