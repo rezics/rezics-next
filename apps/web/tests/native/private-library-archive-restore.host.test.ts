@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Page } from 'playwright';
+import type { Page, Response } from 'playwright';
 import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
 import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import { startAuthStack } from './auth-stack.ts';
@@ -373,6 +373,78 @@ async function downloadArchive(page: Page) {
   return archivePath;
 }
 
+async function recordCollectionPreviewFailure(page: Page, responses: readonly number[]) {
+  const [notices] = await Promise.allSettled([
+    page.locator('main [role="status"], main [role="alert"]').allTextContents(),
+    stack.syncKernelRequests(),
+  ]);
+  const prefix = '/v1/libraryArchiveCollectionRecoveries';
+  const native = stack
+    .kernelRequests()
+    .filter((request) => !request.fixtureRequest && request.url.startsWith(prefix))
+    .slice(-8)
+    .map(({ url, method, responseStatus, failure }) => {
+      const path = url.split('?')[0];
+      let problem: { code?: unknown } | null = null;
+      try {
+        if (failure?.body) problem = JSON.parse(failure.body);
+      } catch {
+        // Transport errors can have a non-JSON response.
+      }
+      const code = problem?.code;
+      return {
+        operation: path === prefix ? 'upload' : path?.endsWith('/collections') ? 'collections' : 'status',
+        method,
+        status: responseStatus ?? null,
+        ...(typeof code === 'string' && /^[a-z0-9_]{1,64}$/u.test(code) ? { code } : {}),
+      };
+    });
+  const observation = {
+    path: new URL(page.url()).pathname,
+    responses,
+    native,
+    notices:
+      notices.status === 'fulfilled'
+        ? notices.value
+            .map((text) => text.trim())
+            .filter(Boolean)
+            .slice(0, 6)
+            .map((text) => text.slice(0, 180))
+        : [],
+  };
+  console.info('Native Library Archive Collection preview boundary', observation);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-collection-preview', observation });
+}
+
+async function startCollectionPreview(page: Page, archivePath: string) {
+  const responses: number[] = [];
+  const origin = new URL(page.url()).origin;
+  const observe = (response: Response) => {
+    const url = new URL(response.url());
+    if (
+      responses.length < 8 &&
+      url.origin === origin &&
+      url.pathname.startsWith('/_serverFn/') &&
+      response.request().method() === 'POST'
+    )
+      responses.push(response.status());
+  };
+  page.on('response', observe);
+  try {
+    await page.getByLabel('Completed Library export file').setInputFiles(archivePath);
+    await page.getByRole('button', { name: 'Upload and preview', exact: true }).click();
+    await page.getByRole('button', { name: 'Review this Collection', exact: true }).waitFor({
+      state: 'visible',
+      timeout: 60_000,
+    });
+  } catch (error) {
+    await recordCollectionPreviewFailure(page, responses).catch(() => undefined);
+    throw error;
+  } finally {
+    page.off('response', observe);
+  }
+}
+
 async function restoreOwnerLibrary() {
   const prepared = await prepareOwnerLibrary(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
@@ -417,12 +489,7 @@ async function restoreOwnerLibrary() {
   await page.getByRole('heading', { name: 'Recover a curated Collection' }).waitFor({
     state: 'visible',
   });
-  await page.getByLabel('Completed Library export file').setInputFiles(archivePath);
-  await page.getByRole('button', { name: 'Upload and preview', exact: true }).click();
-  await page.getByRole('button', { name: 'Review this Collection', exact: true }).waitFor({
-    state: 'visible',
-    timeout: 60_000,
-  });
+  await startCollectionPreview(page, archivePath);
   await page.getByRole('button', { name: 'Review this Collection', exact: true }).click();
   await page.getByRole('button', { name: 'Toggle selection for this page', exact: true }).click();
   await page.getByRole('button', { name: 'Review selection', exact: true }).click();
