@@ -27,6 +27,7 @@ import type {
 } from './import-contract.ts';
 import { evaluateAdmission, insertSourceDestination, throwAdmissionRefusal } from './source-destination.ts';
 import { ImportTransportError } from './import-client.ts';
+import { reviewedCatalogueProblem } from './http.ts';
 import {
   DIGEST,
   ObservationConflictError,
@@ -84,7 +85,8 @@ import { RETENTION_LOCAL_MAINTENANCE } from './retention.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
-  | { status: 'pending' | 'rejected' | 'unavailable' };
+  | { status: 'pending'; mediaState?: 'reserved' | 'uploaded'; failure?: ImportTransportError }
+  | { status: 'rejected' | 'unavailable' };
 /** Actual public media availability, never a URL statement or locally allocated ID. */
 export interface ImportMediaResolver {
   resolve(input: {
@@ -139,11 +141,24 @@ export type ImportRunResult = {
   committedPrefix?: number;
   checkpointed?: boolean;
 };
-const runTransportFailures = new WeakMap<ImportRunResult, ImportTransportError>();
+type RunFailure = Readonly<{
+  phase: Phase | 'bootstrap' | 'finalizing' | 'coordinator';
+  reason: 'unresolved' | 'planning-failed' | 'command-refused' | 'cover-pending' | 'cover-failed';
+  keyDigest?: string;
+  status?: number;
+  problem?: string;
+  mediaState?: 'reserved' | 'uploaded';
+}>;
+type FailureEvidence = { detail: RunFailure; transport?: ImportTransportError };
+const runFailures = new WeakMap<ImportRunResult, FailureEvidence>();
+
+export function importRunFailure(result: ImportRunResult): RunFailure | undefined {
+  return runFailures.get(result)?.detail;
+}
 
 /** The first typed terminal request is diagnostic context, outside the public run report. */
 export function importRunTransportFailure(result: ImportRunResult): ImportTransportError | undefined {
-  return runTransportFailures.get(result);
+  return runFailures.get(result)?.transport;
 }
 
 export type ImportRunOptions = {
@@ -161,6 +176,8 @@ export type ImportRunOptions = {
   checkpoint?: StagingCheckpointRequest;
 };
 export type ResumeRunOptions = ImportRunOptions & {
+  /** Require the same active generation that a preceding handoff inspected. */
+  expectedGeneration?: string;
   /** Credentials and live transport are constructed only after sealed work is admitted. */
   activateNetwork?: () => void | Promise<void>;
 };
@@ -233,6 +250,11 @@ function sameSerializedStatement(left: unknown, right: unknown): boolean {
 }
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
+type CommandRefusal = Extract<BatchWriteResult['results'][number], { problem: unknown }>;
+type CoverOutcome =
+  | { outcome: 'resolved' }
+  | { outcome: 'failed'; refusal?: CommandRefusal; error?: unknown; stopped?: boolean }
+  | { outcome: 'pending'; mediaState?: 'reserved' | 'uploaded'; failure?: ImportTransportError };
 type Write = (<T>(operation: () => Promise<T>) => Promise<T>) & {
   owner?: object;
   waitForDependency?: <T>(dependency: Promise<T>, owner: object | undefined) => Promise<T>;
@@ -284,7 +306,7 @@ export class Importer {
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
   private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
-  private readonly transportFailures = new WeakMap<AbortSignal, ImportTransportError>();
+  private readonly failures = new WeakMap<AbortSignal, FailureEvidence>();
   private readonly recordConcurrency: number;
   private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
   private readonly planInflight = new WeakMap<AbortSignal, Map<string, PlanFlight>>();
@@ -1070,13 +1092,21 @@ export class Importer {
     }
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
     const result = await this.send(request, signal, write);
+    const refusal = result.results.find((entry) => 'problem' in entry);
+    if (refusal) this.retainCommandRefusal(signal, 'bootstrap', refusal);
     const acknowledgedEffects = this.acknowledge(owner, request, result);
     this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
     return bound?.state === 'bound' ? bound.subject : null;
   }
 
-  private async dispatch(run: Run, pending: Pending, signal: AbortSignal, write: Write): Promise<boolean> {
+  private async dispatch(
+    run: Run,
+    pending: Pending,
+    signal: AbortSignal,
+    write: Write,
+    phase: Phase,
+  ): Promise<boolean> {
     const owner = { source: run.source, external_id: pending.recordKey };
     const omissions = await this.fences(owner, signal);
     // An empty commands argument augments only omission proof, retaining the
@@ -1096,6 +1126,8 @@ export class Importer {
         this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
     });
     const result = await this.send(request, signal, write);
+    const refusal = result.results.find((entry) => 'problem' in entry);
+    if (refusal) this.retainCommandRefusal(signal, phase, refusal);
     // Returned identities must be durable before RunStore can resolve a record.
     const acknowledgedEffects = this.atomic(() => {
       const count = this.acknowledge(owner, request, result);
@@ -1107,9 +1139,34 @@ export class Importer {
     return result.results.every(success);
   }
 
-  private retainTransportFailure(signal: AbortSignal, error: unknown): void {
-    if (error instanceof ImportTransportError && !this.transportFailures.has(signal))
-      this.transportFailures.set(signal, error);
+  private retainRunFailure(
+    signal: AbortSignal,
+    failure: Omit<RunFailure, 'keyDigest'>,
+    key?: string,
+    error?: unknown,
+  ): void {
+    const transport = error instanceof ImportTransportError ? error : undefined;
+    const prior = this.failures.get(signal);
+    if (prior && (prior.transport || prior.detail.status !== undefined || (!transport && failure.status === undefined)))
+      return;
+    this.failures.set(signal, {
+      detail: { ...failure, ...(key === undefined ? {} : { keyDigest: hash(key) }) },
+      ...(transport ? { transport } : {}),
+    });
+  }
+
+  private retainCommandRefusal(signal: AbortSignal, phase: RunFailure['phase'], refusal: CommandRefusal): void {
+    const problem = reviewedCatalogueProblem(refusal.problem).code;
+    this.retainRunFailure(
+      signal,
+      { phase, reason: 'command-refused', status: refusal.status, ...(problem ? { problem } : {}) },
+      refusal.key,
+    );
+  }
+
+  private failedRun(result: ImportRunResult, signal: AbortSignal, fallback: RunFailure): ImportRunResult {
+    runFailures.set(result, this.failures.get(signal) ?? { detail: fallback });
+    return result;
   }
 
   private async drain(run: Run, signal: AbortSignal, phase: Phase): Promise<boolean> {
@@ -1128,10 +1185,10 @@ export class Importer {
         (pending) => pending.recordKey,
         async (pending, write) => {
           try {
-            return await this.dispatch(run, pending, signal, write);
+            return await this.dispatch(run, pending, signal, write, phase);
           } catch (error) {
             if (error instanceof Interrupted) throw error;
-            this.retainTransportFailure(signal, error);
+            this.retainRunFailure(signal, { phase, reason: 'unresolved' }, pending.recordKey, error);
             return false;
           }
         },
@@ -1925,7 +1982,7 @@ export class Importer {
         return await this.plan(registration, run, staged, signal, write);
       } catch (error) {
         if (error instanceof Interrupted) throw error;
-        this.retainTransportFailure(signal, error);
+        this.retainRunFailure(signal, { phase: 'staged', reason: 'planning-failed' }, staged.row.recordKey, error);
         return 'failed';
       } finally {
         stack.delete(staged.row.recordKey);
@@ -1966,16 +2023,18 @@ export class Importer {
     write: Write,
   ): Promise<Planned | 'failed' | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
-    if (!(await this.bindOwnDependencies(registration, run, staged, signal, write))) return 'failed';
     const store = this.session.store;
     const { row } = staged;
+    const recordState = store.key(row.source, row.recordKey, run);
+    // A resolved entry belongs to this run's immutable command plan. Current bindings are refreshed in a new run.
+    if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
+    if (!(await this.bindOwnDependencies(registration, run, staged, signal, write))) return 'failed';
     const owner = { source: row.source, external_id: row.recordKey };
     const claim = row.state === 'present' ? this.session.bindings.claim(owner) : null;
     // Metadata is independent of semantic no-change detection. Failure keeps this
     // record unclassified and the source baseline unchanged, with its own retry intent.
     if (claim?.state === 'bound') await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
     let omissions = await this.fences(owner, signal);
-    const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
     const previousProjection = recordState.acknowledgedProjection;
     const sameAdmission = isDeepStrictEqual(
@@ -1995,9 +2054,6 @@ export class Importer {
         : resolveOwnReferences(staged.projection, row.source, this.session.bindings);
     if (ownReferences) {
       const prior = store.referenceSignature(row.source, row.recordKey);
-      // A resolved entry belongs to this run's immutable command plan. If another
-      // record taught a binding after that entry resolved, the next input pass refreshes it.
-      if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
       if (
         isDeepStrictEqual(acknowledged, row) &&
         sameAdmission &&
@@ -2185,9 +2241,12 @@ export class Importer {
     if (!statisticOnly) {
       for (const [candidate, proposal] of retainedCandidates) {
         const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
-        // Equal values still need the changed source's actual digest. An acknowledged
+        // Equal values still need their actual evidence digest. An acknowledged
         // proposal from this immutable run is already current and must survive replay.
-        if (prior.source.digest !== row.digest && candidate.signature !== hash(`${run.id}:${candidate.key}`)) {
+        if (
+          prior.source.digest !== proposal.source.digest &&
+          candidate.signature !== hash(`${run.id}:${candidate.key}`)
+        ) {
           retainedCandidates.delete(candidate);
           retainedProposals.delete(proposal);
         }
@@ -2279,7 +2338,7 @@ export class Importer {
     deferred: DeferredCover<SourceProjection>,
     signal: AbortSignal,
     write: Write,
-  ): Promise<{ outcome: 'pending' | 'failed' | 'resolved'; kind: Kind }> {
+  ): Promise<CoverOutcome> {
     const { row } = deferred;
     const owner = { source: row.source, external_id: row.recordKey };
     let omissions = await this.fences(owner, signal);
@@ -2287,10 +2346,10 @@ export class Importer {
     if (coverOmission) {
       const result = this.session.store.resolveDeferredCover(run, row.recordKey, { omission: coverOmission });
       if (result.resolved) this.acknowledged(row.recordKey);
-      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+      return { outcome: result.resolved ? 'resolved' : 'failed' };
     }
     const claim = this.session.bindings.claim(owner);
-    if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
+    if (claim?.state !== 'bound') return { outcome: 'failed' };
     // The context-free conversion exists only as input to identifier lookup.
     const lookup = this.options.identifierLookup;
     const ownReferences = lookup ? null : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
@@ -2309,9 +2368,9 @@ export class Importer {
     if (!intents.length) {
       const result = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (result.resolved) this.acknowledged(row.recordKey);
-      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+      return { outcome: result.resolved ? 'resolved' : 'failed' };
     }
-    if (!this.options.mediaResolver) return { outcome: 'failed', kind: deferred.kind };
+    if (!this.options.mediaResolver) return { outcome: 'failed' };
     const resolution = await this.options.mediaResolver.resolve({
       owner,
       subject: claim.subject,
@@ -2322,22 +2381,26 @@ export class Importer {
     if (resolution.status !== 'available') {
       if (resolution.status === 'pending') {
         this.progress(signal)?.onMedia?.('deferred');
-        return { outcome: 'pending', kind: deferred.kind };
+        return {
+          outcome: 'pending',
+          ...(resolution.mediaState ? { mediaState: resolution.mediaState } : {}),
+          ...(resolution.failure ? { failure: resolution.failure } : {}),
+        };
       }
       this.progress(signal)?.onMedia?.(resolution.status === 'rejected' ? 'rejected' : 'deferred');
       const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (rejected.resolved) this.acknowledged(row.recordKey);
-      return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
+      return { outcome: rejected.resolved ? 'resolved' : 'failed' };
     }
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     for (const intent of intents)
-      if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? '')) return { outcome: 'failed', kind: deferred.kind };
+      if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? '')) return { outcome: 'failed' };
     omissions = await this.fences(owner, signal);
     const freshCoverOmission = omissions.find((omission) => omission.field_group === 'cover');
     if (freshCoverOmission) {
       const result = this.session.store.resolveDeferredCover(run, row.recordKey, { omission: freshCoverOmission });
       if (result.resolved) this.acknowledged(row.recordKey);
-      return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+      return { outcome: result.resolved ? 'resolved' : 'failed' };
     }
     conversion = this.convert(registration, deferred, { ...context, mediaIds: resolution.mediaIds });
     const proposals: BatchCommand[] = [];
@@ -2390,11 +2453,12 @@ export class Importer {
       const result = await this.send(request, signal, write);
       const acknowledgedEffects = this.acknowledge(owner, request, result);
       this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
-      if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
+      const refusal = result.results.find((entry) => 'problem' in entry);
+      if (refusal) return { outcome: 'failed', refusal };
     }
     const result = this.session.store.resolveDeferredCover(run, row.recordKey);
     if (result.resolved) this.acknowledged(row.recordKey);
-    return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
+    return { outcome: result.resolved ? 'resolved' : 'failed' };
   }
 
   private async resolveCovers(
@@ -2405,9 +2469,7 @@ export class Importer {
   ): Promise<boolean> {
     for (;;) {
       let after: string | undefined;
-      let pending = false;
-      let failed = false;
-      let stopped = false;
+      let issue: (Exclude<CoverOutcome, { outcome: 'resolved' }> & { key: string }) | undefined;
       for (;;) {
         const page = this.session.store.pageDeferredCovers(run, {
           ...(after ? { after } : {}),
@@ -2422,7 +2484,7 @@ export class Importer {
           page,
           signal,
           (entry) => entry.row.recordKey,
-          async (entry, write) => {
+          async (entry, write): Promise<CoverOutcome> => {
             try {
               return await this.resolveCover(registration, run, entry, signal, write);
             } catch (error) {
@@ -2430,25 +2492,40 @@ export class Importer {
               const overload =
                 error instanceof ImportTransportError &&
                 (error.status === 429 || (error.status === 503 && error.retryable));
-              if (overload) this.retainTransportFailure(signal, error);
-              return { outcome: overload ? ('stopped' as const) : ('failed' as const), kind: entry.kind };
+              return { outcome: 'failed', stopped: overload, error };
             }
           },
         );
-        for (const outcome of outcomes) {
-          if (outcome.outcome === 'pending') pending = true;
-          else if (outcome.outcome === 'failed') failed = true;
-          else if (outcome.outcome === 'stopped') stopped = true;
+        for (let index = 0; index < outcomes.length; index++) {
+          const outcome = outcomes[index]!;
+          if (outcome.outcome === 'resolved') continue;
+          if (issue?.outcome === 'failed' && issue.stopped) continue;
+          if (!issue || (outcome.outcome === 'failed' && (outcome.stopped || issue.outcome === 'pending')))
+            issue = { ...outcome, key: page[index]!.row.recordKey };
         }
         if (page.length) after = page.at(-1)!.row.recordKey;
         this.options.observer?.onPageRetained?.('media', []);
-        // Polling availability must not open a new budget for a failed write.
-        if (stopped) return false;
-        if (page.length < 100) break;
+        if ((issue?.outcome === 'failed' && issue.stopped) || page.length < 100) break;
       }
-      if (!pending && !failed) return true;
+      if (!issue) return true;
       const remaining = deadline - this.now();
-      if (remaining <= 0) return false;
+      // Polling availability must not open a new budget for a failed write.
+      if (remaining <= 0 || (issue.outcome === 'failed' && issue.stopped)) {
+        if (issue.outcome === 'pending')
+          this.retainRunFailure(
+            signal,
+            {
+              phase: 'media',
+              reason: 'cover-pending',
+              ...(issue.mediaState ? { mediaState: issue.mediaState } : {}),
+            },
+            issue.key,
+            issue.failure,
+          );
+        else if (issue.refusal) this.retainCommandRefusal(signal, 'media', issue.refusal);
+        else this.retainRunFailure(signal, { phase: 'media', reason: 'cover-failed' }, issue.key, issue.error);
+        return false;
+      }
       await this.sleep(Math.min(1000, remaining), signal);
     }
   }
@@ -2509,27 +2586,21 @@ export class Importer {
   ): Promise<ImportRunResult> {
     const store = this.session.store;
     const { observe, finish, signal, mediaDeadline } = work;
-    const finishBulkFailure = () => {
-      const result = finish('bulk-failed', 'Durable operations remain unresolved');
-      const failure = this.transportFailures.get(signal);
-      if (failure) runTransportFailures.set(result, failure);
-      return result;
-    };
+    const finishBulkFailure = (phase: RunFailure['phase'], diagnostic = 'Durable operations remain unresolved') =>
+      this.failedRun(finish('bulk-failed', diagnostic), signal, { phase, reason: 'unresolved' });
     if (work.finalizeOnly) {
       const finalizing = this.progress(signal)?.onPhase?.('finalizing');
       if (finalizing !== undefined) await finalizing;
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       let final = store.finalize(run, 100);
-      if (final === 'incomplete') return finish('bulk-failed', 'Records remain unresolved');
       if (final === 'more') final = await this.finishCursor(run, signal, final);
-      return finish(
-        final === 'complete' ? 'committed' : 'bulk-failed',
-        final === 'complete' ? 'Resumed source finalization' : 'Records remain unresolved',
-      );
+      return final === 'complete'
+        ? finish('committed', 'Resumed source finalization')
+        : finishBulkFailure('finalizing', 'Records remain unresolved');
     }
     const reconciling = this.progress(signal)?.onPhase?.('reconciling');
     if (reconciling !== undefined) await reconciling;
-    if (work.resumed && !(await this.drain(run, signal, 'resumed'))) return finishBulkFailure();
+    if (work.resumed && !(await this.drain(run, signal, 'resumed'))) return finishBulkFailure('resumed');
     let failed = false;
     let observationConflict = false;
     let after: string | undefined;
@@ -2561,7 +2632,7 @@ export class Importer {
             const planned = await this.planOnce(configured, run, staged, signal, write);
             if (!planned || planned === 'failed') return planned === 'failed' ? 'failed' : null;
             for (const pending of store.pendingRecord(run, row.recordKey))
-              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+              if (!(await this.dispatch(run, pending, signal, write, 'staged'))) return 'failed';
             return planned;
           } catch (error) {
             if (error instanceof Interrupted) throw error;
@@ -2572,7 +2643,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
-            this.retainTransportFailure(signal, error);
+            this.retainRunFailure(signal, { phase: 'staged', reason: 'unresolved' }, row.recordKey, error);
             return 'failed';
           }
         },
@@ -2618,7 +2689,7 @@ export class Importer {
             );
             if (!planned) return 'failed';
             for (const pending of store.pendingRecord(run, prior.recordKey))
-              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+              if (!(await this.dispatch(run, pending, signal, write, 'vanished'))) return 'failed';
             return planned;
           } catch (error) {
             if (error instanceof Interrupted) throw error;
@@ -2629,7 +2700,7 @@ export class Importer {
               error instanceof ClassificationRefusedError
             )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
-            this.retainTransportFailure(signal, error);
+            this.retainRunFailure(signal, { phase: 'vanished', reason: 'unresolved' }, prior.recordKey, error);
             return 'failed';
           }
         },
@@ -2653,15 +2724,14 @@ export class Importer {
       if (conflict !== undefined) await conflict;
       return finish('observation-conflict', 'Source observation requires explicit operator resolution');
     }
-    if (failed || store.hasUnresolvedAggregates(run)) return finishBulkFailure();
+    if (failed || store.hasUnresolvedAggregates(run)) return finishBulkFailure('staged');
     const finalizing = this.progress(signal)?.onPhase?.('finalizing');
     if (finalizing !== undefined) await finalizing;
     let final = store.finalize(run, 100);
     if (final === 'more') final = await this.finishCursor(run, signal, final);
-    return finish(
-      final === 'complete' ? 'committed' : 'bulk-failed',
-      final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
-    );
+    return final === 'complete'
+      ? finish('committed', 'Source snapshot committed')
+      : finishBulkFailure('finalizing', 'Records remain unresolved');
   }
 
   private async resumeSealed(registration: SourceRegistration, options: ResumeRunOptions): Promise<ImportRunResult> {
@@ -2716,6 +2786,8 @@ export class Importer {
           'invalid-dump',
           'No resumable sealed acquisition for this source. Use ordinary import with complete input, or inspect this state read-only.',
         );
+      if (options.expectedGeneration !== undefined && peeked.run.id !== options.expectedGeneration)
+        return finish('invalid-dump', 'The requested sealed acquisition is no longer active.');
       if (peeked.status === 'staging')
         return finish(
           'invalid-dump',
@@ -2735,7 +2807,8 @@ export class Importer {
       }
       if (options.activateNetwork) await options.activateNetwork();
       const run = this.session.reopen(ownership);
-      if (!run) return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
+      if (!run || run.id !== peeked.run.id)
+        return finish('invalid-dump', 'Sealed acquisition changed after ownership was taken.');
       const recheck = this.session.store.peekActive(ownership.source);
       if (!recheck || recheck.run.id !== run.id)
         return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
@@ -2765,10 +2838,14 @@ export class Importer {
         return finish('observation-conflict', 'Source classification requires explicit operator resolution');
       if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
         return finish('observation-conflict', 'Source observation requires explicit operator resolution');
-      return finish('bulk-failed', 'Import operations remain unresolved');
+      this.retainRunFailure(signal, { phase: 'coordinator', reason: 'unresolved' }, undefined, error);
+      return this.failedRun(finish('bulk-failed', 'Import operations remain unresolved'), signal, {
+        phase: 'coordinator',
+        reason: 'unresolved',
+      });
     } finally {
       this.runControllers.delete(signal);
-      this.transportFailures.delete(signal);
+      this.failures.delete(signal);
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);
@@ -2951,13 +3028,15 @@ export class Importer {
         return finish('observation-conflict', 'Source classification requires explicit operator resolution');
       if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
         return finish('observation-conflict', 'Source observation requires explicit operator resolution');
-      return finish(
-        error instanceof Interrupted ? 'interrupted' : 'bulk-failed',
-        error instanceof Interrupted ? error.message : 'Import operations remain unresolved',
-      );
+      if (error instanceof Interrupted) return finish('interrupted', error.message);
+      this.retainRunFailure(signal, { phase: 'coordinator', reason: 'unresolved' }, undefined, error);
+      return this.failedRun(finish('bulk-failed', 'Import operations remain unresolved'), signal, {
+        phase: 'coordinator',
+        reason: 'unresolved',
+      });
     } finally {
       this.runControllers.delete(signal);
-      this.transportFailures.delete(signal);
+      this.failures.delete(signal);
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);

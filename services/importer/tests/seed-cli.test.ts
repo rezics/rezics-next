@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import { ImportTransportError } from '../src/import-client.ts';
-import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
+import { Importer } from '../src/importer.ts';
+import { formatSeedError, SeedFinalization, seedImportRunFailure } from '../src/seed-cli.ts';
 import { formatSeedFailure, remainingRequestFromPreparedCommand } from '../src/seed-remaining-request.ts';
+import { createSourceRegistration } from '../src/source-registry.ts';
 
 test('seed phase wrappers retain the transport classifier, actual failure phase and private cause', () => {
   const cause = new Error('private response body');
@@ -51,4 +55,51 @@ test('seed failure formatting never reads raw error messages or invokes cause ac
   const cyclic = new Error('private text');
   Object.defineProperty(cyclic, 'cause', { value: cyclic });
   expect(formatSeedError(cyclic)).toBe('Cross-media seed failed');
+});
+
+test('a native command refusal includes its status and key digest in the seed failure', async () => {
+  let key = '';
+  const importer = new Importer({
+    path: new Database(':memory:'),
+    transport: {
+      async readFence() {
+        return { fenced: false, securityRevision: null };
+      },
+      async batchWrite(request) {
+        key = request.commands[0]!.key;
+        return {
+          results: [
+            {
+              key,
+              status: 422,
+              problem: {
+                type: 'about:blank',
+                title: 'private title',
+                detail: 'private detail',
+                status: 422,
+                retryable: false,
+                code: 'invalid_statement',
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
+  try {
+    const run = await importer.runRecords(
+      createSourceRegistration('bangumi'),
+      (async function* () {
+        yield { source: 'bangumi', key: '101', revision: null, payload: { id: 101, type: 2, name: 'Anime' } };
+      })(),
+    );
+    const line = formatSeedError(seedImportRunFailure('bangumi', run));
+    expect(line).toContain(
+      `run{phase=bootstrap reason=command-refused keyDigest=${createHash('sha256').update(key).digest('hex')} status=422 problem=invalid_statement}`,
+    );
+    expect(line).not.toContain(key);
+    expect(line).not.toContain('private');
+  } finally {
+    await importer.close();
+  }
 });

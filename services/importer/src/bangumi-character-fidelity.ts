@@ -16,7 +16,7 @@ import type { ImportConversion, SourceRegistration } from './import-contract.ts'
 import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import type { Importer, ImportRunResult } from './importer.ts';
 import { type BangumiCharacterAppearance } from './showcase-contract.ts';
-import { bangumiAppearanceSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
+import { bangumiAppearanceProposalSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, type SourceAssets } from './source-registry.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -57,8 +57,7 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function configuredBindings(value: unknown): SourceVocabularyBindings {
   const raw = record(value) ? value : {};
-  const releaseDigest =
-    typeof raw.releaseDigest === 'string' && raw.releaseDigest.length <= 64 ? raw.releaseDigest : '';
+  const releaseDigest = raw.releaseDigest === bundledDigest ? bundledDigest : '';
   const schemesInput = Array.isArray(raw.schemes) ? raw.schemes.slice(0, 64) : [];
   const conceptsInput = Array.isArray(raw.concepts) ? raw.concepts.slice(0, 512) : [];
   const safeSchemes = schemesInput.flatMap((entry) => {
@@ -216,13 +215,13 @@ function rowForAppearance(
   character: NativeIdentity | undefined,
   roleCode: number | string,
 ): SourceVocabularyRow {
-  const origin = bangumiAppearanceSource(sourceAlias, appearance);
+  const origin = bangumiAppearanceProposalSource(sourceAlias, appearance);
   return {
     kind: 'character-appearance',
     path: `/subject-characters/${appearance.sourceIndex}/type`,
     origin: {
       externalId: origin.external_id,
-      revision: origin.record_revision,
+      revision: null,
       digest: origin.digest,
       url: bangumiRecordUrl(appearance.subjectId),
       converterRevision: origin.converter_revision,

@@ -1,7 +1,7 @@
 import { CredentialDeniedError, CredentialServiceError } from './credentials.ts';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
-import { importRunTransportFailure, type ImportRunResult } from './importer.ts';
+import { importRunFailure, importRunTransportFailure, type ImportRunResult } from './importer.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -41,6 +41,7 @@ const finalizationPhases = {
     'bangumi-records',
     'bangumi-cover-handoff',
     'vndb-records',
+    'bangumi-cover-continuation',
     'bangumi-character-fidelity',
     'graph-delivery',
     'current-reads',
@@ -82,14 +83,14 @@ type FinalizationDiagnostic = {
   observation?: FinalizationObservation;
 };
 const finalizationFailures = new WeakMap<object, readonly FinalizationDiagnostic[]>();
-const importRunFailures = new WeakMap<object, { provider: 'bangumi' | 'vndb'; kind: ImportRunResult['status'] }>();
+const importRunFailures = new WeakMap<object, { provider: 'bangumi' | 'vndb'; result: ImportRunResult }>();
 
 /** Register only the local run classification; its diagnostic may contain private source or response text. */
 export function seedImportRunFailure(provider: 'bangumi' | 'vndb', result: ImportRunResult): Error {
   const error = new TypeError(`Cross-media ${provider} import failed: ${result.status} (${result.diagnostic})`, {
     cause: importRunTransportFailure(result),
   });
-  importRunFailures.set(error, { provider, kind: result.status });
+  importRunFailures.set(error, { provider, result });
   return error;
 }
 
@@ -259,8 +260,19 @@ function formatSeedCause(error: unknown): string {
     const run = importRunFailures.get(error);
     if (run) {
       const failure = seedTransportError(error);
+      const detail = importRunFailure(run.result);
+      const generation = run.result.runId;
       return (
-        `Cross-media seed import failed provider=${run.provider} kind=${run.kind}` +
+        `Cross-media seed import failed provider=${run.provider} kind=${run.result.status}` +
+        (generation && /^[1-9][0-9]{0,19}$/u.test(generation) ? ` generation=${generation}` : '') +
+        (detail
+          ? ` run{phase=${detail.phase} reason=${detail.reason}` +
+            (detail.keyDigest ? ` keyDigest=${detail.keyDigest}` : '') +
+            (detail.status === undefined ? '' : ` status=${detail.status}`) +
+            (detail.problem ? ` problem=${detail.problem}` : '') +
+            (detail.mediaState ? ` mediaState=${detail.mediaState}` : '') +
+            '}'
+          : '') +
         (failure ? ` ${formatImportTransportError(failure)}` : '')
       );
     }

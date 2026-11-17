@@ -33,7 +33,12 @@ import {
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
+import {
+  bangumiAppearanceProposalSource,
+  bangumiAppearanceSource,
+  graphEdgeCommandKey,
+  graphEdgeSource,
+} from './cross-media-bindings.ts';
 import { validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
@@ -213,8 +218,10 @@ function selectedEnvelopes(
         );
     }
   }
-  for (const appearance of plan.characterAppearances ?? [])
+  for (const appearance of [...(plan.characterAppearances ?? []), ...(plan.gameCharacterAppearances ?? [])]) {
     allowed.add(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)));
+    allowed.add(envelopeKey(bangumiAppearanceProposalSource(aliases.bangumi, appearance)));
+  }
   for (const source of plan.personCareerSources ?? []) {
     if (source.sourceStatus !== 'available' || !source.responseDigest) continue;
     allowed.add(
@@ -409,7 +416,7 @@ export function buildShowcaseManifest(input: {
   if (owners.length > showcaseLimits.records) throw new RangeError('Selected showcase record limit exceeded');
   const selectedKeys = new Set(owners.map((row) => `${row.source}\0${row.key}`));
   const appearanceOwners = new Map<string, string>();
-  for (const appearance of plan.characterAppearances ?? [])
+  for (const appearance of [...(plan.characterAppearances ?? []), ...(plan.gameCharacterAppearances ?? [])])
     appearanceOwners.set(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)), appearance.subjectId);
   const omissions: ShowcaseOmission[] = [];
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
