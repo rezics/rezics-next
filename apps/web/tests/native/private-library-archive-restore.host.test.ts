@@ -1,15 +1,19 @@
 import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Page } from 'playwright';
+import { subjectGenerations } from '../../../../services/kernel/src/search/indices.ts';
+import { createOpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
+import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const stacks: NativeWebStack[] = [];
 const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
 const evidence = resolve(import.meta.dir, '../../../../.temp/private-library-archive-restore');
+const provenance = resolve(evidence, 'provenance.json');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const messagesRoot = resolve(import.meta.dir, '../../messages');
 const repositoryRoot = resolve(import.meta.dir, '../../../..');
@@ -24,11 +28,23 @@ function gitHead(): string | null {
   return result.exitCode === 0 ? result.stdout.toString().trim() : null;
 }
 
+async function writeArchiveProvenance(result: object) {
+  const pending = `${provenance}.pending`;
+  await writeFile(pending, JSON.stringify({ sourceRevision: gitHead(), ...result }, null, 2) + '\n', { mode: 0o600 });
+  await rename(pending, provenance);
+}
+
 setDefaultTimeout(300_000);
 
-nativeBeforeAll(lifecycle, 600_000, async () => {
+nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
-  stacks.push(await startNativeWebStack());
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
+  await prepareNativeWebSearch('library-archive');
+  const stack = await startNativeWebStack();
+  stacks.push(stack);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
+  const generation = await waitForSubjectPublication(stack, signal);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-owner-library', generation });
 });
 
 afterEach(async () => {
@@ -54,18 +70,47 @@ async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
+async function waitForSubjectPublication(stack: NativeWebStack, signal: AbortSignal) {
+  const url = process.env.OPENSEARCH_URL;
+  const prefix = stack.searchWorker?.prefix;
+  if (!url || !prefix) throw new Error('Native Library Archive Search setup has no owned Subject worker');
+  const search = createOpenSearch(url, { timeoutMs: 1_500 });
+  console.info('Native Library Archive setup: waiting for ordinary Subject publication');
+  for (;;) {
+    signal.throwIfAborted();
+    const { active } = await subjectGenerations(search, prefix, undefined, signal);
+    if (active !== null) {
+      console.info('Native Library Archive setup: ordinary Subject publication ready', { generation: active });
+      return active;
+    }
+    await Bun.sleep(1_000);
+  }
+}
+
 async function waitForSuggestion(stack: NativeWebStack, id: string, label: string) {
   const until = Date.now() + 60_000;
   const query = `/v1/subjects:suggest?q=${encodeURIComponent(label)}&limit=10&languages=en`;
+  let lastStatus: number | undefined;
+  let lastCount: number | undefined;
+  let lastProblem: string | undefined;
   while (Date.now() < until) {
     const response = await stack.kernel(query);
+    lastStatus = response.status;
+    lastProblem = undefined;
+    lastCount = undefined;
     if (response.status === 200) {
       const body = (await response.json()) as { subjects?: { id: string }[] };
       if (body.subjects?.some((item) => item.id === id)) return;
+      lastCount = body.subjects?.length;
+    } else {
+      const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+      if (typeof body?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(body.code)) lastProblem = body.code;
     }
     await Bun.sleep(250);
   }
-  throw new Error(`Native suggestions did not include ${id} for ${label}`);
+  throw new Error(
+    `Native suggestions did not include ${id} for ${label}; last HTTP=${lastStatus ?? 'none'}, count=${lastCount ?? 'unavailable'}, problem=${lastProblem ?? 'none'}`,
+  );
 }
 
 async function message(locale: (typeof locales)[number], key: string) {
@@ -74,7 +119,7 @@ async function message(locale: (typeof locales)[number], key: string) {
 }
 
 async function openGates(stack: NativeWebStack) {
-  for (const group of ['personal_library', 'collections', 'reading_progress'] as const) {
+  for (const group of ['personal_library', 'collections', 'reading_progress', 'search'] as const) {
     const opened = await stack.kernel(
       `/v1/platform/exposure/${group}:open`,
       { method: 'POST', headers: { 'idempotency-key': key() } },
@@ -306,6 +351,7 @@ async function downloadArchive(page: Page) {
 test('owner exports a populated Library and restores Collection, Entry and progress through actual pages', async () => {
   const stack = stacks[0]!;
   const prepared = await prepareOwnerLibrary(stack);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
   const auth = await startAuthStack(stack);
   authStacks.push(auth);
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
@@ -370,9 +416,10 @@ test('owner exports a populated Library and restores Collection, Entry and progr
   const restoredId = await restored.getAttribute('data-receiving-collection');
   expect(restoredId).toBeTruthy();
   expect(restoredId).not.toBe(prepared.collectionId);
-  await expect(restored).toContainText('private');
-  await expect(restored).toContainText('First archived note');
-  await expect(restored).toContainText('Repeated occurrence');
+  const restoredText = await restored.innerText();
+  expect(restoredText).toContain('private');
+  expect(restoredText).toContain('First archived note');
+  expect(restoredText).toContain('Repeated occurrence');
   const nativeCollection = await json<{
     collection: { id: string; title: string; visibility: string; memberCount: number };
   }>(await stack.kernel(`/v1/collections/${restoredId}`, undefined, 'alice'), 200, 'owner collection readback');
@@ -482,7 +529,7 @@ test('owner exports a populated Library and restores Collection, Entry and progr
   const bobPage = bob.context.pages().at(-1)!;
   await bobPage.goto(`${stack.web}/en/collections/${restoredId}`, { waitUntil: 'domcontentloaded' });
   await hydrated(bobPage);
-  await expect(bobPage.getByRole('heading', { name: prepared.collectionTitle })).toHaveCount(0);
+  expect(await bobPage.getByRole('heading', { name: prepared.collectionTitle }).count()).toBe(0);
 
   const headings: Record<string, string> = {};
   for (const locale of locales) {
@@ -503,38 +550,30 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     state: 'visible',
   });
 
-  await writeFile(
-    resolve(evidence, 'provenance.json'),
-    JSON.stringify(
-      {
-        sourceRevision: gitHead(),
-        stack: { kernel: stack.kernelOrigin, web: stack.web },
-        personas: { owner: 'alice', otherMember: 'bob' },
-        seed: {
-          subjectId: prepared.subjectId,
-          sourceCollectionId: prepared.collectionId,
-          restoredCollectionId: restoredId,
-          labelId: prepared.labelId,
-          sourceSessionId: prepared.sessionId,
-        },
-        archive: {
-          path: archivePath,
-          version: artifact.manifest.version,
-          rows: artifact.manifest.rows,
-          sections: artifact.manifest.sections,
-        },
-        locales: headings,
-        native: {
-          restoredVisibility: nativeCollection.collection.visibility,
-          restoredMemberCount: nativeCollection.collection.memberCount,
-          memberNotes: members.members.map((row) => row.note),
-          otherMemberStatus: bobDenied.status,
-          progressSessionCount: sessions.progressSessions.length,
-        },
-      },
-      null,
-      2,
-    ),
-    { mode: 0o600 },
-  );
+  await writeArchiveProvenance({
+    outcome: 'passed',
+    stack: { kernel: stack.kernelOrigin, web: stack.web },
+    personas: { owner: 'alice', otherMember: 'bob' },
+    seed: {
+      subjectId: prepared.subjectId,
+      sourceCollectionId: prepared.collectionId,
+      restoredCollectionId: restoredId,
+      labelId: prepared.labelId,
+      sourceSessionId: prepared.sessionId,
+    },
+    archive: {
+      path: archivePath,
+      version: artifact.manifest.version,
+      rows: artifact.manifest.rows,
+      sections: artifact.manifest.sections,
+    },
+    locales: headings,
+    native: {
+      restoredVisibility: nativeCollection.collection.visibility,
+      restoredMemberCount: nativeCollection.collection.memberCount,
+      memberNotes: members.members.map((row) => row.note),
+      otherMemberStatus: bobDenied.status,
+      progressSessionCount: sessions.progressSessions.length,
+    },
+  });
 });
