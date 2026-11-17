@@ -1,3 +1,4 @@
+import { observeSeedPreparation, seedPreparationFailure, type EnterSeedPreparation } from './seed-preparation.ts';
 import { SeedFinalization, finalizeSeedResult, seedImportRunFailure } from './seed-cli.ts';
 import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import { createHash } from 'node:crypto';
@@ -2071,6 +2072,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     )
       throw new TypeError('Invalid cross-media table scan limit');
     const file = provider === 'bangumi' ? join(this.bangumi, `${table}.jsonlines`) : join(this.vndb, 'db', table);
+    const readPhase = provider === 'bangumi' ? 'bangumi-table-read' : 'vndb-table-read';
     const requiredLinkTable = provider === 'vndb' && (table === 'vn_extlinks' || table === 'extlinks');
     let header: Buffer | null = null;
     if (provider === 'vndb') {
@@ -2078,35 +2080,48 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         header = await readFile(`${file}.header`);
       } catch (error) {
         if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
-          throw new TypeError('Required VNDB external-link table header is missing: ' + table);
-        throw error;
+          throw seedPreparationFailure(
+            new TypeError('Required VNDB external-link table header is missing: ' + table),
+            'vndb-table-read',
+            'file-missing',
+          );
+        throw seedPreparationFailure(error, 'vndb-table-read');
       }
     }
     const columns = header ? header.toString('utf8').trimEnd().split('\t') : null;
     if (columns) {
-      ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
-      if (table === 'vn_extlinks') ensure(columns.join('\t') === 'id\tlink', 'Invalid VNDB vn_extlinks header');
-      if (table === 'extlinks') ensure(columns.join('\t') === 'id\tsite\tvalue', 'Invalid VNDB extlinks header');
-      if (table === 'producers_relations')
-        ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
-      if (table === 'tags' || table === 'tags_parents' || table === 'tags_vn')
-        ensure(columns.join('\t') === VNDB_PUBLIC_TAG_COLUMNS[table].join('\t'), `Invalid VNDB ${table} header`);
-      if (table === 'chars_alias')
-        ensure(columns.join('\t') === 'id\tspoil\tname\tlatin', 'Invalid VNDB chars_alias header');
-      if (table === 'chars_names')
-        ensure(columns.join('\t') === 'id\tlang\tname\tlatin', 'Invalid VNDB chars_names header');
-      const expectedHeader = VNDB_EXPECTED_HEADERS[table];
-      if (expectedHeader) ensure(columns.join('\t') === expectedHeader, `Invalid VNDB ${table} header`);
-      const headerKey = `${provider}/${table}.header`,
-        hash = createHash('sha256').update(header!).digest('hex');
-      ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');
-      this.digests.set(headerKey, hash);
+      try {
+        ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
+        if (table === 'vn_extlinks') ensure(columns.join('\t') === 'id\tlink', 'Invalid VNDB vn_extlinks header');
+        if (table === 'extlinks') ensure(columns.join('\t') === 'id\tsite\tvalue', 'Invalid VNDB extlinks header');
+        if (table === 'producers_relations')
+          ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
+        if (table === 'tags' || table === 'tags_parents' || table === 'tags_vn')
+          ensure(columns.join('\t') === VNDB_PUBLIC_TAG_COLUMNS[table].join('\t'), `Invalid VNDB ${table} header`);
+        if (table === 'chars_alias')
+          ensure(columns.join('\t') === 'id\tspoil\tname\tlatin', 'Invalid VNDB chars_alias header');
+        if (table === 'chars_names')
+          ensure(columns.join('\t') === 'id\tlang\tname\tlatin', 'Invalid VNDB chars_names header');
+        const expectedHeader = VNDB_EXPECTED_HEADERS[table];
+        if (expectedHeader) ensure(columns.join('\t') === expectedHeader, `Invalid VNDB ${table} header`);
+        const headerKey = `${provider}/${table}.header`,
+          hash = createHash('sha256').update(header!).digest('hex');
+        if (this.digests.has(headerKey) && this.digests.get(headerKey) !== hash)
+          throw seedPreparationFailure(new TypeError('Dump changed during selection'), 'vndb-table-read', 'table-changed');
+        this.digests.set(headerKey, hash);
+      } catch (error) {
+        throw seedPreparationFailure(error, 'vndb-table-read', 'table-header-invalid');
+      }
     }
     const resumeFrom = limits?.resumeBytes ?? 0;
     ensure(Number.isSafeInteger(resumeFrom) && resumeFrom >= 0, 'Invalid cross-media table scan resume offset');
     const stream = createReadStream(file, resumeFrom > 0 ? { start: resumeFrom } : {});
     const digest = createHash('sha256');
     const decoder = new TextDecoder('utf-8', { fatal: true });
+    function checkRowSize(bytes: number): void {
+      if (bytes > 1024 * 1024)
+        throw seedPreparationFailure(new TypeError('Dump row exceeds seed input limit'), readPhase, 'row-too-large');
+    }
     async function* lines() {
       let pending = '';
       for await (const chunk of stream) {
@@ -2116,11 +2131,11 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         while ((end = pending.indexOf('\n')) !== -1) {
           const raw = pending.slice(0, end);
           const lineBytes = Buffer.byteLength(raw) + 1;
-          ensure(lineBytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
+          checkRowSize(lineBytes);
           yield { line: raw.replace(/\r$/, ''), bytes: lineBytes };
           pending = pending.slice(end + 1);
         }
-        ensure(Buffer.byteLength(pending) <= 1024 * 1024, 'Dump row exceeds seed input limit');
+        checkRowSize(Buffer.byteLength(pending));
       }
       pending += decoder.decode();
       if (pending) yield { line: pending, bytes: Buffer.byteLength(pending) };
@@ -2131,7 +2146,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     try {
       for await (const item of lines()) {
         const line = item.line;
-        ensure(item.bytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
+        checkRowSize(item.bytes);
         if (limits) {
           if (rowsRead >= limits.maxRows || bytesRead + item.bytes > limits.maxBytes)
             throw new CrossMediaTableScanLimitError(provider, table, resumeFrom + bytesRead);
@@ -2142,21 +2157,35 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         if (!line) continue;
         if (columns) {
           const cells = line.split('\t');
-          ensure(cells.length === columns.length, `Invalid VNDB column count: ${table}`);
+          if (cells.length !== columns.length)
+            throw seedPreparationFailure(
+              new TypeError(`Invalid VNDB column count: ${table}`),
+              readPhase,
+              'row-shape-invalid',
+            );
           yield Object.fromEntries(columns.map((column, i) => [column, decodeCrossMediaCopy(cells[i]!)]));
         } else {
           const row: unknown = JSON.parse(line);
-          ensure(row && typeof row === 'object' && !Array.isArray(row), 'Invalid Bangumi row');
+          if (!row || typeof row !== 'object' || Array.isArray(row))
+            throw seedPreparationFailure(new TypeError('Invalid Bangumi row'), readPhase, 'row-shape-invalid');
           yield row as Row;
         }
       }
       complete = true;
     } catch (error) {
       if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
-        throw new TypeError('Required VNDB external-link table is missing: ' + table);
+        throw seedPreparationFailure(
+          new TypeError('Required VNDB external-link table is missing: ' + table),
+          'vndb-table-read',
+          'file-missing',
+        );
       if (requiredLinkTable && error instanceof TypeError)
-        throw new TypeError('Invalid VNDB external-link table: ' + table, { cause: error });
-      throw error;
+        throw seedPreparationFailure(
+          new TypeError('Invalid VNDB external-link table: ' + table, { cause: error }),
+          'vndb-table-read',
+          'table-invalid',
+        );
+      throw seedPreparationFailure(error, readPhase);
     } finally {
       stream.destroy();
       this.onTableReleased?.(file);
@@ -2164,7 +2193,8 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     if (!complete || resumeFrom > 0) return;
     const key = `${provider}/${table}`,
       hash = digest.digest('hex');
-    ensure(!this.digests.has(key) || this.digests.get(key) === hash, 'Dump changed during selection');
+    if (this.digests.has(key) && this.digests.get(key) !== hash)
+      throw seedPreparationFailure(new TypeError('Dump changed during selection'), readPhase, 'table-changed');
     this.digests.set(key, hash);
   }
 }
@@ -3510,6 +3540,14 @@ export async function runCrossMediaSeedCli(
   argv: readonly string[],
   options: CrossMediaSeedCliOptions = {},
 ): Promise<CrossMediaSeedReport | undefined> {
+  return observeSeedPreparation('seed-options', (enter) => runSeedCli(argv, options, enter));
+}
+
+async function runSeedCli(
+  argv: readonly string[],
+  options: CrossMediaSeedCliOptions,
+  enter: EnterSeedPreparation,
+): Promise<CrossMediaSeedReport | undefined> {
   const {
     composeVndbCharacterVocabularyBindings,
     parseVndbCharacterVocabularyProfile,
@@ -3567,10 +3605,12 @@ export async function runCrossMediaSeedCli(
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!, options.onDumpTableReleased);
+  enter('record-planning');
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),
   });
+  enter('character-vocabulary-planning');
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
   const {
@@ -3584,6 +3624,7 @@ export async function runCrossMediaSeedCli(
   const reviewedVocabulary = releasedReviewedVocabulary();
   const showcaseScopes =
     options.publishReviewedPersonMerge === false ? CATALOGUE_IMPORTER_SCOPES : SHOWCASE_IMPORTER_SCOPES;
+  enter('account-key');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -3593,7 +3634,9 @@ export async function runCrossMediaSeedCli(
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);
+  enter('prior-result');
   const priorShowcase = showcasePath ? await readPriorShowcasePublication(resultPath) : undefined;
+  enter('binding-configuration');
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
@@ -3697,16 +3740,19 @@ export async function runCrossMediaSeedCli(
     'Result must not overwrite importer state',
   );
   ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
+  enter('state-directory');
   await mkdir(dirname(statePath), { recursive: true });
   const importPort = createImportTransport({
     origin: api,
     tokenProvider,
     onDeniedResponse: createSeedDenialDiagnostics(join(dirname(statePath), 'diagnostics')),
   });
+  enter('binding-current-read');
   let characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
   let bangumiCareerBindings = characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] };
   if (characterBindingsPath)
     bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(bangumiCareerBindings, importPort);
+  enter('showcase-journal');
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;

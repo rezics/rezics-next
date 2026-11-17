@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { types } from 'node:util';
+import { seedPreparationDetail } from './seed-preparation.ts';
 
 /** Fixed local phases only: never derive diagnostic text from source records or remote errors. */
 const finalizationPhases = {
@@ -248,9 +249,10 @@ export function formatSeedError(error: unknown): string {
     (typeof error === 'object' && error !== null) || typeof error === 'function'
       ? finalizationFailures.get(error)
       : undefined;
-  return (
-    formatSeedCause(error) + (phases?.map((phase) => ` finalization{${finalizationDetail(phase)}}`).join('') ?? '')
-  );
+  const cause = formatSeedCause(error);
+  if (phases?.length) return cause + phases.map((phase) => ` finalization{${finalizationDetail(phase)}}`).join('');
+  const preparation = seedPreparationDetail(error);
+  return preparation ? `${cause} preparation{${preparation}}` : cause;
 }
 
 function formatSeedCause(error: unknown): string {

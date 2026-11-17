@@ -10,6 +10,7 @@ import {
   importOperationError,
   type ImportOperation,
 } from '../../services/importer/src/import-fetch.ts';
+import { observeSeedPreparation, type EnterSeedPreparation } from '../../services/importer/src/seed-preparation.ts';
 import { reclaimInactiveFileCache, releaseWalkFileCache } from '../walk-memory.ts';
 
 export const CROSS_MEDIA_DUMP_CACHE_ENV = 'REZICS_DATASETS_DUMP_CACHE';
@@ -673,10 +674,12 @@ async function fetchVndbArchive(
 /** Fetch one VNDB dump, verifying it and recording the resolved file and checksum. */
 export async function fetchVndbDump(
   options: FetchOptions & { cacheRoot?: string; pin?: VndbDumpPin } = {},
+  enter?: EnterSeedPreparation,
 ): Promise<{ cacheRoot: string; vndb: string; vndbArchive: string; manifest: VndbDumpManifest }> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   await mkdir(cacheRoot, { recursive: true });
   if (options.pin) {
+    enter?.('vndb-cache-read');
     const file = dumpFileName(options.pin.url);
     const reused = await reuseVerifiedDumpExtraction(
       join(cacheRoot, 'vndb', file.replace(/\.tar\.zst$/, '')),
@@ -685,12 +688,15 @@ export async function fetchVndbDump(
     );
     if (reused) {
       const manifest: VndbDumpManifest = { file, url: options.pin.url, sha256: options.pin.sha256 };
+      enter?.('vndb-manifest-write');
       await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
       releaseWalkFileCache(reused);
       return { cacheRoot, vndb: reused, vndbArchive: join(cacheRoot, 'downloads', file), manifest };
     }
   }
+  enter?.('vndb-archive-acquisition');
   const fetched = await fetchVndbArchive(cacheRoot, options);
+  enter?.('vndb-archive-extraction');
   const vndb = await extractCached(
     fetched.archive,
     fetched.digest,
@@ -700,6 +706,7 @@ export async function fetchVndbDump(
     (path, destination) => runCommand('tar', ['--zstd', '-xf', path, '-C', destination]),
   );
   const manifest: VndbDumpManifest = { file: fetched.file, url: fetched.url, sha256: fetched.digest };
+  enter?.('vndb-manifest-write');
   await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
   reclaimInactiveFileCache();
   return { cacheRoot, vndb, vndbArchive: fetched.archive, manifest };
@@ -709,15 +716,25 @@ export async function fetchVndbDump(
 export async function fetchCrossMediaDumps(
   options: FetchOptions & { cacheRoot?: string } = {},
 ): Promise<CrossMediaDumpPaths> {
+  return observeSeedPreparation('dump-cache-open', (enter) => acquireCrossMediaDumps(options, enter));
+}
+
+async function acquireCrossMediaDumps(
+  options: FetchOptions & { cacheRoot?: string },
+  enter: EnterSeedPreparation,
+): Promise<CrossMediaDumpPaths> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   const bangumiArchive = join(cacheRoot, 'downloads', 'dump-2026-10-20.210332Z.zip');
   const bangumiTarget = join(cacheRoot, 'bangumi', 'dump-2026-10-20.210332Z');
   await mkdir(cacheRoot, { recursive: true });
 
+  enter('bangumi-cache-read');
   const reusedBangumi = await reuseVerifiedDumpExtraction(bangumiTarget, BANGUMI_ARCHIVE_SHA256, bangumiDirectory);
+  enter('bangumi-archive-acquisition');
   const bangumiDigest = reusedBangumi
     ? BANGUMI_ARCHIVE_SHA256
     : await cacheDumpAsset(BANGUMI_ARCHIVE_URL, bangumiArchive, BANGUMI_ARCHIVE_SHA256, options);
+  enter('bangumi-archive-extraction');
   const bangumi =
     reusedBangumi ??
     (await extractCached(
@@ -728,7 +745,8 @@ export async function fetchCrossMediaDumps(
       (path) => runCommand('unzip', ['-tqq', path]),
       (path, destination) => runCommand('unzip', ['-qq', path, '-d', destination]),
     ));
-  const vndbDump = await fetchVndbDump({ ...options, cacheRoot, pin: DEVELOPMENT_VNDB_PIN });
+  enter('vndb-cache-read');
+  const vndbDump = await fetchVndbDump({ ...options, cacheRoot, pin: DEVELOPMENT_VNDB_PIN }, enter);
   reclaimInactiveFileCache();
   return {
     cacheRoot,

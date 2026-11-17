@@ -35,6 +35,11 @@ import {
 } from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { formatSeedArtifactHandoff, formatSeedError, seedTransportError } from '../../services/importer/src/seed-cli.ts';
+import {
+  observeSeedPreparation,
+  seedPreparationFailure,
+  type EnterSeedPreparation,
+} from '../../services/importer/src/seed-preparation.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
@@ -115,7 +120,12 @@ export const developmentShowcaseSelection = {
 
 function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
   const value = env[name]?.trim();
-  if (!value) throw new Error(`Missing ${name}; configure the local development persona and origins first`);
+  if (!value)
+    throw seedPreparationFailure(
+      new Error(`Missing ${name}; configure the local development persona and origins first`),
+      'environment',
+      'missing-setting',
+    );
   return value;
 }
 
@@ -161,9 +171,16 @@ type DevelopmentSeedOptions = {
   publishReviewedPersonMerge?: boolean;
 };
 
-async function seedDevelopmentImport(
+type ShowcaseCredentials = { accountKey: string; client: string; exportPath?: string };
+
+function seedDevelopmentImport(options: DevelopmentSeedOptions, showcaseCredentials?: ShowcaseCredentials) {
+  return observeSeedPreparation('environment', (enter) => prepareDevelopmentImport(options, enter, showcaseCredentials));
+}
+
+async function prepareDevelopmentImport(
   options: DevelopmentSeedOptions,
-  showcaseCredentials?: { accountKey: string; client: string; exportPath?: string },
+  enter: EnterSeedPreparation,
+  showcaseCredentials?: ShowcaseCredentials,
 ) {
   const env = options.env ?? process.env;
   const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY', env);
@@ -174,21 +191,26 @@ async function seedDevelopmentImport(
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
+  enter('kernel-readiness');
   await (options.waitForKernel ?? waitForKernelReadiness)({
     origin: api,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   options.signal?.throwIfAborted();
+  enter('personal-export');
   const personalXml = showcaseCredentials?.exportPath
     ? await readShowcasePersonalListExport(showcaseCredentials.exportPath)
     : undefined;
+  enter('dump-cache-open');
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
+  enter('state-directory');
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
   await mkdir(dirname(state), { recursive: true, mode: 0o700 });
   await chmod(dirname(state), 0o700);
+  enter('account-key');
   const tokenProvider = await (options.createTokenProvider ?? createAccountTokenProvider)({
     accountKeyPath: accountKey,
     account,
@@ -196,11 +218,13 @@ async function seedDevelopmentImport(
     authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
+  enter('catalogue-transport');
   const catalogueTransport = createImportTransport({
     origin: api,
     tokenProvider,
     onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
   });
+  enter('reviewed-catalogue');
   const reviewedCatalogue = await (options.seedCatalogue
     ? options.seedCatalogue({ path: state, port: catalogueTransport })
     : installReviewedCatalogueComposition({
@@ -233,6 +257,7 @@ async function seedDevelopmentImport(
   if (gameEnvironmentBindings) args.push('--bangumi-game-environment-bindings', gameEnvironmentBindings);
   if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
+  enter('showcase-account-key');
   const request = showcaseCredentials
     ? createDevelopmentShowcaseRequest({
         origin: api,
@@ -248,6 +273,7 @@ async function seedDevelopmentImport(
   const composePersona: CrossMediaSeedCliOptions['composePersona'] = request
     ? (context) => seedDevelopmentShowcase({ ...context, accountId: account, request })
     : undefined;
+  enter('import-handoff');
   const importedResult = await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     includeBooks: true,
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
@@ -260,14 +286,23 @@ async function seedDevelopmentImport(
     ...(composePersona && { composePersona }),
     ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
-  if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
+  if (!importedResult)
+    throw seedPreparationFailure(
+      new TypeError('Cross-media seed did not return its native result handoff'),
+      'result-handoff',
+      'result-missing',
+    );
   return { importedResult, account, auth, api, dumps, showcase, result, personalXml };
 }
 
 export async function seedDevelopmentCatalogue(options: DevelopmentSeedOptions = {}): Promise<void> {
   const { importedResult } = await seedDevelopmentImport(options);
   if (importedResult.showcase?.status !== 'published')
-    throw new TypeError('Cross-media seed did not publish the selected catalogue');
+    throw seedPreparationFailure(
+      new TypeError('Cross-media seed did not publish the selected catalogue'),
+      'result-handoff',
+      'catalogue-unpublished',
+    );
 }
 
 export async function runDevelopmentSeed(options: DevelopmentSeedOptions = {}): Promise<DevelopmentShowcaseReport> {

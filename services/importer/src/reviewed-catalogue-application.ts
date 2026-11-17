@@ -1,3 +1,4 @@
+import { observeSeedPreparation, seedPreparationFailure, type EnterSeedPreparation } from './seed-preparation.ts';
 import type { Database } from 'bun:sqlite';
 import type { BatchCommand, BatchStatement, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { bangumiPublicTagScheme, reviewedReferenceKey, sourceDigest } from '@rezics/conversion/support';
@@ -123,7 +124,7 @@ async function openFence(
 ): Promise<void> {
   const o = reviewedCatalogueOwner(seed.schemeURI, seed.literalMember);
   if ((await port.fence({ source: o.source, externalId: o.external_id, fieldGroup: 'facts' }, signal)).fenced)
-    throw new ReviewedBindingFencedError();
+    throw seedPreparationFailure(new ReviewedBindingFencedError(), 'reviewed-fence', 'source-fenced');
 }
 
 function openLedger(path: string | Database): ReviewedCatalogueLedger {
@@ -238,17 +239,19 @@ async function select(
 async function seedReviewedCatalogueWith(
   vocabulary: ReviewedVocabularyPort,
   input: ReviewedCatalogueSeedInput,
+  enter: EnterSeedPreparation,
 ): Promise<ReviewedCatalogueResult> {
   const rows = preflightReviewedCatalogue(
     vocabulary,
     Object.hasOwn(input, 'seeds') ? input.seeds : vocabulary.inventory,
   );
+  enter('reviewed-ledger');
   const owned = input.ledger ? { ledger: input.ledger, close: false } : { ledger: openLedger(input.path), close: true };
   const { session, store } = owned.ledger;
   const ownership = session.acquire(reviewedCatalogueSource);
   if (ownership === 'busy') {
     if (owned.close) session.close();
-    throw new Error('Reviewed catalogue source is busy');
+    throw seedPreparationFailure(new Error('Reviewed catalogue source is busy'), 'reviewed-ledger', 'ledger-busy');
   }
   let run: Run | null = null;
   try {
@@ -302,14 +305,22 @@ async function seedReviewedCatalogueWith(
     const subjects: Record<string, string> = {};
     for (const seed of rows) {
       input.signal?.throwIfAborted();
+      enter('reviewed-fence');
       await openFence(input.port, seed, input.signal);
       const o = reviewedCatalogueSeedOwner(seed);
+      enter('reviewed-metadata');
       const meta = reviewedCatalogueMetadata(seed);
       const ack = await input.port.setSourceRecordMetadata(
         { command: meta.command, idempotencyKey: meta.key },
         input.signal,
       );
-      assertReviewedCatalogue(sameReviewedCatalogueJson(ack.record, seed.metadata));
+      if (!sameReviewedCatalogueJson(ack.record, seed.metadata))
+        throw seedPreparationFailure(
+          new TypeError('Reviewed catalogue input or current binding is invalid'),
+          'reviewed-metadata',
+          'metadata-mismatch',
+        );
+      enter('reviewed-create');
       const create: BatchCommand = {
         op: 'create',
         source: reviewedCatalogueEnvelope(seed, vocabulary.revision),
@@ -323,6 +334,7 @@ async function seedReviewedCatalogueWith(
       const claim = session.bindings.claim(o);
       assertReviewedCatalogue(claim?.state === 'bound');
       subjects[seed.key] = claim.subject;
+      enter('reviewed-metadata');
       const recorded = session.bindings.metadata(o);
       if (!recorded) session.bindings.prepareMetadata(o, meta.key, sourceDigest(meta.command), meta.command);
       assertReviewedCatalogue(
@@ -333,6 +345,7 @@ async function seedReviewedCatalogueWith(
     }
     const facts: ReviewedCatalogueReceipt[] = [];
     for (const seed of rows) {
+      enter('reviewed-proposal');
       const o = reviewedCatalogueSeedOwner(seed);
       const commands: Extract<BatchCommand, { op: 'propose' }>[] = seed.facts.map((fact) => ({
         op: 'propose',
@@ -344,7 +357,9 @@ async function seedReviewedCatalogueWith(
       for (const command of commands) session.bindings.prepare(o, sourceDigest(command), { commands: [command] });
       store.prepare(run, o.external_id, { commands });
       for (const command of commands) {
+        enter('reviewed-fence');
         await openFence(input.port, seed, input.signal);
+        enter('reviewed-proposal');
         const journal = session.bindings.journal(o, command.key);
         assertReviewedCatalogue(journal);
         const result = await input.port.batch(JSON.parse(journal.bytes), input.signal);
@@ -358,6 +373,7 @@ async function seedReviewedCatalogueWith(
         store.acknowledge(run, result, { recordKey: o.external_id });
         const entry = result.results[0]!;
         assertReviewedCatalogue('value' in entry && 'candidate' in entry.value);
+        enter('reviewed-selection');
         facts.push(
           await select(
             actions,
@@ -372,7 +388,15 @@ async function seedReviewedCatalogueWith(
         );
       }
     }
-    assertReviewedCatalogue(await readBinding(vocabulary, session.bindings, input.port, input.signal));
+    enter('reviewed-current-read');
+    const binding = await inspect(vocabulary, session.bindings, input.port, input.signal);
+    if (binding.state !== 'bound')
+      throw seedPreparationFailure(
+        new TypeError('Reviewed catalogue input or current binding is invalid'),
+        'reviewed-current-read',
+        binding.state === 'withdrawn' ? 'binding-withdrawn' : 'binding-unavailable',
+      );
+    enter('reviewed-finalize');
     let final = store.finalize(run, 100);
     while (final === 'more') final = store.finalize(run, 100);
     assertReviewedCatalogue(final === 'complete');
@@ -550,7 +574,9 @@ export function createReviewedCatalogueApplication(input: {
   );
   return {
     seed(request) {
-      return seedReviewedCatalogueWith(request.vocabulary ?? vocabulary, request);
+      return observeSeedPreparation('reviewed-inventory', (enter) =>
+        seedReviewedCatalogueWith(request.vocabulary ?? vocabulary, request, enter),
+      );
     },
     inspect(bindings, port, signal) {
       return inspect(vocabulary, bindings, port, signal);
