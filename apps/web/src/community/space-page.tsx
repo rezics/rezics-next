@@ -818,7 +818,12 @@ function SpaceHome({
             </Button>
           ) : null}
           {entered && !managementRestricted && page.realm ? (
-            <RealmMembersEntry realmId={page.realm.id} appearance={admissions.appearance === true} setup={setup} />
+            <RealmMembersEntry
+              realmId={page.realm.id}
+              nativeCanManage={nativeObservation ? nativeManageAdmitted : undefined}
+              appearance={admissions.appearance === true}
+              setup={setup}
+            />
           ) : null}
           {viewer && page.realm && (!nativeObservation || (entered && nativeManageAdmitted)) ? (
             <div hidden={managementRestricted} inert={managementRestricted} className="min-w-0 space-y-8">

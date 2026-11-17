@@ -27,6 +27,8 @@ for (const [key, value] of Object.entries({
   navigator: browser.navigator,
   HTMLElement: browser.HTMLElement,
   HTMLButtonElement: browser.HTMLButtonElement,
+  HTMLInputElement: browser.HTMLInputElement,
+  HTMLTextAreaElement: browser.HTMLTextAreaElement,
   Element: browser.Element,
   Node: browser.Node,
   Document: browser.Document,
@@ -34,6 +36,7 @@ for (const [key, value] of Object.entries({
   MutationObserver: browser.MutationObserver,
   ResizeObserver: browser.ResizeObserver,
   getComputedStyle: browser.getComputedStyle.bind(browser),
+  scrollTo: browser.scrollTo.bind(browser),
   IS_REACT_ACT_ENVIRONMENT: true,
 })) {
   originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -133,14 +136,16 @@ test('member discovery uses current Realm management observations and the Realm 
   root = createRoot(host);
   await act(async () => root!.render(createElement(RouterProvider, { router })));
   expect(host.querySelector('a')).toBeNull();
-  for (const [setup, appearance, admitted] of [
-    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: true } }, false, true],
-    [{ kind: 'ready', realm: { id: 'space' }, permitted: { settings: true } }, false, false],
-    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: false } }, false, false],
-    [{ kind: 'failure' }, true, true],
-    [{ kind: 'failure' }, false, false],
-  ] satisfies [Props['setup'], boolean, boolean][]) {
-    await act(async () => update({ realmId: 'realm', setup, appearance }));
+  for (const [setup, appearance, nativeCanManage, admitted] of [
+    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: true } }, false, undefined, true],
+    [{ kind: 'ready', realm: { id: 'space' }, permitted: { settings: true } }, false, undefined, false],
+    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: false } }, false, undefined, false],
+    [{ kind: 'failure' }, true, undefined, true],
+    [{ kind: 'failure' }, false, undefined, false],
+    [{ kind: 'failure' }, false, true, true],
+    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: true } }, true, false, false],
+  ] satisfies [Props['setup'], boolean, Props['nativeCanManage'], boolean][]) {
+    await act(async () => update({ realmId: 'realm', setup, appearance, nativeCanManage }));
     const link = host.querySelector('a');
     expect(link !== null).toBe(admitted);
     if (link) expect(link.getAttribute('href')).toBe('/realms/realm/members');
@@ -410,7 +415,7 @@ test('selected addition reviews the entered identity, retries one immutable comm
   expect(host.textContent).toContain('Add Exact inspected account to Exact Realm?');
   expect(host.textContent).toContain(accountId);
   expect(host.textContent).toContain('realm');
-  await click(m.realm_bans_confirm());
+  await click(m.realm_members_add_member());
   expect(host.textContent).toContain(m.realm_members_unknown_command());
   await click(m.realm_members_retry_command());
   expect(intents).toHaveLength(2);
