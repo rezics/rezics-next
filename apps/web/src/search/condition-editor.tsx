@@ -769,6 +769,18 @@ function NodeEditor({
     ? name(definition?.labels, property)
     : m.refinement_choose_property({}, options);
   const direction = statementValue ? conditionDirection(statementValue) : 'direct';
+  const relationChoices = relationDirectionVisible
+    ? [
+        {
+          value: 'direct',
+          label: m.condition_relation_direct({ property: relationPropertyLabel, values: relationOperandLabel }, options),
+        },
+        {
+          value: 'inverse',
+          label: m.condition_relation_inverse({ property: relationPropertyLabel, values: relationOperandLabel }, options),
+        },
+      ]
+    : [];
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
   const unitMessages = {
     missing: () => m.search_quantity_unit_missing({}, context.options),
@@ -831,13 +843,19 @@ function NodeEditor({
     rangeMagnitudeIdentity,
   ]);
   const properties = facetProperties(context.metadata, Object.keys(context.metadata.types));
+  const emptyPropertyChoice = { value: null, label: m.refinement_choose_property({}, options) };
   const fieldChoices = (ids: readonly string[], selected: string) => {
     const choices = ids.map((id) => ({
       value: id,
       label: name(context.metadata.properties[id]?.labels, id),
     }));
-    return buildConditionFieldChoices(choices, selected, name(context.metadata.properties[selected]?.labels, selected));
+    return [
+      emptyPropertyChoice,
+      ...buildConditionFieldChoices(choices, selected, name(context.metadata.properties[selected]?.labels, selected)),
+    ];
   };
+  const statementPropertyChoices = statementValue ? fieldChoices(properties, statementValue.property) : [];
+  const qualifierPropertyChoices = qualifiers.map(({ property }) => fieldChoices(definition?.qualifiers ?? [], property));
   const replaceStatement = (
     next: Partial<{
       property: string;
@@ -1060,6 +1078,7 @@ function NodeEditor({
           >
             {(props) => (
               <Select
+                items={statementPropertyChoices}
                 value={property === '' ? null : property}
                 onValueChange={(nextSelectValue) => {
                   selectStatementProperty(nextSelectValue ?? '');
@@ -1070,9 +1089,8 @@ function NodeEditor({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value={null}>{m.refinement_choose_property({}, options)}</SelectItem>
-                    {fieldChoices(properties, property ?? '').map(({ value, label }) => (
-                      <SelectItem key={value} value={value}>
+                    {statementPropertyChoices.map(({ value, label }) => (
+                      <SelectItem key={value ?? ''} value={value}>
                         {label}
                       </SelectItem>
                     ))}
@@ -1090,6 +1108,7 @@ function NodeEditor({
             >
               {(props) => (
                 <Select
+                  items={relationChoices}
                   value={direction}
                   onValueChange={(nextSelectValue) => {
                     const next = nextSelectValue ?? '';
@@ -1106,18 +1125,11 @@ function NodeEditor({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="direct">
-                        {m.condition_relation_direct(
-                          { property: relationPropertyLabel, values: relationOperandLabel },
-                          options,
-                        )}
-                      </SelectItem>
-                      <SelectItem value="inverse">
-                        {m.condition_relation_inverse(
-                          { property: relationPropertyLabel, values: relationOperandLabel },
-                          options,
-                        )}
-                      </SelectItem>
+                      {relationChoices.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -1299,6 +1311,7 @@ function NodeEditor({
               >
                 {(props) => (
                   <Select
+                    items={qualifierPropertyChoices[index]!}
                     value={qualifier.property === '' ? null : qualifier.property}
                     onValueChange={(nextSelectValue) => selectQualifierProperty(index, nextSelectValue ?? '')}
                   >
@@ -1307,9 +1320,8 @@ function NodeEditor({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value={null}>{m.refinement_choose_property({}, options)}</SelectItem>
-                        {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
-                          <SelectItem key={value} value={value}>
+                        {qualifierPropertyChoices[index]!.map(({ value, label }) => (
+                          <SelectItem key={value ?? ''} value={value}>
                             {label}
                           </SelectItem>
                         ))}

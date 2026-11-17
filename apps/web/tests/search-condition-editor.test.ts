@@ -268,7 +268,7 @@ test('item operands show stable native identities through entity controls while 
       entityLookup: lookup,
     }),
   );
-  expect(invalidItem).toContain('This value could not be resolved as a native item.');
+  expect(invalidItem).toContain(m.condition_entity_invalid({}, { locale: 'en' }));
   expect(invalidItem).toContain('value="Typed name"');
 });
 

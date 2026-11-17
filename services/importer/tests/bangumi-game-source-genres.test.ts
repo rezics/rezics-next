@@ -39,8 +39,11 @@ function subject(
     subject: { id, type, context: globalContext, statements: ranked },
   } as unknown as ReviewedSubjectRead;
 }
-const emptyReviewedCandidates = async (): Promise<ReviewedCandidatePage> =>
-  ({ candidates: [], next: null }) as unknown as ReviewedCandidatePage;
+const emptyReviewedCandidates = async (): Promise<ReviewedCandidatePage> => ({
+  candidates: [],
+  next: null,
+  adoption: null,
+});
 const statement = (content: string, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') => ({
   rank,
   value: { type: 'value' as const, content },
@@ -216,7 +219,7 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
     async reviewedCandidates(id, query) {
       const key = `${id}\0${query.property}\0${query.target}`;
       associations.set(key, (associations.get(key) ?? 0) + 1);
-      return { candidates: [], next: null } as unknown as ReviewedCandidatePage;
+      return emptyReviewedCandidates();
     },
   });
   const lookup = (signal: AbortSignal, externalId = String(runRecord.id)) =>
@@ -259,9 +262,6 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   const deferred: Extract<ImportIdentifierResolution, { status: 'unavailable' }> = {
     status: 'unavailable',
     preserveProperties: ['schema:genre'],
-    resolvedReferences: Object.fromEntries(
-      literals.slice(1).map((value, index) => [bangumiGameSourceGenreReference(value), ids[index + 1]!]),
-    ),
   };
   expect(unavailable).toEqual(deferred);
   expect(idsFor()).toEqual([undefined, ids[1], ids[2]]);
