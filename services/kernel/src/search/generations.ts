@@ -1458,7 +1458,7 @@ async function reconcileMetadataDiscoveryPage(
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
     const initialEmpty =
       initialEmptyMetadataCandidate(row) &&
-      page.position === 0n &&
+      page.position >= BigInt(row.position) &&
       (kind !== 'collection' || page.epoch !== undefined) &&
       page.next === null &&
       page.continuation === null &&
@@ -1478,7 +1478,7 @@ async function reconcileMetadataDiscoveryPage(
         return false;
       }
       if (current.keys.length === 0 && current.records.length === 0) {
-        await guardedEmptyProbe.certify(row, page.epoch ?? null);
+        await guardedEmptyProbe.certify(row, page.position, page.epoch ?? null);
         return false;
       }
     }
@@ -1770,6 +1770,7 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
     partition: number;
     owner: string;
     position: string;
+    observed_position: string;
     prior_epoch: number | null;
     epoch: number | null;
   }[] = [];
@@ -1782,15 +1783,15 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
              AND index_uuid=$3 AND incarnation=$4::uuid AND state='reconciling'
            FOR SHARE
          ), locked AS MATERIALIZED (
-           SELECT p.partition_no,p.owner,i.epoch FROM bound,
-             jsonb_to_recordset($5::jsonb) AS i(partition integer,owner text,position bigint,prior_epoch integer,epoch integer)
+           SELECT p.partition_no,p.owner,i.observed_position,i.epoch FROM bound,
+             jsonb_to_recordset($5::jsonb) AS i(partition integer,owner text,position bigint,observed_position bigint,prior_epoch integer,epoch integer)
              JOIN search.discovery_population p ON p.partition_no=i.partition AND p.owner=i.owner
            WHERE p.prefix=$1 AND p.generation=$2 AND p.complete AND NOT p.native_complete AND NOT p.certified
              AND p.after_route IS NULL AND p.after_id IS NULL AND p.continuation IS NULL AND p.reconcile_position IS NULL
              AND p.indexed=0 AND p.census=0 AND p.position=i.position AND p.native_epoch IS NOT DISTINCT FROM i.prior_epoch
            ORDER BY p.partition_no,p.owner FOR UPDATE OF p
          )
-         UPDATE search.discovery_population p SET native_complete=true,certified=true,reconcile_position=0,native_epoch=l.epoch
+         UPDATE search.discovery_population p SET native_complete=true,certified=true,reconcile_position=l.observed_position,native_epoch=l.epoch
          FROM locked l WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
         [target.prefix, target.generation, target.uuid, target.incarnation, JSON.stringify(proofs)],
       ),
@@ -1798,11 +1799,12 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
   );
   return {
     observed: batch.observed,
-    async save(row: Population, epoch: number | null) {
+    async save(row: Population, position: bigint, epoch: number | null) {
       proofs.push({
         partition: row.partition,
         owner: row.owner,
         position: row.position,
+        observed_position: position.toString(),
         prior_epoch: row.native_epoch,
         epoch,
       });
@@ -1970,7 +1972,7 @@ type DiscoveryCut = {
   space_position: string | null;
 };
 
-export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number) {
+export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number, limit?: number) {
   return withSearchConnection(
     pool,
     async (client) =>
@@ -1987,9 +1989,13 @@ export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number
      LEFT JOIN search.discovery_population review ON review.partition_no=p.partition_no AND review.prefix=p.prefix AND review.generation=p.generation AND review.owner='review'
      LEFT JOIN search.discovery_population space ON space.partition_no=p.partition_no AND space.prefix=p.prefix AND space.generation=p.generation AND space.owner='space'
      WHERE p.prefix=$1 AND p.generation=$2 AND p.owner='accounts'
+       AND p.complete AND p.certified AND s.complete AND s.certified
+       AND (collection.owner IS NULL OR (collection.complete AND collection.certified))
+       AND (review.owner IS NULL OR (review.complete AND review.certified))
+       AND (space.owner IS NULL OR (space.complete AND space.certified))
      ORDER BY (p.reconcile_position IS DISTINCT FROM c.position OR s.reconcile_position IS DISTINCT FROM c.position) DESC,
-              p.partition_no`,
-          [prefix, generation],
+              p.partition_no LIMIT $3`,
+          [prefix, generation, limit ?? null],
         )
       ).rows,
   );
@@ -2136,6 +2142,69 @@ async function reopenDiscoveryFrontiers(
   return reopened;
 }
 
+async function recheckDiscoveryCutBatch(
+  pool: Pool,
+  target: DiscoveryTarget,
+  chunk: readonly DiscoveryCut[],
+  metadataProducers: DiscoveryMetadataProducers,
+  requiredKinds: readonly string[],
+  trace?: DiscoveryFinalizationTrace,
+) {
+  const checks = await checkDiscoveryCutBatch(pool, chunk, metadataProducers, requiredKinds, trace);
+  const retired = checks.find((check) => check.state === 'retire');
+  if (retired) {
+    trace?.step('retire-epoch');
+    await retireDiscoveryCapability(pool, target);
+    trace?.report({ outcome: 'native-epoch-changed', partition: retired.partition, kind: retired.kind });
+    return { state: 'retiring' as const };
+  }
+  const stale: ReturnType<typeof staleFrontier>[] = [];
+  for (const [index, check] of checks.entries()) {
+    const row = chunk[index]!;
+    if (check.state === 'metadata') stale.push(staleFrontier(row, check.kind));
+    if (!('changed' in check) || !check.changed) continue;
+    const { accountPosition, semanticPosition, accountRevision, claimRevision } = check.changed;
+    if (accountPosition || accountRevision || claimRevision) stale.push(staleFrontier(row, 'accounts'));
+    if (semanticPosition || check.changed.semanticWitness) stale.push(staleFrontier(row, 'semantic'));
+  }
+  if (stale.length) {
+    trace?.step('restart-frontiers');
+    const initial = await reopenDiscoveryFrontiers(pool, target, stale);
+    // The first mismatch skips later metadata owners. Check only the skipped reads in the rejected homes.
+    // Persist each owner's proven mismatches before another owner can refuse its observation.
+    let additionalMetadataFrontiers = 0;
+    const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind));
+    for (const [index, kind] of kinds.entries()) {
+      const earlier = kinds.slice(0, index);
+      const remaining = chunk.filter((_, row) => {
+        const check = checks[row]!;
+        return check.state === 'metadata' && earlier.includes(check.kind);
+      });
+      if (!remaining.length) continue;
+      const siblings = await checkMetadataCuts(pool, remaining, metadataProducers, [kind], trace);
+      const changed = siblings.flatMap((check, index) =>
+        check.state === 'metadata' ? [staleFrontier(remaining[index]!, check.kind)] : [],
+      );
+      additionalMetadataFrontiers += await reopenDiscoveryFrontiers(pool, target, changed);
+      stale.push(...changed);
+    }
+    trace?.report({
+      outcome: 'cuts-changed',
+      first: { partition: stale[0]!.partition, owner: stale[0]!.owner },
+      frontiers: initial + additionalMetadataFrontiers,
+      additionalMetadataFrontiers,
+    });
+    return {
+      state: 'changed' as const,
+      repairPartitions:
+        initial + additionalMetadataFrontiers === stale.length && stale.length <= DISCOVERY_POPULATIONS_PER_ADVANCE
+          ? [...new Set(stale.map((row) => row.partition))]
+          : undefined,
+    };
+  }
+  return { state: 'current' as const };
+}
+
 type AdvanceDiscoveryOptions = SearchTurnContext & {
   pool: Pool;
   search: OpenSearch;
@@ -2279,11 +2348,12 @@ async function advanceDiscoveryTurn(
     return;
   }
   const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
-  if (target.state === 'populating' || target.state === 'reconciling') {
+  async function advancePopulation(phase: 'populating' | 'reconciling', partitions?: readonly number[]) {
+    const { target } = projection;
     const review = metadataProducers.review;
     const readInvalidation = review?.populationInvalidationPending?.bind(review);
     let reviewInvalidationPending = readInvalidation ? await searchTurnCall(readInvalidation) : false;
-    const pending = target.state === 'populating' ? 'NOT complete' : 'NOT certified';
+    const pending = phase === 'populating' ? 'NOT complete' : 'NOT certified';
     const populations = await withSearchConnection(
       pool,
       async (client) =>
@@ -2292,8 +2362,9 @@ async function advanceDiscoveryTurn(
             `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
       revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text,native_complete,native_epoch FROM search.discovery_population
       WHERE prefix=$1 AND generation=$2 AND ${pending}
+      AND ($5::int[] IS NULL OR partition_no=ANY($5))
       AND ($4::boolean = false OR owner <> 'review') ORDER BY partition_no,owner LIMIT $3`,
-            [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE, reviewInvalidationPending],
+            [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE, reviewInvalidationPending, partitions ?? null],
           )
         ).rows,
     );
@@ -2301,23 +2372,22 @@ async function advanceDiscoveryTurn(
       let retiring: Promise<void> | undefined;
       let deferredReview: DiscoveryProducerCoverageError | undefined;
       const checkCapability = discoveryPageCapabilityCheck(pool, projection);
-      await mapBounded(
+      const results = await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
-          const reads = target.state === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
+          const reads = phase === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
           const checkpoints = reads ? populationCheckpointBatch(pool, target, batch) : undefined;
           const indexedReads =
-            target.state === 'reconciling'
+            phase === 'reconciling'
               ? discoveryPageReadBatch(batch.filter(emptyIndexedMetadataCandidate), () =>
                   withDiscoveryTarget(pool, search, target, async () => {}),
                 )
               : undefined;
-          const emptyIndexProbe =
-            target.state === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
+          const emptyIndexProbe = phase === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
           const coreRows = reads ? [] : batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
           const guardedEmptyProbe =
-            target.state === 'reconciling'
+            phase === 'reconciling'
               ? reconciliationEmptyIndexProbe(pool, search, target, coreRows, batch)
               : undefined;
           const coreReads = coreReconciliationBatch(pool, coreRows);
@@ -2367,8 +2437,9 @@ async function advanceDiscoveryTurn(
         },
         (retired) => retired,
       );
-      if (deferredReview && !retiring) throw deferredReview;
-      return;
+      if (results.includes(true)) return 'retiring';
+      if (deferredReview) throw deferredReview;
+      return 'advanced';
     }
     // A filtered selection cannot certify exhaustion. Keep the held Review frontier intact.
     if (
@@ -2379,13 +2450,20 @@ async function advanceDiscoveryTurn(
           (
             await client.query(
               `SELECT 1 FROM search.discovery_population
-         WHERE prefix=$1 AND generation=$2 AND owner='review' AND ${pending} LIMIT 1`,
-              [prefix, target.generation],
+         WHERE prefix=$1 AND generation=$2 AND owner='review' AND ${pending}
+           AND ($3::int[] IS NULL OR partition_no=ANY($3)) LIMIT 1`,
+              [prefix, target.generation, partitions ?? null],
             )
           ).rowCount === 1,
       ))
     )
       return 'waiting-for-review-invalidation';
+    return 'complete';
+  }
+  if (target.state === 'populating' || target.state === 'reconciling') {
+    const progress = await advancePopulation(target.state);
+    if (progress === 'waiting-for-review-invalidation') return progress;
+    if (progress !== 'complete') return;
   }
   if (target.state === 'populating') {
     await withSearchConnection(pool, (client) =>
@@ -2397,16 +2475,18 @@ async function advanceDiscoveryTurn(
     return;
   }
   trace?.start(target.generation, 'replay-freshness');
-  const replay = await withSearchConnection(pool, (client) =>
-    freshness.run(client, { consumer: discoveryConsumer(prefix, target.generation) }),
-  );
-  if (!replay || (replay.behind > 0 && replay.oldest === null))
-    throw new SearchUnavailableError('Discovery replay freshness is unavailable');
-  if (replay.behind > 0) {
-    trace?.report({ outcome: 'replay-behind', behind: replay.behind });
-    return;
-  }
+  const replayCurrent = async () => {
+    const replay = await withSearchConnection(pool, (client) =>
+      freshness.run(client, { consumer: discoveryConsumer(prefix, target.generation) }),
+    );
+    if (!replay || (replay.behind > 0 && replay.oldest === null))
+      throw new SearchUnavailableError('Discovery replay freshness is unavailable');
+    if (replay.behind > 0) trace?.report({ outcome: 'replay-behind', behind: replay.behind });
+    return replay.behind === 0;
+  };
+  const caughtUp = await replayCurrent();
   if (target.state === 'replaying') {
+    if (!caughtUp) return;
     await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='replaying'",
@@ -2417,58 +2497,33 @@ async function advanceDiscoveryTurn(
     return;
   }
   trace?.step('population-heads');
-  // A native write after a partition was certified invalidates that partition, including empty populations.
-  // Check known core drift first so repairs do not repeatedly walk a stable prefix. Metadata still needs its own reads.
-  const observations = await readDiscoveryCuts(pool, prefix, target.generation);
-  if (observations.length !== 4096) throw new Error('Discovery population partitions are incomplete');
+  let observations = await readDiscoveryCuts(
+    pool,
+    prefix,
+    target.generation,
+    caughtUp ? undefined : DISCOVERY_CUT_BATCH_SIZE,
+  );
+  // A shared head advance can make several certified owners due for inspection while the relay catches up.
+  // Inspect only those homes here. Every metadata comparison still uses that producer's own cut.
+  const drift = observations
+    .slice(0, DISCOVERY_CUT_BATCH_SIZE)
+    .filter((row) => row.position !== row.head || row.semantic_position !== row.head);
+  if (drift.length) {
+    const result = await recheckDiscoveryCutBatch(pool, target, drift, metadataProducers, requiredKinds, trace);
+    if (result.state !== 'changed' || !result.repairPartitions) return;
+    const progress = await advancePopulation('reconciling', result.repairPartitions);
+    if (progress === 'waiting-for-review-invalidation') return progress;
+    if (progress !== 'advanced' || !(await replayCurrent())) return;
+    // Repair can perform real writes. Take the entire publication inventory again after it settles.
+    observations = await readDiscoveryCuts(pool, prefix, target.generation);
+    if (observations.length < PARTITIONS) return;
+  } else if (!caughtUp) return;
+  if (observations.length !== PARTITIONS) throw new Error('Discovery population partitions are incomplete');
   for (let offset = 0; offset < observations.length; offset += DISCOVERY_CUT_BATCH_SIZE) {
     const chunk = observations.slice(offset, offset + DISCOVERY_CUT_BATCH_SIZE);
     trace?.step('native-cuts', offset);
-    const checks = await checkDiscoveryCutBatch(pool, chunk, metadataProducers, requiredKinds, trace);
-    const retired = checks.find((check) => check.state === 'retire');
-    if (retired) {
-      trace?.step('retire-epoch');
-      await retireDiscoveryCapability(pool, target);
-      trace?.report({ outcome: 'native-epoch-changed', partition: retired.partition, kind: retired.kind });
-      return;
-    }
-    const stale: ReturnType<typeof staleFrontier>[] = [];
-    for (const [index, check] of checks.entries()) {
-      const row = chunk[index]!;
-      if (check.state === 'metadata') stale.push(staleFrontier(row, check.kind));
-      if (!('changed' in check) || !check.changed) continue;
-      const { accountPosition, semanticPosition, accountRevision, claimRevision } = check.changed;
-      if (accountPosition || accountRevision || claimRevision) stale.push(staleFrontier(row, 'accounts'));
-      if (semanticPosition || check.changed.semanticWitness) stale.push(staleFrontier(row, 'semantic'));
-    }
-    if (stale.length) {
-      trace?.step('restart-frontiers');
-      const initial = await reopenDiscoveryFrontiers(pool, target, stale);
-      // The first mismatch skips later metadata owners. Check only the skipped reads in the rejected homes.
-      // Persist each owner's proven mismatches before another owner can refuse its observation.
-      let additionalMetadataFrontiers = 0;
-      const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind));
-      for (const [index, kind] of kinds.entries()) {
-        const earlier = kinds.slice(0, index);
-        const remaining = chunk.filter((_, row) => {
-          const check = checks[row]!;
-          return check.state === 'metadata' && earlier.includes(check.kind);
-        });
-        if (!remaining.length) continue;
-        const siblings = await checkMetadataCuts(pool, remaining, metadataProducers, [kind], trace);
-        const changed = siblings.flatMap((check, index) =>
-          check.state === 'metadata' ? [staleFrontier(remaining[index]!, check.kind)] : [],
-        );
-        additionalMetadataFrontiers += await reopenDiscoveryFrontiers(pool, target, changed);
-      }
-      trace?.report({
-        outcome: 'cuts-changed',
-        first: { partition: stale[0]!.partition, owner: stale[0]!.owner },
-        frontiers: initial + additionalMetadataFrontiers,
-        additionalMetadataFrontiers,
-      });
-      return;
-    }
+    const result = await recheckDiscoveryCutBatch(pool, target, chunk, metadataProducers, requiredKinds, trace);
+    if (result.state !== 'current') return;
   }
   trace?.step('physical-target', observations.length);
   if (!(await discoveryPhysicalTargetMatches(search, target))) {

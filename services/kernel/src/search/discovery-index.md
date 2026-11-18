@@ -67,15 +67,22 @@ owner fence still runs. All nested reads settle before failure or release, and n
 Search I/O. A concurrent native cut or fenced home remains unqualified, as exercised by
 `test/search/core-reconciliation-snapshot.test.ts`.
 A changed observation restarts that producer's native pass. For Collection, Review and Space, a complete initial
-native page at position zero with no keys, records or continuation can settle both passes in one turn. The wave
-proves zero indexed hits for the exact owner, kind and partition under physical generation custody. A fresh owner
-read must then agree on position and epoch before committing the initial frontier and generation together. A hit or
-inconclusive shared search receives ordinary raw and keyed reconciliation. The durable `native_complete` flag
+native page with no keys, records or continuation can settle both passes in one turn at or beyond the stored
+population position. The wave proves zero indexed hits for the exact owner, kind and partition under physical
+generation custody. A fresh owner read must agree on position and epoch before Search commits the observed position
+under the bound generation. A hit or inconclusive shared search receives ordinary raw and keyed reconciliation. The durable `native_complete` flag
 distinguishes raw completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner
 revisions move. Publication requires every
 producer population to be complete, replay to be current, all reconciliation partitions to be certified and the
 physical UUID to remain unchanged. Only then does an observed alias switch make the candidate active; the former
 generation becomes retiring after that observation.
+
+Once all admitted owners have certified their homes, a moving Core head schedules an early recheck of up to
+100 affected homes, including while replay catches up. Each metadata owner supplies its own position. Up to 128
+reopened frontiers can take an ordinary reconciliation step in that turn. A newly eligible identity missing from the
+index reopens its native population. After repair, publication reads replay freshness again and checks a fresh
+inventory of all 4096 homes. If Content observes a change between its two empty-key Review snapshots, Search
+requests one fresh pair under the same maintenance deadline. A second refusal leaves publication pending.
 
 Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty
 partitions retain their actual epoch and position; subsequent relay advances use the ordinary checkpoint CAS.

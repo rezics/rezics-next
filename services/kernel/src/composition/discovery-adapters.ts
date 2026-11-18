@@ -213,19 +213,33 @@ function createReviewPopulationProducer(
   source: ReviewDiscoverySource | undefined,
   native: boolean,
 ): DiscoveryMetadataProducer {
-  async function read(partition: number, ids: readonly string[]) {
-    if (!source) throw new TypeError('Content review discovery source is unavailable');
-    try {
-      return await source.read(partition, ids);
-    } catch (error) {
-      if (error instanceof ReviewDiscoverySourceError) {
+  async function observe<T>(read: () => Promise<T>, retryEmpty: boolean): Promise<T> {
+    for (;;) {
+      try {
+        return await read();
+      } catch (error) {
+        if (!(error instanceof ReviewDiscoverySourceError)) throw error;
+        // Content compares two snapshots for an empty-key read. A fresh pair can settle a concurrent advance.
+        if (
+          retryEmpty &&
+          error.state === 'changed' &&
+          error.missing === 'eligibility-dependency' &&
+          error.observation === 'empty-position'
+        ) {
+          retryEmpty = false;
+          continue;
+        }
         if (error.state === 'preparing' && error.missing === 'lifecycle-invalidation')
           throw new DiscoveryReviewInvalidationPendingError(error);
         throw new DiscoveryReviewFrontierError(error);
       }
-      throw error;
     }
   }
+  function read(partition: number, ids: readonly string[]) {
+    if (!source) throw new TypeError('Content review discovery source is unavailable');
+    return observe(() => source.read(partition, ids), ids.length === 0);
+  }
+  const readEmptyPositions = source?.readEmptyPositions?.bind(source);
   return {
     kind: 'review',
     owner: 'content',
@@ -282,7 +296,9 @@ function createReviewPopulationProducer(
     async position(partition) {
       return (await read(partition, [])).position;
     },
-    ...(source?.readEmptyPositions ? { readEmptyPositions: source.readEmptyPositions.bind(source) } : {}),
+    ...(readEmptyPositions && {
+      readEmptyPositions: (partitions: readonly number[]) => observe(() => readEmptyPositions(partitions), true),
+    }),
   };
 }
 
