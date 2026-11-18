@@ -274,7 +274,12 @@ export function createDefaultDiscoverySearch(
   const retained = new Set<RetainedDiscoveryRead>();
   let closed = false;
   let closing: Promise<void> | undefined;
-  const open: RetainedDiscoverySearch = (principal, request, context) => {
+  const open = (
+    principal: Parameters<RetainedDiscoverySearch>[0],
+    request: Parameters<RetainedDiscoverySearch>[1],
+    context: DiscoveryReadContext,
+    includeAccountContext = true,
+  ): ReturnType<RetainedDiscoverySearch> => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
     request = ownDiscoveryRequest(request);
     const languages = request.languages ?? ['en'];
@@ -317,6 +322,7 @@ export function createDefaultDiscoverySearch(
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages,
+        includeAccountContext,
         ownerAdapters: ownerAdapters.ownerAdapters,
         accounts,
         omittedKinds: ownerAdapters.omittedKinds,
@@ -492,13 +498,17 @@ export function createDefaultDiscoverySearch(
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
-  const revalidateAccounts = async (page: DiscoveryPage, context: DiscoveryReadContext) => {
+  const revalidateAccounts = async (
+    page: DiscoveryPage,
+    context: DiscoveryReadContext,
+    includeAccountContext = true,
+  ) => {
     const accounts = page.hits.filter((hit) => hit.summary.kind === 'account');
     if (!accounts.length) return;
     const current = await readAccountDiscoverySummaries(
       { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
       accounts.map((hit) => hit.key.id),
-      { languages: context.languages ?? ['en'], context: true },
+      { languages: context.languages ?? ['en'], context: includeAccountContext, verifyAgent: true },
     );
     if (accounts.some((hit) => !isDeepStrictEqual(hit.summary.value, current.get(hit.key.id))))
       throw new ProblemError('search_restart_required');
@@ -511,13 +521,13 @@ export function createDefaultDiscoverySearch(
       languages: request.languages ?? ['en'],
     };
     const operation = (async () => {
-      const read = await open(principal, request, context);
+      const read = await open(principal, request, context, false);
       return readAdmittedDiscoveryPage(read, async (page) => {
         try {
           // Content composes viewer data and uses the current Review witness for qualification.
           const [reviews, accounts] = await Promise.allSettled([
             prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context),
-            revalidateAccounts(page, context),
+            revalidateAccounts(page, context, false),
           ]);
           if (reviews.status === 'rejected') throw reviews.reason;
           if (accounts.status === 'rejected') throw accounts.reason;

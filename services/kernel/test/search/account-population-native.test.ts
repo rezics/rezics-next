@@ -284,9 +284,10 @@ test('native account context reads the exact published agent graph and withholds
         { pool, deadline: Date.now() + 30_000 },
         { accountId, clientId, scopes },
       );
-      const read = (context: boolean) =>
+      const read = (context: boolean, verifyAgent = false) =>
         readAccountDiscoverySummaries({ pool, routeKey, access, actor, deadline: Date.now() + 30_000 }, [accountId], {
           context,
+          verifyAgent,
         });
       const available = (await read(true)).get(accountId);
       expect(available?.verifiedAgent).toEqual({
@@ -301,6 +302,9 @@ test('native account context reads the exact published agent graph and withholds
         type: 'schema:Person',
       });
       expect((await read(false)).get(accountId)).not.toHaveProperty('context');
+      const feedSummary = (await read(false, true)).get(accountId);
+      expect(feedSummary).not.toHaveProperty('context');
+      expect(feedSummary?.verifiedAgent).toEqual(available?.verifiedAgent);
 
       const sourceEpoch = mappings[0].epoch;
       await fixture.admin.query('UPDATE semantic.identity_epoch_mapping SET epoch=0 WHERE route=$1 AND original=$2', [
@@ -308,7 +312,9 @@ test('native account context reads the exact published agent graph and withholds
         original,
       ]);
       try {
-        expect((await read(true)).get(accountId)?.context?.followTarget).toEqual({ state: 'unavailable' });
+        const unavailable = (await read(true)).get(accountId);
+        expect(unavailable?.context?.followTarget).toEqual({ state: 'unavailable' });
+        expect((await read(false, true)).get(accountId)?.verifiedAgent).toEqual(unavailable?.verifiedAgent);
       } finally {
         await fixture.admin.query(
           'UPDATE semantic.identity_epoch_mapping SET epoch=$3 WHERE route=$1 AND original=$2',

@@ -444,7 +444,7 @@ async function optionalSummaries<T>(deadline: number, read: () => Promise<Map<st
 export async function readAccountDiscoverySummaries(
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[]; context?: boolean } = {},
+  options: { languages?: readonly string[]; context?: boolean; verifyAgent?: boolean } = {},
 ) {
   const requested = keys(ids);
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
@@ -464,19 +464,19 @@ export async function readAccountDiscoverySummaries(
   });
   // No Account transaction/custody remains open during foreign owner reads.
   const mediaIds = [...new Set(initial.flatMap(({ row }) => (row.avatar ? [row.avatar] : [])))];
-  const contextBindings = options.context
-    ? await optionalSummaries(deps.deadline, () =>
-        readAccountContextBindings(
-          deps,
-          initial.map(({ row, handle }) => ({ ...row, handle })),
-        ),
-      )
+  const needsBindings = options.context || options.verifyAgent;
+  const bindingRows = initial
+    .filter(({ row }) => options.context || (options.verifyAgent && row.agent))
+    .map(({ row, handle }) => ({ ...row, handle }));
+  const contextBindings = bindingRows.length
+    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, bindingRows))
     : new Map<string, { id: string; source: string }>();
   const subjectIds = [
     ...new Set(
       initial.flatMap(({ row }) => {
         const target = contextBindings.get(row.id);
-        return [...(row.agent ? [row.agent] : []), ...(target ? [target.id] : [])];
+        const agent = row.agent && (!needsBindings || target?.id === row.agent) ? [row.agent] : [];
+        return options.context && target ? [...agent, target.id] : agent;
       }),
     ),
   ];
@@ -492,17 +492,12 @@ export async function readAccountDiscoverySummaries(
   requireAccessDeadline(deps.deadline);
   const subjects = subjectIds.length
     ? await optionalSummaries(deps.deadline, () =>
-        readSubjectSummaries(options.context ? { ...deps, actor: { kind: 'anonymous' } } : deps, subjectIds, options),
+        readSubjectSummaries(needsBindings ? { ...deps, actor: { kind: 'anonymous' } } : deps, subjectIds, options),
       )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
-  const finalBindings = options.context
-    ? await optionalSummaries(deps.deadline, () =>
-        readAccountContextBindings(
-          deps,
-          initial.map(({ row, handle }) => ({ ...row, handle })),
-        ),
-      )
+  const finalBindings = bindingRows.length
+    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, bindingRows))
     : contextBindings;
   // Whole candidates, not just their handle, are withheld on a fence, rename or
   // profile revision during hydration. A bad claim alone leaves a handleless hit.
@@ -520,7 +515,7 @@ export async function readAccountDiscoverySummaries(
         continue;
       const subject =
         row.agent &&
-        (!options.context ||
+        (!needsBindings ||
           (contextBindings.get(row.id)?.id === row.agent &&
             isDeepStrictEqual(contextBindings.get(row.id), finalBindings.get(row.id))))
           ? subjects.get(row.agent)

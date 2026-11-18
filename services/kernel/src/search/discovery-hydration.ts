@@ -23,6 +23,7 @@ export function createNativeDiscoveryRegistry(options: {
   ownerAdapters?: DiscoveryOwnerAdapterSlots;
   omittedKinds?: DiscoveryRegistryOptions['omittedKinds'];
   languages?: readonly string[];
+  includeAccountContext?: boolean;
 }) {
   const { pool, routeKey, languages = [] } = options;
   return createDiscoveryRegistry({
@@ -38,9 +39,11 @@ export function createNativeDiscoveryRegistry(options: {
       ...options.accounts,
       source: options.accounts.source ?? accountDiscoverySource(pool),
       async hydrate(ids, context) {
+        const includeAccountContext = options.includeAccountContext !== false;
         const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, {
           languages,
-          context: true,
+          context: includeAccountContext,
+          verifyAgent: true,
         });
         return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },

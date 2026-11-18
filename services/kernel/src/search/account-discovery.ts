@@ -244,6 +244,7 @@ export async function nativeDiscoveryRegistry(
     ownerAdapters?: DiscoveryOwnerAdapterSlots;
     accounts?: AccountDiscoverySource;
     omittedKinds?: readonly DiscoveryOmittedKind[];
+    includeAccountContext?: boolean;
   },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
@@ -253,6 +254,7 @@ export async function nativeDiscoveryRegistry(
     routeKey,
     release,
     languages: options?.languages ?? [],
+    includeAccountContext: options?.includeAccountContext !== false,
     semantic: {
       source: subjects,
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),
