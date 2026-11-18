@@ -7,7 +7,7 @@ import { LIBRARY_PAGE_LIMIT } from '../../src/library/reads.ts';
 import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { prepareLibraryDirectory } from './library-directory-readiness.ts';
 import { createLibraryEntry, prepareLibraryEntryCreator } from './library-navigation-fixture.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { observePersonalWebReturn, sampleLibraryKernelReturn } from './personal-web-return-observation.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -300,7 +300,45 @@ nativeTest(
     const more = page
       .getByRole('navigation', { name: 'Members', exact: true })
       .getByRole('link', { name: 'More', exact: true });
-    await browserExpect(more).toBeVisible({ timeout: 120_000 });
+    try {
+      await browserExpect(more).toBeVisible({ timeout: 120_000 });
+    } catch (cause) {
+      const requests = await settledWithin(stack.sampleKernelRequests(), 1_500).catch(() => undefined);
+      const reads = requests
+        ?.slice(firstStart)
+        .filter((request) => {
+          if (request.fixtureRequest || request.method !== 'GET') return false;
+          return new URL(request.url, stack.kernelOrigin).pathname === membersPath;
+        })
+        .slice(-8)
+        .map((request) => {
+          const { searchParams } = new URL(request.url, stack.kernelOrigin);
+          const body = request.failure?.body;
+          let code: string | undefined;
+          let missingCanonicalSource = false;
+          if (body && body.length <= 8192) {
+            try {
+              const problem = JSON.parse(body) as { code?: unknown; detail?: unknown } | null;
+              if (typeof problem?.code === 'string' && Object.hasOwn(PROBLEMS, problem.code)) code = problem.code;
+              missingCanonicalSource =
+                problem?.detail ===
+                'The current logical owner binding has no prepared canonical Collection Source scope.';
+            } catch {
+              // Report only known problem metadata from the mounted read.
+            }
+          }
+          return {
+            status: request.responseStatus ?? null,
+            filtered: searchParams.has('filter'),
+            continuation: searchParams.has('cursor'),
+            ownerAuthenticated: request.access?.authenticated === true && request.access.actorId === owner.accountId,
+            code,
+            missingCanonicalSource,
+          };
+        });
+      console.error(`Native Everything members after filter apply: ${JSON.stringify(reads ?? null)}`);
+      throw cause;
+    }
     const filter = await mountedMemberQuery(firstStart, null);
     expect(JSON.parse(filter)).toEqual({ statement: { property, range: { gte: 1990, lte: 1999 } } });
 
