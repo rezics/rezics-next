@@ -1696,7 +1696,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       },
     };
   }
-  async function ownMixedRows(hits: readonly DiscoveryEngineHit[], m: Meter, context: PublicFilterConsumerContext) {
+  async function ownMixedRows(
+    hits: readonly DiscoveryEngineHit[],
+    m: Meter,
+    context: PublicFilterConsumerContext,
+    identitiesOnly = false,
+  ) {
     const rows: CustodyExecution['ownRows'][number][] = [];
     const accepted: number[] = [];
     const seen = new Set<string>();
@@ -1731,6 +1736,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         },
       );
     }
+    const subjects = [...new Set(hits.filter(({ key }) => key.owner === 'semantic').map(({ key }) => key.id))];
+    const nativeIdentities = config.source.readPublicFilterSubjectIdentities;
+    const anchors =
+      identitiesOnly && nativeIdentities && subjects.length
+        ? m.take(
+            await nativeIdentities({
+              subjects,
+              meaning,
+              inputLimit: m.inputLimit - m.cost.inputKeys,
+              context,
+            }),
+          )
+        : null;
+    if (anchors && (anchors.status !== 'observed' || anchors.rows.length !== subjects.length))
+      throw new MixedOwnerPending();
+    const anchorsById = anchors && new Map(anchors.rows.map((row) => [row.subject, row]));
     for (const [position, item] of hits.entries()) {
       m.check();
       if (item.key.owner === 'accounts') {
@@ -1755,23 +1776,36 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         }
         continue;
       }
-      const revision = Number(item.revision);
-      if (!Number.isSafeInteger(revision)) throw new ConsumerFailure('source_pending');
-      const checked = await ownRows(
-        [
-          {
-            id: item.key.id,
-            index: item.index,
-            partition: subjectPartition(item.key.id),
-            securityRevision: revision,
-            matched: [...item.matched],
-            sort: [...item.sort],
-          },
-        ],
-        m,
-        context,
-      );
-      const row = checked.rows[0]!;
+      let row: { original: string; terminal: string };
+      if (anchorsById) {
+        const anchor = anchorsById.get(item.key.id);
+        if (
+          !anchor ||
+          anchor.partition !== subjectPartition(item.key.id) ||
+          anchor.securityRevision !== item.revision ||
+          anchor.currentRelease !== meaning.digest
+        )
+          throw new MixedOwnerPending();
+        row = { original: item.key.id, terminal: anchor.terminal };
+      } else {
+        const revision = Number(item.revision);
+        if (!Number.isSafeInteger(revision)) throw new ConsumerFailure('source_pending');
+        const checked = await ownRows(
+          [
+            {
+              id: item.key.id,
+              index: item.index,
+              partition: subjectPartition(item.key.id),
+              securityRevision: revision,
+              matched: [...item.matched],
+              sort: [...item.sort],
+            },
+          ],
+          m,
+          context,
+        );
+        row = checked.rows[0]!;
+      }
       rows.push(row);
       const identity = `${item.key.owner}:${row.terminal}`;
       if (!seen.has(identity)) {
@@ -2606,7 +2640,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (raw.some((hit) => !('key' in hit))) return m.unavailable('observation_lost');
         let checked: Awaited<ReturnType<typeof ownMixedRows>>;
         try {
-          checked = await ownMixedRows(raw as readonly DiscoveryEngineHit[], m, context);
+          checked = await ownMixedRows(
+            raw as readonly DiscoveryEngineHit[],
+            m,
+            context,
+            Boolean(config.discoveryTarget) &&
+              q.snapshot.kind === 'pit' &&
+              'representation' in plan &&
+              plan.filterDocument === undefined &&
+              plan.text === undefined,
+          );
         } catch (error) {
           if (error instanceof MixedOwnerPending) return preparing();
           throw error;

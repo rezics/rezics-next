@@ -41,6 +41,8 @@ import type {
   PublicFilterProjectionRecord,
   PublicFilterProjectionRequest,
   PublicFilterProjectionRetirement,
+  PublicFilterSubjectIdentities,
+  PublicFilterSubjectIdentityRequest,
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
@@ -328,11 +330,11 @@ const emptyCost = (): PublicFilterCost => ({
 const unready = (
   reason: 'owner_pending' | 'identity_pending' | 'dependency_pending' | 'metadata_missing',
   cost = emptyCost(),
-): PublicFilterProjectionPage => ({ status: 'unready', reason, cost });
+): Extract<PublicFilterProjectionPage, { status: 'unready' }> => ({ status: 'unready', reason, cost });
 const unavailable = (
   reason: 'missing_owner' | 'moved' | 'deadline' | 'dependency_unavailable',
   cost = emptyCost(),
-): PublicFilterProjectionPage => ({ status: 'unavailable', reason, cost });
+): Extract<PublicFilterProjectionPage, { status: 'unavailable' }> => ({ status: 'unavailable', reason, cost });
 
 function validRetainedMeaning(meaning: unknown): boolean {
   return (
@@ -598,6 +600,7 @@ async function readPublicIdentities(
   deadline: number,
   cost: MutableCost,
   root?: Readonly<{ state: IdentityState; head: PrivacyReductionHead }>,
+  inputLimit?: number,
 ): Promise<IdentityRead> {
   const states = new Map<string, IdentityState>();
   const heads = new Map<number, PrivacyReductionHead>();
@@ -626,6 +629,10 @@ async function readPublicIdentities(
     }
     pending = [];
     for (const [partition, group] of groups) {
+      if (inputLimit !== undefined) {
+        if (cost.inputKeys + group.length > inputLimit) return { states, heads, epochs, complete: false };
+        cost.inputKeys += group.length;
+      }
       accessPort.requireDeadline(deadline);
       const checks = new Map<string, AccessCheck>();
       for (const item of group) {
@@ -711,6 +718,66 @@ function resolveIdentity(
   }
   if (id !== null || path.length === 0) return { visible: false, path, terminal: root };
   return { visible: true, path, terminal: path.at(-1)! };
+}
+
+/** One native public identity read for an ordinary mixed window. Statement
+ * projection and its retained builds belong to the fact-reading path. */
+export async function readPublicFilterSubjectIdentities(
+  config: Configuration,
+  request: PublicFilterSubjectIdentityRequest,
+  accessPort: PublicFilterAccessBindingPort,
+): Promise<PublicFilterSubjectIdentities> {
+  const subjects = [...new Set(request.subjects)];
+  const { deadline } = request.context;
+  const cost: MutableCost = { ...emptyCost() };
+  if (
+    !subjects.length ||
+    subjects.length > 200 ||
+    !Number.isSafeInteger(request.inputLimit) ||
+    request.inputLimit < subjects.length ||
+    request.inputLimit > 1000 ||
+    !validMeaning(request.meaning) ||
+    subjects.some((id) => !routePartition(id))
+  )
+    throw new TypeError('Invalid native public identity request');
+  if (identitySourceSupportRoot() || identitySourceSupportJob()) return unready('identity_pending', cost);
+  try {
+    if (!(await storedMeaningRelease(config.pool, request.meaning.digest, deadline)))
+      return unready('metadata_missing', cost);
+    const time = await inSnapshot(config.pool, deadline, (client) => mintReadTime(client, config.clock, config.pool));
+    const observed = await readPublicIdentities(
+      config,
+      accessPort,
+      subjects,
+      time,
+      deadline,
+      cost,
+      undefined,
+      request.inputLimit,
+    );
+    if (!observed.complete) return unready('dependency_pending', cost);
+    const rows = [];
+    for (const subject of subjects) {
+      const row = observed.states.get(subject)?.row;
+      if (!row?.selection_ready || !row.current_revision || row.currentRelease !== request.meaning.digest)
+        return unready('metadata_missing', cost);
+      const partition = partitionOf(row.route);
+      if (!observed.heads.has(partition)) return unready('owner_pending', cost);
+      rows.push({
+        subject,
+        partition,
+        securityRevision: row.securityRevision,
+        currentRelease: row.currentRelease,
+        terminal: resolveIdentity(subject, observed.states).terminal,
+      });
+    }
+    requireAccessDeadline(deadline);
+    return { status: 'observed', rows, cost };
+  } catch (error) {
+    if (accessPort.isUnavailable(error))
+      return Date.now() >= deadline ? unavailable('deadline', cost) : unready('dependency_pending', cost);
+    throw error;
+  }
 }
 
 function observationMatches(build: BuildRow, source: SubjectRow, ownerEpoch: number, privacy: string): boolean {

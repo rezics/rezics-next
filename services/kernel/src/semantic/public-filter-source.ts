@@ -39,7 +39,10 @@ import advancePrivacyHead from './public-filter-source-head-advance.sql';
 import appendPrivacyEntry from './public-filter-source-log-append.sql';
 import { enqueuePublicFilterCoverage } from './public-filter-coverage-pending.ts';
 import { readPublicFilterPopulation } from './public-filter-coverage-population.ts';
-import { readPublicFilterProjectionPage as readProjectionPage } from './public-filter-projection.ts';
+import {
+  readPublicFilterProjectionPage as readProjectionPage,
+  readPublicFilterSubjectIdentities,
+} from './public-filter-projection.ts';
 import { isDeepStrictEqual } from 'node:util';
 import realmOfBoard from '../content/realm-of-board.sql';
 import ownerRead from './public-filter-collection-reduction-owner.sql';
@@ -285,6 +288,9 @@ export function createNativePublicFilterSource(
     },
     async readPublicFilterProjectionPage(request: PublicFilterProjectionRequest) {
       return readProjectionPage(config, request, accessPort);
+    },
+    async readPublicFilterSubjectIdentities(request) {
+      return readPublicFilterSubjectIdentities(config, request, accessPort);
     },
     async readPrivacyReductionHeads(
       request: PrivacyReductionObservationRequest | JoinedPopulationRequest,

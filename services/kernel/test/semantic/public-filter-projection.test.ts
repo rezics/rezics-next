@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { releaseDigest } from '@rezics/definitions';
 import { withQueryAccounting } from '../../src/database/pool.ts';
+import { newId } from '../../src/route/route.ts';
 import { lockProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
@@ -16,6 +17,50 @@ import {
   snak,
   statement,
 } from './support/public-filter-source.ts';
+
+test('native public Subject identity batches retain the same anchors without creating projection builds', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const subjects = [await f.create('schema:Book'), await f.create('schema:Person')];
+    const source = publicFilterSource(f.config);
+    const read = (ids: readonly string[]) =>
+      source.readPublicFilterSubjectIdentities!({
+        subjects: ids,
+        context: readContext(),
+        meaning: f.meaning,
+        inputLimit: 16,
+      });
+    const identities = await read(subjects);
+    expect(identities.status).toBe('observed');
+    if (identities.status !== 'observed') throw new Error('Subject identities were unavailable');
+    expect(identities.cost.frontierWrites).toBe(0);
+    expect(identities.cost.inputKeys).toBe(2);
+    const builds = await f.db.pool.query(
+      'SELECT 1 FROM semantic.public_filter_projection_build WHERE subject_id=ANY($1::uuid[])',
+      [subjects],
+    );
+    expect(builds.rows).toHaveLength(0);
+    const expected = [];
+    for (const subject of subjects) {
+      const page = await source.readPublicFilterProjectionPage({
+        subject,
+        meaning: f.meaning,
+        context: readContext(),
+        inputLimit: 16,
+        frontier: null,
+      });
+      expect(page.status).toBe('complete');
+      if (page.status !== 'complete') throw new Error('The native projection did not complete');
+      const { terminal, partition, securityRevision, currentRelease } = page.source;
+      expected.push({ subject, terminal, partition, securityRevision, currentRelease });
+    }
+    expect(identities.rows).toEqual(expected);
+    expect((await read([subjects[0]!, newId(160)])).status).toBe('unready');
+  } finally {
+    await f.close();
+  }
+}, 60_000);
 
 test('concurrent first pages for one Book complete across a native serialization conflict', async () => {
   const { publicFilterSource } = await nativeProducer();
@@ -247,6 +292,7 @@ test('native complete selected public facet projection retains bounded frontier 
         ),
       ).toBe(true);
     }
+
     const absent = await f.create('schema:Book');
     expect((await complete(f, source, absent)).records).toEqual([]);
     const witnessTarget = await f.create();
@@ -278,7 +324,6 @@ test('native complete selected public facet projection retains bounded frontier 
     await f.close();
   }
 });
-
 
 test('one immutable release projects each native subject type and keeps exact currentness without a meaning type', async () => {
   const { publicFilterSource } = await nativeProducer();

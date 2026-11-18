@@ -90,6 +90,10 @@ validated; matching strings or constructor identity alone never become registrat
 from the implemented `SubjectSourceKeyPages.read` native inventory. The admitted support bridge consumes the
 installed Source factory directly and does not consume the rebuild interface. Missing fixed-cut or foreign owner operations remain explicitly unavailable.
 
+An unfiltered mixed Discovery PIT window can obtain its complete Subject identity anchors in one bounded native
+read. The read resolves current owner rows, public Access and redirect terminals without a statement projection
+build. The serving page still completes current disclosure and the independent population final over every raw row.
+
 Retained preparation advances up to 16 contiguous Account homes per call. Search passes the native producer its
 current remaining input allowance after reserving 128 inputs for capture handoff and persistence; Semantic further
 caps the batch by that allowance and a conservative estimate of 96 fixed inputs plus the compiler-key closure per

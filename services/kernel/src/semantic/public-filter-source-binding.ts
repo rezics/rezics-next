@@ -1871,14 +1871,16 @@ export function createNativePublicFilterSourceBinding(
         projection: null,
         claimInputs: true,
       };
+    const mixed = 'representation' in bootstrap.definition.capture;
     const scansHomes =
       state.partition < 4096 &&
-      state.owner !== 'accounts' &&
-      ((state.phase === 'scan' && (!replay || replay.scan)) ||
-        (state.phase === 'window' && (!replay || replay.windowBatch)));
-    const mixed = 'representation' in bootstrap.definition.capture;
+      ((state.phase === 'scan' && (mixed || state.owner !== 'accounts') && (!replay || replay.scan)) ||
+        (state.phase === 'window' && state.owner !== 'accounts' && (!replay || replay.windowBatch)));
+    // A pending Account home can seek three native keys. Keep both reads of
+    // its original scan and the Search page writes inside the same allowance.
+    const fundedHomes = scansHomes ? (request.homeLimit ?? request.inputLimit) : request.inputLimit;
     const offeredLimit =
-      (scansHomes && (!mixed || state.phase === 'window') ? request.homeLimit : undefined) ?? request.inputLimit;
+      state.owner === 'accounts' ? Math.max(request.inputLimit, Math.min(fundedHomes, 96)) : fundedHomes;
     // A lost reply or upgrade replays the exact original range and digest.
     const inputLimit = old?.input_limit ?? offeredLimit;
     if (inputLimit !== offeredLimit && inputLimit !== request.inputLimit) throw new BindingError('owner_unavailable');
