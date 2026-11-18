@@ -23,8 +23,16 @@ import { createFeedActivityStore } from '../../src/content/feed-activity.ts';
 import { decodeFeedCursor, feedBinding, fingerprint } from '../../src/content/feed-cursor.ts';
 import { withBoundedReadOnlyTransaction } from '../../src/database/pool.ts';
 
-async function eventually<T>(read: () => Promise<T | undefined>, onTimeout?: () => void): Promise<T> {
-  const end = Date.now() + 150_000;
+const normalFixtureWaitMs = 150_000;
+const mixedHomeSetupWaitMs =
+  process.env.REZICS_MIXED_HOME_EXTENDED_SETUP === '1' ? 600_000 : normalFixtureWaitMs;
+
+async function eventually<T>(
+  read: () => Promise<T | undefined>,
+  onTimeout?: () => void,
+  waitMs = normalFixtureWaitMs,
+): Promise<T> {
+  const end = Date.now() + waitMs;
   while (Date.now() < end) {
     const result = await read();
     if (result !== undefined) return result;
@@ -314,6 +322,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
             }),
           );
       },
+      mixedHomeSetupWaitMs,
     );
     if (process.env.REZICS_MIXED_HOME_TIMING === '1')
       expect(serving).toMatchObject({ generation: expect.any(Number), stage: 'final', result: 'finished' });
@@ -422,7 +431,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
       }
     }
   }
-}, 240_000);
+}, 240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs);
 
 test('Default feed route applies the selected native kind across the mixed stream and binds its examined source frontier to that selection', async () => {
   const endpoint = process.env.OPENSEARCH_URL;
