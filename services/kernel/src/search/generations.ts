@@ -1792,6 +1792,94 @@ function initialEmptyCandidate(row: Population) {
   );
 }
 
+function initialEmptyCandidates(populations: readonly Population[]) {
+  const homes = new Set<number>();
+  return populations.filter((row) => {
+    if (!initialEmptyCandidate(row)) return false;
+    if (homes.size === DISCOVERY_CUT_BATCH_SIZE && !homes.has(row.partition)) return false;
+    homes.add(row.partition);
+    return true;
+  });
+}
+
+async function readEmptyMetadataPages(
+  candidates: readonly Population[],
+  producers: DiscoveryMetadataProducers,
+  requiresCurrentRead = false,
+) {
+  const metadata: { row: Population; position: bigint; epoch?: number }[] = [];
+  for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+    const producer = producers[kind];
+    if (
+      !producer?.readEmptyFirstPages ||
+      (requiresCurrentRead && !(kind === 'collection' ? producer.readEmptyStamps : producer.readEmptyPositions))
+    )
+      continue;
+    const rows = candidates.filter((row) => row.owner === kind);
+    if (!rows.length) continue;
+    const pages = await searchTurnCall(() => producer.readEmptyFirstPages!(rows.map((row) => row.partition)));
+    for (const row of rows) {
+      const page = pages.get(row.partition);
+      if (
+        page &&
+        page.position >= BigInt(row.position) &&
+        (kind === 'collection'
+          ? page.epoch !== undefined && (row.native_epoch === null || page.epoch === row.native_epoch)
+          : page.epoch === undefined && row.native_epoch === null)
+      )
+        metadata.push({ row, ...page });
+    }
+  }
+  return metadata;
+}
+
+async function populateEmptyDiscoveryFrontiers(
+  pool: Pool,
+  projection: DiscoveryProjection,
+  populations: readonly Population[],
+  checkCapability: () => Promise<void>,
+) {
+  const candidates = initialEmptyCandidates(populations);
+  if (candidates.length <= DISCOVERY_POPULATION_CONCURRENCY) return new Set<Population>();
+  const account = projection.registry.get('account');
+  const accounts = candidates.filter(({ owner }) => owner === 'accounts');
+  const subjects = candidates.filter(({ owner }) => owner === 'semantic');
+  await checkCapability();
+  const metadata = await readEmptyMetadataPages(candidates, projection.metadataProducers);
+  const accountPages =
+    accounts.length && account.owner === 'accounts' && account.source.readEmptyFirstPages
+      ? await searchTurnCall(() => account.source.readEmptyFirstPages!(accounts.map(({ partition }) => partition)))
+      : new Map<number, bigint>();
+  const subjectPages = subjects.length
+    ? await withSearchConnection(pool, async (client) => {
+        const { rows } = await client.query<{ partition: number }>(
+          `SELECT home AS partition FROM unnest($1::integer[]) AS home
+       WHERE NOT EXISTS (SELECT 1 FROM semantic.subject s WHERE s.route>=home*16 AND s.route<(home+1)*16)`,
+          [subjects.map(({ partition }) => partition)],
+        );
+        return new Set(rows.map(({ partition }) => partition));
+      })
+    : new Set<number>();
+  const empty = [
+    ...metadata,
+    ...accounts.flatMap((row) => {
+      const position = accountPages.get(row.partition);
+      return position === undefined ? [] : [{ row, position, epoch: null }];
+    }),
+    ...subjects
+      .filter(({ partition }) => subjectPages.has(partition))
+      .map((row) => ({ row, position: 0n, epoch: null })),
+  ];
+  if (!empty.length) return new Set<Population>();
+  await checkCapability();
+  const rows = empty.map(({ row }) => row);
+  const checkpoints = populationCheckpointBatch(pool, projection.target, rows);
+  await Promise.all(
+    empty.map(({ row, position, epoch }) => checkpoints.save(row, null, position, null, epoch ?? null)),
+  );
+  return new Set(rows);
+}
+
 /** Share physical custody across a bounded cohort of exact empty scopes. Every row still needs
  * its own native evidence on both sides of the index read. Unproved rows take the ordinary path. */
 async function certifyEmptyDiscoveryFrontiers(
@@ -1802,13 +1890,7 @@ async function certifyEmptyDiscoveryFrontiers(
   checkCapability: () => Promise<void>,
 ) {
   const { registry, target, metadataProducers } = projection;
-  const homes = new Set<number>();
-  const candidates = populations.filter((row) => {
-    if (!initialEmptyCandidate(row)) return false;
-    if (homes.size === DISCOVERY_CUT_BATCH_SIZE && !homes.has(row.partition)) return false;
-    homes.add(row.partition);
-    return true;
-  });
+  const candidates = initialEmptyCandidates(populations);
   if (candidates.length <= DISCOVERY_POPULATION_CONCURRENCY) return new Set<Population>();
 
   const account = registry.get('account');
@@ -1839,29 +1921,7 @@ async function certifyEmptyDiscoveryFrontiers(
     try {
       await checkCapability();
       const core = await readCore(coreRows);
-      const metadata: { row: Population; position: bigint; epoch?: number }[] = [];
-      for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
-        const producer = metadataProducers[kind];
-        if (
-          !producer?.readEmptyFirstPages ||
-          !(kind === 'collection' ? producer.readEmptyStamps : producer.readEmptyPositions)
-        )
-          continue;
-        const rows = candidates.filter((row) => row.owner === kind);
-        if (!rows.length) continue;
-        const pages = await producer.readEmptyFirstPages(rows.map((row) => row.partition));
-        for (const row of rows) {
-          const page = pages.get(row.partition);
-          if (
-            page &&
-            page.position >= BigInt(row.position) &&
-            (kind === 'collection'
-              ? page.epoch !== undefined && (row.native_epoch === null || page.epoch === row.native_epoch)
-              : page.epoch === undefined && row.native_epoch === null)
-          )
-            metadata.push({ row, ...page });
-        }
-      }
+      const metadata = await readEmptyMetadataPages(candidates, metadataProducers, true);
       const rows = [...core, ...metadata].map(({ row }) => row);
       if (rows.length <= DISCOVERY_POPULATION_CONCURRENCY) return [];
       const empty = await guardedDiscoveryScopesEmpty(
@@ -2704,24 +2764,22 @@ async function advanceDiscoveryTurn(
       let retiring: Promise<void> | undefined;
       let deferredReview: DiscoveryProducerCoverageError | undefined;
       const checkCapability = discoveryPageCapabilityCheck(pool, target, metadataProducers);
-      let certified: ReadonlySet<Population> | undefined;
-      if (phase === 'reconciling') {
-        try {
-          certified = await certifyEmptyDiscoveryFrontiers(
-            pool,
-            search,
-            projection,
-            reviewInvalidationPending ? populations.filter(({ owner }) => owner !== 'review') : populations,
-            checkCapability,
-          );
-        } catch (error) {
-          if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
-          await retireDiscoveryCapability(pool, target);
-          return 'retiring';
-        }
+      const candidates = reviewInvalidationPending
+        ? populations.filter(({ owner }) => owner !== 'review')
+        : populations;
+      let settled: ReadonlySet<Population>;
+      try {
+        settled =
+          phase === 'populating'
+            ? await populateEmptyDiscoveryFrontiers(pool, projection, candidates, checkCapability)
+            : await certifyEmptyDiscoveryFrontiers(pool, search, projection, candidates, checkCapability);
+      } catch (error) {
+        if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
+        await retireDiscoveryCapability(pool, target);
+        return 'retiring';
       }
       const results = await mapBounded(
-        certified ? populations.filter((row) => !certified.has(row)) : populations,
+        populations.filter((row) => !settled.has(row)),
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
           const reads = phase === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;

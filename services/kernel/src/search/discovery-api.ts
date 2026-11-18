@@ -54,6 +54,7 @@ export interface AccountDiscoverySource {
   read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
   count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
   countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, { position: bigint; count: number }>>;
+  readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   page(
     partition: number,
     after: AccountPageKey | null,

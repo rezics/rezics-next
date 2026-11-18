@@ -58,8 +58,8 @@ frontiers and settles them in groups of at most eight. Every page remains bounde
 its own cursor only after the exact target actions settle; a failed group is drained before its error is retried. This
 amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
 Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
-Collection, Review and Space can supply empty first pages in one bounded native batch. Each producer checks for raw
-candidates in its exact homes. Review also compares fresh native cuts across two snapshots. A home with raw
+Initial population batches can commit empty first pages together after fresh capability checks. Each producer checks
+for raw candidates in its exact homes. Review also compares fresh native cuts across two snapshots. A home with raw
 candidates or an inconclusive observation uses the ordinary page and its continuation.
 Initial empty frontiers within a selection of at most 100 homes can share one complete search under physical
 generation custody. A hit or inconclusive result leaves the ordinary eight-frontier waves in charge. Counts,

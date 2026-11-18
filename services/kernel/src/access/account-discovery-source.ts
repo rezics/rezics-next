@@ -166,6 +166,22 @@ export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
     async count(partition: number) {
       return { partition, ...(await countPartitions([partition])).get(partition)! };
     },
+    async readEmptyFirstPages(partitions) {
+      if (partitions.length > 100) throw new RangeError('Account discovery reads at most 100 partitions');
+      for (const partition of partitions) partitionKey(partition);
+      return withReadTransaction(pool, async (client) => {
+        const { rows } = await client.query<{ partition: number; position: string }>(
+          `SELECT p.partition_no AS partition,p.position::text FROM core.partition p
+           WHERE p.partition_no=ANY($1::integer[]) AND p.write_state='active'
+             AND NOT EXISTS (
+               SELECT 1 FROM access.account a WHERE a.route>=p.partition_no*16 AND a.route<(p.partition_no+1)*16
+                 AND a.state='active' AND NOT a.authn_fenced
+             )`,
+          [partitions],
+        );
+        return new Map(rows.map(({ partition, position }) => [partition, BigInt(position)]));
+      });
+    },
     async page(partition: number, after: { route: number; id: string } | null, limit: number) {
       partitionKey(partition);
       if (!Number.isInteger(limit) || limit < 1 || limit > 100)
