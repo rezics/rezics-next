@@ -1,3 +1,4 @@
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { ensureMessagesReady, prepareLiveMessages } from './messages-ready.ts';
@@ -120,6 +121,30 @@ export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.Proces
   return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=${heapMiB}`.trim() };
 }
 
+async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signal: AbortSignal, traceId: string) {
+  // Cloudflare places Build Output under the Vite root. Give each launch its own output and keep
+  // the real source and packages at their original paths for the Worker and client builds.
+  const parent = env.WEB_TEST_STATE_INSTANCE_DIR ?? resolve(repoRoot, '.temp');
+  await mkdir(parent, { recursive: true });
+  const root = await mkdtemp(resolve(parent, 'compiled-web-'));
+  try {
+    for (const input of ['cloudflare.config.ts', 'scripts', 'src', 'public', 'node_modules', 'package.json']) {
+      await symlink(resolve(webRoot, input), resolve(root, input));
+    }
+    const options = {
+      ownChild: ownStartupChild,
+      env: { ...env, NODE_ENV: 'production', NATIVE_WEB_PREVIEW_ROOT: root },
+      signal,
+      traceId,
+    };
+    const built = await runWebStartupChild('vite', ['build', '--config', 'vite.config.ts'], plan.cwd, options);
+    if (built !== 0) return built;
+    return await runWebStartupChild('vite', ['preview', ...plan.args], plan.cwd, options);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 if (import.meta.main) {
   const traceId = createWebStartupTraceId();
   const startupEnv: NodeJS.ProcessEnv = { ...process.env, [webStartupTraceIdEnvName]: traceId };
@@ -177,6 +202,13 @@ if (import.meta.main) {
     if (generated !== 0 && !interruptions.signal.aborted) {
       console.error(`Web preparation exited ${generated} before Vite started`);
       process.exitCode = generated;
+    } else if (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1') {
+      process.exitCode = await runBundledPreview(
+        plan,
+        webServeEnvironment(plan.kind, startupEnv),
+        interruptions.signal,
+        traceId,
+      );
     } else {
       process.exitCode = await runWebStartupChild(plan.command, plan.args, plan.cwd, {
         ownChild: ownStartupChild,

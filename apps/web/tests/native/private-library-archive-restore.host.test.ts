@@ -209,7 +209,8 @@ async function visitLocalizedArchive(
     const document = await page.goto(target.href, { waitUntil: 'domcontentloaded' });
     if (waitForWorkspace) {
       const html = await document?.text();
-      expect(html?.includes('src="/assets/index.js"'), 'Japanese Archive document names the bundled entry').toBe(true);
+      const compiledEntry = /<script\b[^>]*\ssrc="\/assets\/index-[\w-]+\.js"/u.test(html ?? '');
+      expect(compiledEntry, 'Japanese Archive document names the compiled hydration entry').toBe(true);
     }
     stage = 'hydration';
     await hydrated(page);
@@ -1636,22 +1637,31 @@ if (japaneseHydrationOnly) {
         .get('content-security-policy')
         ?.split(';')
         .find((part) => part.trimStart().startsWith('script-src '));
-      const expected = ['/bundledDevClient.mjs', '/assets/index.js'];
-      const sources: string[] = [];
-      const rewriter = new HTMLRewriter().on('script[type="module"][src]', {
-        element(script) {
-          const nonce = script.getAttribute('nonce');
-          const admitted = Boolean(nonce && policy?.includes(`'nonce-${nonce}'`));
-          expect(admitted, 'module nonce admitted by script-src').toBe(true);
-          expect(script.hasAttribute('async'), 'ordered bundled bootstrap').toBe(false);
-          const src = script.getAttribute('src')!;
-          sources.push(expected.includes(src) ? src : 'unexpected module URL');
-        },
-      });
+      const entries: string[] = [];
+      const preloads = new Set<string>();
+      const rewriter = new HTMLRewriter()
+        .on('script[type="module"][src]', {
+          element(script) {
+            const nonce = script.getAttribute('nonce');
+            const admitted = Boolean(nonce && policy?.includes(`'nonce-${nonce}'`));
+            expect(admitted, 'module nonce admitted by script-src').toBe(true);
+            const src = script.getAttribute('src')!;
+            expect(/^\/assets\/index-[\w-]+\.js$/u.test(src), 'same-origin compiled entry').toBe(true);
+            entries.push(src);
+          },
+        })
+        .on('link[rel="modulepreload"][href]', {
+          element(link) {
+            const href = link.getAttribute('href')!;
+            if (/^\/assets\/[\w.$-]+\.js$/u.test(href)) preloads.add(href);
+          },
+        });
       await rewriter.transform(document).arrayBuffer();
-      // Compare before fetching. Only these origin-relative paths may receive an asset request.
-      expect(sources).toEqual(expected);
-      for (const path of sources) {
+      expect(entries).toHaveLength(1);
+      const entry = entries[0]!;
+      const dependency = [...preloads].find((path) => path !== entry);
+      expect(dependency, 'compiled dependency declared by the signed-in document').toBeDefined();
+      for (const path of [entry, dependency!]) {
         const response = await stack.request(path);
         expect(response.status, path).toBe(200);
         expect(moduleContentType(response.headers.get('content-type')), path).toBe('javascript');
