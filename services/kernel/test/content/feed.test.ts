@@ -25,8 +25,7 @@ import { decodeFeedCursor, feedBinding, fingerprint } from '../../src/content/fe
 import { withBoundedReadOnlyTransaction } from '../../src/database/pool.ts';
 
 const normalFixtureWaitMs = 150_000;
-const mixedHomeSetupWaitMs =
-  process.env.REZICS_MIXED_HOME_EXTENDED_SETUP === '1' ? 600_000 : normalFixtureWaitMs;
+const mixedHomeSetupWaitMs = process.env.REZICS_MIXED_HOME_EXTENDED_SETUP === '1' ? 600_000 : normalFixtureWaitMs;
 
 async function eventually<T>(
   read: () => Promise<T | undefined>,
@@ -96,7 +95,7 @@ async function readMixedDiscoveryProgress(databaseUrl: string, prefix: string) {
   }
 }
 
-test('Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references', async () => {
+async function runMixedHomeJourney() {
   const startedAt = Date.now();
   const endpoint = process.env.OPENSEARCH_URL;
   if (!endpoint) throw new Error('OPENSEARCH_URL must name the native test service');
@@ -440,7 +439,13 @@ test('Default mixed feed composes real discovery, current Following and Continue
       }
     }
   }
-}, 240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs);
+}
+
+test(
+  'Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references',
+  runMixedHomeJourney,
+  240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs,
+);
 
 test('Default feed route applies the selected native kind across the mixed stream and binds its examined source frontier to that selection', async () => {
   const endpoint = process.env.OPENSEARCH_URL;
