@@ -87,7 +87,8 @@ Once all admitted owners have certified their homes, a moving Core head schedule
 100 affected homes, including while replay catches up. Each metadata owner supplies its own position. Up to 128
 reopened frontiers can take an ordinary reconciliation step in that turn. A newly eligible identity missing from the
 index reopens its native population. After repair, publication reads replay freshness again and checks a fresh
-inventory of all 4096 homes. If Content observes a change between its two empty-key Review snapshots, Search
+inventory of all 4096 homes. Each block of up to 100 homes can share one bounded read per metadata owner.
+An unavailable shared read returns the block to the ordinary owner waves. If Content observes a change between its two empty-key Review snapshots, Search
 requests one fresh pair under the same maintenance deadline. A second refusal leaves publication pending.
 
 The finalizer can advance five existing certificates together after all native readers observe the new head
@@ -102,6 +103,8 @@ its exact native home and payload. These commands maintain notification progress
 Search still requires a current replay checkpoint and fresh observations from all five owners. A suffix from
 position zero must contain every intervening event in the certified owner epoch.
 The update locks the exact generation, active home, caught-up receiver and original certified owner rows.
+Homes beyond the current suffix allowance remain eligible for the next turn. A proven suffix can wait for its
+own replay checkpoint with the existing certificates retained.
 An incomplete proof leaves the affected home on its existing reconciliation path.
 
 Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty

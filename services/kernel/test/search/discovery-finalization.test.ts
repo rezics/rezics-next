@@ -24,6 +24,7 @@ import {
   searchTurnMetadataProducers,
 } from '../../src/search/generations.ts';
 import { createDiscoveryIndexer } from '../../src/search/indexer.ts';
+import { maintenanceCutCandidates } from '../../src/search/discovery-maintenance-cuts.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -156,6 +157,17 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
     expect(cuts).toHaveLength(homes);
+    const twoPositionCuts = cuts.map((row) => ({
+      ...row,
+      head: String(BigInt(row.position) + 2n),
+      semantic_position: row.position,
+      collection_position: row.position,
+      review_position: row.position,
+      space_position: row.position,
+    }));
+    const planned = maintenanceCutCandidates(twoPositionCuts);
+    expect(planned.candidates).toEqual(twoPositionCuts.slice(0, 32));
+    expect(planned.deferred).toEqual(new Set(twoPositionCuts.slice(32)));
     const check = async (rows: typeof cuts, producers = resolved.metadataProducers) => {
       const turn = admitSearchTurn();
       const trace = discoveryFinalizationTrace(prefix, turn.deadline);
@@ -180,11 +192,13 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(current.checks.every((row) => row.state === 'current')).toBe(true);
     expect(current.native['account-witness']?.homes).toBe(homes);
     expect(current.native['collection-batch']?.homes).toBe(homes);
-    expect(current.native['collection-batch']!.calls).toBeLessThan(homes);
+    expect(current.native['collection-batch']?.calls).toBe(1);
     expect(current.native.collection).toBeUndefined();
     expect(current.native['review-batch']?.homes).toBe(homes);
+    expect(current.native['review-batch']?.calls).toBe(1);
     expect(current.native.review).toBeUndefined();
     expect(current.native['space-batch']?.homes).toBe(homes);
+    expect(current.native['space-batch']?.calls).toBe(1);
     expect(current.native.space).toBeUndefined();
     const reviewReader = resolved.metadataProducers.review!;
     const partial = await check(cuts, {
@@ -247,8 +261,14 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     const initial = cuts.find(({ partition }) => partition === noticeHome)!;
     expect(initial.position).toBe('0');
     await resumeCanonicalGenerationDelivery(pool, { after: noticeHome - 1, limit: 1, unannouncedOnly: true });
-    expect(await replay.run(noticeHome)).toMatchObject({ status: 'read' });
     const readsBefore = indexedReads;
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(readsBefore);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(initial.position);
+    expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
+    expect(await replay.run(noticeHome)).toMatchObject({ status: 'read' });
     await advanceDiscovery(options);
     expect(indexedReads).toBe(readsBefore);
     const noticeCut = (await readDiscoveryCuts(pool, prefix, generation)).find(

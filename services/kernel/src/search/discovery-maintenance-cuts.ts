@@ -15,7 +15,8 @@ import { SEARCH_IDENTITY_WRITER_CHANGED } from './identity-epoch-participant-eve
 /** Bound the complete suffix from the oldest of the five certified source points. */
 export function maintenanceCutCandidates(cuts: readonly DiscoveryCut[]) {
   let remaining = BATCH_ENVELOPES;
-  return cuts.filter((row) => {
+  const deferred = new Set<DiscoveryCut>();
+  const candidates = cuts.filter((row) => {
     const head = BigInt(row.head);
     if (row.collection_epoch === null) return false;
     let first = head;
@@ -32,10 +33,15 @@ export function maintenanceCutCandidates(cuts: readonly DiscoveryCut[]) {
       if (cut < first) first = cut;
     }
     const span = head - first;
-    if (span < 1n || span > BigInt(remaining)) return false;
+    if (span < 1n || span > BigInt(BATCH_ENVELOPES)) return false;
+    if (span > BigInt(remaining)) {
+      deferred.add(row);
+      return false;
+    }
     remaining -= Number(span);
     return true;
   });
+  return { candidates, deferred };
 }
 
 /** The real producers have just observed the proposed head. Recheck the exact received suffix and CAS all
@@ -46,7 +52,7 @@ export async function advanceMaintenanceCuts(
   cuts: readonly DiscoveryCut[],
 ) {
   const { prefix, generation, uuid, incarnation } = target;
-  const result = await client.query<{ partition: number }>(
+  const result = await client.query<{ partition: number; advanced: boolean }>(
     `WITH bound AS MATERIALIZED (
        SELECT generation FROM search.discovery_generation
        WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND index_uuid=$3 AND incarnation=$4::uuid
@@ -57,10 +63,11 @@ export async function advanceMaintenanceCuts(
          collection_epoch int,revision bigint,claim_revision bigint,semantic_revision bigint,semantic_claim_revision bigint,
          semantic_position bigint,collection_position bigint,review_position bigint,space_position bigint)
      ), homes AS MATERIALIZED (
-       SELECT i.* FROM input i JOIN core.partition h ON h.partition_no=i.partition AND h.write_state='active'
+       SELECT i.*,cp.epoch=h.epoch AND cp.position=h.position AS caught_up
+       FROM input i JOIN core.partition h ON h.partition_no=i.partition AND h.write_state='active'
          AND h.epoch=i.collection_epoch AND h.position=i.head
        JOIN core.consumer_checkpoint cp ON cp.partition_no=h.partition_no AND cp.consumer=$6
-         AND cp.epoch=h.epoch AND cp.position=h.position
+         AND cp.position<=h.position AND (cp.epoch=h.epoch OR (cp.epoch IS NULL AND cp.position=0))
        WHERE i.first=0 OR EXISTS (
          SELECT 1 FROM core.outbox anchor WHERE anchor.partition_no=h.partition_no AND anchor.position=i.first
            AND anchor.epoch=h.epoch AND anchor.event_seq=0
@@ -103,7 +110,7 @@ export async function advanceMaintenanceCuts(
      ), locked AS MATERIALIZED (
        SELECT p.partition_no,p.owner,h.head FROM proved h JOIN search.discovery_population p
          ON p.partition_no=h.partition AND p.prefix=$1 AND p.generation=$2
-         AND p.complete AND p.certified
+         AND p.complete AND p.certified AND h.caught_up
        WHERE CASE p.owner
          WHEN 'accounts' THEN (p.reconcile_position,p.revision,p.claim_revision)=(h.position,h.revision,h.claim_revision)
          WHEN 'semantic' THEN (p.reconcile_position,p.revision,p.claim_revision)=
@@ -117,7 +124,8 @@ export async function advanceMaintenanceCuts(
        FROM locked l WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)
          AND l.partition_no IN (SELECT partition_no FROM locked GROUP BY partition_no HAVING count(*)=5)
        RETURNING p.partition_no
-     ) SELECT DISTINCT partition_no AS partition FROM updated`,
+     ) SELECT DISTINCT partition_no AS partition,true AS advanced FROM updated
+       UNION ALL SELECT partition,false FROM proved WHERE caught_up IS NOT TRUE`,
     [
       prefix,
       generation,
@@ -132,5 +140,5 @@ export async function advanceMaintenanceCuts(
       CANONICAL_GENERATION_CONTINUATION,
     ],
   );
-  return new Set(result.rows.map(({ partition }) => partition));
+  return result.rows;
 }
