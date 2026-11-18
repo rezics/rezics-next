@@ -227,6 +227,7 @@ export function searchTurnMetadataProducers(
     Object.entries(producers).flatMap(([kind, producer]) => {
       if (!producer) return [];
       const readEmptyPositions = producer.readEmptyPositions?.bind(producer);
+      const readEmptyStamps = producer.readEmptyStamps?.bind(producer);
       return [
         [
           kind,
@@ -241,6 +242,9 @@ export function searchTurnMetadataProducers(
             ...(readEmptyPositions && {
               readEmptyPositions: (partitions: readonly number[]) =>
                 searchTurnCall(() => readEmptyPositions(partitions)),
+            }),
+            ...(readEmptyStamps && {
+              readEmptyStamps: (partitions: readonly number[]) => searchTurnCall(() => readEmptyStamps(partitions)),
             }),
           },
         ] as const,
@@ -2041,6 +2045,8 @@ async function checkMetadataCuts(
   trace?: DiscoveryFinalizationTrace,
   maintenance?: ReadonlyMap<DiscoveryCut, MaintenanceObservation>,
 ) {
+  const collection = metadataProducers.collection;
+  const readStamps = requiredKinds.includes('collection') ? collection?.readEmptyStamps?.bind(collection) : undefined;
   const readReviewPositions = requiredKinds.includes('review')
     ? metadataProducers.review?.readEmptyPositions
     : undefined;
@@ -2054,6 +2060,22 @@ async function checkMetadataCuts(
     Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
     (batch) => {
       const review = reviewPositions && reviewCertificationBatch(batch, reviewPositions);
+      const homes = batch.map((row) => row.partition);
+      let stamps: ReturnType<NonNullable<DiscoveryMetadataProducer['readEmptyStamps']>> | undefined;
+      const collectionStamp = async (partition: number) => {
+        const read = () => readStamps!(homes);
+        stamps ??= trace ? trace.read('collection-batch', homes[0]!, homes.length, read) : read();
+        const result = await stamps;
+        const stamp = result.get(partition);
+        if (
+          result.size !== homes.length ||
+          !stamp ||
+          !Number.isSafeInteger(stamp.epoch) ||
+          typeof stamp.position !== 'bigint'
+        )
+          throw new SearchUnavailableError('Discovery Collection stamps are incomplete');
+        return stamp;
+      };
       return (row) =>
         searchTurnCall(async () => {
           const metadataPositions = {
@@ -2067,12 +2089,12 @@ async function checkMetadataCuts(
             if (!requiredKinds.includes(kind)) continue;
             let observation: { position: bigint; epoch?: number };
             try {
-              observation =
-                kind === 'review' && review
-                  ? { position: await review.position(row) }
-                  : trace
-                    ? await trace.read(kind, row.partition, 1, () => metadataProducers[kind]!.read(row.partition, []))
-                    : await metadataProducers[kind]!.read(row.partition, []);
+              if (kind === 'collection' && readStamps) observation = await collectionStamp(row.partition);
+              else if (kind === 'review' && review) observation = { position: await review.position(row) };
+              else {
+                const read = () => metadataProducers[kind]!.read(row.partition, []);
+                observation = trace ? await trace.read(kind, row.partition, 1, read) : await read();
+              }
             } catch (error) {
               if (!candidate || !mismatch) throw error;
               // Reopen the already observed mismatches before propagating this sibling's refusal.

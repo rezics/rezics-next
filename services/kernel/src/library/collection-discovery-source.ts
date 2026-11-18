@@ -6,7 +6,7 @@ import { FollowCountUnavailableError } from './follow-count-target.ts';
 import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
 import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
 import { readDiscoverySubjectMembership } from './collection-discovery-context.ts';
-import { readPartition } from '../partition/partition.ts';
+import { readPartition, readPartitions, type Partition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import selectedOutput from './collection-source-output-head.sql';
@@ -62,6 +62,8 @@ export type CollectionDiscoveryCensus = Readonly<{
   reason: 'native_collection_population_evidence_unavailable';
 }>;
 export type CollectionDiscoverySource = Readonly<{
+  /** Unfiltered empty-key observations in request order, including unavailable homes. */
+  readEmpty?(partitions: readonly number[]): Promise<readonly CollectionDiscoverySnapshot[]>;
   read(
     partition: number,
     ids: readonly CollectionDiscoveryKey[],
@@ -102,6 +104,10 @@ const metadata = `c.route,c.collection_id::text AS id,c.state,c.visibility,c.rev
 function partitionKey(partition: number) {
   if (!Number.isSafeInteger(partition) || partition < 0 || partition >= PARTITIONS)
     throw new RangeError('Invalid Collection discovery partition');
+}
+function discoveryStamp(owner: Partition | null | undefined): CollectionDiscoveryPosition | undefined {
+  if (owner?.writeState === 'active' && owner.movedTo === null)
+    return { partition: owner.partitionNo, epoch: owner.epoch, position: owner.position.toString() };
 }
 function keyIn(partition: number, key: CollectionDiscoveryKey) {
   if (!Number.isSafeInteger(key.route) || routeOf(key.id) !== key.route || partitionOf(key.route) !== partition)
@@ -168,9 +174,8 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
     try {
       return await withReadTransaction(pool, async (connection) => {
         const client = context ? deadlineClient(connection, context.deadline) : connection;
-        const owner = await readPartition(client, partition);
-        if (!owner || owner.writeState !== 'active' || owner.movedTo !== null)
-          return { status: 'unavailable', reason: 'native_partition_unavailable' };
+        const stamp = discoveryStamp(await readPartition(client, partition));
+        if (!stamp) return { status: 'unavailable', reason: 'native_partition_unavailable' };
         const found = await rows(client);
         const byId = new Map(found.rows.map((row) => [row.id, row]));
         const items: CollectionDiscoveryItem[] = [];
@@ -217,9 +222,7 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
         return {
           status: 'available',
           stamp: {
-            partition,
-            epoch: owner.epoch,
-            position: owner.position.toString(),
+            ...stamp,
             ...(followCountHealth ? { followCountHealth } : {}),
           },
           items: decorated,
@@ -232,22 +235,36 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
     }
   }
   return {
+    async readEmpty(partitions) {
+      if (partitions.length > 100) throw new RangeError('Collection discovery reads at most 100 partitions');
+      for (const partition of partitions) partitionKey(partition);
+      return withReadTransaction(pool, async (client) => {
+        const owners = new Map((await readPartitions(client, partitions)).map((owner) => [owner.partitionNo, owner]));
+        return partitions.map((partition): CollectionDiscoverySnapshot => {
+          const stamp = discoveryStamp(owners.get(partition));
+          return stamp
+            ? { status: 'available', stamp, items: [] }
+            : { status: 'unavailable', reason: 'native_partition_unavailable' };
+        });
+      });
+    },
     async read(partition, ids, query, context) {
       partitionKey(partition);
       if (ids.length > 100) throw new RangeError('Collection discovery reads at most 100 keys');
       for (const key of ids) keyIn(partition, key);
       const keys = [...new Map(ids.map(({ route, id }) => [id, { route, id }])).values()].sort(compare);
-      return snapshot(partition, query, context, async (client) => ({
-        keys,
-        rows: (
+      return snapshot(partition, query, context, async (client) => {
+        if (!keys.length) return { keys, rows: [] };
+        const rows = (
           await client.query<Row>(
             `SELECT ${metadata} FROM unnest($1::integer[],$2::uuid[]) AS k(route,id)
              JOIN library.collection c ON c.route=k.route AND c.collection_id=k.id
              WHERE c.route >= $3*16 AND c.route < ($3+1)*16`,
             [keys.map((key) => key.route), keys.map((key) => key.id), partition],
           )
-        ).rows,
-      }));
+        ).rows;
+        return { keys, rows };
+      });
     },
     async page(partition, after, limit, query, context) {
       partitionKey(partition);
