@@ -30,6 +30,7 @@ import {
 } from './showcase-contract.ts';
 import { publishedShowcaseSourceKeys, publishShowcase, publishShowcaseVocabulary } from './showcase-publication.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
+import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import type { ShowcaseReviewPort } from './showcase-contract.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
@@ -228,11 +229,10 @@ export async function writeBangumiStaffVocabularyCommands(input: {
   commands: readonly BatchCommand[];
   read(id: string): Promise<ReviewedSubjectRead | null>;
 }): Promise<Map<string, string>> {
-  const acknowledgements = new Map(input.journal.acknowledgedCommands().map((ack) => [ack.command.key, ack]));
   const ids = new Map<string, string>();
   const pending: BatchCommand[] = [];
   for (const command of input.commands) {
-    const prior = acknowledgements.get(command.key);
+    const prior = input.journal.acknowledgedCommand(command.key);
     if (!prior) {
       pending.push(command);
       continue;
@@ -251,12 +251,20 @@ export async function writeBangumiStaffVocabularyCommands(input: {
   }
   // Await singleton identity creates; retain smaller byte/count pages for citation-bearing proposals.
   for (const page of importCommandPages(pending, (command) => command, STAFF_VOCABULARY_PAGE)) {
-    const result = await input.port.batch({ commands: [...page] });
+    const result = await input.port.batch({ commands: page }, undefined, 'admission').catch((error: unknown) => {
+      throw recordSeedBatchFailure(error, 'batch-send', 'request-failed', page.length === 1 ? page[0] : undefined);
+    });
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
     for (const command of page) {
       const ack = byKey.get(command.key);
       if (!ack || !('value' in ack))
-        throw new TypeError(`Bangumi staff vocabulary write failed: ${ack?.status ?? 'missing-ack'}`);
+        throw recordSeedBatchFailure(
+          new TypeError(`Bangumi staff vocabulary write failed: ${ack?.status ?? 'missing-ack'}`),
+          'batch-receipt',
+          ack ? 'command-refused' : 'missing-receipt',
+          command,
+          ack,
+        );
       if (command.op === 'create') {
         if (!('id' in ack.value) || !uuid.test(ack.value.id))
           throw new TypeError('Bangumi staff vocabulary ACK has no UUID');
