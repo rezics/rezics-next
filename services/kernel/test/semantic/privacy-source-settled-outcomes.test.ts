@@ -83,7 +83,7 @@ test('native privacy reads preserve settled causes through cleanup and continue 
         stall?: { entered(): void; result: Promise<ReturnType<typeof result>> };
       }
     | undefined;
-  const checkouts: { queries: string[]; releaseError?: Error; released: Promise<void> }[] = [];
+  const checkouts: { queries: string[]; releaseError?: Error | undefined; released: Promise<void> }[] = [];
   const unused = () => {
     throw new Error('Privacy head/log reads must not call another source producer');
   };

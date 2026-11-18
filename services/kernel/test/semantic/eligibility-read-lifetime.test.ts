@@ -62,11 +62,11 @@ function expectedWork(entry: Case, row?: PointRow): AccessWork {
 }
 
 function ledger(deadline: number) {
-  const receipts: Array<{ operation: string; kind: string; bound: AccessWork; settled?: AccessWork }> = [];
+  const receipts: Array<{ operation: string; kind: string; bound: AccessWork; settled: AccessWork | undefined }> = [];
   const work = new AccessWorkAccounting(
     {
       reserve(operation, bound, kind) {
-        const receipt = { operation, kind, bound, settled: undefined as AccessWork | undefined };
+        const receipt: (typeof receipts)[number] = { operation, kind, bound, settled: undefined };
         receipts.push(receipt);
         return {
           settle(actual) {

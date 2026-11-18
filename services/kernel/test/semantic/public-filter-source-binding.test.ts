@@ -807,7 +807,7 @@ test('native Source replays its original creation window after the same home adv
     const book = await f.create('schema:Book', {}, String(key));
     expect(partitionOf(routeOf(book)!)).toBe(openHome);
 
-    let frontier = page.frontier;
+    let frontier: string | null = page.frontier;
     let prefixPredecessor: string | null | undefined;
     let fallbackPredecessor: string | undefined;
     for (let turn = 0; turn < 80; turn++) {
