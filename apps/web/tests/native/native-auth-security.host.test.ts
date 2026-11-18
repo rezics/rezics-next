@@ -1,5 +1,4 @@
 import { expect } from 'bun:test';
-import type { QueryClient } from '@tanstack/react-query';
 import type { Page, Response as PlaywrightResponse } from 'playwright';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
@@ -286,29 +285,49 @@ async function manageAccountSecurity() {
     },
   );
   await alicePage.locator('#account-menu-button').waitFor({ state: 'visible' });
-  const signedInNonce = await alicePage.evaluate(
-    () => document.querySelector('meta[property="csp-nonce"]')?.getAttribute('content') ?? null,
-  );
+  // Conditional mediation can use the virtual authenticator's automatic touch without a click.
+  const { authenticatorId } = authenticator;
+  await webauthn.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: false });
   await signOutWebsiteAndAuth(alicePage);
-  await alicePage.reload({ waitUntil: 'domcontentloaded' });
-  expect(await alicePage.locator('#account-menu-button').count()).toBe(0);
-  await checkLibraryAfterSignOut(alicePage, signedInNonce);
+  await checkLibraryAfterSignOut(alicePage);
   await alicePage.goto(`${stack.web}${fixture.book.path}`, { waitUntil: 'domcontentloaded' });
   await alicePage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   expect(await alicePage.getByRole('heading', { name: fixture.book.title, exact: true }).count()).toBe(1);
   expect(await alicePage.getByRole('combobox', { name: 'Library state', exact: true }).count()).toBe(0);
+  expect(await exactCookie(aliceContext, webOrigin, '__Host-rezics_session')).toBeUndefined();
   const anonymousCatalogue = await stack.kernel(`/v1/subjects/${encodeURIComponent(fixture.book.id)}`);
   expect(anonymousCatalogue.status).toBe(200);
   expect(await anonymousCatalogue.text()).toContain(fixture.book.title);
 
   const passkeySignInOptions = observePasskeySignInOptions(alicePage, auth.origin);
-  await visitLibrarySignIn(alicePage, stack, auth, fixture.libraryTarget, 'passkey');
-  await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
-  const passkeySignInResponse = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/signin/passkey' && response.request().method() === 'POST',
+  // The click cancels conditional mediation. Keep the shared options request pending until presence
+  // is restored so the explicit ceremony starts with the authenticator ready.
+  const releasePasskeyOptions = Promise.withResolvers<void>();
+  await alicePage.route(
+    `${auth.origin}/signin/passkey/options`,
+    async (route) => {
+      await releasePasskeyOptions.promise;
+      await route.continue();
+    },
+    { times: 1 },
   );
-  await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
-  expect((await passkeySignInResponse).status()).toBe(200);
+  try {
+    await visitLibrarySignIn(alicePage, stack, auth, fixture.libraryTarget, 'passkey');
+    expect(await exactCookie(aliceContext, webOrigin, '__Host-rezics_session')).toBeUndefined();
+    const [passkeySignInResponse] = await Promise.all([
+      alicePage.waitForResponse(
+        (response) => response.url() === `${auth.origin}/signin/passkey` && response.request().method() === 'POST',
+      ),
+      (async () => {
+        await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
+        await webauthn.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: true });
+        releasePasskeyOptions.resolve();
+      })(),
+    ]);
+    expect(passkeySignInResponse.status()).toBe(200);
+  } finally {
+    releasePasskeyOptions.resolve();
+  }
   const signInOptions = passkeySignInOptions.at(-1);
   expect(signInOptions?.status()).toBe(200);
   expect(await signInOptions?.json()).toMatchObject({ rpId: 'rezics.com' });
@@ -403,87 +422,38 @@ async function manageAccountSecurity() {
   await bobContext.close();
 }
 
-async function checkLibraryAfterSignOut(page: Page, signedInNonce: string | null): Promise<void> {
+async function checkLibraryAfterSignOut(page: Page): Promise<void> {
   const libraryUrl = `${stack.web}${fixture.libraryTarget}`;
-  const webOrigin = new URL(stack.web).origin;
-  const route = (address: string) => {
-    const { origin, pathname } = new URL(address);
-    if (address === libraryUrl) return 'exact-library';
-    if (origin === webOrigin) return ['/auth/sign-in', '/auth/callback'].includes(pathname) ? pathname : 'web-other';
-    if (origin === auth.origin)
-      return ['/authorize', '/login', '/signin/passkey'].includes(pathname) ? pathname : 'issuer-other';
-    return 'outside';
-  };
-  const responses: PlaywrightResponse[] = [];
-  const observe = (response: PlaywrightResponse) => {
-    const request = response.request();
-    if (responses.length >= 12 || request.serviceWorker() || request.frame() !== page.mainFrame()) return;
-    if (request.isNavigationRequest() || (request.method() === 'POST' && route(response.url()) === '/signin/passkey'))
-      responses.push(response);
-  };
-  page.on('response', observe);
-  try {
-    await page.goto(libraryUrl, { waitUntil: 'domcontentloaded' });
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    // Sample the shell and its backing query in the same turn, before another session read or navigation.
-    const snapshot = await page.locator('#account-menu-button').evaluateAll(
-      (buttons, { priorNonce, alice }) => {
-        const router = (
-          window as Window & { __TSR_ROUTER__?: { options: { context?: { queryClient?: QueryClient } } } }
-        ).__TSR_ROUTER__;
-        const query = router?.options.context?.queryClient?.getQueryState<{ state: string; subject?: string }>([
-          'session',
-        ]);
-        const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-        const nonce = document.querySelector('meta[property="csp-nonce"]')?.getAttribute('content');
-        return {
-          accountButtons: buttons.length,
-          address: location.href,
-          queryStatus: query?.status,
-          sessionState: query?.data?.state,
-          sessionIsAlice: query?.data?.subject === alice,
-          reusedSignedInNonce: priorNonce && nonce ? priorNonce === nonce : null,
-          transferSize: navigation?.transferSize,
-        };
-      },
-      { priorNonce: signedInNonce, alice: fixture.accountIds.alice },
-    );
-    const rows = await exactShelfRow(page, { id: fixture.book.id, label: fixture.book.title }).count();
-    const hops = await Promise.all(
-      responses.map(async (response) => {
-        const hop = { route: route(response.url()), status: response.status() };
-        if (hop.route !== 'exact-library') return hop;
-        const cookie = await response.request().headerValue('cookie');
-        return {
-          ...hop,
-          sentWebSession: /(?:^|;\s*)__Host-rezics_session=/.test(cookie ?? ''),
-          cacheControl: response.headers()['cache-control'],
-          htmlHasTitle: hop.status === 200 ? (await response.text()).includes(fixture.book.title) : null,
-        };
-      }),
-    );
-    const anonymous = await stack.request(libraryUrl, 'anonymous');
-    const anonymousHasTitle = (await anonymous.text()).includes(fixture.book.title);
-    const { address, ...shell } = snapshot;
-    const evidence = {
-      hydratedRoute: route(address),
-      ...shell,
-      rows,
-      responses: hops,
-      webSessionAfterNavigation: !!(await exactCookie(page.context(), webOrigin, '__Host-rezics_session')),
-      anonymousStatus: anonymous.status,
-      anonymousCacheControl: anonymous.headers.get('cache-control'),
-      anonymousHasTitle,
-    };
-    console.info('Native Web Library after sign-out', JSON.stringify(evidence));
-    expect(snapshot.accountButtons).toBe(0);
-    expect(rows).toBe(0);
-    expect(hops.some((hop) => 'htmlHasTitle' in hop && hop.htmlHasTitle === true)).toBe(false);
-    expect(anonymous.status).toBe(200);
-    expect(anonymousHasTitle).toBe(false);
-  } finally {
-    page.off('response', observe);
-  }
+  const signInLocation = `/auth/sign-in?return_to=${encodeURIComponent(fixture.libraryTarget)}`;
+  const [restricted, login] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url() === libraryUrl &&
+        response.request().isNavigationRequest() &&
+        response.request().frame() === page.mainFrame(),
+    ),
+    page.goto(libraryUrl, { waitUntil: 'domcontentloaded' }),
+  ]);
+  expect(restricted.status()).toBe(302);
+  expect(await restricted.headerValue('location')).toBe(signInLocation);
+  expect(await restricted.headerValue('cache-control')).toBe('private, no-store');
+  expect((await restricted.request().headerValue('cookie')) ?? '').not.toMatch(/(?:^|;\s*)__Host-rezics_session=/);
+
+  expect(login?.status()).toBe(200);
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  const loginUrl = new URL(page.url());
+  expect(loginUrl.origin).toBe(auth.origin);
+  expect(loginUrl.pathname).toBe('/login');
+  await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
+  expect(await page.locator('#account-menu-button').count()).toBe(0);
+  expect(await exactShelfRow(page, { id: fixture.book.id, label: fixture.book.title }).count()).toBe(0);
+  expect(await exactCookie(page.context(), stack.web, '__Host-rezics_session')).toBeUndefined();
+
+  const anonymous = await stack.request(libraryUrl, 'anonymous');
+  expect(anonymous.status).toBe(302);
+  expect(anonymous.headers.get('location')).toBe(signInLocation);
+  expect(anonymous.headers.get('cache-control')).toBe('private, no-store');
+  expect(await anonymous.text()).not.toContain(fixture.book.title);
 }
 
 async function signOutWebsiteAndAuth(page: Page): Promise<void> {
@@ -529,6 +499,18 @@ async function signOutWebsiteAndAuth(page: Page): Promise<void> {
       page.off('response', recordDocument);
     }
   }
-  expect(await exactCookie(page.context(), webOrigin, '__Host-rezics_session')).toBeUndefined();
-  expect((await page.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
+  await page.waitForURL(returnedToWebsite, { waitUntil: 'domcontentloaded' });
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  expect(await page.locator('#account-menu-button').count()).toBe(0);
+  const context = page.context();
+  expect(await exactCookie(context, webOrigin, '__Host-rezics_session')).toBeUndefined();
+  const issuerPage = await context.newPage();
+  try {
+    const sessionUrl = `${auth.origin}/session`;
+    const session = await issuerPage.goto(sessionUrl, { waitUntil: 'domcontentloaded' });
+    expect(session?.url()).toBe(sessionUrl);
+    expect(session?.status()).toBe(401);
+  } finally {
+    await issuerPage.close();
+  }
 }
