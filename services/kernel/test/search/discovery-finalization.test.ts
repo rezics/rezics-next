@@ -5,6 +5,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { newId } from '../../src/route/route.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
@@ -24,22 +25,30 @@ import {
   searchTurnMetadataProducers,
 } from '../../src/search/generations.ts';
 import { createDiscoveryIndexer } from '../../src/search/indexer.ts';
+import { maintenanceCutCandidates } from '../../src/search/discovery-maintenance-cuts.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
+import { createSemanticLocatorEffect, SEMANTIC_LOCATOR_ADVANCED } from '../../src/semantic/account-erasure.ts';
+import { resumeCanonicalGenerationDelivery } from '../../src/semantic/canonical-generation-delivery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { CANONICAL_GENERATION_COMMITTED } from '../../src/semantic/events.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 test('64 certified mixed Discovery homes distinguish changed native cuts before activation', async () => {
   const pool = createPool(process.env.DATABASE_URL!);
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);
   let wideEmptyProofs = 0;
+  let indexedReads = 0;
   const search: typeof native = {
     ...native,
     request(...args) {
       const body = args[2] as { query?: { bool?: { should?: unknown[] } } } | undefined;
-      if (args[1].endsWith('/_search') && (body?.query?.bool?.should?.length ?? 0) > 8) wideEmptyProofs++;
+      if (args[1].endsWith('/_search')) {
+        indexedReads++;
+        if ((body?.query?.bool?.should?.length ?? 0) > 8) wideEmptyProofs++;
+      }
       return native.request(...args);
     },
   };
@@ -151,6 +160,17 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
     expect(cuts).toHaveLength(homes);
+    const twoPositionCuts = cuts.map((row) => ({
+      ...row,
+      head: String(BigInt(row.position) + 2n),
+      semantic_position: row.position,
+      collection_position: row.position,
+      review_position: row.position,
+      space_position: row.position,
+    }));
+    const planned = maintenanceCutCandidates(twoPositionCuts);
+    expect(planned.candidates).toEqual(twoPositionCuts.slice(0, 32));
+    expect(planned.deferred).toEqual(new Set(twoPositionCuts.slice(32)));
     const check = async (rows: typeof cuts, producers = resolved.metadataProducers) => {
       const turn = admitSearchTurn();
       const trace = discoveryFinalizationTrace(prefix, turn.deadline);
@@ -175,11 +195,13 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(current.checks.every((row) => row.state === 'current')).toBe(true);
     expect(current.native['account-witness']?.homes).toBe(homes);
     expect(current.native['collection-batch']?.homes).toBe(homes);
-    expect(current.native['collection-batch']!.calls).toBeLessThan(homes);
+    expect(current.native['collection-batch']?.calls).toBe(1);
     expect(current.native.collection).toBeUndefined();
     expect(current.native['review-batch']?.homes).toBe(homes);
+    expect(current.native['review-batch']?.calls).toBe(1);
     expect(current.native.review).toBeUndefined();
     expect(current.native['space-batch']?.homes).toBe(homes);
+    expect(current.native['space-batch']?.calls).toBe(1);
     expect(current.native.space).toBeUndefined();
     const reviewReader = resolved.metadataProducers.review!;
     const partial = await check(cuts, {
@@ -229,6 +251,71 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       { state: 'metadata', partition: 4, kind: 'space' },
     ]);
     expect(checks.slice(5).every((row) => row.state === 'current')).toBe(true);
+
+    // A real Semantic notification at a certified empty home advances every native cut.
+    const untouched = await pool.query<{ partition_no: number }>(
+      `SELECT p.partition_no FROM core.partition p JOIN semantic.partition_subjects s USING(partition_no)
+       WHERE p.partition_no>0 AND p.partition_no<$1 AND p.position=0
+         AND s.canonical_announced_generation<s.canonical_generation
+       ORDER BY p.partition_no LIMIT 1`,
+      [homes],
+    );
+    const noticeHome = untouched.rows[0]!.partition_no;
+    const initial = cuts.find(({ partition }) => partition === noticeHome)!;
+    expect(initial.position).toBe('0');
+    await resumeCanonicalGenerationDelivery(pool, { after: noticeHome - 1, limit: 1, unannouncedOnly: true });
+    const readsBefore = indexedReads;
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(readsBefore);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(initial.position);
+    expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
+    expect(await replay.run(noticeHome)).toMatchObject({ status: 'read' });
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(readsBefore);
+    const noticeCut = (await readDiscoveryCuts(pool, prefix, generation)).find(
+      ({ partition }) => partition === noticeHome,
+    )!;
+    expect(BigInt(noticeCut.position)).toBeGreaterThan(0n);
+    expect((await check([noticeCut])).checks).toEqual([{ state: 'current' }]);
+
+    // An original queued locator consumes a Core envelope and preserves its
+    // zero-padded sequence in the terminal event.
+    const events: CloudEvent[] = [];
+    await readBatch(pool, {
+      consumer: 'test_discovery_locator_notice',
+      partition: noticeHome,
+      async apply(envelopes) {
+        events.push(...envelopes.flatMap((envelope) => envelope.events));
+      },
+    });
+    const original = events.find(({ type }) => type === CANONICAL_GENERATION_COMMITTED)!;
+    expect(original.sequence).toMatch(/^0\d{18}$/);
+    expect(BigInt(original.sequence)).toBeLessThanOrEqual(BigInt(noticeCut.position));
+    await createSemanticLocatorEffect(pool).run(original);
+    const completed = await pool.query<{ position: string; data: unknown }>(
+      'SELECT position::text,data FROM core.outbox WHERE partition_no=$1 AND type=$2',
+      [noticeHome, SEMANTIC_LOCATOR_ADVANCED],
+    );
+    expect(completed.rows).toEqual([
+      { position: String(BigInt(noticeCut.position) + 1n), data: { position: original.sequence } },
+    ]);
+    const locatorReads = indexedReads;
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(noticeCut.position);
+    expect(await replay.run(noticeHome)).toMatchObject({
+      status: 'read',
+      position: BigInt(completed.rows[0]!.position),
+    });
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(completed.rows[0]!.position);
 
     // Advance a certified empty home with a private Search event. Hold the real replay until after repair.
     const empty = await pool.query<{ partition_no: number }>(

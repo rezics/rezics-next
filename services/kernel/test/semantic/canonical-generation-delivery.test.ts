@@ -25,7 +25,7 @@ import { fixture, readContext } from './support/public-filter-source.ts';
 test('canonical delivery recovery yields after eight native homes even with a retained wide request', async () => {
   const f = await fixture();
   try {
-    const pool = f.db.openPool({ max: 1 });
+    const pool = f.db.openPool({ max: 5 });
     const request = { after: 0, limit: CANONICAL_GENERATION_PAGE_SIZE };
     const { homes } = await readCanonicalGenerationDeliveryPage(
       pool,

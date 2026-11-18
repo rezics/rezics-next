@@ -2280,7 +2280,9 @@ export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number
        AND (collection.owner IS NULL OR (collection.complete AND collection.certified))
        AND (review.owner IS NULL OR (review.complete AND review.certified))
        AND (space.owner IS NULL OR (space.complete AND space.certified))
-     ORDER BY (p.reconcile_position IS DISTINCT FROM c.position OR s.reconcile_position IS DISTINCT FROM c.position) DESC,
+     ORDER BY (p.reconcile_position IS DISTINCT FROM c.position OR s.reconcile_position IS DISTINCT FROM c.position
+       OR coalesce(collection.reconcile_position<>c.position,false) OR coalesce(review.reconcile_position<>c.position,false)
+       OR coalesce(space.reconcile_position<>c.position,false)) DESC,
               p.partition_no LIMIT $3`,
           [prefix, generation, limit ?? null],
         )
@@ -2304,6 +2306,42 @@ async function checkMetadataCuts(
 ) {
   const collection = metadataProducers.collection;
   const readStamps = requiredKinds.includes('collection') ? collection?.readEmptyStamps?.bind(collection) : undefined;
+  const review = metadataProducers.review;
+  const space = metadataProducers.space;
+  let wide:
+    | {
+        collection: Awaited<ReturnType<NonNullable<DiscoveryMetadataProducer['readEmptyStamps']>>>;
+        review: ReadonlyMap<number, bigint>;
+        space: ReadonlyMap<number, bigint>;
+      }
+    | undefined;
+  if (
+    chunk.length > DISCOVERY_CERTIFICATION_CONCURRENCY &&
+    chunk.length <= DISCOVERY_CUT_BATCH_SIZE &&
+    readStamps &&
+    review?.readEmptyPositions &&
+    space?.readEmptyPositions &&
+    requiredKinds.includes('review') &&
+    requiredKinds.includes('space')
+  ) {
+    const homes = chunk.map(({ partition }) => partition);
+    const first = homes[0]!;
+    const observe = <T>(kind: string, read: () => Promise<T>) =>
+      searchTurnCall(() => (trace ? trace.read(kind, first, homes.length, read) : read()));
+    const [collections, reviews, spaces] = await Promise.allSettled([
+      observe('collection-batch', () => readStamps(homes)),
+      observe('review-batch', () => review.readEmptyPositions!(homes)),
+      observe('space-batch', () => space.readEmptyPositions!(homes)),
+    ]);
+    if (
+      collections.status === 'fulfilled' &&
+      collections.value.size === homes.length &&
+      reviews.status === 'fulfilled' &&
+      spaces.status === 'fulfilled'
+    )
+      wide = { collection: collections.value, review: reviews.value, space: spaces.value };
+    else searchTurns.getStore()?.check();
+  }
   return mapBounded(
     chunk,
     Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
@@ -2311,7 +2349,7 @@ async function checkMetadataCuts(
       const positions = new Map(
         (['review', 'space'] as const).flatMap((kind) => {
           const read = metadataProducers[kind]?.readEmptyPositions;
-          if (!requiredKinds.includes(kind) || !read) return [];
+          if (wide || !requiredKinds.includes(kind) || !read) return [];
           const observe = (homes: readonly number[]) =>
             trace ? trace.read(`${kind}-batch`, homes[0]!, homes.length, () => read(homes)) : read(homes);
           return [[kind, emptyPositionBatch(batch, observe)] as const];
@@ -2321,11 +2359,15 @@ async function checkMetadataCuts(
       let stamps: ReturnType<NonNullable<DiscoveryMetadataProducer['readEmptyStamps']>> | undefined;
       const collectionStamp = async (partition: number) => {
         const read = () => readStamps!(homes);
-        stamps ??= trace ? trace.read('collection-batch', homes[0]!, homes.length, read) : read();
+        stamps ??= wide
+          ? Promise.resolve(wide.collection)
+          : trace
+            ? trace.read('collection-batch', homes[0]!, homes.length, read)
+            : read();
         const result = await stamps;
         const stamp = result.get(partition);
         if (
-          result.size !== homes.length ||
+          result.size !== (wide ? chunk.length : homes.length) ||
           !stamp ||
           !Number.isSafeInteger(stamp.epoch) ||
           typeof stamp.position !== 'bigint'
@@ -2348,8 +2390,8 @@ async function checkMetadataCuts(
             try {
               const positionBatch = kind === 'collection' ? undefined : positions.get(kind);
               if (kind === 'collection' && readStamps) observation = await collectionStamp(row.partition);
-              else if (positionBatch) {
-                const position = await positionBatch.position(row);
+              else if (kind !== 'collection' && (wide || positionBatch)) {
+                const position = wide ? wide[kind].get(row.partition) : await positionBatch!.position(row);
                 if (position === undefined)
                   return mismatch ?? { state: 'metadata' as const, partition: row.partition, kind };
                 observation = { position };
@@ -2513,10 +2555,21 @@ async function recheckDiscoveryCutBatch(
       SECOND_SCOPE_PUBLIC_METADATA_KINDS.every((kind) => observation.positions[kind]?.toString() === row.head)
     );
   });
+  let waitingForReplay = false;
   if (observed.length) {
-    const advanced = await withSearchConnection(pool, (client) => advanceMaintenanceCuts(client, target, observed));
+    const proved = new Set<number>();
+    const homesPerWrite = Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + SECOND_SCOPE_PUBLIC_METADATA_KINDS.length));
+    for (let offset = 0; offset < observed.length; offset += homesPerWrite) {
+      const batch = observed.slice(offset, offset + homesPerWrite);
+      for (const { partition, advanced } of await withSearchConnection(pool, (client) =>
+        advanceMaintenanceCuts(client, target, batch),
+      )) {
+        proved.add(partition);
+        if (!advanced) waitingForReplay = true;
+      }
+    }
     for (const [index, row] of chunk.entries()) {
-      if (advanced.has(row.partition)) checks[index] = { state: 'current' };
+      if (proved.has(row.partition)) checks[index] = { state: 'current' };
     }
   }
   const stale: ReturnType<typeof staleFrontier>[] = [];
@@ -2584,7 +2637,7 @@ async function recheckDiscoveryCutBatch(
       if (rejected) await rejected('after-reopen');
     }
   }
-  return { state: 'current' as const };
+  return waitingForReplay ? { state: 'waiting-for-replay' as const } : { state: 'current' as const };
 }
 
 type AdvanceDiscoveryOptions = SearchTurnContext & {
@@ -2911,40 +2964,60 @@ async function advanceDiscoveryTurn(
   // Inspect only those homes here. Every metadata comparison still uses that producer's own cut.
   const drift = observations
     .slice(0, DISCOVERY_CUT_BATCH_SIZE)
-    .filter((row) => row.position !== row.head || row.semantic_position !== row.head);
+    .filter((row) =>
+      [row.position, row.semantic_position, row.collection_position, row.review_position, row.space_position].some(
+        (cut) => cut !== null && cut !== row.head,
+      ),
+    );
+  const mixed = SECOND_SCOPE_PUBLIC_METADATA_KINDS.every((kind) => requiredKinds.includes(kind));
   if (drift.length) {
-    const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS;
-    const candidates = kinds.every((kind) => requiredKinds.includes(kind))
-      ? maintenanceCutCandidates(drift).slice(0, Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + kinds.length)))
-      : [];
+    const maintenance = mixed ? maintenanceCutCandidates(drift) : undefined;
+    // A home outside this turn's suffix allowance has not failed its proof.
+    const current = maintenance ? drift.filter((row) => !maintenance.deferred.has(row)) : drift;
     const result = await recheckDiscoveryCutBatch(
       pool,
       target,
-      drift,
+      current,
       metadataProducers,
       requiredKinds,
       trace,
-      candidates,
+      maintenance?.candidates,
     );
-    if (result.state === 'retiring') return;
+    if (result.state === 'retiring' || result.state === 'waiting-for-replay') return;
     if (result.state === 'changed') {
       if (!result.repairPartitions) return;
       const progress = await advancePopulation('reconciling', result.repairPartitions);
       if (progress === 'waiting-for-review-invalidation') return progress;
       if (progress !== 'advanced') return;
     }
+    if (maintenance?.deferred.size) return;
     if (!(await replayCurrent())) return;
     // Repair can perform real writes. Take the entire publication inventory again after it settles.
     observations = await readDiscoveryCuts(pool, prefix, target.generation);
     if (observations.length < PARTITIONS) return;
   } else if (!caughtUp) return;
   if (observations.length !== PARTITIONS) throw new Error('Discovery population partitions are incomplete');
+  let reopenedCuts = false;
   for (let offset = 0; offset < observations.length; offset += DISCOVERY_CUT_BATCH_SIZE) {
     const chunk = observations.slice(offset, offset + DISCOVERY_CUT_BATCH_SIZE);
     trace?.step('native-cuts', offset);
-    const result = await recheckDiscoveryCutBatch(pool, target, chunk, metadataProducers, requiredKinds, trace);
-    if (result.state !== 'current') return;
+    const maintenance = mixed ? maintenanceCutCandidates(chunk) : undefined;
+    const current = maintenance ? chunk.filter((row) => !maintenance.deferred.has(row)) : chunk;
+    const result = await recheckDiscoveryCutBatch(
+      pool,
+      target,
+      current,
+      metadataProducers,
+      requiredKinds,
+      trace,
+      maintenance?.candidates,
+    );
+    if (result.state === 'retiring' || result.state === 'waiting-for-replay' || maintenance?.deferred.size) return;
+    // Later homes can expose independent changes on this same bounded inventory.
+    // A changed batch prevents publication until every reopened frontier is certified again.
+    if (result.state === 'changed') reopenedCuts = true;
   }
+  if (reopenedCuts) return;
   trace?.step('physical-target', observations.length);
   if (!(await discoveryPhysicalTargetMatches(search, target))) {
     await retireDiscoveryCapability(pool, target);

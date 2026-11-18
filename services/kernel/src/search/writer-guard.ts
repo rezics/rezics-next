@@ -333,22 +333,21 @@ function repairReviver(_key: string, item: unknown) {
     return BigInt(item.nativeBigint);
   return item;
 }
-async function verifyRetainedRepairWriter(
-  db: Pick<Pool, 'query'>,
-  index: string,
-  receipt: PublicFilterRepairWriterReceipt,
-) {
-  const fail = () => {
-    throw unavailable('Native repair receipt or final writer fence changed');
-  };
-  // Each query is anchored to one native home; never join observation and subject partitions.
-  const gate = (
-    await db.query(
-      `SELECT consumer,incarnation,owner_epoch,write_alias,closed_token
-    FROM search.identity_writer_gate WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
-      [receipt.partition, index],
-    )
-  ).rows[0];
+type RepairGate = Readonly<{
+  consumer: string;
+  incarnation: string;
+  owner_epoch: number;
+  write_alias: string;
+  closed_token: string | null;
+}>;
+type RepairOwner = Readonly<{ write_state: string; epoch: number; position: bigint | string }>;
+type RepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>> & { repair_account?: string | null };
+
+function changedRepairFence(): never {
+  throw unavailable('Native repair receipt or final writer fence changed');
+}
+
+function checkRepairGate(receipt: PublicFilterRepairWriterReceipt, gate: RepairGate | undefined) {
   if (
     !gate ||
     gate.consumer !== receipt.consumer ||
@@ -357,16 +356,10 @@ async function verifyRetainedRepairWriter(
     gate.write_alias !== receipt.writeAlias ||
     gate.closed_token
   )
-    fail();
-  const writer = (
-    await db.query(
-      `SELECT writer_token,dispatch_state,closed_job,repair_locator,repair_receipt,repair_action,repair_account,
-    owner_epoch,incarnation,source_position,visible_position,visible_transaction_id,
-    settled_position,settled_transaction_id,writer_transaction_id,writer_position
-    FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
-      [receipt.partition, index, receipt.subject],
-    )
-  ).rows[0];
+    changedRepairFence();
+}
+
+function checkRepairWriter(receipt: PublicFilterRepairWriterReceipt, writer: RepairWriter | undefined) {
   if (
     !writer ||
     writer.writer_token !== null ||
@@ -395,21 +388,63 @@ async function verifyRetainedRepairWriter(
     BigInt(writer.settled_position ?? -1) !== receipt.completion.position ||
     BigInt(writer.visible_position ?? -1) !== receipt.completion.position
   )
-    fail();
-  const owner = (
-    await db.query(
-      `SELECT epoch,write_state,position FROM core.partition
-    WHERE partition_no=$1 FOR SHARE`,
-      [receipt.partition],
-    )
-  ).rows[0];
+    changedRepairFence();
+}
+
+function checkRepairOwner(receipt: PublicFilterRepairWriterReceipt, owner: RepairOwner | undefined) {
   if (
     !owner ||
     owner.write_state !== 'active' ||
     owner.epoch !== receipt.epoch ||
     BigInt(owner.position) < receipt.completion.position
   )
-    fail();
+    changedRepairFence();
+}
+
+/** Checks the rows already locked by the reopened native settlement transaction. */
+export function assertRetainedRepairWriterFence(
+  receipt: DiscoveryRepairWriterReceipt,
+  gate: RepairGate | undefined,
+  writer: RepairWriter | undefined,
+  owner: RepairOwner | undefined,
+) {
+  checkRepairGate(receipt, gate);
+  checkRepairWriter(receipt, writer);
+  checkRepairOwner(receipt, owner);
+}
+
+async function verifyRetainedRepairWriter(
+  db: Pick<Pool, 'query'>,
+  index: string,
+  receipt: PublicFilterRepairWriterReceipt,
+) {
+  // Each query is anchored to one native home; never join observation and subject partitions.
+  const gate = (
+    await db.query<RepairGate>(
+      `SELECT consumer,incarnation,owner_epoch,write_alias,closed_token
+    FROM search.identity_writer_gate WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
+      [receipt.partition, index],
+    )
+  ).rows[0];
+  checkRepairGate(receipt, gate);
+  const writer = (
+    await db.query<RepairWriter>(
+      `SELECT writer_token,dispatch_state,closed_job,repair_locator,repair_receipt,repair_action,repair_account,
+    owner_epoch,incarnation,source_position,visible_position,visible_transaction_id,
+    settled_position,settled_transaction_id,writer_transaction_id,writer_position
+    FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
+      [receipt.partition, index, receipt.subject],
+    )
+  ).rows[0];
+  checkRepairWriter(receipt, writer);
+  const owner = (
+    await db.query<RepairOwner>(
+      `SELECT epoch,write_state,position FROM core.partition
+    WHERE partition_no=$1 FOR SHARE`,
+      [receipt.partition],
+    )
+  ).rows[0];
+  checkRepairOwner(receipt, owner);
 }
 
 /** Dispatch by original physical family; no mixed receipt is accepted by the Subject verifier. */
@@ -510,11 +545,24 @@ export async function verifyDiscoveryRepairWriterReceipts(
 ) {
   if (!receipts.length) return;
   const target = await readDiscoveryWriterPhysicalTarget(db, search, index);
-  const physical = /^(.*)discovery-g([1-9][0-9]*)$/.exec(index)!;
-  const actions = new Map<string, DiscoveryIndexAction>();
   for (const receipt of receipts) {
     validatePublicFilterRepairWriterEvidence(index, receipt);
     await verifyRetainedRepairWriter(db, index, receipt);
+  }
+  await verifyDiscoveryRepairWinners(db, search, index, target, receipts);
+}
+
+/** Read the exact physical winners after native receipt and writer checks. */
+export async function verifyDiscoveryRepairWinners(
+  db: Pick<Pool, 'query'>,
+  search: OpenSearch,
+  index: string,
+  target: Awaited<ReturnType<typeof readDiscoveryWriterPhysicalTarget>>,
+  receipts: readonly DiscoveryRepairWriterReceipt[],
+) {
+  const physical = /^(.*)discovery-g([1-9][0-9]*)$/.exec(index)!;
+  const actions = new Map<string, DiscoveryIndexAction>();
+  for (const receipt of receipts) {
     if (
       target.incarnation !== receipt.incarnation ||
       target.allocation !== receipt.allocation ||

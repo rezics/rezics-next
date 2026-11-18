@@ -155,6 +155,7 @@ test('native privacy reads preserve settled causes through cleanup and continue 
     classifyUnavailability,
     requireDeadline: requireAccessDeadline,
     isUnavailable: (error) => error instanceof AccessUnavailableError,
+    readAccountRepairs: unused,
     readAccountRepair: unused,
     enrollAccountHome: unused,
     checkSubjectRead: unused,

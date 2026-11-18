@@ -16,8 +16,10 @@ import {
 } from '../../src/access/account-discovery-work.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import type { WorkContext, WorkService } from '../../src/work/registry.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 const source = accountDiscoverySource(pool);
 afterAll(() => pool.end());
 
@@ -204,26 +206,26 @@ test('scheduled recovery preserves a rolled-back obligation and delivers its cur
         [home, id],
       )
     ).rows;
-  const service = await start();
+  let failures = 0;
+  const service = await withQueryAccounting(
+    {
+      connection: (dispatch) => dispatch(),
+      async query(sql, operands, dispatch) {
+        const result = await dispatch();
+        if (!failures && sql.startsWith('DELETE FROM access.account_discovery_intent') && operands[1] === id) {
+          failures++;
+          throw new Error('injected unexpected database failure after DELETE');
+        }
+        return result;
+      },
+    },
+    async () => start(),
+  );
   try {
     const original = await pending();
     expect(original).toHaveLength(1);
     await effects[0]!.run({ data: { accountId: id } } as Parameters<Effect['run']>[0]);
-    let failures = 0;
-    await withQueryAccounting(
-      {
-        connection: (dispatch) => dispatch(),
-        async query(sql, operands, dispatch) {
-          const result = await dispatch();
-          if (sql.startsWith('DELETE FROM access.account_discovery_intent') && operands[1] === id) {
-            failures++;
-            throw new Error('injected unexpected database failure after DELETE');
-          }
-          return result;
-        },
-      },
-      () => advance(START),
-    );
+    await advance(START);
     expect(failures).toBe(1);
     expect(await pending()).toEqual(original);
     expect(await events()).toEqual([]);

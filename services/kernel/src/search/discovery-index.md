@@ -87,17 +87,27 @@ Once all admitted owners have certified their homes, a moving Core head schedule
 100 affected homes, including while replay catches up. Each metadata owner supplies its own position. Up to 128
 reopened frontiers can take an ordinary reconciliation step in that turn. A newly eligible identity missing from the
 index reopens its native population. After repair, publication reads replay freshness again and checks a fresh
-inventory of all 4096 homes. If Content observes a change between its two empty-key Review snapshots, Search
+inventory of all 4096 homes. Each block of up to 100 homes can share one bounded read per metadata owner.
+An unavailable shared read returns the block to the ordinary owner waves. If Content observes a change between its two empty-key Review snapshots, Search
 requests one fresh pair under the same maintenance deadline. A second refusal leaves publication pending.
+The inventory check can reopen changes in several independent blocks during the same turn. Publication waits
+for the resulting frontiers and a fresh full inventory.
 
-When all five certified cuts coincide at a positive position, the finalizer can advance them together after
-all native readers observe the new head and the Account epoch, Account revision and claim revision still match.
-One batch inspects at most 64 intervening positions in total. Each must contain exactly one intact event in the
-original epoch. A Semantic locator completion needs its completed delivery and original source position at or
-before the certified cut. A Search writer notification needs a position recorded by the ordinary Subject
+The finalizer can advance five existing certificates together after all native readers observe the new head
+and the Account epoch, Account revision and claim revision still match. One batch checks at most 64 positions
+in total, starting after the oldest certificate at each home. Each position must contain exactly one intact event
+in the original epoch. A Semantic locator completion needs its completed delivery and original source position at or
+before the oldest certificate. The receipt accepts the Core envelope's 19-digit sequence and the plain decimal
+position used by explicit locator scheduling. A Search writer notification needs a position recorded by the ordinary Subject
 publication gate on a different physical target. The gate records its consecutive fence, cursor and release
 positions in the same commands that move it. Copy drains, index writes and erasure jobs supply no such proof.
+Semantic canonical-generation announcements, handoffs and delivered notices also qualify when the event has
+its exact native home and payload. These commands maintain notification progress and Realm rating order.
+Search still requires a current replay checkpoint and fresh observations from all five owners. A suffix from
+position zero must contain every intervening event in the certified owner epoch.
 The update locks the exact generation, active home, caught-up receiver and original certified owner rows.
+Homes beyond the current suffix allowance remain eligible for the next turn. A proven suffix can wait for its
+own replay checkpoint with the existing certificates retained.
 An incomplete proof leaves the affected home on its existing reconciliation path.
 
 Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty

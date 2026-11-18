@@ -1,10 +1,22 @@
 import type { Pool, PoolClient } from 'pg';
 import { PUBLIC_FILTER_SUBJECT_SCOPE } from './public-filter-coverage-pending.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withConnection, discardConnection } from '../database/pool.ts';
 import { requireAccessDeadline, CommandUnavailableError } from '../access/unavailable.ts';
 
 /** Internal domain key. It cannot be a public property, inferred hit or caller filter key. */
 export const PUBLIC_FILTER_ACCOUNT_DOMAIN = '["domain","accounts"]';
+
+/** Seek the live pending index. The maintainer still opens each exact native interval. */
+export function nextPublicFilterCoverageHome(pool: Pool, from: number, deadline: number): Promise<number | null> {
+  return withBoundedReadConnection(pool, deadline, async (client) => {
+    const result = await client.query<{ partition_no: number }>(
+      `SELECT partition_no FROM semantic.public_filter_privacy_pending
+       WHERE live AND partition_no>=$1 ORDER BY partition_no,input_key LIMIT 1`,
+      [from],
+    );
+    return result.rows[0]?.partition_no ?? null;
+  });
+}
 type Pending = {
   partition_no: number;
   input_key: string;

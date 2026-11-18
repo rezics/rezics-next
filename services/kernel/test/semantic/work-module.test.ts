@@ -475,6 +475,10 @@ test('default Semantic composition registers its real locator and bounded local 
   const local = effects.find((effect) => effect.name === 'semantic_erasure_local');
   expect(locator?.types).toContain('com.rezics.zone.configured.v1');
   expect(locator?.types).toContain('com.rezics.semantic.erasure.locator-scheduled.v1');
+  expect(locator?.types).toContain('com.rezics.semantic.canonical-generation.delivered.v1');
+  expect(locator?.types).toContain('com.rezics.semantic.canonical-generation.rebuild-continued.v1');
+  expect(locator?.types).not.toContain('com.rezics.semantic.canonical-generation.committed.v1');
+  expect(locator?.types).not.toContain('com.rezics.semantic.canonical-generation.continuation.v1');
   expect(local?.types).toEqual(['com.rezics.semantic.erasure.scheduled.v1']);
   const { ERASURE_LOCATOR_EFFECTS } = await import('../../src/access/erasure.ts');
   expect(ERASURE_LOCATOR_EFFECTS.has(locator!.name)).toBe(true);

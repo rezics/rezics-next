@@ -12,7 +12,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { minimizeAccountErasureZone } from '../zones/account-erasure-zone.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
-import { SEMANTIC_EVENTS } from './events.ts';
+import { CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION, SEMANTIC_EVENTS } from './events.ts';
 import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 import type { Effect } from '../events/effects.ts';
 import { recordSemanticSourceDisposition } from './erasure-producer.ts';
@@ -1076,7 +1076,14 @@ export function createSemanticLocatorEffect(pool: Pool): Effect {
   return {
     name: 'semantic_erasure_locator',
     types: [
-      ...Object.keys(SEMANTIC_EVENTS).filter((type) => !type.startsWith('com.rezics.semantic.erasure.')),
+      ...Object.keys(SEMANTIC_EVENTS).filter(
+        (type) =>
+          !type.startsWith('com.rezics.semantic.erasure.') &&
+          // These Source commands only schedule delivery. The receiving commands
+          // still have locator coverage for any work committed by the receiver.
+          type !== CANONICAL_GENERATION_COMMITTED &&
+          type !== CANONICAL_GENERATION_CONTINUATION,
+      ),
       SEMANTIC_LOCATOR_SCHEDULED,
       'com.rezics.access.role-grant.create.v1',
       'com.rezics.access.role-grant.change.v1',

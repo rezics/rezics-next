@@ -132,7 +132,7 @@ export async function readPublicFilterCreationPrefix(
     };
   };
   if (input.accounts) {
-    const count = exact ?? Math.min(16, homes, Math.max(1, Math.floor(input.inputLimit / 2)));
+    const count = exact ?? Math.min(32, homes, Math.max(1, Math.floor(input.inputLimit / 4)));
     const windows: PublicFilterCreationWindow[] = [];
     const ranges: { home: number; epoch: number; receipt: string; base: string; through: string; points: number }[] =
       [];
