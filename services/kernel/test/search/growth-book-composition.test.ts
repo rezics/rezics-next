@@ -22,10 +22,10 @@ const setupMs = 600_000;
 const cleanupMs = 180_000;
 let world: Awaited<ReturnType<typeof createBookComposition>>;
 beforeAll(async () => {
-  world = await createBookComposition(Date.now() + setupMs);
+  world = await createBookComposition(Date.now() + setupMs, cleanupMs);
 }, setupMs + cleanupMs);
 afterAll(async () => {
-  await world?.close();
+  await world?.close(Date.now() + cleanupMs);
 }, cleanupMs);
 
 async function measurePage() {

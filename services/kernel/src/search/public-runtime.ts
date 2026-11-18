@@ -99,7 +99,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
   privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
   /** Trusted native facet composition; omitted generation or meaning stays closed. */
   facetProvider(context?: PublicFilterConsumerContext): Promise<FacetDiscoveryProvider | undefined>;
-  close(): Promise<void>;
+  close(context?: PublicFilterConsumerContext): Promise<void>;
 }>;
 
 function notReady(): never {
@@ -157,7 +157,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const custody = createPublicFilterCustody(config.pool);
   const nativeSource = createRatedSubjectSource(config.pool, config.routeKey, config.creditSearch).source;
   const listing = subjectListingSource(config.pool);
-  const owned = new Set<{ close(): Promise<void> }>();
+  type Factory = Pick<PublicFilterConsumerOperations, 'close'>;
+  const owned = new Set<Factory>();
   const pending = new Set<Promise<unknown>>();
   // Mixed factories retain PIT ownership until exhaustion or runtime shutdown. Reusing the
   // active factory avoids closing signed continuations at the end of their HTTP request.
@@ -176,11 +177,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
   };
-  function retire(factory: Promise<{ close(): Promise<void> }>): void {
+  function retire(factory: Promise<Factory>, context: PublicFilterConsumerContext): void {
     // Factory cleanup can drain other requests. Keep it runtime-owned without
     // extending the request that observed a replacement or a failed capture.
     const drain = factory.then(
-      (operations) => operations.close(),
+      (operations) => operations.close(context),
       () => {},
     );
     pending.add(drain);
@@ -281,7 +282,6 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       ...(preparation && { discoveryPreparation: preparation }),
     });
     // Native factory close drains owned observations; shutdown and replacement use this wrapper.
-    owned.add(operations);
     let draining: Promise<void> | undefined;
     const wrapper: PublicDiscoveryConsumerOperations = {
       capture: operations.capture.bind(operations),
@@ -291,8 +291,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       repairStep: operations.repairStep.bind(operations),
       readStatus: operations.readStatus.bind(operations),
       closeObservation: operations.closeObservation.bind(operations),
-      close: () => (draining ??= operations.close().finally(() => owned.delete(operations))),
+      close: (context) => (draining ??= operations.close(context).finally(() => owned.delete(wrapper))),
     };
+    owned.add(wrapper);
     forwardPublicFilterCoveragePage(operations, wrapper);
     return wrapper;
   }
@@ -336,7 +337,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     );
     for (const [candidate, old] of retired) {
       subjects.delete(candidate);
-      retire(old);
+      retire(old, context);
     }
     const current = await operations;
     checkDeadline(context);
@@ -377,7 +378,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const retired = [...mixed].filter(([candidate]) => !candidate.startsWith(allocationKey + ':'));
         for (const [candidate, old] of retired) {
           mixed.delete(candidate);
-          retire(old);
+          retire(old, context);
         }
         const current = await operations;
         checkDeadline(context);
@@ -492,19 +493,19 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           physicalTarget: subjectIndexName(config.prefix, state.active),
           meaning: { digest: release.digest, release: release.release },
         });
-        owned.add(native);
         let draining: Promise<void> | undefined;
         const operations: PublicSuggestionOperations = {
           ...native,
-          close: () => (draining ??= native.close().finally(() => owned.delete(native))),
+          close: (context) => (draining ??= native.close(context).finally(() => owned.delete(operations))),
         };
+        owned.add(operations);
         try {
           checkDeadline(context);
           const capture = await operations.capture(structuredClone({ ...request, generation: state.active }), context);
           checkDeadline(context);
           return { operations, capture };
         } catch (error) {
-          retire(Promise.resolve(operations));
+          retire(Promise.resolve(operations), context);
           throw error;
         }
       });
@@ -610,12 +611,16 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         return provider;
       });
     },
-    close() {
+    close(context) {
       if (closing) return closing;
       closed = true;
+      const retirement = { deadline: context?.deadline ?? deadlineFor(10_000) };
       closing = (async () => {
         await Promise.allSettled([...pending]);
-        const results = await Promise.allSettled([...pending, ...[...owned].map((operations) => operations.close())]);
+        const results = await Promise.allSettled([
+          ...pending,
+          ...[...owned].map((operations) => operations.close(retirement)),
+        ]);
         mixed.clear();
         subjects.clear();
         owned.clear();

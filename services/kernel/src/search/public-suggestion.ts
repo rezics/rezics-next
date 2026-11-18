@@ -42,7 +42,7 @@ export interface PublicSuggestionOperations {
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerStatus>;
   closeObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
-  close(): Promise<void>;
+  close(context?: PublicFilterConsumerContext): Promise<void>;
 }
 const emptyCost = (): PublicFilterCost => ({
   inputKeys: 0,
@@ -329,13 +329,13 @@ export async function createPublicSuggestionOperations(
     closeObservation(queried, context) {
       return track(() => operations.closeObservation(queried, context));
     },
-    close() {
+    close(context) {
       if (closing) return closing;
       closed = true;
       return (closing = (async () => {
         await Promise.allSettled([...pending]);
         try {
-          await operations.close();
+          await operations.close(context);
         } finally {
           await custody.close();
         }

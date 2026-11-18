@@ -84,7 +84,7 @@ export interface ReleasedDiscoveryComposition {
   onAccessReady(access: Access): void;
   service(installed: Parameters<typeof createKernel>[0]): ReturnType<typeof createSearchService>;
   start(runtime: SemanticOutcomeDriver['fixtures']['runtime'], send: Request): Promise<void>;
-  close(): Promise<void>;
+  close(deadline?: number): Promise<void>;
 }
 
 /** One native prefix and one default SDK, with explicit pool instrumentation kept in-process. */
@@ -376,7 +376,7 @@ export function releasedDiscoveryRuntime(
         started = true;
       }));
     },
-    close(): Promise<void> {
+    close(deadline?: number): Promise<void> {
       sealed = true;
       return (closing ??= (async () => {
         proxy?.releaseBarriers();
@@ -397,7 +397,7 @@ export function releasedDiscoveryRuntime(
         // A failed drain must never permit deleting the running worker's index.
         if (worker && !worker.exited)
           throw new AggregateError(errors, 'Released discovery worker exit was not confirmed');
-        await attempt(async () => publicFilters?.close());
+        await attempt(async () => publicFilters?.close(deadline === undefined ? undefined : { deadline }));
         await attempt(async () => (await preparationClient)?.close());
         // Runtime/IPC/transport handles are drained before any native state is removed.
         await attempt(async () => {

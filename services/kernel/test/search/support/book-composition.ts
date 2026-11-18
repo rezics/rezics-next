@@ -24,6 +24,7 @@ import {
   type TypeListRead,
 } from '../../performance/support/composed-discovery-fixtures.ts';
 import { readPublicationJobs } from './outcome-worker.ts';
+import { observeComposedWarmup } from './composed-page-cost.ts';
 
 const route = '/book-catalogue-cost';
 const lists: TypeListRead[] = BOOK_CATALOGUE_TYPES.flatMap((type, i) =>
@@ -37,7 +38,7 @@ type Original = Anchor & { label: string };
 type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 
-export async function createBookComposition(setupDeadline: number) {
+export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
@@ -240,23 +241,36 @@ export async function createBookComposition(setupDeadline: number) {
       if (who === 'alice') await fixture.renewCredential('alice');
       const until = Date.now() + 120_000;
       for (;;) {
-        const response = await request(who);
+        const { value: response, stages } = warm
+          ? await observeComposedWarmup(() => request(who))
+          : { value: await request(who), stages: [] };
         const reads = response.body.reads as Record<string, TypeListResponse> | undefined;
-        const pending = response.status === 200 ? Object.values(reads ?? {}) : [response];
-        if (warm && pending.some(({ status }) => status === 503)) {
-          for (const entry of pending.filter(({ status }) => status !== 200))
+        if (response.status === 200) {
+          assert.deepEqual(response.body.document, document);
+          assert(reads);
+          assert.deepEqual(Object.keys(reads).sort(), Object.keys(plan.reads).sort());
+        }
+        const results = response.status === 200 ? reads! : { page: response };
+        if (warm && Object.values(results).some(({ status }) => status === 503)) {
+          for (const entry of Object.values(results).filter(({ status }) => status !== 200))
             assert(
               entry.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(entry.body.code)),
               JSON.stringify(entry),
             );
-          assert(Date.now() < until, 'Released TypeLists did not become ready');
+          if (Date.now() >= until) {
+            const outcomes = Object.entries(results).map(([key, { status, body }]) => ({
+              node: lists.find((list) => plan.nodes[list.id] === key)?.id ?? key,
+              status,
+              code: body.code,
+              count: Array.isArray(body.subjects) ? body.subjects.length : undefined,
+            }));
+            throw new Error(`Released TypeLists did not become ready: ${JSON.stringify({ who, outcomes, stages })}`);
+          }
           await Bun.sleep(100);
           continue;
         }
         requireStatus(response, 200, 'Read the published catalogue composition');
-        assert.deepEqual(response.body.document, document);
         assert(reads);
-        assert.deepEqual(Object.keys(reads).sort(), Object.keys(plan.reads).sort());
         assert(!JSON.stringify(response.body).includes(hidden.id));
         let outputSlots = 0;
         for (const list of lists) {
@@ -299,11 +313,11 @@ export async function createBookComposition(setupDeadline: number) {
         assert.equal(population.size, to);
         assert.deepEqual(await waitForPublication([...population], Date.now() + 120_000), published);
       },
-      close: () => fixture.close(),
+      close: (deadline: number) => fixture.close(deadline),
     };
   } catch (error) {
     try {
-      await owner?.close();
+      await owner?.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
     } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], 'Book catalogue setup and cleanup failed', { cause: error });
     }

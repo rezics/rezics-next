@@ -160,8 +160,8 @@ export interface PublicFilterConsumerOperations {
   ): Promise<PublicFilterConsumerStatus>;
   /** Releases only this retained observation/PIT, after in-flight operations drain. Idempotent. */
   closeObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
-  /** Drains this factory's work/resources; does not close supplied pools, Source or OpenSearch. */
-  close(): Promise<void>;
+  /** A runtime retiring its shared factory supplies the deadline for native disposal. */
+  close(context?: PublicFilterConsumerContext): Promise<void>;
 }
 
 /** Full same-factory view; legacy Subject consumers need only the original operations. */

@@ -1533,11 +1533,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
               ),
             );
           } else {
-            // Poll the retained preparation instead of reserving a fresh direct
-            // allowance on every retry of the same sparse page.
+            // A name-ordered type list already has its predicate and order in the
+            // physical index. Its first page need not materialize the whole type.
+            const indexedTypeList =
+              !readContext?.savedCollection && !text && sort === 'name' && filter && 'type' in filter;
             const bound = await indexRequest(() =>
               runtime.bindRequest(
-                { plan: capturePlan, snapshot: 'prepared' },
+                { plan: capturePlan, snapshot: indexedTypeList ? 'pit' : 'prepared' },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
               ),
