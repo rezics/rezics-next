@@ -247,7 +247,7 @@ test('native account context reads the exact published agent graph and withholds
         statement: 'This public subject represents my account.',
         links: [{ label: 'Website', url: 'https://example.test/profile' }],
       });
-      expect(requested.status).toBe(200);
+      expect(requested.status).toBe(201);
       const requestBody = (await requested.json()) as { verificationRequest: { id: string } };
       const approved = await post(
         `/v1/verification-requests/${requestBody.verificationRequest.id}:approve`,
