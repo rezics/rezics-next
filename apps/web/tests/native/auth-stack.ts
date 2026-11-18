@@ -69,7 +69,7 @@ export type NativeAuthStack = {
     close(): void;
   };
   pageAppProcess(): NativeProcessIdentity | undefined;
-  settlePageApp(): Promise<void>;
+  settlePageApp(options?: { requestRetirement?: boolean }): Promise<void>;
   browserMemoryObservation(): { sampledAt: number; rssBytes: number; peakRssBytes: number } | null;
   context(persona: AuthPersona): Promise<BrowserContext>;
   newContext(persona: AuthPersona): Promise<BrowserContext>;
@@ -749,7 +749,8 @@ export async function startAuthStack(
         };
       },
       pageAppProcess: () => pageApp.process(),
-      async settlePageApp() {
+      async settlePageApp({ requestRetirement = false } = {}) {
+        if (requestRetirement) retirementRequested = true;
         // A new request can start a generation while the previous one retires.
         do {
           assertActive('settle native Auth page app');

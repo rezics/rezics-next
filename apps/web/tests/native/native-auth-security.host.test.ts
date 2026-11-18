@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import type { Page } from 'playwright';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
-import { startAuthStack } from './auth-stack.ts';
+import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
 import {
   exactCookie,
@@ -23,6 +23,7 @@ let issuerProxy: NativeAuthIssuerProxy;
 let fixture: NativeAuthSecurityFixture;
 
 nativeBeforeAll(lifecycle, 300_000, async () => {
+  await prepareNativeAuthMessages();
   issuerProxy = await startNativeAuthIssuerProxy();
   lifecycle.register({ label: 'Auth issuer proxy', close: () => issuerProxy.stop(), force: () => issuerProxy.stop() });
   stack = await startNativeWebStack({
@@ -32,7 +33,7 @@ nativeBeforeAll(lifecycle, 300_000, async () => {
   });
   issuerProxy.setUpstream(stack.authIssuer);
   fixture = await provisionNativeAuthSecurityFixture(stack);
-  auth = await startAuthStack(stack);
+  auth = await startAuthStack(stack, { preparedMessages: true });
 });
 
 nativeAfterAll(lifecycle, 180_000);
@@ -154,6 +155,9 @@ async function manageAccountSecurity() {
   expect(aliceCookie?.value !== bobCookie?.value, 'Alice and Bob have distinct Website sessions').toBe(true);
   expect(await auth.context('alice')).toBe(aliceContext);
   expect(await auth.context('bob')).toBe(bobContext);
+  const bobReturnUrl = bobPage.url();
+  // Keep Bob's signed context while Alice uses the browser for her security changes.
+  await bobPage.close();
 
   await alicePage.locator('#account-menu-button').click();
   await alicePage.locator('[data-account-security-settings]').click();
@@ -322,6 +326,7 @@ async function manageAccountSecurity() {
   expect(usedSession.status).toBe(200);
   expect(usedSession.body.account_id).toBe(fixture.accountIds.alice);
   expect(usedSession.body.amr).toContain('pop');
+  await webauthn.detach();
 
   const wrongRpContext = await auth.context('wrong-rp');
   const wrongRpPage = await wrongRpContext.newPage();
@@ -373,23 +378,28 @@ async function manageAccountSecurity() {
   expect(wrongRpAssertionRequests).toEqual([]);
   expect(await exactCookie(wrongRpContext, stack.web, '__Host-rezics_session')).toBeUndefined();
   expect((await wrongRpPage.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
-
-  await alicePage.goto(`${stack.web}${fixture.libraryTarget}`, { waitUntil: 'domcontentloaded' });
-  await signOutWebsiteAndAuth(alicePage);
-  await alicePage.goto(stack.web, { waitUntil: 'domcontentloaded' });
-  await alicePage.reload({ waitUntil: 'domcontentloaded' });
-  await alicePage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  expect(await alicePage.locator('#account-menu-button').count()).toBe(0);
-  await bobPage.reload({ waitUntil: 'domcontentloaded' });
-  await bobPage.locator('#account-menu-button').waitFor({ state: 'visible' });
-
   await wrongRpWebAuthn.send('WebAuthn.removeVirtualAuthenticator', {
     authenticatorId: wrongRpAuthenticator.authenticatorId,
   });
   await wrongRpWebAuthn.detach();
-  await webauthn.detach();
   await wrongRpContext.close();
+
+  await alicePage.goto(`${stack.web}${fixture.libraryTarget}`, { waitUntil: 'domcontentloaded' });
+  await signOutWebsiteAndAuth(alicePage);
+  await alicePage.goto(stack.web, { waitUntil: 'domcontentloaded' });
+  await auth.settlePageApp({ requestRetirement: true });
+  await alicePage.reload({ waitUntil: 'domcontentloaded' });
+  await alicePage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  expect(await alicePage.locator('#account-menu-button').count()).toBe(0);
   await aliceContext.close();
+
+  const bobReloadPage = await bobContext.newPage();
+  bobReloadPage.setDefaultTimeout(15_000);
+  await bobReloadPage.goto(bobReturnUrl, { waitUntil: 'domcontentloaded' });
+  await bobReloadPage.reload({ waitUntil: 'domcontentloaded' });
+  await bobReloadPage.locator('#account-menu-button').waitFor({ state: 'visible' });
+  const retainedBobCookie = await exactCookie(bobContext, stack.web, '__Host-rezics_session');
+  expect(retainedBobCookie?.value === bobCookie?.value, 'Bob keeps his original Website session').toBe(true);
   await bobContext.close();
 }
 
