@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { nativePopulationStartId, readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import {
   readOriginalPublicFilterProjectionPage,
@@ -652,6 +653,24 @@ const nativeRepairStarts = new WeakMap<
   ) => Promise<Readonly<{ start: PrivacyReductionStart; cost: PublicFilterCost }>>
 >();
 const nativeRepairJoins = new WeakMap<PublicFilterSourceBinding, PublicFilterSourceBinding['join']>();
+type RepairReadBatch = <T>(
+  input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
+  context: PublicFilterConsumerContext,
+  read: () => Promise<T>,
+) => Promise<T>;
+const nativeRepairReadBatches = new WeakMap<PublicFilterSourceBinding, RepairReadBatch>();
+
+/** Share the immutable execution join within an independent Search settlement.
+ * Each Source step still checks its predecessor, owner data and current cut.
+ */
+export function withNativePublicFilterRepairReadBatch<T>(
+  binding: PublicFilterSourceBinding,
+  input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
+  context: PublicFilterConsumerContext,
+  read: () => Promise<T>,
+): Promise<T> {
+  return nativeRepairReadBatches.get(binding)?.(input, context, read) ?? read();
+}
 
 export async function joinNativePublicFilterRepair(
   binding: PublicFilterSourceBinding,
@@ -2849,6 +2868,11 @@ export function createNativePublicFilterSourceBinding(
     );
   }
 
+  const repairReadBatch = new AsyncLocalStorage<{
+    input: Omit<NativeSourceRepairStepRead, 'predecessor'>;
+    deadline: number;
+    joined?: Extract<Awaited<ReturnType<typeof joinNativeCut>>, { status: 'joined' }>;
+  }>();
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
     async readRepairStep(request, context) {
@@ -2864,8 +2888,18 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         const bootstrapId = nativeId(input.bootstrap);
-        const joined = await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true);
-        addCost(cost, joined.cost);
+        const batch = repairReadBatch.getStore();
+        const scope =
+          batch?.deadline === deadline &&
+          batch.input.bootstrap === input.bootstrap &&
+          batch.input.execution === input.execution &&
+          isDeepStrictEqual(batch.input.queried, input.queried)
+            ? batch
+            : undefined;
+        const reused = scope?.joined;
+        const joined =
+          reused ?? (await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true));
+        if (!reused) addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const { cut } = joined;
         if (
@@ -2875,6 +2909,7 @@ export function createNativePublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
+        if (scope) scope.joined = joined;
         const row = await nativeSourceQuery(db, repairRead, {
           bootstrap: bootstrapId,
           execution: input.execution,
@@ -3204,7 +3239,7 @@ export function createNativePublicFilterSourceBinding(
           encode(expectedBridgeEvents ?? null) !== encode(record.bridgeEvents ?? null)
         )
           throw new BindingError('binding_mismatch');
-        const current = await loadBootstrap(input.bootstrap, db);
+        const current = await loadBootstrap(input.bootstrap, db, scope ? cut.definition : undefined);
         if (
           current.row.state !== 'adopted' ||
           current.row.queried !== cut.row.queried ||
@@ -3527,6 +3562,9 @@ export function createNativePublicFilterSourceBinding(
     },
   };
   nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
+  nativeRepairReadBatches.set(bootstrapBinding, (input, context, read) =>
+    repairReadBatch.run({ input: structuredClone(input), deadline: context.deadline }, read),
+  );
   nativeRepairStarts.set(bootstrapBinding, async (request, context) => {
     const result = await run(context, async (cost, db) => {
       const joined = await joinNative({ queried: request.queried }, context, true);

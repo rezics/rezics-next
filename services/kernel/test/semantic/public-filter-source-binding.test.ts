@@ -11,6 +11,7 @@ import {
   advanceNativePublicFilterPreparation,
   readNativePublicFilterPublicationCompletion,
   nativePublicFilterRepairEvidence,
+  withNativePublicFilterRepairReadBatch,
   type NativeSourceRepairLocator,
   type NativeSourceRepairStepVerification,
 } from '../../src/semantic/public-filter-source-binding.ts';
@@ -362,6 +363,16 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       expect(page.status).toBe('progress');
       if (page.status !== 'progress') throw new Error(`Native repair stopped: ${page.status}`);
       if (steps === 0) {
+        const sharedDeadline = readContext();
+        const root = { ...original, predecessor: null };
+        await withNativePublicFilterRepairReadBatch(binding, original, sharedDeadline, async () => {
+          const first = await binding.readRepairStep(root, sharedDeadline);
+          const second = await binding.readRepairStep(root, sharedDeadline);
+          expect(first.status).toBe('verified');
+          expect(second).toMatchObject({ status: 'verified', step: page.frontier, receipts: [] });
+          expect(second.cost.inputKeys).toBeLessThan(first.cost.inputKeys);
+          expect(second.cost.inputKeys).toBeGreaterThan(0);
+        });
         const scan = await binding.readRepairStep(
           { bootstrap: original.bootstrap, queried: retained.queried, execution, predecessor: null },
           readContext(),
