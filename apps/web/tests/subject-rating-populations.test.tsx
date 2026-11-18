@@ -1,7 +1,6 @@
-// UNRUN: connected Subject route/context, real prepared-reader wire and mounted lifetime assertions.
-// Native signatures, browser layout, physical cost and private SSR require postintegration verification.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Window } from 'happy-dom';
 import { act, Suspense, type ComponentProps } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -12,9 +11,6 @@ import { GLOBAL, QUESTION, RATING_SOURCES, readRatings } from '../src/features/p
 import { readRatingPopulations, type PopulationInput } from '../src/features/pages/subject-rating-populations';
 import type { SessionEnv } from '../src/session/client';
 
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
 const window = new Window({ url: `https://site.test/en/subjects/${recorded.subject}/kokoro` });
 const globals = {
   window,
@@ -23,6 +19,7 @@ const globals = {
   HTMLElement: window.HTMLElement,
   HTMLInputElement: window.HTMLInputElement,
   HTMLButtonElement: window.HTMLButtonElement,
+  KeyboardEvent: window.KeyboardEvent,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -34,7 +31,12 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previous = new Map(
+  [...Object.keys(globals), '__rezicsStoryContext'].map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
+  ]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 function deferred<T>() {
@@ -138,10 +140,14 @@ const sources = [
     attribution: 'VNDB contributors',
   },
 ];
+const bffRequests = new AsyncLocalStorage<Request>();
+const requestOwners = new WeakMap<Request, Request>();
 const native = createKernelClient('https://kernel.test', {
   fetch: async (raw, init) => {
     const req = new Request(raw, init);
     requests.push(req);
+    const owner = bffRequests.getStore();
+    if (owner) requestOwners.set(req, owner);
     const url = new URL(req.url);
     if (url.pathname.startsWith('/v1/rating-questions/'))
       return Response.json(question, { status: sourceStatuses.question ?? 200 });
@@ -202,36 +208,53 @@ const native = createKernelClient('https://kernel.test', {
         },
       );
     }
+    if (url.pathname === '/v1/platform/exposure') return Response.json({ admitted: [] });
+    if (url.pathname === `/v1/accounts/${preparedReader}/preferences`)
+      return Response.json({ spoilerLevel: 0, suitability: 'blur', version: 1 });
     if (url.pathname.endsWith('/vote')) return Response.json({ units: 17, revision: 1, at: '2026-11-01T00:00:00Z' });
     // Unrelated page regions retain their ordinary unavailable states; no ratings or reader helper is substituted.
     return Response.json({ code: 'not_found' }, { status: 404 });
   },
 });
-let bffRequest: Request;
 function signalServerFn() {
   const chain = start.createServerFn();
   const handle = chain.handler.bind(chain);
   chain.handler = (handler) => {
     const invoke = handle(handler);
     return ((options: { signal?: AbortSignal }) => {
-      bffRequest = start.requestForStory(undefined, { signal: options?.signal });
-      return invoke(options as never);
+      const request = start.requestForStory(undefined, { signal: options?.signal });
+      return bffRequests.run(request, () => invoke(options as never));
     }) as typeof handler;
   };
   return chain;
 }
-mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: signalServerFn }));
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => bffRequest }));
-mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
-const kernel = await import('../src/kernel/client');
-mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
-mock.module('../src/settings/preferences', () => ({
-  loadSettingsPage: async () => ({
-    signedIn: true,
-    accountId: preparedReader,
-    preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
-  }),
+const startExports = { ...(await import('@tanstack/react-start')) };
+const serverExports = { ...(await import('@tanstack/react-start/server')) };
+const workerExports = { ...(await import('cloudflare:workers')) };
+mock.module('@tanstack/react-start', () => ({ ...startExports, ...start, createServerFn: signalServerFn }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...serverExports,
+  ...start,
+  getRequest: () => {
+    const request = bffRequests.getStore();
+    if (!request) throw new Error('No active server function request');
+    return request;
+  },
 }));
+mock.module('cloudflare:workers', () => ({ ...workerExports, env: sessionEnv }));
+const kernel = { ...(await import('../src/kernel/client')) };
+mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
+// An earlier SSR fixture may already have bound these functions to the server runtime.
+// Install their browser implementations after the DOM and request transport are available.
+const restoreBrowserModules: (() => void)[] = [];
+for (const specifier of ['../src/kernel/query', '../src/session/query', '../src/features/pages/subject-queries']) {
+  const path = Bun.resolveSync(specifier, import.meta.dir);
+  if (!require.cache[path]) continue;
+  const previousExports = { ...(await import(path)) };
+  const browserExports = await import(`${path}?subject-rating-browser`);
+  mock.module(path, () => browserExports);
+  restoreBrowserModules.push(() => mock.module(path, () => previousExports));
+}
 
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
@@ -246,11 +269,12 @@ const { readSubjectRatingPopulations, validatePopulationInput } =
 const { subjectFrameQuery, subjectRelationsQuery, subjectRatingQuery } =
   await import('../src/features/pages/subject-queries');
 const { pageRelationProperties, subjectPageType } = await import('../src/features/pages/subject');
+const { browserSessionOwner, subscribeBrowserSession } = await import('../src/session/browser-state');
 const { sessionQuery, useSession } = await import('../src/session/query');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { m } = await import('../src/paraglide/messages.js');
-const host = window.document.createElement('main') as unknown as HTMLElement;
-window.document.body.append(host);
+const host = document.createElement('main');
+document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let cache: InstanceType<typeof QueryClient>;
 let extraCache: InstanceType<typeof QueryClient> | undefined;
@@ -269,7 +293,8 @@ const paths = (suffix: string, privateOnly = false) =>
     (req) => new URL(req.url).pathname.endsWith(suffix) && (!privateOnly || req.headers.has('authorization')),
   );
 const directoryQueries = () => cache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] });
-const boxes = () => Array.from(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+const boxes = (container = host) =>
+  Array.from(container.querySelectorAll<HTMLInputElement>('[data-slot="rating-populations"] input[type="checkbox"]'));
 const selectedNames = () =>
   Array.from(host.querySelectorAll<HTMLElement>('[data-slot="rating-comparison"] h4')).map(
     (heading) => heading.textContent,
@@ -292,17 +317,9 @@ function PopulationOwner({
   q?: typeof question;
   enabled?: boolean;
 }) {
-  const data = useSession();
+  const viewer = useSession();
   useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
-  return (
-    <SubjectRatingPopulations
-      subjectId={id}
-      question={q}
-      locale="en"
-      session={data ?? { state: 'unknown', csrfToken: null }}
-      enabled={enabled}
-    />
-  );
+  return <SubjectRatingPopulations subjectId={id} question={q} locale="en" session={viewer} enabled={enabled} />;
 }
 async function paint(id = subjectId, provider = cache, q = question, enabled = true) {
   await act(async () => {
@@ -321,21 +338,22 @@ async function select(index: number) {
     await tick();
   });
 }
-async function seedPublic(provider = cache) {
-  await Promise.all(RATING_SOURCES.map((source) => provider.fetchQuery(subjectRatingQuery(subjectId, 'en', source))));
-  provider.setQueryData(subjectFrameQuery(subjectPageType(recorded) ?? '', 'en').queryKey, {});
-  provider.setQueryData(subjectRelationsQuery(pageRelationProperties(recorded), 'en').queryKey, {});
-}
 async function ordinary(provider = cache) {
-  await seedPublic(provider);
+  // The generic CreativeWork overview includes the full comparison panel. Books use the compact overview.
+  const page = structuredClone(recorded);
+  const { subject, summary } = page.reads.r0.body;
+  subject.type = page.template.key;
+  summary.type = page.template.key;
+  summary.types = [subject.type, 'schema:Thing'];
+  provider.setQueryData(subjectFrameQuery(subjectPageType(page) ?? '', 'en').queryKey, {});
+  provider.setQueryData(subjectRelationsQuery(pageRelationProperties(page), 'en').queryKey, {});
   const data = {
-    page: recorded,
+    page,
     tabs: [],
     reader: null,
     verification: { sitekey: '', scriptUrl: '' },
     frame: {},
     relations: {},
-    ratings: await readRatings(native, subjectId),
   } as unknown as ComponentProps<typeof SubjectOverview>['data'];
   await act(async () => {
     root.render(
@@ -378,6 +396,11 @@ afterEach(async () => {
 });
 afterAll(async () => {
   mock.restore();
+  for (const restore of restoreBrowserModules.reverse()) restore();
+  mock.module('../src/kernel/client', () => kernel);
+  mock.module('cloudflare:workers', () => workerExports);
+  mock.module('@tanstack/react-start/server', () => serverExports);
+  mock.module('@tanstack/react-start', () => startExports);
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
@@ -450,11 +473,28 @@ test('one sparse bounded page retains the opaque next, rejects cursor/question/S
 });
 
 test('Independent healthy rating sources survive sibling failures with targeted retries and public head isolation', async () => {
+  using errors = spyOn(console, 'error');
   sourceFailed = true;
   await ordinary();
   await until(
-    () => boxes().length === 20 && host.querySelector('[data-slot="rating-control-reserved"] input') !== null,
+    () =>
+      boxes().length === 20 && host.querySelector('[data-slot="rating-control-reserved"] input[type="range"]') !== null,
   );
+  expect(browserSessionOwner.getSnapshot().client).toBe(cache);
+  for (const suffix of [
+    `/rating-questions/${QUESTION}`,
+    '/figure',
+    '/ratings',
+    '/source-statistics',
+    '/ratings/populations',
+    '/vote',
+    '/preferences',
+  ]) {
+    expect(paths(suffix)).toHaveLength(1);
+  }
+  for (const suffix of ['/ratings/populations', '/vote', '/preferences']) {
+    expect(paths(suffix)[0]!.headers.get('authorization')).toBe(`Bearer token-${preparedReader}`);
+  }
   await select(0);
   await select(1);
   await select(2);
@@ -468,10 +508,13 @@ test('Independent healthy rating sources survive sibling failures with targeted 
   const draft = host.querySelector<HTMLInputElement>('[data-slot="rating-control-reserved"] input[type="range"]')!;
   await act(async () => {
     draft.focus();
-    draft.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    draft.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
   });
   const draftValue = draft.value;
+  expect(draftValue).toBe(String(question.scale.min));
   const before = {
+    question: paths(`/rating-questions/${QUESTION}`).length,
+    preferences: paths('/preferences').length,
     figure: paths('/figure').length,
     global: paths('/ratings').length,
     own: paths('/vote').length,
@@ -485,10 +528,13 @@ test('Independent healthy rating sources survive sibling failures with targeted 
   });
   await until(() => host.querySelector('[data-slot="imported-score"]') !== null);
   expect(host.textContent).toContain('VNDB contributors');
+  expect(host.querySelector('[data-slot="rating-control-reserved"] input[type="range"]')).toBe(draft);
   expect(draft.value).toBe(draftValue);
   expect(host.querySelector('[data-slot="public-rating-figure"]')).toBe(figure);
   expect(host.querySelector('[data-slot="rating-distribution"]')).toBe(distribution);
   expect(paths('/source-statistics')).toHaveLength(before.source + 1);
+  expect(paths(`/rating-questions/${QUESTION}`)).toHaveLength(before.question);
+  expect(paths('/preferences')).toHaveLength(before.preferences);
   expect(paths('/figure')).toHaveLength(before.figure);
   expect(paths('/ratings')).toHaveLength(before.global);
   expect(paths('/vote')).toHaveLength(before.own);
@@ -515,6 +561,7 @@ test('Independent healthy rating sources survive sibling failures with targeted 
   expect(
     JSON.stringify(dehydrate(cache, { shouldDehydrateQuery: (query) => query.queryKey[0] === 'subject-rating' })),
   ).not.toContain(preparedReader);
+  expect(errors.mock.calls.flat().join(' ')).not.toMatch(/while rendering|getSnapshot should be cached|update depth/i);
 });
 
 test('question/Global distribution and imported source survive headline failure; genuine zero, failed and absent remain distinct', async () => {
@@ -547,8 +594,8 @@ test('hydration waits for the browser observation before admitting its prepared 
   const markup = renderToStaticMarkup(tree);
   expect(markup).toBe('');
   expect(paths('/ratings/populations')).toHaveLength(0);
-  const hydrationHost = window.document.createElement('main');
-  window.document.body.append(hydrationHost);
+  const hydrationHost = document.createElement('main');
+  document.body.append(hydrationHost);
   hydrationHost.innerHTML = markup;
   const hydrated = hydrateRoot(hydrationHost, tree);
   try {
@@ -565,11 +612,13 @@ test('hydration waits for the browser observation before admitting its prepared 
 test('terminal empty ready population directory settles once without replacing its accepted observer', async () => {
   nativePopulations = [];
   cache.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+  const pending = deferred<ReturnType<typeof session>>();
+  const reading = cache.fetchQuery({ ...sessionQuery, queryFn: () => pending.promise });
   await paint();
   expect(paths('/ratings/populations')).toHaveLength(0);
   await act(async () => {
-    cache.setQueryData(sessionQuery.queryKey, session());
-    await tick();
+    pending.resolve(session());
+    await reading;
   });
   await until(() => host.textContent!.includes(m.rating_population_empty_page()));
   const reads = paths('/ratings/populations').length;
@@ -596,7 +645,7 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
     await tick();
   });
   await until(() => boxes().length === 20);
-  expect(window.document.activeElement).toBe(boxes()[0]);
+  expect(document.activeElement).toBe(boxes()[0]);
   expect(new URL(paths('/ratings/populations').at(-1)!.url).searchParams.get('cursor')).toBe(opaqueNext);
   for (let index = 0; index < 20; index++) await select(index);
   await until(() => host.querySelectorAll('[data-slot="rating-comparison"]').length === 20);
@@ -619,7 +668,7 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   });
   const abandoned = paths('/ratings', true).at(-1)!;
   const siblings = requests.slice(requests.indexOf(abandoned) - 20, requests.indexOf(abandoned));
-  const abandonedRequest = bffRequest;
+  const abandonedRequest = requestOwners.get(abandoned)!;
   expect(siblings).toHaveLength(20);
   const oldRemove = button(m.rating_population_remove({ name: names.get(ids[0]!)! }));
   await act(async () => {
@@ -655,7 +704,7 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   });
   await until(() => boxes().length === 0);
   expect(paths('/ratings/populations')).toHaveLength(before + 1);
-  expect(window.document.activeElement).toBe(button(m.rating_population_next()));
+  expect(document.activeElement).toBe(button(m.rating_population_next()));
 });
 
 for (const replacement of [
@@ -977,9 +1026,49 @@ test('independent QueryClients serialize private responses separately and requir
   expect(JSON.parse(JSON.stringify(dehydrate(extraCache)))).toMatchObject({ queries: expect.any(Array) });
 });
 
+test('session authority changes immediately and publishes once after cache and owner handoffs settle', async () => {
+  const published: ReturnType<typeof browserSessionOwner.getSnapshot>[] = [];
+  const stop = browserSessionOwner.subscribe(() => published.push(browserSessionOwner.getSnapshot()));
+  const release = subscribeBrowserSession(cache, () => {}, undefined, true);
+  try {
+    const first = browserSessionOwner.getSnapshot();
+    expect(first.client).toBe(cache);
+    expect(published).toHaveLength(0);
+    await Promise.resolve();
+    expect(published).toEqual([first]);
+
+    const query = cache.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })!;
+    query.setState({ fetchStatus: 'idle' });
+    await Promise.resolve();
+    expect(browserSessionOwner.getSnapshot()).toBe(first);
+    expect(published).toHaveLength(1);
+
+    cache.setQueryData(sessionQuery.queryKey, session());
+    const replacement = browserSessionOwner.getSnapshot();
+    expect(replacement.revision).toBe(first.revision + 1);
+    extraCache = new QueryClient();
+    const releaseOther = subscribeBrowserSession(extraCache, () => {}, undefined, true);
+    try {
+      expect(browserSessionOwner.getSnapshot().client).toBe(extraCache);
+    } finally {
+      releaseOther();
+    }
+    const restored = browserSessionOwner.getSnapshot();
+    expect(restored.client).toBe(cache);
+    expect(restored.revision).toBe(replacement.revision + 2);
+    expect(published).toHaveLength(1);
+    await Promise.resolve();
+    expect(published).toEqual([first, restored]);
+  } finally {
+    release();
+    stop();
+  }
+});
+
 test('a later session owner retires held comparisons across live QueryClients and cannot revive the earlier visit', async () => {
   await paint();
   await until(() => boxes().length === 20);
+  expect(browserSessionOwner.getSnapshot().client).toBe(cache);
   aggregateGate = deferred<Response>();
   const delayedAggregate = aggregateGate;
   await select(0);
@@ -988,8 +1077,8 @@ test('a later session owner retires held comparisons across live QueryClients an
   extraCache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   extraCache.setQueryData(sessionQuery.queryKey, session());
-  const otherHost = window.document.createElement('main');
-  window.document.body.append(otherHost);
+  const otherHost = document.createElement('main');
+  document.body.append(otherHost);
   const otherRoot = createRoot(otherHost);
   try {
     await act(async () => {
@@ -1000,7 +1089,8 @@ test('a later session owner retires held comparisons across live QueryClients an
       );
       await tick();
     });
-    await until(() => otherHost.querySelectorAll('input[type="checkbox"]').length === 20);
+    await until(() => boxes(otherHost).length === 20);
+    expect(browserSessionOwner.getSnapshot().client).toBe(extraCache);
     expect(boxes()).toHaveLength(0);
     delayedAggregate.resolve(
       Response.json({
@@ -1017,6 +1107,7 @@ test('a later session owner retires held comparisons across live QueryClients an
   }
 
   await until(() => boxes().length === 20);
+  expect(browserSessionOwner.getSnapshot().client).toBe(cache);
   expect(boxes().every((box) => !box.checked)).toBe(true);
 });
 
@@ -1100,7 +1191,7 @@ test('all four public requests start concurrently and growth in unrelated native
   }
 });
 
-test('Complete eight-locale/stories/current fixture caller compatibility; all connected assertions authored UNRUN', async () => {
+test('rating outcomes retain their messages and source controls in all eight locales', async () => {
   const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
   const english = await Bun.file(new URL('../messages/en.json', import.meta.url)).json();
   const keys = Object.keys(english)

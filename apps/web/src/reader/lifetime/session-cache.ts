@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { browserObservation, type BrowserCacheEvent } from './observation';
+import { browserObservation } from './observation';
 import { normalizeSessionObservation, sessionQueryKey, unknownSession, type BrowserSession } from './contract';
 
 type ClientEntry = {
@@ -22,9 +22,16 @@ const serverOwnerSnapshot: BrowserSessionOwnerSnapshot = { client: null, revisio
 let ownerSnapshot = serverOwnerSnapshot;
 const ownerListeners = new Set<() => void>();
 
-function publishOwnerSnapshot(): void {
+let ownerPublicationQueued = false;
+function advanceOwnerSnapshot(): void {
   ownerSnapshot = { client: owners.at(-1)?.client ?? null, revision: ownerSnapshot.revision + 1 };
-  for (const listener of [...ownerListeners]) listener();
+  // Guards see each retirement now, including ABA within a single React update.
+  if (ownerPublicationQueued) return;
+  ownerPublicationQueued = true;
+  queueMicrotask(() => {
+    ownerPublicationQueued = false;
+    for (const listener of [...ownerListeners]) listener();
+  });
 }
 
 /** Identifies the active useSession cache without exposing its credentials or session payload. */
@@ -37,11 +44,19 @@ export const browserSessionOwner = {
   },
 };
 
-function sessionAuthorityEvent(event: BrowserCacheEvent) {
+type SessionState = ReturnType<typeof sessionStateSnapshot>;
+
+// TanStack announces observer results before its cache update. Compare the committed state
+// so both events describe one transition, and observer/options churn cannot create a visit.
+function sessionAuthorityChanged(before: SessionState, after: SessionState): boolean {
   return (
-    event.type === 'added' ||
-    event.type === 'removed' ||
-    (event.type === 'updated' && ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type))
+    before?.status !== after?.status ||
+    before?.fetchStatus !== after?.fetchStatus ||
+    before?.isInvalidated !== after?.isInvalidated ||
+    before?.data !== after?.data ||
+    before?.dataUpdateCount !== after?.dataUpdateCount ||
+    before?.dataUpdatedAt !== after?.dataUpdatedAt ||
+    before?.errorUpdateCount !== after?.errorUpdateCount
   );
 }
 
@@ -88,16 +103,20 @@ export function subscribeBrowserSession(
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
       owners.push(entry);
-      publishOwnerSnapshot();
+      advanceOwnerSnapshot();
       const observation = browserObservation(client);
       const publish = () => {
         for (const subscriber of [...entry.listeners]) subscriber();
       };
+      let previousState = sessionStateSnapshot(client);
       entry.unsubscribeCache = observation.subscribeCache((event) => {
-        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQueryKey[0]) {
-          if (owners.at(-1) === entry && sessionAuthorityEvent(event)) publishOwnerSnapshot();
-          observation.publish(publish);
-        }
+        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQueryKey[0]) return;
+        const state = sessionStateSnapshot(client);
+        if (state === previousState) return;
+        const replaced = sessionAuthorityChanged(previousState, state);
+        previousState = state;
+        if (replaced && owners.at(-1) === entry) advanceOwnerSnapshot();
+        observation.publish(publish);
       });
     }
   }
@@ -117,7 +136,7 @@ export function subscribeBrowserSession(
         const ownerIndex = owners.indexOf(entry);
         const wasCurrentOwner = ownerIndex !== -1 && ownerIndex === owners.length - 1;
         if (ownerIndex !== -1) owners.splice(ownerIndex, 1);
-        if (wasCurrentOwner) publishOwnerSnapshot();
+        if (wasCurrentOwner) advanceOwnerSnapshot();
         entry.unsubscribeCache?.();
         entry.unsubscribeCache = undefined;
       }
