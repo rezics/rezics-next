@@ -64,10 +64,12 @@ async function authoredCopy(directory: string, released = '20200229') {
       ].join('\n'),
     ],
     releases_supersedes: ['id\trid', 'r1\tr2'],
+    releases_platforms: ['id\tplatform', ''],
+    releases_media: ['id\tmedium\tqty', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
     await writeFile(join(db, `${name}.header`), `${header}\n`);
-    await writeFile(join(db, name), `${body}\n`);
+    await writeFile(join(db, name), body ? `${body}\n` : '');
   }
   return new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
 }
