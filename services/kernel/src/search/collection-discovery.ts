@@ -315,9 +315,24 @@ export function createCollectionDiscoveryAdapter(
     return { status: producer.status, reason: producer.reason ?? `commerce_collection_discovery_${producer.status}` };
   if (!producer.source?.read || !producer.source.page || !producer.source.count || !producer.readSummaries)
     return { status: 'preparing', reason: 'commerce_collection_discovery_contract_incomplete' };
+  const readEmpty = producer.source.readEmpty?.bind(producer.source);
   return {
     status: 'ready',
     source: {
+      ...(readEmpty && {
+        async readEmpty(partitions: readonly number[]) {
+          bounded(partitions);
+          const homes = partitions.map(partitionKey);
+          const values = await readEmpty(homes);
+          if (values.length !== homes.length) throw new TypeError('Collection discovery returned incomplete homes');
+          return values.map((value, i) => {
+            const result = snapshot(value, homes[i]!);
+            if (result.status === 'available' && result.items.length)
+              throw new TypeError('Collection discovery returned unrequested keys');
+            return result;
+          });
+        },
+      }),
       async read(partitionValue, values, query, context) {
         const partition = partitionKey(partitionValue);
         bounded(values);

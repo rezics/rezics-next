@@ -146,6 +146,9 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     const current = await check(cuts);
     expect(current.checks.every((row) => row.state === 'current')).toBe(true);
     expect(current.native['account-witness']?.homes).toBe(homes);
+    expect(current.native['collection-batch']?.homes).toBe(homes);
+    expect(current.native['collection-batch']!.calls).toBeLessThan(homes);
+    expect(current.native.collection).toBeUndefined();
     expect(current.native['review-batch']?.homes).toBe(homes);
     expect(current.native.review).toBeUndefined();
     // Present stale certified observations to the identical native checker in the same 64-home cohort.
@@ -155,10 +158,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     stale[2]!.collection_position = String(BigInt(cuts[2]!.collection_position!) + 1n);
     stale[3]!.review_position = String(BigInt(cuts[3]!.review_position!) + 1n);
     stale[4]!.space_position = String(BigInt(cuts[4]!.space_position!) + 1n);
-    // Exercise the existing per-home Review fallback against the same native source and cuts.
+    // Compare the native batched cuts with the per-home fallbacks on the same changed inventory.
+    const batched = await check(stale);
+    const { readEmptyStamps, ...collection } = resolved.metadataProducers.collection!;
+    expect(typeof readEmptyStamps).toBe('function');
     const { readEmptyPositions, ...review } = resolved.metadataProducers.review!;
     expect(typeof readEmptyPositions).toBe('function');
-    const { checks, native } = await check(stale, { ...resolved.metadataProducers, review });
+    const { checks, native } = await check(stale, { ...resolved.metadataProducers, collection, review });
+    expect(checks).toEqual(batched.checks);
+    expect(native.collection?.calls).toBe(homes);
     expect(native['review-batch']).toBeUndefined();
     expect(native.review?.calls).toBe(homes - 2);
     expect(checks.slice(0, 5)).toEqual([

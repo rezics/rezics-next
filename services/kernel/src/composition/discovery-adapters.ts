@@ -160,10 +160,24 @@ function spaceRecords(partition: number, position: bigint, spaces: readonly Inde
 function createCollectionPopulationProducer(
   adapter: ReturnType<typeof createNativeCollectionDiscoveryAdapter>,
 ): DiscoveryMetadataProducer {
+  const readEmpty = adapter.source.readEmpty?.bind(adapter.source);
   return {
     kind: 'collection',
     owner: 'commerce',
     pageCapabilityWitness: 'none',
+    ...(readEmpty && {
+      async readEmptyStamps(partitions: readonly number[]) {
+        const snapshots = await readEmpty(partitions);
+        return new Map(
+          snapshots.map((snapshot) => {
+            if (snapshot.status !== 'available')
+              throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
+            const { partition, epoch, position } = snapshot.stamp;
+            return [partition, { epoch, position: BigInt(position) }] as const;
+          }),
+        );
+      },
+    }),
     async readiness() {
       return adapter.status === 'ready' ? 'ready' : adapter.status;
     },
