@@ -21,7 +21,7 @@ import {
 import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
 import { FollowCountUnavailableError } from './contract/index.ts';
 import { prepareReadDecisions } from '../request/access-check.ts';
-import type { Actor } from '../request/access.ts';
+import { snapshotReadActor, type Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {
   collectionPresentation,
@@ -180,13 +180,7 @@ function request(ids: readonly string[], context: PublicCollectionDiscoveryConte
     if (route === null || partitionOf(route) !== context.partition)
       throw new RangeError('Public Collection discovery requires full keys in one partition');
   }
-  const actor: Actor =
-    context.actor.kind === 'anonymous'
-      ? { kind: 'anonymous' }
-      : {
-          ...context.actor,
-          scopes: [...context.actor.scopes],
-        };
+  const actor = snapshotReadActor(context.actor);
   return { ids: [...new Set(ids)], context: { ...context, actor } };
 }
 

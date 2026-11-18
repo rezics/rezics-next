@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem-error.ts';
+import { snapshotReadActor } from '../request/access.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
@@ -172,11 +173,7 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
     request = ownDiscoveryRequest(request);
     context = Object.freeze({
       ...context,
-      actor: Object.freeze(
-        context.actor.kind === 'account'
-          ? { ...context.actor, scopes: Object.freeze([...context.actor.scopes]) }
-          : { kind: 'anonymous' as const },
-      ),
+      actor: snapshotReadActor(context.actor),
     });
     let deliver!: (value: { page: DiscoveryPage; current: RetainedPrimaryReader }) => void;
     let refuse!: (error: unknown) => void;

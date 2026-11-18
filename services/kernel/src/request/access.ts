@@ -5,6 +5,7 @@ export {
   accessCheck,
   accessExplicitCheck,
   prepareReadDecisions,
+  snapshotReadActor,
   resourcePage,
   validReadDecisionActions,
   installPreparedAccessCheckWork,

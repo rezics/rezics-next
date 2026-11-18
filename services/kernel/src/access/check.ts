@@ -20,6 +20,13 @@ import { AccessUnavailableError } from './unavailable.ts';
 export { AuthenticationError } from './contract/authentication.ts';
 export type * from '../request/access.ts';
 
+/** Keep the immutable actor that carries native authentication evidence. */
+export function snapshotReadActor(actor: Actor): Actor {
+  if (actor.kind === 'anonymous') return Object.freeze({ kind: 'anonymous' });
+  if (Object.isFrozen(actor) && Object.isFrozen(actor.scopes)) return actor;
+  return Object.freeze({ ...actor, scopes: Object.freeze([...actor.scopes]) });
+}
+
 /** Reject malformed pages synchronously, before any database or actor read. */
 export function resourcePage(page: ResourcePage): ResourcePage {
   if (

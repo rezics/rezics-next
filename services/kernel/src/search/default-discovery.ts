@@ -22,7 +22,7 @@ import {
 } from '../library/index.ts';
 import { readPublicFigureViews } from '../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
-import type { AccountActor } from '../request/access.ts';
+import { snapshotReadActor, type AccountActor } from '../request/access.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
@@ -286,10 +286,7 @@ export function createDefaultDiscoverySearch(
     request = { ...request, languages };
     context = { ...context, languages };
     const deadline = context.deadline;
-    const actor =
-      context.actor.kind === 'account'
-        ? Object.freeze({ ...context.actor, scopes: Object.freeze([...context.actor.scopes]) })
-        : Object.freeze({ kind: 'anonymous' as const });
+    const actor = snapshotReadActor(context.actor);
     const execute = async () => {
       let operations: PublicDiscoveryConsumerOperations | undefined;
       const current = await activeRelease(config.pool);
@@ -517,7 +514,7 @@ export function createDefaultDiscoverySearch(
     const request = ownDiscoveryRequest(inputRequest);
     const context = {
       ...inputContext,
-      actor: structuredClone(inputContext.actor),
+      actor: snapshotReadActor(inputContext.actor),
       languages: request.languages ?? ['en'],
     };
     const operation = (async () => {
