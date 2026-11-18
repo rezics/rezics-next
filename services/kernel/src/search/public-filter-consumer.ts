@@ -1164,6 +1164,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   type Page = {
     context: PublicFilterConsumerContext;
     captureWitness?: PublicFilterCaptureWitness;
+    bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered'>;
     m: Meter;
     id: string | null;
     queried: PublicFilterQueriedObservation | null;
@@ -1960,6 +1961,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page?: Page,
     publication?: PublicFilterConsumer,
     inlinePublishedPreparation = false,
+    bookPage?: boolean,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     // Publication resumes its exact Source cut and this registration's Search materialization.
@@ -2000,6 +2002,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     // Reconciliation may advance only the retained enrollment. The real physical
     // observation, adoption and repair still belong to the activation turn.
     if (m.enrollmentOnly) return { status: 'preparing', repair: job, cost: m.cost };
+    const bookCut = bookPage && recovery.status === 'begun' ? recovery.bootstrap : undefined;
     // Recover the original committed physical adoption, never open a replacement PIT.
     if (recovery.status === 'adopted') {
       if (work.queried !== null && !isDeepStrictEqual(work.queried, recovery.queried))
@@ -2283,7 +2286,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const q = work.queried!;
     await physical(q, m, context);
     if (!work.adopted && !publication) {
-      const recovered = m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+      // Native adopt joins the exact PIT and performs the Source CAS. The
+      // Book capture has already recovered the cut before opening that PIT.
+      const recovered = bookCut
+        ? recovery
+        : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
       if (recovered.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
@@ -2331,6 +2338,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     );
 
     if (publication) return { status: 'captured', queried: q, repair: job, cost: m.cost };
+    if (page && bookCut) {
+      // Native adoption has bound this exact cut and PIT. START checks the
+      // live publication and immutable definition before the first search.
+      page.bookCut = { definition: bookCut.definition, covered: bookCut.covered };
+      return { status: 'captured', queried: q, repair: job, cost: m.cost };
+    }
     try {
       const joined = await join(q, undefined, m, context);
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
@@ -2525,7 +2538,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           cost: m.cost,
         };
       }
-      return await advanceCapture(work, encoded, m, context, page, publication, true);
+      const bookPage =
+        page !== undefined &&
+        native?.status === 'begun' &&
+        snapshot === 'pit' &&
+        'bookTypeList' in canonical &&
+        canonical.bookTypeList === true &&
+        begun.bootstrap.coveragePublication !== undefined;
+      return await advanceCapture(work, encoded, m, context, page, publication, true, bookPage);
     } catch (error) {
       return failure(error, m);
     }
@@ -2555,13 +2575,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
         use = acquired.use;
       }
-      const joined = await join(q, undefined, m, context);
-      const plan = joined.definition.capture;
+      const bookCut = page?.bookCut;
+      if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
+      const cut = bookCut ?? (await join(q, undefined, m, context));
+      const plan = cut.definition.capture;
       if ('representation' in plan !== mixed || ('purpose' in plan && mixed))
         return m.unavailable('registration_missing');
       const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m);
       const { work } = loaded;
-      if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, joined.covered))
+      if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, cut.covered))
         return m.unavailable('observation_lost');
       let previous: RetainedWindow | undefined;
       let previousEncoded: string | null = null;
@@ -2709,12 +2731,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.execution = execution;
       work.frontier = null;
       encoded = await save(work, encoded, false, m);
-      const finalJoined = await join(q, execution, m, context);
-      if (
-        !isDeepStrictEqual(finalJoined.execution, { id: execution, start: started.start, ownRows: rows }) ||
-        !isDeepStrictEqual(finalJoined.covered, joined.covered)
-      )
-        return m.unavailable('observation_lost');
+      // The native Book page's FINAL validates the retained children, input
+      // boundary, current coverage and own rows before publishing the result.
+      if (!bookCut) {
+        const finalJoined = await join(q, execution, m, context);
+        if (
+          !isDeepStrictEqual(finalJoined.execution, { id: execution, start: started.start, ownRows: rows }) ||
+          !isDeepStrictEqual(finalJoined.covered, cut.covered)
+        )
+          return m.unavailable('observation_lost');
+      }
       if (!page) {
         const final = await observe(q, started.start, execution, m, context);
         if (!observationIsDisclosableFromUnknown(final)) return preparing();
