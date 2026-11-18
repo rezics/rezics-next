@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
+import { runCommand } from '../../src/command/command.ts';
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
-import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
+import { newId } from '../../src/route/route.ts';
+import { createDiscoveryProjection, nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
 import {
   discoveryFailureObservation,
   discoveryFinalizationTrace,
@@ -21,6 +23,7 @@ import {
   runSearchTurn,
   searchTurnMetadataProducers,
 } from '../../src/search/generations.ts';
+import { createDiscoveryIndexer } from '../../src/search/indexer.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -170,6 +173,65 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       { state: 'metadata', partition: 4, kind: 'space' },
     ]);
     expect(checks.slice(5).every((row) => row.state === 'current')).toBe(true);
+
+    // Advance a certified empty home with a private Search event. Hold the real replay until after repair.
+    const empty = await pool.query<{ partition_no: number }>(
+      `SELECT partition_no FROM search.discovery_population WHERE prefix=$1 AND generation=$2
+       GROUP BY partition_no HAVING bool_and(census=0 AND indexed=0) AND count(*)=5
+       ORDER BY partition_no<>44,partition_no LIMIT 1`,
+      [prefix, generation],
+    );
+    const home = empty.rows[0]!.partition_no;
+    const route = home * 16;
+    const id = newId(route);
+    const target = (await discoveryGenerations(pool, prefix))[0]!;
+    const consumer = discoveryConsumer(prefix, generation);
+    const relay = createDiscoveryIndexer(pool, createDiscoveryProjection({ ...options, target }), consumer);
+    const checkpoint = async () =>
+      (
+        await pool.query<{ position: string }>(
+          'SELECT position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
+          [home, consumer],
+        )
+      ).rows[0]!.position;
+    const before = await checkpoint();
+    const noise = await runCommand(pool, { partition: home }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.search.recent-changed.v1', subject: id, data: { accountId: id } }],
+    }));
+    expect(noise.position).toBeGreaterThan(BigInt(before));
+    await advanceDiscovery(options);
+    const refreshed = (await readDiscoveryCuts(pool, prefix, generation)).filter((row) => row.partition === home);
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]!.position).toBe(noise.position.toString());
+    expect((await check(refreshed)).checks).toEqual([{ state: 'current' }]);
+    expect(await checkpoint()).toBe(before);
+    expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
+    expect(await relay.run(home)).toMatchObject({ status: 'read', position: noise.position });
+    await expect(advanceDiscovery(options)).rejects.toThrow('Discovery population partitions are incomplete');
+
+    // The same home's next advance creates a public Account absent from the index. Its raw pass must reopen.
+    await runCommand(pool, { partition: home }, async (tx) => {
+      await tx.query(
+        `INSERT INTO access.account(route,account_id,kind,state,authn_fenced,transaction_id,membership_inverse_complete)
+         VALUES ($1,$2,'actor','active',false,$2,true)`,
+        [route, id],
+      );
+      return {
+        value: null,
+        events: [{ type: 'com.rezics.access.account-updated.v1', subject: id, data: { accountId: id } }],
+      };
+    });
+    expect((await entry.accounts.count(home)).count).toBe(1);
+    await advanceDiscovery(options);
+    const account = await pool.query(
+      `SELECT complete,certified FROM search.discovery_population
+       WHERE prefix=$1 AND generation=$2 AND partition_no=$3 AND owner='accounts'`,
+      [prefix, generation, home],
+    );
+    expect(account.rows).toEqual([{ complete: false, certified: false }]);
+    expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('populating');
+    expect(await checkpoint()).toBe(noise.position.toString());
   } finally {
     try {
       const owned = await search.request<{ indices: { name: string }[] }>(

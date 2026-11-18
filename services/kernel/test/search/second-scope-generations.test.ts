@@ -314,6 +314,7 @@ test('an allocated review owner omitted later retires the generation instead of 
 
 test('Review population waits for invalidation and rejects a changed signed cut', async () => {
   let state: 'preparing' | 'changed' | 'unavailable' = 'preparing';
+  let emptyReads = 0;
   const producers = createDiscoveryProducerEntry({
     clock: () => new Date(),
     pool: {} as Pool,
@@ -326,6 +327,11 @@ test('Review population waits for invalidation and rejects a changed signed cut'
           state === 'preparing' ? 'lifecycle-invalidation' : 'private detail',
           'empty-position',
         );
+      },
+      readEmptyPositions: async (homes: readonly number[]) => {
+        emptyReads++;
+        if (emptyReads === 2) return new Map(homes.map((home) => [home, 8n]));
+        throw new ReviewDiscoverySourceError(state, 'eligibility-dependency', 'empty-position');
       },
       pageWithCut: async () => ({
         state,
@@ -344,6 +350,14 @@ test('Review population waits for invalidation and rejects a changed signed cut'
   await expect(review.page(0, after, 'signed', 100)).rejects.toBeInstanceOf(DiscoveryReviewInvalidationPendingError);
   await expect(review.position(0)).rejects.toBeInstanceOf(DiscoveryReviewInvalidationPendingError);
   state = 'changed';
+  expect(await review.readEmptyPositions!([44, 47])).toEqual(
+    new Map([
+      [44, 8n],
+      [47, 8n],
+    ]),
+  );
+  await expect(review.readEmptyPositions!([44, 47])).rejects.toBeInstanceOf(DiscoveryReviewFrontierError);
+  expect(emptyReads).toBe(4);
   await expect(review.page(0, null, null, 100)).rejects.toBeInstanceOf(DiscoveryReviewFrontierError);
   const refusal = await review.read(0, []).catch((error: unknown) => error);
   expect(refusal).toBeInstanceOf(DiscoveryReviewFrontierError);
