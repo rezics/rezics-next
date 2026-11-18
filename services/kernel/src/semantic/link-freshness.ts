@@ -1,5 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
+import { lookupEventType } from '../events/catalogue.ts';
+import { BATCH_ENVELOPES } from '../events/log.ts';
+import { LINKS_PROJECTED, SUBJECT_PAGE_WORK_COMMITTED } from './events.ts';
+import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
+import readMaintenance from './link-checkpoint-maintenance.sql';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { SessionComponent } from '../tokens/session.ts';
@@ -42,10 +47,38 @@ export async function pendingMergeSources(
   return pending;
 }
 
-function checkpointWaitReason(
-  row: NonNullable<Awaited<ReturnType<typeof readLinkCheckpoint.run>>>,
-  subject: string,
-): SubjectLinkWaitReason {
+type Behind = NonNullable<Awaited<ReturnType<typeof readLinkCheckpoint.run>>>;
+
+const completionEvents = [
+  LINKS_PROJECTED,
+  SUBJECT_PAGE_WORK_COMMITTED,
+  SEMANTIC_LOCATOR_ADVANCED,
+  'com.rezics.semantic.provider-review.projected.v1',
+];
+
+async function coversSubjectAnchor(client: PoolClient, behind: Behind, anchor: SessionComponent): Promise<boolean> {
+  if (
+    behind.partition_no !== anchor.partition ||
+    behind.epoch !== anchor.epoch ||
+    behind.checkpoint_epoch !== anchor.epoch ||
+    behind.checkpoint_position === null
+  )
+    return false;
+  const checkpoint = BigInt(behind.checkpoint_position);
+  const span = anchor.position - checkpoint;
+  if (checkpoint <= 0n || span <= 0n || span > BigInt(BATCH_ENVELOPES)) return false;
+
+  const { rows } = await client.query<{ kind: string; payload: unknown }>(readMaintenance.sql, [
+    anchor.partition,
+    anchor.epoch,
+    checkpoint.toString(),
+    anchor.position.toString(),
+    completionEvents,
+  ]);
+  return rows.length === Number(span) && rows.every(({ kind, payload }) => lookupEventType(kind)?.Check(payload));
+}
+
+function checkpointWaitReason(row: Behind, subject: string): SubjectLinkWaitReason {
   const home = row.partition_no === partitionOf(routeOf(subject)!) ? 'local' : 'foreign';
   if (row.checkpoint_epoch === null && String(row.position) === '0') return `${home}-checkpoint-zero-position`;
   if (home === 'foreign' && row.first_present !== null && row.checkpoint_position === null) {
@@ -78,14 +111,16 @@ export async function linksCaughtUp(
   yieldAdmission?: YieldAdmission,
   observeWait?: (reason: SubjectLinkWaitReason) => void,
   observeMissing = false,
+  anchor?: SessionComponent,
 ): Promise<boolean> {
-  const requirements = {
+  const requirementsFor = (components: readonly SessionComponent[]) => ({
     consumer: LINKS_CONSUMER,
     observe_missing: observeMissing,
-    partitions: seen.map((component) => component.partition),
-    epochs: seen.map((component) => component.epoch),
-    positions: seen.map((component) => component.position),
-  };
+    partitions: components.map((component) => component.partition),
+    epochs: components.map((component) => component.epoch),
+    positions: components.map((component) => component.position),
+  });
+  const requirements = requirementsFor(anchor ? [...seen, anchor] : seen);
   let lastObservation: SubjectLinkWaitReason = 'deadline';
   const unfinished = () => {
     observeWait?.(lastObservation);
@@ -97,7 +132,26 @@ export async function linksCaughtUp(
         pool,
         async (client) => {
           lastObservation = 'checkpoint-deadline';
-          const behind = seen.length ? await readLinkCheckpoint.run(client, requirements) : null;
+          let behind = requirements.partitions.length ? await readLinkCheckpoint.run(client, requirements) : null;
+          // Only the detail reader supplies its authorized Subject home anchor. A positive link
+          // checkpoint plus a complete suffix of already committed maintenance has no link work left.
+          if (
+            behind &&
+            anchor &&
+            anchor.partition === partitionOf(routeOf(subject)!) &&
+            (await coversSubjectAnchor(client, behind, anchor))
+          ) {
+            const otherRequirements = requirementsFor(
+              seen.filter((component) =>
+                component.partition !== anchor.partition ||
+                component.epoch !== anchor.epoch ||
+                component.position > anchor.position
+              ),
+            );
+            behind = otherRequirements.partitions.length
+              ? await readLinkCheckpoint.run(client, otherRequirements)
+              : null;
+          }
           if (behind) {
             lastObservation = checkpointWaitReason(behind, subject);
             return false;
@@ -132,9 +186,10 @@ export function waitForSubjectLinks(
   yieldAdmission?: YieldAdmission,
   observeWait?: (reason: SubjectLinkWaitReason) => void,
   observeMissing = false,
+  anchor?: SessionComponent,
 ): Promise<boolean> {
   const started = Date.now();
   // Leave at least half of the remaining request budget for authorization and the read.
   const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission, observeWait, observeMissing);
+  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission, observeWait, observeMissing, anchor);
 }

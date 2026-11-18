@@ -361,6 +361,47 @@ test('authorized subject redirects resolve before projection freshness', async (
   }
 }, 60_000);
 
+test('Subject GET sees the applied relation while the link checkpoint trails its own completion events', async () => {
+  const partition = freshPartition();
+  const author = await createFixed(partition, 'schema:Person', 'Projected author');
+  await catchUpLinks(partition);
+  const book = await createFixed(partition, 'schema:Book', 'Book with an author', {
+    'schema:author': [
+      {
+        property: { id: 'schema:author' },
+        value: { type: 'value', content: author.id },
+        qualifiers: [],
+        references: [],
+      },
+    ],
+  });
+  await realAccess.grant({ route: book.route, id: book.id }, 'reader', 'subject:read');
+  await realAccess.grant({ route: author.route, id: author.id }, 'reader', 'subject:read');
+  const read = (session?: string) =>
+    call('GET', `/v1/subjects/${book.id}`, { token: 'reader', ...(session && { session }) });
+
+  // The same positive checkpoint cannot stand in for unprojected inputs.
+  expect((await read()).body.code).toBe('semantic_not_ready');
+  expect(await projection.run(partition)).toMatchObject({ status: 'read', position: book.component.position });
+  const {
+    rows: [home],
+  } = await admin.query<{ position: string }>('SELECT position::text FROM core.partition WHERE partition_no=$1', [
+    partition,
+  ]);
+  const position = BigInt(home!.position);
+  expect(position).toBeGreaterThan(book.component.position);
+  const session = encodeSession(tokens, `account:${accounts.reader}`, [{ ...book.component, position }]);
+  const current = await read(session);
+  expect(current.response.status).toBe(200);
+  expect(current.body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+  const foreign = await createFixed((partition + 1) % 4096, 'schema:Person', 'Pending foreign Subject');
+  const pending = encodeSession(tokens, `account:${accounts.reader}`, [
+    { ...book.component, position },
+    foreign.component,
+  ]);
+  expect((await read(pending)).body.code).toBe('semantic_not_ready');
+}, 60_000);
+
 test('live subject construction preserves projection freshness and final authorization', async () => {
   const partition = freshPartition();
   const target = await createFixed(partition, 'schema:Person', 'Projected author');
