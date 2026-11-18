@@ -1934,6 +1934,22 @@ export async function runWalk(
           );
           current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
           code = await current.exited;
+          if (code !== 0 && importCatalogueWalk()) {
+            // The private stack log also contains persona output. Return only the last
+            // checkpoint observation and relay status before the walk releases the stack.
+            const tail = await Bun.file(log)
+              .slice(-65_536)
+              .text()
+              .catch(() => '');
+            const wait = tail
+              .match(/^Semantic links wait home=\d+ (?:deadline|merge|partition=\d+ required=\d+\/\d+ checkpoint=(?:none|\d+)\/(?:none|\d+))$/gm)
+              ?.at(-1);
+            const relay = tail
+              .match(/^Relay semantic_links (?:failed on partition \d+\b|stopped at partition \d+ position \d+: (?:gap|epoch|unknown_type|invalid_data)\b)/gm)
+              ?.at(-1);
+            if (wait) console.error(wait);
+            if (relay) console.error(relay);
+          }
         } catch (error) {
           walkFailure = error;
           throw error;
