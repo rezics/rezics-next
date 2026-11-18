@@ -37,6 +37,7 @@ type Anchor = { id: string; type: string };
 type Original = Anchor & { label: string };
 type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
+const editorCredentialWindowMs = 30_000;
 
 export async function publishBookOriginals(setupDeadline: number, cleanupMs: number) {
   let database: GrowthDatabase | undefined;
@@ -90,19 +91,16 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
         try {
           const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
           const { active, generations } = await subjectGenerations(engine, prefix, undefined, signal);
-          const [physical, jobs] = await Promise.all([
+          const [physical, publication] = await Promise.all([
             Promise.all(
               generations.map(async (generation) => ({
                 generation,
                 matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
               })),
             ),
-            publicationJobs(deadline).then((jobs) => jobs.map(({ consumer: _consumer, ...job }) => job), String),
+            withBoundedReadConnection(pool, deadline, (client) => inspectPublication(client, prefix)).catch(String),
           ]);
-          const publication = await withBoundedReadConnection(pool, deadline, (client) =>
-            inspectPublication(client, prefix),
-          );
-          return { active, physical, jobs, publication };
+          return { active, physical, publication };
         } catch (error) {
           return { inventoryError: String(error) };
         }
@@ -180,7 +178,6 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
       );
     }
     const originals: Original[] = [];
-    const editorCredentialWindowMs = 30_000;
     async function createSubject(type: string, name: string) {
       // A publication wait or a long growth scale can outlast the editor's bearer.
       await fixture.renewCredential('editor', editorCredentialWindowMs);
@@ -220,7 +217,6 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
       waitForPublication,
       createAnchor,
       createSubject,
-      editorCredentialWindowMs,
     };
   } catch (error) {
     try {
@@ -233,16 +229,8 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
 }
 
 export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
-  const {
-    fixture,
-    database,
-    originals,
-    published,
-    waitForPublication,
-    createAnchor,
-    createSubject,
-    editorCredentialWindowMs,
-  } = await publishBookOriginals(setupDeadline, cleanupMs);
+  const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
+    await publishBookOriginals(setupDeadline, cleanupMs);
   try {
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
