@@ -110,7 +110,7 @@ export type NativeAccountOperationActor = {
   accountId: string;
   scopes: readonly string[];
 };
-export type NativeWebServices = Pick<NativeWebStack, 'authPersona' | 'kernelOrigin'> & {
+export type NativeWebServices = Pick<NativeWebStack, 'authPersona' | 'databaseUrl' | 'kernelOrigin'> & {
   /** Service setup uses an issued bearer directly, before a website session can exist. */
   kernel(path: string, init?: RequestInit): Promise<Response>;
 };
@@ -2412,7 +2412,12 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       force: terminate,
     });
     if (options.onServicesReady) {
-      options.onServicesReady({ kernelOrigin, kernel: api.kernel, authPersona: api.authPersona });
+      options.onServicesReady({
+        databaseUrl: api.databaseUrl,
+        kernelOrigin,
+        kernel: api.kernel,
+        authPersona: api.authPersona,
+      });
       await call('waitForWebsite');
       lifecycle.assertOpen('finish native website startup');
     }

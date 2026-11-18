@@ -60,7 +60,12 @@ export const feed: SitemapFeed<AgentItem> = {
       sitemapLocales.map((locale) => [locale, accountHref(locale, item.handle)]),
     ) as Record<(typeof sitemapLocales)[number], string>;
     // Access supplies meaningful public identity change time; activity has its own owners and clocks.
-    const lastModified = utcLastmod(item.lastModified) === undefined ? undefined : item.lastModified;
+    // The native datetime is PostgreSQL's ISO timestamptz text, including its explicit offset.
+    const time = item.lastModified.replace(
+      /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{2})(?::(\d{2}))?$/u,
+      (_value, date, clock, offset, minutes = '00') => `${date}T${clock}${offset}:${minutes}`,
+    );
+    const lastModified = utcLastmod(time) === undefined ? undefined : time;
     return sitemapFamilyFromPagePaths(sitemapPagePaths(paths), lastModified);
   },
 };

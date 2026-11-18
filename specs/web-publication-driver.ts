@@ -41,7 +41,7 @@
 export type Persona = 'anonymous' | 'alice' | 'bob' | 'editor' | 'verified-agent' | 'suspended';
 export type RelationView = 'editions' | 'contents' | 'cast' | 'crew' | 'inverse' | 'relations';
 export type PublishedSubject = 'book' | 'recipe' | 'game' | 'release' | 'person' | 'organization' | 'automated';
-export type SitemapKind = 'subject' | 'collection' | 'realm' | 'space' | 'board' | 'thread';
+export type SitemapKind = 'agent' | 'subject' | 'collection' | 'realm' | 'space' | 'board' | 'thread';
 
 export interface PublicationFixture {
   /** The actual immutable release digest, with bundled Book/form/tag/diet support. */
