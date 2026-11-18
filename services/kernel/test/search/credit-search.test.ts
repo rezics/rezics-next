@@ -104,7 +104,7 @@ describe('bounded credited-name projection consumer', () => {
       mappings: { _meta: Record<string, unknown>; properties: Record<string, unknown> };
     };
     expect(base).toEqual(before);
-    expect(mapped).toEqual(subjectIndexDefinition());
+    expect<unknown>(mapped).toEqual(subjectIndexDefinition());
     expect(mapped.mappings.properties.credited_names).toMatchObject({ type: 'nested', dynamic: 'strict' });
     expect(mapped.mappings.properties.credit_search_complete).toEqual({ type: 'boolean' });
     expect(mapped.mappings._meta.credit_search_format).toBe(1);

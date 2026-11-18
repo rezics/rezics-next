@@ -128,7 +128,7 @@ export async function readCandidateAccounts(
   });
   const snapshots = [];
   for (let offset = 0; offset < groups.length;) {
-    const batch = [];
+    const batch: typeof groups = [];
     let count = 0;
     while (offset < groups.length && batch.length < 16) {
       const group = groups[offset]!;

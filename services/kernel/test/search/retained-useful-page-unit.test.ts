@@ -2,9 +2,11 @@ import { expect, test } from 'bun:test';
 import { collectRetainedUsefulPage } from '../../src/search/useful-page.ts';
 import { readPublicSearchPage } from '../../src/search/public-runtime.ts';
 import { decodeSearchCursor, encodeRetainedSearchCursor, retainedSearchContinuation } from '../../src/search/cursor.ts';
+import { installPublicFilterCoveragePage } from '../../src/search/public-filter-coverage-page.ts';
 import type {
   PublicFilterConsumerOperations,
   PublicFilterConsumerQuery,
+  PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
 } from '../../src/search/public-filter-consumer-contract.ts';
 import type { SearchHit } from '../../src/search/query.ts';
@@ -47,7 +49,7 @@ const context = () => ({ deadline: Date.now() + 10_000 });
 const plan = { filterDocument: undefined, text: undefined, sort: 'name' as const, pageSize: 1, size: 3 };
 
 function operations(overrides: Partial<PublicFilterConsumerOperations> = {}): PublicFilterConsumerOperations {
-  return {
+  const native: PublicFilterConsumerOperations = {
     capture: async () => ({ status: 'captured', queried, repair, cost }),
     captureDiscovery: async () => {
       throw new Error('unexpected mixed capture');
@@ -78,6 +80,47 @@ function operations(overrides: Partial<PublicFilterConsumerOperations> = {}): Pu
     close: async () => {},
     ...overrides,
   };
+  installPublicFilterCoveragePage(native, (context, capture) => {
+    let execution: Extract<PublicFilterConsumerQuery, { status: 'queried' }> | undefined;
+    let consumed = false;
+    let failure: PublicFilterConsumerUnavailable | undefined;
+    const refused = new Error('Current Source refused the selected execution');
+    return {
+      capture: (plan, snapshot) => native.capture({ plan, snapshot }, context),
+      async query(queried, refill) {
+        if (capture) expect(queried).toEqual(capture.queried);
+        const result = await native.query(queried, context, refill);
+        if (result.status === 'queried') {
+          execution = result;
+          consumed = false;
+        }
+        return result;
+      },
+      queryDiscovery: async () => {
+        throw new Error('unexpected mixed query');
+      },
+      async consume(id) {
+        expect(id).toBe(execution?.execution);
+        consumed = true;
+      },
+      async finish() {
+        if (!execution || !consumed) throw new Error('Expected one consumed native execution');
+        const status = await native.readStatus({ queried: execution.queried, execution: execution.execution }, context);
+        if (status.status === 'unavailable') {
+          failure = status;
+          throw refused;
+        }
+        expect(status.queried).toEqual(execution.queried);
+        expect(status.blocking).toEqual([]);
+      },
+      dispose: async () => {},
+      failure(error) {
+        if (error === refused && failure) return failure;
+        throw error;
+      },
+    };
+  });
+  return native;
 }
 
 test('host-bound capture is used without recapture or a second root reservation', async () => {
