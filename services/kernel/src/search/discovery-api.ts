@@ -332,6 +332,10 @@ export type DiscoveryMetadataProducer = Readonly<{
   /** Native position observations for certification requests that carry no identities. */
   readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   readEmptyStamps?(partitions: readonly number[]): Promise<ReadonlyMap<number, { epoch: number; position: bigint }>>;
+  /** Native first pages with no raw candidates. Omitted homes require the normal page reader. */
+  readEmptyFirstPages?(
+    partitions: readonly number[],
+  ): Promise<ReadonlyMap<number, { epoch: number; position: bigint }>>;
 }>;
 export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
 

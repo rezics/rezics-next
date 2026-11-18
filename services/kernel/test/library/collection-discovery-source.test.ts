@@ -7,6 +7,7 @@ import {
 } from '../../src/library/collection-discovery-source.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
 
 let f: CollectionRulesFixture;
@@ -223,6 +224,7 @@ test('full keys, one partition and a maximum of 100 raw keys are required before
   await expect(source.read(2, [{ ...locator, route: 33 }])).rejects.toThrow();
   await expect(source.page(2, locator, 101)).rejects.toThrow();
   await expect(source.page(2, key(newId(48)), 1)).rejects.toThrow();
+  await expect(source.readEmptyFirstPages!(Array(101).fill(2))).rejects.toThrow();
   await expect(source.count(4096)).rejects.toThrow();
 });
 
@@ -278,6 +280,20 @@ test('native continuation preserves route before UUID order, including empty suf
       [routeOf(id), id, randomUUID()],
     );
   const source = publicCollectionDiscoverySource({ pool: f.database.pool });
+  await withReadTransaction(f.database.pool, async (client) => {
+    const empty = await client.query<{ partition_no: number }>(
+      `SELECT p.partition_no FROM core.partition p WHERE p.write_state='active' AND p.moved_to IS NULL
+       AND NOT EXISTS (SELECT 1 FROM library.collection c WHERE c.route>=p.partition_no*16 AND c.route<(p.partition_no+1)*16)
+       ORDER BY p.partition_no LIMIT 1`,
+    );
+    const homes = [partition, empty.rows[0]!.partition_no];
+    const stamps = await source.readEmptyFirstPages!(homes);
+    expect(stamps.map((stamp) => stamp.partition)).toEqual([homes[1]!]);
+    for (const home of homes) {
+      const page = available(await source.page(home, null, 1));
+      expect(stamps.find((stamp) => stamp.partition === home)).toEqual(page.items.length ? undefined : page.stamp);
+    }
+  });
   const read = available(await source.read(partition, ids.map(key).reverse()));
   expect(read.items.map((item) => item.key.id)).toEqual(ids);
   const after = { route, id: `fffffffe-ffff-7fff-bfff-${route.toString(16).padStart(4, '0')}ffffffff` };

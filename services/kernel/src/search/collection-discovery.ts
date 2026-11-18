@@ -316,9 +316,28 @@ export function createCollectionDiscoveryAdapter(
   if (!producer.source?.read || !producer.source.page || !producer.source.count || !producer.readSummaries)
     return { status: 'preparing', reason: 'commerce_collection_discovery_contract_incomplete' };
   const readEmpty = producer.source.readEmpty?.bind(producer.source);
+  const readEmptyFirstPages = producer.source.readEmptyFirstPages?.bind(producer.source);
   return {
     status: 'ready',
     source: {
+      ...(readEmptyFirstPages && {
+        async readEmptyFirstPages(partitions: readonly number[]) {
+          bounded(partitions);
+          const homes = partitions.map(partitionKey);
+          const remaining = new Set(homes);
+          const stamps = await readEmptyFirstPages(homes);
+          return stamps.map(({ partition, epoch, position }) => {
+            if (
+              !remaining.delete(partition) ||
+              !integer(epoch) ||
+              typeof position !== 'string' ||
+              !/^\d+$/.test(position)
+            )
+              throw new TypeError('Invalid empty Collection first page');
+            return { partition, epoch, position };
+          });
+        },
+      }),
       ...(readEmpty && {
         async readEmpty(partitions: readonly number[]) {
           bounded(partitions);
