@@ -380,7 +380,10 @@ describe('native document authoring', () => {
       fullPage: true,
     });
 
-    await page.getByRole('button', { name: 'More actions' }).click();
+    await page
+      .getByRole('button', { name: 'More actions', exact: true })
+      .and(page.locator('[aria-haspopup="menu"]'))
+      .click();
     // The shared Menu contract uses a menu item on desktop and a button in its touch sheet.
     const editAction = page
       .getByRole('menuitem', { name: 'Edit', exact: true })
