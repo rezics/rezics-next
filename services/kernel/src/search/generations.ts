@@ -981,7 +981,11 @@ async function mapBounded<T, Result>(
   return results;
 }
 
-function discoveryPageCapabilityCheck(pool: Pool, { target, metadataProducers }: DiscoveryProjection) {
+function discoveryPageCapabilityCheck(
+  pool: Pool,
+  target: DiscoveryGeneration,
+  metadataProducers: DiscoveryMetadataProducers,
+) {
   // Status-only producers are admitted by the turn and fence their own native pages.
   // Keep the installed Space observation and recheck every durable bound witness.
   const bound = target.capability?.witnesses ?? {};
@@ -2419,8 +2423,7 @@ async function advanceDiscoveryTurn(
     return;
   }
   const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
-  async function advancePopulation(phase: 'populating' | 'reconciling', partitions?: readonly number[]) {
-    const { target } = projection;
+  const advancePopulation = async (phase: 'populating' | 'reconciling', partitions?: readonly number[]) => {
     const review = metadataProducers.review;
     const readInvalidation = review?.populationInvalidationPending?.bind(review);
     let reviewInvalidationPending = readInvalidation ? await searchTurnCall(readInvalidation) : false;
@@ -2448,7 +2451,7 @@ async function advanceDiscoveryTurn(
     if (populations.length > 0) {
       let retiring: Promise<void> | undefined;
       let deferredReview: DiscoveryProducerCoverageError | undefined;
-      const checkCapability = discoveryPageCapabilityCheck(pool, projection);
+      const checkCapability = discoveryPageCapabilityCheck(pool, target, metadataProducers);
       const results = await mapBounded(
         populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
@@ -2534,7 +2537,7 @@ async function advanceDiscoveryTurn(
     )
       return 'waiting-for-review-invalidation';
     return 'complete';
-  }
+  };
   if (target.state === 'populating' || target.state === 'reconciling') {
     const progress = await advancePopulation(target.state);
     if (progress === 'waiting-for-review-invalidation') return progress;

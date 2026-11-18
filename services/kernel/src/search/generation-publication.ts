@@ -210,7 +210,7 @@ function locator(consumer: PublicFilterConsumer) {
   requireValue(
     (family === 'subjects' ? subjectIndexName : discoveryIndexName)(prefix, generation) === consumer.physicalTarget,
   );
-  return { prefix, family, generation };
+  return { prefix, family, generation, readDefinition: consumer.readDefinition };
 }
 function bindingKey(definition: SearchPublicFilterSourceDefinition) {
   return {
@@ -461,7 +461,7 @@ export function createSearchGenerationPublication(
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
     // Preparation registered this definition before the job was created.
     const resolved = binding.readDefinition
-      ? await binding.readDefinition({ source, id: job.consumer.readDefinition }, context)
+      ? await binding.readDefinition({ source, id: current.readDefinition }, context)
       : await binding.resolve(
           { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
           context,
