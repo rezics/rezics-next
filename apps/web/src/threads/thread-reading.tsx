@@ -179,6 +179,8 @@ export function ThreadReading({
   pageCallbackRevision = '0:0',
   isPageCallbackCurrent = () => true,
   readAuthority,
+  historyReadAuthority,
+  preserveHistoryOnConnect = false,
   activityQueryKey,
   personal,
   session,
@@ -197,6 +199,8 @@ export function ThreadReading({
   pageCallbackRevision?: string;
   isPageCallbackCurrent?: () => boolean;
   readAuthority?: object;
+  historyReadAuthority?: object;
+  preserveHistoryOnConnect?: boolean;
   activityQueryKey?: QueryKey;
   Post: typeof ThreadReadingPost;
   signedOut: ReactNode;
@@ -510,6 +514,10 @@ export function ThreadReading({
                       pageIndex={row.index}
                       post={post}
                       readAuthority={readAuthority}
+                      historyReadAuthority={historyReadAuthority}
+                      {...(preserveHistoryOnConnect
+                        ? { connectingHistoryPost: sourcePage.posts.posts[row.index]! }
+                        : {})}
                       authors={authors}
                       composed={page.composed}
                       reactionFieldsAvailable={

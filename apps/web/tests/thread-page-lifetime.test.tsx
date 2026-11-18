@@ -10,6 +10,8 @@ import postsRecording from '../src/kernel/recorded/thread-posts.json';
 import accountsRecording from '../src/kernel/recorded/accounts.json';
 import boardRecording from '../src/kernel/recorded/board.json';
 import realmRecording from '../src/kernel/recorded/board-realm-realm.json';
+import { historicalReadEnvelope } from '../src/threads/historical-reader-provenance';
+import type { PostHistoryReadData } from '../src/threads/post-history-read';
 
 // Authored composed loader/cache/reader regressions. The full acceptance command is intentionally UNRUN here.
 mock.module('@tanstack/react-start', () => start);
@@ -708,6 +710,14 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
   const { authoredReadingPage } = await import('../src/kernel/fake/thread-reading-page');
   const threadId = id(125);
   const page = await mountRoute({ threadId, mode: 'anonymous', session: signedOut });
+  const historyResult = deferred<PostHistoryReadData>();
+  const historyReader = spyOn(readModule, 'readPostHistory').mockImplementation(async ({ data }) =>
+    historicalReadEnvelope(
+      data.binding,
+      { credentialMode: 'session', subject: viewerId, complete: true },
+      await historyResult.promise,
+    ),
+  );
   try {
     const publicPage = pageFor(threadId, { body: 'Public page before session preparation' });
     publicPage.composed = authoredReadingPage(publicPage.thread);
@@ -723,6 +733,17 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
       expectedReaderSubject: viewerId,
     });
     expect(personalReads).toHaveLength(0);
+
+    const post = publicPage.posts.posts[0]!;
+    if (post.availability !== 'available') throw new Error('Expected a published Post fixture');
+    page.host.querySelector<HTMLDetailsElement>('[data-slot="post-reading-inspection"] > details')!.open = true;
+    const historyControl = () => page.host.querySelector<HTMLButtonElement>('button[aria-controls^="post-history-"]');
+    const control = historyControl()!;
+    await act(async () => control.click());
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    expect(historyReader).toHaveBeenCalledTimes(1);
+    expect(historyReader.mock.calls[0]?.[0]?.data).toMatchObject({ postId: post.id, credentialMode: 'session' });
+
     await page.settlePage(1, {
       ...publicPage,
       viewerId,
@@ -740,7 +761,29 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
     expect(page.host.querySelector<HTMLButtonElement>('button[data-slot="feed-reply-action"]')?.disabled).toBe(false);
     expect(page.host.textContent).toContain('Public page before session preparation');
     expect(pageReads).toHaveLength(2);
+
+    expect(historyControl() === control).toBe(true);
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => {
+      historyResult.resolve({
+        available: true,
+        revisions: [{ ...post, revisionId: id(45) }, post],
+        next: null,
+        authors: {},
+        mentions: {},
+        subjects: [],
+        reviewVotes: {},
+        documentMedia: { kind: 'ready', images: new Map() },
+        now: publicPage.now,
+      });
+    });
+    const historyPanel = window.document.getElementById(control.getAttribute('aria-controls')!);
+    expect(historyPanel?.hidden).toBe(false);
+    expect(historyPanel?.querySelectorAll('[data-history-summary]')).toHaveLength(2);
+    expect(historyReader).toHaveBeenCalledTimes(1);
   } finally {
+    historyResult.resolve({ available: false });
+    historyReader.mockRestore();
     await page.dispose();
   }
 });

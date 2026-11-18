@@ -329,13 +329,21 @@ function ThreadPage() {
   );
   const returnTo = location.hash.replace(/^#/, '') === 'reply' ? `${resume.split('#')[0]}#reply` : resume;
   const routeSearch = JSON.stringify(location.search);
-  const readScope = useMemo(
-    () => ({}),
-    [id, cursor, post, slug, locale, location.pathname, routeSearch, queryClient, loadedPage.callerAdmission.id],
-  );
+  const routeScope = useMemo(() => ({}), [id, cursor, post, slug, locale, location.pathname, routeSearch, queryClient]);
+  const readScope = useMemo(() => ({}), [routeScope, loadedPage.callerAdmission.id]);
   const activeRefresh = refreshed?.source === loadedPage && refreshed.scope === readScope ? refreshed : undefined;
   const activePage = activeRefresh?.page ?? loadedPage;
   const activeAdmission = activeRefresh?.admission ?? loadedPage.callerAdmission;
+  // History prepares its own reader. Replacing page advice for the same route and disclosure keeps that visit.
+  const historyReadAuthority = useMemo(
+    () => ({}),
+    [
+      routeScope,
+      activePage.thread.boardId,
+      activePage.thread.securityRevision,
+      activePage.composed?.target.boardSecurityRevision,
+    ],
+  );
   const identity = useMemo<ThreadPageRouteIdentity>(
     () => ({
       id,
@@ -366,6 +374,17 @@ function ThreadPage() {
     (pageIsPrivate &&
       activePage.viewerId !== undefined &&
       (session !== 'signed-in' || activePage.viewerId !== subject));
+  const mountedPublicRoute = useRef<object | undefined>(undefined);
+  const preserveHistoryOnConnect =
+    currentPageUnavailable &&
+    mountedPublicRoute.current === routeScope &&
+    session === 'signed-in' &&
+    !!subject &&
+    activePage.viewerId === subject &&
+    caller?.awaitsFirstConnection() === true;
+  useLayoutEffect(() => {
+    mountedPublicRoute.current = !currentPageUnavailable && activeAdmission.publicRead ? routeScope : undefined;
+  }, [activeAdmission.publicRead, currentPageUnavailable, routeScope]);
   const rereadForSession =
     session === 'signed-in' &&
     !!subject &&
@@ -660,6 +679,8 @@ function ThreadPage() {
         key={id}
         page={page}
         readAuthority={readScope}
+        historyReadAuthority={historyReadAuthority}
+        preserveHistoryOnConnect={preserveHistoryOnConnect}
         activityQueryKey={activeAdmission.queryKey}
         readerSubject={subject}
         Post={ThreadReadingPost}
@@ -733,6 +754,8 @@ export function ThreadReadingPost({
   reactionFieldsAvailable = true,
   reactionViewerAvailable = true,
   readAuthority,
+  historyReadAuthority = readAuthority,
+  connectingHistoryPost,
   authors,
   mentions,
   documentMedia,
@@ -765,6 +788,8 @@ export function ThreadReadingPost({
   reactionFieldsAvailable?: boolean;
   reactionViewerAvailable?: boolean;
   readAuthority?: object | undefined;
+  historyReadAuthority?: object | undefined;
+  connectingHistoryPost?: ThreadPost;
   authors: PageAuthors;
   mentions: DocumentMentions;
   documentMedia?: ThreadDocumentMedia | undefined;
@@ -866,10 +891,30 @@ export function ThreadReadingPost({
       viewerId,
     ],
   );
+  const historyPost = connectingHistoryPost?.id === post.id ? connectingHistoryPost : post;
+  const historyRevisionId = historyPost.availability === 'available' ? historyPost.revisionId : undefined;
+  const historySecurityRevision = historyPost.availability === 'available' ? historyPost.securityRevision : undefined;
   const historyScope = useMemo(
     () => ({}),
-    [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id],
+    [
+      historyReadAuthority,
+      signedIn,
+      personalReady,
+      viewerId,
+      post.id,
+      post.threadId,
+      historyRevisionId,
+      historySecurityRevision,
+      target.kind,
+      target.id,
+    ],
   );
+  const mountedHistory = useRef<object | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!connectingHistoryPost) mountedHistory.current = !editing && historyRevisionId ? historyScope : undefined;
+  }, [connectingHistoryPost, editing, historyRevisionId, historyScope]);
+  // The list stays inert while its new caller connects. Keep only a matching history visit already mounted.
+  const showHistory = historyRevisionId && (!connectingHistoryPost || mountedHistory.current === historyScope);
   previousLifetime.current = lifetime;
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);
   useLayoutEffect(() => lifetime.connect(), [lifetime]);
@@ -1203,7 +1248,7 @@ export function ThreadReadingPost({
                 ) : null}
               </CollapsibleContent>
             </Collapsible>
-            {post.revisionId ? (
+            {showHistory ? (
               <PostHistory
                 postId={post.id}
                 readAuthority={historyScope}
