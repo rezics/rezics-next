@@ -6,4 +6,5 @@ WITH next_page AS MATERIALIZED (
 )
 SELECT n.ordinal,n.intent,p.intent AS previous_intent FROM next_page n
 LEFT JOIN search.public_filter_repair_page p ON (p.partition_no,p.observation,p.execution,p.ordinal)=
-  (n.partition_no,n.observation,n.execution,n.ordinal-1) AND n.ordinal>0;
+  (n.partition_no,n.observation,n.execution,n.ordinal-1) AND n.ordinal>0
+LIMIT 1;
