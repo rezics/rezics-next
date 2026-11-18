@@ -3,7 +3,6 @@ import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
-import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -16,7 +15,7 @@ import { moveMergePage } from '../../src/semantic/merge-moves.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { actorOf, type AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, actorOf, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { encodeSession } from '../../src/tokens/session.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -53,19 +52,12 @@ const kernel = createKernel({
   receiptKeys: testReceiptKeys(),
   writeRate: realAccess.writeRate,
 });
-const writer = actor('writer');
-const subjectMergeAuthorization: CommandAuthorization = {
-  action: 'subject:merge',
-  resource: { route: 0, id: GLOBAL_CONTEXT },
-  denied: () => new Error('Merge denied'),
-  async authorize() {
-    return 'execute';
-  },
-};
+const globalSubjectResource = { route: 0, id: GLOBAL_CONTEXT };
 
 beforeAll(async () => {
   await bootstrapRelease(pool, bundledRelease);
-  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'writer', 'subject:create');
+  await realAccess.grant(globalSubjectResource, 'writer', 'subject:create');
+  await realAccess.grant(globalSubjectResource, 'writer', 'subject:merge');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
 });
 
@@ -93,6 +85,20 @@ async function libraryActor(persona: keyof typeof accounts, authPool: typeof poo
   )) as AccountActor;
 }
 
+async function admittedWriter(action: 'subject:create' | 'subject:merge') {
+  const actor = await libraryActor('writer');
+  const deadline = Date.now() + 20_000;
+  const authorization = await accessCommandAuthorization(
+    libraryAccess,
+    actor,
+    action,
+    globalSubjectResource,
+    { pool, deadline },
+    () => new Error(`Denied native fixture ${action}`),
+  );
+  return { actor, deadline, authorization };
+}
+
 function digest(value: string): Uint8Array {
   return createHash('sha256').update(value).digest();
 }
@@ -105,13 +111,12 @@ async function createFixed(partition: number, type: string, label: string, state
   const route = partition * 16;
   const id = newId(route);
   const result = await createSubject(pool, {
-    actor: writer,
+    ...(await admittedWriter('subject:create')),
     target: { route, id },
     idempotencyKey: randomUUID(),
     digest: digest(id),
     item: { type, labels: { en: label }, ...(statements ? { statements } : {}) },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
   });
   return { id, route, component: result.component };
 }
@@ -137,12 +142,10 @@ async function mergePair(partition: number) {
   const result = await mergeSubjects(pool, {
     subjects: [first.id, second.id],
     survivor,
-    actor: writer,
+    ...(await admittedWriter('subject:merge')),
     idempotencyKey: randomUUID(),
     digest: digest(`${survivor}:${merged}`),
     release: { digest: bundledDigest, release: bundledRelease },
-    authorization: subjectMergeAuthorization,
-    deadline: Date.now() + 20_000,
   });
   expect(result).toMatchObject({ survivor, redirected: merged });
   return { survivor, merged, component: result.component };
@@ -510,12 +513,10 @@ test('live subject construction preserves projection freshness and final authori
           await mergeSubjects(pool, {
             subjects: [survivor, merged],
             survivor,
-            actor: writer,
+            ...(await admittedWriter('subject:merge')),
             idempotencyKey: randomUUID(),
             digest: digest(`${survivor}:${merged}:live`),
             release: { digest: bundledDigest, release: bundledRelease },
-            authorization: subjectMergeAuthorization,
-            deadline: Date.now() + 20_000,
           });
           await moveMergePage(pool, merged, survivor);
           await catchUpLinks(redirectPartition);
