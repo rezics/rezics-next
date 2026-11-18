@@ -12,6 +12,7 @@ import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { CANONICAL_SOURCE_WORKFLOW } from '../../src/library/canonical-source-store.ts';
 import { OWNER_INDEX_WORKFLOW } from '../../src/library/owner-index-work.ts';
 import type { DiscoveryServingObservation } from '../../src/search/default-discovery.ts';
+import { discoveryGenerations } from '../../src/search/generations.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import type { FeedItem, FeedPage } from '../../src/content/feed-contract.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
@@ -24,7 +25,8 @@ import { decodeFeedCursor, feedBinding, fingerprint } from '../../src/content/fe
 import { withBoundedReadOnlyTransaction } from '../../src/database/pool.ts';
 
 const normalFixtureWaitMs = 150_000;
-const mixedHomeSetupWaitMs = process.env.REZICS_MIXED_HOME_EXTENDED_SETUP === '1' ? 600_000 : normalFixtureWaitMs;
+const mixedHomeSetupWaitMs =
+  process.env.REZICS_MIXED_HOME_EXTENDED_SETUP === '1' ? 600_000 : normalFixtureWaitMs;
 
 async function eventually<T>(
   read: () => Promise<T | undefined>,
@@ -94,372 +96,351 @@ async function readMixedDiscoveryProgress(databaseUrl: string, prefix: string) {
   }
 }
 
-test(
-  'Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references',
-  async () => {
-    const startedAt = Date.now();
-    const endpoint = process.env.OPENSEARCH_URL;
-    if (!endpoint) throw new Error('OPENSEARCH_URL must name the native test service');
-    const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
+test('Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references', async () => {
+  const startedAt = Date.now();
+  const endpoint = process.env.OPENSEARCH_URL;
+  if (!endpoint) throw new Error('OPENSEARCH_URL must name the native test service');
+  const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
+  if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+    console.info(
+      'Mixed Home setup timing',
+      JSON.stringify({ phase: 'driver ready', elapsedMs: Date.now() - startedAt }),
+    );
+  const { runtime } = driver.fixtures;
+  const prefix = `feed-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
+  const search = createOpenSearch(endpoint);
+  const observations = new Set<string>();
+  function observe(phase: string, readiness: Record<string, boolean | string | DiscoveryServingObservation> = {}) {
+    const message = JSON.stringify({ phase, ...readiness });
+    if (observations.has(message)) return;
+    observations.add(message);
+    console.info('Mixed Home readiness', JSON.stringify({ phase, ...readiness, elapsedMs: Date.now() - startedAt }));
+  }
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
+  let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+  try {
+    await driver.fixtures.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
+    const viewer = await driver.fixtures.person('feed-reader');
+    const curator = await driver.fixtures.person('feed-curator');
+    const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
+    const created = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      {
+        type: 'schema:Book',
+        labels: { en: '000 Native mixed feed book' },
+      },
+      key(),
+    );
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const book = (created.body.subject as { id: string }).id;
+    const followedSubject = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key());
+    expect(followedSubject.status, JSON.stringify(followedSubject.body)).toBe(200);
+    const nativeReaction = await driver.fixtures.send(
+      viewer,
+      'PUT',
+      `/v1/subjects/${book}/reaction`,
+      { kind: 'love' },
+      key(),
+    );
+    expect(nativeReaction.status, JSON.stringify(nativeReaction.body)).toBe(200);
+    const metadata = bundledRelease.types['schema:Book']!.library!;
+    const active = bundledRelease.libraryProfiles![metadata.profileId]!.entryStateSet!.states.find(
+      (state) => state.role === 'active',
+    )!.id;
+    const entry = await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${book}`, { state: active }, key());
+    expect(entry.status, JSON.stringify(entry.body)).toBe(201);
+    const everything = builtinCollectionId(viewer.accountId, { kind: 'everything' });
+    const savedEverything = await driver.fixtures.send(
+      viewer,
+      'PATCH',
+      `/v1/collections/${everything}`,
+      { revision: 0, title: 'Everything I read' },
+      key(),
+    );
+    expect(savedEverything.status, JSON.stringify(savedEverything.body)).toBe(200);
+    // A Realm adoption publishes the Book itself to followers of the native Space.
+    await driver.grant('editor', ['space:create', 'realm:create'], PLATFORM_RESOURCE.id);
+    const space = await driver.request('editor', 'POST', '/v1/spaces', { title: 'Native mixed feed Space' }, key());
+    expect(space.status, JSON.stringify(space.body)).toBe(201);
+    const spaceId = (space.body.space as { spaceId: string }).spaceId;
+    const realm = await driver.request(
+      'editor',
+      'POST',
+      '/v1/realms',
+      { spaceId, title: 'Native mixed feed Realm', visibility: 'public', contextId: GLOBAL_CONTEXT },
+      key(),
+    );
+    expect(realm.status, JSON.stringify(realm.body)).toBe(201);
+    const realmId = (realm.body.realm as { realmId: string }).realmId;
+    const publication = await driver.request(
+      'editor',
+      'POST',
+      `/v1/realms/${realmId}/publications`,
+      { subjectId: book },
+      key(),
+    );
+    expect(publication.status, JSON.stringify(publication.body)).toBe(201);
+    const collection = await driver.fixtures.send(
+      curator,
+      'POST',
+      '/v1/collections',
+      {
+        title: 'Native followed collection',
+        visibility: 'public',
+      },
+      key(),
+    );
+    expect(collection.status, JSON.stringify(collection.body)).toBe(201);
+    const collectionId = (collection.body.collection as { id: string }).id;
+    const follow = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${collectionId}`, undefined, key());
+    expect(follow.status, JSON.stringify(follow.body)).toBe(200);
+    const env = workerTestEnv({
+      DATABASE_URL: runtime.databaseUrl,
+      KERNEL_ROUTE_KEY: runtime.routeKey,
+      KERNEL_SESSION_KEYS: runtime.sessionKeys,
+      AUTH_ISSUER: runtime.authIssuer,
+      AUTH_AUDIENCE: runtime.authAudience,
+      AUTH_JWKS_URL: runtime.authJwksUrl,
+      OPENSEARCH_URL: endpoint,
+      KERNEL_SEARCH_PREFIX: prefix,
+      KERNEL_PORT: '0',
+      ...(process.env.REZICS_MIXED_HOME_TIMING === '1' ? { REZICS_MIXED_HOME_TIMING: '1' } : {}),
+    });
     if (process.env.REZICS_MIXED_HOME_TIMING === '1')
       console.info(
         'Mixed Home setup timing',
-        JSON.stringify({ phase: 'driver ready', elapsedMs: Date.now() - startedAt }),
+        JSON.stringify({ phase: 'before worker start', elapsedMs: Date.now() - startedAt }),
       );
-    const { runtime } = driver.fixtures;
-    const prefix = `feed-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
-    const search = createOpenSearch(endpoint);
-    const observations = new Set<string>();
-    function observe(phase: string, readiness: Record<string, boolean | string | DiscoveryServingObservation> = {}) {
-      const message = JSON.stringify({ phase, ...readiness });
-      if (observations.has(message)) return;
-      observations.add(message);
-      console.info('Mixed Home readiness', JSON.stringify({ phase, ...readiness, elapsedMs: Date.now() - startedAt }));
-    }
-    let server: Awaited<ReturnType<typeof startServer>> | undefined;
-    let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
-    let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+    worker = startOutcomeWorkerProcess(env);
+    await worker.ready;
+    observe('worker ready');
+    const config = readConfig(env);
+    // Following a Space with an already indexed adoption uses the native follow backfill.
+    const activityPool = new Pool({ connectionString: runtime.databaseUrl, max: 1 });
     try {
-      await driver.fixtures.openFeatures(['search', 'search_advanced', 'personal_library', 'reading_progress']);
-      const viewer = await driver.fixtures.person('feed-reader');
-      const curator = await driver.fixtures.person('feed-curator');
-      const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
-      const created = await driver.request(
-        'editor',
-        'POST',
-        '/v1/subjects',
-        {
-          type: 'schema:Book',
-          labels: { en: '000 Native mixed feed book' },
-        },
-        key(),
-      );
-      expect(created.status, JSON.stringify(created.body)).toBe(201);
-      const book = (created.body.subject as { id: string }).id;
-      const followedSubject = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key());
-      expect(followedSubject.status, JSON.stringify(followedSubject.body)).toBe(200);
-      const nativeReaction = await driver.fixtures.send(
-        viewer,
-        'PUT',
-        `/v1/subjects/${book}/reaction`,
-        { kind: 'love' },
-        key(),
-      );
-      expect(nativeReaction.status, JSON.stringify(nativeReaction.body)).toBe(200);
-      const metadata = bundledRelease.types['schema:Book']!.library!;
-      const active = bundledRelease.libraryProfiles![metadata.profileId]!.entryStateSet!.states.find(
-        (state) => state.role === 'active',
-      )!.id;
-      const entry = await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${book}`, { state: active }, key());
-      expect(entry.status, JSON.stringify(entry.body)).toBe(201);
-      const everything = builtinCollectionId(viewer.accountId, { kind: 'everything' });
-      const savedEverything = await driver.fixtures.send(
-        viewer,
-        'PATCH',
-        `/v1/collections/${everything}`,
-        { revision: 0, title: 'Everything I read' },
-        key(),
-      );
-      expect(savedEverything.status, JSON.stringify(savedEverything.body)).toBe(200);
-      // A Realm adoption publishes the Book itself to followers of the native Space.
-      await driver.grant('editor', ['space:create', 'realm:create'], PLATFORM_RESOURCE.id);
-      const space = await driver.request('editor', 'POST', '/v1/spaces', { title: 'Native mixed feed Space' }, key());
-      expect(space.status, JSON.stringify(space.body)).toBe(201);
-      const spaceId = (space.body.space as { spaceId: string }).spaceId;
-      const realm = await driver.request(
-        'editor',
-        'POST',
-        '/v1/realms',
-        { spaceId, title: 'Native mixed feed Realm', visibility: 'public', contextId: GLOBAL_CONTEXT },
-        key(),
-      );
-      expect(realm.status, JSON.stringify(realm.body)).toBe(201);
-      const realmId = (realm.body.realm as { realmId: string }).realmId;
-      const publication = await driver.request(
-        'editor',
-        'POST',
-        `/v1/realms/${realmId}/publications`,
-        { subjectId: book },
-        key(),
-      );
-      expect(publication.status, JSON.stringify(publication.body)).toBe(201);
-      const collection = await driver.fixtures.send(
-        curator,
-        'POST',
-        '/v1/collections',
-        {
-          title: 'Native followed collection',
-          visibility: 'public',
-        },
-        key(),
-      );
-      expect(collection.status, JSON.stringify(collection.body)).toBe(201);
-      const collectionId = (collection.body.collection as { id: string }).id;
-      const follow = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${collectionId}`, undefined, key());
-      expect(follow.status, JSON.stringify(follow.body)).toBe(200);
-      const env = workerTestEnv({
-        DATABASE_URL: runtime.databaseUrl,
-        KERNEL_ROUTE_KEY: runtime.routeKey,
-        KERNEL_SESSION_KEYS: runtime.sessionKeys,
-        AUTH_ISSUER: runtime.authIssuer,
-        AUTH_AUDIENCE: runtime.authAudience,
-        AUTH_JWKS_URL: runtime.authJwksUrl,
-        OPENSEARCH_URL: endpoint,
-        KERNEL_SEARCH_PREFIX: prefix,
-        KERNEL_PORT: '0',
-        ...(process.env.REZICS_MIXED_HOME_TIMING === '1' ? { REZICS_MIXED_HOME_TIMING: '1' } : {}),
+      const inventory = createFeedActivityStore({ pool: activityPool, clock: () => new Date(), tokens: config.tokens });
+      await eventually(async () => {
+        const page = await inventory.pageTargetActivity({ type: 'space', id: spaceId }, {}, Date.now() + 5_000);
+        return page.activities.some((activity) => activity.object.id === book) || undefined;
       });
-      if (process.env.REZICS_MIXED_HOME_TIMING === '1')
-        console.info(
-          'Mixed Home setup timing',
-          JSON.stringify({ phase: 'before worker start', elapsedMs: Date.now() - startedAt }),
-        );
-      worker = startOutcomeWorkerProcess(env);
-      await worker.ready;
-      observe('worker ready');
-      const config = readConfig(env);
-      // Following a Space with an already indexed adoption uses the native follow backfill.
-      const activityPool = new Pool({ connectionString: runtime.databaseUrl, max: 1 });
-      try {
-        const inventory = createFeedActivityStore({
-          pool: activityPool,
-          clock: () => new Date(),
-          tokens: config.tokens,
-        });
-        await eventually(async () => {
-          const page = await inventory.pageTargetActivity({ type: 'space', id: spaceId }, {}, Date.now() + 5_000);
-          return page.activities.some((activity) => activity.object.id === book) || undefined;
-        });
-      } finally {
-        await activityPool.end();
-      }
-      const followedSpace = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${spaceId}`, undefined, key());
-      expect(followedSpace.status, JSON.stringify(followedSpace.body)).toBe(200);
-      observe('Book activity available and Space followed');
-      // Start the existing canonical and owner index workflows before the read-only feed calls.
-      work = await createWorkClient(runtime.databaseUrl);
+    } finally {
+      await activityPool.end();
+    }
+    const followedSpace = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${spaceId}`, undefined, key());
+    expect(followedSpace.status, JSON.stringify(followedSpace.body)).toBe(200);
+    observe('Book activity available and Space followed');
+    // Start the existing canonical and owner index workflows before the read-only feed calls.
+    work = await createWorkClient(runtime.databaseUrl);
+    await work.enqueue(
+      {
+        workflowName: CANONICAL_SOURCE_WORKFLOW,
+        queueName: 'maintenance',
+        workflowID: `feed-native-source:${randomUUID()}`,
+      },
+      { accounts: [viewer.accountId], collectionId: everything },
+    );
+    for (const metadata of [false, true]) {
       await work.enqueue(
         {
-          workflowName: CANONICAL_SOURCE_WORKFLOW,
+          workflowName: OWNER_INDEX_WORKFLOW,
           queueName: 'maintenance',
-          workflowID: `feed-native-source:${randomUUID()}`,
+          workflowID: `feed-native-owner-index:${randomUUID()}`,
         },
-        { accounts: [viewer.accountId], collectionId: everything },
+        { accounts: [viewer.accountId], frontier: null, metadata },
       );
-      for (const metadata of [false, true]) {
-        await work.enqueue(
-          {
-            workflowName: OWNER_INDEX_WORKFLOW,
-            queueName: 'maintenance',
-            workflowID: `feed-native-owner-index:${randomUUID()}`,
-          },
-          { accounts: [viewer.accountId], frontier: null, metadata },
-        );
-      }
-      let serving: DiscoveryServingObservation | undefined;
-      server = await startServer({
-        ...config,
-        ...(process.env.REZICS_MIXED_HOME_TIMING === '1'
-          ? {
-              observeDiscoveryServing(value: DiscoveryServingObservation) {
-                serving = value;
-              },
-            }
-          : {}),
+    }
+    let serving: DiscoveryServingObservation | undefined;
+    server = await startServer({
+      ...config,
+      ...(process.env.REZICS_MIXED_HOME_TIMING === '1'
+        ? {
+            observeDiscoveryServing(value: DiscoveryServingObservation) {
+              serving = value;
+            },
+          }
+        : {}),
+    });
+    observe('feed server ready');
+    async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
+      const query = new URLSearchParams({ stream, limit: '20' });
+      if (cursor) query.set('cursor', cursor);
+      serving = undefined;
+      const response = await fetch(new URL(`/v1/feedItems?${query}`, server!.url), {
+        headers: { ...(account ? { authorization: `Bearer ${account.bearer}` } : {}), 'accept-language': 'en' },
       });
-      observe('feed server ready');
-      async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
-        const query = new URLSearchParams({ stream, limit: '20' });
-        if (cursor) query.set('cursor', cursor);
-        serving = undefined;
-        const response = await fetch(new URL(`/v1/feedItems?${query}`, server!.url), {
-          headers: { ...(account ? { authorization: `Bearer ${account.bearer}` } : {}), 'accept-language': 'en' },
-        });
-        const body = await response.json();
-        expect(response.status, JSON.stringify(body)).toBe(200);
-        if (account) expect(response.headers.get('cache-control')).toBe('private, no-store');
-        return body as FeedPage;
-      }
-      // Wait for the native publication boundary before exercising the live request deadline.
-      // Replay must finish on its own; polling feed requests during replay competes for its pool.
-      const publicationWaitStarted = Date.now();
-      const publicationPool = new Pool({
-        connectionString: runtime.databaseUrl,
-        max: 1,
-        connectionTimeoutMillis: 1_500,
-      });
-      try {
-        await eventually(
-          async () => {
-            const active = await withBoundedReadOnlyTransaction(publicationPool, Date.now() + 1_500, async (client) => {
-              const { rowCount } = await client.query(
-                "SELECT 1 FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'",
-                [prefix],
-              );
-              return rowCount === 1;
-            });
-            return active || undefined;
-          },
-          undefined,
-          mixedHomeSetupWaitMs,
-          1_000,
-        );
-      } finally {
-        await publicationPool.end();
-      }
-      observe('Discovery generation active');
-      const pollStarted = Date.now();
-      let requestStarted = pollStarted;
-      let responseReceived = pollStarted;
-      const anonymous = await eventually(
+      const body = await response.json();
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      if (account) expect(response.headers.get('cache-control')).toBe('private, no-store');
+      return body as FeedPage;
+    }
+    // Wait for native publication separately from the requests under the live deadline.
+    const publicationWaitStarted = Date.now();
+    const publicationPool = new Pool({ connectionString: runtime.databaseUrl, max: 1, connectionTimeoutMillis: 1_500 });
+    try {
+      await eventually(
         async () => {
-          requestStarted = Date.now();
-          const result = await page(null);
-          responseReceived = Date.now();
-          const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
-          const projection = subjectReactions(row);
-          const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
-          observe('anonymous Discovery', {
-            discovery: result.sources.discovery,
-            ...(serving ? { serving } : {}),
-            bookPresent: row !== undefined,
-            expectedReaction,
-          });
-          return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
+          const generations = await discoveryGenerations(publicationPool, prefix, { deadline: Date.now() + 1_500 });
+          return generations.find(({ state }) => state === 'active');
         },
-        () => {
-          if (process.env.REZICS_MIXED_HOME_TIMING === '1')
-            console.info(
-              'Mixed Home last anonymous response',
-              JSON.stringify({
-                serving,
-                requestStartedMs: requestStarted - pollStarted,
-                responseReceivedMs: responseReceived - pollStarted,
-              }),
-            );
-        },
-        Math.max(1_000, mixedHomeSetupWaitMs - (Date.now() - publicationWaitStarted)),
+        undefined,
+        mixedHomeSetupWaitMs,
+        1_000,
       );
-      if (process.env.REZICS_MIXED_HOME_TIMING === '1')
-        expect(serving).toMatchObject({ generation: expect.any(Number), stage: 'final', result: 'finished' });
-      expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
-      expect(anonymous.feedItems.every((item) => item.source === 'discovery' && !('continue' in item))).toBe(true);
-      const anonymousSubject = anonymous.feedItems.find((item) => item.key.id === book)!;
-      expect(subjectReactions(anonymousSubject)).toMatchObject({ action: 'sign_in', counts: { state: 'available' } });
-      expect(subjectReactions(anonymousSubject)).not.toHaveProperty('viewer');
-      const mixed = await eventually(async () => {
-        const result = await page(viewer);
-        const continuedBook = result.feedItems.some((item) => item.source === 'continue' && item.key.id === book);
-        const followedCollection = result.feedItems.some(
-          (item) => item.source === 'following' && item.key.id === collectionId,
-        );
-        const discovery = result.feedItems.some((item) => item.source === 'discovery');
-        observe('signed-in Home', {
-          ...result.sources,
-          continuedBook,
-          followedCollection,
-          hasDiscoveryItem: discovery,
-        });
-        return result.sources.continue === 'ready' &&
-          result.sources.following === 'ready' &&
-          continuedBook &&
-          followedCollection &&
-          discovery
-          ? result
-          : undefined;
-      });
-      expect(mixed.feedItems.filter((item) => item.key.id === book)).toHaveLength(1);
-      expect(mixed.feedItems.slice(0, 3).map((item) => item.source)).toEqual(['continue', 'following', 'discovery']);
-      expect(mixed.feedItems.find((item) => item.source === 'continue')!.continue).toMatchObject({
-        subjectId: book,
-        state: active,
-        activeProgressSession: null,
-      });
-      const continuedSubject = mixed.feedItems.find((item) => item.source === 'continue')!;
-      expect(subjectReactions(continuedSubject)).toMatchObject({
-        counts: { state: 'available', values: { love: 1 } },
-        viewer: { state: 'available', kind: 'love' },
-        action: 'allowed',
-      });
-      const following = await eventually(async () => {
-        const result = await page(viewer, 'following');
-        const row = result.feedItems.find((item) => item.source === 'following' && item.key.id === book);
-        const expectedAction = subjectReactions(row)?.action === 'allowed';
-        observe('Following', {
-          following: result.sources.following,
+    } finally {
+      await publicationPool.end();
+    }
+    observe('Discovery generation active');
+    const pollStarted = Date.now();
+    let requestStarted = pollStarted;
+    let responseReceived = pollStarted;
+    const anonymous = await eventually(
+      async () => {
+        requestStarted = Date.now();
+        const result = await page(null);
+        responseReceived = Date.now();
+        const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
+        const projection = subjectReactions(row);
+        const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
+        observe('anonymous Discovery', {
+          discovery: result.sources.discovery,
+          ...(serving ? { serving } : {}),
           bookPresent: row !== undefined,
-          expectedAction,
+          expectedReaction,
         });
-        return expectedAction ? result : undefined;
-      });
-      expect(subjectReactions(following.feedItems.find((item) => item.key.id === book))).toMatchObject({
-        counts: { state: 'available', values: { love: 1 } },
-        viewer: { state: 'available', kind: 'love' },
-        action: 'allowed',
-      });
-      observe('current disclosure checks');
-      const unfollow = await driver.fixtures.send(viewer, 'DELETE', `/v1/follows/${collectionId}`, undefined, key());
-      expect(unfollow.status).toBe(200);
-      // No cleanup/projection wait: the native current negative immediately overrides retained refs.
-      expect((await page(viewer, 'following')).feedItems.some((item) => item.key.id === collectionId)).toBe(false);
-      await driver.grant('editor', ['moderation:hide'], book);
-      const hidden = await driver.request(
-        'editor',
-        'POST',
-        `/v1/subjects/${book}:hide`,
-        { reason: 'Current feed disclosure' },
-        key(),
-      );
-      expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
-      expect((await page(null)).feedItems.some((item) => item.key.id === book)).toBe(false);
-      expect((await page(viewer)).feedItems.some((item) => item.key.id === book)).toBe(false);
-      if (mixed.next)
-        expect((await page(viewer, 'home', mixed.next)).feedItems.some((item) => item.key.id === book)).toBe(false);
-    } catch (error) {
-      if (process.env.REZICS_MIXED_HOME_TIMING === '1' && worker) {
-        reportMixedHomeFinalization(worker.recentOutput, prefix);
-        try {
-          const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
+        return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
+      },
+      () => {
+        if (process.env.REZICS_MIXED_HOME_TIMING === '1')
           console.info(
-            'Mixed Home discovery generation',
-            JSON.stringify({ elapsedMs: Date.now() - startedAt, generations }),
+            'Mixed Home last anonymous response',
+            JSON.stringify({
+              serving,
+              requestStartedMs: requestStarted - pollStarted,
+              responseReceivedMs: responseReceived - pollStarted,
+            }),
           );
-        } catch (observationError) {
-          console.info('Mixed Home discovery generation observation failed', String(observationError));
-        }
+      },
+      Math.max(1_000, mixedHomeSetupWaitMs - (Date.now() - publicationWaitStarted)),
+    );
+    if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+      expect(serving).toMatchObject({ generation: expect.any(Number), stage: 'final', result: 'finished' });
+    expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
+    expect(anonymous.feedItems.every((item) => item.source === 'discovery' && !('continue' in item))).toBe(true);
+    const anonymousSubject = anonymous.feedItems.find((item) => item.key.id === book)!;
+    expect(subjectReactions(anonymousSubject)).toMatchObject({ action: 'sign_in', counts: { state: 'available' } });
+    expect(subjectReactions(anonymousSubject)).not.toHaveProperty('viewer');
+    const mixed = await eventually(async () => {
+      const result = await page(viewer);
+      const continuedBook = result.feedItems.some((item) => item.source === 'continue' && item.key.id === book);
+      const followedCollection = result.feedItems.some(
+        (item) => item.source === 'following' && item.key.id === collectionId,
+      );
+      const discovery = result.feedItems.some((item) => item.source === 'discovery');
+      observe('signed-in Home', {
+        ...result.sources,
+        continuedBook,
+        followedCollection,
+        hasDiscoveryItem: discovery,
+      });
+      return result.sources.continue === 'ready' &&
+        result.sources.following === 'ready' &&
+        continuedBook &&
+        followedCollection &&
+        discovery
+        ? result
+        : undefined;
+    });
+    expect(mixed.feedItems.filter((item) => item.key.id === book)).toHaveLength(1);
+    expect(mixed.feedItems.slice(0, 3).map((item) => item.source)).toEqual(['continue', 'following', 'discovery']);
+    expect(mixed.feedItems.find((item) => item.source === 'continue')!.continue).toMatchObject({
+      subjectId: book,
+      state: active,
+      activeProgressSession: null,
+    });
+    const continuedSubject = mixed.feedItems.find((item) => item.source === 'continue')!;
+    expect(subjectReactions(continuedSubject)).toMatchObject({
+      counts: { state: 'available', values: { love: 1 } },
+      viewer: { state: 'available', kind: 'love' },
+      action: 'allowed',
+    });
+    const following = await eventually(async () => {
+      const result = await page(viewer, 'following');
+      const row = result.feedItems.find((item) => item.source === 'following' && item.key.id === book);
+      const expectedAction = subjectReactions(row)?.action === 'allowed';
+      observe('Following', {
+        following: result.sources.following,
+        bookPresent: row !== undefined,
+        expectedAction,
+      });
+      return expectedAction ? result : undefined;
+    });
+    expect(subjectReactions(following.feedItems.find((item) => item.key.id === book))).toMatchObject({
+      counts: { state: 'available', values: { love: 1 } },
+      viewer: { state: 'available', kind: 'love' },
+      action: 'allowed',
+    });
+    observe('current disclosure checks');
+    const unfollow = await driver.fixtures.send(viewer, 'DELETE', `/v1/follows/${collectionId}`, undefined, key());
+    expect(unfollow.status).toBe(200);
+    // No cleanup/projection wait: the native current negative immediately overrides retained refs.
+    expect((await page(viewer, 'following')).feedItems.some((item) => item.key.id === collectionId)).toBe(false);
+    await driver.grant('editor', ['moderation:hide'], book);
+    const hidden = await driver.request(
+      'editor',
+      'POST',
+      `/v1/subjects/${book}:hide`,
+      { reason: 'Current feed disclosure' },
+      key(),
+    );
+    expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
+    expect((await page(null)).feedItems.some((item) => item.key.id === book)).toBe(false);
+    expect((await page(viewer)).feedItems.some((item) => item.key.id === book)).toBe(false);
+    if (mixed.next)
+      expect((await page(viewer, 'home', mixed.next)).feedItems.some((item) => item.key.id === book)).toBe(false);
+  } catch (error) {
+    if (process.env.REZICS_MIXED_HOME_TIMING === '1' && worker) {
+      reportMixedHomeFinalization(worker.recentOutput, prefix);
+      try {
+        const elapsedMs = Date.now() - startedAt;
+        const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
+        console.info('Mixed Home discovery generation', JSON.stringify({ elapsedMs, generations }));
+      } catch (observationError) {
+        console.info('Mixed Home discovery generation observation failed', String(observationError));
       }
-      throw error;
+    }
+    throw error;
+  } finally {
+    try {
+      await server?.stop();
     } finally {
       try {
-        await server?.stop();
+        await worker?.close();
       } finally {
         try {
-          await worker?.close();
+          await work?.close();
         } finally {
           try {
-            await work?.close();
-          } finally {
-            try {
-              const owned = await search.request<{ indices: { name: string }[] }>(
-                'GET',
-                `/_resolve/index/${prefix}*`,
-                undefined,
-                { query: { expand_wildcards: 'all' } },
-              );
-              for (const { name } of owned.body.indices) {
-                if (!name.startsWith(prefix)) throw new Error('Feed cleanup escaped its owned prefix');
-                await search.request('DELETE', `/${name}`);
-              }
-            } finally {
-              await driver.close();
+            const owned = await search.request<{ indices: { name: string }[] }>(
+              'GET',
+              `/_resolve/index/${prefix}*`,
+              undefined,
+              { query: { expand_wildcards: 'all' } },
+            );
+            for (const { name } of owned.body.indices) {
+              if (!name.startsWith(prefix)) throw new Error('Feed cleanup escaped its owned prefix');
+              await search.request('DELETE', `/${name}`);
             }
+          } finally {
+            await driver.close();
           }
         }
       }
     }
-  },
-  240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs,
-);
+  }
+}, 240_000 + mixedHomeSetupWaitMs - normalFixtureWaitMs);
 
 test('Default feed route applies the selected native kind across the mixed stream and binds its examined source frontier to that selection', async () => {
   const endpoint = process.env.OPENSEARCH_URL;
