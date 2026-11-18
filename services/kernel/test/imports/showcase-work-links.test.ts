@@ -268,10 +268,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
       mediaDeadlineMs: 0,
     });
     expect(commands.slice(commandOffset).filter((command) => command.op === 'create')).toEqual([]);
-    const refreshedVnId = subjectId(
-      refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!,
-    );
-    expect(refreshedVnId).toBe(vnId);
+    expect(refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)).toBeUndefined();
     expect(refreshed.unresolved).toContainEqual(
       expect.objectContaining({
         holder: sourceWork,
@@ -281,6 +278,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
     );
     expect(refreshed.workLinks[0]?.candidateDigest).not.toBe(first.workLinks[0]?.candidateDigest);
     const afterFence = await read(vnId);
+    expect(afterFence.subject.id).toBe(vnId);
     const counterparts = afterFence.subject.statements['rezics:crossMediaCounterpart'] ?? [];
     expect(counterparts.map((item) => item.value.content)).not.toContain(animeId);
     const urls = (afterFence.subject.statements['schema:url'] ?? []).map((item) => item.value.content);
