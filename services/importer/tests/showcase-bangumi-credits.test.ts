@@ -527,8 +527,8 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     expect(journal.acknowledgedCommands()).toHaveLength(acknowledgementCount);
     resolution = reopened;
 
-    setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
-    for (const property of Object.keys(expectedValues) as (keyof typeof expectedValues)[]) {
+    setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'normal', 'skos:inScheme': 'deprecated' });
+    for (const property of ['schema:url', 'skos:inScheme'] as const) {
       const assertionCandidate = [...candidates.values()].find(
         (candidate) =>
           candidate.source.external_id === roleRequirement.source.external_id &&

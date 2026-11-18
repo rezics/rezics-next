@@ -3920,7 +3920,7 @@ async function runSeedCli(
       ...(journal ? { showcaseJournal: journal } : {}),
       ...(journal && publicClient
         ? {
-            readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+            readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId, undefined, 'after-create'),
             prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
               creditResolution = await creditPreparation.prepare({
                 plan,
@@ -4191,6 +4191,7 @@ async function runSeedCli(
           creditVocabularyPublication,
           journal,
           concepts.requirements,
+          priorShowcase,
         );
     }
     finalization.enter('character-profile-vocabulary');
@@ -4369,7 +4370,7 @@ async function runSeedCli(
         acknowledgements: journal.acknowledgedCommands(),
         read: async (id) => {
           try {
-            return await publicClient.readSubject(id);
+            return await publicClient.readSubject(id, undefined, 'after-create');
           } catch {
             return null;
           }

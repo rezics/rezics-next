@@ -321,9 +321,14 @@ function statementCites(command: BatchCommand, uri: string): boolean {
   );
 }
 
-function hasCurrentValues(read: ReviewedSubjectRead | null, property: string): boolean {
+function hasConflictingCurrentValue(read: ReviewedSubjectRead | null, property: string, expected: string): boolean {
   const subject = read?.subject as { statements?: Record<string, readonly PublicVocabularyStatement[]> } | undefined;
-  return subject?.statements?.[property]?.some(currentRank) ?? false;
+  return (
+    subject?.statements?.[property]?.some(
+      (statement) =>
+        currentRank(statement) && (statement.value?.type !== 'value' || statement.value.content !== expected),
+    ) ?? false
+  );
 }
 
 function vocabularyRecord(manifest: ShowcaseManifest, sourceKey: string): ShowcaseVocabularyRecord | undefined {
@@ -542,7 +547,10 @@ export async function prepareBangumiCreatorCreditBindings(
   let schemeMustNotRestore = previousSchemeWasPublished && !scheme;
   if (previousScheme && !scheme) {
     const oldRead = await read(previousScheme.subjectId);
-    if (hasCurrentValues(oldRead, 'schema:sameAs') && !valueAt(oldRead, 'schema:sameAs', bangumiStaffSchemeUri))
+    if (
+      !valueAt(oldRead, 'schema:sameAs', bangumiStaffSchemeUri) &&
+      hasConflictingCurrentValue(oldRead, 'schema:sameAs', bangumiStaffSchemeUri)
+    )
       schemeMustNotRestore = true;
   }
   let schemeManifest = input.prior?.manifest;
@@ -664,14 +672,19 @@ export async function prepareBangumiCreatorCreditBindings(
         schemeId: scheme.id,
       });
       existingRoleRequirements.push(requirement);
-    } else if (
-      wasPublished ||
-      (previousRecord !== undefined &&
-        (hasCurrentValues(await read(previousRecord.subjectId), 'schema:sameAs') ||
-          hasCurrentValues(await read(previousRecord.subjectId), 'skos:inScheme')))
-    ) {
-      // A retracted or mismatched current role binding is never repaired by replay.
     } else {
+      if (wasPublished) continue;
+      if (previousRecord) {
+        const current = await read(previousRecord.subjectId);
+        if (
+          (current && (current.subject.id !== previousRecord.subjectId || current.subject.type !== 'skos:Concept')) ||
+          hasConflictingCurrentValue(current, 'schema:url', role.sourceUri) ||
+          hasConflictingCurrentValue(current, 'schema:sameAs', role.uri) ||
+          hasConflictingCurrentValue(current, 'skos:inScheme', scheme.id)
+        )
+          continue;
+      }
+      // A partially visible role can finish through its original commands and review.
       missing.push(role);
     }
   }

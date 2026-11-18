@@ -1960,7 +1960,7 @@ async function publishShowcasePhases(
     if (cached) return cached;
     const pending = (async () => {
       try {
-        return await input.publicClient.readSubject(id);
+        return await input.publicClient.readSubject(id, undefined, vocabularyById.has(id) ? 'after-create' : undefined);
       } catch {
         return null;
       }

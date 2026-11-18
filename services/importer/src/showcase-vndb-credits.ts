@@ -368,9 +368,23 @@ export async function prepareShowcaseVndbCreditVocabulary(input: {
   return { requirements, issues };
 }
 
-/** Return only UUIDs that the common publisher independently reread as current and public. */
+/** Select exact acknowledged UUIDs for a fresh dependency read, including earlier public evidence. */
 export function publishedShowcaseVndbCreditReferences(
-  publication: ShowcasePublicationResult,
+  publication: Pick<ShowcasePublicationResult, 'manifest' | 'published'>,
+  journal: ShowcaseJournal,
+  requirements: readonly ShowcaseVocabularyRequirement[],
+  prior?: Pick<ShowcasePublicationResult, 'manifest' | 'published'>,
+): VndbCreditVocabularyReferences | undefined {
+  const current = readPublishedCreditReferences(publication, journal, requirements);
+  if (!prior) return current;
+  const retained = readPublishedCreditReferences(prior, journal, requirements);
+  if (!current || !retained || current.schemeId !== retained.schemeId) return current ?? retained;
+  const byCode = new Map([...retained.concepts, ...current.concepts].map((concept) => [concept.code, concept]));
+  return { schemeId: current.schemeId, concepts: [...byCode.values()] };
+}
+
+function readPublishedCreditReferences(
+  publication: Pick<ShowcasePublicationResult, 'manifest' | 'published'>,
   journal: ShowcaseJournal,
   requirements: readonly ShowcaseVocabularyRequirement[],
 ): VndbCreditVocabularyReferences | undefined {

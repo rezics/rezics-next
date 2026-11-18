@@ -360,7 +360,12 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     expect(publishedShowcaseVndbCreditReferences(partialPublication, journal, concepts.requirements)?.concepts).toEqual(
       [expect.objectContaining({ code: 'scenario' })],
     );
-    const references = publishedShowcaseVndbCreditReferences(publication, journal, concepts.requirements)!;
+    const references = publishedShowcaseVndbCreditReferences(
+      partialPublication,
+      journal,
+      concepts.requirements,
+      publication,
+    )!;
     expect(references.concepts).toEqual([
       { code: 'chardesign', id: design.subjectId },
       expect.objectContaining({ code: 'scenario' }),
