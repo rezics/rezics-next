@@ -1,5 +1,5 @@
 import { showcaseBookFamilies } from './showcase-book-series.ts';
-import { graphEdgeCommandKey } from './cross-media-bindings.ts';
+import { graphEdgeCommandKey, isVndbCreditEdge } from './cross-media-bindings.ts';
 import { SeedFinalization } from './seed-cli.ts';
 import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
@@ -8,6 +8,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { ImportTransportError, importCommandPages, type ReviewedSubjectRead } from './import-client.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
+  proposalIdentity,
   showcaseDigest,
   showcaseLimits,
   showcaseSourceMatches,
@@ -851,12 +852,6 @@ export async function preferCurrentCandidateAcknowledgements(
   return selected;
 }
 
-/** Receipt keys are transport-scoped by the importer; proposal identity retains every other operand. */
-function proposalIdentity(command: BatchCommand): string {
-  const { key: _key, ...proposal } = command;
-  return showcaseDigest(proposal);
-}
-
 export async function resolveLegacyCandidates(input: {
   plan: CrossMediaPlan;
   result: Pick<CrossMediaSeedResult, 'readings' | 'mediaOutcomes'>;
@@ -1132,6 +1127,7 @@ async function publishShowcasePhases(
     // Exact current graph operations cannot fall out of the historical journal's bounded page.
     const graphKeys = new Set([
       ...input.plan.edges.flatMap((edge) => {
+        if (isVndbCreditEdge(edge)) return [];
         const key = graphEdgeCommandKey(edge);
         return [key, `${edge.alias}:${edge.holder}:${key}`];
       }),
@@ -1841,8 +1837,7 @@ async function publishShowcasePhases(
       }
       const prior = input.journal.action(key);
       const unknown =
-        prior?.state === 'prepared' ||
-        (prior?.state === 'refused' && !prior.error_code?.startsWith('review-http-4'));
+        prior?.state === 'prepared' || (prior?.state === 'refused' && !prior.error_code?.startsWith('review-http-4'));
       if (candidate.decision === 'rejected') return 'candidate-currently-rejected';
       if (candidate.decision === 'accepted' && !unknown) return null;
       const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
@@ -2252,7 +2247,12 @@ async function publishShowcasePhases(
           const refreshState = await parentRefreshEvidence(refresh);
           if (refreshState === 'unavailable') {
             for (const { binding, assertion } of group.edges) {
-              setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent refresh read is unavailable');
+              setParentOutcome(
+                binding,
+                'withheld',
+                assertion.candidateId,
+                'current parent refresh read is unavailable',
+              );
               unavailableParentCandidateIds.add(assertion.candidateId);
               unavailableParentPaths.add(binding.path);
             }
@@ -2355,7 +2355,12 @@ async function publishShowcasePhases(
         }
         if (parentRetirementUnavailable) {
           for (const { binding, assertion } of group.edges)
-            setParentOutcome(binding, 'withheld', assertion.candidateId, 'prior source parent tuple cannot be reconciled');
+            setParentOutcome(
+              binding,
+              'withheld',
+              assertion.candidateId,
+              'prior source parent tuple cannot be reconciled',
+            );
           withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
           return null;
         }

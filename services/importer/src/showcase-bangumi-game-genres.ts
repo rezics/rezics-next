@@ -1,5 +1,4 @@
 import { reviewedSchemeIndex, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
-import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   bangumiGameSourceGenreReference,
@@ -14,9 +13,16 @@ import {
   type ImportIdentifierResolution,
 } from './importer.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
-import { showcaseDigest, showcaseLimits, type ShowcaseAcknowledgement } from './showcase-contract.ts';
+import {
+  proposalIdentity,
+  showcaseDigest,
+  showcaseLimits,
+  showcaseSourceMatches,
+  type ShowcaseAcknowledgement,
+} from './showcase-contract.ts';
 import { readCurrentCandidatePages, type CandidatePage } from './showcase-current-reads.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
+import { sameStatementProvenance } from './statement-provenance.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -409,7 +415,7 @@ function readOwnedGenreProposals(
   subjectId: string,
   proposals: readonly GenreProposal[],
 ): Map<string, OwnedGenreProposal[]> | null {
-  const expected = new Map(proposals.map((proposal) => [proposal.key, proposal]));
+  const expected = new Set(proposals.map(proposalIdentity));
   const exact = new Map<string, OwnedGenreProposal[]>();
   const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
   let after: string | undefined;
@@ -425,17 +431,12 @@ function readOwnedGenreProposals(
       if (candidate.subject !== subjectId) continue;
       try {
         const command = (JSON.parse(candidate.bytes) as { commands?: BatchCommand[] }).commands?.[0];
-        if (command?.op !== 'propose') continue;
-        const proposal = expected.get(command.key);
-        if (
-          !proposal ||
-          !isDeepStrictEqual(command.source, proposal.source) ||
-          !isDeepStrictEqual(command.statement, proposal.statement)
-        )
-          continue;
-        const matches = exact.get(proposal.key) ?? [];
+        if (command?.op !== 'propose' || command.key !== candidate.key || command.subject !== subjectId) continue;
+        const digest = proposalIdentity(command);
+        if (!expected.has(digest)) continue;
+        const matches = exact.get(digest) ?? [];
         matches.push({ candidateId: candidate.candidate, command });
-        exact.set(proposal.key, matches);
+        exact.set(digest, matches);
       } catch {
         continue;
       }
@@ -450,7 +451,7 @@ export async function prepareShowcaseBangumiGameGenres(input: {
   sourceAlias: string;
   records: readonly SourceRecord[];
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>;
-  port: ReviewedCataloguePort;
+  port: Pick<ReviewedCataloguePort, 'reviewedCandidates'>;
   adapter: ReturnType<typeof createShowcaseBangumiGameGenreLookup>;
   lookupDiagnostics: readonly BangumiGameGenreDiagnostic[];
 }): Promise<BangumiGameGenrePublication> {
@@ -509,12 +510,12 @@ export async function prepareShowcaseBangumiGameGenres(input: {
     }
     const current = new Map(page.candidates.map((candidate) => [candidate.id, candidate]));
     for (const proposal of proposals) {
-      const live = (local.get(proposal.key) ?? []).filter((entry) => {
+      const live = (local.get(proposalIdentity(proposal)) ?? []).filter((entry) => {
         const candidate = current.get(entry.candidateId);
         return (
           candidate !== undefined &&
-          isDeepStrictEqual(candidate.source, proposal.source) &&
-          isDeepStrictEqual(candidate.statement, proposal.statement) &&
+          showcaseSourceMatches(candidate.source, proposal.source) &&
+          sameStatementProvenance(candidate.statement, proposal.statement) &&
           'retracted' in candidate &&
           candidate.retracted === null &&
           'retraction' in candidate &&

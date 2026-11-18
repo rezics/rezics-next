@@ -427,6 +427,11 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       vocabularyRequirements: concepts.requirements,
     });
     const work = creditManifest.records.find((record) => record.sourceKey === 'v1')!;
+    expect(creditManifest.omissions).not.toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v1',
+      code: 'candidate-ack-missing',
+    });
     expect(work.assertions.map((assertion) => assertion.property)).toEqual(
       expect.arrayContaining(['schema:author', 'wdt:P725']),
     );

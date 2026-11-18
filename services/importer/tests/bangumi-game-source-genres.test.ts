@@ -1,5 +1,6 @@
 import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
 import { expect, test } from 'bun:test';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { ReviewedCandidatePage, ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   bangumiGameSourceGenreReference,
@@ -10,10 +11,12 @@ import { converter_revision } from '@rezics/conversion/bangumi';
 import {
   createShowcaseBangumiGameGenreLookup,
   parseBangumiGameGenreBindings,
+  prepareShowcaseBangumiGameGenres,
   reviewedBangumiGameGenreBindings,
 } from '../src/showcase-bangumi-game-genres.ts';
 import { isUnavailableIdentifierResolution, type ImportIdentifierResolution } from '../src/importer.ts';
-import { createSourceRegistration } from '../src/source-registry.ts';
+import { createSelectedFamilySourceRegistration, createSourceRegistration } from '../src/source-registry.ts';
+import { reviewedStatementFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const gameId = '00000000-0000-4000-8000-000000000104';
@@ -202,9 +205,10 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   );
   const reads = new Map<string, number>();
   const associations = new Map<string, number>();
+  let reviewedGenreCandidates: ReviewedCandidatePage['candidates'] = [];
   let state: 'retired' | 'current' | 'unavailable' = 'current';
-  const adapter = createShowcaseBangumiGameGenreLookup('bangumi', profile, {
-    async readReviewedSubject(id) {
+  const port = {
+    async readReviewedSubject(id: string) {
       reads.set(id, (reads.get(id) ?? 0) + 1);
       if (state === 'unavailable' && id === ids[0]) throw new TypeError('current Concept read unavailable');
       if (id === schemeId)
@@ -218,12 +222,14 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
         'skos:inScheme': [statement(schemeId, membershipRank)],
       });
     },
-    async reviewedCandidates(id, query) {
+    async reviewedCandidates(id: string, query: { property?: string; target?: string }) {
+      if (id === gameId) return { candidates: reviewedGenreCandidates, next: null, adoption: null };
       const key = `${id}\0${query.property}\0${query.target}`;
       associations.set(key, (associations.get(key) ?? 0) + 1);
       return emptyReviewedCandidates();
     },
-  });
+  };
+  const adapter = createShowcaseBangumiGameGenreLookup('bangumi', profile, port);
   const lookup = (signal: AbortSignal, externalId = String(runRecord.id)) =>
     adapter.lookup.resolve({
       owner: { source: 'bangumi', external_id: externalId },
@@ -274,6 +280,52 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
   expect(adapter.bindingFor(literal)?.id).toBe(ids[0]);
   expect(adapter.diagnostics()).toEqual([]);
   expectReads(5);
+
+  const key = String(runRecord.id);
+  const proposals = createSelectedFamilySourceRegistration('bangumi', 'bangumi')
+    .convert(
+      { external_id: key, record_revision: 'unversioned', record: runRecord },
+      { source: 'bangumi', subjectId: gameId, resolvedReferences: refs() },
+    )
+    .proposals.filter(
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.statement.property.id === 'schema:genre',
+    );
+  expect(proposals).toHaveLength(3);
+  const sealed = proposals.map((proposal, index) => ({ ...proposal, key: `bangumi:${key}:run-${index}` }));
+  reviewedGenreCandidates = sealed.map((command, index) => ({
+    id: ids[index]!,
+    source: index === 1 ? { ...command.source, record_revision: 'older' } : command.source,
+    statement: reviewedStatementFixture(ids[index]!, 'normal', command.statement),
+    release: 'released',
+    revision: 1,
+    head: null,
+    rank: null,
+    retracted: null,
+    retraction: null,
+    decision: index === 2 ? 'rejected' : null,
+  }));
+  const publication = await prepareShowcaseBangumiGameGenres({
+    sourceAlias: 'bangumi',
+    records: [{ key, revision: null, payload: runRecord }],
+    bindings: {
+      claim: () => ({ state: 'bound', subject: gameId }),
+      candidates: () =>
+        sealed.map((command, index) => ({
+          key: command.key,
+          bytes: JSON.stringify({ commands: [command] }),
+          signature: 'fixture',
+          candidate: ids[index]!,
+          subject: gameId,
+          field_group: 'facts',
+        })),
+    },
+    port,
+    adapter,
+    lookupDiagnostics: [],
+  });
+  expect(publication.acknowledgements.map(({ command }) => command)).toEqual([sealed[0]!]);
+  expect(publication.diagnostics.map(({ code }) => code)).toEqual(['candidate-not-current', 'candidate-not-current']);
 });
 
 test('the development catalogue hands its exact unsplit Game genre to current binding inspection', () => {

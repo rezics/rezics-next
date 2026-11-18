@@ -462,6 +462,12 @@ export function showcaseDigest(value: unknown): string {
   return createHash('sha256').update(sourceDigest(value)).digest('hex');
 }
 
+/** The importer's delivery key is scoped to a run; every other command operand identifies the proposal. */
+export function proposalIdentity(command: BatchCommand): string {
+  const { key: _key, ...proposal } = command;
+  return showcaseDigest(proposal);
+}
+
 export function showcaseSourceMatches(
   actual: BatchCommand['source'] | null,
   expected: BatchCommand['source'],

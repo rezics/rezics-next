@@ -38,6 +38,7 @@ import {
   bangumiAppearanceSource,
   graphEdgeCommandKey,
   graphEdgeSource,
+  isVndbCreditEdge,
 } from './cross-media-bindings.ts';
 import { validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
@@ -185,6 +186,7 @@ function selectedEnvelopes(
     }
   }
   for (const edge of plan.edges) {
+    if (isVndbCreditEdge(edge)) continue;
     if (!edge.relation && !edge.producerParent) allowed.add(envelopeKey(graphEdgeSource(edge)));
     if (edge.relation) {
       const relation = edge.relation;
@@ -503,7 +505,7 @@ export function buildShowcaseManifest(input: {
   const eligibleGraphCommandKeys = new Set<string>();
   const graphTargetsByCommandKey = new Map<string, NonNullable<ShowcaseAssertion['graphTarget']>>();
   for (const edge of plan.edges) {
-    if (edge.relation || edge.producerParent) continue;
+    if (edge.relation || edge.producerParent || isVndbCreditEdge(edge)) continue;
     const provider = edge.source;
     const source = graphEdgeSource(edge);
     const edgeEnvelope = envelopeKey(source);

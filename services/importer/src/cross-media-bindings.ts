@@ -68,6 +68,13 @@ export type GraphEdgeDraft = {
   };
 };
 
+/** These drafts feed the VNDB credit converter, which writes its own proposals. */
+export function isVndbCreditEdge(
+  draft: GraphEdgeDraft,
+): draft is GraphEdgeDraft & { source: 'vndb'; table: 'vn_staff' | 'vn_seiyuu' } {
+  return draft.source === 'vndb' && (draft.table === 'vn_staff' || draft.table === 'vn_seiyuu');
+}
+
 /** Exact source envelope used by an ordinary selected graph proposal. */
 export function graphEdgeSource(draft: GraphEdgeDraft): Source {
   const digest = draft.vndbRelation ? sourceDigest(draft.vndbRelation.evidence) : sourceDigest(draft.record);

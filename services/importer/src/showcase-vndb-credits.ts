@@ -14,6 +14,7 @@ import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
 import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import type { ImporterOptions } from './importer.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
+import { isVndbCreditEdge } from './cross-media-bindings.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
   showcaseDigest,
@@ -449,7 +450,7 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
 
   const candidates: VndbStaffCredit[] = [];
   for (const edge of plan.edges) {
-    if (edge.source !== 'vndb' || (edge.table !== 'vn_staff' && edge.table !== 'vn_seiyuu')) continue;
+    if (!isVndbCreditEdge(edge)) continue;
     const row = edge.record;
     const vn = sourceText(row, 'id') ?? edge.holder;
     const aliasId = sourceText(row, 'aid');
@@ -612,9 +613,7 @@ export async function prepareShowcaseVndbCredits(
     candidateDigests,
     vocabularyAdmission,
     deliveryEdges(edges) {
-      return edges.filter(
-        (edge) => edge.source !== 'vndb' || (edge.table !== 'vn_staff' && edge.table !== 'vn_seiyuu'),
-      );
+      return edges.filter((edge) => !isVndbCreditEdge(edge));
     },
   };
 }
