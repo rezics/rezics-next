@@ -3,6 +3,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
+import { ProblemError } from '../../http/problem-error.ts';
 import { statementBytes } from '../../database/statement-bytes.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
@@ -726,10 +727,10 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
     return dimensions(
       declareBound({
         candidateKeys: 0,
-        nativeRows: 12,
+        nativeRows: 16,
         identityMetadataRows: 0,
-        emptySeeks: 1,
-        nativePoints: 1,
+        emptySeeks: 2,
+        nativePoints: 2,
         witnessKeys: 0,
         statements: 1,
         bytes: statementBytes(commitCapture.sql) + jsonBytes(values),
@@ -784,16 +785,20 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
       },
       async commitScopeCapture(client, input) {
         const address = identityScopeAddress(semanticScopeKey(input.observation.key));
-        await commitCapture.run(client as PoolClient, {
-          route: input.route,
-          collection_id: input.collectionId,
-          source_fence: input.sourceFence,
-          capture_id: input.observation.captureId,
-          revision: input.observation.committedRevision.toString(),
-          partition_no: address.partition,
-          source_key: address.source,
-          scope_id: address.scope,
-        });
+        const result = await client.query(
+          commitCapture.sql,
+          operandsOf(commitCapture, {
+            route: input.route,
+            collection_id: input.collectionId,
+            source_fence: input.sourceFence,
+            capture_id: input.observation.captureId,
+            revision: input.observation.committedRevision.toString(),
+            partition_no: address.partition,
+            source_key: address.source,
+            scope_id: address.scope,
+          }),
+        );
+        if (result.rowCount !== 1) throw new ProblemError('semantic_not_ready');
       },
     },
     follow: {

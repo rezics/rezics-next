@@ -1157,7 +1157,18 @@ export function createSearchScopeSource({
         ...(indexed ?? { nativeOwner: { source: sort.source, observation: nativeBasis } }),
         ...(publicObservation ? { publicScope: observationDigest(publicObservation) } : {}),
       });
-      if (!options?.readOnly && !workDefinition) {
+      // The id-order Library definition captures the complete original population independently of
+      // the predicate. Only logical Everything publishes this exact capture with its canonical head.
+      const logicalCapture =
+        options?.readOnly === true &&
+        !workDefinition &&
+        !outputDefinition &&
+        sort.kind === 'id' &&
+        definition.kind === 'library' &&
+        isDeepStrictEqual(collection?.observation.sourceIdentity, definition.identity)
+          ? collection?.source.queryCapture
+          : undefined;
+      if (!logicalCapture && !options?.readOnly && !workDefinition) {
         work.consume({
           ...zeroScopeWork(),
           statements: 1,
@@ -1174,7 +1185,7 @@ export function createSearchScopeSource({
           search: client,
         }).prepare(identity, reader.deadline, work);
       }
-      if (!workDefinition)
+      if (!workDefinition && !logicalCapture)
         work.consume({
           ...zeroScopeWork(),
           statements: 1,
@@ -1183,10 +1194,22 @@ export function createSearchScopeSource({
         });
       const observation =
         workDefinition?.identityObservation ??
-        (await readPreparedScopeObservation(pool, prefix, identity, reader.deadline));
+        (logicalCapture && definition.kind === 'library'
+          ? {
+              key: {
+                source: { kind: 'library' as const, identity: definition.identity },
+                scopeId: 'collection-source',
+              },
+              captureId: logicalCapture.id,
+              committedRevision: BigInt(logicalCapture.revision),
+            }
+          : await readPreparedScopeObservation(pool, prefix, identity, reader.deadline));
       if (
         !observation ||
-        (!workDefinition && observation.key.scopeId !== identity) ||
+        (logicalCapture &&
+          digest([observation.captureId, observation.committedRevision.toString()]) !==
+            collection?.observation.basis.identity.digest) ||
+        (!workDefinition && observation.key.scopeId !== (logicalCapture ? 'collection-source' : identity)) ||
         !isDeepStrictEqual(
           observation.key.source,
           definition.kind === 'library'

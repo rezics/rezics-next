@@ -17,12 +17,26 @@ WITH input AS (SELECT
  $15::text AS scope,
  $16::text AS receiving_epoch,
  $17::text AS effect_key
+), stored AS MATERIALIZED (
+ SELECT l.curator_account_id AS account_id,l.collection_id::text || ':' || extract(epoch FROM l.created_at)::text AS incarnation,
+        l.source_generation AS generation
+ FROM input i JOIN library.collection l ON l.route=i.route AND l.collection_id=i.collection_id
+ WHERE l.state='active' AND ((i.scope='curated' AND l.membership_kind='curated') OR
+      (i.scope='private_builtin' AND l.membership_kind='dynamic' AND
+       (l.visibility='private' OR (l.builtin_kind IS NULL AND l.rule_filter IS NOT NULL
+        AND l.rule_sort='id' AND l.rule_release_digest IS NOT NULL)))) /* stored-lock */
+), logical AS MATERIALIZED (
+ SELECT l.account_id,l.incarnation,l.generation
+ FROM input i JOIN library.logical_everything_source l ON l.route=i.route AND l.collection_id=i.collection_id
+ WHERE i.scope='private_builtin' /* logical-lock */
+), source AS (
+ SELECT * FROM stored UNION ALL SELECT * FROM logical
 )
 SELECT s.registration::text,s.capture_id::text,s.revision::text,s.state
 FROM input i JOIN semantic.identity_scope_summary s
  ON s.partition_no=i.partition_no AND s.source_key=i.source_key AND s.scope_id=i.scope_id
 JOIN core.partition p ON p.partition_no=s.partition_no
-JOIN library.collection l ON l.route=i.route AND l.collection_id=i.collection_id
+JOIN source l ON l.account_id=i.account_id AND l.incarnation=i.incarnation AND l.generation::text=i.generation
 JOIN access.account a ON a.route=i.account_route AND a.account_id=i.account_id
 JOIN library.native_source_capture c ON c.route=i.route AND c.capture_id=s.capture_id
 JOIN library.native_source_receipt r ON r.route=c.route AND r.capture_id=c.capture_id
@@ -40,13 +54,7 @@ WHERE s.partition_no=i.partition_no AND s.source_key=i.source_key AND s.scope_id
  AND s.capture->'capture'->'identity'=s.source->'identity'
  AND s.capture->'frontier'->>'captureId'=s.capture_id::text
  AND s.capture->'frontier'->>'driver'='done'
- AND l.curator_account_id=i.account_id AND l.state='active'
- AND l.collection_id::text || ':' || extract(epoch FROM l.created_at)::text=i.incarnation
- AND l.source_generation::text=i.generation AND a.state='active' AND NOT a.authn_fenced
- AND ((i.scope='curated' AND l.membership_kind='curated') OR
-      (i.scope='private_builtin' AND l.membership_kind='dynamic' AND
-       (l.visibility='private' OR (l.builtin_kind IS NULL AND l.rule_filter IS NOT NULL
-        AND l.rule_sort='id' AND l.rule_release_digest IS NOT NULL))))
+ AND a.state='active' AND NOT a.authn_fenced
  AND c.collection_id=i.collection_id AND c.account_id=i.account_id AND c.incarnation=i.incarnation
  AND c.generation::text=i.generation AND c.scope=i.scope AND c.owner_epoch=i.owner_epoch
  AND c.receiving_epoch::text=i.receiving_epoch AND c.effect_key=i.effect_key

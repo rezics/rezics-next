@@ -18,12 +18,9 @@ FROM input i CROSS JOIN LATERAL (
         AND (c.subject_id,c.subject_id) > (i.after_subject,i.after_fact)
       ORDER BY c.subject_id,c.subject_id LIMIT i.batch_limit)
      UNION ALL
-     (SELECT p.subject_id, p.fact_id FROM library.entry_personal_fact p
-      WHERE i.driver = 'entry' AND p.route = i.route AND p.account_id = i.account_id
-        AND (p.note IS NOT NULL OR p.priority IS NOT NULL OR EXISTS(
-          SELECT 1 FROM library.entry_source_observation o WHERE o.route=p.route AND o.account_id=p.account_id
-            AND o.subject_id=p.subject_id))
-        AND (p.subject_id,p.fact_id) > (i.after_subject,i.after_fact)
+     (SELECT p.subject_id, p.fact_id FROM
+       library.personal_source_page(i.route,i.account_id,i.after_subject,i.batch_limit+1) p
+      WHERE i.driver = 'entry' AND (p.subject_id,p.fact_id) > (i.after_subject,i.after_fact)
       ORDER BY p.subject_id,p.fact_id LIMIT i.batch_limit)
    ) facts
    ORDER BY facts.subject_id,facts.fact_id LIMIT i.batch_limit)

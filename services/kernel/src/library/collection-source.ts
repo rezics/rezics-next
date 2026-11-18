@@ -348,7 +348,8 @@ function createCollectionSourceRuntime(
       const currentBinding = await logicalBinding(input, l);
       if (!isDeepStrictEqual(currentBinding, saved.logicalBinding)) throw new ProblemError('stale_cursor');
     }
-    await authorize(input, saved.metadata, l);
+    // The logical binding already performed this owner admission at the caller's native read time.
+    if (!saved.logicalBinding || saved.metadata.createdAt !== null) await authorize(input, saved.metadata, l);
     const state = await ready(input, saved.metadata, l);
     if (state.basis.digest !== saved.basis.digest || state.generation !== saved.generation)
       throw new ProblemError('stale_cursor');
@@ -574,7 +575,7 @@ function createCollectionSourceRuntime(
             });
           throw new ProblemError('not_found');
         }
-        if (!input.work) await authorize(input, metadata, l);
+        if (!input.work && (!logical || metadata.createdAt !== null)) await authorize(input, metadata, l);
         if (input.logical && (!logical || !('actor' in input) || !isCurrentLogicalBuiltin(metadata, input.actor)))
           throw new ProblemError('dependency_unavailable', {
             detail: 'The current native Collection Source does not bind this owner logical identity.',
@@ -593,6 +594,7 @@ function createCollectionSourceRuntime(
         const state = current ?? (await ready(input, metadata, l));
         const source: PreparedCollectionSource = {
           [preparedSource]: true,
+          ...('queryCapture' in state && state.queryCapture ? { queryCapture: state.queryCapture } : {}),
           observation: current?.observation ?? observation(metadata, state.basis),
         };
         prepared.set(source, {

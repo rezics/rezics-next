@@ -102,7 +102,7 @@ type Header = Ref & {
   visibility: 'private' | 'unlisted' | 'public';
   membershipKind: 'curated' | 'dynamic';
   revision: number;
-  createdAt: string;
+  createdAt: string | null;
   sourceGeneration: string;
   builtinKind: 'everything' | 'state' | 'liked' | null;
   releaseDigest: string | null;
@@ -164,6 +164,7 @@ type ProbeEvidence =
     };
 export type NativeCollectionProbe = ProbeEvidence & { work: WorkReceipt };
 import headerQuery from './collection-source-native-header.sql';
+import logicalEverythingQuery from './collection-source-logical-everything.sql';
 function headerSQL() {
   return memoizedValue(headerSQL, () => headerQuery.sql);
 }
@@ -276,6 +277,7 @@ function costs() {
        */
       // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
       // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
+      register(logicalEverythingQuery.sql, fixed(32, 5, 256));
       for (const sql of [headerSQL(), fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
       register(logicalBindingSQL(), fixed(68, 9, 4096));
       // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
@@ -330,8 +332,8 @@ function costs() {
         register(query.sql, (values) => {
           const limit = Number(values[query.params.indexOf('limit')]);
           return {
-            nativeRows: query === factsQuery ? 16 * limit + 16 : 8 * limit + 8,
-            nativePoints: 1,
+            nativeRows: query === factsQuery ? 32 * limit + 48 : 8 * limit + 8,
+            nativePoints: query === factsQuery ? 2 * limit + 8 : 1,
             candidateKeys: limit,
             bytes: 256 * limit,
           };
@@ -530,15 +532,43 @@ async function readOnly<T>(
 function validate(ref: Ref) {
   if (routeOf(ref.collectionId) !== ref.route) throw new TypeError('Invalid native Collection reference');
 }
-async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionMetadata | null> {
+async function observe(client: QueryClient, ref: Ref, logical = true): Promise<NativeCollectionMetadata | null> {
   validate(ref);
-  const row = (
+  let row = (
     await client.query<Header>(headerSQL(), bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
   ).rows[0];
   if (!row) {
     if ((await client.query(referenceSQL, [ref.route, ref.collectionId])).rows.length)
       throw new ProblemError('dependency_unavailable');
-    return null;
+    if (!logical) return null;
+    const point = (
+      await client.query<Pick<Header, 'route' | 'collectionId' | 'curatorAccountId' | 'sourceGeneration'>>(
+        logicalEverythingQuery.sql,
+        bind(logicalEverythingQuery, { route: ref.route, collection_id: ref.collectionId }),
+      )
+    ).rows[0];
+    if (!point) return null;
+    row = {
+      ...point,
+      createdAt: null,
+      state: 'active',
+      membershipKind: 'dynamic',
+      visibility: 'private',
+      revision: 0,
+      builtinKind: 'everything',
+      releaseDigest: null,
+      profileId: null,
+      stateSetId: null,
+      stateId: null,
+    };
+  }
+  if (
+    row.createdAt === null &&
+    (!row.curatorAccountId ||
+      row.builtinKind !== 'everything' ||
+      builtinCollectionId(row.curatorAccountId, { kind: 'everything' }) !== ref.collectionId)
+  ) {
+    throw new ProblemError('dependency_unavailable');
   }
   const home = partitionOf(ref.route);
   const partition = (
@@ -579,7 +609,7 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
       : null;
   return Object.freeze({
     ...row,
-    incarnation: `${row.collectionId}:${row.createdAt}`,
+    incarnation: `${row.collectionId}:${row.createdAt ?? 'everything'}`,
     authority,
     outputGeneration,
     outputPublication,
@@ -592,8 +622,8 @@ async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionM
   });
 }
 /** Structural producer read only. Maintenance/custody do not obtain reader authority from this result. */
-async function observeWorking(client: QueryClient, ref: Ref) {
-  const metadata = await observe(client, ref);
+async function observeWorking(client: QueryClient, ref: Ref, logical = true) {
+  const metadata = await observe(client, ref, logical);
   if (!metadata || metadata.membershipKind !== 'dynamic') return metadata;
   // Catalogue membership is Search-owned. Working observation stays unavailable_output and carries
   // the curator fence so publication can snapshot public A without an owner capture.
@@ -626,7 +656,9 @@ async function observeWorking(client: QueryClient, ref: Ref) {
 
 export function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options) {
   return call(pool, options, async (work) => ({
-    metadata: await readOnly(pool, options, work, (client) => observeWorking(client, ref)),
+    metadata: await readOnly(pool, options, work, (client) =>
+      observeWorking(client, ref, options.commandTx === undefined),
+    ),
   }));
 }
 
@@ -636,7 +668,7 @@ export async function observeNativePublicCollectionOutput(
   ref: Ref,
   work: NativeCollectionWork,
 ): Promise<NativeCollectionMetadata | null> {
-  const metadata = await observe(client, ref);
+  const metadata = await observe(client, ref, false);
   return metadata?.state === 'active' &&
     metadata.membershipKind === 'dynamic' &&
     metadata.visibility !== 'private' &&
@@ -757,7 +789,9 @@ export function readNativeLogicalBuiltinBinding(
 
     const ownerIndexReady =
       row.ownerIndexPhase === 'ready' &&
-      (key.kind === 'everything' ? row.personalCoverageReady === true && !row.pendingLabelRepair : !row.pendingOwnerPin);
+      (key.kind === 'everything'
+        ? row.personalCoverageReady === true && !row.pendingLabelRepair
+        : !row.pendingOwnerPin);
     const stateSupported = key.kind !== 'state' || row.stateSupported;
     const sourceFence = row.sourceVersion;
     const sourceVersion = key.kind === 'liked' ? row.likedVersion : (sourceFence ?? 'absent');
@@ -821,7 +855,7 @@ export async function readNativeCollectionMetadataForWork(
     }) as QueryClient['query'],
   };
   return {
-    metadata: await (options.working ? observeWorking(client, ref) : observe(client, ref)),
+    metadata: await (options.working ? observeWorking(client, ref, false) : observe(client, ref, false)),
   };
 }
 function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: NativeCollectionWork) {
@@ -869,6 +903,19 @@ export function authorizeNativeCollectionMetadata(
 ) {
   if (context.tx) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(context.at);
+  if (metadata.createdAt === null) {
+    return readNativeLogicalBuiltinBinding(pool, { ...context, collectionId: metadata.collectionId }).then(
+      ({ binding, work }) => ({
+        authorized:
+          binding?.ready === true &&
+          binding.key.kind === 'everything' &&
+          binding.accountId === metadata.curatorAccountId &&
+          binding.sourceFence === metadata.factFence &&
+          binding.epoch === metadata.stamp.epoch,
+        work,
+      }),
+    );
+  }
   const owner = workingMetadata.has(metadata) ? admittedOwnerWorkingSource(pool, metadata.collectionId) : undefined;
   if (workingMetadata.has(metadata) && (!owner || owner.actor !== context.actor || owner.at !== context.at))
     throw new ProblemError('not_found');

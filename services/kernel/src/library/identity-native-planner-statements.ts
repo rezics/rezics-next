@@ -21,7 +21,7 @@ export const libraryIdentitySQL = Object.freeze({
   abandonWorking:
     "UPDATE library.canonical_source_generation SET state='abandoned' WHERE route=$1 AND collection_id=$2 AND state='working'",
   insertGeneration:
-    'INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver)\n      VALUES($1,$2,$3,$4::jsonb,$5)',
+    'INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver,logical_owner_id)\n      VALUES($1,$2,$3,$4::jsonb,$5,$6)',
   insertPlan:
     'INSERT INTO library.identity_scope_plan\n      (route,collection_id,plan_key,account_id,source_identity,job_id,job_epoch,scope,generation,capture_id,capture_frontier,\n       collection_fence,account_fence,job_transaction_id,scope_digest,driver,old_head,old_state,frontier,phase,job_writer_fence)\n      VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18::jsonb,$19::jsonb,$20,$21::jsonb)',
   advanceCapture:

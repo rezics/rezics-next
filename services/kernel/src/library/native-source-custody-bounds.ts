@@ -342,7 +342,7 @@ function statementSpecs(): readonly StatementSpec[] {
       spec('retained', retainedQuery, 16, 1, 0, 0, retainedProjectionBytes),
       spec('release', releaseQuery, 32, 1, 0, 0, 0),
       spec('terminalScope', terminalScope, 48, 3, 0, 0, terminalProjectionBytes),
-      spec('retireSource', retireSource, 3, 3, 0, 3, retireSourceProjectionBytes),
+      spec('retireSource', retireSource, 4, 4, 0, 3, retireSourceProjectionBytes),
       spec('retireReceipt', retireReceipt, 1, 1, 0, 1, receiptProjectionBytes),
       spec('retireActive', retireActive, 1, 1, 0, 1, Buffer.byteLength(JSON.stringify([{ id: maxUuid }]))),
       spec('retireHolds', retireHolds, 80, 1, 0, 80, retirementHoldProjectionBytes * 80),
@@ -384,8 +384,8 @@ function statementSpecs(): readonly StatementSpec[] {
       spec(
         'nextCapture',
         nextCapture,
-        1,
-        2,
+        3,
+        3,
         1,
         1,
         Buffer.byteLength(
@@ -416,9 +416,9 @@ function statementSpecs(): readonly StatementSpec[] {
           query,
           (values) => {
             const limit = planLimit(values, query);
-            return limit === undefined ? undefined : 16 * limit + 32;
+            return limit === undefined ? undefined : driver === 'entry' ? 32 * limit + 48 : 16 * limit + 32;
           },
-          1,
+          driver === 'entry' ? 208 : 1,
           0,
           (values) => planLimit(values, query),
           (values) => {
@@ -682,6 +682,7 @@ function maxValue(name: string, overrides?: Readonly<Record<string, unknown>>): 
     transaction_id: maxUuid,
     hold_id: maxUuid,
     hold_ids: Array.from({ length: 80 }, () => maxUuid),
+    retained: false,
     purge_after: '9999-12-31T23:59:59.999999Z',
     time: '9999-12-31T23:59:59.999999Z',
   };
@@ -732,6 +733,8 @@ function validParameter(name: string, value: unknown): boolean {
     case 'route':
     case 'account_route':
       return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 65535;
+    case 'retained':
+      return typeof value === 'boolean';
     case 'partition_no':
       return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 4095;
     case 'owner_epoch':

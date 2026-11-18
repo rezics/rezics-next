@@ -99,7 +99,12 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unsigned = /^(0|[1-9][0-9]{0,18})$/;
 const maxBigint = 9223372036854775807n;
 function currentLocked() {
-  return memoizedValue(currentLocked, () => current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa');
+  return memoizedValue(
+    currentLocked,
+    () =>
+      current.sql.replace('/* stored-lock */', 'FOR SHARE OF l').replace('/* logical-lock */', 'FOR SHARE OF l') +
+      '\nFOR UPDATE OF s FOR SHARE OF p,a,c,r,h,fc,fa',
+  );
 }
 function associationLocked() {
   return memoizedValue(
@@ -132,7 +137,7 @@ export function identityScopeCommittedReceiptFootprint(
   let rows: number;
   let output: number;
   if (sql === current.sql || sql === currentLocked()) {
-    rows = 12; // nine keyed rows, consumer fence, unresolved forward, active attempt
+    rows = 17; // physical or logical parent, coverage fences and committed capture points
     output = 512;
   } else if (sql === association.sql || sql === associationLocked()) {
     rows = 7; // association/component, summary/partition, capture association/component, attempt probe
