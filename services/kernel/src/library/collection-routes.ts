@@ -40,6 +40,7 @@ import {
 import { collectionPresentation } from './collection-presentation.ts';
 import { collectionBulkRoutes } from './collection-bulk-routes.ts';
 import { listSitemapCollections } from './sitemap.ts';
+import { builtinCollectionId } from './builtin-identity.ts';
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 import { assertMemberPageCurrent } from './member-viewer-currentness.ts';
 import { withCollectionRetentionDeclaration } from './collection-retention-bounds.ts';
@@ -1344,13 +1345,36 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
               job.deadline,
             ),
           );
-        const finalSource =
-          query.view === 'FULL' && actor.kind === 'account'
-            ? await read().observeMemberSource(actor, params.collectionId, job.deadline)
-            : undefined;
+        const fullAccount = query.view === 'FULL' && actor.kind === 'account';
+        // The prepared reader compares the exact owner, reader and capture after the overlay.
+        // Capture the general reader's original guard before its page if the prepared plan declines.
+        const deferSource =
+          fullAccount &&
+          actor.kind === 'account' &&
+          query.filter !== undefined &&
+          params.collectionId === builtinCollectionId(actor.accountId, { kind: 'everything' });
+        let finalSource: (() => Promise<void>) | undefined;
+        const captureSource = async () => {
+          finalSource = await read().observeMemberSource(actor, params.collectionId, job.deadline);
+        };
+        if (fullAccount && !deferSource) await captureSource();
+        let ownerOverlay: { ids: string[]; facts?: ViewerPersonalActionsPage } | undefined;
+        const readOwnerViewerFacts = async (members: readonly { subjectId: string }[]) => {
+          const ids = members.map((member) => member.subjectId);
+          const projected = await read().withViewerFacts(actor, { members }, job.deadline);
+          ownerOverlay = { ids, ...('viewerFacts' in projected ? { facts: projected.viewerFacts } : {}) };
+          return finalSource;
+        };
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
-            ? read().readMembers(actor, params.collectionId, memberQuery, job.deadline)
+            ? read().readMembers(
+                actor,
+                params.collectionId,
+                memberQuery,
+                job.deadline,
+                fullAccount ? readOwnerViewerFacts : undefined,
+                deferSource ? captureSource : undefined,
+              )
             : query.view === 'FULL'
               ? fullMembers(
                   viewDependencies(),
@@ -1365,6 +1389,17 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                 )
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
+        if (ownerOverlay) {
+          // The same reader just finalized FULL projection and the entire original Source after the overlay.
+          const { ids, facts } = ownerOverlay;
+          if (
+            !('members' in result) ||
+            result.members.length !== ids.length ||
+            result.members.some((member, index) => member.subjectId !== ids[index])
+          )
+            throw new ProblemError('stale_cursor');
+          return membersHttpResponse({ ...result, ...(facts === undefined ? {} : { viewerFacts: facts }) });
+        }
         if ('members' in result && query.view === 'FULL') {
           const admitted = result;
           result = await read().withViewerFacts(actor, result, job.deadline, async () => {

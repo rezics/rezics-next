@@ -426,7 +426,7 @@ type FrozenLibrarySource = {
   deadline: number;
 };
 
-function libraryScopeSourceKey(
+export function libraryScopeSourceKey(
   identity: Pick<NativeSourceIdentity, 'route' | 'collectionId' | 'incarnation' | 'scope'>,
   binding:
     | { accountId: string }
@@ -1293,7 +1293,7 @@ export function createIdentityScopedObservations(
       if (captured.status === 'unavailable') return fail('source_unready', measured);
       const prior = row;
       const nativeAssociation2 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await withSingleCommandAttempt(() =>
+      const committed = await withSingleCommandAttempt(() =>
         runCommand(pool, { partition: k.partition, deadline: nativeAssociation2.deadline }, async (tx) => {
           bindIdentityScopeNativeAssociation(tx, nativeAssociation2);
           const locked = await head(tx, key, measured, true);
@@ -1356,7 +1356,7 @@ export function createIdentityScopedObservations(
           };
         }),
       );
-      return { status: 'pending', work: measured };
+      return { status: 'pending', progressTransaction: committed.transactionId, work: measured };
     }
     const dep = await withReadTransaction(
       pool,
@@ -1375,7 +1375,7 @@ export function createIdentityScopedObservations(
       const ticket = await enroll(pool, key, row, dep, deadline, measured);
       if (!ticket) return { status: 'pending', work: measured };
       const nativeAssociation3 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await withSingleCommandAttempt(() =>
+      const committed = await withSingleCommandAttempt(() =>
         runCommand(pool, { partition: k.partition, deadline: nativeAssociation3.deadline }, async (tx) => {
           bindIdentityScopeNativeAssociation(tx, nativeAssociation3);
           const locked = await head(tx, key, measured, true);
@@ -1393,9 +1393,9 @@ export function createIdentityScopedObservations(
             `UPDATE semantic.identity_scope_forward SET ticket=$6 WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5 AND ticket IS NULL`,
             [...params(key), row!.registration, dep.dependency, json(ticket)],
           );
-          if (enrolled.rowCount === 0) return noEffect(null);
+          if (enrolled.rowCount === 0) return noEffect(false);
           return {
-            value: null,
+            value: true,
             events: [
               recordIdentityScopeNativeAssociation(tx, nativeAssociation3, key, 'enrollment', {
                 dependency: dep.dependency,
@@ -1404,7 +1404,11 @@ export function createIdentityScopedObservations(
           };
         }),
       );
-      return { status: 'pending', work: measured };
+      return {
+        status: 'pending',
+        ...(committed.value ? { progressTransaction: committed.transactionId } : {}),
+        work: measured,
+      };
     }
     const nativeAssociation4 = prepayIdentityScopeNativeAssociation(pool, deadline);
     return (

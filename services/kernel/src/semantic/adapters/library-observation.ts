@@ -763,7 +763,7 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
             observation: libraryScopeObservation(registered.observation),
             work: scopeDimensions(registered.work),
           };
-        if (registered.status === 'pending') return { status: 'pending', work: scopeDimensions(registered.work) };
+        if (registered.status === 'pending') return { ...registered, work: scopeDimensions(registered.work) };
         return { status: 'unavailable', work: scopeDimensions(registered.work) };
       },
       async revalidateScope(pool, input) {

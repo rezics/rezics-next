@@ -6,6 +6,8 @@ import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '..
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
 import { CANONICAL_SOURCE_COMPLETED_READBACK, CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
@@ -16,13 +18,14 @@ import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work
 import type { SearchPreparationCapability } from './contract/index.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {
-  CollectionWorkLedger,
+  type CollectionWorkLedger,
   WORK_AXES,
   zeroWorkDimensions,
   ordinaryCollectionPagePlan,
   ordinaryPageWorkDimensions,
   type OrdinaryCollectionPagePlan,
 } from './core/index.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
 
 export type OwnerQueryDependencies = {
@@ -36,21 +39,23 @@ export type OwnerQueryDependencies = {
 
 class OwnerQueryWorkLedger {
   readonly plan: OrdinaryCollectionPagePlan;
-  private readonly ledger: CollectionWorkLedger;
+  readonly physical: NativeCollectionWork;
 
-  constructor(plan: OrdinaryCollectionPagePlan) {
+  constructor(plan: OrdinaryCollectionPagePlan, deadline: number) {
     this.plan = plan;
-    this.ledger = new CollectionWorkLedger(
+    this.physical = new NativeCollectionWork(
       {
         reservationId: crypto.randomUUID(),
         remaining: ordinaryPageWorkDimensions(plan.total),
       },
-      plan,
+      deadline,
     );
   }
 
-  remaining() {
-    return this.ledger.remaining();
+  remaining(): WorkAllowance {
+    const remaining = { ...zeroWorkDimensions() };
+    for (const axis of WORK_AXES) remaining[axis] = this.physical.available(axis);
+    return { reservationId: this.receipt().reservationId, remaining };
   }
 
   sourceAllowance(): WorkAllowance {
@@ -61,37 +66,32 @@ class OwnerQueryWorkLedger {
   }
 
   receipt() {
-    return this.ledger.receipt();
-  }
-
-  private settle(work: () => void): void {
-    try {
-      work();
-    } catch (error) {
-      if (error instanceof RangeError)
-        throw new ProblemError('dependency_unavailable', {
-          detail: error.message,
-        });
-      throw error;
-    }
+    return this.physical.receipt();
   }
 
   consume(used: WorkDimensions): void {
-    this.settle(() => this.ledger.consume(used));
+    const charge = this.physical.reserve(used);
+    charge.dispatch();
+    charge.settle();
   }
 
   native(receipt: WorkReceipt): void {
-    this.settle(() => this.ledger.native(receipt));
+    if (receipt.reservationId !== this.receipt().reservationId) throw new TypeError('Foreign owner page reservation');
+    this.consume(receipt.used);
   }
 }
 
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
-export function ownerQueryWork(limit: number, view: 'BASIC' | 'FULL' = 'BASIC') {
-  return new OwnerQueryWorkLedger(ordinaryCollectionPagePlan(limit, view));
+export function ownerQueryWork(
+  limit: number,
+  view: 'BASIC' | 'FULL' = 'BASIC',
+  deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+) {
+  return new OwnerQueryWorkLedger(ordinaryCollectionPagePlan(limit, view), deadline);
 }
 
 /** Continue reads chronological candidates, resolves whole Source groups, and verifies shown rows again. */
-export function continueOwnerQueryWork(limit: number) {
+export function continueOwnerQueryWork(limit: number, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
   const page = ordinaryCollectionPagePlan(limit);
   const checks = page.candidateLimit + limit;
   const sourceReads = 2 + 3 * checks;
@@ -117,7 +117,7 @@ export function continueOwnerQueryWork(limit: number) {
       page.candidateLimit,
     ),
   );
-  return new OwnerQueryWorkLedger({ ...page, sourceBound, total: sourceBound });
+  return new OwnerQueryWorkLedger({ ...page, sourceBound, total: sourceBound }, deadline);
 }
 
 function canonicalAllowance(allowance: WorkAllowance) {
@@ -178,6 +178,7 @@ export async function openOwnerQuery(
     deadline: number;
     work: Pick<CollectionWorkLedger, 'remaining' | 'receipt' | 'native'>;
     logical?: boolean;
+    publishedEverythingPage?: boolean;
     at?: AuthoritativeTime;
   },
 ) {
@@ -187,7 +188,9 @@ export async function openOwnerQuery(
     if (input.at === undefined) releaseOperationalTime(at);
   };
   const planned = input.work instanceof OwnerQueryWorkLedger ? input.work.plan : undefined;
-  const native = planned ? createOrdinaryCollectionPageSource(deps) : createCollectionSource(deps);
+  const native = planned
+    ? createOrdinaryCollectionPageSource(deps, input.publishedEverythingPage)
+    : createCollectionSource(deps);
   const context = { actor: input.actor, at, deadline: input.deadline };
   const sourceAllowance = () =>
     input.work instanceof OwnerQueryWorkLedger ? input.work.sourceAllowance() : input.work.remaining();

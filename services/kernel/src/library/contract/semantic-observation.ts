@@ -33,6 +33,8 @@ export type LibrarySemanticScopeObservation = Readonly<{
 export type LibrarySemanticScopeResult = Readonly<{
   status: 'registered' | 'pending' | 'current' | 'unavailable' | 'stale';
   observation?: LibrarySemanticScopeObservation;
+  /** A completed capture or enrollment step. Only a continuation locator. */
+  progressTransaction?: string;
   work: WorkDimensions;
 }>;
 

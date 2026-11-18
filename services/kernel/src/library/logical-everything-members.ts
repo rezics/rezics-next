@@ -2,67 +2,50 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import { systemClock } from '../clock.ts';
-import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  withCompiledCommandControls,
+  type AuthoritativeTime,
+} from '../command/command.ts';
+import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { activeRelease } from '../semantic/definitions.ts';
-import { readCataloguePointEvidence } from '../semantic/scope-leaf-evidence.ts';
-import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
+import { decideExposure } from '@rezics/access';
+import { observePreparedScalarRange } from '../semantic/private-catalogue-range.ts';
+import { libraryScopeSourceKey } from '../semantic/identity-scoped-observations.ts';
+import { LIBRARY_SUBJECT_PAGE_LIMIT } from './contract/presentation.ts';
+import type { ownerQueryWork } from './builtin-runtime-query.ts';
 import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { PlatformClosedError } from '../access/contract/errors.ts';
 import { accessRoot, admitGroup } from './access-port.ts';
-import { mapPresentationBounded } from './application/presentation-bounds.ts';
 import { builtinCollectionId } from './builtin-identity.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import type { PresentationDependencies } from './collection-presentation.ts';
-import { withCollectionReadConnection, withCollectionReadSnapshot } from './collection-read-connection.ts';
-import { requireLibraryPresentation } from './domain-binding.ts';
+import { withCollectionReadConnection } from './collection-read-connection.ts';
 import { builtinMemberCursorBinding } from './owner-index-members.ts';
-import { readOwnerFactPresence } from './owner-index.ts';
+import { grantCapable, type GrantedAccount } from './account-grant.ts';
+import { instrumentNativeCollectionWork } from './collection-native-work.ts';
+import {
+  collectionsOpeningValues,
+  everythingEntryWindowSQL,
+  openEverythingEntryWindowSQL,
+  nativeCollectionFootprint,
+} from './collection-source-native.ts';
 import { listMemberPage } from './member-viewer-currentness.ts';
 import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
-import {
-  matchOwnerFilterCatalogue,
-  type CollectionMemberAdmission,
-  type CollectionMemberQuery,
-} from './owner-filter.ts';
+import { type CollectionMemberAdmission, type CollectionMemberQuery } from './owner-filter.ts';
 
 const digest = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
-// Each of at most two entry windows admits one scalar selection and its real Subject authority per original.
-// The Access-key ceiling also covers the native account membership-inverse lookup, independently of statement keys.
-const rangeWork = Object.freeze({
-  keys: 32,
-  witnesses: 16,
-  points: 256,
-  rows: 2048,
-  emptySeeks: 128,
-  bytes: 64 * 1024,
-});
-const authorityWork = Object.freeze({
-  keys: 4096,
-  witnesses: 100,
-  points: 4096,
-  rows: 65536,
-  emptySeeks: 256,
-  bytes: 1024 * 1024,
-});
 const changed = () => new ProblemError('stale_cursor');
-type ObservationPhase = 'initial' | 'revalidation';
-type ReadinessStage =
-  | 'admission'
-  | 'entry-coverage'
-  | 'identity-coverage'
-  | 'identity-mapping'
-  | `${ObservationPhase}-point`
-  | `${ObservationPhase}-subject-currentness`
-  | 'list-facts'
-  | 'presented-members';
+type ReadinessStage = 'admission' | 'scalar-selection' | 'list-facts' | 'presented-members';
 
 /**
  * Direct id-order plan for a revision-zero Everything whose entire native population is explicit entries.
- * The writer's current shelf count admits two bounded entry windows before any enumeration. Other fact
+ * The canonical worker proves identity and order over the whole generation. Other fact
  * families, stored Collections and larger populations keep their ordinary Source plan.
  */
 export async function readLogicalEverythingMembers(
@@ -70,53 +53,50 @@ export async function readLogicalEverythingMembers(
   actor: AccountActor,
   collectionId: string,
   admission: CollectionMemberAdmission | undefined,
-  options: CollectionMemberQuery,
+  options: CollectionMemberQuery & { readViewerFacts?: ReadMemberViewerFacts },
   deadline: number,
+  ledger: ReturnType<typeof ownerQueryWork>,
 ) {
   const routeKey = deps.routeKey;
   if (!routeKey || collectionId !== builtinCollectionId(actor.accountId, { kind: 'everything' })) return null;
   let reported = false;
-  function reportUnready(
-    stage: ReadinessStage,
-    reason?: string,
-    timing?: { observationMs: number; remainingMs: number },
-  ) {
+  function reportUnready(stage: ReadinessStage, reason?: string) {
     // Concurrent Subject reads can encounter the same refusal. Log the first stage once per direct read.
     if (reported) return;
     reported = true;
-    console.warn(JSON.stringify({ event: 'library.logical-everything-unready', stage, reason, ...timing }));
+    console.warn(JSON.stringify({ event: 'library.logical-everything-unready', stage, reason }));
   }
   function unready(stage: ReadinessStage, reason?: string) {
     reportUnready(stage, reason);
     return new ProblemError('semantic_not_ready');
   }
-  if (admission) {
-    const admitted = readNativeCollectionMemberAdmission(admission);
-    if (!admitted || admitted.pool !== deps.pool || admitted.actor !== actor || admitted.deadline < deadline)
-      throw unready('admission');
-  }
-  const leaf = admission?.plan?.leaves[0];
+  if (!admission) return null;
+  const admitted = readNativeCollectionMemberAdmission(admission);
+  if (!admitted || admitted.pool !== deps.pool || admitted.actor !== actor || admitted.deadline < deadline)
+    throw unready('admission');
+  const leaf = admission.plan?.leaves.length === 1 ? admission.plan.leaves[0] : undefined;
   if (
-    admission?.plan &&
-    (!admission.filter ||
-      !('statement' in admission.filter) ||
-      leaf?.kind !== 'catalogue' ||
-      leaf.clause.facet !== 'statement' ||
-      !('range' in leaf.clause))
+    admitted.retainedMeaning ||
+    admitted.source.kind !== 'owner' ||
+    !admission.releaseDigest ||
+    !admission.release ||
+    !admission.filter ||
+    !('statement' in admission.filter) ||
+    leaf?.kind !== 'catalogue' ||
+    leaf.clause.facet !== 'statement' ||
+    !('range' in leaf.clause)
   )
     return null;
 
+  const releaseDigest = admission.releaseDigest;
+  const meaning = { release: admission.release, releaseDigest, leaf: leaf.clause };
   const route = routeOf(actor.accountId)!;
   const limit = options.limit ?? 20;
   const clock = deps.clock ?? systemClock;
-  const standardBinding = builtinMemberCursorBinding(
-    actor,
-    collectionId,
-    limit,
-    admission?.filter && admission.releaseDigest
-      ? { filter: admission.filter, releaseDigest: admission.releaseDigest }
-      : undefined,
-  );
+  const standardBinding = builtinMemberCursorBinding(actor, collectionId, limit, {
+    filter: admission.filter,
+    releaseDigest,
+  });
   const binding = { ...standardBinding, query: { ...standardBinding.query, source: 'private_builtin_direct' } };
   const cursor = options.cursor == null ? null : await decodeListCursor(deps.tokens, binding, options.cursor, clock());
   // A cursor from the existing prepared Source belongs to that reader.
@@ -130,165 +110,175 @@ export async function readLogicalEverythingMembers(
   )
     throw new ProblemError('invalid_cursor');
 
-  const owner = requireLibraryPresentation();
-  async function population() {
-    try {
-      await admitGroup({
-        pool: deps.pool,
-        access: () => accessRoot(deps.access),
-        actor,
-        group: 'collections',
-        clientAction: 'collection:read',
-        clock,
-        deadline,
-      });
-    } catch (error) {
-      if (error instanceof PlatformClosedError) throw new ProblemError('not_found');
-      throw error;
-    }
-    return withCollectionReadSnapshot(deps.pool, deadline, async (client) => {
-      if (!(await owner.admitOwner(client, actor))) throw new ProblemError('not_found');
-      const presence = await readOwnerFactPresence(client, actor.accountId);
-      if (!presence.entry || presence.personal || presence.copy || presence.session || presence.label) return null;
-      const {
-        rows: [head],
-      } = await client.query<{ epoch: number; position: string; version: string; n: string }>(
-        `SELECT partition.epoch, partition.position::text, facts.generation::text AS version, counts.n::text AS n
-         FROM library.fact_source_head facts
-         JOIN core.partition partition ON partition.partition_no=$4 AND partition.write_state<>'moved'
-         JOIN library.owner_index_control idx USING (route,account_id)
-         JOIN library.shelf_maintenance shelf USING (route,account_id)
-         JOIN library.shelf_count counts ON (counts.route,counts.account_id,counts.generation_id)=
-           (shelf.route,shelf.account_id,shelf.active_generation)
-         WHERE facts.route=$1 AND facts.account_id=$2 AND idx.phase='ready' AND shelf.initialized AND shelf.ready AND shelf.mode='open'
-           AND counts.bucket='all' AND counts.type_id='00000000-0000-0000-0000-000000000000'
-           AND counts.n BETWEEN 1 AND $5
-           AND NOT EXISTS (SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$3)
-           AND NOT EXISTS (SELECT 1 FROM library.owner_index_pin WHERE route=$1 AND account_id=$2 AND NOT meaning_ready)
-           AND NOT EXISTS (SELECT 1 FROM library.entry_clear WHERE route=$1 AND account_id=$2)`,
-        [route, actor.accountId, collectionId, partitionOf(route), 2 * limit],
-      );
-      if (!head) return null;
-      const ids: string[] = [];
-      const count = Number(head.n);
-      // An exact multiple also needs its native EOF point; the count alone never proves coverage.
-      while (ids.length <= count) {
-        const take = Math.min(100, count + 1 - ids.length);
-        const after = ids.at(-1);
-        const rows = (
-          await client.query<{ id: string }>(
-            after === undefined
-              ? 'SELECT subject_id AS id FROM library.entry WHERE route=$1 AND account_id=$2 ORDER BY subject_id LIMIT $3'
-              : 'SELECT subject_id AS id FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id>$4 ORDER BY subject_id LIMIT $3',
-            after === undefined ? [route, actor.accountId, take] : [route, actor.accountId, take, after],
-          )
-        ).rows;
-        ids.push(...rows.map((row) => row.id));
-        if (rows.length < take) break;
+  const sourceKey = libraryScopeSourceKey(
+    { route, collectionId, incarnation: collectionId + ':everything', scope: 'private_builtin' },
+    { accountId: actor.accountId },
+  );
+  const onPage = <T>(operation: () => Promise<T>) =>
+    ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+      instrumentNativeCollectionWork(deps.pool, ledger.physical, nativeCollectionFootprint, operation),
+    );
+  async function population(at: AuthoritativeTime, take: number) {
+    const values = [route, actor.accountId, collectionId, partitionOf(route), take, sourceKey];
+    type EntryRow = {
+      version: string;
+      epoch: number;
+      accountTuple: string;
+      accountVersion: string;
+      generation: string;
+      capture: string;
+      revision: string;
+      id: string | null;
+      explicit: boolean;
+      kind: GrantedAccount['kind'];
+      state: GrantedAccount['state'];
+      fenced: boolean;
+      floor: string;
+
+      releaseDigest: string | null;
+      releaseHead: number | null;
+    };
+    const gated = await withCollectionReadConnection(
+      deps.pool,
+      deadline,
+      async (client) =>
+        (
+          await client.query<EntryRow & { groupOpen: boolean; gateHome: boolean }>(openEverythingEntryWindowSQL(), [
+            ...values,
+            ...collectionsOpeningValues(authoritativeTimeValue(at)),
+          ])
+        ).rows,
+    );
+    const gate = gated[0];
+    if (!gate || !gate.gateHome) throw new ProblemError('partition_unavailable');
+    let rows: EntryRow[] = gated;
+    if (
+      !decideExposure({
+        exposure: { kind: 'gate', group: 'collections' },
+        open: gate.groupOpen,
+        actor: actor.kind,
+        clientScope: actor.scopes.includes('collection:read'),
+        gateAuthority: false,
+      }).allowed
+    ) {
+      try {
+        await admitGroup({
+          pool: deps.pool,
+          access: () => accessRoot(deps.access),
+          actor,
+          group: 'collections',
+          clientAction: 'collection:read',
+          clock,
+          deadline,
+        });
+      } catch (error) {
+        if (error instanceof PlatformClosedError) throw new ProblemError('not_found');
+        throw error;
       }
-      if (ids.length !== count) throw unready('entry-coverage');
-      return { epoch: head.epoch, position: head.position, version: head.version, ids };
-    });
+      rows = await withCollectionReadConnection(
+        deps.pool,
+        deadline,
+        async (client) => (await client.query<EntryRow>(everythingEntryWindowSQL(), values)).rows,
+      );
+    }
+    const head = rows[0];
+    if (!head || head.version === null) return null;
+    if (head.releaseHead === null || head.releaseDigest !== releaseDigest) throw changed();
+    if (
+      !grantCapable(
+        {
+          route,
+          accountId: actor.accountId,
+          kind: head.kind,
+          state: head.state,
+          fenced: head.fenced,
+          minimumAuthnEpoch: BigInt(head.floor),
+        },
+        actor,
+      )
+    )
+      throw new ProblemError('not_found');
+    const stamp = {
+      epoch: head.epoch,
+      version: head.version,
+      accountTuple: head.accountTuple,
+      accountVersion: head.accountVersion,
+      generation: head.generation,
+      capture: head.capture,
+      revision: head.revision,
+      releaseHead: head.releaseHead,
+    };
+    const ids: string[] = [];
+    if (!take) return { stamp, ids };
+    // A full window still has an unexamined suffix. Other fact shapes use the general reader.
+    if (rows.length >= take || !head.id) return null;
+    for (const row of rows) {
+      if (!row.id || !row.explicit || routeOf(row.id) === null || (ids.length && row.id <= ids.at(-1)!)) return null;
+      ids.push(row.id);
+    }
+    return { stamp, ids };
   }
 
-  const first = await population();
-  if (!first) {
-    if (cursor?.ok && cursor.after[0] === collectionId) throw changed();
-    return null;
-  }
-  const disclosure = { ...deps, actor, routeKey, deadline };
-  const { ids, version, epoch } = first;
-  async function mappingEpochs() {
-    const mappings = [];
-    for (let offset = 0; offset < ids.length; offset += 100) {
-      const originals = ids.slice(offset, offset + 100);
-      const current = await owner.readMappings(deps.pool, originals);
-      if (current.length !== originals.length) throw unready('identity-coverage');
-      for (const [i, mapping] of current.entries()) {
-        // The entry index proves canonical order only for this complete self-mapped population.
-        if (mapping.state !== 'mapped' || mapping.original !== originals[i] || mapping.terminal !== originals[i])
-          throw unready('identity-mapping');
-        mappings.push(mapping.epoch.toString());
-      }
-    }
-    return mappings;
-  }
-  async function meaningHead() {
-    if (!admission?.filter) return null;
-    const release = await activeRelease(deps.pool, 'native');
-    if (!release || release.digest !== admission.releaseDigest) throw changed();
-    return release.head;
-  }
-  const mappings = await mappingEpochs();
-  const head = await meaningHead();
-  async function observe(phase: ObservationPhase) {
-    const started = Date.now();
-    const subjects = await readSubjectSummaryObservation(disclosure, ids, { exactSubjectCurrentness: true });
-    const at = await withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock));
+  async function atReadTime<T>(operation: (at: AuthoritativeTime) => Promise<T>) {
+    const at = await onPage(() =>
+      withCompiledCommandControls(deps.pool, () =>
+        withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock, deps.pool)),
+      ),
+    );
     try {
-      const rows = await mapPresentationBounded(ids, async (id) => {
-        if (subjects.summaries.get(id)?.id !== id) return { id, visible: false, matches: false };
-        if (!leaf || leaf.kind !== 'catalogue') return { id, visible: true, matches: true };
-        const { evidence, readinessReason } = await readCataloguePointEvidence(
-          deps.pool,
-          {
-            subject: id,
-            leaf: leaf.clause,
-            after: null,
-            revalidate: null,
-            budget: rangeWork,
-          },
-          { ...disclosure, nativeT: at },
-          authorityWork,
-        );
-        if (evidence.state !== 'current') throw unready(`${phase}-point`, readinessReason ?? evidence.state);
-        if (evidence.progress || evidence.coverage?.basis !== evidence.basis)
-          throw unready(`${phase}-point`, evidence.progress ? 'partial-selection' : 'missing-coverage');
-        const matches = matchOwnerFilterCatalogue(leaf, evidence);
-        if (typeof matches !== 'boolean') throw unready(`${phase}-point`, 'unknown-match');
-        return { id, visible: true, matches, evidence: digest([evidence.basis, evidence.facts]) };
-      });
-      let mismatch: string | undefined;
-      const current = await subjects.current((reason) => {
-        mismatch = reason;
-      });
-      if (!current) {
-        const now = Date.now();
-        reportUnready(`${phase}-subject-currentness`, mismatch, {
-          observationMs: now - started,
-          remainingMs: Math.max(0, deadline - now),
-        });
-        throw new ProblemError('semantic_not_ready');
-      }
-      return {
-        ids: rows.filter((row) => row.matches).map((row) => row.id),
-        basis: digest([version, epoch, head, mappings, rows]),
-      };
+      return await operation(at);
     } finally {
       releaseOperationalTime(at);
     }
   }
-  const observed = await observe('initial');
+  const disclosure = { ...deps, actor, routeKey, deadline };
+  const scalarDeps = { ...disclosure, work: ledger.physical, ownerId: actor.accountId };
+  const observation = await atReadTime(async (at) => {
+    const first = await onPage(() => population(at, 2 * limit + 1));
+    if (!first) return null;
+    const ids: string[] = [];
+    const batches = [];
+    for (let offset = 0; offset < first.ids.length; offset += LIBRARY_SUBJECT_PAGE_LIMIT) {
+      const originals = first.ids.slice(offset, offset + LIBRARY_SUBJECT_PAGE_LIMIT);
+      const batch = await ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+        observePreparedScalarRange(scalarDeps, originals, meaning, at),
+      );
+      if (batch.status !== 'complete') {
+        if (cursor?.ok) throw unready('scalar-selection');
+        return null;
+      }
+      batches.push(batch);
+      for (const [i, decision] of batch.decisions.entries()) if (decision.matches) ids.push(originals[i]!);
+    }
+    return { first: first.stamp, ids, batches, basis: digest([first.stamp, batches.map((batch) => batch.basis)]) };
+  });
+  if (!observation) {
+    if (cursor?.ok) throw changed();
+    return null;
+  }
+  const { first, ids, batches, basis } = observation;
   if (
     cursor?.ok &&
     (cursor.epoch !== first.epoch ||
       cursor.after[0] !== collectionId ||
-      cursor.after[1] !== observed.basis ||
+      cursor.after[1] !== basis ||
       cursor.after[2] !== first.version ||
-      !observed.ids.includes(String(cursor.after[3])))
+      !ids.includes(String(cursor.after[3])))
   )
     throw changed();
   const after = cursor?.ok ? String(cursor.after[3]) : null;
-  const remaining = observed.ids.filter((id) => after === null || id > after);
+  const remaining = ids.filter((id) => after === null || id > after);
   const shown = remaining.slice(0, limit).map((subjectId) => ({ kind: 'dynamic' as const, subjectId }));
+  const revalidateViewer = options.view === 'FULL' ? await options.readViewerFacts?.(shown) : undefined;
   const revalidate = async () => {
-    if (
-      (await observe('revalidation')).basis !== observed.basis ||
-      !isDeepStrictEqual(await mappingEpochs(), mappings) ||
-      (await meaningHead()) !== head ||
-      !isDeepStrictEqual(await population(), first)
-    )
-      throw changed();
+    await revalidateViewer?.();
+    await atReadTime(async (fresh) => {
+      for (const batch of batches) {
+        if (!(await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => batch.revalidate(fresh))))
+          throw changed();
+      }
+      if (!isDeepStrictEqual((await onPage(() => population(fresh, 0)))?.stamp, first)) throw changed();
+    });
   };
   let members = shown;
   if (options.view === 'FULL') {
@@ -308,7 +298,7 @@ export async function readLogicalEverythingMembers(
     deps.tokens,
     binding,
     remaining.length > limit
-      ? { epoch: first.epoch, after: [collectionId, observed.basis, first.version, shown.at(-1)!.subjectId] }
+      ? { epoch: first.epoch, after: [collectionId, basis, first.version, shown.at(-1)!.subjectId] }
       : null,
     clock,
   );

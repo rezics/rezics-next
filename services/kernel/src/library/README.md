@@ -1004,12 +1004,10 @@ a state clear. Its worker repairs earlier personal rows and deleted-label child 
 fact writer lock. When the only physical assignments belong to deleted parents, a completed directory with no
 pending parent repair and no support can establish an empty Everything in the same owner snapshot.
 
-A nonempty headerless Everything outside the direct plan still needs canonical ordering and complete original
-groups. The canonical sweep visits stored Collection headers, and the scope and generation foreign keys require
-that same parent. Settled owner input coverage alone supplies neither canonical identity nor a prepared members
-episode. The [reservation contract](members-preparation-contract.md#local-api-and-authority) requires an active
-curated header. A read-only Search preparation can look up an exact published scope. Its worker restores the
-lossless compiler definition from Semantic and resumes the retained capture across registration retries.
+Outside the entry-only plan, a nonempty logical Everything needs its published canonical generation and
+complete original groups. The [canonical Source](#required-built-ins-and-personal-space) owns that publication.
+The [reservation contract](members-preparation-contract.md#local-api-and-authority) still requires an active
+curated header. A read-only Search preparation uses the published scope and the admitted query and release.
 
 For an admitted catalogue-plus-owner request, Search passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
 Library revalidates that execution and its privacy-reduction closure. Owner-only and mixed predicates use the
@@ -1095,8 +1093,30 @@ and revision with the exhausted id-ordered generation. Search can use that publi
 id-order filter. It still binds the viewer, expanded predicate, release and required public evidence to the query.
 The worker reuses a current committed registration when advancing the canonical generation. The reader spends
 the remaining page allowance across refills and compares the full query basis, including native bigint positions.
-A mounted positive still requires an original-and-terminal disclosure batch that fits the 12-statement page.
-The current single-original Source check reserves 128 statements before calling Subject resolution.
+The mounted statement-range reader selects the current generation and its ordered original, terminal, driver and
+fact keys in a bounded suffix. Each key retains its live support decision. A trailing incomplete group supplies
+ordering evidence only. Semantic discloses the directed pairs in batches of up to 100 on the owner page ledger.
+Mounted FULL reads obtain viewer actions for the selected IDs before projecting their current Subject and list facts.
+The reader compares the ordered filter decisions and evidence, the Source, the owner fact head and the original
+mounted viewer after projection, then revalidates every disclosure batch at fresh native time on the same page
+ledger.
+
+When the owner's index and pins reach readiness, that transaction hands the nonempty logical Source to the
+existing canonical worker. After its bounded turns, a committed Semantic capture or enrollment step can identify
+one successor for that same owner and Collection. A pending registration without such progress waits for recovery.
+
+For an exhausted generation consisting entirely of explicit self-mapped entries, the worker's references supply
+the complete ordered population. The ordinary reader checks the current fact generation, active owner home,
+ready and unfenced Semantic scope, exact committed capture and revision, Collections gate and definition head
+before selection and after FULL projection. The owner statement also binds the exact mounted account row.
+After viewer actions and list facts, its final read compares those heads without enumerating references again.
+A general reader captures its original mounted Source before reading its page if this plan declines.
+Each batch of up to 100 repeats current Subject disclosure and one-key scalar selection at fresh native time.
+This plan requires the active recording definition and retains rejected originals in the cursor basis.
+At limit 100 with 102 originals and an open gate, the Source window, time and scalar operations declare eight
+statements, 9,598 native rows, 3,961 points including checkouts, and zero identity metadata rows. These terms
+cover the prepared range reader. Mounted admission, viewer actions and list-fact projection retain their own
+currentness requirements. Closed-gate Access work must fit the remaining allowance.
 
 The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
 and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.

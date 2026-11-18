@@ -6,6 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { CANONICAL_SOURCE_WORKFLOW } from './canonical-source-store.ts';
 import { workStepDeadline } from './collection-command-work.ts';
 import { readOwnerIndexWorkFrontier, stepOwnerIndex, type OwnerIndexWorkFrontier } from './owner-index.ts';
 import {
@@ -85,6 +86,29 @@ async function enqueue(tx: OperationalTransaction, input: Locator) {
   });
 }
 
+/** The same owner transaction releases the existing Source worker once its population and pins are ready. */
+async function prepareLogicalEverything(tx: OperationalTransaction, accountId: string) {
+  const {
+    rows: [source],
+  } = await tx.query<{ collection_id: string; generation: string }>(
+    `SELECT l.collection_id,l.generation::text FROM library.logical_everything_source l
+     WHERE (l.route,l.account_id)=($1,$2) AND EXISTS (SELECT 1 FROM library.owner_member_support m
+       WHERE (m.route,m.account_id)=(l.route,l.account_id))
+     AND NOT EXISTS (SELECT 1 FROM library.owner_index_pin p
+       WHERE (p.route,p.account_id)=(l.route,l.account_id) AND NOT p.meaning_ready)
+     AND NOT EXISTS (SELECT 1 FROM library.builtin_collection_reference r
+       WHERE (r.route,r.collection_id)=(l.route,l.collection_id))`,
+    [routeOf(accountId), accountId],
+  );
+  if (!source) return;
+  await enqueueIntent(tx, {
+    queue: 'maintenance',
+    workflowName: CANONICAL_SOURCE_WORKFLOW,
+    workflowId: `${CANONICAL_SOURCE_WORKFLOW}:${source.collection_id}:owner-ready:${source.generation}`,
+    input: { accounts: [accountId], collectionId: source.collection_id },
+  });
+}
+
 /** Each committed frontier owns its successor intent. Obsolete DBOS step replay has no source effects. */
 async function page(context: WorkContext, input: Locator) {
   const accountId = owner(input);
@@ -94,7 +118,9 @@ async function page(context: WorkContext, input: Locator) {
     // The one owner home is released before Global/Definitions checkout.
     const meaning = await loadOwnerPinMeaning(context.pool, accountId, pin);
     await pinCaptures.get(context.pool)?.({ workflowId: DBOS.workflowID!, accountId, meaning });
-    await transaction(context, accountId, (tx) => applyOwnerPinMeaning(tx, accountId, meaning));
+    await transaction(context, accountId, async (tx) => {
+      if (await applyOwnerPinMeaning(tx, accountId, meaning)) await prepareLogicalEverything(tx, accountId);
+    });
     // Metadata is swept in bounded pages. No user read schedules or pretends metadata completion.
     return;
   }
@@ -102,8 +128,10 @@ async function page(context: WorkContext, input: Locator) {
     const current = await readOwnerIndexWorkFrontier(tx, accountId);
     if (!isDeepStrictEqual(current, input.frontier)) return;
     const next = await stepOwnerIndex(tx, accountId);
-    if (!isDeepStrictEqual(next, current))
+    if (!isDeepStrictEqual(next, current)) {
       await enqueue(tx, { accounts: [accountId], frontier: next, metadata: false });
+      if (next.phase === 'ready') await prepareLogicalEverything(tx, accountId);
+    }
   });
 }
 

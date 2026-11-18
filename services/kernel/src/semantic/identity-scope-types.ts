@@ -70,7 +70,7 @@ export type IdentityScopeRegistrationResult =
       observation: IdentityScopeObservation;
       work: IdentityScopeWork;
     }>
-  | Readonly<{ status: 'pending'; work: IdentityScopeWork }>;
+  | Readonly<{ status: 'pending'; progressTransaction?: string; work: IdentityScopeWork }>;
 export type IdentityScopeArmInput = Readonly<{
   key: IdentityScopeKey;
   job: IdentityJobRef;

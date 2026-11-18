@@ -6,6 +6,7 @@ import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './b
 import { systemClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
+import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -13,6 +14,15 @@ import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
+import { readEverythingFilterTuple } from './logical-everything-filter.ts';
+import { mapPresentationBounded } from './application/presentation-bounds.ts';
+import type { CollectionMemberAdmission } from './owner-filter.ts';
+import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
+import { builtinCollectionId } from './builtin-identity.ts';
+import { nativeCollectionFootprint } from './collection-source-native.ts';
+import { instrumentNativeCollectionWork } from './collection-native-work.ts';
+import { withCollectionReadConnection } from './collection-read-connection.ts';
+import { observeEverythingPairs, readPublishedEverythingWindow } from './logical-everything-window.ts';
 import { listMemberPage } from './member-viewer-currentness.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { ordinaryCollectionPagePlan, ordinaryPageWorkDimensions } from './ordinary-read-bounds.ts';
@@ -66,8 +76,10 @@ export async function readCollectionSourceMembers(
     limit: number;
     cursor?: string | null;
     deadline: number;
-    query?: { filter: FilterDocument; releaseDigest: string };
+    query?: { filter: FilterDocument; releaseDigest: string; admission?: CollectionMemberAdmission };
     view?: 'BASIC' | 'FULL';
+    readViewerFacts?: ReadMemberViewerFacts;
+    ledger?: ReturnType<typeof ownerQueryWork>;
     languages?: readonly string[];
     /** Actual owner-home reread after releasing all foreign source homes. */
     revalidateOwner: () => Promise<void>;
@@ -87,10 +99,22 @@ export async function readCollectionSourceMembers(
   )
     throw new ProblemError('invalid_cursor');
   const pagePlan = ordinaryCollectionPagePlan(input.limit, input.view ?? 'BASIC');
-  const ledger = ownerQueryWork(input.limit, input.view ?? 'BASIC');
+  const ledger = input.ledger ?? ownerQueryWork(input.limit, input.view ?? 'BASIC', input.deadline);
   const pageDimensions = ordinaryPageWorkDimensions(pagePlan.sourceBound);
-  const version = await input.readSourceVersion();
-  const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
+  const readTime = () =>
+    ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+      instrumentNativeCollectionWork(deps.pool, ledger.physical, nativeCollectionFootprint, () =>
+        withCollectionReadConnection(deps.pool, input.deadline, (client) => mintReadTime(client, clock)),
+      ),
+    );
+  const logicalFilter =
+    input.query !== undefined &&
+    input.actor.kind === 'account' &&
+    input.collectionId === builtinCollectionId(input.actor.accountId, { kind: 'everything' });
+  const previousVersion = logicalFilter ? null : await input.readSourceVersion();
+  const at = logicalFilter
+    ? await readTime()
+    : await withConnection(deps.pool, (client) => mintReadTime(client, clock));
   try {
     const context = { actor: input.actor, at, deadline: input.deadline };
     const runtime = await openOwnerQuery(deps, {
@@ -99,12 +123,15 @@ export async function readCollectionSourceMembers(
       deadline: input.deadline,
       work: ledger,
       logical: true,
+      publishedEverythingPage: logicalFilter,
       at,
     });
     const prepared = runtime.source;
     const source = runtime.native;
     const filtered = input.query ? await runtime.filter(input.query.filter, input.query.releaseDigest) : null;
     const observed = prepared.observation;
+    const version =
+      previousVersion ?? (prepared.queryCapture ? observed.sourceIdentity.generation : await input.readSourceVersion());
     if (
       observed.authority.kind !== 'private_builtin' ||
       (observed.authority.kind === 'private_builtin' &&
@@ -121,6 +148,129 @@ export async function readCollectionSourceMembers(
       )
         throw new ProblemError('stale_cursor');
       after = String(position.after[3]);
+    }
+    const admission = input.query?.admission;
+    const nativeAdmission = admission && readNativeCollectionMemberAdmission(admission);
+    const leaf = admission?.plan?.leaves.length === 1 ? admission.plan.leaves[0] : null;
+    if (
+      filtered &&
+      input.query &&
+      prepared.queryCapture &&
+      input.actor.kind === 'account' &&
+      admission &&
+      nativeAdmission?.actor === input.actor &&
+      nativeAdmission.pool === deps.pool &&
+      nativeAdmission.deadline >= input.deadline &&
+      !nativeAdmission.retainedMeaning &&
+      nativeAdmission.source.kind === 'owner' &&
+      admission.filter === input.query.filter &&
+      admission.releaseDigest === input.query.releaseDigest &&
+      'statement' in input.query.filter &&
+      leaf?.kind === 'catalogue' &&
+      leaf.clause.facet === 'statement' &&
+      'range' in leaf.clause
+    ) {
+      const query = input.query;
+      const actor = input.actor;
+      const depsAtOwner = { ...deps, actor, deadline: input.deadline, work: ledger.physical };
+      const rawLimit = Math.min(pagePlan.candidateLimit, 2 * input.limit);
+      const window = (source: typeof prepared) =>
+        ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+          readPublishedEverythingWindow(depsAtOwner, source, after, rawLimit),
+        );
+      const initial = await window(prepared);
+      const subjects = await ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+        observeEverythingPairs(depsAtOwner, initial.rows, at),
+      );
+      const ids = [...new Set(initial.rows.map((row) => row.terminal))];
+      const visible = new Set(
+        subjects.decisions.filter((decision) => decision.state === 'disclosed').map((decision) => decision.terminal),
+      );
+      const evaluate = (time: typeof at) =>
+        ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+          instrumentNativeCollectionWork(deps.pool, ledger.physical, nativeCollectionFootprint, () =>
+            mapPresentationBounded(ids, async (id) =>
+              visible.has(id)
+                ? readEverythingFilterTuple(
+                    { ...depsAtOwner, routeKey: requiredRouteKey(deps.routeKey) },
+                    time,
+                    id,
+                    leaf,
+                  )
+                : { id, visible: false, matches: false },
+            ),
+          ),
+        );
+      const matches = await evaluate(at);
+      const supported = new Set(
+        initial.rows.flatMap((row, i) =>
+          row.present && subjects.decisions[i]!.state === 'disclosed' ? [row.terminal] : [],
+        ),
+      );
+      const members = ids
+        .filter((id, i) => id !== initial.incompleteTerminal && matches[i]!.matches && supported.has(id))
+        .map((subjectId) => ({ kind: 'dynamic' as const, subjectId }));
+      if (!initial.exhausted && members.length <= input.limit) throw new ProblemError('semantic_not_ready');
+      const shown = members.slice(0, input.limit);
+      const revalidateViewer = input.view === 'FULL' ? await input.readViewerFacts?.(shown) : undefined;
+      const revalidate = async () => {
+        const finalAt = await readTime();
+        try {
+          const final = await openOwnerQuery(deps, {
+            actor,
+            collectionId: input.collectionId,
+            deadline: input.deadline,
+            work: ledger,
+            logical: true,
+            publishedEverythingPage: true,
+            at: finalAt,
+          });
+          if (
+            !sameSource(observed, final.source.observation) ||
+            !isDeepStrictEqual(initial, await window(final.source))
+          )
+            throw new ProblemError('semantic_not_ready');
+          const finalFilter = await final.filter(query.filter, query.releaseDigest);
+          if (
+            !isDeepStrictEqual(filtered.prepared.basis, finalFilter.prepared.basis) ||
+            !isDeepStrictEqual(matches, await evaluate(finalAt))
+          )
+            throw new ProblemError('semantic_not_ready');
+          // The fresh logical Source admits the same owner. The window joins its exact current fact head.
+          if (final.source.observation.sourceIdentity.generation !== version)
+            throw new ProblemError('semantic_not_ready');
+          await revalidateViewer?.();
+          const fresh = await readTime();
+          try {
+            await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => subjects.revalidate(fresh));
+          } finally {
+            releaseOperationalTime(fresh);
+          }
+        } finally {
+          releaseOperationalTime(finalAt);
+        }
+      };
+      const disclosed =
+        input.view === 'FULL'
+          ? await attachCollectionListFacts({ ...depsAtOwner, routeKey: requiredRouteKey(deps.routeKey) }, shown, {
+              revalidate,
+              ...(input.languages === undefined ? {} : { languages: input.languages }),
+            })
+          : shown;
+      if (input.view !== 'FULL') await revalidate();
+      if (disclosed.length !== shown.length) throw new ProblemError('semantic_not_ready');
+      return listMemberPage(
+        disclosed,
+        deps.tokens,
+        binding,
+        members.length > shown.length
+          ? {
+              epoch: observed.stamp.epoch,
+              after: [observed.incarnation, observed.basis.digest, version, shown.at(-1)!.subjectId],
+            }
+          : null,
+        clock,
+      );
     }
     const members: DynamicMemberView[] = [];
     let exhausted = false;
