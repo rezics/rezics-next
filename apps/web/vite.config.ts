@@ -463,7 +463,20 @@ export default defineConfig((context) => {
     plugins: traceWebVitePlugins([
       bundledNativeClient &&
         ({
-          name: 'native-web-bundled-client-ready',
+          name: 'native-web-bundled-client',
+          applyToEnvironment(environment) {
+            return environment.name === 'client';
+          },
+          configResolved(config) {
+            const client = config.environments.client!;
+            // The bundled resolver reads source dependencies directly. Its dev environment would still
+            // start an independent optimizer alongside Rolldown. Clear Start's merged optimizer inputs.
+            client.optimizeDeps = { ...client.optimizeDeps, noDiscovery: true, include: [], entries: [] };
+          },
+          outputOptions(options) {
+            // Bundled dev forces maps after reading build.sourcemap. The private browser only consumes the emitted JS.
+            return { ...options, sourcemap: false };
+          },
           configureServer(server) {
             const client = server.environments.client;
             const bundle = client.bundledDev;
