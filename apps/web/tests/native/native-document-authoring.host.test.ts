@@ -13,11 +13,12 @@ import {
 } from '@rezics/document';
 import type { BrowserContext, Page } from 'playwright';
 import { expect } from 'playwright/test';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import {
   createNativeDocumentAuthoringFixture,
   type NativeDocumentAuthoringFixture,
 } from './native-document-authoring-fixture.ts';
+import type { NativeKernelRequest } from './stack.ts';
 
 const timeout = 600_000;
 const lifecycle = new NativeTestLifecycle('native document authoring');
@@ -131,22 +132,98 @@ async function revealHistoryControl(post: ReturnType<Page['locator']>) {
   return post.getByRole('button', { name: 'Revision history', exact: true, expanded: false });
 }
 
+function isMountedRevisionRead(request: NativeKernelRequest, postId: string): boolean {
+  return (
+    !request.fixtureRequest &&
+    request.method === 'GET' &&
+    request.url.split('?', 1)[0] === `/v1/posts/${postId}/revisions`
+  );
+}
+
+function isHistoryFunctionRead(href: string, postId: string): boolean {
+  const url = new URL(href);
+  if (url.origin !== new URL(fixture.stack.web).origin || !url.pathname.startsWith('/_serverFn/')) return false;
+  const payload = url.searchParams.get('payload');
+  return payload?.includes('"post-history"') === true && payload.includes(`"${postId}"`);
+}
+
+async function observeMountedHistory(page: Page, postId: string, controlId: string | null, nativeFrom: number) {
+  const [mounted, native] = await Promise.all([
+    settledWithin(
+      page.evaluate(({ postId, controlId }) => {
+        const post = document.getElementById(`post-${postId}`);
+        const control = post?.querySelector('button[aria-controls^="post-history-"]');
+        const currentId = control?.getAttribute('aria-controls');
+        const region = currentId ? document.getElementById(currentId) : null;
+        return {
+          hydrated: document.documentElement.hasAttribute('data-hydrated'),
+          postFound: !!post,
+          detailsOpen: control?.closest('details')?.open ?? null,
+          sameControl: currentId ? currentId === controlId : null,
+          expanded: control?.getAttribute('aria-expanded') ?? null,
+          region: region && {
+            hidden: region.hasAttribute('hidden'),
+            role: region.getAttribute('role'),
+            named: region.getAttribute('aria-label') === 'Revision history',
+            status: Array.from(region.querySelectorAll(':scope > p[role="status"], :scope > p[role="alert"]'))
+              .slice(0, 4)
+              .map((status) => status.textContent?.trim().slice(0, 160)),
+            summaries: region.querySelectorAll('[data-history-summary]').length,
+            lists: Array.from(region.querySelectorAll('ol, ul, [role="list"]'))
+              .slice(0, 4)
+              .map((list) => ({
+                tag: list.localName,
+                role: list.getAttribute('role'),
+                named: list.getAttribute('aria-label') === 'Revision history',
+                directItems: list.querySelectorAll(':scope > li').length,
+              })),
+          },
+        };
+      }, { postId, controlId }),
+      1_500,
+    ).catch(() => undefined),
+    // Sample pending as well as completed worker requests without draining the Kernel.
+    settledWithin(fixture.stack.sampleKernelRequests(), 1_500).catch(() => undefined),
+  ]);
+  const reads = native?.slice(nativeFrom).filter((request) => isMountedRevisionRead(request, postId));
+  return {
+    mounted: mounted ?? null,
+    kernel: reads
+      ? {
+          count: reads.length,
+          samples: reads.slice(0, 4).map(({ authorization, session, responseStatus, access }) => ({
+            status: responseStatus ?? null,
+            credentialPresent: Boolean(authorization || session),
+            isAlice: access ? access.actorId === fixture.alice.accountId : null,
+            authorized: access?.authorized ?? null,
+          })),
+        }
+      : null,
+  };
+}
+
 async function measureHistoryReads(pageUrl: string, context: BrowserContext, postId: string): Promise<number> {
   const historyPage = await context.newPage();
-  historyPage.setDefaultTimeout(30_000);
-  await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-  await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  const post = historyPage.locator(`#post-${postId}`);
-  const button = await revealHistoryControl(post);
-  await expect(button).toBeVisible();
-  await historyPage.waitForTimeout(100);
-  const before = fixture.stack.kernelRequests().length;
-  await button.click();
-  const panel = post.getByRole('region', { name: 'Revision history', exact: true });
-  await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
-  const requests = fixture.stack.kernelRequests().slice(before);
-  await historyPage.close();
-  return requests.length;
+  try {
+    historyPage.setDefaultTimeout(30_000);
+    await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+    await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    const post = historyPage.locator(`#post-${postId}`);
+    const button = await revealHistoryControl(post);
+    await expect(button).toBeVisible();
+    await historyPage.waitForTimeout(100);
+    // Browser traffic only appears in the test process after sampling the stack host.
+    const before = (await fixture.stack.sampleKernelRequests()).length;
+    await button.click();
+    const panel = post.getByRole('region', { name: 'Revision history', exact: true });
+    await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
+    const requests = (await fixture.stack.sampleKernelRequests()).slice(before);
+    const revisionReads = requests.filter((request) => isMountedRevisionRead(request, postId));
+    expect(revisionReads.map(({ responseStatus }) => responseStatus)).toEqual([200]);
+    return requests.length;
+  } finally {
+    await historyPage.close();
+  }
 }
 
 describe('native document authoring', () => {
@@ -510,7 +587,8 @@ describe('native document authoring', () => {
     expect(ids(newRevision!.body!).length).toBeGreaterThan(ids(initial).length);
     expect(documentText(newRevision!.body!)).toContain('edited in the served editor');
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    const historyNativeFrom = fixture.stack.kernelRequests().length;
+    const reloadedThread = await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
     const revisedProse = page.locator('[data-slot="document-body"]').first();
     const visibleBlocks = await revisedProse.locator(':scope > *').allTextContents();
@@ -522,12 +600,31 @@ describe('native document authoring', () => {
     await expect(revisedProse).not.toContainText('Private account title sentinel');
 
     const history = await revealHistoryControl(editedPost);
+    const historyControlId = await history.getAttribute('aria-controls');
     await history.click();
     const historyPanel = editedPost.getByRole('region', { name: 'Revision history', exact: true });
     const historyVersions = historyPanel
       .getByRole('list', { name: 'Revision history', exact: true })
       .locator(':scope > li');
-    await expect(historyVersions).toHaveCount(2);
+    try {
+      await expect(historyVersions).toHaveCount(2);
+    } catch (error) {
+      const observation = await observeMountedHistory(page, original.id, historyControlId, historyNativeFrom);
+      const functionResponses = network
+        .filter(({ url }) => isHistoryFunctionRead(url, original.id))
+        .slice(0, 4)
+        .map(({ status }) => status);
+      const functionFailures = requestFailures.filter(({ url }) => isHistoryFunctionRead(url, original.id)).length;
+      const evidence = {
+        documentStatus: reloadedThread?.status() ?? null,
+        sameThreadPath: reloadedThread ? new URL(reloadedThread.url()).pathname === new URL(page.url()).pathname : null,
+        functionResponses,
+        functionFailures,
+        ...observation,
+      };
+      console.info(`native-document-authoring-history ${JSON.stringify(evidence)}`);
+      throw error;
+    }
     for (const [index, revision] of revisionsRead.revisions.entries()) {
       const row = historyVersions.nth(index);
       const version = index + 1;
