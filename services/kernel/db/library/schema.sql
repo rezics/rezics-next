@@ -9617,6 +9617,13 @@ CREATE INDEX entry_deleted_profile_pending ON library.entry_deleted USING btree 
 
 
 --
+-- Name: entry_personal_live_annotation_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_personal_live_annotation_owner ON library.entry_personal_fact USING btree (route, account_id) WHERE ((note IS NOT NULL) OR (priority IS NOT NULL));
+
+
+--
 -- Name: entry_profile_pending; Type: INDEX; Schema: library; Owner: -
 --
 
