@@ -133,13 +133,14 @@ test.serial(
     await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
     const { collection } = await fixture.checked('POST', '/v1/collections', {
       title: 'Viewer currentness',
-      visibility: 'public',
+      visibility: 'private',
     });
     for (const subjectId of [book, book])
       await fixture.checked('POST', `/v1/collections/${collection.id}/members`, { subjectId });
-    const read = () => fixture.call('GET', `/v1/collections/${collection.id}/members?view=FULL`, undefined, 'editor');
+    const path = `/v1/collections/${collection.id}/members?view=FULL`;
+    const read = () => fixture.call('GET', path, undefined, 'editor');
     const initial = await read();
-    expect(initial.status).toBe(200);
+    expect(initial.status, JSON.stringify(initial.body)).toBe(200);
     const initialPage = initial.body as {
       members: Array<{ id: string; subjectId: string }>;
       viewerFacts?: { state: string; rows?: Array<{ rowKey: string }> };
@@ -150,6 +151,12 @@ test.serial(
       expect(initialPage.viewerFacts.rows?.map(({ rowKey }) => rowKey)).toEqual(
         initialPage.members.map(({ id }) => id),
       );
+
+    await fixture.grant('reader', 'gate:collections');
+    const denied = await fixture.call('GET', path, undefined, 'reader');
+    expect(denied.status).toBe(404);
+    expect(denied.body).not.toHaveProperty('members');
+    expect(denied.body).not.toHaveProperty('viewerFacts');
 
     const removed = initialPage.members[1]!;
     const interleave = interleaveViewerEntries(() =>
@@ -203,7 +210,7 @@ test.serial('shelf route withholds a row whose native Entry changes during viewe
   const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
   const read = () => fixture.call('GET', path, undefined, 'reader');
   const initial = await read();
-  expect(initial.status).toBe(200);
+  expect(initial.status, JSON.stringify(initial.body)).toBe(200);
   expect((initial.body as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
     { subjectId: book },
   ]);

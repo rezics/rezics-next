@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
+import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 const scopes = ['copy:create', 'copy:update', 'copy:delete', 'copy:list', 'copy:read'];
 let now = Date.parse('2026-10-26T12:00:00.000Z');
@@ -80,17 +82,23 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   });
 
   const ownerId = native.owner.actor.accountId;
+  const routeKey = testRouteKey();
+  const usedRoutes = new Set([routeOf(ownerId)]);
   const people: { id: string; label: string }[] = [];
   for (const label of ['Original loan counterparty', 'Current loan counterparty']) {
+    let key = native.homeKey(ownerId);
+    while (usedRoutes.has(subjectTarget(routeKey, ownerId, key).route)) key = native.homeKey(ownerId);
     const response = await native.send(
       'owner',
       'POST',
       '/v1/subjects',
       { type: 'schema:Person', labels: { en: label } },
-      native.homeKey(ownerId),
+      key,
     );
     expect(response.status).toBe(201);
     const { subject } = (await response.json()) as { subject: { id: string } };
+    expect(usedRoutes.has(routeOf(subject.id))).toBe(false);
+    usedRoutes.add(routeOf(subject.id));
     await native.awaitCurrentIdentity(subject.id);
     people.push({ id: subject.id, label });
   }
@@ -104,14 +112,16 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   });
   expect(personCopyResponse.status).toBe(201);
   const { copy: personCopy } = (await personCopyResponse.json()) as { copy: { id: string; revision: number } };
-  const personLoanResponse = await native.send('owner', 'POST', '/v1/copy-loans', {
+  const personInput = {
     copyId: personCopy.id,
     copyRevision: personCopy.revision,
     direction: 'borrowed',
     counterparty: { kind: 'person', personId: redirected.id },
     startedOn: '2026-10-20',
     dueOn: '2026-10-27',
-  });
+  };
+  const personKey = entryKey();
+  const personLoanResponse = await native.send('owner', 'POST', '/v1/copy-loans', personInput, personKey);
   expect(personLoanResponse.status).toBe(201);
   const { loan: personLoan } = (await personLoanResponse.json()) as { loan: { id: string } };
   const personPage = (await (await native.send('owner', 'GET', openPath)).json()) as {
@@ -132,6 +142,9 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
       { loan: { id: loan.id, counterparty: input.counterparty } },
     ],
   });
+  const mergedReplay = await native.send('owner', 'POST', '/v1/copy-loans', personInput, personKey);
+  expect(mergedReplay.status).toBe(201);
+  expect(await mergedReplay.json()).toMatchObject({ loan: { id: personLoan.id, copyId: personCopy.id, revision: 1 } });
   const personReturned = await native.send('owner', 'POST', `/v1/copy-loans/${personLoan.id}/return`, {
     revision: 1,
     returnedOn: '2026-10-26',
@@ -184,6 +197,17 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
       { loan: { id: loan.id, counterparty: input.counterparty, state: 'returned' }, copy: { state: 'deleted' } },
       { loan: { id: personLoan.id, state: 'returned' }, copy: { state: 'available' } },
     ],
+  });
+
+  const mergedCreate = await native.send('owner', 'POST', '/v1/copy-loans', personInput, entryKey());
+  expect(mergedCreate.status).toBe(201);
+  const { loan: mergedLoan } = (await mergedCreate.json()) as { loan: { id: string } };
+  expect(mergedLoan.id).not.toBe(personLoan.id);
+  expect(mergedLoan).toMatchObject({
+    copyId: personCopy.id,
+    counterparty: { kind: 'person', personId: redirected.id, displayName: survivor.label },
+    startedOn: '2026-10-20',
+    dueOn: '2026-10-27',
   });
 }, 120_000);
 
