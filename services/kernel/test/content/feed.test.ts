@@ -271,6 +271,8 @@ async function runMixedHomeJourney() {
         headers: { ...(account ? { authorization: `Bearer ${account.bearer}` } : {}), 'accept-language': 'en' },
       });
       const body = await response.json();
+      if (response.status !== 200 && process.env.REZICS_MIXED_HOME_TIMING === '1')
+        observe('request failed', { stream, signedIn: account !== null, ...(serving ? { serving } : {}) });
       expect(response.status, JSON.stringify(body)).toBe(200);
       if (account) expect(response.headers.get('cache-control')).toBe('private, no-store');
       return body as FeedPage;

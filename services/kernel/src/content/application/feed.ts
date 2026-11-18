@@ -84,6 +84,7 @@ export function createFeedApplication(
       const personal = actor.kind === 'account';
       if (stream === 'following' && !personal) return ports.refuse('authentication_required');
       const account = asAccount(actor);
+      const admissions: Promise<void>[] = [];
       if (account) {
         if (
           !account.scopes.includes('follow:list') ||
@@ -91,13 +92,16 @@ export function createFeedApplication(
             (!account.scopes.includes('library_entry:list') || !account.scopes.includes('progress_session:list')))
         )
           return ports.refuse('forbidden');
-        await ports.admission.following(account, deadline);
+        admissions.push(ports.admission.following(account, deadline));
         if (stream === 'home') {
-          await ports.admission.personalLibrary(account, deadline);
-          await ports.admission.readingProgress(account, deadline);
+          admissions.push(ports.admission.personalLibrary(account, deadline));
+          admissions.push(ports.admission.readingProgress(account, deadline));
         }
       }
-      if (stream === 'home') await ports.admission.discovery(actor, deadline);
+      if (stream === 'home') admissions.push(ports.admission.discovery(actor, deadline));
+      // Each owner admits its own boundary. Drain all reads and keep the same denial precedence.
+      for (const admission of await Promise.allSettled(admissions))
+        if (admission.status === 'rejected') throw admission.reason;
       const now = ports.now();
       const bindingQuery: FeedReadQuery = {
         ...query,
