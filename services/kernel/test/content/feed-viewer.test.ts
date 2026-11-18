@@ -1,6 +1,6 @@
 import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
 import { expect, test } from 'bun:test';
-import { composeFeedViewerPersonalActions, feedViewerReferences } from '../../src/content/feed-viewer.ts';
+import { prepareFeedViewerPersonalActions, feedViewerReferences } from '../../src/content/feed-viewer.ts';
 import { FeedViewerPersonalActionsSchema } from '../../src/content/feed-viewer-schema.ts';
 import { Value } from 'typebox/value';
 import type { FeedItem } from '../../src/content/feed-contract.ts';
@@ -71,7 +71,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
       const ready = new Promise<void>((resolve) => {
         reached = resolve;
       });
-      const result = composeFeedViewerPersonalActions(
+      const result = prepareFeedViewerPersonalActions(
         {
           ...deps,
           viewerPersonalActions: async (...args) => {
@@ -85,8 +85,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
         [first, second],
         Date.now() + 120_000,
         [],
-        async () => admitted,
-      );
+      ).then((publish) => publish(admitted));
       await ready;
       return { result };
     };
@@ -115,7 +114,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
       ],
     });
     for (const page of pages) expect(Value.Check(FeedViewerPersonalActionsSchema(), page)).toBe(true);
-    const native = await composeFeedViewerPersonalActions(
+    const native = await prepareFeedViewerPersonalActions(
       {
         ...deps,
         viewerPersonalActions: (...args) =>
@@ -134,38 +133,35 @@ test('Home keeps native private states, duplicate occurrence keys and independen
       [first],
       Date.now() + 120_000,
       [],
-      async () => [first],
-    );
+    ).then((publish) => publish([first]));
     expect(native).toEqual({ state: 'unavailable', reason: 'currentness', retryable: true });
     expect(Value.Check(FeedViewerPersonalActionsSchema(), native)).toBe(true);
     const producerFailure = new Error('viewer action producer failed');
     await expect(
-      composeFeedViewerPersonalActions(
+      prepareFeedViewerPersonalActions(
         { ...deps, viewerPersonalActions: async () => Promise.reject(producerFailure) },
         enrichment,
         actor,
         [first],
         Date.now() + 120_000,
         [],
-        async () => [first],
       ),
     ).rejects.toBe(producerFailure);
     const refused: ViewerPersonalActionsPage = { state: 'unavailable', reason: 'response_limit', retryable: false };
     expect(
-      await composeFeedViewerPersonalActions(
+      await prepareFeedViewerPersonalActions(
         { ...deps, viewerPersonalActions: async () => refused },
         enrichment,
         actor,
         [first],
         Date.now() + 120_000,
         [],
-        async () => [first],
-      ),
+      ).then((publish) => publish([first])),
     ).toEqual(refused);
     for (const width of [1, 4, 16]) {
       const occurrences = Array.from({ length: width }, (_, index) => work(f.subjectId, `growth-${index}`));
       let raw = 0;
-      await composeFeedViewerPersonalActions(
+      await prepareFeedViewerPersonalActions(
         {
           ...deps,
           viewerPersonalActions: async (_actor, rows) => {
@@ -178,8 +174,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
         occurrences,
         Date.now() + 120_000,
         [],
-        async () => occurrences,
-      );
+      ).then((publish) => publish(occurrences));
       expect(raw).toBe(width);
     }
     const nativeDeps = {

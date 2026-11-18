@@ -473,6 +473,8 @@ export type FeedFinishResult = {
   reactionsAsOf?: FeedReactionFreshness | null;
 };
 
+export type FeedPersonalActionsPublication = (admitted: readonly FeedItem[]) => Promise<ViewerPersonalActionsPage>;
+
 export type FeedFinishPort = Readonly<{
   beginConversation(items: FeedItem[], deadline: number): Promise<Pick<FeedFinishResult, 'rewind' | 'error'>>;
   confirmConversation(items: FeedItem[], deadline: number): Promise<FeedFinishResult>;
@@ -496,13 +498,12 @@ export type FeedFinishPort = Readonly<{
     actor: FeedAccountActor,
     deadline: number,
   ): Promise<FeedViewerFollows | undefined>;
-  personalActions(
-    items: FeedItem[],
-    actor: FeedActor,
+  preparePersonalActions(
+    items: readonly FeedItem[],
+    actor: FeedAccountActor,
     languages: readonly string[],
     deadline: number,
-    reopen: (viewerReady?: Promise<unknown>) => Promise<FeedItem[]>,
-  ): Promise<{ items: FeedItem[]; viewerPersonalActions?: ViewerPersonalActionsPage }>;
+  ): Promise<FeedPersonalActionsPublication | undefined>;
   reopenSelected(
     items: FeedItem[],
     actor: FeedActor,

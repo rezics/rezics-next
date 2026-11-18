@@ -45,4 +45,4 @@ export type { FeedDependencies, FeedNativeSuppliers } from './feed-capabilities.
 export type { FeedEnrichmentPorts } from '../feed-enrichment-ports.ts';
 export type { FeedActivityStore } from '../feed-activity.ts';
 export { prepareFeedContentContext } from '../feed-context.ts';
-export { composeFeedViewerPersonalActions } from '../feed-viewer.ts';
+export { prepareFeedViewerPersonalActions } from '../feed-viewer.ts';

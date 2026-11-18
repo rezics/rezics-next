@@ -17,15 +17,15 @@ import {
   type FeedPublicSummary,
 } from '../../src/content/contract/index.ts';
 import { canonicalFeedObject, feedCandidateBound, mergeFeedLanes } from '../../src/content/core/index.ts';
-import { FeedPageSchema } from '../../src/content/feed-contract.ts';
 
 type CollectionFeedItem = Extract<FeedItem, { key: { owner: 'commerce'; kind: 'collection' } }>;
 expectTypeOf<CollectionFeedItem['summary']['card']>().toEqualTypeOf<CollectionCard>();
 expectTypeOf<CollectionFeedItem['summary']>().toEqualTypeOf<CollectionSummary>();
 expectTypeOf<FeedPage['viewerPersonalActions']>().toEqualTypeOf<ViewerPersonalActionsPage | undefined>();
-expectTypeOf<
-  Awaited<ReturnType<FeedApplicationPorts['finish']['personalActions']>>['viewerPersonalActions']
->().toEqualTypeOf<ViewerPersonalActionsPage | undefined>();
+type PreparedPersonalActions = Awaited<ReturnType<FeedApplicationPorts['finish']['preparePersonalActions']>>;
+expectTypeOf<PreparedPersonalActions>().toEqualTypeOf<
+  ((admitted: readonly FeedItem[]) => Promise<ViewerPersonalActionsPage>) | undefined
+>();
 
 const summary = (id: string, type = 'schema:Book'): FeedPublicSummary => ({
   id,
@@ -87,7 +87,7 @@ function ports(overrides: Partial<FeedApplicationPorts> = {}): FeedApplicationPo
       reactionAdvice: async (items) => ({ items }),
       subjectReactions: async (items) => ({ items }),
       followSupport: async (items) => ({ items }),
-      personalActions: async (items) => ({ items }),
+      preparePersonalActions: async () => undefined,
       reopenSelected: async (items) => items,
     },
     classifyFailure: () => 'unavailable',
@@ -116,12 +116,12 @@ test('missing continuation, discovery and following producers stay unavailable r
   expect(page.next).toBeNull();
 });
 
-test('a refused retained Home final removes Discovery before private viewer rows are admitted', async () => {
+test('Home prepares viewer actions during enrichment and publishes only survivors of the retained final', async () => {
   const selected = item('discovery', '00000000-0000-4000-8000-000000000001');
   const following = item('following', '00000000-0000-4000-8000-000000000002');
   const calls: string[] = [];
   const selectionOpened = Promise.withResolvers<void>();
-  const viewerReady = Promise.withResolvers<void>();
+  const releaseViewer = Promise.withResolvers<void>();
   const discoveryFinished = Promise.withResolvers<void>();
   let followingReads = 0;
   const defaults = ports();
@@ -161,19 +161,28 @@ test('a refused retained Home final removes Discovery before private viewer rows
     },
     finish: {
       ...defaults.finish,
-      async personalActions(items, _actor, _languages, _deadline, finalAdmission) {
+      async contentContext(items) {
+        calls.push('context');
+        return { items };
+      },
+      async preparePersonalActions(items) {
+        calls.push('viewer');
         expect(items.map(({ id }) => id)).toContain(selected.id);
-        const publication = finalAdmission(viewerReady.promise);
-        await selectionOpened.promise;
-        expect(calls).toEqual(['search', 'current']);
-        viewerReady.resolve();
-        const current = await publication;
-        expect(current.map(({ id }) => id)).toEqual([following.id]);
-        return { items: current };
+        await releaseViewer.promise;
+        calls.push('viewer ready');
+        return async (admitted) => {
+          expect(admitted.map(({ id }) => id)).toEqual([following.id]);
+          calls.push('publish');
+          return { state: 'current', question: null, rows: [] };
+        };
+      },
+      async subjectReactions(items) {
+        calls.push('subject reactions');
+        return { items };
       },
     },
   });
-  const page = await app.list(
+  const reading = app.list(
     {
       kind: 'account',
       accountId: '00000000-0000-4000-8000-000000000003',
@@ -183,7 +192,27 @@ test('a refused retained Home final removes Discovery before private viewer rows
     Date.now() + 2_000,
     ['en'],
   );
-  expect(calls).toEqual(['search', 'current', 'final', 'close']);
+  await selectionOpened.promise;
+  // Drain runnable work with the viewer read held open. Neither private lanes nor
+  // the retained FINAL may reauthorize until that read has completed.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const beforeRelease = [...calls];
+  const followingBeforeRelease = followingReads;
+  releaseViewer.resolve();
+  const page = await reading;
+  expect(beforeRelease).toEqual(['search', 'context', 'viewer', 'subject reactions', 'current']);
+  expect(followingBeforeRelease).toBe(1);
+  expect(calls).toEqual([
+    'search',
+    'context',
+    'viewer',
+    'subject reactions',
+    'current',
+    'viewer ready',
+    'final',
+    'publish',
+    'close',
+  ]);
   expect(page.sources.discovery).toBe('unavailable');
   expect(page.feedItems).toEqual([following]);
 });
@@ -230,7 +259,7 @@ test('current Collection cards and viewer actions keep their installed types and
       },
       finish: {
         ...defaults.finish,
-        personalActions: async (items) => ({ items, viewerPersonalActions }),
+        preparePersonalActions: async () => async () => viewerPersonalActions,
       },
     },
     { route: () => 1 },
@@ -247,6 +276,7 @@ test('current Collection cards and viewer actions keep their installed types and
 
   expect(page.feedItems).toEqual([collection]);
   expect(page.viewerPersonalActions).toEqual(viewerPersonalActions);
+  const { FeedPageSchema } = await import('../../src/content/feed-contract.ts');
   expect(Value.Check(FeedPageSchema(), page)).toBe(true);
   expect(JSON.parse(JSON.stringify(page))).toEqual(page);
 });

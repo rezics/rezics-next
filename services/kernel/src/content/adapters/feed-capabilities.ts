@@ -6,7 +6,6 @@ import type { WorkClient } from '../../work/client.ts';
 import type { AccountDiscoverySummary, DiscoveryFeedSearch, DiscoverySearch } from '../../search/index.ts';
 import type { SearchService } from '../../search/service-scope.ts';
 import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
-import type { ViewerPersonalActionsPage } from '../../library/contract/index.ts';
 import type { readFollowDiscovery } from '../../library/follow-discovery.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../feed-activity.ts';
@@ -23,6 +22,7 @@ import type {
   FeedContinuationQuery,
   FeedContinuationSubject,
   FeedItem,
+  FeedPersonalActionsPublication,
   FeedPublicSummary,
 } from '../contract/index.ts';
 
@@ -99,20 +99,19 @@ export type FeedContentContextComposer = (
   options?: FeedContentContextOptions,
 ) => Promise<FeedContentContextComposition>;
 
-export type FeedViewerPersonalActionsComposer = (
+export type FeedViewerPersonalActionsPreparer = (
   dependencies: Pick<FeedDependencies, 'pool' | 'routeKey' | 'access' | 'viewerPersonalActions'>,
   actor: Actor,
   items: readonly FeedItem[],
   deadline: number,
   languages: readonly string[],
-  finalAdmission: (viewerReady?: Promise<unknown>) => Promise<readonly FeedItem[]>,
-) => Promise<ViewerPersonalActionsPage>;
+) => Promise<FeedPersonalActionsPublication>;
 
 /** Composition supplies one factory; a native reader retains its own producer instances. */
 export type FeedProducerCapabilities = Readonly<{
   enrichment: FeedEnrichmentPorts;
   prepareContentContext: FeedContentContextComposer;
-  composeViewerPersonalActions: FeedViewerPersonalActionsComposer;
+  prepareViewerPersonalActions: FeedViewerPersonalActionsPreparer;
   create(deps: FeedDependencies, activityStore: FeedActivityStore): FeedNativeSuppliers;
   isDeadline(error: unknown): boolean;
   isAdmissionFailure(error: unknown): boolean;

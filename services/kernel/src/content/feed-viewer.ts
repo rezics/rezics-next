@@ -1,6 +1,6 @@
 import type { Actor } from '../request/access.ts';
 import type { ViewerPersonalActionsReader } from '../library/adapters/index.ts';
-import type { ViewerPersonalActionsPage } from '../library/contract/index.ts';
+import type { FeedPersonalActionsPublication } from './contract/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { FeedDependencies } from './feed.ts';
 import type { FeedItem } from './feed-contract.ts';
@@ -31,57 +31,45 @@ export function feedViewerReferences(items: readonly FeedItem[]): ViewerPersonal
 }
 
 /** One call is one page cohort. No cached result or deduplicated raw input crosses calls. */
-export async function composeFeedViewerPersonalActions(
+export async function prepareFeedViewerPersonalActions(
   deps: Pick<FeedDependencies, 'pool' | 'routeKey' | 'access' | 'viewerPersonalActions'>,
   enrichment: FeedEnrichmentPorts,
   actor: Actor,
   items: readonly FeedItem[],
   deadline: number,
   languages: readonly string[],
-  finalAdmission: (viewerReady?: Promise<unknown>) => Promise<readonly FeedItem[]>,
-): Promise<ViewerPersonalActionsPage> {
+): Promise<FeedPersonalActionsPublication> {
   const references = feedViewerReferences(items);
-  const reading = (async () => {
-    const subjects = await enrichment.readSubjectSummaryObservation(
-      { ...deps, actor, deadline },
-      [...new Set(references.map((row) => row.subjectId))],
-      { languages },
-    );
-    const rows = references.filter((row) => {
-      const subject = subjects.summaries.get(row.subjectId);
-      return subject?.creativeWork && subject.id === row.subjectId && subject.type === row.resourceType;
-    });
-    const result = await deps.viewerPersonalActions(actor, rows, enrichment.standardQuestionId, deadline);
-    return { subjects, rows, result };
-  })();
-  // Reopen the selected lane operands while Library reads viewer facts. The
-  // final owner checks wait for that private reader to settle.
-  const [viewer, publication] = await Promise.allSettled([
-    reading,
-    Promise.resolve().then(() => finalAdmission(reading)),
-  ]);
-  if (viewer.status === 'rejected') throw viewer.reason;
-  if (publication.status === 'rejected') throw publication.reason;
-  const { subjects, rows, result } = viewer.value;
-  const admitted = publication.value;
-  if (!(await subjects.current())) return { state: 'unavailable', reason: 'currentness', retryable: true };
-  if (result.state !== 'current') return result;
-  const current = new Map(feedViewerReferences(admitted).map((row) => [row.rowKey, row]));
-  // The native helper owns standard-question meaning, counted CURRENT votes and
-  // mounted action advice. Never derive a score or create denial from other fields.
-  return {
-    ...result,
-    rows: result.rows.filter((row) => {
-      const source = current.get(row.rowKey);
-      return (
-        source?.subjectId === row.subjectId &&
-        rows.some(
-          (input) =>
-            input.rowKey === row.rowKey &&
-            input.subjectId === row.subjectId &&
-            input.resourceType === source.resourceType,
-        )
-      );
-    }),
+  const subjects = await enrichment.readSubjectSummaryObservation(
+    { ...deps, actor, deadline },
+    [...new Set(references.map((row) => row.subjectId))],
+    { languages },
+  );
+  const rows = references.filter((row) => {
+    const subject = subjects.summaries.get(row.subjectId);
+    return subject?.creativeWork && subject.id === row.subjectId && subject.type === row.resourceType;
+  });
+  const result = await deps.viewerPersonalActions(actor, rows, enrichment.standardQuestionId, deadline);
+  return async (admitted) => {
+    if (!(await subjects.current())) return { state: 'unavailable', reason: 'currentness', retryable: true };
+    if (result.state !== 'current') return result;
+    const current = new Map(feedViewerReferences(admitted).map((row) => [row.rowKey, row]));
+    // The native helper owns standard-question meaning, counted CURRENT votes and
+    // mounted action advice. Never derive a score or create denial from other fields.
+    return {
+      ...result,
+      rows: result.rows.filter((row) => {
+        const source = current.get(row.rowKey);
+        return (
+          source?.subjectId === row.subjectId &&
+          rows.some(
+            (input) =>
+              input.rowKey === row.rowKey &&
+              input.subjectId === row.subjectId &&
+              input.resourceType === source.resourceType,
+          )
+        );
+      }),
+    };
   };
 }

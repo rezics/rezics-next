@@ -61,7 +61,7 @@ test('default composition installs and retains real suppliers once before IO', a
     expect(bound.enrichment.readVisibleRatingQuestion).toBe(readVisibleRatingQuestion);
     expect(bound.enrichment.standardQuestionId).toBe(STANDARD_QUESTION_ID);
     expect(bound.prepareContentContext).toBeFunction();
-    expect(bound.composeViewerPersonalActions).toBeFunction();
+    expect(bound.prepareViewerPersonalActions).toBeFunction();
     const suppliers = bound.create(dependencies, createFeedActivityStore(dependencies));
     expect(suppliers.publicSummary.read).toBeFunction();
     expect(suppliers.readCollection).toBeFunction();

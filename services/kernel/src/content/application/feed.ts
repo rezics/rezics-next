@@ -296,36 +296,43 @@ export function createFeedApplication(
         feedItems = context.items;
         if (context.rewind) rewind(context.rewind, context.error ?? new FeedRefusedError('dependency_unavailable'));
 
-        const reactions = await ports.finish.reactions(feedItems, actor, deadline);
-        feedItems = reactions.items;
-        let reactionsAsOf = reactions.reactionsAsOf;
-        if (reactions.rewind) {
-          rewind(reactions.rewind, reactions.error ?? new FeedRefusedError('dependency_unavailable'));
-          reactionsAsOf = undefined;
-        }
+        // Content context supplies the original review targets. Viewer preparation captures
+        // those operands before reaction and activity enrichment can change the selected rows.
+        const viewerRead =
+          account && stream === 'home'
+            ? ports.finish.preparePersonalActions(feedItems, account, languages, deadline)
+            : undefined;
 
-        const advice = await ports.finish.reactionAdvice(feedItems, actor, deadline, stream);
-        feedItems = advice.items;
+        const enrichCards = async () => {
+          const reactions = await ports.finish.reactions(feedItems, actor, deadline);
+          feedItems = reactions.items;
+          let reactionsAsOf = reactions.reactionsAsOf;
+          if (reactions.rewind) {
+            rewind(reactions.rewind, reactions.error ?? new FeedRefusedError('dependency_unavailable'));
+            reactionsAsOf = undefined;
+          }
 
-        const subject = await ports.finish.subjectReactions(feedItems, actor, deadline);
-        feedItems = subject.items;
-        if (subject.rewind) rewind(subject.rewind, subject.error ?? new FeedRefusedError('dependency_unavailable'));
+          const advice = await ports.finish.reactionAdvice(feedItems, actor, deadline, stream);
+          feedItems = advice.items;
 
-        await space?.finish();
-        await spacePopulation?.finish();
+          const subject = await ports.finish.subjectReactions(feedItems, actor, deadline);
+          feedItems = subject.items;
+          if (subject.rewind) rewind(subject.rewind, subject.error ?? new FeedRefusedError('dependency_unavailable'));
 
-        const finishFollowing = async () => {
+          await space?.finish();
+          await spacePopulation?.finish();
+
           const follows = await ports.finish.followSupport(feedItems, actor, deadline);
           if (follows.items.length < feedItems.length) next.following = position.following;
           feedItems = follows.items;
           if (follows.rewind) rewind(follows.rewind, follows.error ?? new FeedRefusedError('dependency_unavailable'));
-        };
-        await finishFollowing();
 
-        const confirmed = await ports.finish.confirmConversation(feedItems, deadline);
-        feedItems = confirmed.items;
-        if (confirmed.rewind)
-          rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
+          const confirmed = await ports.finish.confirmConversation(feedItems, deadline);
+          feedItems = confirmed.items;
+          if (confirmed.rewind)
+            rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
+          return { advice, reactionsAsOf };
+        };
 
         let discoveryFinished = false;
         const publishDiscovery = async () => {
@@ -337,7 +344,7 @@ export function createFeedApplication(
             rewind(new Set<FeedLane>(['discovery']), error);
           }
         };
-        const reopenSelected = async (viewerReady?: Promise<unknown>) => {
+        const reopenSelected = async () => {
           const retained = { ...next };
           const selected = [...new Set(feedItems.map((item) => item.source))];
           let discoveryFailure: PromiseRejectedResult | undefined;
@@ -347,7 +354,7 @@ export function createFeedApplication(
           const loadCurrentLanes = async (selectedLanes: readonly FeedLane[]) => {
             // The native Following and Continue reads themselves authorize the
             // selected private activity after the viewer read has settled.
-            await viewerReady;
+            await viewerRead;
             await loadLanes(selectedLanes);
           };
           if (retainedDiscovery && selected.includes('discovery')) {
@@ -355,7 +362,7 @@ export function createFeedApplication(
             const discoveryIds = feedItems.filter((item) => item.source === 'discovery').map(({ id }) => id);
             const loadCurrentDiscovery = async () => {
               const candidates = await discovery.current(discoveryIds);
-              await viewerReady;
+              await viewerRead;
               await discovery.finish();
               discoveryFinished = true;
               return candidates;
@@ -387,21 +394,21 @@ export function createFeedApplication(
           await space?.finish();
           await spacePopulation?.finish();
           await publishDiscovery();
-          return feedItems;
         };
 
-        let viewerPersonalActions: FeedPage['viewerPersonalActions'];
-        if (personal && stream === 'home') {
-          const personalPage = await ports.finish.personalActions(
-            feedItems,
-            actor,
-            languages,
-            deadline,
-            reopenSelected,
-          );
-          feedItems = personalPage.items;
-          viewerPersonalActions = personalPage.viewerPersonalActions;
-        } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
+        const cards = enrichCards();
+        const [enriched, viewer, admission] = await Promise.allSettled([
+          cards,
+          viewerRead,
+          cards.then(async ({ advice }) => {
+            if (viewerRead || (stream === 'home' && advice.hasTargets)) await reopenSelected();
+          }),
+        ]);
+        if (enriched.status === 'rejected') throw enriched.reason;
+        if (viewer.status === 'rejected') throw viewer.reason;
+        if (admission.status === 'rejected') throw admission.reason;
+        const { advice, reactionsAsOf } = enriched.value;
+        const viewerPersonalActions = await viewer.value?.(feedItems);
         if (advice.finish) feedItems = await advice.finish(feedItems);
         await question?.finish();
         await publishDiscovery();

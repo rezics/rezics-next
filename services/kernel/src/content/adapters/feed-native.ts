@@ -736,19 +736,10 @@ export function createNativeFeedPorts(
           ? readFeedViewerFollows(producers.readViewerFollows, live, items, deadline)
           : Promise.resolve(undefined);
       },
-      async personalActions(items, actor, languages, deadline, reopen) {
+      async preparePersonalActions(items, actor, languages, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        if (live.kind !== 'account') return { items };
-        let admitted = items;
-        const viewerPersonalActions = await capabilities.composeViewerPersonalActions(
-          deps,
-          live,
-          items,
-          deadline,
-          languages,
-          async (viewerReady) => (admitted = await reopen(viewerReady)),
-        );
-        return { items: admitted, viewerPersonalActions };
+        if (live.kind !== 'account') return undefined;
+        return capabilities.prepareViewerPersonalActions(deps, live, items, deadline, languages);
       },
       async reopenSelected(items, actor, _query, languages, deadline) {
         if (!contextReferences.length) return items;

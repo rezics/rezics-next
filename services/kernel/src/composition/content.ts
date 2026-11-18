@@ -13,7 +13,7 @@ import {
   tryFeedCapabilities,
   readRealmSubjectIdentityMappings,
   prepareFeedContentContext,
-  composeFeedViewerPersonalActions,
+  prepareFeedViewerPersonalActions,
   type FeedEnrichmentPorts,
   type FeedProducerCapabilities,
 } from '../content/adapters/index.ts';
@@ -61,16 +61,8 @@ export function composeContentFeed(): FeedProducerCapabilities {
     prepareContentContext(dependencies, references, context, languages, options) {
       return prepareFeedContentContext(dependencies, enrichment, references, context, languages, options);
     },
-    composeViewerPersonalActions(dependencies, actor, items, deadline, languages, finalAdmission) {
-      return composeFeedViewerPersonalActions(
-        dependencies,
-        enrichment,
-        actor,
-        items,
-        deadline,
-        languages,
-        finalAdmission,
-      );
+    prepareViewerPersonalActions(dependencies, actor, items, deadline, languages) {
+      return prepareFeedViewerPersonalActions(dependencies, enrichment, actor, items, deadline, languages);
     },
     create(deps, activityStore) {
       const continuation = createContinuePageAdapter(deps);
