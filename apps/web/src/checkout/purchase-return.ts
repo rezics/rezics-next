@@ -24,7 +24,7 @@ export type PurchaseReaderViewer = {
 
 const identifierPattern = /^[^/\\\u0000-\u001f]{1,128}$/;
 const localePattern = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-const runtimeId = globalThis.crypto?.randomUUID?.();
+let runtimeId: string | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -56,7 +56,6 @@ export function createPurchaseReaderOrigin(input: {
 }): PurchaseReaderOrigin | undefined {
   const history = validHistoryPosition(input.history);
   if (
-    !runtimeId ||
     !input.viewer.current ||
     !validIdentifier(input.recordId) ||
     !validIdentifier(input.editionId) ||
@@ -67,6 +66,9 @@ export function createPurchaseReaderOrigin(input: {
     input.viewer.readId! < 1
   )
     return undefined;
+  // Workerd permits randomness during a request. Mint the runtime ID on the first admitted purchase origin.
+  runtimeId ??= globalThis.crypto?.randomUUID?.();
+  if (!runtimeId) return undefined;
   return {
     version: 1,
     kind: input.kind,
@@ -86,7 +88,7 @@ export function purchaseReaderOriginFromState(
   editionId: string,
   locale: string,
 ): PurchaseReaderOrigin | undefined {
-  if (!isRecord(state) || !isRecord(state.purchaseOrigin)) return undefined;
+  if (!runtimeId || !isRecord(state) || !isRecord(state.purchaseOrigin)) return undefined;
   const value = state.purchaseOrigin;
   const history = validHistoryPosition(value.history);
   if (
@@ -124,6 +126,7 @@ export function purchaseReaderOriginIsCurrent(
   viewer: PurchaseReaderViewer,
 ): boolean {
   return (
+    runtimeId !== undefined &&
     origin.runtimeId === runtimeId &&
     origin.editionId === editionId &&
     origin.locale === locale &&
