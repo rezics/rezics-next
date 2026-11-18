@@ -1,6 +1,10 @@
 import { nativeSubjectReadingApplication } from './adapters/subject-reading.ts';
 import type { SubjectSummary, SubjectSummaryObservation } from './contract/index.ts';
-import type { SummaryDependencies, SummaryReaderDependencies } from './subject-reading-application.ts';
+import type {
+  SummaryDependencies,
+  SummaryObservationOptions,
+  SummaryReaderDependencies,
+} from './subject-reading-application.ts';
 
 export type {
   CoverCredit,
@@ -27,7 +31,7 @@ export function readSubjectSummaries(
 export function readSubjectSummaryObservation(
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[]; displayFallback?: boolean } = {},
+  options: SummaryObservationOptions = {},
 ): Promise<SubjectSummaryObservation> {
   return nativeSubjectReadingApplication().readSubjectSummaryObservation(deps, ids, options);
 }
