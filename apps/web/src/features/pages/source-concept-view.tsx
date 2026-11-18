@@ -288,7 +288,7 @@ function ConceptVisitView({
         routeIntentRef.current = watchPresentationIntent(
           routeAddressKey,
           visit.focus,
-          read?.admitted && source.active ? source.generation : undefined,
+          read?.admitted ? source.generation : undefined,
         );
         previousRouteIntentRef.current = undefined;
       } else {
@@ -300,7 +300,7 @@ function ConceptVisitView({
       if (!active || active.key !== routeAddressKey) return;
       active.stop();
     };
-  }, [routeAddressKey, visit.focus, read?.admitted, source.active, source.generation]);
+  }, [routeAddressKey, visit.focus, read?.admitted, source.generation]);
 
   useLayoutEffect(
     () => () => {
@@ -344,7 +344,7 @@ function ConceptVisitView({
       intent.stop();
       return;
     }
-    if (visit.loading || visit.busy || !read?.admitted || !source.active || !admission.active()) return;
+    if (visit.loading || visit.busy || !read?.admitted || !admission.active()) return;
     if (!currentAddressMatches(visit.history, visit.index, read, returnAddress)) return;
     if (intent.sourceGeneration === undefined) intent.sourceGeneration = source.generation;
     else if (intent.sourceGeneration !== source.generation) {
@@ -369,7 +369,6 @@ function ConceptVisitView({
       if (
         focusRowMissingFor(article, routeFocus) &&
         read?.admitted &&
-        source.active &&
         admission.active() &&
         currentAddressMatches(visit.history, visit.index, read, returnAddress) &&
         sameFocus(visit.focus, routeFocus)
@@ -385,7 +384,6 @@ function ConceptVisitView({
       visit.loading ||
       visit.busy ||
       !read?.admitted ||
-      !source.active ||
       !admission.active() ||
       intent.sourceGeneration !== source.generation ||
       !currentAddressMatches(visit.history, visit.index, read, returnAddress) ||
@@ -411,7 +409,6 @@ function ConceptVisitView({
     visit.index,
     visit.hierarchy?.state,
     read,
-    source.active,
     source.generation,
     admission.generation,
     admission.active,
@@ -440,11 +437,9 @@ function ConceptVisitView({
       return;
     }
     if (visit.loading || visit.busy || !read?.admitted) return;
-    if (!admission.active() || !source.active) {
-      if (!admission.active()) {
-        intent.consumed = true;
-        intent.stop();
-      }
+    if (!admission.active()) {
+      intent.consumed = true;
+      intent.stop();
       return;
     }
     if (intent.sourceGeneration === undefined) intent.sourceGeneration = source.generation;
@@ -477,7 +472,6 @@ function ConceptVisitView({
       visit.loading ||
       visit.busy ||
       !read?.admitted ||
-      !source.active ||
       !admission.active() ||
       intent.sourceGeneration !== source.generation ||
       noticeKey !== JSON.stringify([visit.notice, visit.noticeSection ?? 'hierarchy'])
@@ -498,7 +492,6 @@ function ConceptVisitView({
     visit.notice,
     visit.noticeSection,
     read,
-    source.active,
     source.generation,
     statusRef,
     admission.generation,

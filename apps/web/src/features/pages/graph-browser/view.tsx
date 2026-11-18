@@ -1065,7 +1065,7 @@ export function GraphBrowserPage({
   useEffect(() => {
     const ownerDocument = pageRef.current?.ownerDocument;
     if (!ownerDocument) return;
-    function cancelPresentation(event: Event) {
+    const cancelPresentation = (event: Event) => {
       const intent = presentationIntentRef.current;
       if (!intent) return;
       if (event.type === 'focusin') {
@@ -1073,7 +1073,7 @@ export function GraphBrowserPage({
         if (target === intent.opener || target === ownerDocument.body || target === ownerDocument.documentElement) return;
       }
       presentationIntentRef.current = null;
-    }
+    };
     ownerDocument.addEventListener('focusin', cancelPresentation, true);
     ownerDocument.addEventListener('pointerdown', cancelPresentation, true);
     ownerDocument.addEventListener('keydown', cancelPresentation, true);
@@ -1199,10 +1199,11 @@ export function GraphBrowserPage({
       return;
     }
     let target: HTMLElement | null = null;
-    if (intent.destination.kind === 'selection') {
+    const { destination } = intent;
+    if (destination.kind === 'selection') {
       target =
         [...(pageRef.current?.querySelectorAll<HTMLButtonElement>('[data-graph-selection]') ?? [])].find(
-          (button) => button.dataset.graphSelection === intent.destination.key && isCurrentVisibleTarget(button),
+          (button) => button.dataset.graphSelection === destination.key && isCurrentVisibleTarget(button),
         ) ?? null;
     } else if (isCurrentVisibleTarget(relationRef.current)) target = relationRef.current;
     if (!target && isCurrentVisibleTarget(detailHeadingRef.current)) target = detailHeadingRef.current;
