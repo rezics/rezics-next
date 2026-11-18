@@ -662,6 +662,24 @@ function byteaPayloadLength(value: string | Buffer): number {
 function instrumentBytes(client: PoolClient, state: CaptureState): void {
   const connection = client.connection;
   const transaction = { active: false, token: 0 };
+  const capturedTransactions = new Map<ActiveCapture, { database: GrowthDatabase; backend: number }>();
+  const settleCapturedTransactions = (token: number) => {
+    for (const [capture, { database, backend }] of capturedTransactions) {
+      const captureTransactions = capture.transactions.get(database);
+      const tracked = captureTransactions?.get(backend);
+      if (tracked?.token === token) {
+        captureTransactions!.delete(backend);
+        tracked.reservation.release();
+      }
+      const history = capture.transactionHistory.find(
+        (entry) => entry.database === databaseName(database) && entry.backend === backend && entry.token === token,
+      );
+      if (history) (history as { state: 'open' | 'closed' }).state = 'closed';
+      const runTransactions = capture.run?.backends.transactions.get(database);
+      if (runTransactions?.get(backend) === token) runTransactions.delete(backend);
+    }
+    capturedTransactions.clear();
+  };
   const query = connection.query.bind(connection);
   connection.query = ((text: string) => {
     const wireStatement = nextWireStatement(client);
@@ -757,6 +775,7 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
               captureTransactions.delete(backend);
               const reservation = attribution.capture.budget.retainLiveTransaction(side, bytes);
               captureTransactions.set(backend, { token: transaction.token, reservation });
+              capturedTransactions.set(attribution.capture, { database, backend });
               if (attribution.capture.transactionHistory.length < 128) {
                 attribution.capture.budget.retainFoldedSummary(side, 'transaction history', 1, bytes);
                 attribution.capture.transactionHistory.push({
@@ -787,29 +806,9 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
       transaction.active = false;
       if (backend !== undefined && state.activeTransactions.get(backend) === completedToken)
         state.activeTransactions.delete(backend);
-      if (backend !== undefined && completedToken !== undefined) {
-        if (attribution) {
-          const database = databaseForName(
-            attribution.capture.database,
-            connectedDatabase(client) ?? databaseName(attribution.capture.database),
-          );
-          const captureTransactions = attribution.capture.transactions.get(database);
-          const tracked = captureTransactions?.get(backend);
-          if (tracked?.token === completedToken) {
-            captureTransactions!.delete(backend);
-            tracked.reservation.release();
-          }
-          const history = attribution.capture.transactionHistory.find(
-            (entry) =>
-              entry.database === databaseName(database) && entry.backend === backend && entry.token === completedToken,
-          );
-          if (history) (history as { state: 'open' | 'closed' }).state = 'closed';
-          if (!attribution.background) {
-            const runTransactions = attribution.capture.run?.backends.transactions.get(database);
-            if (runTransactions?.get(backend) === completedToken) runTransactions.delete(backend);
-          }
-        }
-      }
+      // Settlement belongs to the connection and token, even when COMMIT or
+      // ROLLBACK has no capture attribution.
+      if (completedToken !== undefined) settleCapturedTransactions(completedToken);
     }
     clientExecutingStatement.delete(client);
     clientWireStatement.delete(client);
@@ -820,6 +819,7 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     const backend = backendPid(client);
     if (backend !== undefined && state.activeTransactions.get(backend) === transaction.token)
       state.activeTransactions.delete(backend);
+    if (transaction.active) settleCapturedTransactions(transaction.token);
   });
 
   connection.on('message', (message) => {
@@ -1881,8 +1881,20 @@ function retainRunFailedCapture(
 }
 
 /** Warm-up and prepare retain costs and settle evidence while releasing each parsed notice. */
-export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
-  return trackCaptureTask(captureInternal(database, operation, { includeBackends: true }, true, 'cost-folded'));
+export function captureWarmup<T>(
+  database: GrowthDatabase,
+  operation: () => Promise<T>,
+  telemetryLimits?: Partial<GrowthCaptureBudgetLimits>,
+) {
+  return trackCaptureTask(
+    captureInternal(
+      database,
+      operation,
+      { includeBackends: true, ...(telemetryLimits && { telemetryLimits }) },
+      true,
+      'cost-folded',
+    ),
+  );
 }
 
 function databaseName(database: GrowthDatabase): string {

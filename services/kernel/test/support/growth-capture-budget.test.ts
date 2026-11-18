@@ -84,6 +84,24 @@ test('warmup counts repeated background plans whose raw notices exceed the captu
   });
 });
 
+test('warmup settles transactions even if their commit comes from another execution context', async () => {
+  await withConnection(database!.pool, async (client) => {
+    const commit = AsyncResource.bind(() => client.query('COMMIT'));
+    const { value } = await captureWarmup(
+      database!,
+      async () => {
+        for (let completed = 0; completed < 200; completed++) {
+          await client.query('BEGIN');
+          await commit();
+        }
+        return 'settled';
+      },
+      { entries: 160 },
+    );
+    expect(value).toBe('settled');
+  });
+});
+
 test('a folded capacity failure drains its caller, keeps costs when available, and the next capture is clean', async () => {
   let operationFinished = false;
   let failure: unknown;
