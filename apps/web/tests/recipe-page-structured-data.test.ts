@@ -284,6 +284,10 @@ const messages = {
   aliases: 'Also known as',
 };
 
+function selectedDocuments(method: ReturnType<typeof instruction>) {
+  return { [method.id]: documentBodies[method.id] };
+}
+
 test('the composed SubjectPage publishes the same read, visible Recipe facts and instruction order at fixed read cost', async () => {
   const plan = planReads(platformRegistry, composition, { subject: id });
   expect(Object.values(plan.reads).map((read) => read.kind)).toEqual(['subject']);
@@ -291,28 +295,29 @@ test('the composed SubjectPage publishes the same read, visible Recipe facts and
     const records = new Map<string, unknown>(
       Array.from({ length: size }, (_, i) => [crypto.randomUUID(), { private: `Unrelated ${i}` }]),
     );
-    records.set(id, body);
+    const [englishMethod, japaneseMethod] = body.subject.statements['schema:recipeInstructions'];
+    records.set(id, { ...body, documents: selectedDocuments(englishMethod!) });
     let reads = 0;
-    const representation: SubjectPageData = {
+    const representation = (): SubjectPageData => ({
       subject: id,
       profile: 'sha256:0',
       template: { scope: 'generic', key: null },
       document: composition as never,
       reads: Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: records.get(id) }])),
-    };
+    });
     const client = createKernelClient('https://kernel.invalid', {
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         reads++;
         const request = new Request(input, init);
         expect(new URL(request.url).pathname).toBe('/v1/pages:read');
-        expect(await request.json()).toEqual({ target: { subject: id }, languages: ['en'] });
-        return Response.json(representation);
+        expect(await request.json()).toEqual({ target: { subject: id }, languages: [reads === 1 ? 'en' : 'ja'] });
+        return Response.json(representation());
       }) as typeof fetch,
     });
     const loaded = await loadSubjectPage(client, id);
     if (loaded.kind !== 'page') throw new Error(`Expected Recipe page, got ${loaded.kind}`);
     const page = loaded.page;
-    expect(page.reads).toEqual(representation.reads);
+    expect(page.reads).toEqual(representation().reads);
     const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
     const script = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html);
     expect(script).not.toBeNull();
@@ -337,9 +342,13 @@ test('the composed SubjectPage publishes the same read, visible Recipe facts and
     expect(html).not.toContain('Unrelated');
     expect(reads).toBe(1);
     expect(records.size).toBe(size + 1);
-    const japanese = renderToString(createElement(SubjectPage, { page, locale: 'ja', messages }));
+    records.set(id, { ...body, documents: selectedDocuments(japaneseMethod!) });
+    const translated = await loadSubjectPage(client, id, undefined, 'ja');
+    if (translated.kind !== 'page') throw new Error(`Expected Recipe page, got ${translated.kind}`);
+    const japanese = renderToString(createElement(SubjectPage, { page: translated.page, locale: 'ja', messages }));
     expect(japanese).toContain('米を洗う。');
     expect(japanese).not.toContain('Rinse the rice.');
+    expect(reads).toBe(2);
   }
 });
 
@@ -388,11 +397,13 @@ test('explicit block language survives and concealed page instructions stay out 
       ],
     }),
   });
+  const method = instruction('en', document);
   const publicBody = {
     ...body,
+    documents: selectedDocuments(method),
     subject: {
       ...body.subject,
-      statements: { ...body.subject.statements, 'schema:recipeInstructions': [instruction('en', document)] },
+      statements: { ...body.subject.statements, 'schema:recipeInstructions': [method] },
     },
   };
   const plan = planReads(platformRegistry, composition, { subject: id });

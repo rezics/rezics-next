@@ -1393,7 +1393,7 @@ function SummaryContent({
             setSelectionState({ sourceKey, candidateId: selectedChoice.statement.id, expanded: open })
           }
         />
-        <LanguageTag lang={selectedChoice.language} locale={value.locale} />
+        {choiceSet.kind !== 'ready' && <LanguageTag lang={selectedChoice.language} locale={value.locale} />}
       </div>
     ) : null;
   const candidateEvidence =

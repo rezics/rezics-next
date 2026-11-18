@@ -27,10 +27,12 @@ export function recipePublicationReading(
   locale: string,
   reader: Reader = defaultReader,
 ): RecipePublicationReading | undefined {
-  if (publicationOverlayKind(subject.type, definitions) !== 'recipe') return;
+  if (!definitions?.types[subject.type] || publicationOverlayKind(subject.type, definitions) !== 'recipe') return;
   const fields = subjectPublicationFields(subject, definitions, reader, locale).flatMap((field) => {
     if (!RECIPE_PROPERTY_SET.has(field.property)) return [];
-    const label = pageText(definitions?.properties[field.property]?.labels, locale);
+    const property = definitions.properties[field.property];
+    if (!property || (field.property === 'schema:recipeInstructions' && property.datatype !== 'document')) return [];
+    const label = pageText(property.labels, locale);
     return [{ ...field, label }];
   });
   return fields.length ? { type: 'schema:Recipe', fields } : undefined;

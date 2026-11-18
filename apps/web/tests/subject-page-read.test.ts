@@ -62,7 +62,9 @@ test('a subject page is one page read rendered from its template', async () => {
   expect(subjectPageTitle(page, 'ja')).toBe('こころ');
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   expect(html).toMatch(/<h1[^>]*>Kokoro<\/h1>/);
-  expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}/${slug('Natsume Sōseki')}"[^>]*>Natsume Sōseki</a>`));
+  const creatorReturn = new URLSearchParams({ via: `/en/subjects/${kokoro}/kokoro#literary-reader` });
+  const creatorPath = `/en/subjects/${soseki}/${encodeURIComponent(slug('Natsume Sōseki'))}`;
+  expect(html).toContain(`href="${creatorPath}?${creatorReturn}">Natsume Sōseki</a>`);
   const script = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html);
   expect(script).not.toBeNull();
   expect(JSON.parse(script![1]!)).toMatchObject({
@@ -70,7 +72,10 @@ test('a subject page is one page read rendered from its template', async () => {
     '@graph': [{ '@type': 'Book', name: 'Kokoro' }, { '@type': 'BreadcrumbList' }],
   });
   const tale = renderToString(createElement(SubjectPage, { page: await loaded(taketori), locale: 'en', messages }));
-  expect(tale).toContain(`href="/en/subjects/${shortStory}/${slug('short story')}"`);
+  const genreReturn = new URLSearchParams({
+    via: `/en/subjects/${taketori}/${slug('The Tale of the Bamboo Cutter')}#literary-reader`,
+  });
+  expect(tale).toContain(`href="/en/subjects/${shortStory}/${slug('short story')}?${genreReturn}"`);
   expect(tale).not.toContain(`/subjects/${mergedGenre}`);
   const person = await loaded(soseki);
   expect(person.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
