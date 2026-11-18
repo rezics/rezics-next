@@ -3267,7 +3267,7 @@ export function createNativePublicFilterSourceBinding(
           complete: row.complete,
           inputLimit: row.input_limit,
           digests: row.repair_locator_digests!,
-          closedHome,
+          ...(closedHome === undefined ? {} : { closedHome }),
         };
         if (proof) {
           if (
