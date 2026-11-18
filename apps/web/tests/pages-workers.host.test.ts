@@ -108,12 +108,14 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
     const main = mainMarkup(html);
     const scripts = [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
     expect(scripts).toHaveLength(1);
-    const jsonLd = JSON.parse(scripts[0]![1]!);
+    const graph = JSON.parse(scripts[0]![1]!);
+    const [jsonLd, breadcrumbs] = graph['@graph'];
+    expect(graph['@context']).toBe('https://schema.org');
+    expect(breadcrumbs['@type']).toBe('BreadcrumbList');
     const { subject, related } = page.reads.r0.body;
     const author = subject.statements['schema:author'][0]!.value.content;
     const authorLabel = related[author as keyof typeof related].labels.en;
     expect(structuredClone(jsonLd)).toMatchObject({
-      '@context': 'https://schema.org',
       '@type': 'Book',
       '@id': `https://rezics.com/id/${subject.id}`,
       url: `https://rezics.com/en/subjects/${subject.id}/${slug(subject.labels.en)}`,
@@ -128,7 +130,7 @@ test('Workers HTML and JSON-LD use the same aggregate public subject representat
     expect(main).toContain('>Author</');
     expect(main).toContain('April 6, 1943');
     expect(html).not.toContain(worker!.privateSentinel);
-    expect(JSON.stringify(jsonLd)).not.toContain(worker!.privateSentinel);
+    expect(JSON.stringify(graph)).not.toContain(worker!.privateSentinel);
     aggregateSince(start, page.subject);
 
     const missingStart = worker!.calls.length;

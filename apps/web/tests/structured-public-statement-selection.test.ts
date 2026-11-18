@@ -58,7 +58,7 @@ test('public rank, document language and source order are independent of conceal
       related: {},
       locale: 'fr',
       url: 'https://rezics.com/fr/subjects/recipe',
-    } as never);
+    } as never)['@graph'][0];
   const visible = [statement('First'), statement('Second'), statement('Deprecated', 'deprecated')];
   const documents = [document('en'), document('ja')];
   const expected = build(visible, documents);

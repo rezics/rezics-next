@@ -165,11 +165,11 @@ describe('Close current Context and Realm Subject navigation cache and continuat
       },
     };
     const page = recordedPage();
-    const selectedJson = JSON.parse(subjectPageJsonLd(page, 'en', { ratings })!);
+    const selectedJson = JSON.parse(subjectPageJsonLd(page, 'en', { ratings })!)['@graph'][0];
     expect(selectedJson.name).toBe('Current selected title');
     expect(selectedJson.aggregateRating).toBeUndefined();
     const global = { ...page, context: { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'global' as const } } };
-    expect(JSON.parse(subjectPageJsonLd(global, 'en', { ratings })!).aggregateRating).toMatchObject({
+    expect(JSON.parse(subjectPageJsonLd(global, 'en', { ratings })!)['@graph'][0].aggregateRating).toMatchObject({
       ratingValue: 8.4,
       ratingCount: 28,
     });

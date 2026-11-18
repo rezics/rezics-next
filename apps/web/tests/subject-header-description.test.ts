@@ -138,7 +138,7 @@ test('About omits prose when the subject has neither summary nor description', (
 test('meta description, JSON-LD, search and card snippets keep the description unchanged from base', async () => {
   const page = loaded();
   const subject = subjectOf(page);
-  const jsonLd = JSON.parse(subjectPageJsonLd(page, 'en')!);
+  const jsonLd = JSON.parse(subjectPageJsonLd(page, 'en')!)['@graph'][0];
   expect(jsonLd.description).toBe(description);
   const head = pageHead(
     { title: subject.labels.en, description: jsonLd.description },
@@ -264,7 +264,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
   expect(jsonBytes).not.toContain(hiddenLabel);
   expect(jsonBytes).not.toContain(hiddenId);
   expect(jsonBytes).not.toContain('next-secret-cursor');
-  const json = JSON.parse(jsonBytes) as {
+  const json = JSON.parse(jsonBytes)['@graph'][0] as {
     hasPart: { '@id': string; name: string; url?: string }[];
   };
   expect(json.hasPart.map(({ name }) => name)).toEqual([names[0], ...names.slice(2, 12)]);

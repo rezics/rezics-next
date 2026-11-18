@@ -89,7 +89,7 @@ const build = (entries: unknown[], locale = 'en') =>
     ),
     locale,
     url: 'https://rezics.com/en/subjects/rice',
-  } as never);
+  } as never)['@graph'][0];
 const step = (text: string, inLanguage = 'en') => ({ '@type': 'HowToStep', text, inLanguage });
 const expected = [
   {
@@ -314,7 +314,7 @@ test('the composed SubjectPage publishes the same read, visible Recipe facts and
     const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
     const script = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html);
     expect(script).not.toBeNull();
-    const jsonld = JSON.parse(script![1]!);
+    const jsonld = JSON.parse(script![1]!)['@graph'][0];
     expect(jsonld.cookTime).toBe('PT25M');
     expect(jsonld.recipeInstructions).toEqual(expected);
     expect(jsonld.suitableForDiet).toEqual({ '@id': `https://rezics.com/id/${diet}`, name: 'Vegetarian' });
@@ -403,7 +403,10 @@ test('explicit block language survives and concealed page instructions stay out 
   };
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   const serialized = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html)![1]!;
-  expect(JSON.parse(serialized).recipeInstructions).toEqual([step('米を洗う。', 'ja'), step('Public  finish.')]);
+  expect(JSON.parse(serialized)['@graph'][0].recipeInstructions).toEqual([
+    step('米を洗う。', 'ja'),
+    step('Public  finish.'),
+  ]);
   expect(serialized).not.toContain('concealed method');
   expect(html).toContain('aria-expanded="false"');
   expect(html).toContain('lang="ja"');
@@ -448,7 +451,7 @@ test('filled standalone documents feed configured visible steps and JSON-LD whil
   };
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   const serialized = subjectPageJsonLd(page, 'en')!;
-  expect(JSON.parse(serialized).recipeInstructions).toEqual(expected);
+  expect(JSON.parse(serialized)['@graph'][0].recipeInstructions).toEqual(expected);
   for (const text of ['Rinse the rice.', 'Add water.', 'Simmer for 25 minutes.']) expect(html).toContain(text);
   const headerOnly = {
     ...page,
@@ -458,7 +461,7 @@ test('filled standalone documents feed configured visible steps and JSON-LD whil
   headerOnly.reads = Object.fromEntries(
     Object.keys(headerPlan.reads).map((key) => [key, { status: 200, body: publicBody }]),
   );
-  expect(JSON.parse(subjectPageJsonLd(headerOnly, 'en')!)).not.toHaveProperty('recipeInstructions');
+  expect(JSON.parse(subjectPageJsonLd(headerOnly, 'en')!)['@graph'][0]).not.toHaveProperty('recipeInstructions');
   expect(renderToString(createElement(SubjectPage, { page: headerOnly, locale: 'en', messages }))).not.toContain(
     'Rinse the rice.',
   );
@@ -468,7 +471,7 @@ test('filled standalone documents feed configured visible steps and JSON-LD whil
       ...page,
       reads: Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: altered }])),
     };
-    expect(JSON.parse(subjectPageJsonLd(rejected, 'en')!)).not.toHaveProperty('recipeInstructions');
+    expect(JSON.parse(subjectPageJsonLd(rejected, 'en')!)['@graph'][0]).not.toHaveProperty('recipeInstructions');
     expect(renderToString(createElement(SubjectPage, { page: rejected, locale: 'en', messages }))).not.toContain(
       'Rinse the rice.',
     );

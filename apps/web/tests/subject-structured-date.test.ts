@@ -55,7 +55,7 @@ test.each([
       related: {},
       locale: 'en',
       url: 'https://rezics.com/en/subjects/book',
-    } as never);
+    } as never)['@graph'][0];
     if (expected === undefined) expect(data).not.toHaveProperty('datePublished');
     else expect(data.datePublished).toBe(expected);
   }

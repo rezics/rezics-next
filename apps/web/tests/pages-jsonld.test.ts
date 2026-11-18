@@ -81,16 +81,32 @@ const related = {
   [merged]: { labels: { en: 'Old record' }, redirect: survivor },
 };
 const url = `https://rezics.com/en/subjects/${id}/${slug('Kokoro')}`;
-const build = (overrides: Record<string, unknown> = {}, locale = 'en') =>
-  subjectJsonLd({ subject: { ...subject, ...overrides }, related, locale, url } as never) as Record<string, unknown>;
+const buildGraph = (overrides: Record<string, unknown> = {}, locale = 'en') =>
+  subjectJsonLd({ subject: { ...subject, ...overrides }, related, locale, url } as never);
+const build = (overrides?: Record<string, unknown>, locale?: string) => buildGraph(overrides, locale)['@graph'][0];
 
 test("a subject's public representation becomes schema.org JSON-LD", () => {
-  expect(build()).toEqual({
+  expect(buildGraph()).toEqual({
     '@context': 'https://schema.org',
-    '@type': 'Book',
-    '@id': `https://rezics.com/id/${id}`,
-    url,
     '@graph': [
+      {
+        '@type': 'Book',
+        '@id': `https://rezics.com/id/${id}`,
+        url,
+        name: 'Kokoro',
+        description: '1914 novel by Natsume Sōseki',
+        alternateName: ['Heart'],
+        author: [
+          { '@id': `https://rezics.com/id/${author}`, name: 'Natsume Sōseki' },
+          { '@id': `https://rezics.com/id/${survivor}`, name: 'Old record' },
+        ],
+        datePublished: '1914-04-20',
+        dateModified: '1914-04',
+        isbn: '978-4-10-101013-7',
+        numberOfPages: 248,
+        cookTime: 'PT45M',
+        identifier: [{ '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL45804W' }],
+      },
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
@@ -105,19 +121,6 @@ test("a subject's public representation becomes schema.org JSON-LD", () => {
         ],
       },
     ],
-    name: 'Kokoro',
-    description: '1914 novel by Natsume Sōseki',
-    alternateName: ['Heart'],
-    author: [
-      { '@id': `https://rezics.com/id/${author}`, name: 'Natsume Sōseki' },
-      { '@id': `https://rezics.com/id/${survivor}`, name: 'Old record' },
-    ],
-    datePublished: '1914-04-20',
-    dateModified: '1914-04',
-    isbn: '978-4-10-101013-7',
-    numberOfPages: 248,
-    cookTime: 'PT45M',
-    identifier: [{ '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL45804W' }],
   });
 });
 
@@ -146,7 +149,7 @@ test('only values the representation discloses are emitted', () => {
     name: 'Le Pauvre Cœur des hommes',
   });
   const bare = build({ labels: {}, descriptions: {}, aliases: {}, statements: {} });
-  expect(Object.keys(bare).sort()).toEqual(['@context', '@graph', '@id', '@type', 'url']);
+  expect(Object.keys(bare).sort()).toEqual(['@id', '@type', 'url']);
 });
 
 test('released work form is additionalType from the related Concept, not an external identifier', () => {
@@ -161,7 +164,7 @@ test('released work form is additionalType from the related Concept, not an exte
     related: { ...related, [form]: { type: 'skos:Concept', labels: { en: 'Light novel' } } },
     locale: 'en',
     url,
-  } as never);
+  } as never)['@graph'][0];
   expect(document.additionalType).toEqual({
     '@id': `https://rezics.com/id/${form}`,
     '@type': 'Thing',

@@ -88,7 +88,7 @@ test('Recipe pages render the page.read method body and omit withheld text from 
   expect(serialized).toBeDefined();
   expect(visible).toContain(method);
   expect(visible.toLowerCase()).not.toContain('unavailable');
-  expect(JSON.parse(serialized!).recipeInstructions).toEqual([
+  expect(JSON.parse(serialized!)['@graph'][0].recipeInstructions).toEqual([
     { '@type': 'HowToStep', text: method, inLanguage: 'en' },
   ]);
 
@@ -97,5 +97,5 @@ test('Recipe pages render the page.read method body and omit withheld text from 
   expect(withheld.toLowerCase()).toContain('unavailable');
   expect(withheld).not.toContain(method);
   expect(withheldJson).toBeDefined();
-  expect(JSON.parse(withheldJson!)).not.toHaveProperty('recipeInstructions');
+  expect(JSON.parse(withheldJson!)['@graph'][0]).not.toHaveProperty('recipeInstructions');
 });

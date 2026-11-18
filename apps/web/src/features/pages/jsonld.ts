@@ -37,6 +37,7 @@ const prefixes = new Map([
 ]);
 const reserved = new Set([
   '@context',
+  '@graph',
   '@id',
   '@type',
   'additionalType',
@@ -274,12 +275,11 @@ export function subjectJsonLd({
   schemaOrgType?: string;
   ratings?: { figure: PublicFigure };
   summary?: Summary | null;
-}): Record<string, JsonValue> {
+}) {
   const original = originalLanguage(subject);
   const site = (origin ?? new URL(url).origin).replace(/\/+$/, '');
   const label = subjectLabel ?? text(subject.labels, locale, original) ?? '';
   const entries: [string, JsonValue][] = [
-    ['@context', 'https://schema.org'],
     ['@id', `${idBase}${subject.id}`],
     ['@type', schemaType(subject.type, schemaOrgType)],
     ['url', url],
@@ -366,36 +366,31 @@ export function subjectJsonLd({
       },
     ]);
   }
-  entries.push([
-    '@graph',
-    [
+  const breadcrumbs = {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
       {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          {
-            '@type': 'ListItem',
-            position: 1,
-            name: 'REZICS',
-            item: `${site}/${encodeURIComponent(locale)}`,
-          },
-          {
-            '@type': 'ListItem',
-            position: 2,
-            name: typeLabel ?? subject.type,
-            item: `${site}/${encodeURIComponent(locale)}/search?type=${encodeURIComponent(subject.type)}`,
-          },
-          {
-            '@type': 'ListItem',
-            position: 3,
-            name: label,
-            item: url,
-          },
-        ],
+        '@type': 'ListItem',
+        position: 1,
+        name: 'REZICS',
+        item: `${site}/${encodeURIComponent(locale)}`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: typeLabel ?? subject.type,
+        item: `${site}/${encodeURIComponent(locale)}/search?type=${encodeURIComponent(subject.type)}`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: label,
+        item: url,
       },
     ],
-  ]);
+  };
   // fromEntries also preserves hostile property names such as __proto__ as ordinary own keys.
-  return Object.fromEntries(entries);
+  return { '@context': 'https://schema.org', '@graph': [Object.fromEntries(entries), breadcrumbs] as const };
 }
 
 /** Describe the localized site home and its search entry point. */
