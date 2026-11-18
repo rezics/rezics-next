@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Source } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import {
   developmentStatusConceptUri,
@@ -81,8 +82,10 @@ type Candidate = {
   head: number | null;
   retracted: number | null;
   statement: { value: { content: unknown }; rank?: 'normal' | 'preferred'; references?: unknown[] };
-  source?: unknown;
+  source?: Source | null;
 };
+
+type CandidatePage = { candidates: Candidate[]; adoption: { head: number } | null };
 
 test('production operator imports authored VNDB release dates, states and work completeness through ordinary accept and current reads', async () => {
   const previous = process.env.TMPDIR;
@@ -242,7 +245,7 @@ test('production operator imports authored VNDB release dates, states and work c
       const query = new URLSearchParams({ ...slot, context: globalContext, limit: '100' });
       const page = await editor.http(`/v1/subjects/${subjectId}/candidates?${query}`);
       expect(page.status).toBe(200);
-      const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
+      const listing = page.body as CandidatePage;
       const expectedContent = options.target ?? options.content;
       const candidate =
         expectedContent === undefined
@@ -370,9 +373,40 @@ test('production operator imports authored VNDB release dates, states and work c
     const statusUrlPage = await editor.http(
       `/v1/subjects/${statusId}/candidates?${new URLSearchParams({ property: 'schema:url', context: globalContext, limit: '100' })}`,
     );
-    const statusUrl = (statusUrlPage.body as { candidates: Candidate[] }).candidates.find((item) => item.source)!;
-    const retracted = await editor.http(`/v1/statements/${statusUrl.id}/retract`, {});
-    expect(retracted.status).toBe(200);
+    expect(statusUrlPage.status).toBe(200);
+    const statusListing = statusUrlPage.body as CandidatePage;
+    const statusUrl = statusListing.candidates.find(
+      (item) => item.source && item.statement.value.content === developmentStatusConceptUri('1'),
+    );
+    if (!statusUrl?.source) throw new Error('Missing imported development-status URL candidate');
+    const retracted = await runtime.importTransport.batch({
+      commands: [
+        {
+          op: 'retract',
+          key: randomUUID(),
+          source: statusUrl.source,
+          subject: statusId,
+          candidate: statusUrl.id,
+          references: [
+            {
+              parts: [
+                { property: { id: 'schema:url' }, value: { type: 'value', content: developmentStatusConceptUri('1') } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(retracted.results[0]?.status).toBe(200);
+    // A source retraction leaves the independent Global selection in place.
+    const cleared = await editor.http(`/v1/subjects/${statusId}:adopt`, {
+      context: globalContext,
+      property: 'schema:url',
+      mode: 'replace',
+      expected_head: statusListing.adoption?.head ?? null,
+      selection: [],
+    });
+    expect(cleared.status).toBe(200);
     const withheldBindings = await readVndbReleaseBindings(runtime.importTransport, [
       {
         taxonomy: developmentStatusTaxonomy,
