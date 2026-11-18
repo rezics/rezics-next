@@ -11,10 +11,12 @@ import {
   readVndbReleaseBindings,
 } from '../../../importer/src/vndb-release-fidelity.ts';
 import { CrossMediaDumpFiles, crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
+import { ImportSession } from '../../../importer/src/import-session.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import type { ApiRuntimeFailure } from './api-runtime-support.ts';
 import { importVndbReleaseFidelity } from '../../../importer/src/selected-import.ts';
 
 const globalContext = GLOBAL_CONTEXT;
@@ -94,6 +96,7 @@ test('production operator imports authored VNDB release dates, states and work c
     }
   })();
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-native-'));
+  let failure: ApiRuntimeFailure | undefined;
   try {
     const tier = await runtime.request(
       `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
@@ -230,13 +233,24 @@ test('production operator imports authored VNDB release dates, states and work c
       ],
     });
     expect(propose.results.every((result) => result.status === 201)).toBe(true);
-    async function acceptAdopt(subjectId: string, property: string) {
-      const page = await editor.http(
-        `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
-      );
+    async function acceptAdopt(
+      subjectId: string,
+      property: string,
+      options: { content?: string; target?: string } = {},
+    ) {
+      const slot = { property, ...(options.target ? { target: options.target } : {}) };
+      const query = new URLSearchParams({ ...slot, context: globalContext, limit: '100' });
+      const page = await editor.http(`/v1/subjects/${subjectId}/candidates?${query}`);
       expect(page.status).toBe(200);
       const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-      const candidate = listing.candidates.find((item) => item.source) ?? listing.candidates[0]!;
+      const expectedContent = options.target ?? options.content;
+      const candidate =
+        expectedContent === undefined
+          ? (listing.candidates.find((item) => item.source) ?? listing.candidates[0])
+          : listing.candidates.find(
+              (item) => item.source && item.retracted === null && item.statement.value.content === expectedContent,
+            );
+      if (!candidate) throw new Error(`Missing ${property} candidate on Subject ${subjectId}`);
       const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
         context: globalContext,
         expected_head: candidate.head,
@@ -244,7 +258,7 @@ test('production operator imports authored VNDB release dates, states and work c
       expect(accepted.status).toBe(200);
       const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
         context: globalContext,
-        property,
+        ...slot,
         mode: 'replace',
         expected_head: listing.adoption?.head ?? null,
         selection: [{ candidate: candidate.id, rank: candidate.statement.rank ?? 'normal' }],
@@ -273,24 +287,39 @@ test('production operator imports authored VNDB release dates, states and work c
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
-    const work = first.readings.find((row) => row.externalId === 'v1');
-    const exact = first.readings.find((row) => row.externalId === 'r1');
-    const month = first.readings.find((row) => row.externalId === 'r2');
-    const year = first.readings.find((row) => row.externalId === 'r3');
-    const tba = first.readings.find((row) => row.externalId === 'r4');
-    expect(work && exact && month && year && tba).toBeTruthy();
-    const idOf = (row: (typeof first.readings)[number]) =>
-      (row.subject as { subject?: { id: string } }).subject?.id ?? (row.subject as { id?: string }).id;
-    const workId = idOf(work!);
-    const exactId = idOf(exact!);
-    const monthId = idOf(month!);
-    const yearId = idOf(year!);
-    const tbaId = idOf(tba!);
-    expect(workId && exactId && monthId && yearId && tbaId).toBeTruthy();
-    expect(exactId).not.toBe(workId);
+    expect(first.readings).toEqual([]);
+    const required = ['v1', 'r1', 'r2', 'r3', 'r4'] as const;
+    const session = await ImportSession.openExisting(path);
+    const boundSubject = (externalId: string) => {
+      const claim = session.bindings.claim({ source: crossMediaAliases.vndb, external_id: externalId });
+      if (claim?.state !== 'bound') throw new Error(`Missing acknowledged VNDB binding for ${externalId}`);
+      return claim.subject;
+    };
+    const subjects = (() => {
+      try {
+        return required.map((externalId) => [externalId, boundSubject(externalId)] as const);
+      } finally {
+        session.close();
+      }
+    })();
+    const { v1: workId, r1: exactId, r2: monthId, r3: yearId, r4: tbaId } = Object.fromEntries(subjects);
+    expect(new Set(subjects.map(([, id]) => id)).size).toBe(required.length);
+    // The import binds a Subject before ordinary review makes its source identifier current.
+    for (const [externalId, id] of subjects) await acceptAdopt(id, 'wdt:P3180', { content: externalId });
+    const again = await importVndbReleaseFidelity({
+      tables: await authoredCopy(directory),
+      path,
+      port: runtime.importTransport,
+      bindings,
+      destination: { origin: 'https://kernel.import.test' },
+    });
+    expect(Object.fromEntries(again.readings.map((row) => [row.externalId, row.subject.subject.id]))).toEqual(
+      Object.fromEntries(subjects),
+    );
+    expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
     await acceptAdopt(workId!, 'schema:keywords');
     await acceptAdopt(exactId!, 'schema:datePublished');
-    await acceptAdopt(exactId!, 'schema:exampleOfWork');
+    await acceptAdopt(exactId!, 'schema:exampleOfWork', { target: workId! });
     await acceptAdopt(monthId!, 'schema:datePublished');
     await acceptAdopt(yearId!, 'schema:datePublished');
     const read = async (id: string) => {
@@ -320,17 +349,6 @@ test('production operator imports authored VNDB release dates, states and work c
     const tbaView = await read(tbaId!);
     expect(tbaView.subject.statements['schema:datePublished'] ?? []).toEqual([]);
     expect(tbaView.subject.statements['schema:keywords'] ?? []).toEqual([]);
-    const again = await importVndbReleaseFidelity({
-      tables: await authoredCopy(directory),
-      path,
-      port: runtime.importTransport,
-      bindings,
-      destination: { origin: 'https://kernel.import.test' },
-    });
-    expect(again.readings.map((row) => row.externalId).sort()).toEqual(
-      first.readings.map((row) => row.externalId).sort(),
-    );
-    expect(idOf(again.readings.find((row) => row.externalId === 'r1')!)).toBe(exactId);
     const successor = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory, '20200301'),
       path,
@@ -397,8 +415,14 @@ test('production operator imports authored VNDB release dates, states and work c
       (item) => (item.statement.value.content as { time?: string }).time,
     );
     expect(times).not.toContain('+2020-04-01T00:00:00Z');
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    await runtime.close();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await runtime.close(failure);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
-}, 180_000);
+}, 300_000);
