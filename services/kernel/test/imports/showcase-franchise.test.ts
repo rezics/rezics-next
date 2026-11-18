@@ -96,9 +96,10 @@ test('selected franchise relations publish on exact native endpoints after separ
     expect(grant.status).toBe(201);
 
     async function candidates(subject: string, property: string, slot?: ReturnType<typeof relationSlot>) {
-      const response = await editor.http(
-        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100', ...slot })}`,
-      );
+      const query = new URLSearchParams({ property, context: globalContext, limit: '100' });
+      if (slot) query.set('target', slot.target);
+      if (slot?.key) query.set('key', slot.key);
+      const response = await editor.http(`/v1/subjects/${subject}/candidates?${query}`);
       expect(response.status).toBe(200);
       return response.body as {
         candidates: { id: string; head: number | null; retracted: number | null; source?: unknown }[];
