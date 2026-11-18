@@ -2,7 +2,8 @@
  *
  *   bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/importer/src/imports-public-journey.ts [--scope operators|catalogue|all] [--reopen-seed]
  *
- * Use --reviewed-bootstrap alone for the released vocabulary and its independent current read.
+ * Use --reviewed-bootstrap for the released vocabulary. In an already seeded, admitted stack,
+ * --reviewed-source-scheme reads the bound public scheme without replaying any writes.
  * Operators import licensed fixtures through the ordinary CLI, then separately accept/adopt and independently
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
  */
@@ -13,11 +14,17 @@ import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { walkStackAdmitted } from '../../../scripts/stack-run.ts';
+import { walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
 import { formatReviewedCatalogueSeedError, reviewedCatalogueProblem } from './http.ts';
-import { installReviewedCatalogueComposition, releasedReviewedVocabulary } from './showcase-cross-media.ts';
+import {
+  composeReviewedCatalogueHost,
+  openReviewedCatalogueLedger,
+  releasedReviewedVocabulary,
+} from './showcase-cross-media.ts';
+import { reviewedCatalogueSeedOwner, reviewedCatalogueStatement } from './reviewed-catalogue-contract.ts';
 import { createImportTransport, importTransportCause, ImportTransportError } from './import-client.ts';
 import { waitForKernelReadiness } from './seed-readiness.ts';
 import {
@@ -27,6 +34,7 @@ import {
 } from './seed-remaining-request.ts';
 import { importCorrelationId, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
+import { BindingInspectionStore } from './binding-inspection-store.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import {
   createPublicBulkClient,
@@ -1609,35 +1617,97 @@ function requireCatalogueWalk() {
     throw new Error('Use the admitted dev-stack.ts walk --import-catalogue fixture');
 }
 
-async function runReviewedBootstrap() {
+class ReviewedWalkFailure extends Error {}
+
+async function existingReviewedScheme(owner: ReturnType<typeof reviewedCatalogueSeedOwner>): Promise<string> {
+  const store = await BindingInspectionStore.open(resolve(root, '.temp/cross-media-seed/state.sqlite'));
+  try {
+    const { binding } = store.inspect({ source: owner.source, record: owner.external_id });
+    if (binding.state !== 'bound' || !binding.subject)
+      throw new ReviewedWalkFailure('Reviewed source scheme has no existing bound claim');
+    return binding.subject;
+  } finally {
+    await store.close();
+  }
+}
+
+async function runReviewedBootstrap(existingScheme: boolean) {
   requireCatalogueWalk();
   const persona = await readPersona();
-  await grantOwner(persona);
+  if (!existingScheme) await grantOwner(persona);
   await waitForKernelReadiness({ origin: persona.kernel });
-  const transport = createImportTransport({
-    origin: persona.kernel,
-    tokenProvider: await createAccountTokenProvider({
-      accountKeyPath: persona.accountKeyPath,
-      account: persona.account,
-      client: persona.client,
-      authOrigin: persona.auth,
-      issuerOrigin: persona.issuer,
-      scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
-    }),
+  const tokenProvider = await createAccountTokenProvider({
+    accountKeyPath: persona.accountKeyPath,
+    account: persona.account,
+    client: persona.client,
+    authOrigin: persona.auth,
+    issuerOrigin: persona.issuer,
+    scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
-  const directory = await mkdtemp(resolve(root, '.temp/reviewed-bootstrap-'));
+  const vocabulary = releasedReviewedVocabulary();
+  const scheme = vocabulary.inventory.find(({ key }) => key === 'source-scheme')!;
+  const owner = reviewedCatalogueSeedOwner(scheme);
+  const existingId = existingScheme ? await existingReviewedScheme(owner) : undefined;
+  const directory = existingScheme ? undefined : await mkdtemp(resolve(root, '.temp/reviewed-bootstrap-'));
+  let ledger: ReturnType<typeof openReviewedCatalogueLedger> | undefined;
   try {
-    const vocabulary = releasedReviewedVocabulary();
-    const path = resolve(directory, 'state.sqlite');
-    const catalogue = installReviewedCatalogueComposition({ vocabulary, transport, path });
+    if (directory) ledger = openReviewedCatalogueLedger(resolve(directory, 'state.sqlite'));
+    // Mark only the GET of this journal's acknowledged public fixture. Transport retains its own session and caps.
+    const observedFetch = (async (input, init) => {
+      if (!(input instanceof Request) || input.method !== 'GET') return fetch(input, init);
+      const url = new URL(input.url);
+      if (url.origin !== persona.kernel || !/^\/v1\/subjects\/[0-9a-f-]{36}$/iu.test(url.pathname))
+        return fetch(input, init);
+      const claim = ledger?.session.bindings.claim(owner);
+      const id = existingId ?? (claim?.state === 'bound' ? claim.subject : undefined);
+      if (!id || url.pathname !== `/v1/subjects/${id}`) return fetch(input, init);
+      const request = new Request(input, init);
+      request.headers.set('x-rezics-walk-subject-read', 'source-scheme');
+      const response = await fetch(request);
+      if (response.status === 503) {
+        const reason = walkSubjectReadReason(response.headers.get('x-rezics-walk-subject-read'));
+        console.error(`Reviewed source-scheme GET 503 reason=${reason ?? 'unobserved'}`);
+      }
+      return response;
+    }) as typeof fetch;
+    const transport = createImportTransport({ origin: persona.kernel, tokenProvider, fetch: observedFetch });
+    if (existingId) {
+      const fence = await transport.fence({ source: owner.source, externalId: owner.external_id, fieldGroup: 'facts' });
+      if (fence.fenced) throw new ReviewedWalkFailure('Reviewed source scheme is fenced');
+      const read = await transport.readReviewedSubject(existingId);
+      if (!('subject' in read)) throw new ReviewedWalkFailure('Reviewed source scheme current read has no Subject');
+      const { subject } = read;
+      if (
+        subject.id !== existingId ||
+        subject.type !== scheme.type ||
+        subject.context !== GLOBAL_CONTEXT ||
+        !scheme.facts.every((fact) =>
+          subject.statements[fact.property]?.some(
+            (statement) =>
+              (statement.rank === 'normal' || statement.rank === 'preferred') &&
+              sameStatementProvenance(statement, reviewedCatalogueStatement(fact)),
+          ),
+        )
+      ) {
+        throw new ReviewedWalkFailure('Reviewed source scheme current read differs from the released fixture');
+      }
+      console.log('Reviewed source-scheme GET 200 with current fixture statements');
+      return;
+    }
+    assert(ledger);
+    const catalogue = composeReviewedCatalogueHost({ vocabulary, transport, ledger });
     const { subjects, facts } = await catalogue.seed().catch((error: unknown) => {
-      throw new Error(formatReviewedCatalogueSeedError(error));
+      throw new ReviewedWalkFailure(formatReviewedCatalogueSeedError(error));
     });
     assert.equal(new Set(Object.values(subjects)).size, vocabulary.inventory.length);
-    assert.equal(facts.length, vocabulary.inventory.reduce((count, seed) => count + seed.facts.length, 0));
+    assert.equal(
+      facts.length,
+      vocabulary.inventory.reduce((count, seed) => count + seed.facts.length, 0),
+    );
     console.log(`Reviewed catalogue bound records=${Object.keys(subjects).length} selectedFacts=${facts.length}`);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    ledger?.session.close();
+    if (directory) await rm(directory, { recursive: true, force: true });
   }
 }
 
@@ -1913,8 +1983,20 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
 
 if (import.meta.main) {
   const args = Bun.argv.slice(2);
-  if (args.length === 1 && args[0] === '--reviewed-bootstrap') {
-    await runReviewedBootstrap();
+  if (args.length === 1 && (args[0] === '--reviewed-bootstrap' || args[0] === '--reviewed-source-scheme')) {
+    try {
+      await runReviewedBootstrap(args[0] === '--reviewed-source-scheme');
+    } catch (error) {
+      const status = error instanceof ImportTransportError ? error.status : undefined;
+      console.error(
+        error instanceof ReviewedWalkFailure
+          ? error.message
+          : status
+            ? `Reviewed fixture request failed HTTP ${status}`
+            : 'Reviewed fixture or its existing binding is unavailable',
+      );
+      process.exitCode = 1;
+    }
   } else {
     const inventory = await runImportsPublicJourney(args);
     if (

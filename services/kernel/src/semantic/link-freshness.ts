@@ -3,6 +3,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { SessionComponent } from '../tokens/session.ts';
+import type { SubjectLinkWaitReason } from './contract/subject-errors.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
 import readPendingMember from './links-read-pending-member.sql';
 import readProjectionPending from './merge-read-projection-pending.sql';
@@ -41,6 +42,18 @@ export async function pendingMergeSources(
   return pending;
 }
 
+function checkpointWaitReason(
+  row: NonNullable<Awaited<ReturnType<typeof readLinkCheckpoint.run>>>,
+  subject: string,
+): SubjectLinkWaitReason {
+  const home = row.partition_no === partitionOf(routeOf(subject)!) ? 'local' : 'foreign';
+  if (row.checkpoint_epoch === null && String(row.position) === '0') return `${home}-checkpoint-zero-position`;
+  if (row.checkpoint_position === null) return `${home}-checkpoint-missing`;
+  if (row.checkpoint_epoch === null) return `${home}-checkpoint-uninitialized`;
+  if (row.checkpoint_epoch !== row.epoch) return `${home}-checkpoint-epoch`;
+  return `${home}-checkpoint-position`;
+}
+
 export async function linksCaughtUp(
   pool: Pool,
   seen: readonly SessionComponent[],
@@ -48,6 +61,7 @@ export async function linksCaughtUp(
   deadline = deadlineFor(FRESHNESS_WAIT_MS),
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
+  observeWait?: (reason: SubjectLinkWaitReason) => void,
 ): Promise<boolean> {
   const requirements = {
     consumer: LINKS_CONSUMER,
@@ -55,10 +69,9 @@ export async function linksCaughtUp(
     epochs: seen.map((component) => component.epoch),
     positions: seen.map((component) => component.position),
   };
-  const trace = process.env.REZICS_WALK_IMPORT_CATALOGUE === '1';
-  let lastObservation = 'deadline';
+  let lastObservation: SubjectLinkWaitReason = 'deadline';
   const unfinished = () => {
-    if (trace) console.warn(`Semantic links wait home=${partitionOf(routeOf(subject)!)} ${lastObservation}`);
+    observeWait?.(lastObservation);
     return false;
   };
   try {
@@ -66,23 +79,22 @@ export async function linksCaughtUp(
       const covered = await withReadTransaction(
         pool,
         async (client) => {
+          lastObservation = 'checkpoint-deadline';
           const behind = seen.length ? await readLinkCheckpoint.run(client, requirements) : null;
           if (behind) {
-            if (trace)
-              lastObservation =
-                `partition=${behind.partition_no} required=${behind.epoch}/${behind.position} ` +
-                `checkpoint=${behind.checkpoint_epoch ?? 'none'}/${behind.checkpoint_position ?? 'none'}`;
+            lastObservation = checkpointWaitReason(behind, subject);
             return false;
           }
+          lastObservation = 'merge-deadline';
           const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-          if (trace) lastObservation = pending === null ? 'deadline' : 'merge';
+          lastObservation = pending === null ? 'deadline' : 'merge';
           return pending === null;
         },
         deadline,
       );
       const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members, deadline) : [];
       if (covered && pendingMembers.length === 0) return true;
-      if (pendingMembers.length && trace) lastObservation = 'merge';
+      if (pendingMembers.length) lastObservation = 'merge';
       if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
       // The database connection is released before this wait; yield the request's admission permit too.
       await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
@@ -101,9 +113,10 @@ export function waitForSubjectLinks(
   deadline: number,
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
+  observeWait?: (reason: SubjectLinkWaitReason) => void,
 ): Promise<boolean> {
   const started = Date.now();
   // Leave at least half of the remaining request budget for authorization and the read.
   const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission);
+  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission, observeWait);
 }

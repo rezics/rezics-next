@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
@@ -44,6 +44,7 @@ import {
   walkPublishedPortAllocated,
   walkStackLimit,
   walkStackLogPath,
+  walkSubjectReadReason,
   SEEDED_WEB_READY_PATH,
   WALK_READY_DEADLINE_MS,
   walkStackNames,
@@ -1905,17 +1906,23 @@ export async function runWalk(
           }
           const log = walkStackLogPath(root, task);
           await mkdir(dirname(log), { recursive: true });
-          await writeFile(log, '');
           // Every walk creates a new database, so retire old native identifiers even when slot URLs are reused.
           const kernelEnv = await kernelEnvironment();
           if (kernelEnv.DATABASE_URL) await resetWalkSeedJournals(root, kernelEnv.DATABASE_URL);
-          starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
-            cwd: root,
-            env,
-            stdin: 'ignore',
-            stdout: Bun.file(log),
-            stderr: Bun.file(log),
-          });
+          // Both streams inherit one open file description. Separate Bun.file opens have independent offsets.
+          const output = await open(log, 'w', 0o600);
+          try {
+            await output.chmod(0o600);
+            starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
+              cwd: root,
+              env,
+              stdin: 'ignore',
+              stdout: output.fd,
+              stderr: output.fd,
+            });
+          } finally {
+            await output.close();
+          }
           // An admitted stack's frontends start after its journey seeds, so readiness is Auth JWKS and Kernel only.
           const plan = stackStartPlan(env, {
             web: `http://127.0.0.1:${ports.web}`,
@@ -1935,17 +1942,23 @@ export async function runWalk(
           current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
           code = await current.exited;
           if (code !== 0 && importCatalogueWalk()) {
-            // The private stack log also contains persona output. Return only the last
-            // checkpoint observation and relay status before the walk releases the stack.
-            const tail = await Bun.file(log)
-              .slice(-65_536)
+            // Full journeys retain the last producer observation and relay status from the private log.
+            const recorded = Bun.file(log);
+            const end = recorded.size;
+            const tail = await recorded
+              .slice(Math.max(0, end - 65_536), end)
               .text()
               .catch(() => '');
+            const prefix = 'Semantic subject GET 503 reason=';
             const wait = tail
-              .match(/^Semantic links wait home=\d+ (?:deadline|merge|partition=\d+ required=\d+\/\d+ checkpoint=(?:none|\d+)\/(?:none|\d+))$/gm)
-              ?.at(-1);
+              .split('\n')
+              .findLast(
+                (line) => line.startsWith(prefix) && walkSubjectReadReason(line.slice(prefix.length)) !== undefined,
+              );
             const relay = tail
-              .match(/^Relay semantic_links (?:failed on partition \d+\b|stopped at partition \d+ position \d+: (?:gap|epoch|unknown_type|invalid_data)\b)/gm)
+              .match(
+                /^Relay semantic_links (?:failed on partition \d+\b|stopped at partition \d+ position \d+: (?:gap|epoch|unknown_type|invalid_data)\b)/gm,
+              )
               ?.at(-1);
             if (wait) console.error(wait);
             if (relay) console.error(relay);

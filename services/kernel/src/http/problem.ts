@@ -134,7 +134,7 @@ export function logDeadlineExceeded(context: { method: string; id: string; route
 
 export function problemResponse(
   error: unknown,
-  context: { method: string; id: string; action?: string; route?: string | undefined },
+  context: { method: string; id: string; action?: string; route?: string | undefined; observeWalkSubject?: boolean },
 ): Response {
   const appliedError = error instanceof AppliedCommandResponseError ? error : undefined;
   const applied = appliedError !== undefined;
@@ -200,6 +200,23 @@ export function problemResponse(
         code = 'deadline_exceeded';
         break;
     }
+  }
+
+  // Native walk evidence belongs to the refusal that produced this response.
+  if (
+    code === 'semantic_not_ready' &&
+    context.method === 'GET' &&
+    context.route === '/v1/subjects/:id' &&
+    process.env.REZICS_WALK_IMPORT_CATALOGUE === '1' &&
+    process.env.REZICS_WALK_STACK_SLOT &&
+    process.env.NODE_ENV !== 'production'
+  ) {
+    const reason =
+      error instanceof SubjectProjectionPreparingError
+        ? `${error.identity}/${error.stage}/${error.reason}`
+        : 'other-readiness';
+    console.warn(`Semantic subject GET 503 reason=${reason}`);
+    if (context.observeWalkSubject) headers.set('x-rezics-walk-subject-read', reason);
   }
 
   const definition = PROBLEMS[code];

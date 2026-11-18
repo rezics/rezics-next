@@ -34,7 +34,11 @@ import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { currentReadSnapshot, withReadTransaction } from './read.ts';
-import { SubjectProjectionPreparingError, SubjectRedirectError } from './contract/subject-errors.ts';
+import {
+  SubjectProjectionPreparingError,
+  SubjectRedirectError,
+  type SubjectLinkWaitReason,
+} from './contract/subject-errors.ts';
 import {
   selectedSynopsisFact,
   redactSynopsisFact,
@@ -949,16 +953,23 @@ async function readSubjectNative(
         };
       });
       if (!preflight) return null;
-      let caughtUp = await waitForSubjectLinks(
-        pool,
-        [...(summaries.seen ?? []), preflight.component],
-        subjectId,
-        deadline,
-        [],
-        summaries.yieldAdmission,
-      );
-      requireAccessDeadline(deadline);
-      if (!caughtUp) throw new SubjectProjectionPreparingError();
+      const requireProjection = async (component: SubjectComponent, stage: 'initial' | 'revision-recheck') => {
+        let reason: SubjectLinkWaitReason = 'deadline';
+        const ready = await waitForSubjectLinks(
+          pool,
+          [...(summaries.seen ?? []), component],
+          subjectId,
+          deadline,
+          [],
+          summaries.yieldAdmission,
+          (observed) => {
+            reason = observed;
+          },
+        );
+        requireAccessDeadline(deadline);
+        if (!ready) throw new SubjectProjectionPreparingError(terminal ? 'merged-member' : 'subject', stage, reason);
+      };
+      await requireProjection(preflight.component, 'initial');
       await refreshStatementReaderAuthorization();
       let check = await prepare();
       let expectedRevision = preflight.revision;
@@ -1122,16 +1133,7 @@ async function readSubjectNative(
         expectedRevision = snapshot.revision;
         expectedSecurityRevision = snapshot.securityRevision;
         requireAccessDeadline(deadline);
-        caughtUp = await waitForSubjectLinks(
-          pool,
-          [...(summaries.seen ?? []), snapshot.component],
-          subjectId,
-          deadline,
-          [],
-          summaries.yieldAdmission,
-        );
-        requireAccessDeadline(deadline);
-        if (!caughtUp) throw new SubjectProjectionPreparingError();
+        await requireProjection(snapshot.component, 'revision-recheck');
         await refreshStatementReaderAuthorization();
         check = await prepare();
         snapshot = await readCurrent();
