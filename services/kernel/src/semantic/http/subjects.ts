@@ -1330,8 +1330,7 @@ function subjectRoutes(
           runNative: (read) => admission.run('normal', job, read),
           readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
           seen: [...session.components],
-          observeMissingCheckpoint:
-            request.headers.get('x-rezics-walk-subject-read') === 'source-scheme' && isImportCatalogueWalk(),
+          observeMissingCheckpoint: isImportCatalogueWalk(),
           ...(selectedSynopsis ? { selectedSynopsis } : {}),
           ...(reviewIdentity ? { reviewIdentity } : {}),
           ...(query.includeViewerActions ? { includeViewerActions: true } : {}),
