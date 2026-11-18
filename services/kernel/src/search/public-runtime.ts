@@ -32,7 +32,7 @@ import type {
   PublicFilterQueriedObservation,
   PublicSuggestionCaptureInput,
 } from './public-filter-consumer-contract.ts';
-import { subjectGenerations, subjectIndexName, readSubjectCalendarMappingFormat } from './indices.ts';
+import { subjectGenerations, subjectIndexName } from './indices.ts';
 import type { OpenSearch, SearchRequestOptions } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
@@ -199,9 +199,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       consumer.physicalTarget !== subjectIndexName(config.prefix, generation)
     )
       notReady();
-    const search = requestSearch(context);
-    // This native mapping read admits both the calendar and credit formats.
-    await readSubjectCalendarMappingFormat(search, config.prefix, generation);
+    // Publication admits calendar, credit and sort formats together on its native target.
     return sourcePublication.createGenerationPublication({
       pool: config.pool,
       search: config.search,

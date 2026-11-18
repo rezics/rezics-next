@@ -37,6 +37,7 @@ function fixture(active: number[], lostSave = false, incarnation = reference.con
     prefix,
     generation: '2',
     phase: 'active',
+    fenced_pass: true,
     fence: fence as string | null,
     revision: '1',
   };
@@ -59,7 +60,7 @@ function fixture(active: number[], lostSave = false, incarnation = reference.con
           }
           expect(text).toStartWith('UPDATE search.generation_publication');
           expect(values.slice(0, 3)).toEqual([job.job, job.revision, 'active']);
-          expect(values[8]).toBeNull();
+          expect(values.slice(8, 10)).toEqual([null, true]);
           if (lostSave) {
             lostSave = false;
             return { rows: [] };
