@@ -1,76 +1,42 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomInt, randomUUID } from 'node:crypto';
-import pg from 'pg';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
-import { createPool } from '../../src/database/pool.ts';
-import { createKernel } from '../../src/http/kernel.ts';
-import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
+import type { Subject } from '../../../../specs/semantic-driver.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection, listSubjectLinks } from '../../src/semantic/links.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
-import { createRealAccess } from './real-access.ts';
+import { fixtureFetch } from '../imports/type-helpers.ts';
+import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
-const admin = new pg.Pool({ connectionString: databaseUrl, max: 3 });
-const accounts = { owner: newId(65_536), reader: newId(65_536) };
-const actions = ['subject:create', 'subject:read'];
-const real = await createRealAccess(admin, accounts, actions);
-const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-const routeKey = new Uint8Array(32).fill(81);
+type Account = Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>>;
+let driver: SemanticOutcomeDriver;
+let owner: Account;
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) };
-const kernel = createKernel({ pool, routeKey, tokens, access: real.access, writeRate: real.writeRate });
-const projection = linkProjection(pool);
 
 beforeAll(async () => {
-  await bootstrapRelease(pool, bundledRelease);
-  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
-});
+  driver = await createSemanticDriver(undefined, { linkProjection: 'external' });
+  owner = await driver.fixtures.person('relation_assertion_owner');
+  await driver.fixtures.grantAccount(owner, ['subject:create']);
+}, 180_000);
 afterAll(async () => {
-  await pool.end();
-  await admin.end();
+  await driver?.close();
 });
-
-async function actor(persona: keyof typeof accounts): Promise<AccountActor> {
-  return (await actorOf(
-    access,
-    new Request('https://kernel.test', { headers: { authorization: `Bearer ${real.bearer(persona)}` } }),
-    { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
-  )) as AccountActor;
-}
 
 async function create(type: string, label: string, statements: Record<string, unknown[]> = {}) {
-  const owner = await actor('owner');
-  const route = randomInt(1_000, 4_000) * 16;
-  const id = newId(route);
-  const authorize = await accessCheck(
-    access,
+  const response = await driver.fixtures.send(
     owner,
-    'subject:create',
-    { route: 0, id: GLOBAL_CONTEXT },
-    { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+    'POST',
+    '/v1/subjects',
+    { type, labels: { en: label, ja: `日本語 ${label}` }, statements },
+    { 'Idempotency-Key': `"${randomUUID()}"` },
   );
-  const result = await createSubject(pool, {
-    actor: owner,
-    target: { route, id },
-    idempotencyKey: randomUUID(),
-    digest: createHash('sha256').update(id).digest(),
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize,
-    item: {
-      type,
-      labels: { en: label, ja: `日本語 ${label}` },
-      statements,
-    },
-  });
-  await real.grant({ route, id }, 'reader', 'subject:read');
-  return result.subject;
+  expect(response.status, JSON.stringify(response.body)).toBe(201);
+  return response.body.subject as Subject;
 }
 
 async function catchUp(ids: readonly string[]) {
+  const projection = linkProjection(driver.fixtures.pool);
   const partitions = new Set(
     ids.map((id) => partitionOf(routeOf(id)!)).filter((partition): partition is number => partition !== null),
   );
@@ -83,15 +49,18 @@ async function catchUp(ids: readonly string[]) {
   }
 }
 
-async function request(path: string) {
-  const response = await kernel.handle(
-    new Request(`https://kernel.test${path}`, {
+function requestAsReader(url: string) {
+  return driver.fixtures.handle(
+    new Request(url, {
       headers: {
-        authorization: `Bearer ${real.bearer('reader')}`,
         'accept-language': 'ja, en;q=0.5',
       },
     }),
   );
+}
+
+async function request(path: string) {
+  const response = await requestAsReader(`https://kernel.test${path}`);
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 
@@ -144,9 +113,17 @@ test('unqualified Book series windows retain the exact cited assertion and item 
   expect(Object.keys(forwardRow.related).sort()).toEqual([series.id, citation.id].sort());
   expect(forwardRow.related[citation.id].label).toEqual({ value: '日本語 Citation source', language: 'ja' });
   expect(forwardRow.summary.label).toEqual({ value: '日本語 Series', language: 'ja' });
+  const client = createPublicBulkClient({
+    origin: 'https://kernel.test',
+    fetch: fixtureFetch((input) => requestAsReader(String(input))),
+  });
+  expect(await client.readSubjectRelations!(book.id, 'wdt:P179')).toEqual({
+    statements: [expected],
+    next: null,
+  });
 
-  const crossProperty = await listSubjectLinks(pool, tokens, {
-    routeKey,
+  const crossProperty = await listSubjectLinks(driver.fixtures.pool, tokens, {
+    routeKey: Buffer.from(driver.fixtures.runtime.routeKey, 'base64url'),
     subject: series.id,
     property: null,
     limit: 20,
@@ -159,8 +136,8 @@ test('unqualified Book series windows retain the exact cited assertion and item 
   expect(crossProperty.links[0]).not.toHaveProperty('assertion');
   expect(crossProperty.links[0]).not.toHaveProperty('related');
 
-  const withoutLabels = await listSubjectLinks(pool, tokens, {
-    routeKey,
+  const withoutLabels = await listSubjectLinks(driver.fixtures.pool, tokens, {
+    routeKey: Buffer.from(driver.fixtures.runtime.routeKey, 'base64url'),
     subject: series.id,
     property: 'wdt:P179',
     limit: 20,

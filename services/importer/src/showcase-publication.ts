@@ -31,7 +31,12 @@ import {
 import { buildShowcaseManifest, showcaseStatementMatches, showcaseMediaContext } from './showcase-manifest.ts';
 import { ShowcaseManifestTrace } from './showcase-manifest-trace.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
-import { GLOBAL_CONTEXT, admitSelectedSynopsisSupport, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
+import {
+  GLOBAL_CONTEXT,
+  admitSelectedSynopsisSupport,
+  publicRelationPageSize,
+  selectedSynopsisQueryFromPublic,
+} from './public-bulk-client.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
 import {
   bangumiRecordUrl,
@@ -2884,6 +2889,9 @@ async function publishShowcasePhases(
   for (const key of grouped.keys()) omissions.push(...(adoptionOmissions.get(key) ?? []));
 
   progress.enter('public-readback');
+  // Adoption-phase reads establish prerequisites. Start final evidence from the post-adoption state,
+  // including endpoints whose earlier read was unavailable.
+  publicSubjects.clear();
   const published: {
     provider: 'bangumi' | 'vndb';
     sourceKey: string;
@@ -2940,7 +2948,33 @@ async function publishShowcasePhases(
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'public-view-unavailable' });
       continue;
     }
-    const publicSubject = read.subject as { statements?: Record<string, unknown[]> } | undefined;
+    const relationPages = new Map<string, Map<string, unknown>>();
+    const readRelations = async (property: string) => {
+      const cached = relationPages.get(property);
+      if (cached) return cached;
+      const rows = new Map<string, unknown>();
+      relationPages.set(property, rows);
+      const id = subjectId(read);
+      if (!id || !input.publicClient.readSubjectRelations) return rows;
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      // Allow enough pages for a full selected record even if one property holds all its candidates.
+      for (let count = 0; count < showcaseLimits.candidatesPerRecord; count += publicRelationPageSize) {
+        const page = await input.publicClient.readSubjectRelations(id, property, cursor).catch(() => null);
+        if (!page) break;
+        for (const statement of page.statements) {
+          if (
+            publicValueStatementCurrent(statement, property) &&
+            typeof (statement as { id?: unknown }).id === 'string'
+          )
+            rows.set((statement as { id: string }).id, statement);
+        }
+        if (!page.next || cursors.has(page.next)) break;
+        cursors.add(page.next);
+        cursor = page.next;
+      }
+      return rows;
+    };
     const withheldGraphCandidates = new Set<string>();
     const graphAssertions = record.assertions.filter((assertion) => assertion.graphTarget);
     if (graphAssertions.length && !publicHasSourceIdentity(read, record)) {
@@ -3024,7 +3058,8 @@ async function publishShowcasePhases(
         });
       }
     }
-    const visible = record.assertions.filter((assertion) => {
+    const visible: ShowcaseAssertion[] = [];
+    for (const assertion of record.assertions) {
       if (
         !validated.has(assertion.candidateId) ||
         withheldAcceptanceCandidates.has(assertion.candidateId) ||
@@ -3033,29 +3068,32 @@ async function publishShowcasePhases(
         withheldGraphCandidates.has(assertion.candidateId) ||
         blockedMembershipCandidateIds.has(assertion.candidateId)
       )
-        return false;
-      const rows = publicSubject?.statements?.[assertion.property] ?? [];
-      const readback = rows.find((row) =>
+        continue;
+      const slot = relationSlot(assertion.statement);
+      const adoption = adoptionSnapshots.get(groupKey(record.subjectId, assertion.property, slot));
+      const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
+      const rows = publicStatements(read, assertion.property);
+      let readback = rows.find((row) =>
         assertion.property === 'schema:abstract'
           ? selectedSynopsisOnPublicRead(row, assertion.statement, assertion.candidateId)
           : statementOnPublicRead(row, assertion.statement),
       );
+      if (!readback && slot && selected && selected.rank !== 'deprecated') {
+        const relation = (await readRelations(assertion.property)).get(assertion.candidateId);
+        if (relation && statementOnPublicRead(relation, assertion.statement)) readback = relation;
+      }
       if (!readback && assertion.graphTarget) {
         withheldGraphCandidates.add(assertion.candidateId);
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-relation-not-public' });
       }
-      if (!readback) return false;
-      const adoption = adoptionSnapshots.get(
-        groupKey(record.subjectId!, assertion.property, relationSlot(assertion.statement)),
-      );
-      const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
+      if (!readback) continue;
       if (!adoption || !selected) {
         omissions.push({
           provider: record.provider,
           sourceKey: record.sourceKey,
           code: 'candidate-not-currently-adopted',
         });
-        return false;
+        continue;
       }
       readbacksByCandidate.set(assertion.candidateId, readback);
       adoptionsByCandidate.set(assertion.candidateId, {
@@ -3063,8 +3101,8 @@ async function publishShowcasePhases(
         candidateId: assertion.candidateId,
         rank: selected.rank,
       });
-      return true;
-    });
+      visible.push(assertion);
+    }
     const imageVisible =
       imagePublishable &&
       !!imageAssertion &&

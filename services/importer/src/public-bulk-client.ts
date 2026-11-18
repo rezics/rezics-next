@@ -37,7 +37,14 @@ export class PublicSubjectGetUnavailable extends Error {
 export type PublicBulkClient = Readonly<{
   readSubject(id: string, signal?: AbortSignal, mode?: 'after-create'): Promise<ReviewedSubjectRead>;
   readSelectedSynopsis(id: string, query: string, signal?: AbortSignal): Promise<ReviewedSubjectRead>;
+  readSubjectRelations?(
+    id: string,
+    property: string,
+    cursor?: string,
+  ): Promise<{ statements: unknown[]; next: string | null }>;
 }>;
+
+export const publicRelationPageSize = 20;
 
 export type SelectedSynopsisDocument = { document: string; digest: string; language: string };
 
@@ -324,6 +331,28 @@ export function createPublicBulkClient(options: { origin: string; fetch?: typeof
     },
     async readSelectedSynopsis(id, query, signal) {
       return readCurrentSubject(read, origin, id, signal, query);
+    },
+    async readSubjectRelations(id, property, cursor) {
+      if (!subjectId.test(id)) throw new TypeError('Invalid public subject identity');
+      const url = new URL(`/v1/subjects/${id}/relations`, origin);
+      url.searchParams.set('context', GLOBAL_CONTEXT);
+      url.searchParams.set('property', property);
+      url.searchParams.set('limit', String(publicRelationPageSize));
+      if (cursor !== undefined) url.searchParams.set('cursor', cursor);
+      const response = await read(url.href);
+      if (!response.ok) throw new Error(`Public subject relations read returned ${response.status}`);
+      const body: unknown = await response.json();
+      if (
+        !isRecord(body) ||
+        !Array.isArray(body.relations) ||
+        body.relations.length > publicRelationPageSize ||
+        (body.next !== null && (typeof body.next !== 'string' || body.next.length === 0 || body.next.length > 4096))
+      )
+        throw new TypeError('Invalid public subject relations page');
+      return {
+        statements: body.relations.map((row: unknown) => (isRecord(row) ? row.statement : undefined)),
+        next: body.next,
+      };
     },
   };
 }

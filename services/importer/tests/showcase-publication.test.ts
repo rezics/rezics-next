@@ -553,10 +553,24 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         };
       },
     };
+    let relationOutsidePreview = false;
+    const relationReadCursors: (string | null)[] = [];
     const publicClient = createPublicBulkClient({
       origin: 'https://fixture.test',
       fetch: (async (input) => {
         const url = new URL(String(input));
+        if (url.pathname.endsWith('/relations')) {
+          const property = url.searchParams.get('property')!;
+          if (!relationOutsidePreview || property !== 'schema:exampleOfWork')
+            return Response.json({ relations: [], next: null });
+          expect(url.searchParams.get('context')).toBe(globalContext);
+          const cursor = url.searchParams.get('cursor');
+          relationReadCursors.push(cursor);
+          if (!cursor) return Response.json({ relations: [], next: 'public-page-two' });
+          const holder = url.pathname.split('/').at(-2)!;
+          const statements = read(holder).subject.statements[property] ?? [];
+          return Response.json({ relations: statements.map((statement) => ({ statement })), next: null });
+        }
         const id = url.pathname.split('/').at(-1)!;
         publicReadIds.add(id);
         const value = read(id);
@@ -600,7 +614,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         const publicSubject = {
           ...value.subject,
           ...(omitSelectedSynopsisOperands ? {} : { context: globalContext, release: `sha256:${'a'.repeat(64)}` }),
-          statements: { ...value.subject.statements, 'schema:abstract': currentRows },
+          statements: {
+            ...value.subject.statements,
+            'schema:abstract': currentRows,
+            ...(relationOutsidePreview ? { 'schema:exampleOfWork': undefined } : {}),
+          },
         };
         const publicValue = { ...value, subject: publicSubject };
         if (!url.searchParams.has('selectedSynopsis')) {
@@ -1561,6 +1579,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       tagParentRefreshes: [graphParentRefresh],
     };
     publicReadIds.clear();
+    relationOutsidePreview = true;
     const resumed = await publishShowcase({
       plan,
       result,
@@ -1570,6 +1589,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       publicClient,
       ...tagOptions,
     });
+    relationOutsidePreview = false;
+    expect(relationReadCursors).toEqual([null, 'public-page-two']);
     expect(resumed.omissions).toContainEqual({
       provider: 'vndb',
       sourceKey: 'v2',
@@ -1594,6 +1615,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(relation).toMatchObject({
       citations: ['https://vndb.org/r1'],
       target: { sourceKey: 'v1', subjectId: vndbTargetId, nativeType: 'wd:Q689445' },
+      readback: { id: relation?.candidateId, rank: 'normal' },
     });
     expect(candidates.get(relation!.candidateId)!.statement).toMatchObject({
       property: { id: 'schema:exampleOfWork' },
