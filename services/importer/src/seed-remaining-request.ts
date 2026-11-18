@@ -10,9 +10,9 @@ import {
   type BatchWriteFailureStage,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
-import { reviewedCatalogueProblem } from './http.ts';
+import { ReviewedCatalogueCommandError, reviewedCatalogueProblem, type ReviewedCatalogueProblem } from './http.ts';
 import type { ImportTransportError } from './import-client.ts';
-import { formatSeedError, seedTransportError } from './seed-cli.ts';
+import { formatSeedError, seedImportRunDetail, seedTransportError } from './seed-cli.ts';
 
 const batchTransitions = [
   'graph-retain',
@@ -60,6 +60,7 @@ export type SeedRemainingRequest = {
   transition?: BatchTransition;
   reason?: BatchReason;
   transactionPhase?: string;
+  effectStatus?: ReviewedCatalogueProblem['effect_status'];
   failureStage?: BatchWriteFailureStage;
   sqlstate?: string;
   constraintName?: string;
@@ -90,6 +91,7 @@ const remainingFields = {
   transition: new RegExp(`^(?:${batchTransitions.join('|')})$`),
   reason: new RegExp(`^(?:${batchReasons.join('|')})$`),
   transactionPhase: /^[a-z_]{1,32}$/,
+  effectStatus: /^(?:unknown|not_applied|applied|not_applicable)$/,
   failureStage: new RegExp(`^(?:${BATCH_WRITE_FAILURE_STAGES.join('|')})$`),
   sqlstate: BATCH_SQLSTATE,
   constraintName: BATCH_CONSTRAINT_NAME,
@@ -159,6 +161,32 @@ export function remainingRequestFromPreparedCommand(command: CommandIdentity): S
 
 const batchFailures = new WeakMap<Error, SeedRemainingRequest>();
 
+function batchProblemFields(
+  op: string | undefined,
+  status: number | undefined,
+  problem: ReviewedCatalogueProblem,
+  transport?: ImportTransportError,
+) {
+  return {
+    type: problem.type ?? transport?.type,
+    code: problem.code ?? transport?.code,
+    retryable: problem.retryable ?? transport?.retryable,
+    correlationId: problem.request_id ?? transport?.correlationId,
+    transactionPhase: problem.phase,
+    effectStatus: problem.effect_status,
+    ...((op === 'create' || op === 'propose') &&
+    ((status === 500 && problem.code === 'internal_error') ||
+      (status === 503 && problem.failure_stage === 'transaction_commit'))
+      ? {
+          commandIndex: problem.command_index,
+          failureStage: problem.failure_stage,
+          sqlstate: problem.sqlstate,
+          constraintName: problem.constraint_name,
+        }
+      : {}),
+  };
+}
+
 /** Keep request-local failure metadata, including the exact command only when its identity is known. */
 export function recordSeedBatchFailure(
   error: unknown,
@@ -185,29 +213,45 @@ export function recordSeedBatchFailure(
       reason,
       ...(receipt === undefined ? {} : { status: receipt.status }),
       failurePhase,
-      type: problem.type ?? (remote?.type === 'about:blank' ? 'about:blank' : transport?.type),
-      code: problem.code ?? transport?.code,
-      retryable: problem.retryable ?? transport?.retryable,
-      correlationId: problem.request_id ?? transport?.correlationId,
-      transactionPhase: problem.phase,
-      ...((command?.op === 'create' || command?.op === 'propose') &&
-      receipt?.status === 500 &&
-      problem.code === 'internal_error'
-        ? {
-            commandIndex: problem.command_index,
-            failureStage: problem.failure_stage,
-            ...(command.op === 'propose'
-              ? { sqlstate: problem.sqlstate, constraintName: problem.constraint_name }
-              : {}),
-          }
-        : {}),
+      ...batchProblemFields(command?.op, receipt?.status, problem, transport),
+      ...(remote?.type === 'about:blank' ? { type: 'about:blank' } : {}),
     }),
   );
   return failure;
 }
 
 export function seedBatchRemainingRequest(error: unknown): SeedRemainingRequest | undefined {
-  return error instanceof Error ? batchFailures.get(error) : undefined;
+  if (!(error instanceof Error)) return undefined;
+  const recorded = batchFailures.get(error);
+  if (recorded) return recorded;
+  const reviewed = seedTransportError(error);
+  if (reviewed instanceof ReviewedCatalogueCommandError && reviewed.remaining) {
+    return safeRemainingRequest({
+      ...reviewed.remaining,
+      ...remainingRequestFromTransport(reviewed),
+      transition: 'batch-receipt',
+      reason: 'command-refused',
+      failurePhase: 'response',
+      ...batchProblemFields(reviewed.remaining.op, reviewed.status, reviewed.problem),
+    });
+  }
+  const failure = seedImportRunDetail(error);
+  if (!failure?.batch) return undefined;
+  const { batch, status } = failure;
+  return safeRemainingRequest({
+    method: 'POST',
+    path: BATCH_ROUTE,
+    transition: 'batch-receipt',
+    reason: 'command-refused',
+    failurePhase: 'response',
+    status,
+    op: batch.op,
+    source: batch.source,
+    externalId: batch.externalId,
+    converter: batch.converter,
+    nativeType: batch.nativeType,
+    ...batchProblemFields(batch.op, status, batch),
+  });
 }
 
 export function remainingRequestFromPreparedJournal(path: string): SeedRemainingRequest | undefined {

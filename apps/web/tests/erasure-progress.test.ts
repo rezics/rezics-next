@@ -99,7 +99,7 @@ test('private platform erasure progress shows exact native pending retention and
     expect(request.headers.get('authorization')).toBe('Bearer current-native-scope');
     expect(request.headers.get('cache-control')).toBe('no-store');
     expect(request.cache).toBe('no-store');
-    expect(request.redirect).toBe('error');
+    expect(request.redirect).toBe('manual');
   }
 });
 

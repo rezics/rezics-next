@@ -237,10 +237,11 @@ and is measured separately from Codex execution. Private configuration owns acco
 
 ## Incident method
 
-When delivery slows or misses its forecast, start with the largest evidenced loss. State the observation and source,
-the decision or repeated action that sustained it, the causal explanation and its confidence, what to stop or change,
-the repair owner, and the next comparable outcome. Token totals and exhausted resources describe costs, not causes.
-Do not infer loaded prompt size from repository size or attribute delay to a model setting without supporting evidence.
+Invoke [delivery-efficiency](../../.agents/skills/delivery-efficiency/SKILL.md) during execution when a missed
+milestone, slipping forecast or recurring loss calls for intervention. Start with the largest evidenced loss.
+Record the observation, its source, the action sustaining the loss, the likely cause and confidence, the change,
+its owner and the next comparison. Token totals and depleted allowance measure cost. Attribute delay to a
+model setting or loaded prompt only when the evidence supports it.
 
 Repair the class at its owner and remove the superseded action or rule. Do not add another gate, watcher, audit or
 recurring report by default. Keep incident evidence in operating records or a short report, outside default prompts;
@@ -248,5 +249,4 @@ put only reusable rules in owner documents and link them from templates and brie
 
 Use the existing progress checkpoint to compare delivery time, accepted outcomes, repeated failures and manager cost.
 State unknown attribution and untested hypotheses. A document edit or passing tooling test is not evidence of faster
-delivery; when no comparable outcome has run, report the improvement as unverified. Follow the
-[incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis).
+delivery; when no comparable outcome has run, report the improvement as unverified.

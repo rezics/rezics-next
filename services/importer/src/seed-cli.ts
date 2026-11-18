@@ -95,6 +95,11 @@ export function seedImportRunFailure(provider: 'bangumi' | 'vndb', result: Impor
   return error;
 }
 
+export function seedImportRunDetail(error: Error) {
+  const run = importRunFailures.get(error);
+  return run && importRunFailure(run.result);
+}
+
 function finalizationDetail(value: FinalizationDiagnostic): string {
   const { requirements, bindingsChanged } = value.observation ?? {};
   let detail = `scope=${value.scope} phase=${value.phase} remaining=${value.remaining.join(',') || 'none'}`;

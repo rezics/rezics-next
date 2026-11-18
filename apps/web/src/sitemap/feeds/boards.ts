@@ -20,7 +20,7 @@ export const feed: SitemapFeed<BoardItem> = {
   async read(cursor) {
     const result = await kernelClient().sitemap.boards.get({
       query: { ...(cursor === null ? {} : { cursor }), limit: 1_000 },
-      fetch: { cache: 'no-store', redirect: 'error' },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (result.status !== 200 || !result.data)
       throw Object.assign(new Error(`Sitemap feed boards returned ${result.status}`), { status: result.status });

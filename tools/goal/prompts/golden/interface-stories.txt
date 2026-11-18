@@ -1,7 +1,11 @@
-Work in /work/t with /repo read-only. Respect owned and risk paths.
+Work only in /work/t with /repo read-only. Respect owned and risk paths.
+AGENTS.md is already loaded. Search recursively only in the worktree and named directories.
+Manage only containers, databases and processes this attempt started. Never prune Docker or edit node_modules in place.
 
 Send the manager independent gaps with the outcome, evidence, first edit and dependency. Honor source-only and
 money/authorization rules.
+Report failures already on base and fix regressions you introduced. For a tool or infrastructure failure persisting after
+two retries, start the `tool` blocker with the exact first error line.
 
 row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; path k=kernel,w=web,p=package,@=rezics; dir:{...}; - = none
 wapp|u|w:{books:{catalogue:{route.tsx,shelf-link.tsx},reader:{route.tsx}},content-editions:{creator-editions-route.tsx,edition-api.ts,edition-create-route.tsx,edition-route.tsx,sale-review.tsx},editor:{behavior-labels.ts,command-labels.ts,labels.ts,preference-version.ts,preferences.tsx,preferred-rich-text-editor.tsx},features:{count.ts,feed:{home-reaction-currentness-recovery.tsx}},identity:{read-contract.ts},kernel:{client.ts,exposure.ts,languages.ts,platform-closed.ts,query.ts,use-sync-external-store-with-selector.ts,viewer-exposure.ts},knowledge:{route.tsx},paraglide:{messages.d.ts,messages.js,runtime.d.ts,runtime.js},reader:{lease.ts},report:{index.ts,contract:{contribution-actions.ts}},session:{auth-page-routes.ts,browser-state.ts,client.ts,community-application.tsx,csrf.ts,expected-reader.ts,guard.ts,index.ts,library-application.tsx,observation.ts,performance-ambient.ts,query.ts,reader.ts,reading-policy.ts,recent-search-binding.ts,request.ts,state.ts},shell:{collection-presentation.tsx,current-reading.tsx,head-context.ts,head.ts,page-heading.tsx,route-state.tsx},studio:{index.ts},subject:{candidate-contract.ts,candidate-lifetime.tsx,collection-return.ts,definitions.ts,language.ts,load-subject.ts,page-visit-binding.tsx,quantity-presentation.ts,read-contract.ts,reader.ts,subject-href.ts,time-presentation.ts,reading-state:{index.tsx}}}|browser-reader-lifetime,client,composition,content-edition-contract,definitions,definitions-compiler,definitions-compiler-adapter,document,editor,editor-preferences,filter,ui,wcommerce,wcontent,wdisplay-definition-cache,wlibrary,wperformance,wsearch,wsemantic

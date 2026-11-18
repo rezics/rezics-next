@@ -125,15 +125,16 @@ export async function readLogicalEverythingMembers(
       epoch: number;
       accountTuple: string;
       accountVersion: string;
-      generation: string;
-      capture: string;
-      revision: string;
+      generation: string | null;
+      capture: string | null;
+      revision: string | null;
       id: string | null;
       explicit: boolean;
       kind: GrantedAccount['kind'];
       state: GrantedAccount['state'];
       fenced: boolean;
       floor: string;
+      preparing: boolean | null;
 
       releaseDigest: string | null;
       releaseHead: number | null;
@@ -198,6 +199,8 @@ export async function readLogicalEverythingMembers(
       )
     )
       throw new ProblemError('not_found');
+    if (head.preparing) return 'preparing' as const;
+    if (head.generation === null) return null;
     const stamp = {
       epoch: head.epoch,
       version: head.version,
@@ -236,6 +239,7 @@ export async function readLogicalEverythingMembers(
   const observation = await atReadTime(async (at) => {
     const first = await onPage(() => population(at, 2 * limit + 1));
     if (!first) return null;
+    if (first === 'preparing') return first;
     const ids: string[] = [];
     const batches = [];
     for (let offset = 0; offset < first.ids.length; offset += LIBRARY_SUBJECT_PAGE_LIMIT) {
@@ -255,6 +259,10 @@ export async function readLogicalEverythingMembers(
   if (!observation) {
     if (cursor?.ok) throw changed();
     return null;
+  }
+  if (observation === 'preparing') {
+    if (cursor?.ok) throw changed();
+    return { preparing: true as const };
   }
   const { first, ids, batches, basis } = observation;
   if (
@@ -277,7 +285,8 @@ export async function readLogicalEverythingMembers(
         if (!(await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => batch.revalidate(fresh))))
           throw changed();
       }
-      if (!isDeepStrictEqual((await onPage(() => population(fresh, 0)))?.stamp, first)) throw changed();
+      const current = await onPage(() => population(fresh, 0));
+      if (!current || current === 'preparing' || !isDeepStrictEqual(current.stamp, first)) throw changed();
     });
   };
   let members = shown;

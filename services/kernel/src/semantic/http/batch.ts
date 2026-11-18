@@ -1,4 +1,5 @@
 import { BATCH_CONSTRAINT_NAME, type BatchWriteFailureStage, type WalkCommitCause } from '@rezics/definitions/bulk';
+import { classifyUnavailability } from '../../access/unavailable.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandCommitUncertainError, CommandUnavailableError } from '../../command/command.ts';
 import { commandTimingSnapshot } from '../../command/timing.ts';
@@ -95,7 +96,10 @@ export function bulkWriteDiagnostics(
   action: BulkWriteAction,
 ): Pick<BulkWriteProblemBody, 'operation' | 'partition' | 'phase' | 'contention_retries'> {
   const timing = commandTimingSnapshot();
-  const partition = error instanceof CommandUnavailableError ? publicPartition(error.partition) : undefined;
+  const partition =
+    error instanceof CommandUnavailableError || error instanceof CommandCommitUncertainError
+      ? publicPartition(error.partition)
+      : undefined;
   const phase = publicPhase(timing?.dominant_phase);
   const retries = publicRetries(timing?.contention_retries);
   return {
@@ -143,6 +147,10 @@ function mapBulkWriteError(
   commandIndex: number,
   op: string | undefined,
 ): { problem: unknown; redirect?: { from: string; to: string } } {
+  // The receipt may already be durable. A fresh request with the same command key
+  // can recover it after this request has spent its entire database deadline.
+  if (error instanceof CommandCommitUncertainError && classifyUnavailability(error.cause) === 'deadline')
+    return { problem: new ProblemError('deadline_exceeded') };
   if (error instanceof SubjectInputError)
     return {
       problem: new ProblemError('invalid_request', {
@@ -162,7 +170,7 @@ function mapBulkWriteError(
 }
 
 /** Only the command's own COMMIT error establishes its stage. Batch timing includes concurrent commands. */
-function catalogueProposalDiagnostics(
+function catalogueCommandDiagnostics(
   error: unknown,
 ): Pick<BulkWriteProblemBody, 'failure_stage' | 'sqlstate' | 'constraint_name'> {
   const commit = error instanceof CommandCommitUncertainError;
@@ -214,6 +222,7 @@ export async function bulkWriteCommandProblem(
     action,
     route: BULK_WRITE_ROUTE,
   });
+  const observeCommand = (options.op === 'create' || options.op === 'propose') && isImportCatalogueWalk();
   if (response.status === 500)
     logInternalError({
       requestId: options.requestId,
@@ -221,10 +230,7 @@ export async function bulkWriteCommandProblem(
       route: BULK_WRITE_ROUTE,
       cause: error,
       commandIndex: options.commandIndex,
-      ...(options.op === 'propose' &&
-        isImportCatalogueWalk() &&
-        error instanceof CommandCommitUncertainError &&
-        !isPostgresServerError(error.cause)
+      ...(observeCommand && error instanceof CommandCommitUncertainError && !isPostgresServerError(error.cause)
         ? { commitCause: walkCommitCause(error.cause) }
         : {}),
     });
@@ -233,12 +239,13 @@ export async function bulkWriteCommandProblem(
     throw new TypeError('bulk write problem payload');
   const problem: BulkWriteProblemBody = {
     ...(payload as BulkWriteProblemBody),
+    ...(error instanceof CommandCommitUncertainError ? { effect_status: 'unknown' } : {}),
     ...bulkWriteDiagnostics(error, action),
-    ...(response.status === 500
+    ...(response.status === 500 || (observeCommand && error instanceof CommandCommitUncertainError)
       ? {
           command_index: options.commandIndex,
           failure_stage: options.failureStage ?? 'command_execution',
-          ...(options.op === 'propose' && isImportCatalogueWalk() ? catalogueProposalDiagnostics(error) : {}),
+          ...(observeCommand ? catalogueCommandDiagnostics(error) : {}),
         }
       : {}),
     ...(mapped.redirect ? { redirect: mapped.redirect } : {}),

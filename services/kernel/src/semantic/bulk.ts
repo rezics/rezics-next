@@ -12,8 +12,11 @@ import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import {
+  CommandCommitUncertainError,
+  CommandResultErasedError,
   CommandUnavailableError,
   noEffect,
+  preflightCommandReceipt,
   principalCommandIdentity,
   runCommand,
   type CommandAttempt,
@@ -473,7 +476,19 @@ export async function batchCommand(
       }
     }
   };
-  const outcome = command.op === 'create' ? await create() : await runCommand<Value>(pool, commandOptions, body);
+  const recoverReceipt = async (error: unknown) => {
+    if (!(error instanceof CommandCommitUncertainError) || Date.now() >= commandOptions.deadline) throw error;
+    // The original permit still covers this lookup. Absence cannot settle an in-flight COMMIT.
+    try {
+      const receipt = await preflightCommandReceipt<Value>(pool, commandOptions);
+      if (receipt) return receipt;
+    } catch (lookupError) {
+      if (lookupError instanceof CommandResultErasedError) throw lookupError;
+    }
+    throw error;
+  };
+  const execution = command.op === 'create' ? create() : runCommand<Value>(pool, commandOptions, body);
+  const outcome = await execution.catch(recoverReceipt);
   return {
     ...outcome.value,
     component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },

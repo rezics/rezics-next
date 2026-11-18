@@ -71,8 +71,6 @@ const CHECK_CONDITIONS = new Set<ConditionId>([
   'no-wrapper',
   'wrapper',
 ]);
-const WAIT =
-  'Wait for a long command, even one queued for a test slot, in its open session with one yield of at least {{task.waitSeconds}} seconds (Codex: `write_stdin`, `yield_time_ms: {{task.waitMs}}`); never start a duplicate, interrupt it, poll faster, or use sleep loops, `ps` or `pgrep`.';
 const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`), and fix failures you caused.";
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
@@ -82,9 +80,9 @@ const MINIMAL_SESSION_COMMANDS =
 const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks":[]\`) once each changed workspace type-checks and each required changed payment, payout, order settlement, points or balance test passes{{task.minimalInfrastructureException}}, naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.`;
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
   'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${MINIMAL_WRAPPER_RESULT}`.trimEnd(),
-  'local-placement': `${WAIT} ${REGRESSION}`,
+  'local-placement': `{{task.localRun}} {{task.localResult}} ${REGRESSION}`,
   wrapper: REGRESSION,
-  'no-wrapper': `${WAIT} ${REGRESSION}`,
+  'no-wrapper': `{{task.foregroundWait}} ${REGRESSION}`,
 };
 
 type TemplateCache = { mtimeMs: number; size: number; text: string; sha: string };
@@ -348,7 +346,7 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
   const manager = brief.manager ?? brief.goal ?? '<your manager>';
   const decisionInbox = `\`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\``;
   const owned = brief.acceptance?.workerOwned === true && brief.goal !== 'control-plane';
-  const { runner, local } = wrapperRunner(task.worktree, brief);
+  const { runner } = wrapperRunner(task.worktree, brief);
   const command = brief.acceptance?.command;
   const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';
   const servers = storybookServers(task.worktree, brief);
@@ -375,6 +373,8 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
   const localRun = runner
     ? `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`
     : `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`;
+  const waitMs = policy.guidance.longCommandWaitMs;
+  const foregroundWait = `Wait for a long command, even one queued for a test slot, in its open session with one yield of at least ${waitMs / 1000} seconds (Codex: \`write_stdin\`, \`yield_time_ms: ${waitMs}\`); never start a duplicate, interrupt it, poll faster, or use sleep loops, \`ps\` or \`pgrep\`.`;
   return {
     id: task.id ?? '',
     goal: brief.goal ?? '',
@@ -425,16 +425,16 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
     sourceOnlyContinuation: continuesItself(task)
       ? `${CONTINUATION_BOUNDARY} Save at ${CONTINUATION_DIRECTORY}/<short-name>.md; name it in result.`
       : '',
-    waitSeconds: String(policy.guidance.longCommandWaitMs / 1000),
-    waitMs: String(policy.guidance.longCommandWaitMs),
+    foregroundWait,
     checkOnce: owned ? OWNED_ONCE : SCARCE_ONCE,
     noWrapperRun: owned
       ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
       : `This base has no scripts/worker-check.ts; do not add one. ${localRun}`,
     ownedNoWrapperTail: owned ? ' Do not report success unless the chosen validation actually exits zero.' : '',
     wrapperInvocation: runner ? `${runner} -- <command...>` : 'bun scripts/worker-check.ts -- <command...>',
-    wrapperResult:
-      local && runner ? wrapperResult('missing, unknown or nonzero is not a pass', wrapperFailureRule) : '',
+    localResult: runner
+      ? wrapperResult('missing, unknown or nonzero is not a pass', wrapperFailureRule).trimEnd()
+      : foregroundWait,
     localRun,
     minimalOwned: owned
       ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
@@ -547,7 +547,6 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const extras = [
     readOnlyProof ? '' : view.unfinished,
     readOnlyProof ? '' : view.testCommands,
-    selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
     input.landingDiagnostic
       ? `Dev landing repair diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`

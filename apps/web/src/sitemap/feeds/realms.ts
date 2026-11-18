@@ -18,7 +18,7 @@ export function createRealmFeed(
     async read(cursor) {
       const result = await kernelClient().sitemap.realms.get({
         query: { ...(cursor === null ? {} : { cursor }), limit: 1_000 },
-        fetch: { cache: 'no-store', redirect: 'error' },
+        fetch: { cache: 'no-store', redirect: 'manual' },
       });
       if (result.status !== 200 || !result.data)
         throw Object.assign(new Error(`Sitemap feed realms returned ${result.status}`), { status: result.status });

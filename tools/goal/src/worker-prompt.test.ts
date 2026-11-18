@@ -13,7 +13,7 @@ import {
 } from '../../../scripts/architecture-map.ts';
 import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
 import { defaultPolicy } from './policy.ts';
-import { renderCheckProtocol, renderManagerOpening, renderWorkerPrompt } from './prompts.ts';
+import { renderCheckProtocol, renderWorkerPrompt } from './prompts.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import type { Attempt, Brief, Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
@@ -52,7 +52,7 @@ function mapRows(prompt: string): string[] {
     .filter(Boolean);
 }
 
-test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
+test('the worker prompt limits writes to the assigned worktree and keeps the main checkout read-only', () => {
   const task = {
     worktree: '/work/trees/t1',
     branch: 'worker/t1',
@@ -60,8 +60,7 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
     brief: { markdown: 'Do the thing.', acceptance: { command: ['bun', 'test'], tests: ['x'] } },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('the main checkout /repo/main is read-only');
-  expect(prompt).toContain('Work only in /work/trees/t1;');
+  expect(prompt).toContain('Work only in /work/trees/t1 with /repo/main read-only.');
 });
 
 test('product prompts hand off fixture choices and route adopted contract changes by declared document scope', () => {
@@ -101,7 +100,7 @@ test.skip('an interface worker is told to start and use its own worktree Storybo
   expect(other).not.toContain('Storybook');
 });
 
-test('the worker prompt says failures outside the declared paths are reported, not blocking', () => {
+test('the worker reports pre-existing failures and fixes regressions introduced by the task', () => {
   const task = {
     worktree: '/work/trees/t1',
     branch: 'worker/t1',
@@ -113,8 +112,7 @@ test('the worker prompt says failures outside the declared paths are reported, n
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Failures on base are not yours; name them.');
-  expect(prompt).toContain('Fix tests that passed on base but fail now.');
+  expect(prompt).toContain('Report failures already on base and fix regressions you introduced.');
 });
 
 test('a dev product worker may merge or cherry-pick only what its contract names; other workers may not merge', () => {
@@ -158,9 +156,9 @@ test('an implementation worker is told the applicable AGENTS.md is already loade
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('AGENTS.md is loaded.');
+  expect(prompt).toContain('AGENTS.md is already loaded.');
   expect(prompt).not.toContain('Read and follow its AGENTS.md');
-  expect(prompt).toContain('Search freely inside the worktree; outside it, only the directories named here.');
+  expect(prompt).toContain('Search recursively only in the worktree and named directories.');
 });
 
 test('a research worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
@@ -187,21 +185,14 @@ test('the worker prompt forbids touching resources the attempt did not start', (
     worktree: '/work/trees/t1',
     branch: 'worker/t1',
     mainCheckout: '/repo/main',
-    brief: {
-      markdown: 'Do the thing.',
-      paths: ['src/a.ts'],
-      acceptance: { command: ['bun', 'test', 'a.test.ts'], tests: ['x'] },
-    },
+    brief: { ...brief(), urgent: true },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Leave containers, databases and processes this attempt did not start running');
-  expect(prompt).toContain('do not prune Docker');
-  // A diagnosis patched a hardlinked reylo file in place and every worktree and check host printed its trace.
-  expect(prompt).toContain('Do not write under node_modules');
-  // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
+  expect(prompt).toContain('Manage only containers, databases and processes this attempt started.');
+  expect(prompt).toContain('Never prune Docker or edit node_modules in place.');
   expect(prompt).toContain('Check slots are scarce: run your acceptance command once after your last relevant edit.');
   expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
-  expect(prompt).toContain('Run the acceptance command in the foreground from the worktree root and let it finish');
+  expect(prompt).toContain('in the foreground from the worktree root, without a wrapper');
   expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
   expect(prompt).toContain('Do not run the root typecheck or other regression suites yourself');
   expect(prompt).toContain("run the test files you created or changed once, with the landing's command");
@@ -240,20 +231,20 @@ test('a worker starts only below the worker cap and above the memory floor', asy
   expect(hasCapacity(10, 4000, capacity)).toBe(false);
 });
 
-test('a worker writes acceptance tests the contract names and waits for queued checks', () => {
+test('a worker writes focused acceptance tests for the contract and waits for foreground checks', () => {
   const task = {
     worktree: '/work/trees/t1',
     branch: 'worker/t1',
     brief: {
       markdown: 'Do the thing.',
       kind: 'implementation',
+      urgent: true,
       acceptance: { command: ['bun', 'test'], tests: ['x'] },
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
   expect(prompt).not.toContain('never edit a frozen file');
-  expect(prompt).not.toContain('must not be edited');
   expect(prompt).not.toContain('must not be edited');
   expect(prompt).toContain(
     'Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions.',
@@ -264,7 +255,7 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   expect(prompt).toContain('Wait for a long command, even one queued for a test slot');
 });
 
-test('worker and manager prompts trust repository callers and let dev repair contradictory frozen tests', () => {
+test('a dev worker repairs contradictory frozen tests and hands off independent gaps', () => {
   const task = {
     id: 'task',
     worktree: '/work/trees/t1',
@@ -289,46 +280,14 @@ test('worker and manager prompts trust repository callers and let dev repair con
   expect(rendered.prompt).toContain(
     "Frozen acceptance files hold the contract's tests: tests/acceptance.test.ts. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.",
   );
-  expect(rendered.prompt).toContain(
-    'When two requirements conflict, follow the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
-  );
-  expect(rendered.prompt).toContain(
-    'Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.',
-  );
   expect(rendered.prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
-  const checkpoint = rendered.prompt.indexOf('Checkpoint coherent source');
-  const ongoingProposal = rendered.prompt.indexOf('While implementing, fixing or reviewing');
-  expect(ongoingProposal).toBeGreaterThan(checkpoint);
-  expect(ongoingProposal).toBeLessThan(
-    rendered.prompt.indexOf('When only a check or dependent change remains blocked'),
-  );
   expect(rendered.prompt).toContain(
-    'immediately propose each distinct valuable gap concisely: outcome, source evidence',
+    'Send the manager independent gaps with the outcome, evidence, first edit and dependency.',
   );
-  expect(rendered.prompt).toContain('first editable boundary, true prerequisite if any');
-  expect(rendered.prompt).toContain('Keep useful in-scope work with you');
-  expect(rendered.prompt).toContain('ready independent work to its manager as a short inbox handoff');
-  expect(rendered.prompt).toContain('delivery ownership](delivery.md#delivery-ownership)');
-  expect(rendered.prompt).not.toContain('Before finishing, propose the next evidenced independent outcome');
+  expect(rendered.prompt).toContain('money/authorization rules.');
   expect(rendered.prompt).not.toContain('must not be edited');
   expect(rendered.prompt).not.toContain('never edit a frozen file');
   expect(rendered.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.workerRoleBytes);
-
-  const directory = temporaryDirectory();
-  try {
-    const trustBlock =
-      'Trust model for briefs. Agents and internal callers are trusted; REZICS is a community product, and a mistake on dev is caught and returned after integration. When an incident shows a wrong result, brief the repair that produces the right result where the problem appears (resolve, merge, regenerate, normalize), so the pipeline continues. Do not brief a new refusal, rejection, stop or failed attempt unless no agent could produce the correct result there; if you still need one, state the defect it prevents and the attempts and hours it will cost. Ask for validation only at system boundaries: HTTP input, imported records, external files and third-party responses. Acceptance covers the behaviour asked for; ask for refusal tests only for boundary input and authorization rules. Money movement (payments, payouts, balances) keeps strict guards.';
-    const manager = renderManagerOpening({
-      spec: { id: 'manager', goal: 'web', brief: '', cwd: directory.path, engine: 'codex' },
-      backlogPath: 'backlog.md',
-      command: 'bun tools/goal/src/cli.ts',
-    });
-    expect(manager.prompt).toContain(trustBlock);
-    expect(manager.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
-    expect(manager.openingBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerOpeningBytes);
-  } finally {
-    directory.close();
-  }
 });
 
 test('minimal verification collects independent failures under one wrapper budget', () => {
@@ -336,25 +295,20 @@ test('minimal verification collects independent failures under one wrapper budge
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
     const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain(
-      'Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit',
-    );
+    expect(prompt).toContain('Defer ordinary acceptance/native/browser/root/growth suites.');
     expect(prompt).toContain('Typecheck each changed workspace');
     expect(prompt).toContain('Order producers before consumers');
     expect(prompt).toContain('On prerequisite failure, skip only dependent checks and report them unverified');
-    expect(prompt).toContain('Use one wrapper submission for the pass');
     expect(prompt).toContain(
-      'Run independent selected cases together through their owning runner and collect all failures in one pass',
+      'Run independent selected cases together through their owning runner and collect all failures in one wrapper submission',
     );
-    expect(prompt).toContain('No extra submissions or shell fanout');
-    expect(prompt).toContain('Kernel/Auth/Web mapper typechecks stay within the per-run memory cap');
     expect(prompt).toContain('use `&&` only for real dependencies');
     expect(prompt).not.toContain('never joins them with `&&`');
     expect(prompt).not.toContain('cmd1; s=$?; cmd2 || s=1');
     expect(prompt).toContain('All must pass for success; reuse unchanged passing evidence');
-    expect(prompt).toContain('Run checks through the wrapper');
+    expect(prompt).toContain('(`bun scripts/worker-check.ts -- <command...>`)');
     expect(prompt).not.toContain("under a 'failing tests' label in the summary");
-    expect(prompt).toContain('Group the observed failures by cause and rerun only affected checks after repair');
+    expect(prompt).toContain('Group failures by cause and rerun only affected checks after repair');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
   } finally {
@@ -395,7 +349,7 @@ test('minimal verification parks check-host commands on the wrapper and keeps sh
     mkdirSync(join(directory.path, 'scripts'), { recursive: true });
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
     const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain('Run checks through the wrapper (`bun scripts/worker-check.ts -- <command...>`)');
+    expect(prompt).toContain('one wrapper submission (`bun scripts/worker-check.ts -- <command...>`)');
     expect(prompt).toContain('Kernel/Auth may use compiler DB/host');
     expect(prompt).toContain('include payment, payout, order settlement, points or balance tests when changed');
     expect(prompt).toContain(
@@ -442,22 +396,28 @@ test('a resumed prompt supersedes a saved legacy check wait and states the bare 
       worktree,
       branch: 'worker/protocol',
       brief: {
+        goal: 'control-plane',
+        target: 'main',
         markdown: 'Do the thing.',
         kind: 'implementation',
         acceptance: { command: ['bun', 'test'], tests: ['x'] },
       },
     } as unknown as Task;
-    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain(
-      '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
-    );
-    expect(prompt).toContain('Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say)');
-    expect(prompt).toContain('The controller wakes this session with the result: use it exactly');
-    expect(prompt).toContain('missing, unknown or nonzero is not a pass');
-    expect(prompt).toContain('do not return waiting again for those ids');
-    expect(prompt).toContain('success uses `"checks":[]`');
-    expect(prompt).toContain("A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker.");
+    for (const prompt of [
+      workerPrompt(task, undefined, undefined, [], '/repo/main'),
+      workerCheckProtocol(worktree, task.brief, worktree),
+    ]) {
+      expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
+      expect(prompt).toContain(
+        '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
+      );
+      expect(prompt).toContain('Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say)');
+      expect(prompt).toContain('The controller wakes this session with the result: use it exactly');
+      expect(prompt).toContain('missing, unknown or nonzero is not a pass');
+      expect(prompt).toContain('do not return waiting again for those ids');
+      expect(prompt).toContain('success uses `"checks":[]`');
+      expect(prompt).toContain("A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker");
+    }
   } finally {
     rmSync(worktree, { recursive: true, force: true });
   }
@@ -474,6 +434,7 @@ test('local placement renders the concrete declared argv, overrides saved remote
       brief: {
         markdown: 'Old session said `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
         kind: 'implementation',
+        urgent: true,
         acceptance: {
           command: ['bun', 'test', 'apps/web/tests/shell-menus.test.ts', '-t', "filter's phrase"],
           tests: ['local test'],
@@ -482,17 +443,23 @@ test('local placement renders the concrete declared argv, overrides saved remote
         },
       },
     } as unknown as Task;
-    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain(
-      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
-    );
-    expect(prompt).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
+    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main', undefined, worktree);
     expect(prompt.indexOf('The acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
-    const localPolicy = prompt.slice(prompt.lastIndexOf('The acceptance placement is local'));
-    expect(localPolicy).not.toContain('bun scripts/worker-check.ts -- <command...>');
-    expect(prompt).toContain('do not report an old check as cancelled');
+    for (const localPolicy of [
+      prompt.slice(prompt.indexOf('The acceptance placement is local')),
+      workerCheckProtocol(worktree, task.brief, worktree),
+    ]) {
+      expect(localPolicy).toContain(
+        "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
+      );
+      expect(localPolicy).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
+      expect(localPolicy).toContain('do not report an old check as cancelled');
+      expect(localPolicy).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+      expect(localPolicy).not.toContain('bun scripts/worker-check.ts -- <command...>');
+      expect(localPolicy).not.toContain('Wait for a long command');
+    }
   } finally {
     rmSync(worktree, { recursive: true, force: true });
   }
@@ -508,15 +475,22 @@ test('local placement without a worktree wrapper uses the exact foreground comma
       brief: {
         markdown: 'Use the current placement.',
         kind: 'implementation',
+        urgent: true,
         acceptance: { command, tests: ['local test'], failing: true, placement: 'local' },
       },
     } as unknown as Task;
-    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain(
-      "run the exact declared local command `'bun' 'test' 'apps/web/tests/shell-menus.test.ts'` in the foreground from the worktree root, without a wrapper",
-    );
-    expect(prompt).toContain('it gives no check id and no waiting result');
-    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    for (const prompt of [
+      workerPrompt(task, undefined, undefined, [], '/repo/main', undefined, worktree),
+      workerCheckProtocol(worktree, task.brief, worktree),
+    ]) {
+      expect(prompt).toContain(
+        "run the exact declared local command `'bun' 'test' 'apps/web/tests/shell-menus.test.ts'` in the foreground from the worktree root, without a wrapper",
+      );
+      expect(prompt).toContain('it gives no check id and no waiting result');
+      expect(prompt).toContain('Wait for a long command');
+      expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+      expect(prompt).not.toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    }
   } finally {
     rmSync(worktree, { recursive: true, force: true });
   }
@@ -535,12 +509,17 @@ test('a named absolute wrapper keeps the local route and safely quotes a path wi
       brief: {
         markdown: `Existing wrapper: bun ${JSON.stringify(runner)}\n`,
         kind: 'implementation',
+        urgent: true,
         acceptance: { command, tests: ['local test'], failing: true, placement: 'local' },
       },
     } as unknown as Task;
-    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-    expect(prompt).toContain(`bun '${runner}' --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`);
-    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    for (const prompt of [
+      workerPrompt(task, undefined, undefined, [], '/repo/main', undefined, worktree),
+      workerCheckProtocol(worktree, task.brief, worktree),
+    ]) {
+      expect(prompt).toContain(`bun '${runner}' --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`);
+      expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    }
   } finally {
     rmSync(worktree, { recursive: true, force: true });
   }
@@ -557,8 +536,8 @@ test('a worker reports persistent tool and infrastructure failures as a tool blo
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain(
-    'a tool or infrastructure failure persisting after two retries, reported as a `tool` blocker starting with the exact error line.',
+  expect(prompt).toMatch(
+    /tool or infrastructure failure persisting after\s+two retries, start the `tool` blocker with the exact first error line/,
   );
 });
 
@@ -631,21 +610,16 @@ const MINIMAL_RULES = [
   'Order producers before consumers',
   'use `&&` only for real dependencies',
   'On prerequisite failure, skip only dependent checks and report them unverified',
-  'Use one wrapper submission for the pass',
-  'Run independent selected cases together through their owning runner and collect all failures in one pass',
-  'No extra submissions or shell fanout',
-  'Kernel/Auth/Web mapper typechecks stay within the per-run memory cap',
-  'reuse unchanged passing evidence',
+  'Run independent selected cases together through their owning runner and collect all failures in one wrapper submission',
   'All must pass for success; reuse unchanged passing evidence',
-  'Group the observed failures by cause and rerun only affected checks after repair',
-  'Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit',
+  'Group failures by cause and rerun only affected checks after repair',
+  'Defer ordinary acceptance/native/browser/root/growth suites.',
   'a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
-  'a `tool` blocker; type and test failures are not infrastructure failures',
-  'Typecheck each changed workspace',
+  'A wrapper-classified shared infrastructure-only failure uses the dev product source-success rule',
   'include payment, payout, order settlement, points or balance tests when changed',
   'Kernel/Auth may use compiler DB/host',
   "don't unset KERNEL_CHECK_REMOTE or force local",
-  'Run checks through the wrapper (`bun scripts/worker-check.ts -- <command...>`)',
+  'one wrapper submission (`bun scripts/worker-check.ts -- <command...>`)',
   '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
   'Never wait for it yourself: no `--wait`',
   'Commands that finish locally in under a minute',
@@ -707,7 +681,10 @@ test('minimal product policy keeps supported compiler placement and parks check-
       }
     }
     writeFileSync(join(state, 'verification-mode'), 'full\n');
-    expect(workerCheckProtocol(directory.path, brief(), state)).toContain('run your acceptance command once');
+    expect(workerCheckProtocol(directory.path, brief(), state)).toContain('Verification is minimal');
+    expect(workerCheckProtocol(directory.path, { ...brief(), urgent: true }, state)).toContain(
+      'run your acceptance command once',
+    );
   } finally {
     directory.close();
   }
@@ -924,7 +901,8 @@ test('the configured minimal policy parks check-host commands on the wrapper eve
     );
     expect(policy).not.toContain('Use already-recorded failure evidence');
     writeFileSync(join(state, 'verification-mode'), 'full\n');
-    const normal = workerPrompt(task, undefined, undefined, [], directory.path, undefined, state);
+    const exempt = { ...task, brief: { ...task.brief, urgent: true } };
+    const normal = workerPrompt(exempt, undefined, undefined, [], directory.path, undefined, state);
     expect(normal).not.toContain('Verification is minimal');
     expect(normal).toContain('run your acceptance command once');
   } finally {

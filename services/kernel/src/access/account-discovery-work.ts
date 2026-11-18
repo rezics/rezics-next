@@ -1,7 +1,9 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { maintainPublicFilterCoverageHome } from '../semantic/public-filter-coverage-maintenance.ts';
 import type { Pool } from 'pg';
+import type { CloudEvent } from '../events/log.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -189,6 +191,16 @@ const timers: AccountDiscoveryTimers = {
 export function registerAccountDiscoveryWork(context: WorkContext, time: AccountDiscoveryTimers = timers): void {
   const wakeups = new Set<number>();
   let wake = () => {};
+  const wakeHome = (event: CloudEvent) => {
+    const data = event.data as { accountId?: string; id?: string; visibility?: string };
+    if (data.visibility === 'visible') return;
+    const id = event.type === 'com.rezics.subject.visibility_changed.v1' ? data.id : data.accountId;
+    const route = id ? routeOf(id) : null;
+    if (route !== null) {
+      wakeups.add(partitionOf(route));
+      wake();
+    }
+  };
   context.addEffects([
     {
       name: 'account_discovery_redrive',
@@ -197,15 +209,13 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         'com.rezics.access.account-tombstoned.v1',
         'com.rezics.subject.visibility_changed.v1',
       ],
+      async admit(_client, event) {
+        // The moderation command already committed its Source barrier. Wake its
+        // home before generic effect delivery queues behind publication work.
+        if (event.type === 'com.rezics.subject.visibility_changed.v1') wakeHome(event);
+      },
       async run(event) {
-        const data = event.data as { accountId?: string; id?: string; visibility?: string };
-        if (data.visibility === 'visible') return;
-        const id = event.type === 'com.rezics.subject.visibility_changed.v1' ? data.id : data.accountId;
-        const route = id ? routeOf(id) : null;
-        if (route !== null) {
-          wakeups.add(partitionOf(route));
-          wake();
-        }
+        wakeHome(event);
       },
     },
   ]);
@@ -226,7 +236,7 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
       if (stopped || running) return;
       cancel?.();
       const next = failed || wakeups.size ? time.now() : sweepAt;
-      cancel = time.schedule(tick, Math.max(0, Math.max(availableAt, next) - time.now()));
+      cancel = time.schedule(serviceTick, Math.max(0, Math.max(availableAt, next) - time.now()));
     };
     const step = async () => {
       // Do not join a boot/foreground checkout queue or consume its last slot.
@@ -286,6 +296,9 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         schedule();
       }
     };
+    // Admission may hold the relay checkout. Every timer runs in the service's
+    // own context so redrive can acquire its independent connection.
+    const serviceTick = AsyncLocalStorage.bind(tick);
     wake = schedule;
     schedule();
     return {

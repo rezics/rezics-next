@@ -383,7 +383,7 @@ describe('public-discovery-and-cache', () => {
       for (const item of inventory.eligible) {
         expect(expected.has(item.url)).toBe(false);
         expected.set(item.url, item.lastmod);
-        expect(actual.get(item.url)).toBe(item.lastmod);
+        expect(actual.get(item.url), `Missing or stale ${kind} sitemap URL ${item.url}`).toBe(item.lastmod);
       }
       for (const url of inventory.excluded) expect(actual.has(url)).toBe(false);
     }

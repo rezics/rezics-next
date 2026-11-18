@@ -1,4 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Pool } from 'pg';
+import { withConnection } from '../../src/database/pool.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import type { WorkContext, WorkService } from '../../src/work/registry.ts';
 import { newId } from '../../src/route/route.ts';
@@ -18,9 +21,10 @@ function fixture() {
   const time: AccountDiscoveryTimers = {
     now: () => now,
     schedule(run, delay) {
-      scheduled.set(run, now + delay);
+      const timer = AsyncLocalStorage.bind(run);
+      scheduled.set(timer, now + delay);
       return () => {
-        scheduled.delete(run);
+        scheduled.delete(timer);
       };
     },
   };
@@ -88,6 +92,13 @@ function fixture() {
       beforeQuery = run;
     },
     wake: (home = 37) => effects[0]!.run({ data: { accountId: newId(home * 16) } } as Parameters<Effect['run']>[0]),
+    admitVisibility: (home: number, visibility: 'hidden' | 'visible') =>
+      withConnection(pool as unknown as Pool, (client) =>
+        effects[0]!.admit!(client, {
+          type: 'com.rezics.subject.visibility_changed.v1',
+          data: { id: newId(home * 16), visibility },
+        } as Parameters<Effect['run']>[0]),
+      ),
     next: () => Math.min(...scheduled.values()),
     async advance(ms: number) {
       const end = now + ms;
@@ -125,11 +136,14 @@ test('empty full pass idles, source events wake one home, and bounded recovery r
   ]);
   await f.advance(IDLE - STEP);
   expect(f.homes.length).toBe(4097);
-  await Promise.all([f.wake(), f.wake()]);
+  await f.admitVisibility(42, 'visible');
   await f.advance(0);
-  expect(f.homes.slice(-1)).toEqual([37]);
+  expect(f.homes.length).toBe(4097);
+  await Promise.all([f.admitVisibility(42, 'hidden'), f.admitVisibility(42, 'hidden')]);
+  await f.advance(0);
+  expect(f.homes.slice(-1)).toEqual([42]);
   await f.advance(STEP);
-  expect(f.homes.slice(-2)).toEqual([37, 0]);
+  expect(f.homes.slice(-2)).toEqual([42, 0]);
   await service.stop();
   expect(f.next()).toBe(Infinity);
 });

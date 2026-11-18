@@ -51,6 +51,8 @@ type NativeSignInOptions = {
   returnTo?: string;
   context?: BrowserContext;
   sessionOnly?: boolean;
+  /** Attach diagnostics before the page makes its first request. */
+  observePage?: (page: Page) => Promise<void>;
   /** Start the same sign-in transaction from a guarded page. */
   openSignIn?: (page: Page) => Promise<void>;
 };
@@ -463,6 +465,7 @@ export async function startAuthStack(
       });
       page.once('close', releasePage);
       page.setDefaultTimeout(15_000);
+      if (options.observePage) await options.observePage(page);
       const webOrigin = new URL(stack.web).origin;
       const authResponses: PlaywrightResponse[] = [];
       const visitedUrls: string[] = [];

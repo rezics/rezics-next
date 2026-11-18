@@ -1,3 +1,4 @@
+import { fromPlainText } from '@rezics/document';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
@@ -30,7 +31,11 @@ async function write(
   actor: string | Account,
   path: string,
   body: unknown,
-  { method = 'POST', ifMatch }: { method?: 'POST' | 'PUT'; ifMatch?: string } = {},
+  {
+    method = 'POST',
+    ifMatch,
+    status = method === 'POST' ? 201 : 200,
+  }: { method?: 'POST' | 'PUT'; ifMatch?: string; status?: number } = {},
 ): Promise<ApiObject> {
   const headers = new Headers({
     'content-type': 'application/json',
@@ -44,7 +49,7 @@ async function write(
       { method, headers, body: JSON.stringify(body) },
       typeof actor === 'string' ? actor : undefined,
     ),
-    method === 'POST' ? 201 : 200,
+    status,
     `${method} ${path}`,
   );
 }
@@ -61,6 +66,30 @@ export type NativeDocumentAuthoringFixture = {
   bobHandle: string;
   growthWriters: { persona: string; accountId: string }[];
 };
+
+export async function seedDocumentHistory(fixture: NativeDocumentAuthoringFixture) {
+  const { stack, boardId } = fixture;
+  const licence = 'LicenseRef-rezics-terms';
+  const originalText = 'Unicode 雪 café authored whitespace  bold';
+  const created = await write(stack, 'alice', '/v1/threads', {
+    title: 'Unicode document round trip',
+    body: fromPlainText(originalText, 'blocks'),
+    licence,
+    subjectIds: [],
+    boardId,
+    visibility: 'published',
+  });
+  const thread = created.thread as { id: string; firstPost: { id: string; revisionId: string } };
+  const { id: postId, revisionId } = thread.firstPost;
+  await write(
+    stack,
+    'alice',
+    `/v1/posts/${postId}/revisions`,
+    { body: fromPlainText(`${originalText}\nEdited in the served editor`, 'blocks'), licence, mediaIds: [] },
+    { ifMatch: revisionId, status: 200 },
+  );
+  return { threadId: thread.id, postId };
+}
 
 /** Create a published discussion board and its posting grant through native production APIs. */
 export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocumentAuthoringFixture> {
