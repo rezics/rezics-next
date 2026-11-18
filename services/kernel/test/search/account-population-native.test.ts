@@ -19,6 +19,7 @@ import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { admittedAccess, authenticateAccount, accountToken } from '../support/admitted-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { digest, epochFixture, globalResource, identityEpochDatabase } from '../semantic/support/identity-epoch.ts';
 import type { IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
@@ -99,6 +100,7 @@ test('native handled and handleless Accounts and catalogue Person converge; curr
       routeKey,
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
       writeRate: createWriteRateLimiter({ secret: key() }),
+      receiptKeys: testReceiptKeys(),
     });
     const bearer = await accountToken({ accountId, clientId: 'account-population', scopes: [...actions.keys()] });
     const created = await kernel.handle(
@@ -212,10 +214,11 @@ test('native account context reads the exact published agent graph and withholds
         routeKey = new Uint8Array(32).fill(93),
         tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(46)]]) },
         writeRate = createWriteRateLimiter({ secret: crypto.randomUUID() });
-      const routeKernel = createKernel({ pool, routeKey, tokens, writeRate });
+      const receiptKeys = testReceiptKeys();
+      const routeKernel = createKernel({ pool, routeKey, tokens, writeRate, receiptKeys });
       const actions = new Map(actionCatalogue(routeKernel));
       const access = admittedAccess({ actions });
-      const kernel = createKernel({ pool, routeKey, tokens, writeRate, access });
+      const kernel = createKernel({ pool, routeKey, tokens, writeRate, access, receiptKeys });
       const clientId = 'account-population-context';
       const scopes = [...actions.keys(), 'account:manage', 'gate:any'];
       const accountBearer = await accountToken({ accountId, clientId, scopes });
