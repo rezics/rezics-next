@@ -441,7 +441,12 @@ export async function seedPublicationSubjects(
         descriptions: { en: `A public catalogue page ${index}.` },
       });
     }
-    const withheld = await create('excluded-withheld', 'schema:Book', data.withheld[0]!, sitemapFacts('excluded-withheld'));
+    const withheld = await create(
+      'excluded-withheld',
+      'schema:Book',
+      data.withheld[0]!,
+      sitemapFacts('excluded-withheld'),
+    );
     const privateOnly = await create('excluded-private', 'schema:Book', 'Private context lantern');
     const takenDown = await create(
       'excluded-taken-down',
