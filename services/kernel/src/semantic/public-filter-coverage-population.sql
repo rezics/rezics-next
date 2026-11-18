@@ -12,7 +12,7 @@ binding AS MATERIALIZED (
     coalesce(attached.bootstrap,b.bootstrap) AS coverage_bootstrap,
     coalesce(attached.registration,o.registration) AS coverage_registration,
     d.coverage_keys || coalesce(attached.coverage_keys,'{}'::text[])
-      || CASE WHEN attached.job IS NOT NULL OR '["scope","catalogue-text"]'=ANY(d.coverage_keys)
+      || CASE WHEN (attached.job IS NOT NULL AND r.physical_target !~ 'discovery-g[1-9][0-9]*$') OR '["scope","catalogue-text"]'=ANY(d.coverage_keys)
          THEN (SELECT catalogue_text_keys FROM input) ELSE '{}'::text[] END AS pending_keys,
     s.source_id,s.configuration,s.owner_epoch,s.route_digest,
     d.release_digest,d.capture,d.dependency_keys,d.coverage_keys,
@@ -31,7 +31,11 @@ binding AS MATERIALIZED (
   LEFT JOIN LATERAL (
     SELECT proof.* FROM semantic.public_filter_published_coverage(
       r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,(SELECT catalogue_text_keys FROM input)
-    ) proof WHERE b.coverage_publication IS NOT NULL
+    ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target !~ 'discovery-g[1-9][0-9]*$'
+    UNION ALL
+    SELECT proof.* FROM semantic.public_filter_mixed_coverage(
+      r.physical_target,t.incarnation,b.read_definition,b.coverage_publication,r.consumer
+    ) proof WHERE b.coverage_publication IS NOT NULL AND r.physical_target ~ 'discovery-g[1-9][0-9]*$'
   ) attached ON true
   JOIN search.public_filter_coverage_preparation c ON (c.partition_no,c.registration,c.bootstrap)=
     (o.partition_no,coalesce(attached.registration,o.registration),coalesce(attached.bootstrap,b.bootstrap))

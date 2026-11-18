@@ -362,7 +362,7 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
   const row = (
     await pool.query<{ index_uuid: string; incarnation: string }>(
       `SELECT index_uuid,incarnation::text FROM search.discovery_generation
-     WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active','retiring')`,
+     WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('populating','replaying','reconciling','ready','active','retiring')`,
       [match[1], match[2]],
     )
   ).rows[0];

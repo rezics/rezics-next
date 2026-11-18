@@ -284,7 +284,7 @@ export function createDefaultDiscoverySearch(
       let operations: PublicDiscoveryConsumerOperations | undefined;
       const current = await activeRelease(config.pool);
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-      const activeGeneration = await readDiscoveryScope(config.pool, config.prefix, deadline);
+      const activeGeneration = await readDiscoveryScope(config.pool, config.prefix, deadline, 'preparation');
       if (!activeGeneration) {
         config.observeServing?.({ generation: null, stage: 'allocation', result: 'no_active_generation' });
         throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
@@ -292,7 +292,10 @@ export function createDefaultDiscoverySearch(
       const generation = activeGeneration.generation;
       const observe = (stage: DiscoveryServingObservation['stage'], result: DiscoveryServingObservation['result']) =>
         config.observeServing?.({ generation, stage, result });
-      observe('allocation', 'active');
+      const enrollmentOnly = activeGeneration.state !== 'active';
+      observe('allocation', enrollmentOnly ? 'no_active_generation' : 'active');
+      if (enrollmentOnly && (request.cursor || request.kindPage?.cursor))
+        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       const ownerAdapters = await resolveDiscoveryOwnerAdapters(producers, activeGeneration.metadataKinds);
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
@@ -308,7 +311,7 @@ export function createDefaultDiscoverySearch(
       const openOperations = (
         nativeContext: Parameters<typeof runtime.openDiscovery>[3],
         queried?: Parameters<typeof runtime.openDiscovery>[4],
-      ) => runtime.openDiscovery(registry, activeGeneration, current.digest, nativeContext, queried);
+      ) => runtime.openDiscovery(registry, activeGeneration, current.digest, nativeContext, queried, enrollmentOnly);
       const confirmCapability = async () => {
         try {
           await assertDiscoveryCapabilityBinding(config.pool, activeGeneration, ownerAdapters.metadataProducers);

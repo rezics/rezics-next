@@ -37,7 +37,7 @@ export type PublicPreparationOptions = {
 // Yield ordinary reconciliation after four independently metered turns.
 const publicationTurnsPerDelivery = 4;
 // Reserve time inside the delivery for the frontier commit and successor enqueue.
-const populationHandoffMs = 1000;
+const preparationHandoffMs = 1000;
 
 const databaseLifetimeOptions = {
   deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
@@ -132,7 +132,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     deliveryDeadline: number,
     mayContinue: (sourceAdvanced: boolean) => boolean,
   ): Promise<string | undefined> {
-    const context = { deadline: deliveryDeadline - populationHandoffMs };
+    const context = { deadline: deliveryDeadline - preparationHandoffMs };
     const advance = async (locator: PreparationLocator | null, delayMs = 0, ready = false, sourceAdvanced = false) => {
       const continueInline = ready && mayContinue(sourceAdvanced);
       const revision = await store.advance(record, locator, delayMs, deliveryDeadline, continueInline);
@@ -297,35 +297,39 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
             return;
           }
           try {
+            const mayContinue = (sourceAdvanced: boolean) => {
+              const now = Date.now();
+              longestTurnMs = Math.max(longestTurnMs, now - started);
+              return (
+                !paused &&
+                !stopped &&
+                (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
+                now + 2 * longestTurnMs < context.deadline - preparationHandoffMs
+              );
+            };
+            let next: string | undefined;
             if (record.locator.kind === 'population') {
-              const next = await population(record, record.locator, context.deadline, (sourceAdvanced) => {
-                const now = Date.now();
-                longestTurnMs = Math.max(longestTurnMs, now - started);
-                // Cold Source preparation needs hundreds of metered turns. Keep its
-                // committed successor on this delivery while there is room to claim it.
-                // Leave time for both the handoff write and a turn of the observed cost.
-                return (
-                  !paused &&
-                  !stopped &&
-                  (turn < publicationTurnsPerDelivery || sourceAdvanced) &&
-                  now + 2 * longestTurnMs < context.deadline - populationHandoffMs
-                );
-              });
-              failures.delete(record.locator.kind);
-              if (next === undefined) return;
-              revision = next;
+              next = await population(record, record.locator, context.deadline, mayContinue);
             } else {
-              const outcome = await options.runtime.repair(record.locator.job, context);
-              // 'settled' releases scheduling only. It never activates a generation or certifies output.
-              await store.advance(
+              const mixed = record.locator.job.consumer.physicalTarget.startsWith(`${options.prefix}discovery-g`);
+              const outcome = await options.runtime.repair(
+                record.locator.job,
+                mixed ? { deadline: context.deadline - preparationHandoffMs } : context,
+              );
+              const progress = outcome.status === 'progress';
+              const inline = mixed && progress && mayContinue(true);
+              const successor = await store.advance(
                 record,
                 outcome.status === 'settled' ? null : record.locator,
-                outcome.status === 'progress' ? 0 : 1000,
+                progress ? 0 : 1000,
                 context.deadline,
+                inline,
               );
-              failures.delete(record.locator.kind);
-              return;
+              if (inline && successor) next = successor;
             }
+            failures.delete(record.locator.kind);
+            if (next === undefined) return;
+            revision = next;
           } catch (error) {
             reportFailure(record.locator.kind, error);
             throw error;

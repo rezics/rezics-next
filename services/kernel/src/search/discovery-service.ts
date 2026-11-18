@@ -398,6 +398,8 @@ function executeDiscoverySearch(
     };
     const now = config.now();
     const nativeContext = { deadline: context.deadline };
+    const prepare = (job: PublicFilterConsumerJob) =>
+      config.prepare ? config.prepare(job) : config.consumer.repairStep(job, nativeContext);
     let coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
     try {
       let queried!: PublicFilterQueriedObservation;
@@ -486,8 +488,7 @@ function executeDiscoverySearch(
       if (!observationOpened) {
         const captured = await coverage.capture(nativePlan, 'pit');
         if (captured.status === 'preparing') {
-          await config.prepare?.(captured.repair);
-          await config.consumer.repairStep(captured.repair, nativeContext);
+          await prepare(captured.repair);
           throw ready();
         }
         if (captured.status !== 'captured') throw ready();
@@ -697,8 +698,7 @@ function executeDiscoverySearch(
               coverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
               const prepared = await coverage.capture(nativePlan, 'prepared');
               if (prepared.status === 'preparing') {
-                await config.prepare?.(prepared.repair);
-                await config.consumer.repairStep(prepared.repair, nativeContext);
+                await prepare(prepared.repair);
                 throw ready();
               }
               if (prepared.status !== 'captured') throw ready();
@@ -722,8 +722,7 @@ function executeDiscoverySearch(
         if (!last || (!exhausted && hits.length < admitted.limit)) {
           // Advance actual finite preparation, never publish an empty cursor chain.
           if (repair) {
-            await config.prepare?.(repair);
-            await config.consumer.repairStep(repair, nativeContext);
+            await prepare(repair);
             retained = true;
           }
           throw ready();
@@ -762,8 +761,7 @@ function executeDiscoverySearch(
             );
             const captured = await countCoverage.capture(countPlan, 'pit');
             if (captured.status === 'preparing') {
-              await config.prepare?.(captured.repair);
-              await config.consumer.repairStep(captured.repair, nativeContext);
+              await prepare(captured.repair);
               throw ready();
             }
             if (captured.status !== 'captured') throw ready();
@@ -771,8 +769,7 @@ function executeDiscoverySearch(
             const countBatch = await countCoverage.queryDiscovery(countQueried);
             if (countBatch.status !== 'queried') {
               if (countBatch.status === 'preparing') {
-                await config.prepare?.(captured.repair);
-                await config.consumer.repairStep(captured.repair, nativeContext);
+                await prepare(captured.repair);
               }
               throw ready();
             }

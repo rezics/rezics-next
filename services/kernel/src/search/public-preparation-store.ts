@@ -38,14 +38,16 @@ const lifetimeOptions = {
 
 /** One scalar operational frontier. It never stores public rows, permissions, cuts or coverage. */
 export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefix: string) {
-  const intent = (id: string, revision: string, kind: PreparationLocator['kind'], notBefore = Date.now()) => {
-    const population = kind === 'population';
+  const schedule = (locator: PreparationLocator) =>
+    locator.kind === 'repair' && locator.job.consumer.physicalTarget.startsWith(`${prefix}discovery-g`)
+      ? 'discovery'
+      : locator.kind;
+  const intent = (id: string, revision: string, kind: ReturnType<typeof schedule>, notBefore = Date.now()) => {
+    const maintenance = kind === 'repair';
     return {
-      queue: population ? ('workflows' as const) : ('maintenance' as const),
+      queue: maintenance ? ('maintenance' as const) : ('workflows' as const),
       workflowName: PUBLIC_PREPARATION_WORKFLOW,
-      // A queued legacy ID may still claim the same revision from maintenance.
-      // Use a distinct ID for population so rediscovery can safely route it to workflows.
-      workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${population ? ':population' : ''}`,
+      workflowId: `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${maintenance ? '' : ':' + kind}`,
       input: { accounts: [], id, prefix, revision, notBefore },
     };
   };
@@ -91,6 +93,11 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       expiresAt: number,
       deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS),
     ): Promise<string> {
+      const kind = schedule(locator);
+      // Consumer JSON key order changes on a database round trip. The native
+      // bootstrap or observation locator is stable across the read and worker.
+      if (locator.kind === 'repair' && kind === 'discovery')
+        locator = { ...locator, key: JSON.stringify([locator.job.consumer.physicalTarget, locator.job.job]) };
       return transaction(deadline, async (client) => {
         const result = await client.query<{ id: string; revision: string; lease_until: string }>(
           `
@@ -135,7 +142,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
         const row = result.rows[0]!;
         // Claim already advanced the revision. Enqueuing that revision while a
         // delivery holds the lease creates a stale workflow when the holder saves.
-        if (row.lease_until === '0') await enqueueWorkIntent(work, client, intent(row.id, row.revision, locator.kind));
+        if (row.lease_until === '0') await enqueueWorkIntent(work, client, intent(row.id, row.revision, kind));
         return row.id;
       });
     },
@@ -180,7 +187,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
         );
         const next = result.rows[0];
         if (next && (!readySuccessor || delayMs !== 0))
-          await enqueueWorkIntent(work, client, intent(record.id, next.revision, locator.kind, Date.now() + delayMs));
+          await enqueueWorkIntent(work, client, intent(record.id, next.revision, schedule(locator), Date.now() + delayMs));
         // If the caller or a competing delivery cannot claim this ready
         // successor, due() can still discover the committed revision.
         return next?.revision ?? null;
@@ -189,7 +196,7 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     async due(deadline = deadlineFor(PUBLIC_PREPARATION_BUDGET_MS)): Promise<void> {
       await transaction(deadline, async (client) => {
         // CASE reads the uncleared lease; later SET assignments see earlier ones.
-        const rows = await client.query<{ id: string; revision: string; kind: PreparationLocator['kind'] }>(
+        const rows = await client.query<{ id: string; revision: string; kind: ReturnType<typeof schedule> }>(
           `
           UPDATE search.public_preparation
           SET revision = CASE WHEN lease_until > 0 THEN revision + 1 ELSE revision END,
@@ -197,7 +204,9 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
           WHERE (partition_no, id) IN (SELECT partition_no, id FROM search.public_preparation
           WHERE partition_no = 0 AND prefix = $1 AND due_at <= $2 AND lease_until <= $2
           ORDER BY due_at, id LIMIT 16 FOR UPDATE SKIP LOCKED)
-          RETURNING id, revision::text, kind`,
+          RETURNING id, revision::text, CASE WHEN kind='repair' AND
+            starts_with(locator #>> '{job,consumer,physicalTarget}', $1 || 'discovery-g')
+            THEN 'discovery' ELSE kind END AS kind`,
           [prefix, Date.now()],
         );
         for (const row of rows.rows) await enqueueWorkIntent(work, client, intent(row.id, row.revision, row.kind));

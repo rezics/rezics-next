@@ -60,26 +60,33 @@ export type ResolvedDiscoveryOwnerAdapters = Readonly<{
 }>;
 
 /** Allocation creates the same owner slots in every home in one transaction. Home zero is
- * a bounded scope lookup on the generation that activation has already certified. */
-export function readDiscoveryScope(pool: Pool, prefix: string, deadline: number, generation?: number) {
+ * a bounded scope lookup for both enrollment and active serving. */
+export function readDiscoveryScope(pool: Pool, prefix: string, deadline: number, generation?: number | 'preparation') {
   const selection =
-    generation === undefined ? "g.state='active'" : "g.generation=$2 AND g.state IN ('ready','active','retiring')";
+    generation === 'preparation'
+      ? "g.state IN ('active','ready','reconciling','populating','replaying')"
+      : generation === undefined
+        ? "g.state='active'"
+        : "g.generation=$2 AND g.state IN ('populating','replaying','reconciling','ready','active','retiring')";
   return withBoundedReadConnection(
     pool,
     deadline,
     async (client) => {
       const result = await client.query<
-        Omit<DiscoveryGeneration, 'state' | 'kinds'> & { metadataKinds: DiscoveryMetadataKind[] }
+        Omit<DiscoveryGeneration, 'kinds'> & { metadataKinds: DiscoveryMetadataKind[] }
       >(
         `SELECT g.prefix,g.generation::float8 AS generation,g.index_uuid AS uuid,g.incarnation::text,
-              g.capability,
+              g.state,g.capability,
               ARRAY(SELECT p.owner FROM search.discovery_population p
                     WHERE (p.partition_no,p.prefix,p.generation)=(g.partition_no,g.prefix,g.generation)
                       AND p.owner IN ('collection','review','space') ORDER BY p.owner) AS "metadataKinds"
-       FROM search.discovery_generation g WHERE g.partition_no=0 AND g.prefix=$1 AND ${selection}`,
-        generation === undefined ? [prefix] : [prefix, generation],
+       FROM search.discovery_generation g WHERE g.partition_no=0 AND g.prefix=$1 AND ${selection}
+       ORDER BY (g.state='active') DESC,g.generation DESC LIMIT 2`,
+        typeof generation === 'number' ? [prefix, generation] : [prefix],
       );
-      return result.rows.length === 1 ? result.rows[0] : undefined;
+      const [first, second] = result.rows;
+      if (generation === 'preparation' && second?.state !== 'active') return first;
+      return second ? undefined : first;
     },
     {
       deadlineError: () => new ProblemError('deadline_exceeded'),
