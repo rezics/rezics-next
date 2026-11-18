@@ -239,11 +239,9 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
             disabled={!snap.cleanupPending && locked}
             onEdit={() => void act((current) => current.editReplacement())}
             onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
-            onReopen={
-              snap.cleanupPending || snap.importId
-                ? undefined
-                : (importId) => void act((current) => current.loadPage(importId, -1))
-            }
+            {...(snap.cleanupPending || snap.importId
+              ? {}
+              : { onReopen: (importId: string) => void act((current) => current.loadPage(importId, -1)) })}
           />
         </section>
       ) : null}

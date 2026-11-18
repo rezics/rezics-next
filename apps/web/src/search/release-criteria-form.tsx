@@ -633,8 +633,8 @@ export function ReleaseSearchFormView({
         composition.handlers.onCompositionStartCapture(event);
         setComposing(true);
       }}
-      onCompositionEndCapture={(event) => {
-        composition.handlers.onCompositionEndCapture(event);
+      onCompositionEndCapture={() => {
+        composition.handlers.onCompositionEndCapture();
         setComposing(false);
       }}
       onKeyDownCapture={(event) => {
@@ -653,8 +653,8 @@ export function ReleaseSearchFormView({
       }}
       onKeyUpCapture={composition.handlers.onKeyUpCapture}
       onPointerDownCapture={composition.handlers.onPointerDownCapture}
-      onBlurCapture={(event) => {
-        composition.handlers.onBlurCapture(event);
+      onBlurCapture={() => {
+        composition.handlers.onBlurCapture();
         setComposing(false);
       }}
       onSubmit={submit}

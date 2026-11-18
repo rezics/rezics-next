@@ -239,7 +239,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
     <PublicCollectionDiscoveryWorkspace
       locale={locale}
       selection={selection}
-      headingRef={headingRef}
+      {...(headingRef === undefined ? {} : { headingRef })}
       results={results}
       refinement={refinement}
     />

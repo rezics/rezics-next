@@ -106,7 +106,7 @@ export function ImportLibraryView({
   useEffect(
     () => () => {
       const launcher = liveLauncher.current;
-      if (launcher?.ownerDocument.activeElement === launcher) launcher.blur();
+      if (launcher && launcher.ownerDocument.activeElement === launcher) launcher.blur();
       liveLauncher.current = null;
     },
     [],
