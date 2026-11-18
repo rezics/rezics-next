@@ -111,7 +111,8 @@ test('actual export recovers an explicitly selected current Type, fresh private 
     presentation: { state: 'adopted', kind: 'ex:Child' },
   });
   expect(done.collectionId).not.toBe(collectionId);
-  expect((await json(owner, 'GET', `/v1/collections/${done.collectionId}`)).collection).toMatchObject({
+  const restored = (await json(owner, 'GET', `/v1/collections/${done.collectionId}`)).collection;
+  expect(restored).toMatchObject({
     presentationKind: 'ex:Child',
     presentationKindSource: 'owner',
     visibility: 'private',
@@ -124,7 +125,12 @@ test('actual export recovers an explicitly selected current Type, fresh private 
   ]);
   expect(new Set(outcomes.outcomes.map((row: any) => row.nativeMemberId)).size).toBe(2);
   expect(done.pin.state).toBe('applied');
-  await json(owner, 'DELETE', `/v1/collections/${done.collectionId}`);
+  const removed = await f.send(
+    owner.bearer,
+    'DELETE',
+    `/v1/collections/${done.collectionId}?revision=${restored.revision}`,
+  );
+  expect(removed.status).toBe(204);
 }, 120000);
 
 test('unknown evidence defaults to mixed; alternatives and replaced confirmations remain deliberate', async () => {
