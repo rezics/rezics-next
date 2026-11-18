@@ -2280,7 +2280,9 @@ export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number
        AND (collection.owner IS NULL OR (collection.complete AND collection.certified))
        AND (review.owner IS NULL OR (review.complete AND review.certified))
        AND (space.owner IS NULL OR (space.complete AND space.certified))
-     ORDER BY (p.reconcile_position IS DISTINCT FROM c.position OR s.reconcile_position IS DISTINCT FROM c.position) DESC,
+     ORDER BY (p.reconcile_position IS DISTINCT FROM c.position OR s.reconcile_position IS DISTINCT FROM c.position
+       OR coalesce(collection.reconcile_position<>c.position,false) OR coalesce(review.reconcile_position<>c.position,false)
+       OR coalesce(space.reconcile_position<>c.position,false)) DESC,
               p.partition_no LIMIT $3`,
           [prefix, generation, limit ?? null],
         )
@@ -2514,7 +2516,15 @@ async function recheckDiscoveryCutBatch(
     );
   });
   if (observed.length) {
-    const advanced = await withSearchConnection(pool, (client) => advanceMaintenanceCuts(client, target, observed));
+    const advanced = new Set<number>();
+    const homesPerWrite = Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + SECOND_SCOPE_PUBLIC_METADATA_KINDS.length));
+    for (let offset = 0; offset < observed.length; offset += homesPerWrite) {
+      const batch = observed.slice(offset, offset + homesPerWrite);
+      for (const partition of await withSearchConnection(pool, (client) =>
+        advanceMaintenanceCuts(client, target, batch),
+      ))
+        advanced.add(partition);
+    }
     for (const [index, row] of chunk.entries()) {
       if (advanced.has(row.partition)) checks[index] = { state: 'current' };
     }
@@ -2911,12 +2921,13 @@ async function advanceDiscoveryTurn(
   // Inspect only those homes here. Every metadata comparison still uses that producer's own cut.
   const drift = observations
     .slice(0, DISCOVERY_CUT_BATCH_SIZE)
-    .filter((row) => row.position !== row.head || row.semantic_position !== row.head);
+    .filter((row) =>
+      [row.position, row.semantic_position, row.collection_position, row.review_position, row.space_position].some(
+        (cut) => cut !== null && cut !== row.head,
+      ),
+    );
+  const mixed = SECOND_SCOPE_PUBLIC_METADATA_KINDS.every((kind) => requiredKinds.includes(kind));
   if (drift.length) {
-    const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS;
-    const candidates = kinds.every((kind) => requiredKinds.includes(kind))
-      ? maintenanceCutCandidates(drift).slice(0, Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + kinds.length)))
-      : [];
     const result = await recheckDiscoveryCutBatch(
       pool,
       target,
@@ -2924,7 +2935,7 @@ async function advanceDiscoveryTurn(
       metadataProducers,
       requiredKinds,
       trace,
-      candidates,
+      mixed ? maintenanceCutCandidates(drift) : [],
     );
     if (result.state === 'retiring') return;
     if (result.state === 'changed') {
@@ -2942,7 +2953,15 @@ async function advanceDiscoveryTurn(
   for (let offset = 0; offset < observations.length; offset += DISCOVERY_CUT_BATCH_SIZE) {
     const chunk = observations.slice(offset, offset + DISCOVERY_CUT_BATCH_SIZE);
     trace?.step('native-cuts', offset);
-    const result = await recheckDiscoveryCutBatch(pool, target, chunk, metadataProducers, requiredKinds, trace);
+    const result = await recheckDiscoveryCutBatch(
+      pool,
+      target,
+      chunk,
+      metadataProducers,
+      requiredKinds,
+      trace,
+      mixed ? maintenanceCutCandidates(chunk) : [],
+    );
     if (result.state !== 'current') return;
   }
   trace?.step('physical-target', observations.length);

@@ -28,6 +28,7 @@ import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
+import { resumeCanonicalGenerationDelivery } from '../../src/semantic/canonical-generation-delivery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -35,11 +36,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
   const pool = createPool(process.env.DATABASE_URL!);
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);
   let wideEmptyProofs = 0;
+  let indexedReads = 0;
   const search: typeof native = {
     ...native,
     request(...args) {
       const body = args[2] as { query?: { bool?: { should?: unknown[] } } } | undefined;
-      if (args[1].endsWith('/_search') && (body?.query?.bool?.should?.length ?? 0) > 8) wideEmptyProofs++;
+      if (args[1].endsWith('/_search')) {
+        indexedReads++;
+        if ((body?.query?.bool?.should?.length ?? 0) > 8) wideEmptyProofs++;
+      }
       return native.request(...args);
     },
   };
@@ -229,6 +234,28 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       { state: 'metadata', partition: 4, kind: 'space' },
     ]);
     expect(checks.slice(5).every((row) => row.state === 'current')).toBe(true);
+
+    // A real Semantic notification at a certified empty home advances every native cut.
+    const untouched = await pool.query<{ partition_no: number }>(
+      `SELECT p.partition_no FROM core.partition p JOIN semantic.partition_subjects s USING(partition_no)
+       WHERE p.partition_no>0 AND p.partition_no<$1 AND p.position=0
+         AND s.canonical_announced_generation<s.canonical_generation
+       ORDER BY p.partition_no LIMIT 1`,
+      [homes],
+    );
+    const noticeHome = untouched.rows[0]!.partition_no;
+    const initial = cuts.find(({ partition }) => partition === noticeHome)!;
+    expect(initial.position).toBe('0');
+    await resumeCanonicalGenerationDelivery(pool, { after: noticeHome - 1, limit: 1, unannouncedOnly: true });
+    expect(await replay.run(noticeHome)).toMatchObject({ status: 'read' });
+    const readsBefore = indexedReads;
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(readsBefore);
+    const noticeCut = (await readDiscoveryCuts(pool, prefix, generation)).find(
+      ({ partition }) => partition === noticeHome,
+    )!;
+    expect(BigInt(noticeCut.position)).toBeGreaterThan(0n);
+    expect((await check([noticeCut])).checks).toEqual([{ state: 'current' }]);
 
     // Advance a certified empty home with a private Search event. Hold the real replay until after repair.
     const empty = await pool.query<{ partition_no: number }>(
