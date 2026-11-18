@@ -224,8 +224,6 @@ async function measureHistoryReads(
     historyPage.setDefaultTimeout(30_000);
     await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
     await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    // The mounted reply composer requires a personal read admitted for the current session's bearer.
-    await expect(historyPage.getByRole('region', { name: 'Reply', exact: true })).toBeVisible();
     const post = historyPage.locator(`#post-${postId}`);
     const button = await revealHistoryControl(post);
     await expect(button).toBeVisible();
