@@ -149,7 +149,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
       value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name),
     });
 
-  const { act, createElement: h, createContext, useContext } = await import('react');
+  const { act, createElement: h } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { waitFor } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -157,11 +157,13 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     await import('@tanstack/react-router');
   const { setLocale } = await import('../src/paraglide/runtime');
   const { Route } = await import('../src/routes/subjects/$id_.$slug.graph');
+  const { PageVisitBinding } = await import('../src/subject/page-visit-binding');
+  const { sessionQueryKey, signedOutSession } = await import('../src/session/browser-state');
   setLocale('en', { reload: false });
 
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const content = createContext(null as import('react').ReactNode);
-  const rootRoute = createRootRoute({ component: () => useContext(content) ?? h(Outlet) });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  queryClient.setQueryData(sessionQueryKey, signedOutSession);
+  const rootRoute = createRootRoute({ component: () => h(PageVisitBinding, { children: h(Outlet) }) });
   const graphRoute = Route.update({
     id: '/subjects/$id_/$slug/graph',
     path: '/subjects/$id/$slug/graph',
@@ -265,11 +267,9 @@ test('the production graph route gates unsupported origins and a fresh Global ch
 
     const beforeSignIn = calls.length;
     await act(async () => {
-      setObservedSession({
-        state: 'signed-in',
-        subject: otherSubject,
-        csrfToken: 'reader',
-      });
+      const session = { state: 'signed-in', subject: otherSubject, csrfToken: 'reader' } as const;
+      queryClient.setQueryData(sessionQueryKey, session);
+      setObservedSession(session);
     });
     await waitFor(() => expect(calls.length).toBeGreaterThan(beforeSignIn));
     expect(calls.slice(beforeSignIn).some((call) => typeof call.data.expectedReader === 'string')).toBe(true);
