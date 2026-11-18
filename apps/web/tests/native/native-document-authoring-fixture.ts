@@ -52,6 +52,8 @@ async function write(
 export type NativeDocumentAuthoringFixture = {
   stack: NativeWebStack;
   auth: NativeAuthStack;
+  spaceId: string;
+  realmId: string;
   boardId: string;
   alice: Account;
   aliceHandle: string;
@@ -156,6 +158,8 @@ export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocu
   return {
     stack,
     auth,
+    spaceId: space.spaceId,
+    realmId: realm.realmId,
     boardId: board.id,
     alice,
     aliceHandle: aliceAccount.handle,
