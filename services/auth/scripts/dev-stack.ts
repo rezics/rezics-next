@@ -1504,6 +1504,15 @@ async function start() {
     ...kernelEnvironmentValues,
     ...developmentKernelBindings(),
   };
+  if (importCatalogueWalk() && env.REZICS_WALK_STACK_SLOT && process.env.KERNEL_WRITE_RATE_OVERRIDES) {
+    type Overrides = Record<string, Record<string, unknown>>;
+    const stored = JSON.parse(kernelEnvironmentValues.KERNEL_WRITE_RATE_OVERRIDES ?? '{}') as Overrides;
+    const supplied = JSON.parse(process.env.KERNEL_WRITE_RATE_OVERRIDES) as Overrides;
+    for (const [rateClass, families] of Object.entries(supplied)) {
+      stored[rateClass] = { ...stored[rateClass], ...families };
+    }
+    env.KERNEL_WRITE_RATE_OVERRIDES = JSON.stringify(stored);
+  }
   // Walk fixture keys survive kernel .env, which can contain a developer's Stripe bindings.
   if (process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce') {
     Object.assign(env, {
