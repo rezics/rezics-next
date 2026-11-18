@@ -11,7 +11,8 @@ let fixture: Awaited<ReturnType<typeof createListPresentationFixture>>;
 
 beforeAll(async () => {
   fixture = await createListPresentationFixture({ poolMax: 1 });
-  await fixture.checked('POST', '/v1/platform/exposure/collections:open', {}, 'operator');
+  await fixture.grant('editor', 'gate:collections');
+  await fixture.grant('editor', 'gate:personal_library');
 }, 180_000);
 
 afterAll(async () => {
@@ -41,7 +42,10 @@ function interleaveViewerEntries(mutate: () => Promise<unknown>) {
                 : typeof first === 'object' && first !== null && 'text' in first
                   ? String(first.text)
                   : '';
-            if (!interleaved && statement.includes('incarnation_id AS "incarnationId"')) {
+            // The initial shelf query also selects incarnation_id. Wait for the viewer's batch lookup.
+            const viewerLookup =
+              statement.includes('incarnation_id AS "incarnationId"') && statement.includes('subject_id = ANY(');
+            if (!interleaved && viewerLookup) {
               interleaved = true;
               await mutate();
             }
@@ -192,16 +196,12 @@ test('shelf currentness preserves the original cursor and rejects changed rows o
 });
 
 test.serial('shelf route withholds a row whose native Entry changes during viewer overlay', async () => {
+  await fixture.grant('reader', 'gate:personal_library');
+  await fixture.grant('reader', 'gate:reading_progress');
   const book = await fixture.create('schema:Book');
-  await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
-  await fixture.db.admin.query(
-    `INSERT INTO access.exposure_opening ("group",valid,transaction_id)
-     VALUES ('personal_library',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$1),
-            ('reading_progress',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$2)`,
-    [randomUUID(), randomUUID()],
-  );
+  await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'reader');
   const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
-  const read = () => fixture.call('GET', path, undefined, 'editor');
+  const read = () => fixture.call('GET', path, undefined, 'reader');
   const initial = await read();
   expect(initial.status).toBe(200);
   expect((initial.body as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
@@ -211,7 +211,7 @@ test.serial('shelf route withholds a row whose native Entry changes during viewe
   const interleave = interleaveViewerEntries(() =>
     fixture.db.admin.query(
       "UPDATE library.entry SET state='paused', revision=revision+1, updated_at=now() WHERE route=$1 AND account_id=$2 AND subject_id=$3",
-      [routeOf(fixture.accounts.editor), fixture.accounts.editor, book],
+      [routeOf(fixture.accounts.reader), fixture.accounts.reader, book],
     ),
   );
   let response: Awaited<ReturnType<typeof read>>;
