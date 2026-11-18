@@ -1,5 +1,6 @@
 import type { AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
+import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, readAccount, readAccountCommandState } from './access-port.ts';
@@ -1053,7 +1054,13 @@ export function createCollectionReads(
     return presented;
   }
 
-  async function readBuiltinMembers(viewer: Actor, id: string, options: CollectionMemberQuery, deadline: number) {
+  async function readBuiltinMembers(
+    viewer: Actor,
+    id: string,
+    options: CollectionMemberQuery,
+    deadline: number,
+    readViewerFacts?: ReadMemberViewerFacts,
+  ) {
     if (options.filter === undefined && options.sort === undefined) {
       return builtins.members(viewer, id, { ...options, deadline });
     }
@@ -1061,6 +1068,7 @@ export function createCollectionReads(
     return builtins.members(viewer, id, {
       ...options,
       deadline,
+      ...(readViewerFacts ? { readViewerFacts } : {}),
       ...(admission.filter && admission.releaseDigest
         ? { query: { filter: admission.filter, releaseDigest: admission.releaseDigest, admission } }
         : {}),
@@ -1073,15 +1081,16 @@ export function createCollectionReads(
     collectionId: string,
     options: CollectionMemberQuery = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
+    readViewerFacts?: ReadMemberViewerFacts,
   ) {
     pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view', 'languages']);
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
-    if (logical) return readBuiltinMembers(viewer, collectionId, options, deadline);
+    if (logical) return readBuiltinMembers(viewer, collectionId, options, deadline, readViewerFacts);
     const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
     if (collection.membershipKind === 'dynamic') {
       if (collection.visibility === 'private' && collection.builtinKind)
-        return readBuiltinMembers(viewer, collectionId, options, deadline);
+        return readBuiltinMembers(viewer, collectionId, options, deadline, readViewerFacts);
       return readDynamicMembers(viewer, collection, options, deadline);
     }
     if (options.filter !== undefined || options.sort !== undefined)

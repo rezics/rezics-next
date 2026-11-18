@@ -115,6 +115,7 @@ import {
   readCanonicalSourceGroup,
   seekCanonicalSourceGroup,
   nativeSourceIdentity,
+  readPublishedEverythingState,
   type CanonicalAllowance,
   type CanonicalBasis,
   type CanonicalWork,
@@ -246,13 +247,16 @@ export function createCollectionSource(dependencies: {
 }
 
 /** Local bridge for one ordinary page: fixed structural limits drive Source work, receipts still admit it. */
-export function createOrdinaryCollectionPageSource(dependencies: {
-  pool: Pool;
-  access: Access;
-  clock?: KernelClock;
-  semanticObservations?: LibrarySemanticObservationCapability;
-}): CollectionSource {
-  return createCollectionSourceRuntime(dependencies, true);
+export function createOrdinaryCollectionPageSource(
+  dependencies: {
+    pool: Pool;
+    access: Access;
+    clock?: KernelClock;
+    semanticObservations?: LibrarySemanticObservationCapability;
+  },
+  publishedEverythingPage = false,
+): CollectionSource {
+  return createCollectionSourceRuntime(dependencies, true, publishedEverythingPage);
 }
 
 function createCollectionSourceRuntime(
@@ -263,6 +267,7 @@ function createCollectionSourceRuntime(
     semanticObservations?: LibrarySemanticObservationCapability;
   },
   fixedPageWork: boolean,
+  publishedEverythingPage = false,
 ): CollectionSource {
   let observations = dependencies.semanticObservations;
   const semanticObservations = () => (observations ??= librarySemanticObservations());
@@ -294,6 +299,7 @@ function createCollectionSourceRuntime(
         access: dependencies.access,
         actor: input.actor,
         at: input.at,
+        ordinaryPage: publishedEverythingPage,
       }),
     );
     if (!current.binding) throw new ProblemError('not_found');
@@ -555,6 +561,23 @@ function createCollectionSourceRuntime(
         const route = routeOf(input.collectionId);
         if (route === null) throw new ProblemError('not_found');
         const logical = input.logical ? await logicalBinding(input, l) : undefined;
+        if (publishedEverythingPage && logical?.key.kind === 'everything') {
+          const published = await readPublishedEverythingState(dependencies.pool, logical, l, semanticObservations());
+          if (published) {
+            const source: PreparedCollectionSource = {
+              [preparedSource]: true,
+              queryCapture: published.queryCapture,
+              observation: observation(published.metadata, published.basis),
+            };
+            prepared.set(source, {
+              metadata: published.metadata,
+              basis: published.basis,
+              generation: published.generation,
+              logicalBinding: logical,
+            });
+            return { source, work: l.receipt() };
+          }
+        }
         const { metadata } =
           current ??
           (await l.run((allowance) =>

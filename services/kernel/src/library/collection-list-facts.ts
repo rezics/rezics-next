@@ -44,7 +44,6 @@ export async function attachCollectionListFacts<T extends { subjectId: string }>
       const summaries = await readSubjectSummaries(deps, terminals, languages);
       // Exactly one actual native fact batch, retaining raw multiplicity for the helper's independent 100 bound.
       const facts = await readListPresentationFacts(deps, originals, languages);
-      await options.revalidate();
       const disclosed = valid.filter((id) => facts.get(id) != null);
       const current = await readIdentityMappings(deps.pool, disclosed);
       for (const [index, original] of disclosed.entries()) {
@@ -61,6 +60,7 @@ export async function attachCollectionListFacts<T extends { subjectId: string }>
         )
           throw new ProblemError('semantic_not_ready');
       }
+      await options.revalidate();
       requireAccessDeadline(deps.deadline);
       return members.flatMap((member) => {
         const value = facts.get(member.subjectId);

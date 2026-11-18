@@ -1,11 +1,17 @@
 import type { LibraryActor } from './actors.ts';
 
+/** Request-local FULL presentation. The native reader still owns the final Source and disclosure checks. */
+export type ReadMemberViewerFacts = (
+  members: readonly { subjectId: string }[],
+) => Promise<(() => Promise<void>) | undefined>;
+
 export type BuiltinMemberOptions<Query> = {
   limit?: number;
   cursor?: string | null;
   deadline?: number;
   query?: Query;
   view?: 'BASIC' | 'FULL';
+  readViewerFacts?: ReadMemberViewerFacts;
   languages?: readonly string[];
 };
 

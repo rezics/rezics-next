@@ -24,7 +24,7 @@ import {
 } from '../owner-index.ts';
 import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { CollectionKind } from '../collection-kind.ts';
-import type { OwnerQueryDependencies } from '../builtin-runtime-query.ts';
+import { ownerQueryWork, type OwnerQueryDependencies } from '../builtin-runtime-query.ts';
 import type { FilterDocument } from '@rezics/filter';
 import { consumeFollowWork } from '../follow-operation-bounds.ts';
 import { semanticObservationBound } from '../semantic-observation.ts';
@@ -301,6 +301,7 @@ export function createNativeBuiltinRuntime(
         throw new ProblemError('dependency_unavailable', {
           detail: 'Built-in members require current Access and cursor keys.',
         });
+      const ledger = ownerQueryWork(options.limit, options.view ?? 'BASIC', options.deadline);
       if (options.source.builtinKind === 'everything' && options.source.revision === 0 && options.query?.admission) {
         const direct = await readLogicalEverythingMembers(
           { ...config, access, tokens },
@@ -309,6 +310,7 @@ export function createNativeBuiltinRuntime(
           options.query.admission,
           options,
           options.deadline,
+          ledger,
         );
         if (direct) return direct;
       }
@@ -323,6 +325,8 @@ export function createNativeBuiltinRuntime(
           ...(options.query ? { query: options.query } : {}),
           ...(options.view === undefined ? {} : { view: options.view }),
           ...(options.languages === undefined ? {} : { languages: options.languages }),
+          ledger,
+          ...(options.readViewerFacts ? { readViewerFacts: options.readViewerFacts } : {}),
           revalidateOwner: options.revalidateOwner,
           readSourceVersion: options.readSourceVersion,
         },
