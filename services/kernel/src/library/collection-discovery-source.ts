@@ -64,6 +64,8 @@ export type CollectionDiscoveryCensus = Readonly<{
 export type CollectionDiscoverySource = Readonly<{
   /** Unfiltered empty-key observations in request order, including unavailable homes. */
   readEmpty?(partitions: readonly number[]): Promise<readonly CollectionDiscoverySnapshot[]>;
+  /** Only homes whose first unfiltered raw page is empty at the returned stamp. */
+  readEmptyFirstPages?(partitions: readonly number[]): Promise<readonly CollectionDiscoveryPosition[]>;
   read(
     partition: number,
     ids: readonly CollectionDiscoveryKey[],
@@ -100,6 +102,7 @@ const metadata = `c.route,c.collection_id::text AS id,c.state,c.visibility,c.rev
   c.membership_kind AS "membershipKind",(c.builtin_kind IS NULL AND c.rule_revision>0) AS saved,
   c.source_generation::text AS "sourceGeneration",
   trunc(extract(epoch FROM c.updated_at) * 1000000)::text AS "updatedAtEpochMicros"`;
+const publicPageCandidate = "c.state='active' AND c.visibility='public'";
 
 function partitionKey(partition: number) {
   if (!Number.isSafeInteger(partition) || partition < 0 || partition >= PARTITIONS)
@@ -235,6 +238,25 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
     }
   }
   return {
+    async readEmptyFirstPages(partitions) {
+      if (partitions.length > 100) throw new RangeError('Collection discovery reads at most 100 partitions');
+      for (const partition of partitions) partitionKey(partition);
+      return withReadTransaction(pool, async (client) => {
+        // Probe the raw public-listing index, including dynamic Collections awaiting a publication witness.
+        const { rows } = await client.query<CollectionDiscoveryPosition>(
+          `SELECT p.partition_no AS partition,p.epoch,p.position::text
+           FROM core.partition p
+           WHERE p.partition_no=ANY($1::integer[]) AND p.write_state='active' AND p.moved_to IS NULL
+             AND (
+               SELECT true FROM library.collection c
+               WHERE c.route >= p.partition_no*16 AND c.route < (p.partition_no+1)*16 AND ${publicPageCandidate}
+               ORDER BY c.route,c.collection_id LIMIT 1
+             ) IS NULL`,
+          [partitions],
+        );
+        return rows;
+      });
+    },
     async readEmpty(partitions) {
       if (partitions.length > 100) throw new RangeError('Collection discovery reads at most 100 partitions');
       for (const partition of partitions) partitionKey(partition);
@@ -278,7 +300,7 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
             `SELECT ${metadata} FROM library.collection c
              WHERE c.route >= $1*16 AND c.route < ($1+1)*16
                AND (c.route,c.collection_id)>($2::integer,$3::uuid)
-               AND c.state='active' AND c.visibility='public'
+               AND ${publicPageCandidate}
              ORDER BY c.route,c.collection_id LIMIT $4`,
             [partition, after?.route ?? partition * 16 - 1, after?.id ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff', limit],
           )

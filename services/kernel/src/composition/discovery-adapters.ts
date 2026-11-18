@@ -161,10 +161,19 @@ function createCollectionPopulationProducer(
   adapter: ReturnType<typeof createNativeCollectionDiscoveryAdapter>,
 ): DiscoveryMetadataProducer {
   const readEmpty = adapter.source.readEmpty?.bind(adapter.source);
+  const readEmptyFirstPages = adapter.source.readEmptyFirstPages?.bind(adapter.source);
   return {
     kind: 'collection',
     owner: 'commerce',
     pageCapabilityWitness: 'none',
+    ...(readEmptyFirstPages && {
+      async readEmptyFirstPages(partitions: readonly number[]) {
+        const stamps = await readEmptyFirstPages(partitions);
+        return new Map(
+          stamps.map(({ partition, epoch, position }) => [partition, { epoch, position: BigInt(position) }]),
+        );
+      },
+    }),
     ...(readEmpty && {
       async readEmptyStamps(partitions: readonly number[]) {
         const snapshots = await readEmpty(partitions);

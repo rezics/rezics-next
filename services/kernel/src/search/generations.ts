@@ -1026,6 +1026,43 @@ function discoveryPageReadBatch<Result>(rows: readonly Population[], checkEmpty:
   };
 }
 
+function populationPageProducers(
+  producers: DiscoveryMetadataProducers,
+  rows: readonly Population[],
+): DiscoveryMetadataProducers {
+  const collection = producers.collection;
+  const readEmptyFirstPages = collection?.readEmptyFirstPages?.bind(collection);
+  if (!collection || !readEmptyFirstPages) return producers;
+  const homes = rows
+    .filter(
+      (row) =>
+        row.owner === 'collection' &&
+        !row.native_complete &&
+        row.after_route === null &&
+        row.after_id === null &&
+        row.continuation === null,
+    )
+    .slice(0, 100)
+    .map((row) => row.partition);
+  if (homes.length < 2) return producers;
+  let pages: ReturnType<typeof readEmptyFirstPages> | undefined;
+  return {
+    ...producers,
+    collection: {
+      ...collection,
+      async page(partition, after, continuation, limit) {
+        if (after === null && continuation === null && homes.includes(partition)) {
+          // The first caller has checked the generation capability. The native snapshot ends before index I/O.
+          pages ??= searchTurnCall(() => readEmptyFirstPages(homes));
+          const stamp = (await pages).get(partition);
+          if (stamp) return { ...stamp, keys: [], records: [], next: null, continuation: null };
+        }
+        return collection.page(partition, after, continuation, limit);
+      },
+    },
+  };
+}
+
 function reviewCertificationBatch(
   rows: readonly { partition: number }[],
   read: NonNullable<DiscoveryMetadataProducer['readEmptyPositions']>,
@@ -2465,7 +2502,6 @@ async function advanceDiscoveryTurn(
     trace?.report({ outcome: 'capability-changed' });
     return;
   }
-  const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
   const advancePopulation = async (phase: 'populating' | 'reconciling', partitions?: readonly number[]) => {
     const review = metadataProducers.review;
     const readInvalidation = review?.populationInvalidationPending?.bind(review);
@@ -2492,6 +2528,11 @@ async function advanceDiscoveryTurn(
         ).rows,
     );
     if (populations.length > 0) {
+      const projection = createDiscoveryProjection({
+        ...options,
+        target,
+        metadataProducers: populationPageProducers(metadataProducers, populations),
+      });
       let retiring: Promise<void> | undefined;
       let deferredReview: DiscoveryProducerCoverageError | undefined;
       const checkCapability = discoveryPageCapabilityCheck(pool, target, metadataProducers);
