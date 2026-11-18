@@ -131,7 +131,7 @@ async function traverse(view: RelationView, persona: Persona) {
     reached.push(...emitted);
     const continuations = await elements(page.html, 'a[rel~="next"]');
     expect(continuations.length).toBeLessThanOrEqual(1);
-    next = continuations[0] ? absolute(continuations[0].attrs.href!) : undefined;
+    next = continuations[0] ? absolute(decode(continuations[0].attrs.href!)) : undefined;
   }
   expect(seenPages.size).toBeGreaterThan(1);
   expect(reached).toEqual(targets);
