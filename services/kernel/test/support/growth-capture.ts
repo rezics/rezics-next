@@ -717,7 +717,16 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     // has selected the actual prepared statement, without changing the occurrence reserved when it was enqueued.
     if (record && record.text.length === 0 && config?.statement) {
       const text = preparedStatementText(client, config.statement);
-      if (text !== undefined) record.text = text;
+      const capture = wireStatement?.attribution?.capture;
+      if (text !== undefined && !capture?.costFolder) record.text = text;
+      else if (text !== undefined && capture && !capture.error) {
+        const side = record.background ? 'background' : 'foreground';
+        try {
+          record.text = capture.budget.internFoldedStatementText(side, text);
+        } catch (error) {
+          capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, record.index, text));
+        }
+      }
     }
     if (config?.values && config.valueMapper) {
       const valueMapper = config.valueMapper;
@@ -939,14 +948,17 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (capture.error) capture.omittedStatements++;
       else {
         try {
-          if (!backgroundControl && !settlementOnly)
-            capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
+          let retainedText = text ?? '';
+          if (!backgroundControl && !settlementOnly) {
+            capture.budget.retainStatementText(side, capture.costFolder ? 0 : Buffer.byteLength(retainedText, 'utf8'));
+            if (capture.costFolder) retainedText = capture.budget.internFoldedStatementText(side, retainedText);
+          }
           const index = attribution.background
             ? capture.backgroundStatementCount++
             : capture.foregroundStatementCount++;
           const database = connectedDatabase(client) ?? databaseName(capture.database);
           record = {
-            text: text ?? '',
+            text: retainedText,
             background: attribution.background,
             backend: backendPid(client),
             index,
@@ -1539,6 +1551,8 @@ function makeCaptureFailureDiagnostic(
   }
   const native = {
     mode: active.costFolder ? 'cost-folded' : 'raw',
+    foregroundStatementCount: active.foregroundStatementCount,
+    backgroundStatementCount: active.backgroundStatementCount,
     statements: active.statementRecords,
     foregroundPlans: active.plans,
     foregroundPlanStatements: active.planStatements,

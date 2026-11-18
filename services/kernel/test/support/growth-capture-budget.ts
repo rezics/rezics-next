@@ -44,6 +44,7 @@ export class GrowthCaptureBudgetExceededError extends Error {
 export class GrowthCaptureBudget {
   readonly #label: string;
   readonly limits: GrowthCaptureBudgetLimits;
+  readonly #foldedStatementTexts = new Map<string, string>();
   #entries = 0;
   #bytes = 0;
   #failureEntries = 0;
@@ -75,6 +76,15 @@ export class GrowthCaptureBudget {
 
   retainStatementText(side: GrowthCaptureEvidenceSide, bytes: number): void {
     this.reserve(`${side} statement text`, 1, bytes);
+  }
+
+  /** Share an exact immutable string while each statement occurrence keeps its own entry and wire cost. */
+  internFoldedStatementText(side: GrowthCaptureEvidenceSide, text: string): string {
+    const retained = this.#foldedStatementTexts.get(text);
+    if (retained !== undefined) return retained;
+    this.reserve(`${side} folded statement text`, 0, Buffer.byteLength(text, 'utf8') + 64);
+    this.#foldedStatementTexts.set(text, text);
+    return text;
   }
 
   retainStatementError(side: GrowthCaptureEvidenceSide, bytes: number): void {
