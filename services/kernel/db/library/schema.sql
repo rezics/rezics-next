@@ -1076,6 +1076,25 @@ $$;
 
 
 --
+-- Name: everything_source_id(uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.everything_source_id(owner_id uuid) RETURNS uuid
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  WITH seed AS (
+    SELECT substring(sha256(uuid_send(owner_id) ||
+      '["library.collection.builtin",1,"everything"]'::bytea) FROM 1 FOR 16) AS bytes
+  )
+  SELECT encode(set_byte(set_byte(set_byte(set_byte(bytes,
+    6, (get_byte(bytes,6) & 15) | 128),
+    8, (get_byte(bytes,8) & 63) | 128),
+    10, get_byte(uuid_send(owner_id),10)),
+    11, get_byte(uuid_send(owner_id),11)), 'hex')::uuid FROM seed
+$$;
+
+
+--
 -- Name: fence_profile_migration_writer(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2056,6 +2075,32 @@ CREATE FUNCTION library.owner_original_activity(r integer, a uuid, s uuid) RETUR
     OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.state <> 'retired' AND p.route=r AND p.account_id=a AND p.subject_id=s)
       AND NOT EXISTS(SELECT 1 FROM library.progress_head h WHERE h.route=r AND h.account_id=a AND h.subject_id=s
         AND h.last_changed_at IS NOT NULL));
+$$;
+
+
+--
+-- Name: personal_source_page(integer, uuid, uuid, integer); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.personal_source_page(r integer, a uuid, lower_subject uuid, page_size integer) RETURNS TABLE(subject_id uuid, fact_id uuid, transaction_id uuid)
+    LANGUAGE sql STABLE
+    AS $$
+  WITH RECURSIVE observed(id,n) AS (
+    (SELECT o.subject_id,1 FROM library.entry_source_observation o
+     WHERE o.route=r AND o.account_id=a AND o.subject_id>=lower_subject ORDER BY o.subject_id LIMIT 1)
+    UNION ALL
+    SELECT successor.subject_id,prior.n+1 FROM observed prior CROSS JOIN LATERAL (
+      SELECT o.subject_id FROM library.entry_source_observation o
+      WHERE o.route=r AND o.account_id=a AND o.subject_id>prior.id ORDER BY o.subject_id LIMIT 1
+    ) successor WHERE prior.n<LEAST(page_size,101)
+  ), subjects AS MATERIALIZED (
+    (SELECT p.subject_id FROM library.entry_personal_fact p WHERE p.route=r AND p.account_id=a
+      AND p.subject_id>=lower_subject AND (p.note IS NOT NULL OR p.priority IS NOT NULL)
+      ORDER BY p.subject_id LIMIT LEAST(page_size,101))
+    UNION SELECT id FROM observed ORDER BY 1 LIMIT LEAST(page_size,101)
+  )
+  SELECT p.subject_id,p.fact_id,p.transaction_id FROM subjects s JOIN library.entry_personal_fact p
+    ON p.route=r AND p.account_id=a AND p.subject_id=s.subject_id
 $$;
 
 
@@ -3346,7 +3391,17 @@ CREATE TABLE library.canonical_source_generation (
     source_exhausted boolean DEFAULT false NOT NULL,
     state text DEFAULT 'working'::text NOT NULL,
     version bigint DEFAULT 0 NOT NULL,
+    logical_owner_id uuid,
+    stored_collection_id uuid GENERATED ALWAYS AS (
+CASE
+    WHEN (logical_owner_id IS NULL) THEN collection_id
+    ELSE NULL::uuid
+END) STORED,
+    query_capture_id uuid,
+    query_capture_revision bigint,
     CONSTRAINT canonical_source_generation_basis_check CHECK ((octet_length((basis)::text) <= 4096)),
+    CONSTRAINT canonical_source_generation_check CHECK (((logical_owner_id IS NULL) OR ((collection_id = library.everything_source_id(logical_owner_id)) AND (NOT (((basis -> 'authority'::text) ->> 'kind'::text) IS DISTINCT FROM 'private_builtin'::text)) AND (NOT (((basis -> 'authority'::text) ->> 'curatorAccountId'::text) IS DISTINCT FROM (logical_owner_id)::text))))),
+    CONSTRAINT canonical_source_generation_check1 CHECK ((((query_capture_id IS NULL) AND (query_capture_revision IS NULL)) OR ((logical_owner_id IS NOT NULL) AND (query_capture_id IS NOT NULL) AND (query_capture_revision IS NOT NULL) AND (query_capture_revision > 0) AND (state = 'complete'::text) AND source_exhausted))),
     CONSTRAINT canonical_source_generation_driver_check CHECK ((driver = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'done'::text]))),
     CONSTRAINT canonical_source_generation_state_check CHECK ((state = ANY (ARRAY['working'::text, 'complete'::text, 'abandoned'::text])))
 );
@@ -3391,6 +3446,13 @@ CREATE TABLE library.canonical_source_scope (
     frontier jsonb,
     capture_id uuid,
     committed_revision bigint,
+    logical_owner_id uuid,
+    stored_collection_id uuid GENERATED ALWAYS AS (
+CASE
+    WHEN (logical_owner_id IS NULL) THEN collection_id
+    ELSE NULL::uuid
+END) STORED,
+    CONSTRAINT canonical_source_scope_check CHECK (((logical_owner_id IS NULL) OR ((collection_id = library.everything_source_id(logical_owner_id)) AND (NOT ((identity ->> 'scope'::text) IS DISTINCT FROM 'private_builtin'::text)) AND (NOT ((identity ->> 'accountId'::text) IS DISTINCT FROM (logical_owner_id)::text))))),
     CONSTRAINT canonical_source_scope_frontier_check CHECK ((octet_length((frontier)::text) <= 4096)),
     CONSTRAINT canonical_source_scope_identity_check CHECK ((octet_length((identity)::text) <= 4096))
 );
@@ -5547,6 +5609,62 @@ CREATE TABLE library.list_import_mal_row (
 
 
 --
+-- Name: owner_index_control; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.owner_index_control (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    phase text DEFAULT 'entry'::text NOT NULL,
+    after_subject uuid,
+    after_fact uuid,
+    chronology_ready boolean DEFAULT false NOT NULL,
+    activity_after_subject uuid,
+    personal_coverage_ready boolean DEFAULT false NOT NULL,
+    personal_coverage_after uuid,
+    everything_id uuid GENERATED ALWAYS AS (library.everything_source_id(account_id)) STORED,
+    CONSTRAINT owner_index_control_check CHECK (((after_subject IS NULL) = (after_fact IS NULL))),
+    CONSTRAINT owner_index_control_check1 CHECK (((phase <> 'ready'::text) OR (after_subject IS NULL))),
+    CONSTRAINT owner_index_control_check2 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT owner_index_control_phase_check CHECK ((phase = ANY (ARRAY['entry'::text, 'session'::text, 'copy'::text, 'label'::text, 'ready'::text]))),
+    CONSTRAINT owner_index_control_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: owner_index_label_repair; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.owner_index_label_repair (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    label_id uuid NOT NULL,
+    after_subject uuid
+);
+
+
+--
+-- Name: logical_everything_source; Type: VIEW; Schema: library; Owner: -
+--
+
+CREATE VIEW library.logical_everything_source AS
+ SELECT c.route,
+    c.account_id,
+    c.everything_id AS collection_id,
+    ((c.everything_id)::text || ':everything'::text) AS incarnation,
+    h.generation
+   FROM (library.owner_index_control c
+     JOIN library.fact_source_head h USING (route, account_id))
+  WHERE ((c.phase = 'ready'::text) AND c.personal_coverage_ready AND (NOT (EXISTS ( SELECT 1
+           FROM library.collection s
+          WHERE ((s.route = c.route) AND (s.collection_id = c.everything_id))))) AND (NOT (EXISTS ( SELECT 1
+           FROM library.owner_index_label_repair r
+          WHERE ((r.route = c.route) AND (r.account_id = c.account_id))))) AND (NOT (EXISTS ( SELECT 1
+           FROM library.label_assignment a
+          WHERE ((a.route = c.route) AND (a.account_id = c.account_id) AND (a.deleted_at IS NULL) AND ((a.slot_no IS NULL) OR (a.assignment_id IS NULL)))))));
+
+
+--
 -- Name: members_preparation; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -5906,40 +6024,6 @@ CREATE TABLE library.owner_identity_scope (
     CONSTRAINT owner_identity_scope_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT owner_identity_scope_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text]))),
     CONSTRAINT owner_identity_scope_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535)))
-);
-
-
---
--- Name: owner_index_control; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.owner_index_control (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    phase text DEFAULT 'entry'::text NOT NULL,
-    after_subject uuid,
-    after_fact uuid,
-    chronology_ready boolean DEFAULT false NOT NULL,
-    activity_after_subject uuid,
-    personal_coverage_ready boolean DEFAULT false NOT NULL,
-    personal_coverage_after uuid,
-    CONSTRAINT owner_index_control_check CHECK (((after_subject IS NULL) = (after_fact IS NULL))),
-    CONSTRAINT owner_index_control_check1 CHECK (((phase <> 'ready'::text) OR (after_subject IS NULL))),
-    CONSTRAINT owner_index_control_check2 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT owner_index_control_phase_check CHECK ((phase = ANY (ARRAY['entry'::text, 'session'::text, 'copy'::text, 'label'::text, 'ready'::text]))),
-    CONSTRAINT owner_index_control_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
--- Name: owner_index_label_repair; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.owner_index_label_repair (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    label_id uuid NOT NULL,
-    after_subject uuid
 );
 
 
@@ -8417,6 +8501,14 @@ ALTER TABLE ONLY library.owner_index_control
 
 
 --
+-- Name: owner_index_control owner_index_control_route_everything_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_control
+    ADD CONSTRAINT owner_index_control_route_everything_id_key UNIQUE (route, everything_id);
+
+
+--
 -- Name: owner_index_label_repair owner_index_label_repair_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9627,6 +9719,13 @@ CREATE INDEX entry_deleted_profile_pending ON library.entry_deleted USING btree 
 --
 
 CREATE INDEX entry_personal_live_annotation_owner ON library.entry_personal_fact USING btree (route, account_id) WHERE ((note IS NOT NULL) OR (priority IS NOT NULL));
+
+
+--
+-- Name: entry_personal_live_annotation_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_personal_live_annotation_subject ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE ((note IS NOT NULL) OR (priority IS NOT NULL));
 
 
 --
@@ -11719,11 +11818,19 @@ ALTER TABLE ONLY library.canonical_source_fact
 
 
 --
--- Name: canonical_source_generation canonical_source_generation_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+-- Name: canonical_source_generation canonical_source_generation_route_logical_owner_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.canonical_source_generation
-    ADD CONSTRAINT canonical_source_generation_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+    ADD CONSTRAINT canonical_source_generation_route_logical_owner_id_fkey FOREIGN KEY (route, logical_owner_id) REFERENCES library.owner_index_control(route, account_id);
+
+
+--
+-- Name: canonical_source_generation canonical_source_generation_route_stored_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_generation
+    ADD CONSTRAINT canonical_source_generation_route_stored_collection_id_fkey FOREIGN KEY (route, stored_collection_id) REFERENCES library.collection(route, collection_id);
 
 
 --
@@ -11743,11 +11850,19 @@ ALTER TABLE ONLY library.canonical_source_reference
 
 
 --
--- Name: canonical_source_scope canonical_source_scope_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+-- Name: canonical_source_scope canonical_source_scope_route_logical_owner_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.canonical_source_scope
-    ADD CONSTRAINT canonical_source_scope_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+    ADD CONSTRAINT canonical_source_scope_route_logical_owner_id_fkey FOREIGN KEY (route, logical_owner_id) REFERENCES library.owner_index_control(route, account_id);
+
+
+--
+-- Name: canonical_source_scope canonical_source_scope_route_stored_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_scope
+    ADD CONSTRAINT canonical_source_scope_route_stored_collection_id_fkey FOREIGN KEY (route, stored_collection_id) REFERENCES library.collection(route, collection_id);
 
 
 --
