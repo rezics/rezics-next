@@ -5,7 +5,7 @@ import {
   CANONICAL_GENERATION_COMMITTED,
   CANONICAL_GENERATION_CONTINUATION,
   CANONICAL_GENERATION_DELIVERED,
-} from '../semantic/events.ts';
+} from '../semantic/canonical-generation-events.ts';
 import type { DiscoveryTarget } from './account-discovery.ts';
 import { discoveryConsumer } from './consumer-name.ts';
 import type { DiscoveryCut } from './generations.ts';

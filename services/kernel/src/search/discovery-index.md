@@ -127,6 +127,9 @@ reconciliation frontiers. Publication requires complete populations for each reg
 current keyed reconciliation, the current registry, the captured physical UUID and durable native frontiers to agree.
 Current owner hydration alone does not make an incomplete generation ready.
 
+Current Subject and Account disclosure run independently within one four-home admission bound. Each owner
+retains its own admission, hydration and final checks before Search returns candidates in the original order.
+
 Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDependencyReadiness` through the
 Search Space adapter's `source.dependencies`. Search retains the entire ready result, including opaque
 `generation`, `cut` and capability fields, in `discovery_generation.capability` with the observed physical UUID and

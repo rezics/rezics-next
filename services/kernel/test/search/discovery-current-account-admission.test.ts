@@ -16,6 +16,7 @@ import {
   type IndexedAccount,
 } from '../../src/search/discovery.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
+import type { SubjectSource } from '../../src/search/source.ts';
 
 const route = 160;
 const partition = 10;
@@ -61,12 +62,13 @@ function disclose(
   read: (ids: readonly string[]) => AccountSnapshot | Promise<AccountSnapshot>,
   hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, AccountDiscoverySummary>> = noHydrate,
   readContext: DiscoveryReadContext = context,
+  readSubject: SubjectSource['read'] = noRead,
 ) {
   return currentDiscoveryCandidates(
     createDiscoveryRegistry({
       release: bundledRelease,
       semantic: {
-        source: { read: noRead, count: noRead },
+        source: { read: readSubject, count: noRead },
         hydrate: noRead,
         icons: Object.fromEntries(Object.keys(bundledRelease.types).map((kind) => [kind, 'catalogue'])),
       },
@@ -172,6 +174,38 @@ test('an absent Subject text producer omits indexed Subject candidates while cur
   );
 
   expect([...passed.keys()]).toEqual([account]);
+});
+
+test('current Account hydration can proceed while an independent Subject home is still reading', async () => {
+  const subject = {
+    ...hit('018f0000-0000-7000-8000-00a000000003'),
+    key: { owner: 'semantic' as const, kind: 'schema:Book', route, id: '018f0000-0000-7000-8000-00a000000003' },
+  };
+  const account = hit(nativeId);
+  const resumeSubject = Promise.withResolvers<void>();
+  const accountHydrated = Promise.withResolvers<void>();
+  const current = disclose(
+    [subject, account],
+    () => ({ partition, position: 12n, accounts: [row(nativeId)] }),
+    async () => {
+      accountHydrated.resolve();
+      return new Map([[nativeId, summaryOf(nativeId)]]);
+    },
+    context,
+    async () => {
+      await resumeSubject.promise;
+      return { partition, position: 12n, subjects: [] };
+    },
+  );
+  const failWait = Promise.withResolvers<void>();
+  const watchdog = setTimeout(() => failWait.reject(new Error('Account hydration waited for Subject')), 1_000);
+  try {
+    await Promise.race([accountHydrated.promise, failWait.promise, current]);
+  } finally {
+    clearTimeout(watchdog);
+    resumeSubject.resolve();
+  }
+  expect([...(await current).keys()]).toEqual([account]);
 });
 
 test('positive current evidence with missing, foreign, changed or malformed hydration refuses the whole page', async () => {
