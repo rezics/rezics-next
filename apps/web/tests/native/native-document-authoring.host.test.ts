@@ -432,15 +432,50 @@ describe('native document authoring', () => {
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(page.locator('[data-slot="document-body"]')).toContainText('edited in the served editor');
 
-    const revisionsRead = await json<{
-      revisions: Post[];
-      next: string | null;
-    }>(
-      await fixture.stack.kernel(`/v1/posts/${original.id}/revisions?limit=20`, undefined, 'alice'),
-      'GET /v1/posts/:id/revisions',
-    );
+    const postPath = `/v1/posts/${original.id}`;
+    const historyResponse = await fixture.stack.kernel(`${postPath}/revisions?limit=20`, undefined, 'alice');
+    if (!historyResponse.ok) {
+      const problem = await historyResponse.text();
+      const reads: Record<string, number | string> = {};
+      // Observe the same author's native reads after the failed request, including both exact revisions
+      // when the current Post discloses its saved head. Keep the original history failure as the result.
+      const observe = async (path: string) => {
+        try {
+          const response = await fixture.stack.kernel(path, undefined, 'alice');
+          reads[path] = response.status;
+          await response.body?.cancel();
+          return response;
+        } catch (error) {
+          reads[path] = String(error);
+          return null;
+        }
+      };
+      const head = await observe(postPath);
+      const revisionId = head?.ok ? head.headers.get('etag')?.match(/^"([0-9a-f-]{36})"$/i)?.[1] : undefined;
+      await observe(`${postPath}/revisions/${original.revisionId}`);
+      if (revisionId && revisionId !== original.revisionId) await observe(`${postPath}/revisions/${revisionId}`);
+      await observe(`${postPath}/revision-headers?limit=20`);
+      await observe(`/v1/threads/${threadId}`);
+      await observe(`/v1/boards/${fixture.boardId}`);
+      await observe(`/v1/realms/${fixture.realmId}`);
+      await observe(`/v1/spaces/${fixture.spaceId}`);
+      throw new Error(
+        `GET ${postPath}/revisions?limit=20 returned ${historyResponse.status}: ${problem}\nSubsequent Alice reads: ${JSON.stringify(reads)}`,
+      );
+    }
+    const revisionsRead = await json<{ revisions: Post[] }>(historyResponse, 'GET /v1/posts/:id/revisions');
     expect(revisionsRead.revisions).toHaveLength(2);
     const [oldRevision, newRevision] = revisionsRead.revisions;
+    const { post: head } = await json<{ post: Post }>(
+      await fixture.stack.kernel(postPath, undefined, 'alice'),
+      'GET /v1/posts/:id',
+    );
+    expect(oldRevision!.id).toBe(original.id);
+    expect(oldRevision!.revisionId).toBe(original.revisionId);
+    expect(newRevision!.id).toBe(original.id);
+    expect(newRevision!.revisionId).not.toBe(original.revisionId);
+    expect(newRevision!.revisionId).toBe(head.revisionId);
+    expect(newRevision!.body).toEqual(head.body);
     expect(oldRevision!.body).toEqual(initial);
     expect(documentText(oldRevision!.body!)).toContain('Unicode 雪 café authored whitespace  bold');
     expect(documentText(oldRevision!.body!)).not.toContain('edited in the served editor');
