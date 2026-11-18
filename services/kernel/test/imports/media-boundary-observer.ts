@@ -27,7 +27,10 @@ export async function observeMediaPool(pool: Pool) {
         for (const tuple of tuples)
           if (!fences.some((f) => JSON.stringify(f) === JSON.stringify(tuple))) fences.push(tuple);
       }
-      if (text === fenceStatement.sql && result.rows.length === 1) {
+      // Reylo's event append includes its source comment on the wire.
+      if (text === fenceStatement['~standard'].query.text && result.rows.length === 1) {
+        const row = result.rows[0];
+        const fence = Array.isArray(row) ? fenceStatement['~standard'].query.decode([row])[0]! : row;
         const parameters = Object.fromEntries(fenceStatement.params.map((name, index) => [name, values[index]]));
         const events = JSON.parse(String(parameters.events)) as { subject?: string; type: string }[];
         events.forEach((event, index) => {
@@ -36,8 +39,8 @@ export async function observeMediaPool(pool: Pool) {
               id: event.subject,
               anchor: {
                 partition: Number(parameters.partition_no),
-                epoch: result.rows[0].epoch,
-                position: String(result.rows[0].position),
+                epoch: fence.epoch,
+                position: String(fence.position),
                 index,
                 transactionId: String(parameters.transaction_id),
               },
