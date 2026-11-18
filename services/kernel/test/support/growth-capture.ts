@@ -141,6 +141,7 @@ type ActiveCapture = {
   readonly budget: GrowthCaptureBudget;
   readonly costFolder: GrowthCostFolder | undefined;
   readonly mode: 'measured' | 'warmup';
+  readonly settlementOnly: boolean;
   readonly backgroundControls: { statements: number; requestBytes: number; responseBytes: number };
   readonly database: GrowthDatabase;
   readonly run: RunCapture | undefined;
@@ -915,8 +916,12 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     const sqlKind = explain && !suppressAttribution ? classifiedSqlKind(text) : undefined;
     const resetsSetting = sqlKind === 'commit' || sqlKind === 'rollback' || sqlKind === 'rollback-to';
+    const settlementOnly = attribution?.capture.settlementOnly;
     const backgroundControl =
-      attribution?.background && attribution.capture.mode === 'warmup' && (sqlKind === 'begin' || resetsSetting);
+      !settlementOnly &&
+      attribution?.background &&
+      attribution.capture.mode === 'warmup' &&
+      (sqlKind === 'begin' || resetsSetting);
     let record: StatementRecord | undefined;
     if (explain && !suppressAttribution && (text !== undefined || name !== undefined) && attribution) {
       const capture = attribution.capture;
@@ -927,7 +932,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (capture.error) capture.omittedStatements++;
       else {
         try {
-          if (!backgroundControl) capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
+          if (!backgroundControl && !settlementOnly)
+            capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
           const index = attribution.background
             ? capture.backgroundStatementCount++
             : capture.foregroundStatementCount++;
@@ -944,10 +950,12 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
             errorMessage: null,
             requiresNativePlan: false,
           };
-          if (!backgroundControl) {
+          if (!backgroundControl && !settlementOnly) {
             capture.statementRecords.push(record);
             capture.costFolder?.registerStatement(side, index);
           }
+          if (settlementOnly && !attribution.background && record.backend !== undefined)
+            capture.run?.backends.add(record.backend);
         } catch (error) {
           capture.omittedStatements++;
           capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, occurrenceIndex, text ?? ''));
@@ -986,7 +994,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         counts.statements++;
         counts.requestBytes += record.requestBytes;
         counts.responseBytes += record.responseBytes;
-      } else if (record) {
+      } else if (record && !settlementOnly) {
         if (failed) {
           const code = (error as { code?: unknown } | null)?.code;
           record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
@@ -1144,12 +1152,9 @@ function instrument(client: PoolClient, state: CaptureState): void {
       }
       if (capture.costFolder) {
         const database = connectedDatabase(client) ?? '';
-        const planIndex = capture.costFolder.addNotice(plan, {
-          side,
-          owner,
-          backend: backendPid(client),
-          database,
-        });
+        const planIndex = capture.settlementOnly
+          ? 'warmup'
+          : capture.costFolder.addNotice(plan, { side, owner, backend: backendPid(client), database });
         retainCapturePlanWrites(
           capture,
           plan,
@@ -1295,6 +1300,8 @@ export type GrowthCaptureOptions = {
   readonly includeBackends?: boolean;
   /** A capture may use tighter telemetry limits for a focused check, but cannot raise the documented hard caps. */
   readonly telemetryLimits?: Partial<GrowthCaptureBudgetLimits>;
+  /** For unmeasured warmups, retain write targets and live transactions without per-query telemetry. */
+  readonly settlementOnly?: boolean;
 };
 
 /** Internal entry point used by the public cost-folded capture facade. */
@@ -1662,6 +1669,7 @@ async function captureInternal<T>(
     budget,
     costFolder,
     mode,
+    settlementOnly: mode === 'warmup' && options.settlementOnly === true,
     database,
     run,
     statementRecords: [],
@@ -1896,16 +1904,10 @@ function retainRunFailedCapture(
 export function captureWarmup<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
-  telemetryLimits?: Partial<GrowthCaptureBudgetLimits>,
+  options: Pick<GrowthCaptureOptions, 'telemetryLimits' | 'settlementOnly'> = {},
 ) {
   return trackCaptureTask(
-    captureInternal(
-      database,
-      operation,
-      { includeBackends: true, ...(telemetryLimits && { telemetryLimits }) },
-      true,
-      'cost-folded',
-    ),
+    captureInternal(database, operation, { ...options, includeBackends: true }, true, 'cost-folded'),
   );
 }
 

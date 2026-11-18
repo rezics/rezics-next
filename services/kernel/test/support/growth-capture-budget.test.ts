@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { AsyncResource } from 'node:async_hooks';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, captureWarmup, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import {
+  capture,
+  captureMeasuredRun,
+  captureWarmup,
+  openGrowthDatabase,
+  type GrowthDatabase,
+} from './growth-capture.ts';
 import { GrowthCaptureBudget, parseNativePlanNotice } from './growth-capture-budget.ts';
 import { captureWithFoldedCost, costOf, growthFailureEvidence } from './growth.ts';
 
@@ -97,12 +103,26 @@ test('warmup settles transactions even if their commit comes from another execut
         }
         return 'settled';
       },
-      { entries: 160 },
+      { telemetryLimits: { entries: 160 } },
     );
     expect(value).toBe('settled');
     expect(costOf(warmup).backgroundStatements).toBe(400);
     expect(costOf(warmup).backgroundRequestBytes).toBeGreaterThan(0);
   });
+});
+
+test('unmeasured warmup keeps native write targets for settlement without per-query evidence', async () => {
+  const db = database!;
+  await db.admin.query('CREATE TABLE public.growth_warmup_writes (value integer)');
+  const run = await captureMeasuredRun(() =>
+    captureWarmup(db, () => db.pool.query('INSERT INTO public.growth_warmup_writes VALUES (1)'), {
+      settlementOnly: true,
+    }),
+  );
+  expect(run.value.capture.statements).toEqual([]);
+  expect([...run.writes.values()].flatMap((relations) => [...relations.values()])).toContainEqual(
+    expect.objectContaining({ name: 'growth_warmup_writes' }),
+  );
 });
 
 test('a folded capacity failure drains its caller, keeps costs when available, and the next capture is clean', async () => {

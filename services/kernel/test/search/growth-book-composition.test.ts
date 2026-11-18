@@ -86,6 +86,7 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     includeBackends: true,
     repetitions: 1,
     grow: (_db, scale, previous) => world.grow(previous, scale),
+    warmupSettlementOnly: true,
     async warmup() {
       await world.read('anonymous', true);
     },

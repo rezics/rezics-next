@@ -147,6 +147,8 @@ export type GrowthCheck = {
    * otherwise `operation`. Must be a positive safe integer; use the `warmup` hook for consumable state.
    */
   readonly warmups?: number;
+  /** Track writes and transaction closure in unmeasured warmups. The measured capture stays complete. */
+  readonly warmupSettlementOnly?: true;
   /**
    * Grows the data from the previous scale (0 before the first) to this one, normally with seed(). After each call,
    * checkGrowth settles the database with ANALYZE before the scale's first unmeasured run.
@@ -1288,10 +1290,14 @@ async function runGrowthCheck(
       failureContext.repetition = repetition;
       failureContext.native = undefined;
       const warmupRun = await captureMeasuredRun(() =>
-        captureWarmup(db, async () => {
-          if (check.warmup) await check.warmup(db, scale, repetition);
-          else await check.operation(db, scale, repetition);
-        }),
+        captureWarmup(
+          db,
+          async () => {
+            if (check.warmup) await check.warmup(db, scale, repetition);
+            else await check.operation(db, scale, repetition);
+          },
+          { settlementOnly: check.warmupSettlementOnly === true },
+        ),
       );
       failureContext.native = captureRunFailureEvidence(warmupRun, warmupRun.value.capture);
       absorbUnmeasured(warmupRun);
