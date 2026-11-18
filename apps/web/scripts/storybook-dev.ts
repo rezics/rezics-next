@@ -110,12 +110,13 @@ export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolea
 
 /** Leave room for workerd and the native stack instead of sizing V8 from the whole host. */
 export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (kind !== 'app') return env;
+  const bundledNative = kind === 'vite' && env.REZICS_TEST_RUNTIME === '1' && env.NATIVE_WEB_BUNDLED_CLIENT === '1';
+  if (kind !== 'app' && !bundledNative) return env;
   const options = env.NODE_OPTIONS ?? '';
   // An explicit operator heap limit remains authoritative; other Node options are retained.
   if (/(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s)/.test(options)) return env;
   // Bundled native checks compile the complete client graph in one V8 process.
-  const heapMiB = env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? 2560 : 2048;
+  const heapMiB = bundledNative ? 2560 : 2048;
   return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=${heapMiB}`.trim() };
 }
 
