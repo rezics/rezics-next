@@ -1,7 +1,7 @@
 import { m } from '../../paraglide/messages.js';
-import type { VndbReviewResult } from './contract';
+import type { VndbRow } from './contract';
 
-type Measure = NonNullable<VndbReviewResult['progress']>['measures'][number];
+type Measure = NonNullable<NonNullable<VndbRow['decision']>['progress']>['measures'][number];
 
 const measureStatuses = {
   applied: m.library_vndb_progress_applied,

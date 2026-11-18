@@ -184,11 +184,9 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
             disabled={!snap.cleanupPending && locked}
             onEdit={() => void act((current) => current.editReplacement())}
             onUpload={(upload) => void act((current) => current.preview(upload))}
-            onReopen={
-              snap.cleanupPending || snap.uploadId
-                ? undefined
-                : (uploadId) => void act((current) => current.loadPage(uploadId, -1))
-            }
+            {...(snap.cleanupPending || snap.uploadId
+              ? {}
+              : { onReopen: (uploadId: string) => void act((current) => current.loadPage(uploadId, -1)) })}
           />
         </div>
       ) : null}

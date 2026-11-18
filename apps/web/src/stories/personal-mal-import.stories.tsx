@@ -9,6 +9,7 @@ import {
   type MalImportPort,
   type MalPreviewRow,
   type MalQuestion,
+  type MalReview,
 } from '../library/personal-mal-import/contract';
 import type { MalVisit } from '../library/personal-mal-import/visit';
 import { getLocale } from '../paraglide/runtime.js';
@@ -120,7 +121,7 @@ function makePort(navigation?: NavigationState): MalImportPort {
     async review(command) {
       const input = command.input;
       const row = rows[input.row]!;
-      row.review = {
+      const review: MalReview = {
         version: command.key,
         fingerprint: `illustrative-review-${input.row}`,
         target: input.target,
@@ -132,39 +133,6 @@ function makePort(navigation?: NavigationState): MalImportPort {
         source: row.source,
         conflict: !!row.current,
         unsupported: null,
-        ...(input.score
-          ? {
-              score: {
-                action: input.score.action,
-                source: row.score,
-                sourceSupport: {
-                  status: 'owner-selection-required',
-                  reason: 'native-units-require-explicit-selection',
-                },
-                conversion: 'owner-selected-not-exact',
-                question: {
-                  id: question.id,
-                  revision: 1,
-                  label: question.label,
-                  meaning: question.meaning ?? null,
-                  grain: 'work',
-                  lifecycleState: 'active',
-                  scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },
-                },
-                units: input.score.action === 'adopt' ? input.score.units : null,
-                replaceCurrent: input.score.action === 'adopt' && input.score.replaceCurrent === true,
-                support: { status: 'supported', reason: null },
-                baseline: { state: 'present', units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' },
-                admission: { status: 'conditional', reason: null },
-                guard: {
-                  version: 1,
-                  question: { revision: 1, lifecycleRevision: 1 },
-                  subject: { canonicalId: input.target, epochs: [] },
-                  ownVote: { state: 'present', observation: 'illustrative-revision-3' },
-                },
-              },
-            }
-          : {}),
         ...(input.labels
           ? {
               labels: {
@@ -179,6 +147,39 @@ function makePort(navigation?: NavigationState): MalImportPort {
             }
           : {}),
       };
+      if (input.score) {
+        if (input.target === null) return { kind: 'not-found' };
+        review.score = {
+          action: input.score.action,
+          source: row.score,
+          sourceSupport: {
+            status: 'owner-selection-required',
+            reason: 'native-units-require-explicit-selection',
+          },
+          conversion: 'owner-selected-not-exact',
+          question: {
+            id: question.id,
+            revision: 1,
+            label: question.label,
+            meaning: question.meaning ?? null,
+            grain: 'work',
+            lifecycleState: 'active',
+            scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },
+          },
+          units: input.score.action === 'adopt' ? input.score.units : null,
+          replaceCurrent: input.score.action === 'adopt' && input.score.replaceCurrent === true,
+          support: { status: 'supported', reason: null },
+          baseline: { state: 'present', units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' },
+          admission: { status: 'conditional', reason: null },
+          guard: {
+            version: 1,
+            question: { revision: 1, lifecycleRevision: 1 },
+            subject: { canonicalId: input.target, epochs: [] },
+            ownVote: { state: 'present', observation: 'illustrative-revision-3' },
+          },
+        };
+      }
+      row.review = review;
       row.scoreReviewState = input.score ? 'observations-match' : null;
       return { kind: 'reviewed', id };
     },
