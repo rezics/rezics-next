@@ -150,36 +150,39 @@ function isHistoryFunctionRead(href: string, postId: string): boolean {
 async function observeMountedHistory(page: Page, postId: string, controlId: string | null, nativeFrom: number) {
   const [mounted, native] = await Promise.all([
     settledWithin(
-      page.evaluate(({ postId, controlId }) => {
-        const post = document.getElementById(`post-${postId}`);
-        const control = post?.querySelector('button[aria-controls^="post-history-"]');
-        const currentId = control?.getAttribute('aria-controls');
-        const region = currentId ? document.getElementById(currentId) : null;
-        return {
-          hydrated: document.documentElement.hasAttribute('data-hydrated'),
-          postFound: !!post,
-          detailsOpen: control?.closest('details')?.open ?? null,
-          sameControl: currentId ? currentId === controlId : null,
-          expanded: control?.getAttribute('aria-expanded') ?? null,
-          region: region && {
-            hidden: region.hasAttribute('hidden'),
-            role: region.getAttribute('role'),
-            named: region.getAttribute('aria-label') === 'Revision history',
-            status: Array.from(region.querySelectorAll(':scope > p[role="status"], :scope > p[role="alert"]'))
-              .slice(0, 4)
-              .map((status) => status.textContent?.trim().slice(0, 160)),
-            summaries: region.querySelectorAll('[data-history-summary]').length,
-            lists: Array.from(region.querySelectorAll('ol, ul, [role="list"]'))
-              .slice(0, 4)
-              .map((list) => ({
-                tag: list.localName,
-                role: list.getAttribute('role'),
-                named: list.getAttribute('aria-label') === 'Revision history',
-                directItems: list.querySelectorAll(':scope > li').length,
-              })),
-          },
-        };
-      }, { postId, controlId }),
+      page.evaluate(
+        ({ postId, controlId }) => {
+          const post = document.getElementById(`post-${postId}`);
+          const control = post?.querySelector('button[aria-controls^="post-history-"]');
+          const currentId = control?.getAttribute('aria-controls');
+          const region = currentId ? document.getElementById(currentId) : null;
+          return {
+            hydrated: document.documentElement.hasAttribute('data-hydrated'),
+            postFound: !!post,
+            detailsOpen: control?.closest('details')?.open ?? null,
+            sameControl: currentId ? currentId === controlId : null,
+            expanded: control?.getAttribute('aria-expanded') ?? null,
+            region: region && {
+              hidden: region.hasAttribute('hidden'),
+              role: region.getAttribute('role'),
+              named: region.getAttribute('aria-label') === 'Revision history',
+              status: Array.from(region.querySelectorAll(':scope > p[role="status"], :scope > p[role="alert"]'))
+                .slice(0, 4)
+                .map((status) => status.textContent?.trim().slice(0, 160)),
+              summaries: region.querySelectorAll('[data-history-summary]').length,
+              lists: Array.from(region.querySelectorAll('ol, ul, [role="list"]'))
+                .slice(0, 4)
+                .map((list) => ({
+                  tag: list.localName,
+                  role: list.getAttribute('role'),
+                  named: list.getAttribute('aria-label') === 'Revision history',
+                  directItems: list.querySelectorAll(':scope > li').length,
+                })),
+            },
+          };
+        },
+        { postId, controlId },
+      ),
       1_500,
     ).catch(() => undefined),
     // Sample pending as well as completed worker requests without draining the Kernel.
@@ -236,7 +239,7 @@ describe('native document authoring', () => {
 
   async function preserveAuthoredDocuments() {
     const aliceJourney = await fixture.auth.signIn('alice');
-    const page = await aliceJourney.context.newPage();
+    const page = aliceJourney.continueOnPage();
     page.setDefaultTimeout(30_000);
     const network: { url: string; status: number }[] = [];
     const requestFailures: { url: string; failure: string | null }[] = [];
@@ -652,9 +655,12 @@ describe('native document authoring', () => {
       fullPage: true,
     });
 
+    const threadUrl = page.url();
+    await page.close();
+
     const bobJourney = await fixture.auth.signIn('bob');
-    const bobPage = await bobJourney.context.newPage();
-    await bobPage.goto(page.url(), { waitUntil: 'domcontentloaded' });
+    const bobPage = bobJourney.continueOnPage();
+    await bobPage.goto(threadUrl, { waitUntil: 'domcontentloaded' });
     await bobPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
     await bobPage
       .locator(`#post-${original.id}`)
@@ -664,6 +670,7 @@ describe('native document authoring', () => {
     const bobMenu = bobPage.getByRole('menu');
     await expect(bobMenu.getByRole('menuitem', { name: 'Copy link', exact: true })).toBeVisible();
     await expect(bobMenu.getByRole('menuitem', { name: 'Edit', exact: true })).toHaveCount(0);
+    await bobPage.close();
 
     const forbidden = await fixture.stack.kernel(
       `/v1/posts/${original.id}/revisions`,
@@ -691,7 +698,7 @@ describe('native document authoring', () => {
     for (const target of [1, 8, 64]) {
       await createGrowthThreads(target - unrelated);
       unrelated = target;
-      const requests = await measureHistoryReads(page.url(), aliceJourney.context, original.id);
+      const requests = await measureHistoryReads(threadUrl, aliceJourney.context, original.id);
       growthRequests.push({ unrelated, requests });
     }
     console.log(`native-document-authoring-growth ${JSON.stringify(growthRequests)}`);
