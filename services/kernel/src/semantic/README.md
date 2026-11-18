@@ -621,6 +621,8 @@ one bounded statement. The unlogged buffer holds only partition numbers and two-
 per topology home. The native links relay discards expired hints and alternates one hinted batch with oldest-first
 work while both queues have work. Hints affect scheduling only. The normal event validation, checkpoint advancement,
 freshness checks and final authorization still determine the response.
+A failed hint write can be retried within the original wait. An ordinary relay yields at a committed batch boundary
+when a hint arrives, then resumes from its checkpoint.
 
 Semantic keeps its logical snapshot registry and child deadline narrowing; the shared Kernel bounded read-only lifetime
 owns physical checkout, guarded SQL, transaction cleanup and uncertain-connection discard.

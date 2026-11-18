@@ -174,10 +174,14 @@ export async function linksCaughtUp(
       const remaining = deadline - Date.now();
       if (remaining < FRESHNESS_POLL_MS) return unfinished();
       if (anchor && !covered && lastObservation !== 'merge' && !requestedPriority) {
-        requestedPriority = true;
-        await withBoundedCommandConnection(pool, Math.min(deadline, Date.now() + FRESHNESS_POLL_MS), (client) =>
-          prioritizeReads.run(client, requirements),
-        ).catch(() => undefined); // The normal relay and the existing freshness wait remain available.
+        requestedPriority = await withBoundedCommandConnection(
+          pool,
+          Math.min(deadline, Date.now() + FRESHNESS_POLL_MS),
+          (client) => prioritizeReads.run(client, requirements),
+        ).then(
+          () => true,
+          () => false,
+        );
         if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
       }
       // The database connection is released before this wait; yield the request's admission permit too.
