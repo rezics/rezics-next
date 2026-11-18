@@ -500,6 +500,7 @@ export default defineConfig((context) => {
         // Workerd's runner eval has no `module`. CJS that still reaches this environment is named
         // here so the executing file is in the Vite log, then wrapped so inspection can finish.
         name: 'worker-cjs-eval-shim',
+        apply: 'serve',
         applyToEnvironment(environment) {
           return environment.name !== 'client';
         },
