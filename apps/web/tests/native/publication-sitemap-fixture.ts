@@ -31,7 +31,7 @@ export async function observePublicationSitemap(
     );
     const threads = await pool.query<{ id: string; board: string; created: Date; activity: Date }>(
       `SELECT thread_id AS id, board_id AS board, created_at AS created, last_activity_at AS activity
-       FROM content.thread WHERE thread_id = ANY($1::uuid[])`,
+       FROM content.board_thread WHERE thread_id = ANY($1::uuid[])`,
       [threadIds],
     );
     const inventory: PublicationFixture['sitemap']['agent'] = { eligible: [], excluded: [] };
