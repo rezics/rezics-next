@@ -17,6 +17,7 @@ let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
 const entryOnly = process.env.WEB_ARCHIVE_ENTRY_FOCUSED === '1';
+const japaneseHydrationOnly = process.env.WEB_ARCHIVE_JAPANESE_HYDRATION_FOCUSED === '1';
 const evidence = resolve(
   import.meta.dir,
   entryOnly
@@ -46,20 +47,26 @@ async function writeArchiveProvenance(result: object, path = provenance) {
 
 nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   const setupDeadline = Date.now() + 600_000;
-  await mkdir(evidence, { recursive: true, mode: 0o700 });
-  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
-  await writeArchiveProvenance(
-    { outcome: 'unreached', phase: 'before-progress' },
-    resolve(evidence, 'progress-boundary.json'),
-  );
+  if (!japaneseHydrationOnly) {
+    await mkdir(evidence, { recursive: true, mode: 0o700 });
+    await writeArchiveProvenance({ outcome: 'incomplete', phase: 'starting-native-stack' });
+    await writeArchiveProvenance(
+      { outcome: 'unreached', phase: 'before-progress' },
+      resolve(evidence, 'progress-boundary.json'),
+    );
+  }
   await prepareNativeAuthMessages();
-  await prepareNativeWebSearch('library-archive');
+  if (!japaneseHydrationOnly) await prepareNativeWebSearch('library-archive');
   stack = await startNativeWebStack({
-    observeBookSearchPreparation: !entryOnly,
+    observeBookSearchPreparation: !entryOnly && !japaneseHydrationOnly,
     observeArchiveEntry: true,
     observeArchiveProgress: true,
     observePersonalAccess: true,
   });
+  if (japaneseHydrationOnly) {
+    await openGates(stack, false);
+    return;
+  }
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'preparing-archive-subject' });
   archiveSubject = await prepareArchiveSubject(stack);
   await writeArchiveProvenance({ outcome: 'incomplete', phase: 'waiting-for-subject-publication' });
@@ -124,6 +131,7 @@ async function visitLocalizedArchive(
   locale: (typeof locales)[number],
   route: 'export' | 'recover-collections' | 'recover-archive',
   titleKey: string,
+  waitForWorkspace?: () => Promise<void>,
 ) {
   const target = new URL(`/${locale}/library/${route}`, stack.web);
   const issuer = new URL(stack.issuerOrigin).origin;
@@ -196,6 +204,10 @@ async function visitLocalizedArchive(
     stage = 'localized-heading';
     const expected = await message(locale, titleKey);
     await page.getByRole('heading', { name: expected }).waitFor({ state: 'visible' });
+    if (waitForWorkspace) {
+      stage = 'workspace';
+      await waitForWorkspace();
+    }
     stage = 'ready';
     return expected;
   } finally {
@@ -328,8 +340,10 @@ async function message(locale: (typeof locales)[number], key: string) {
   return body[key]!;
 }
 
-async function openGates(stack: NativeWebStack) {
-  for (const group of ['personal_library', 'collections', 'reading_progress', 'search'] as const) {
+async function openGates(stack: NativeWebStack, includeSearch = true) {
+  const groups = ['personal_library', 'collections', 'reading_progress', 'search'] as const;
+  for (const group of groups) {
+    if (group === 'search' && !includeSearch) continue;
     const opened = await stack.kernel(
       `/v1/platform/exposure/${group}:open`,
       { method: 'POST', headers: { 'idempotency-key': key() } },
@@ -1137,9 +1151,7 @@ async function restoreCollection(
   return { restoredId, nativeCollection, members, bobDenied };
 }
 
-async function restoreOwnerLibrary() {
-  const prepared = await prepareOwnerLibrary(stack);
-  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
+async function openOwnerArchive() {
   const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
   const page = signedIn.continueOnPage();
@@ -1149,6 +1161,45 @@ async function restoreOwnerLibrary() {
   await page.goto(`${stack.web}/en/library/export`, { waitUntil: 'domcontentloaded' });
   await hydrated(page);
   await page.getByRole('heading', { name: 'Export your Library' }).waitFor({ state: 'visible' });
+  return { auth, signedIn, page };
+}
+
+async function visitLocalizedArchiveRoutes(page: Page, waitForJapaneseWorkspace?: () => Promise<void>) {
+  const headings: Record<string, string> = {};
+  for (const locale of locales) {
+    headings[locale] = await visitLocalizedArchive(page, locale, 'export', 'library_export_title');
+  }
+  await visitLocalizedArchive(page, 'zh-Hant', 'recover-collections', 'library_archive_recovery_title');
+  await visitLocalizedArchive(page, 'ja', 'recover-archive', 'library_archive_title', waitForJapaneseWorkspace);
+  return headings;
+}
+
+async function probeJapaneseArchiveHydration() {
+  const { auth, page } = await openOwnerArchive();
+  // Load the English route modules in the same order as the populated journey.
+  const englishVisits = [
+    ['library_export_restore_collections', 'library_archive_recovery_title'],
+    ['library_archive_title', 'library_archive_title'],
+    ['library_archive_progress_title', 'library_archive_progress_title'],
+    ['library_export_title', 'library_export_title'],
+  ] as const;
+  for (const [destination, heading] of englishVisits) {
+    await leaveRecoveryFor(page, await message('en', destination), 'settled');
+    await page.getByRole('heading', { name: await message('en', heading), exact: true }).waitFor();
+  }
+  await visitLocalizedArchiveRoutes(page, async () => {
+    expect(new URL(page.url()).pathname).toBe('/ja/library/recover-archive');
+    await page.locator('#account-menu-button').waitFor({ state: 'visible' });
+    const archiveFile = page.getByLabel(await message('ja', 'library_archive_choose_file'), { exact: true });
+    await archiveFile.click({ trial: true });
+  });
+  await auth.stop();
+}
+
+async function restoreOwnerLibrary() {
+  const prepared = await prepareOwnerLibrary(stack);
+  await writeArchiveProvenance({ outcome: 'incomplete', phase: 'restoring-library' });
+  const { auth, signedIn, page } = await openOwnerArchive();
   const archivePath = await downloadArchive(page);
   const artifact = JSON.parse(await readFile(archivePath, 'utf8')) as {
     manifest: { version: number; coverage?: string; rows: number; sections: string[] };
@@ -1496,12 +1547,7 @@ async function restoreOwnerLibrary() {
     await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
-  const headings: Record<string, string> = {};
-  for (const locale of locales) {
-    headings[locale] = await visitLocalizedArchive(page, locale, 'export', 'library_export_title');
-  }
-  await visitLocalizedArchive(page, 'zh-Hant', 'recover-collections', 'library_archive_recovery_title');
-  await visitLocalizedArchive(page, 'ja', 'recover-archive', 'library_archive_title');
+  const headings = await visitLocalizedArchiveRoutes(page);
 
   // Finish Alice's localized visits before opening Bob's separate context.
   await signedIn.context.close();
@@ -1544,11 +1590,20 @@ async function restoreOwnerLibrary() {
   });
 }
 
-nativeTest(
-  entryOnly
-    ? 'owner exports a populated Library and restores Entry and Label through actual pages'
-    : 'owner exports a populated Library and restores Collection, Entry and progress through actual pages',
-  300_000,
-  restoreOwnerLibrary,
-  lifecycle,
-);
+if (japaneseHydrationOnly) {
+  nativeTest(
+    'owner hydrates Japanese Archive recovery after localized Export',
+    300_000,
+    probeJapaneseArchiveHydration,
+    lifecycle,
+  );
+} else {
+  nativeTest(
+    entryOnly
+      ? 'owner exports a populated Library and restores Entry and Label through actual pages'
+      : 'owner exports a populated Library and restores Collection, Entry and progress through actual pages',
+    300_000,
+    restoreOwnerLibrary,
+    lifecycle,
+  );
+}
