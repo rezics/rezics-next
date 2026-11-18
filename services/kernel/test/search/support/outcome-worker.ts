@@ -92,7 +92,7 @@ export async function readPublicationJobs(connection: Pick<Pool, 'query'>, prefi
 }
 
 /** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
-async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
+export async function inspectPublication(pool: Pick<Pool, 'query'>, prefix: string): Promise<Record<string, unknown>> {
   const nativeJobs = await readPublicationJobs(pool, prefix);
   const jobs = nativeJobs.map(({ consumer: _consumer, ...job }) => job);
   const locators = (
@@ -172,7 +172,7 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
          SELECT s.verified_ordinal,s.verified_home,s.complete,s.ack_after
          FROM semantic.public_filter_repair_step s
          WHERE (s.partition_no,s.bootstrap,s.execution)=(b.partition_no,b.bootstrap,b.publication_execution)
-         AND s.verified_root IS NOT NULL AND s.verified_next IS NULL LIMIT 1
+         AND s.verified_root IS NOT NULL ORDER BY s.verified_ordinal DESC LIMIT 1
        ) verified ON true
        LEFT JOIN core.partition p ON p.partition_no=b.account_after
        LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(b.account_after,b.bootstrap)

@@ -23,7 +23,7 @@ import {
   requireStatus,
   type TypeListRead,
 } from '../../performance/support/composed-discovery-fixtures.ts';
-import { readPublicationJobs } from './outcome-worker.ts';
+import { inspectPublication, readPublicationJobs } from './outcome-worker.ts';
 import { observeComposedWarmup } from './composed-page-cost.ts';
 
 const route = '/book-catalogue-cost';
@@ -38,7 +38,7 @@ type Original = Anchor & { label: string };
 type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 
-export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
+export async function publishBookOriginals(setupDeadline: number, cleanupMs: number) {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
@@ -99,7 +99,10 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
             ),
             publicationJobs(deadline).then((jobs) => jobs.map(({ consumer: _consumer, ...job }) => job), String),
           ]);
-          return { active, physical, jobs };
+          const publication = await withBoundedReadConnection(pool, deadline, (client) =>
+            inspectPublication(client, prefix),
+          );
+          return { active, physical, jobs, publication };
         } catch (error) {
           return { inventoryError: String(error) };
         }
@@ -209,6 +212,38 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       originals,
     );
 
+    return {
+      fixture,
+      database,
+      originals,
+      published,
+      waitForPublication,
+      createAnchor,
+      createSubject,
+      editorCredentialWindowMs,
+    };
+  } catch (error) {
+    try {
+      await owner?.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Book publication and cleanup failed', { cause: error });
+    }
+    throw error;
+  }
+}
+
+export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
+  const {
+    fixture,
+    database,
+    originals,
+    published,
+    waitForPublication,
+    createAnchor,
+    createSubject,
+    editorCredentialWindowMs,
+  } = await publishBookOriginals(setupDeadline, cleanupMs);
+  try {
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
       anchors.push({ id: originals[grain]!.id, type });
@@ -324,7 +359,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     };
   } catch (error) {
     try {
-      await owner?.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
+      await fixture.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
     } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], 'Book catalogue setup and cleanup failed', { cause: error });
     }
