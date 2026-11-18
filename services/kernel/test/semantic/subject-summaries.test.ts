@@ -433,7 +433,7 @@ test('summary batches refuse more than 256 ids before SQL', async () => {
   expect(queried).toBe(false);
 });
 
-test('subject summaries for a page use two bounded reads per partition, not one read per subject', async () => {
+test('subject summaries for a page use two bounded reads per batch across subject homes', async () => {
   const ids: string[] = [];
   const deps = dependencies();
   const unrelated = unrelatedSemanticPopulation(
@@ -486,7 +486,7 @@ test('subject summaries for a page use two bounded reads per partition, not one 
   logGrowthSeeding(report);
   // One distinct selected tuple in one home adds its native partition anchor and fence read (B = 1).
   // All existing row, block, population and deadline bounds still apply.
-  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([13, 13, 13]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([7, 7, 7]);
 }, 900_000);
 
 test('a representative cover read stays flat as the work gains editions', async () => {

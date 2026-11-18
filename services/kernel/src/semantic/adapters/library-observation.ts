@@ -446,10 +446,9 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
   }
   const subjectRead = (id: string) => {
     const route = routeOf(id)!;
-    const subjects = [{ route, id }];
-    const summarySubjects = [{ route, id, image: uuid, original: uuid }];
-    const selected = Array.from({ length: 12 }, (_, ordinal) => ({ id: uuid, slot_id: uuid, ordinal }));
-    const repOperands = operandsOf(representatives, { partition_no: partitionOf(route), subjects });
+    const key = { route, partition_no: partitionOf(route), id };
+    const selected = Array.from({ length: 12 }, (_, ordinal) => ({ slot_id: uuid, ordinal: ordinal + 1 }));
+    const repOperands = operandsOf(representatives, { subjects: [key] });
     const reps = sqlWork(representatives.sql, repOperands, {
       keys: 12,
       rows: 1 + 5 * 12,
@@ -459,10 +458,8 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
       width: size({ id: uuid, slot_id: uuid, ordinal: 12 }),
     });
     const summaryOperands = operandsOf(summaries, {
-      partition_no: partitionOf(route),
       context_id: uuid,
-      subjects: summarySubjects,
-      representatives: selected,
+      subjects: [{ ...key, image: uuid, original: uuid, representatives: selected }],
       bounded_labels: true,
       label_languages: ['en'],
       display_fallback: true,

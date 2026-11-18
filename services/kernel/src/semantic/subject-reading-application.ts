@@ -601,40 +601,38 @@ async function projectSummaries(
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
   const partitions = new Set<number>(releaseHome ? [0] : []);
   async function read(batch: readonly string[]): Promise<Map<string, Row>> {
-    const groups = new Map<number, string[]>();
+    const subjects = [];
     for (const id of new Set(batch)) {
       const route = routeOf(id);
       if (route === null) continue;
-      const partition = partitionOf(route);
-      const group = groups.get(partition) ?? [];
-      group.push(id);
-      groups.set(partition, group);
+      const partition_no = partitionOf(route);
+      partitions.add(partition_no);
+      subjects.push({ route, partition_no, id });
     }
     const rows = new Map<string, Row>();
-    for (const [partition, group] of groups) {
-      const parameters = {
-        partition_no: partition,
-        context_id: GLOBAL_SUBJECT_CONTEXT,
-        subjects: group.map((id) => ({
-          route: routeOf(id)!,
-          id,
-          image: slotId(id, 'schema:image'),
-          original: slotId(id, 'schema:inLanguage'),
-        })),
-      };
-      const subjects = group.map((id) => ({ route: routeOf(id)!, id }));
-      partitions.add(partition);
-      const representatives = (
-        await readRepresentativeEditions.run(storage.client, { partition_no: partition, subjects })
-      ).map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
-      const summaryParameters = { ...parameters, representatives };
-      const found = (await readSummaries.run(storage.client, {
-        ...summaryParameters,
-        bounded_labels: labelLanguages !== undefined,
-        label_languages: [...(labelLanguages ?? [])],
-        display_fallback: displayFallback,
-      })) as Row[];
-      for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
+    if (!subjects.length) return rows;
+    const slots = new Map<string, { slot_id: string; ordinal: number }[]>();
+    for (const { id, slot_id, ordinal } of await readRepresentativeEditions.run(deps.client, { subjects })) {
+      const selected = slots.get(id) ?? [];
+      selected.push({ slot_id, ordinal: Number(ordinal) });
+      slots.set(id, selected);
+    }
+    const found = (await readSummaries.run(deps.client, {
+      context_id: GLOBAL_SUBJECT_CONTEXT,
+      subjects: subjects.map((key) => ({
+        ...key,
+        image: slotId(key.id, 'schema:image'),
+        original: slotId(key.id, 'schema:inLanguage'),
+        representatives: slots.get(key.id) ?? [],
+      })),
+      bounded_labels: labelLanguages !== undefined,
+      label_languages: [...(labelLanguages ?? [])],
+      display_fallback: displayFallback,
+    })) as Row[];
+    const byId = new Map(found.map((row) => [row.id, row]));
+    for (const { id } of subjects) {
+      const row = byId.get(id);
+      if (row && (await deps.authorize(deps.client, id, batch))) rows.set(id, row);
     }
     return rows;
   }
@@ -722,8 +720,8 @@ async function projectSummaries(
     group.push(tuple);
     homes.set(partition, group);
   }
-  // The same RR snapshot also binds every home that produced facts, including
-  // empty/missing probes. Batched partition metadata is not a cross-home row join.
+  // Verify every addressed home, including empty subject probes, on the same
+  // snapshot before returning results. Each fact probe uses its own route and home.
   const anchored = await partitionReadClients(deps.client, [...partitions, ...homes.keys()]);
   const unfenced = new Set<string>();
   const deadline = deps.deadline;

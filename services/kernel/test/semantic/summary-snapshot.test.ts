@@ -49,6 +49,7 @@ test('A default mounted summary batch spanning logical partitions uses one real 
     expect(before.get(missing)).toBeNull();
     expect(partitionOf(routeOf(work.id)!)).not.toBe(partitionOf(routeOf(neighbour.id)!));
     expect(partitionOf(routeOf(work.id)!)).not.toBe(partitionOf(routeOf(edition.id)!));
+    const summaryIds = [work.id, neighbour.id, edition.id];
 
     const kernel = createKernel({
       pool: database.pool,
@@ -151,14 +152,13 @@ test('A default mounted summary batch spanning logical partitions uses one real 
               `SELECT pg_backend_pid() AS backend,pg_current_snapshot()::text AS snapshot,
                       current_setting('transaction_isolation') AS isolation,current_setting('transaction_read_only') AS readonly`,
             );
-            const resources: unknown =
-              kind === 'authorization' ? values?.[permissionRead.params.indexOf('resource_ids')] : undefined;
+            const resourceIds = String(values?.[permissionRead.params.indexOf('resource_ids')]);
             samples.push({
               kind,
               transaction,
               checkout: acquisitions.get(client)!,
               ...observed.rows[0]!,
-              resources: Array.isArray(resources) ? resources.filter((id): id is string => typeof id === 'string') : [],
+              resources: kind === 'authorization' ? summaryIds.filter((id) => resourceIds.includes(id)) : [],
             });
           }
           const result = await query(...args);
@@ -189,7 +189,9 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       );
       expect(body.nodes.some((node: { id: string }) => node.id === hidden.id)).toBe(false);
       const complete = transactions.filter((tx) =>
-        samples.some((sample) => sample.transaction === tx && sample.kind === 'fence'),
+        ['representative', 'fence'].every((kind) =>
+          samples.some((sample) => sample.transaction === tx && sample.kind === kind),
+        ),
       );
       expect(complete).toHaveLength(1);
       const final = complete[0]!;
@@ -198,13 +200,16 @@ test('A default mounted summary batch spanning logical partitions uses one real 
       expect(new Set(finalSamples.map((sample) => sample.kind))).toEqual(
         new Set(['representative', 'summary', 'authorization', 'media', 'fence']),
       );
+      // One pair for originals across homes and one pair for the discovered edition.
+      for (const kind of ['representative', 'summary'])
+        expect(finalSamples.filter((sample) => sample.kind === kind)).toHaveLength(2);
       expect(new Set(finalSamples.map((sample) => sample.checkout))).toEqual(new Set([final.checkout]));
       expect(new Set(finalSamples.map((sample) => sample.backend)).size).toBe(1);
       expect(new Set(finalSamples.map((sample) => sample.snapshot)).size).toBe(1);
       const checked = new Set(
         finalSamples.filter((sample) => sample.kind === 'authorization').flatMap((s) => s.resources),
       );
-      for (const id of [work.id, neighbour.id, edition.id]) expect(checked.has(id)).toBe(true);
+      for (const id of summaryIds) expect(checked.has(id)).toBe(true);
       for (const sample of finalSamples) {
         expect(sample.isolation).toBe('repeatable read');
         expect(sample.readonly).toBe('on');

@@ -372,15 +372,15 @@ test('bounded graph summary filling preserves the shared 256 ID limit', async ()
       graph.nodes.some((node: { id: string }) => node.id === entry.node),
     ),
   ).toBe(true);
-  // Two chunks, each touching both subject partitions. Count actual shared SQL, including its representative probes.
+  // Two chunks, each batching both subject homes.
   const summaryReads = measured.capture.statements.filter((text) =>
     text.includes('Only the requested image, representative-edition and original-language slots'),
   );
   const representativeReads = measured.capture.statements.filter((text) =>
     text.includes('row_number() OVER (ORDER BY ordered.order_key'),
   );
-  expect(summaryReads).toHaveLength(4);
-  expect(representativeReads).toHaveLength(4);
+  expect(summaryReads).toHaveLength(2);
+  expect(representativeReads).toHaveLength(2);
   expect(partitionOf(routeOf(anchor)!)).toBe(2500);
   const cost = costOf(measured.capture);
   console.info(
