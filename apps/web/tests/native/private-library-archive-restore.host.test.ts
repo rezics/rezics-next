@@ -10,6 +10,8 @@ import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settl
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
+import { observeWebDocumentModules } from './web-document-modules.ts';
+import type { WebModuleFailureTrace } from './web-module-failure.ts';
 import { archiveProgressOperation } from './archive-progress-observation.ts';
 import { archiveLabelServerReply, type ArchiveLabelIdentity } from './archive-label-observation.ts';
 
@@ -131,6 +133,7 @@ async function visitLocalizedArchive(
   locale: (typeof locales)[number],
   route: 'export' | 'recover-collections' | 'recover-archive',
   titleKey: string,
+  trace: WebModuleFailureTrace | undefined,
   waitForWorkspace?: () => Promise<void>,
 ) {
   const target = new URL(`/${locale}/library/${route}`, stack.web);
@@ -153,8 +156,7 @@ async function visitLocalizedArchive(
   const failedImports = new Set<string>();
   const observeRequest = (request: Request) => {
     // Requests still settling from the previous visit do not belong to this document.
-    if (request.resourceType() === 'script' && documents.at(-1)?.path === 'expected')
-      scriptStatuses.set(request, null);
+    if (request.resourceType() === 'script' && documents.at(-1)?.path === 'expected') scriptStatuses.set(request, null);
   };
   const recordScriptFailure = (request: Request, status: number | null, error: string | null) => {
     if (!failedScripts.has(request) && failedScripts.size >= 8) return;
@@ -192,6 +194,9 @@ async function visitLocalizedArchive(
     } else if (/hydrat(?:e|ion)/iu.test(message)) recordError('hydration');
     else recordError(['TypeError', 'SyntaxError', 'ReferenceError', 'RangeError'].includes(name) ? name : 'page-error');
   };
+  const moduleVisit =
+    trace && (await observeWebDocumentModules(page, target, (url) => archiveModuleLabel(url, target.origin)));
+  if (trace && moduleVisit) trace.document = moduleVisit;
   page.on('request', observeRequest);
   page.on('response', observeResponse);
   page.on('requestfailed', observeRequestFailure);
@@ -239,6 +244,8 @@ async function visitLocalizedArchive(
     page.off('response', observeResponse);
     page.off('requestfailed', observeRequestFailure);
     page.off('pageerror', observePageError);
+    const transport = stage !== 'ready' ? moduleVisit?.snapshot() : undefined;
+    if (trace) delete trace.document;
     console.info(
       'Native Library Archive localized visit',
       JSON.stringify({
@@ -253,8 +260,10 @@ async function visitLocalizedArchive(
         browserErrors: [...browserErrors],
         failedScripts: [...failedScripts.values()],
         failedImports: [...failedImports],
+        transport,
       }),
     );
+    await moduleVisit?.close().catch(() => {});
   }
 }
 
@@ -1152,7 +1161,11 @@ async function restoreCollection(
 }
 
 async function openOwnerArchive() {
-  const auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
+  const auth = await startAuthStack(stack, {
+    preparedMessages: true,
+    useHeadlessShell: true,
+    traceModules: japaneseHydrationOnly,
+  });
   const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
   const page = signedIn.continueOnPage();
   await auth.settlePageApp();
@@ -1164,13 +1177,17 @@ async function openOwnerArchive() {
   return { auth, signedIn, page };
 }
 
-async function visitLocalizedArchiveRoutes(page: Page, waitForJapaneseWorkspace?: () => Promise<void>) {
+async function visitLocalizedArchiveRoutes(
+  page: Page,
+  trace: WebModuleFailureTrace | undefined,
+  waitForJapaneseWorkspace?: () => Promise<void>,
+) {
   const headings: Record<string, string> = {};
   for (const locale of locales) {
-    headings[locale] = await visitLocalizedArchive(page, locale, 'export', 'library_export_title');
+    headings[locale] = await visitLocalizedArchive(page, locale, 'export', 'library_export_title', trace);
   }
-  await visitLocalizedArchive(page, 'zh-Hant', 'recover-collections', 'library_archive_recovery_title');
-  await visitLocalizedArchive(page, 'ja', 'recover-archive', 'library_archive_title', waitForJapaneseWorkspace);
+  await visitLocalizedArchive(page, 'zh-Hant', 'recover-collections', 'library_archive_recovery_title', trace);
+  await visitLocalizedArchive(page, 'ja', 'recover-archive', 'library_archive_title', trace, waitForJapaneseWorkspace);
   return headings;
 }
 
@@ -1187,7 +1204,7 @@ async function probeJapaneseArchiveHydration() {
     await leaveRecoveryFor(page, await message('en', destination), 'settled');
     await page.getByRole('heading', { name: await message('en', heading), exact: true }).waitFor();
   }
-  await visitLocalizedArchiveRoutes(page, async () => {
+  await visitLocalizedArchiveRoutes(page, auth.moduleFailureTrace, async () => {
     expect(new URL(page.url()).pathname).toBe('/ja/library/recover-archive');
     await page.locator('#account-menu-button').waitFor({ state: 'visible' });
     const archiveFile = page.getByLabel(await message('ja', 'library_archive_choose_file'), { exact: true });
@@ -1547,7 +1564,7 @@ async function restoreOwnerLibrary() {
     await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
-  const headings = await visitLocalizedArchiveRoutes(page);
+  const headings = await visitLocalizedArchiveRoutes(page, auth.moduleFailureTrace);
 
   // Finish Alice's localized visits before opening Bob's separate context.
   await signedIn.context.close();

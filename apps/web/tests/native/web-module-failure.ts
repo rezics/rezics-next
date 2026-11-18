@@ -1,4 +1,5 @@
 import { inspectNativeProcess } from './lifecycle.ts';
+import type { WebDocumentModules } from './web-document-modules.ts';
 import type { NativeMemoryObservation } from './native-memory.ts';
 
 export type WebModuleFailure = {
@@ -10,10 +11,11 @@ export type WebModuleFailure = {
 
 export type WebModuleFailureTrace = {
   origin: string;
+  document?: WebDocumentModules;
   report(failure: WebModuleFailure): void;
 };
 
-function transportError(error: unknown): string | undefined {
+export function transportError(error: unknown): string | undefined {
   if (!(error instanceof Error)) return;
   if (error.name === 'AbortError' || error.name === 'TimeoutError') return error.name;
   for (const value of [error, error.cause]) {

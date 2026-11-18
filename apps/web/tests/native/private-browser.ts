@@ -5,7 +5,8 @@ import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { ownBridgeSocket } from './private-browser-socket.ts';
-import type { WebModuleFailureTrace } from './web-module-failure.ts';
+import { moduleContentType, type WebModuleTransfer } from './web-document-modules.ts';
+import { transportError, type WebModuleFailureTrace } from './web-module-failure.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
@@ -220,8 +221,10 @@ export async function launchPrivateBrowser(
     });
     socket.on('end', () => {
       if (mode !== 'http') return;
+      const documentTrace = moduleFailureTrace?.document;
       void withSlot(async () => {
         let controller: AbortController | undefined;
+        let transfer: WebModuleTransfer | undefined;
         let moduleStarted: number | undefined;
         let upstreamStatus: number | undefined;
         try {
@@ -254,8 +257,23 @@ export async function launchPrivateBrowser(
             target.origin === moduleFailureTrace?.origin &&
             request.method === 'GET' &&
             headers.get('sec-fetch-dest') === 'script'
-          )
+          ) {
             moduleStarted = performance.now();
+            transfer = documentTrace?.upstream(target.href, headers.has('if-none-match'));
+            if (transfer) {
+              const observed = transfer;
+              const settled = (outcome: 'failed' | 'finished') => {
+                if (observed.socketWrite) return;
+                observed.socketWrite = outcome;
+                observed.socketSettledMs = Math.round(performance.now());
+              };
+              if (socket.destroyed) settled('failed');
+              else {
+                socket.once('finish', () => settled('finished'));
+                socket.once('close', () => settled('failed'));
+              }
+            }
+          }
           const response = await fetch(target, {
             method: request.method,
             headers,
@@ -264,7 +282,16 @@ export async function launchPrivateBrowser(
             signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
           });
           upstreamStatus = response.status;
+          if (transfer) {
+            transfer.status = response.status;
+            transfer.mime = moduleContentType(response.headers.get('content-type'));
+          }
           const responseBody = Buffer.from(await response.arrayBuffer());
+          if (transfer) {
+            transfer.bytes = responseBody.length;
+            if (responseBody[0] === 60)
+              transfer.htmlBody = /^<(?:!doctype\s+html|html)\b/iu.test(responseBody.toString('ascii', 0, 64));
+          }
           if (responseBody.length > maxFrameBytes)
             throw new Error('Private browser bridge response exceeded its size bound');
           if (!socket.destroyed && moduleStarted !== undefined && upstreamStatus === 502)
@@ -285,6 +312,7 @@ export async function launchPrivateBrowser(
             body: responseBody.toString('base64'),
           });
         } catch (error) {
+          if (transfer) transfer.error = transportError(error) ?? 'unclassified';
           if (socket.destroyed) return;
           if (moduleStarted !== undefined)
             moduleFailureTrace?.report({
