@@ -534,6 +534,45 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: public_filter_coverage_home; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_coverage_home (
+    partition_no integer NOT NULL,
+    registration text NOT NULL COLLATE pg_catalog."C",
+    source_home integer NOT NULL,
+    source_epoch integer NOT NULL,
+    relevant_position bigint NOT NULL,
+    acknowledged_position bigint DEFAULT 0 NOT NULL,
+    native_enqueue_revision bigint DEFAULT 0 NOT NULL,
+    native_revision bigint,
+    native_claim_revision bigint,
+    acknowledged_native_revision bigint,
+    acknowledged_native_claim_revision bigint,
+    last_change_generation bigint NOT NULL,
+    behind boolean DEFAULT true NOT NULL,
+    acknowledged_native_enqueue bigint DEFAULT 0 CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueu_not_null NOT NULL,
+    baseline_bootstrap uuid,
+    acknowledged_baseline uuid,
+    acknowledged_observation text,
+    acknowledged_execution text,
+    acknowledged_settlement text,
+    CONSTRAINT public_filter_coverage_ack_receipt CHECK ((((acknowledged_observation IS NULL) = (acknowledged_execution IS NULL)) AND ((acknowledged_execution IS NULL) = (acknowledged_settlement IS NULL)) AND ((acknowledged_settlement IS NULL) OR (acknowledged_baseline IS NOT NULL)))),
+    CONSTRAINT public_filter_coverage_home_ack_prefix CHECK ((behind OR ((baseline_bootstrap IS NOT NULL) AND (acknowledged_baseline IS NOT NULL) AND (acknowledged_baseline = baseline_bootstrap) AND (acknowledged_position >= relevant_position) AND (acknowledged_native_enqueue >= native_enqueue_revision) AND ((native_revision IS NULL) OR ((acknowledged_native_revision IS NOT NULL) AND (acknowledged_native_revision >= native_revision))) AND ((native_claim_revision IS NULL) OR ((acknowledged_native_claim_revision IS NOT NULL) AND (acknowledged_native_claim_revision >= native_claim_revision)))))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_execution_check CHECK (((octet_length(acknowledged_execution) >= 1) AND (octet_length(acknowledged_execution) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueue_check CHECK ((acknowledged_native_enqueue >= 0)),
+    CONSTRAINT public_filter_coverage_home_acknowledged_observation_check CHECK (((octet_length(acknowledged_observation) >= 1) AND (octet_length(acknowledged_observation) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_acknowledged_position_check CHECK ((acknowledged_position >= 0)),
+    CONSTRAINT public_filter_coverage_home_acknowledged_settlement_check CHECK (((octet_length(acknowledged_settlement) >= 1) AND (octet_length(acknowledged_settlement) <= 4096))),
+    CONSTRAINT public_filter_coverage_home_last_change_generation_check CHECK ((last_change_generation >= 0)),
+    CONSTRAINT public_filter_coverage_home_native_enqueue_revision_check CHECK ((native_enqueue_revision >= 0)),
+    CONSTRAINT public_filter_coverage_home_relevant_position_check CHECK ((relevant_position >= 0)),
+    CONSTRAINT public_filter_coverage_home_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT public_filter_coverage_home_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
+);
+
+
+--
 -- Name: discovery_copy; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1231,45 +1270,6 @@ CREATE TABLE search.public_filter_coverage_baseline (
     CONSTRAINT public_filter_coverage_baseline_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT public_filter_coverage_baseline_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095))),
     CONSTRAINT public_filter_coverage_baseline_source_position_check CHECK ((source_position >= 0))
-);
-
-
---
--- Name: public_filter_coverage_home; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_filter_coverage_home (
-    partition_no integer NOT NULL,
-    registration text NOT NULL COLLATE pg_catalog."C",
-    source_home integer NOT NULL,
-    source_epoch integer NOT NULL,
-    relevant_position bigint NOT NULL,
-    acknowledged_position bigint DEFAULT 0 NOT NULL,
-    native_enqueue_revision bigint DEFAULT 0 NOT NULL,
-    native_revision bigint,
-    native_claim_revision bigint,
-    acknowledged_native_revision bigint,
-    acknowledged_native_claim_revision bigint,
-    last_change_generation bigint NOT NULL,
-    behind boolean DEFAULT true NOT NULL,
-    acknowledged_native_enqueue bigint DEFAULT 0 CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueu_not_null NOT NULL,
-    baseline_bootstrap uuid,
-    acknowledged_baseline uuid,
-    acknowledged_observation text,
-    acknowledged_execution text,
-    acknowledged_settlement text,
-    CONSTRAINT public_filter_coverage_ack_receipt CHECK ((((acknowledged_observation IS NULL) = (acknowledged_execution IS NULL)) AND ((acknowledged_execution IS NULL) = (acknowledged_settlement IS NULL)) AND ((acknowledged_settlement IS NULL) OR (acknowledged_baseline IS NOT NULL)))),
-    CONSTRAINT public_filter_coverage_home_ack_prefix CHECK ((behind OR ((baseline_bootstrap IS NOT NULL) AND (acknowledged_baseline IS NOT NULL) AND (acknowledged_baseline = baseline_bootstrap) AND (acknowledged_position >= relevant_position) AND (acknowledged_native_enqueue >= native_enqueue_revision) AND ((native_revision IS NULL) OR ((acknowledged_native_revision IS NOT NULL) AND (acknowledged_native_revision >= native_revision))) AND ((native_claim_revision IS NULL) OR ((acknowledged_native_claim_revision IS NOT NULL) AND (acknowledged_native_claim_revision >= native_claim_revision)))))),
-    CONSTRAINT public_filter_coverage_home_acknowledged_execution_check CHECK (((octet_length(acknowledged_execution) >= 1) AND (octet_length(acknowledged_execution) <= 4096))),
-    CONSTRAINT public_filter_coverage_home_acknowledged_native_enqueue_check CHECK ((acknowledged_native_enqueue >= 0)),
-    CONSTRAINT public_filter_coverage_home_acknowledged_observation_check CHECK (((octet_length(acknowledged_observation) >= 1) AND (octet_length(acknowledged_observation) <= 4096))),
-    CONSTRAINT public_filter_coverage_home_acknowledged_position_check CHECK ((acknowledged_position >= 0)),
-    CONSTRAINT public_filter_coverage_home_acknowledged_settlement_check CHECK (((octet_length(acknowledged_settlement) >= 1) AND (octet_length(acknowledged_settlement) <= 4096))),
-    CONSTRAINT public_filter_coverage_home_last_change_generation_check CHECK ((last_change_generation >= 0)),
-    CONSTRAINT public_filter_coverage_home_native_enqueue_revision_check CHECK ((native_enqueue_revision >= 0)),
-    CONSTRAINT public_filter_coverage_home_relevant_position_check CHECK ((relevant_position >= 0)),
-    CONSTRAINT public_filter_coverage_home_source_epoch_check CHECK ((source_epoch > 0)),
-    CONSTRAINT public_filter_coverage_home_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
 );
 
 
