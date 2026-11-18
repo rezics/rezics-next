@@ -6,6 +6,7 @@ import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './b
 import { systemClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
+import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -77,6 +78,7 @@ export async function readCollectionSourceMembers(
     deadline: number;
     query?: { filter: FilterDocument; releaseDigest: string; admission?: CollectionMemberAdmission };
     view?: 'BASIC' | 'FULL';
+    readViewerFacts?: ReadMemberViewerFacts;
     ledger?: ReturnType<typeof ownerQueryWork>;
     languages?: readonly string[];
     /** Actual owner-home reread after releasing all foreign source homes. */
@@ -210,6 +212,7 @@ export async function readCollectionSourceMembers(
         .map((subjectId) => ({ kind: 'dynamic' as const, subjectId }));
       if (!initial.exhausted && members.length <= input.limit) throw new ProblemError('semantic_not_ready');
       const shown = members.slice(0, input.limit);
+      const revalidateViewer = input.view === 'FULL' ? await input.readViewerFacts?.(shown) : undefined;
       const revalidate = async () => {
         const finalAt = await readTime();
         try {
@@ -236,6 +239,7 @@ export async function readCollectionSourceMembers(
           // The fresh logical Source admits the same owner. The window joins its exact current fact head.
           if (final.source.observation.sourceIdentity.generation !== version)
             throw new ProblemError('semantic_not_ready');
+          await revalidateViewer?.();
           const fresh = await readTime();
           try {
             await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => subjects.revalidate(fresh));

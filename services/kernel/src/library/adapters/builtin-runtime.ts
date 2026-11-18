@@ -326,6 +326,7 @@ export function createNativeBuiltinRuntime(
           ...(options.view === undefined ? {} : { view: options.view }),
           ...(options.languages === undefined ? {} : { languages: options.languages }),
           ledger,
+          ...(options.readViewerFacts ? { readViewerFacts: options.readViewerFacts } : {}),
           revalidateOwner: options.revalidateOwner,
           readSourceVersion: options.readSourceVersion,
         },

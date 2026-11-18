@@ -1096,9 +1096,12 @@ the remaining page allowance across refills and compares the full query basis, i
 The mounted statement-range reader selects the current generation and its ordered original, terminal, driver and
 fact keys in a bounded suffix. Each key retains its live support decision. A trailing incomplete group supplies
 ordering evidence only. Semantic discloses the directed pairs in batches of up to 100 on the owner page ledger.
-The reader compares the ordered filter decisions and evidence, the Source and the owner fact head after FULL
-projection, then revalidates every disclosure batch at fresh native time. The entry-only reader uses the same
-disclosure port on its complete self-mapped population. An ordinary scalar point read requires a priced
+Mounted FULL reads obtain viewer actions for the selected IDs before projecting their current Subject and list facts.
+The reader compares the ordered filter decisions and evidence, the Source, the owner fact head and the original
+mounted viewer after projection, then revalidates every disclosure batch at fresh native time on the same page
+ledger. The entry-only reader uses the same disclosure port on its complete self-mapped population. Its open-gate
+entry window reads the active definition head in the owner statement snapshot. A closed gate requires ordinary
+Access admission on the remaining allowance. An ordinary scalar point read requires a priced
 literal for every lookup. Current per-Subject mapping and catalogue selection do not provide a complete
 102-entry direct range read within the ordinary 12 statements. Published scope revalidation and Search
 preparation also need to fit both page phases before a mounted positive can be accepted.
