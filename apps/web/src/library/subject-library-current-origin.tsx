@@ -158,15 +158,24 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
     return {
       owner: crypto.randomUUID(),
       read,
+      snapshot: () => value,
       server: () => server,
       isMounted: () => mounted,
       subscribe: (notify: () => void) => {
         mounted = true;
-        const reconcile = () => {
-          const before = value;
-          if (read() !== before) notify();
+        let subscribed = true;
+        let published = value;
+        const publish = () => {
+          if (subscribed && published !== value) {
+            published = value;
+            notify();
+          }
         };
-        const cache = client.getQueryCache().subscribe(({ query, type }) => {
+        const reconcile = () => {
+          if (read() !== published) exposureLifetime.publish(publish);
+        };
+        const cache = exposureLifetime.subscribeCache(({ query, type }) => {
+          if (type !== 'added' && type !== 'removed' && type !== 'updated') return;
           if (query.queryKey[0] !== 'session' && query.queryKey[0] !== 'exposure') return;
           const enrolled = exposureLifetime.getSnapshot();
           if (
@@ -184,7 +193,6 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
           }
           reconcile();
         });
-        const stopExposure = exposureLifetime.subscribe(reconcile);
         const navigation = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
           const next = subjectSlotReturnTo(toLocation.publicHref, subject, locale);
           if (address !== next) {
@@ -194,10 +202,10 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
         });
         reconcile();
         return () => {
+          subscribed = false;
           mounted = false;
           cache();
           navigation();
-          stopExposure();
           // Setup never reactivates an episode retired by cleanup, including StrictMode replay.
           value = {
             ...value,
@@ -210,6 +218,6 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
       },
     };
   }, [client, router, subject.id, subject.type, locale]);
-  const value = useSyncExternalStore(observation.subscribe, observation.read, observation.server);
+  const value = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.server);
   return { ...observation, value };
 }
