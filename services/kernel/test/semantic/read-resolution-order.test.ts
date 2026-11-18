@@ -66,17 +66,6 @@ afterAll(async () => {
   await admin.end();
 });
 
-function actor(persona: keyof typeof accounts): AccountActor {
-  return {
-    kind: 'account',
-    accountId: accounts[persona],
-    clientId: 'semantic-read-resolution',
-    scopes: actions,
-    requestedBy: null,
-    authnEpoch: 1,
-  };
-}
-
 async function libraryActor(persona: keyof typeof accounts, authPool: typeof pool = pool): Promise<AccountActor> {
   return (await actorOf(
     libraryAccess,
