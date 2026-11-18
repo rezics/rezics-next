@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
@@ -6,7 +7,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { workStepDeadline } from './collection-command-work.ts';
-import { readOwnerIndexFrontier, stepOwnerIndex, type OwnerIndexFrontier } from './owner-index.ts';
+import { readOwnerIndexWorkFrontier, stepOwnerIndex, type OwnerIndexWorkFrontier } from './owner-index.ts';
 import {
   applyOwnerPinMeaning,
   loadOwnerPinMeaning,
@@ -25,7 +26,7 @@ export function observeOwnerPinCapture(pool: WorkContext['pool'], capture: (valu
   pinCaptures.set(pool, capture);
   return () => pinCaptures.delete(pool);
 }
-type Locator = { accounts: [string]; frontier: OwnerIndexFrontier | null; metadata: boolean };
+type Locator = { accounts: [string]; frontier: OwnerIndexWorkFrontier | null; metadata: boolean };
 type Sweep = { root: string; sequence: number; partition: number; route: number | null; account: string | null };
 
 function owner(input: Locator): string {
@@ -41,7 +42,7 @@ function owner(input: Locator): string {
   if (routeOf(account) === null) throw new TypeError('Invalid owner index account');
   if (
     input.frontier &&
-    (!['entry', 'session', 'copy', 'label', 'ready'].includes(input.frontier.phase) ||
+    (!['entry', 'session', 'copy', 'label', 'personal', 'label-repair', 'ready'].includes(input.frontier.phase) ||
       (input.frontier.subject !== null && routeOf(input.frontier.subject) === null) ||
       (input.frontier.fact !== null && routeOf(input.frontier.fact) === null))
   )
@@ -66,10 +67,20 @@ function transaction<T>(context: WorkContext, accountId: string, body: (tx: Oper
 async function enqueue(tx: OperationalTransaction, input: Locator) {
   const account = owner(input),
     f = input.frontier;
+  // A parent can be deleted and restored repeatedly at the same child frontier. Each committed
+  // repair page owns its intent. The row under the writer lock remains the replay check.
+  let suffix = '';
+  if (f?.phase === 'label-repair') {
+    const { rows } = await tx.query<{ generation: string }>(
+      'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
+      [routeOf(account), account],
+    );
+    suffix = `:${rows[0]!.generation}`;
+  }
   await enqueueIntent(tx, {
     queue: 'maintenance',
     workflowName: OWNER_INDEX_WORKFLOW,
-    workflowId: `${OWNER_INDEX_WORKFLOW}:${account}:${input.metadata ? 'metadata' : 'facts'}:${f?.phase ?? 'start'}:${f?.subject ?? '-'}:${f?.fact ?? '-'}`,
+    workflowId: `${OWNER_INDEX_WORKFLOW}:${account}:${input.metadata ? 'metadata' : 'facts'}:${f?.phase ?? 'start'}:${f?.subject ?? '-'}:${f?.fact ?? '-'}${suffix}`,
     input,
   });
 }
@@ -88,10 +99,10 @@ async function page(context: WorkContext, input: Locator) {
     return;
   }
   await transaction(context, accountId, async (tx) => {
-    const current = await readOwnerIndexFrontier(tx, accountId);
-    if (JSON.stringify(current) !== JSON.stringify(input.frontier)) return;
+    const current = await readOwnerIndexWorkFrontier(tx, accountId);
+    if (!isDeepStrictEqual(current, input.frontier)) return;
     const next = await stepOwnerIndex(tx, accountId);
-    if (JSON.stringify(next) !== JSON.stringify(current))
+    if (!isDeepStrictEqual(next, current))
       await enqueue(tx, { accounts: [accountId], frontier: next, metadata: false });
   });
 }
@@ -119,7 +130,7 @@ export async function registerOwnerIndexWork(context: WorkContext) {
       );
       const row = rows[0];
       if (!row) return { ...input, partition: input.partition + 1, route: null, account: null };
-      const frontier = await withConnection(context.pool, (client) => readOwnerIndexFrontier(client, row.account));
+      const frontier = await withConnection(context.pool, (client) => readOwnerIndexWorkFrontier(client, row.account));
       // This is already a registered step; call the transaction body, never nest DBOS steps.
       await apply({ accounts: [row.account], frontier, metadata: false });
       await apply({ accounts: [row.account], frontier: null, metadata: true });

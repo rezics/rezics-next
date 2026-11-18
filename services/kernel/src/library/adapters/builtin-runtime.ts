@@ -16,6 +16,7 @@ import { routeOf } from '../../route/route.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from '../builtin-identity.ts';
 import { readBuiltinStateReference } from '../builtin-reference-store.ts';
 import {
+  isOwnerEverythingEmpty,
   readOwnerFactPresence,
   readOwnerIndexFrontier,
   readOwnerOriginalPrefix,
@@ -290,8 +291,7 @@ export function createNativeBuiltinRuntime(
           return page.subjects.length === 0 && page.next === null;
         }
         if (source.builtinKind !== 'everything') return false;
-        const presence = await readOwnerFactPresence(client, owner.accountId);
-        return !Object.values(presence).some(Boolean);
+        return isOwnerEverythingEmpty(client, owner.accountId);
       }, deadline);
     },
     async readPage(actor, collectionId, options) {
