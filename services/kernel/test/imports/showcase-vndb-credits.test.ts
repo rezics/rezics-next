@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import type { ShowcaseAssertion } from '../../../importer/src/showcase-contract.ts';
-import { creditSlot, statementOnPublicRead } from '../../../importer/src/showcase-current-reads.ts';
+import { relationSlot, statementOnPublicRead } from '../../../importer/src/showcase-current-reads.ts';
 import {
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
@@ -157,7 +157,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     const destination = { origin: runtime.origin };
     let result = await seedCrossMedia(plan, statePath, port, destination, { mediaDeadlineMs: 0 });
 
-    async function reviewSlot(subjectId: string, property: string, slot?: ReturnType<typeof creditSlot>) {
+    async function reviewSlot(subjectId: string, property: string, slot?: ReturnType<typeof relationSlot>) {
       const listing = await review.reviewedCandidates(subjectId, {
         property,
         ...slot,
@@ -184,7 +184,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       property: string,
       candidate: Candidate,
       adoptionHead: number | null,
-      slot?: ReturnType<typeof creditSlot>,
+      slot?: ReturnType<typeof relationSlot>,
     ) {
       expect(candidate.retracted).toBeNull();
       const accepted = await review.acceptReviewedCandidate(
@@ -204,7 +204,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     }
 
     async function adoptCredit(workId: string, assertion: ShowcaseAssertion, target: string, key?: string) {
-      const slot = creditSlot(assertion.statement);
+      const slot = relationSlot(assertion.statement);
       expect(slot).toEqual({ target, ...(key === undefined ? {} : { key }) });
       const { candidates, adoption } = await reviewSlot(workId, assertion.property, slot);
       const candidate = candidates.find((row) => row.id === assertion.candidateId);
@@ -348,7 +348,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
         (candidate) => valueContent(candidate.statement.value) === requirement.sourceUri,
       );
       await adoptVocabularyCandidate(subjectId, 'skos:inScheme', (candidate) =>
-        subjectId === designId ? candidate.id === wrongCandidateId : valueContent(candidate.statement.value) === schemeId,
+        subjectId === designId
+          ? candidate.id === wrongCandidateId
+          : valueContent(candidate.statement.value) === schemeId,
       );
     }
 
@@ -512,7 +514,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     await adoptCredit(workId, author, personId);
     await adoptCredit(workId, voice, correctedVoiceId, characterId);
 
-    const oldVoiceSlot = await reviewSlot(workId, 'wdt:P725', creditSlot(oldVoice.statement));
+    const oldVoiceSlot = await reviewSlot(workId, 'wdt:P725', relationSlot(oldVoice.statement));
     const withdrawnVoice = oldVoiceSlot.candidates.find((candidate) => candidate.id === oldVoice.candidateId);
     expect(withdrawnVoice?.source).toEqual(oldVoice.source);
     expect(Number.isInteger(withdrawnVoice?.retracted)).toBe(true);
@@ -536,7 +538,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
     const current = await read(workId);
     expectPublicCredit(current, author);
     expectPublicCredit(current, voice);
-    expect(current.statements['wdt:P725']?.map((statement) => valueContent(statement.value))).toEqual([correctedVoiceId]);
+    expect(current.statements['wdt:P725']?.map((statement) => valueContent(statement.value))).toEqual([
+      correctedVoiceId,
+    ]);
     expect(current.statements['schema:illustrator']).toBeUndefined();
     const authorPerson = await read(personId);
     expect(authorPerson.id).toBe(personId);
