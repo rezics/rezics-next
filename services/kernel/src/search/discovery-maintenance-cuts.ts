@@ -86,7 +86,9 @@ export async function advanceMaintenanceCuts(
                WHERE delivery.partition_no=h.partition AND delivery.epoch=h.collection_epoch
                  AND delivery.source_position=CASE WHEN pg_input_is_valid(o.data->>'position','bigint')
                        THEN (o.data->>'position')::bigint END
-                 AND delivery.source_position<=h.first
+                 -- A delivered notification in this suffix is also checked by the outer proof.
+                 AND (delivery.source_position<=h.first
+                   OR (delivery.source_position<step.pos AND delivery.source_type=$12))
                  AND o.data IN (
                    jsonb_build_object('position',delivery.source_position::text),
                    jsonb_build_object('position',lpad(delivery.source_position::text,19,'0'))
@@ -141,6 +143,7 @@ export async function advanceMaintenanceCuts(
       discoveryIndexName(prefix, generation),
       [CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_DELIVERED],
       CANONICAL_GENERATION_CONTINUATION,
+      CANONICAL_GENERATION_DELIVERED,
     ],
   );
   return result.rows;

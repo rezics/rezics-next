@@ -31,9 +31,12 @@ import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcome
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
 import { createSemanticLocatorEffect, SEMANTIC_LOCATOR_ADVANCED } from '../../src/semantic/account-erasure.ts';
-import { resumeCanonicalGenerationDelivery } from '../../src/semantic/canonical-generation-delivery.ts';
+import {
+  deliverCanonicalGenerationEvent,
+  resumeCanonicalGenerationDelivery,
+} from '../../src/semantic/canonical-generation-delivery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { CANONICAL_GENERATION_COMMITTED } from '../../src/semantic/events.ts';
+import { CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_DELIVERED } from '../../src/semantic/events.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 test('64 certified mixed Discovery homes distinguish changed native cuts before activation', async () => {
@@ -316,6 +319,42 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(
       (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
     ).toBe(completed.rows[0]!.position);
+
+    // A newly delivered canonical notification and its locator are both proved in the same suffix.
+    await deliverCanonicalGenerationEvent(pool, original, async (tx, { partition }) => {
+      const native = await tx.query<{ generation: string }>(
+        'SELECT canonical_generation::text AS generation FROM semantic.partition_subjects WHERE partition_no=$1',
+        [partition],
+      );
+      return {
+        partition,
+        canonicalGeneration: native.rows[0]!.generation,
+        revision: native.rows[0]!.generation,
+        complete: true,
+      };
+    });
+    await readBatch(pool, {
+      consumer: 'test_discovery_locator_notice',
+      partition: noticeHome,
+      async apply(envelopes) {
+        events.push(...envelopes.flatMap((envelope) => envelope.events));
+      },
+    });
+    const delivered = events.find(({ type }) => type === CANONICAL_GENERATION_DELIVERED)!;
+    expect(BigInt(delivered.sequence)).toBe(BigInt(completed.rows[0]!.position) + 1n);
+    await createSemanticLocatorEffect(pool).run(delivered);
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(completed.rows[0]!.position);
+    const deliveredAndLocated = BigInt(delivered.sequence) + 1n;
+    expect(await replay.run(noticeHome)).toMatchObject({ status: 'read', position: deliveredAndLocated });
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(String(deliveredAndLocated));
 
     // Advance a certified empty home with a private Search event. Hold the real replay until after repair.
     const empty = await pool.query<{ partition_no: number }>(
