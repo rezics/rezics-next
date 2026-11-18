@@ -105,6 +105,8 @@ export type ReviewDiscoverySource = Readonly<{
   read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
   /** Exact current positions for requests with no Review identities. */
   readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+  /** Coherent terminal first pages for homes with no raw Review candidates. */
+  readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   hydrate(partition: number, ids: readonly string[]): Promise<ReviewDiscoveryHydration>;
   count(partition: number): Promise<ReviewDiscoveryCount>;
   page(
@@ -466,18 +468,31 @@ async function captureCut(
   return cutState(partition, rows, selected.length);
 }
 
-async function captureEmptyCuts(client: PoolClient, partitions: readonly number[]) {
+async function captureEmptyCuts(client: PoolClient, partitions: readonly number[], requireEmptyPage = false) {
   const { rows } = await client.query<CutHomeRow & { moved_to: string | null }>(
     `SELECT p.partition_no AS partition,p.epoch,p.position::text,p.write_state,p.moved_to,
             COALESCE((SELECT revision FROM content.review_census_source_frontier WHERE route=p.partition_no*16),0)::text AS projection,
             ${pendingInvalidation} AS pending,
             COALESCE((SELECT position FROM content.review_discovery_frontier WHERE route=p.partition_no*16),0)::text AS frontier
-     FROM core.partition p WHERE p.partition_no=ANY($1::integer[])`,
-    [partitions],
+     FROM core.partition p WHERE p.partition_no=ANY($1::integer[])
+       AND (NOT $2::boolean OR NOT EXISTS (
+         SELECT 1 FROM content.thread t WHERE t.kind='review'
+           AND t.route >= p.partition_no*16 AND t.route < (p.partition_no+1)*16
+       ))`,
+    [partitions, requireEmptyPage],
   );
   const byPartition = new Map(rows.map((row) => [row.partition, row]));
   if (byPartition.size !== rows.length) throw new TypeError('Review discovery returned a duplicate home');
   return byPartition;
+}
+
+function emptyReviewHomes(partitions: readonly number[]) {
+  if (!Array.isArray(partitions) || partitions.length > REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT)
+    throw new RangeError(`At most ${REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT} Review discovery partitions`);
+  const requested = [...partitions];
+  for (const partition of requested) assertPartition(partition);
+  if (new Set(requested).size !== requested.length) throw new TypeError('Review discovery partitions must be distinct');
+  return requested;
 }
 
 function sameCut(left: PopulationCut, right: PopulationCut): boolean {
@@ -990,13 +1005,35 @@ export function createReviewDiscoverySource(
   });
 
   const source: NativeReviewDiscoverySource = {
+    async readEmptyFirstPages(partitions) {
+      const requested = emptyReviewHomes(partitions);
+      if (!requested.length) return new Map();
+      const { deadline } = checkedContext(makeAnonymousContext);
+      const before = await withReadTransaction(
+        dependencies.pool,
+        (client) => captureEmptyCuts(client, requested, true),
+        deadline,
+      );
+      const cuts = new Map<number, PopulationCut>();
+      for (const [partition, row] of before) {
+        const state = cutState(partition, [row], 1);
+        if (state.status === 'ready') cuts.set(partition, state.cut);
+      }
+      if (!cuts.size) return new Map();
+      const after = await withReadTransaction(
+        dependencies.pool,
+        (client) => captureEmptyCuts(client, [...cuts.keys()], true),
+        deadline,
+      );
+      const pages = new Map<number, bigint>();
+      for (const [partition, row] of after) {
+        const state = cutState(partition, [row], 1);
+        if (state.status === 'ready' && sameCut(cuts.get(partition)!, state.cut)) pages.set(partition, state.position);
+      }
+      return pages;
+    },
     async readEmptyPositions(partitions) {
-      if (!Array.isArray(partitions) || partitions.length > REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT)
-        throw new RangeError(`At most ${REVIEW_DISCOVERY_EMPTY_POSITION_LIMIT} Review discovery partitions`);
-      const requested = [...partitions];
-      for (const partition of requested) assertPartition(partition);
-      if (new Set(requested).size !== requested.length)
-        throw new TypeError('Review discovery partitions must be distinct');
+      const requested = emptyReviewHomes(partitions);
       if (requested.length === 0) return new Map();
 
       const context = checkedContext(makeAnonymousContext);

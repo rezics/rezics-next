@@ -263,9 +263,16 @@ function createReviewPopulationProducer(
     return observe(() => source.read(partition, ids), ids.length === 0);
   }
   const readEmptyPositions = source?.readEmptyPositions?.bind(source);
+  const readEmptyFirstPages = source?.readEmptyFirstPages?.bind(source);
   return {
     kind: 'review',
     owner: 'content',
+    ...(readEmptyFirstPages && {
+      async readEmptyFirstPages(partitions: readonly number[]) {
+        const positions = await readEmptyFirstPages(partitions);
+        return new Map([...positions].map(([partition, position]) => [partition, { position }]));
+      },
+    }),
     ...(native && { pageCapabilityWitness: 'none' }),
     ...(source?.populationInvalidationPending && {
       populationInvalidationPending: source.populationInvalidationPending.bind(source),
@@ -326,9 +333,18 @@ function createReviewPopulationProducer(
 }
 
 function createSpacePopulationProducer(adapter: SpaceDiscoveryAdapter): DiscoveryMetadataProducer {
+  const readEmptyPositions = adapter.source.readEmptyPositions;
+  const readEmptyFirstPages = adapter.source.readEmptyFirstPages;
   return {
     kind: 'space',
     owner: 'content',
+    ...(readEmptyPositions && { readEmptyPositions }),
+    ...(readEmptyFirstPages && {
+      async readEmptyFirstPages(partitions: readonly number[]) {
+        const positions = await readEmptyFirstPages(partitions);
+        return new Map([...positions].map(([partition, position]) => [partition, { position }]));
+      },
+    }),
     async readiness() {
       return adapter.source.dependencies();
     },

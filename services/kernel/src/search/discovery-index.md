@@ -58,13 +58,18 @@ frontiers and settles them in groups of at most eight. Every page remains bounde
 its own cursor only after the exact target actions settle; a failed group is drained before its error is retried. This
 amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
 Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
-For zero-count Account and Semantic frontiers at the start of an indexed pass, one complete search under physical
-generation custody can prove absence across the wave's exact scopes. Counts, positions, ownership epochs and
+Initial population batches can commit empty first pages together after fresh capability checks. Each producer checks
+for raw candidates in its exact homes. Review also compares fresh native cuts across two snapshots. A home with raw
+candidates or an inconclusive observation uses the ordinary page and its continuation.
+Initial empty frontiers within a selection of at most 100 homes can share one complete search under physical
+generation custody. A hit or inconclusive result leaves the ordinary eight-frontier waves in charge. Counts,
+positions, ownership epochs and
 Account and claim revisions are checked before and after that search. A hit in the union requires keyed reconciliation.
 Core census and Account/claim witness callbacks share one live physical-pool read-only repeatable-read snapshot for
-each existing wave's before observation, and a fresh snapshot for its after observation. Every native callback and
-owner fence still runs. All nested reads settle before failure or release, and neither snapshot crosses external
-Search I/O. A concurrent native cut or fenced home remains unqualified, as exercised by
+each wave's before observation, and a fresh snapshot for its after observation. Both owner censuses and the
+Account/claim witness still run, with one census query per native Core owner where supported. All nested reads
+settle before failure or release, and neither snapshot crosses external Search I/O. A concurrent native cut or
+fenced home remains unqualified, as exercised by
 `test/search/core-reconciliation-snapshot.test.ts`.
 A changed observation restarts that producer's native pass. For Collection, Review and Space, a complete initial
 native page with no keys, records or continuation can settle both passes in one turn at or beyond the stored
@@ -134,9 +139,10 @@ replacement; requests keep the active generation in service while that replaceme
 For producer i, complete preparation costs `sum(P_i * C_i(B_i))` plus actual action bytes, writes and durable state;
 the 128-frontier selection and eight-page concurrency change elapsed time, not that sum. A reconciliation restart adds
 another native raw pass and indexed cleanup; an epoch replacement adds a fresh physical population. Neither term is
-absorbed into a retained-count cap. Final certification still examines all 4096 partitions: it reads Account witnesses
-in bounded groups of 100 and, for each partition, performs an actual empty-key current-position read for every admitted
-metadata producer, with at most 16 partitions in flight. Empty native reads and empty terminal pages still count.
+absorbed into a retained-count cap. Final certification still examines all 4096 partitions. It reads Account witnesses
+in bounded groups of 100 and checks the native current position for every admitted metadata producer in each home,
+using native empty-key batches where available and at most 16 partitions in flight. Empty reads and terminal pages
+still count.
 Unchanged keyed replay verifies the exact visible winner before advancing.
 
 Review's `C_i` includes five Content snapshots, two ancestry walks (`d <= 33`, `2d+25` local statements), Semantic

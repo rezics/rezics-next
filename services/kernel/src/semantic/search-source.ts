@@ -200,6 +200,22 @@ export function subjectSource(
     readCompleteWorkLinks: NonNullable<SubjectSource['readCompleteWorkLinks']>;
   } {
   const relations = relationSource(pool, routeKey);
+  async function countPartitions(partitions: readonly number[]) {
+    if (partitions.length > 100) throw new RangeError('Subject discovery counts at most 100 partitions');
+    for (const partition of partitions) assertPartition(partition);
+    return inSearchSnapshot(pool, async (client) => {
+      const rows = await count.run(client, { partitions: [...partitions] });
+      const byPartition = new Map(rows.map((row) => [row.partition, row]));
+      return new Map(
+        partitions.map((partition) => {
+          const row = byPartition.get(partition);
+          if (!row) throw new CommandUnavailableError('fenced', partition);
+          if (row.writeState === 'moved') throw new CommandUnavailableError('moved', partition, row.movedTo);
+          return [partition, { position: BigInt(row.position), count: Number(row.visible) }] as const;
+        }),
+      );
+    });
+  }
   return {
     readSubjectKeyPage,
     canonicalNames: createSubjectCanonicalNames(pool),
@@ -380,19 +396,9 @@ export function subjectSource(
     readConceptStatements: relations.readConceptStatements,
     readCompleteWorkLinks: relations.readCompleteWorkLinks,
 
+    countPartitions,
     async count(partition) {
-      assertPartition(partition);
-      return inSearchSnapshot(pool, async (client) => {
-        const positionRow = await readPosition.run(client, { partition_no: partition });
-        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
-        if (positionRow.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
-        const countRow = await count.run(client, { partition_no: partition });
-        return {
-          position: BigInt(positionRow.position),
-          count: Number(countRow?.visible ?? '0'),
-        };
-      });
+      return (await countPartitions([partition])).get(partition)!;
     },
   };
 }
