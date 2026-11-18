@@ -1873,8 +1873,6 @@ export async function runWalk(
       slot = await admitWalkStack(task, process.env, root, controller.signal, blocked, portsAvailable);
       const names = walkStackNames(task, slot.index!);
       const env = walkProcessEnvironment(task, slot.index!);
-      // Book discovery needs the standard Search-backed Kernel. Web still starts after the fixture.
-      if (firstPublicWebWalk()) env.REZICS_WALK_DEFER_FRONTENDS = '0';
       const ports = walkStackPorts(slot.index!);
       let starting: ReturnType<typeof Bun.spawn> | undefined;
       let walkFailure: unknown;
