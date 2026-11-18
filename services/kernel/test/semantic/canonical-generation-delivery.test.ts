@@ -48,6 +48,30 @@ test('canonical delivery recovery yields after eight native homes even with a re
   }
 });
 
+test('overlapping canonical wakes announce a home once and startup can recover an undelivered generation', async () => {
+  const f = await fixture();
+  try {
+    const home = 4095;
+    const request = { after: home - 1, limit: 1 };
+    const pool = f.db.openPool({ max: 2 });
+    const wake = () => resumeCanonicalGenerationDelivery(pool, { ...request, unannouncedOnly: true });
+    const notices = async () => (await f.db.admin.query(
+      'SELECT data FROM core.outbox WHERE partition_no=$1 AND type=$2 ORDER BY position,event_seq',
+      [home, CANONICAL_GENERATION_COMMITTED],
+    )).rows.map(({ data }) => data);
+    const pending = await readCanonicalGenerationDeliveryPage(pool, request, readContext());
+    expect(pending.homes).toHaveLength(1);
+    await Promise.all([wake(), wake()]);
+    await wake();
+    expect(await notices()).toEqual(pending.homes);
+    expect((await readCanonicalGenerationDeliveryPage(pool, request, readContext())).homes).toEqual(pending.homes);
+    await resumeCanonicalGenerationDelivery(pool, request);
+    expect(await notices()).toEqual([...pending.homes, ...pending.homes]);
+  } finally {
+    await f.close();
+  }
+});
+
 test('default Content dispatch requires a complete native rebuild before acknowledging a canonical generation', async () => {
   const f = await fixture();
   try {
