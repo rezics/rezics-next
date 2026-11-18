@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { PublicFilterCost } from './public-filter-source-contract.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
-import type { PublicFilterCreationWindow } from './public-filter-creation-window.ts';
+import { publicFilterAccountCreationEvents, type PublicFilterCreationWindow } from './public-filter-creation-window.ts';
 
 type Meter = {
   -readonly [Key in 'inputKeys' | 'dependencyPoints']: PublicFilterCost[Key];
@@ -42,12 +42,18 @@ function completeWindow(events: readonly EventPoint[], window: PublicFilterCreat
 }
 
 /** Close a contiguous prefix only when every retained outbox position and event
- * is present under its original pin and epoch, with no Subject work to dispatch.
+ * is present under its original pin and epoch, with no relevant owner work to dispatch.
  * A relevant event, gap or oversized window returns that home to ordinary repair.
  */
 export async function readPublicFilterCreationPrefix(
   pool: Pool,
-  input: Readonly<{ bootstrap: string; from: number; inputLimit: number; through?: readonly string[] }>,
+  input: Readonly<{
+    bootstrap: string;
+    from: number;
+    inputLimit: number;
+    accounts?: boolean;
+    through?: readonly string[];
+  }>,
   context: Readonly<{ deadline: number }>,
   cost: Meter,
 ) {
@@ -143,10 +149,11 @@ export async function readPublicFilterCreationPrefix(
         const result = await pool.query<EventPoint>(
           `/* semantic.native-keyed:0:0 */
          SELECT o.position::text,epoch,event_seq,event_count,
-           (starts_with(type,'com.rezics.subject.') OR starts_with(type,'com.rezics.statement.')) AS repairs_subject
+           (starts_with(type,'com.rezics.subject.') OR starts_with(type,'com.rezics.statement.')
+            OR type=ANY($5::text[])) AS repairs_subject
          FROM core.outbox o WHERE partition_no=$1 AND o.position>$2::bigint AND o.position<=$3::bigint
          ORDER BY o.position,o.event_seq LIMIT $4`,
-          [row.home, String(base), String(through), remaining],
+          [row.home, String(base), String(through), remaining, input.accounts ? publicFilterAccountCreationEvents : []],
         );
         const unused = remaining - result.rows.length;
         charge(-unused);

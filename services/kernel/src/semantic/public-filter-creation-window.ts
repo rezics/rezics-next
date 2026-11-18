@@ -179,15 +179,15 @@ function creationEventSuccessor(w: PublicFilterCreationWindow, count: number): P
 
 const subjectPrefix = 'com.rezics.subject.';
 const statementPrefix = 'com.rezics.statement.';
-const accountEvents = [
+export const publicFilterAccountCreationEvents = Object.freeze([
   'com.rezics.access.account-updated.v1',
   'com.rezics.access.account-tombstoned.v1',
   'com.rezics.access.account-discovery-changed.v1',
-];
+]);
 
 export function publicFilterCreationAction(type: string, accounts: boolean): 'semantic' | 'accounts' | null {
   if (type.startsWith(subjectPrefix) || type.startsWith(statementPrefix)) return 'semantic';
-  return accounts && accountEvents.includes(type) ? 'accounts' : null;
+  return accounts && publicFilterAccountCreationEvents.includes(type) ? 'accounts' : null;
 }
 
 type CreationEvent = Readonly<{
