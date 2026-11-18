@@ -61,8 +61,10 @@ checkouts are waiting or only one pool slot remains. Each sweep takes two bounde
 claim intent or live Source interval. An empty pass sleeps for `ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes).
 A pass with remaining work and no progress retries after one second. A source event wakes its home during either wait.
 A committed Subject hide or takedown wakes its home at effect admission. Under pool pressure, the serial worker
-queues the exact Subject key for a bounded Source step. This lets the receiver apply the interval while readers
-are waiting for it. With capacity available, withdrawal turns share the worker with Account wakes and the sweep.
+queues the exact Subject key for a bounded Source step, or seeks the next live Source interval. The latter processes
+the native Account and claim intents in that home before applying its Source interval. These turns let the receiver
+apply live barriers while readers are waiting for them. With capacity available, withdrawal turns share the worker
+with Account wakes and the sweep.
 Durable effect delivery can repeat the wake after a restart.
 A productive pass continues catch-up. Decision: every failed step retains its exact home and sweep/wakeup origin,
 and retries with exponential 1–60 second backoff, which events cannot bypass; success resets the delay.

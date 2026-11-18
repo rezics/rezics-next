@@ -166,22 +166,28 @@ test('empty indexed recovery idles, source wakes one home, and a missed wake at 
   expect(f.next()).toBe(Infinity);
 });
 
-test('pool pressure yields without checkout and events share one serial connection', async () => {
+test('pool pressure admits live Source barriers ahead of ordinary recovery on one serial connection', async () => {
   const f = fixture(),
     service = await f.start();
   f.pool.totalCount = 9;
   await f.advance(START);
-  expect(f.stats().attempts).toBe(0);
+  expect(f.stats().attempts).toBe(1);
+  expect(f.homes).toEqual([]);
   f.pool.idleCount = 1;
   f.pool.waitingCount = 1;
   await f.wake();
   await f.advance(RETRY);
-  expect(f.stats().attempts).toBe(0);
+  expect(f.stats().attempts).toBe(2);
+  expect(f.homes).toEqual([]);
   // The public reads waiting for Subject coverage cannot release their own barrier.
   await f.admitVisibility(42, 'hidden');
   await f.advance(RETRY);
   expect(f.subjectHomes).toEqual([42]);
   expect(f.homes).toEqual([]);
+  f.pendingCoverage.add(4095);
+  await f.advance(STEP);
+  expect(f.homes).toEqual([4095]);
+  expect(f.pendingCoverage.size).toBe(0);
   f.pool.waitingCount = 0;
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {

@@ -244,6 +244,7 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
     let stopped = false;
     let running = false;
     let partition = 0;
+    let coverageFrom = 0;
     let passWorked = false;
     let passHadWork = false;
     let preferSweep = false;
@@ -251,7 +252,7 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
     let sweepAt = time.now() + ACCOUNT_DISCOVERY_START_DELAY_MS;
     let availableAt = sweepAt;
     let retry = ACCOUNT_DISCOVERY_RETRY_MS;
-    type Turn = { home: number; kind: 'seek' | 'sweep' | 'wake' | 'withdrawal' };
+    type Turn = { home: number; kind: 'seek' | 'seek-coverage' | 'coverage' | 'sweep' | 'wake' | 'withdrawal' };
     let failed: Turn | undefined;
     let cancel: (() => void) | undefined;
     let pending: Promise<void> = Promise.resolve();
@@ -266,9 +267,15 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
       const pool = context.pool;
       const pressure = pool.waitingCount > 0 || pool.totalCount - pool.idleCount >= (pool.options.max ?? 10) - 1;
       const withdrawal = withdrawals.values().next().value;
-      // An admitted withdrawal can be holding every public catalogue read.
-      // Its serial worker may queue for a checkout, including a due retry.
-      if (pressure && withdrawal === undefined) {
+      // Earlier failures keep their owner and backoff. An admitted withdrawal
+      // or a live Source barrier can queue for one checkout under pressure.
+      if (
+        pressure &&
+        withdrawal === undefined &&
+        failed &&
+        failed.kind !== 'coverage' &&
+        failed.kind !== 'seek-coverage'
+      ) {
         availableAt = time.now() + ACCOUNT_DISCOVERY_RETRY_MS;
         return;
       }
@@ -277,11 +284,23 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         time.now() >= sweepAt && (preferSweep || (accountHome === undefined && withdrawal === undefined));
       let turn: Turn;
       if (failed) turn = failed;
+      else if (pressure && withdrawal === undefined) turn = { home: coverageFrom, kind: 'seek-coverage' };
       else if (!pressure && sweepDue) turn = { home: partition, kind: 'seek' };
       else if (withdrawal !== undefined && (pressure || preferWithdrawal || accountHome === undefined))
         turn = { home: withdrawal, kind: 'withdrawal' };
       else turn = { home: accountHome!, kind: 'wake' };
       try {
+        if (turn.kind === 'seek-coverage') {
+          const home = await nextPublicFilterCoverageHome(pool, turn.home, deadlineFor(DEFAULT_REQUEST_DEADLINE_MS));
+          if (home === null) {
+            coverageFrom = 0;
+            failed = undefined;
+            retry = ACCOUNT_DISCOVERY_RETRY_MS;
+            availableAt = time.now() + ACCOUNT_DISCOVERY_RETRY_MS;
+            return;
+          }
+          turn = { home, kind: 'coverage' };
+        }
         if (turn.kind === 'seek') {
           const home = await nextRedriveHome(pool, turn.home);
           if (home === null) {
@@ -302,7 +321,7 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         const { home, kind } = turn;
         const sweep = kind === 'sweep';
         const queue = kind === 'withdrawal' ? withdrawals : wakeups;
-        if (!sweep) queue.delete(home);
+        if (kind === 'withdrawal' || kind === 'wake') queue.delete(home);
         const result =
           kind === 'withdrawal'
             ? await maintainPublicFilterCoverageHome(pool, home, {
@@ -313,6 +332,10 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         failed = undefined;
         retry = ACCOUNT_DISCOVERY_RETRY_MS;
         availableAt = time.now() + ACCOUNT_DISCOVERY_STEP_MS;
+        if (kind === 'coverage') {
+          coverageFrom = result.more ? home : home + 1;
+          return;
+        }
         preferSweep = !sweep;
         if (!sweep) {
           preferWithdrawal = kind === 'wake';
