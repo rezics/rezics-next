@@ -33,6 +33,7 @@ const document = composedLimitDocument(lists);
 const plan = planReads(platformRegistry, document, { subject: null });
 type Anchor = { id: string; type: string };
 type Original = Anchor & { label: string };
+type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 
 export async function createBookComposition(setupDeadline: number) {
@@ -235,9 +236,7 @@ export async function createBookComposition(setupDeadline: number) {
       const until = Date.now() + 120_000;
       for (;;) {
         const response = await request(who);
-        const reads = response.body.reads as
-          | Record<string, { status: number; body: Record<string, unknown> }>
-          | undefined;
+        const reads = response.body.reads as Record<string, TypeListResponse> | undefined;
         const pending = response.status === 200 ? Object.values(reads ?? {}) : [response];
         if (warm && pending.some(({ status }) => status === 503)) {
           for (const entry of pending.filter(({ status }) => status !== 200))
@@ -256,7 +255,7 @@ export async function createBookComposition(setupDeadline: number) {
         assert(!JSON.stringify(response.body).includes(hidden.id));
         let outputSlots = 0;
         for (const list of lists) {
-          const result = reads[plan.nodes[list.id]!]!;
+          const result: TypeListResponse = reads[plan.nodes[list.id]!]!;
           assert.equal(result.status, 200, JSON.stringify(result.body));
           const subjects = result.body.subjects;
           assert(Array.isArray(subjects));
