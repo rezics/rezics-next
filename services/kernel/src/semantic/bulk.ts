@@ -487,9 +487,8 @@ export async function batchCommand(
     }
     throw error;
   };
-  const outcome = command.op === 'create'
-    ? await create()
-    : await runCommand<Value>(pool, commandOptions, body).catch(recoverReceipt);
+  const execution = command.op === 'create' ? create() : runCommand<Value>(pool, commandOptions, body);
+  const outcome = await execution.catch(recoverReceipt);
   return {
     ...outcome.value,
     component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },

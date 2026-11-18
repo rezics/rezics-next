@@ -26,6 +26,7 @@ export type ReviewedCatalogueProblem = Readonly<{
   type?: string;
   code?: string;
   retryable?: boolean;
+  effect_status?: 'unknown' | 'not_applied' | 'applied' | 'not_applicable';
   request_id?: string;
   operation?: 'subject:create' | 'statement:propose';
   partition?: number;
@@ -63,6 +64,7 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
   const status = publicStatus(value.status);
   const type = publicString(value.type, PROBLEM_TYPE, 128);
   const code = publicString(value.code, PROBLEM_CODE, 80);
+  const effect = value.effect_status;
   const request_id = publicString(value.request_id, CORRELATION, 128);
   const operation = publicString(value.operation, OPERATION, 32) as ReviewedCatalogueProblem['operation'] | undefined;
   const partition = publicPartition(value.partition);
@@ -79,6 +81,9 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
     ...(type === undefined ? {} : { type }),
     ...(code === undefined ? {} : { code }),
     ...(value.retryable === true ? { retryable: true } : value.retryable === false ? { retryable: false } : {}),
+    ...(effect === 'unknown' || effect === 'not_applied' || effect === 'applied' || effect === 'not_applicable'
+      ? { effect_status: effect }
+      : {}),
     ...(request_id === undefined ? {} : { request_id }),
     ...(operation === undefined ? {} : { operation }),
     ...(partition === undefined ? {} : { partition }),
@@ -92,6 +97,7 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
 }
 
 export class ReviewedCatalogueCommandError extends ImportTransportError {
+  readonly problem: ReviewedCatalogueProblem;
   readonly seedKey: string;
   readonly commandKind: ReviewedCatalogueCommandKind;
   readonly operationName: string | undefined;
@@ -117,6 +123,7 @@ export class ReviewedCatalogueCommandError extends ImportTransportError {
       ...(problem.request_id === undefined ? {} : { correlationId: problem.request_id }),
     });
     this.name = 'ReviewedCatalogueCommandError';
+    this.problem = reviewedCatalogueProblem(problem);
     this.seedKey = seedKey;
     this.commandKind = commandKind;
     this.operationName = problem.operation;
@@ -132,7 +139,8 @@ export function formatReviewedCatalogueCommandError(error: ReviewedCatalogueComm
   const partition =
     error.partition === undefined ? 'none' : Number.isSafeInteger(error.partition) ? String(error.partition) : 'none';
   const phase = publicString(error.transactionPhase, TRANSACTION_PHASE, 32) ?? 'none';
-  return `${formatImportTransportError(error)} seed=${seed} kind=${error.commandKind} operation=${operation} partition=${partition} transaction_phase=${phase}`;
+  const stage = error.problem.failure_stage ? ` failure_stage=${error.problem.failure_stage}` : '';
+  return `${formatImportTransportError(error)} seed=${seed} kind=${error.commandKind} operation=${operation} partition=${partition} transaction_phase=${phase}${stage}`;
 }
 
 export function throwReviewedCatalogueBatchFailure(

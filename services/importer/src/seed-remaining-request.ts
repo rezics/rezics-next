@@ -10,7 +10,7 @@ import {
   type BatchWriteFailureStage,
   type BatchWriteResult,
 } from '@rezics/definitions/bulk';
-import { reviewedCatalogueProblem, type ReviewedCatalogueProblem } from './http.ts';
+import { ReviewedCatalogueCommandError, reviewedCatalogueProblem, type ReviewedCatalogueProblem } from './http.ts';
 import type { ImportTransportError } from './import-client.ts';
 import { formatSeedError, seedImportRunDetail, seedTransportError } from './seed-cli.ts';
 
@@ -60,6 +60,7 @@ export type SeedRemainingRequest = {
   transition?: BatchTransition;
   reason?: BatchReason;
   transactionPhase?: string;
+  effectStatus?: ReviewedCatalogueProblem['effect_status'];
   failureStage?: BatchWriteFailureStage;
   sqlstate?: string;
   constraintName?: string;
@@ -90,6 +91,7 @@ const remainingFields = {
   transition: new RegExp(`^(?:${batchTransitions.join('|')})$`),
   reason: new RegExp(`^(?:${batchReasons.join('|')})$`),
   transactionPhase: /^[a-z_]{1,32}$/,
+  effectStatus: /^(?:unknown|not_applied|applied|not_applicable)$/,
   failureStage: new RegExp(`^(?:${BATCH_WRITE_FAILURE_STAGES.join('|')})$`),
   sqlstate: BATCH_SQLSTATE,
   constraintName: BATCH_CONSTRAINT_NAME,
@@ -171,11 +173,15 @@ function batchProblemFields(
     retryable: problem.retryable ?? transport?.retryable,
     correlationId: problem.request_id ?? transport?.correlationId,
     transactionPhase: problem.phase,
-    ...((op === 'create' || op === 'propose') && status === 500 && problem.code === 'internal_error'
+    effectStatus: problem.effect_status,
+    ...((op === 'create' || op === 'propose') &&
+    ((status === 500 && problem.code === 'internal_error') ||
+      (status === 503 && problem.failure_stage === 'transaction_commit'))
       ? {
           commandIndex: problem.command_index,
           failureStage: problem.failure_stage,
-          ...(op === 'propose' ? { sqlstate: problem.sqlstate, constraintName: problem.constraint_name } : {}),
+          sqlstate: problem.sqlstate,
+          constraintName: problem.constraint_name,
         }
       : {}),
   };
@@ -218,6 +224,17 @@ export function seedBatchRemainingRequest(error: unknown): SeedRemainingRequest 
   if (!(error instanceof Error)) return undefined;
   const recorded = batchFailures.get(error);
   if (recorded) return recorded;
+  const reviewed = seedTransportError(error);
+  if (reviewed instanceof ReviewedCatalogueCommandError && reviewed.remaining) {
+    return safeRemainingRequest({
+      ...reviewed.remaining,
+      ...remainingRequestFromTransport(reviewed),
+      transition: 'batch-receipt',
+      reason: 'command-refused',
+      failurePhase: 'response',
+      ...batchProblemFields(reviewed.remaining.op, reviewed.status, reviewed.problem),
+    });
+  }
   const failure = seedImportRunDetail(error);
   if (!failure?.batch) return undefined;
   const { batch, status } = failure;
