@@ -40,7 +40,7 @@ export async function attachCollectionListFacts<T extends { subjectId: string }>
       const mappings = await readIdentityMappings(deps.pool, valid);
       const terminals = [...new Set(mappings.flatMap((m) => (m.state === 'mapped' ? [m.terminal] : [])))];
       // Preserve the shared summary/cover projection and its independent legacy 256-ID bound.
-      const languages = options.languages === undefined ? {} : { languages: options.languages };
+      const languages = options.languages?.length ? { languages: options.languages } : {};
       const summaries = await readSubjectSummaries(deps, terminals, languages);
       // Exactly one actual native fact batch, retaining raw multiplicity for the helper's independent 100 bound.
       const facts = await readListPresentationFacts(deps, originals, languages);
