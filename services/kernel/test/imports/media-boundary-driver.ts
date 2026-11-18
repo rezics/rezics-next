@@ -332,7 +332,9 @@ export async function launchBoundaryProcess(mode: 'host' | 'worker', env: Record
     close: () =>
       (closing ??= (async () => {
         try {
-          await call('close', undefined, AbortSignal.timeout(5_000));
+          // Graceful shutdown drains in-flight services. The short process-group
+          // grace in stopBoundaryProcess applies after this bounded RPC settles.
+          await call('close');
         } finally {
           try {
             await stopBoundaryProcess(child);
