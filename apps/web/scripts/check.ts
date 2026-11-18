@@ -592,9 +592,11 @@ export async function runWebHostTests(
   };
   const runNative =
     runtime.runNative ??
-    ((selected: string[], commandEnv: NodeJS.ProcessEnv, execution: WebNativeHostExecution) => {
-      const commandEnvironment = { ...commandEnv };
-      delete commandEnvironment[webTestSelectionContextEnvironment];
+    ((_selected: string[], commandEnv: NodeJS.ProcessEnv, execution: WebNativeHostExecution) => {
+      // Native fixture setup can consume the same exact selection passed to Bun.
+      const commandEnvironment = execution.selection
+        ? writeWebTestSelectionContext(execution.selection, commandEnv)
+        : { ...commandEnv, [webTestSelectionContextEnvironment]: undefined };
       return runCommand('host tests', 'bun', execution.command.slice(1), commandEnvironment, execution.cwd);
     });
 

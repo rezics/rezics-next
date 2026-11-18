@@ -57,14 +57,14 @@ function numbered(kind: string, index: number): string {
   return `${kind}${String(index).padStart(2, '0')}`;
 }
 
-async function openExposure(kernel: Kernel, family: string): Promise<void> {
+export async function openPublicationVerification(kernel: Kernel): Promise<void> {
   const response = await kernel(
-    `/v1/platform/exposure/${family}:open`,
+    '/v1/platform/exposure/agent_verification:open',
     { method: 'POST', headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) } },
     'governor',
   );
   if (!response.ok && response.status !== 409)
-    throw new Error(`Could not open ${family} exposure: ${response.status} ${await response.text()}`);
+    throw new Error(`Could not open agent_verification exposure: ${response.status} ${await response.text()}`);
   await response.body?.cancel();
 }
 
@@ -128,12 +128,21 @@ async function setBoardScheme(
 async function createBoard(
   kernel: Kernel,
   realmId: string,
-  conceptId: string,
+  schemeId: string,
   title: string,
   visibility: 'published' | 'protected',
 ): Promise<string> {
+  // A Realm can host only one Board for a given Concept.
+  const concept = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: `${title} topic` },
+    statements: {
+      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+    },
+  });
+  if (!concept.subject?.id) throw new Error(`Board Concept create omitted identity for ${title}`);
   const created = await writeJson<{ board: { id: string } }>(kernel, `/v1/realms/${realmId}/boards`, {
-    conceptId,
+    conceptId: concept.subject.id,
     title,
     visibility,
   });
@@ -204,13 +213,14 @@ async function deleteCollection(kernel: Kernel, collection: { id: string; revisi
   await response.body?.cancel();
 }
 
-async function bindVerifiedHandle(
+export async function provisionVerifiedPublication(
   kernel: Kernel,
   actor: (persona: string) => Promise<{ accountId: string }>,
   origin: string,
   handleHint: string,
   subjectPath: (id: string, label: string, locale?: string) => string,
 ): Promise<{ subjectUrl: string; profileUrl: string }> {
+  await openPublicationVerification(kernel);
   const persona = handleHint;
   const { accountId } = await actor(persona);
   const grant = await kernel(
@@ -283,18 +293,10 @@ export async function provisionCommunityPublication(input: {
   subjectPath: (id: string, label: string, locale?: string) => string;
 }): Promise<CommunityPublicationInventory> {
   const { kernel, publicOrigin, locales, eligiblePerKind } = input;
-  await openExposure(kernel, 'agent_verification');
 
   const scheme = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
     type: 'skos:ConceptScheme',
     labels: { en: 'Publication board scheme' },
-  });
-  const concept = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
-    type: 'skos:Concept',
-    labels: { en: 'Publication discussion' },
-    statements: {
-      'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.subject.id } }],
-    },
   });
 
   const collectionIds: string[] = [];
@@ -369,7 +371,7 @@ export async function provisionCommunityPublication(input: {
     const boardId = await createBoard(
       kernel,
       publicRealm.realmId,
-      concept.subject.id,
+      scheme.subject.id,
       `Public lantern board ${index}`,
       'published',
     );
@@ -382,7 +384,7 @@ export async function provisionCommunityPublication(input: {
   const protectedBoardId = await createBoard(
     kernel,
     protectedRealm.realmId,
-    concept.subject.id,
+    scheme.subject.id,
     'Protected lantern board',
     'protected',
   );
@@ -391,11 +393,11 @@ export async function provisionCommunityPublication(input: {
   const takenBoardId = await createBoard(
     kernel,
     publicRealm.realmId,
-    concept.subject.id,
+    scheme.subject.id,
     'Taken-down lantern board',
     'published',
   );
-  await createThread(kernel, takenBoardId, 'Thread on taken-down board', 'published');
+  const takenBoardThread = await createThread(kernel, takenBoardId, 'Thread on taken-down board', 'published');
   const takenThread = await createThread(kernel, boardIds[0]!, 'Taken-down lantern thread', 'published');
   const boardExcluded = [
     ...localePaths(publicOrigin, `/boards/${encodeURIComponent(protectedBoardId)}`, locales),
@@ -404,12 +406,19 @@ export async function provisionCommunityPublication(input: {
   const threadExcluded = [
     ...localePaths(publicOrigin, threadHref({ id: draftThread.id, title: draftThread.title }), locales),
     ...localePaths(publicOrigin, threadHref({ id: protectedThread.id, title: protectedThread.title }), locales),
+    ...localePaths(publicOrigin, threadHref({ id: takenBoardThread.id, title: takenBoardThread.title }), locales),
     ...localePaths(publicOrigin, threadHref({ id: takenThread.id, title: takenThread.title }), locales),
   ];
   await takeDown(kernel, 'board', takenBoardId);
   await takeDown(kernel, 'thread', takenThread.id);
 
-  const verified = await bindVerifiedHandle(kernel, input.actor, publicOrigin, input.verifiedHandle, input.subjectPath);
+  const verified = await provisionVerifiedPublication(
+    kernel,
+    input.actor,
+    publicOrigin,
+    input.verifiedHandle,
+    input.subjectPath,
+  );
 
   return {
     sitemap: {

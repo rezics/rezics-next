@@ -5,7 +5,12 @@ import publicationData from '../../../../specs/fixtures/web-publication.json';
 import { readFile } from 'node:fs/promises';
 import { startNativeWebStack, type NativeCredentials, type NativeWebServices, type NativeWebStack } from './stack';
 import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
-import { provisionCommunityPublication } from './publication-community-fixture.ts';
+import {
+  openPublicationVerification,
+  provisionCommunityPublication,
+  provisionVerifiedPublication,
+} from './publication-community-fixture.ts';
+import { publicationFixtureSelection, traversalSources } from './publication-fixture-selection.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
 const traversalViews = ['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const;
@@ -156,6 +161,7 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
 
 export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Promise<WebPublicationDriver> {
   const factoryStarted = performance.now();
+  const selection = publicationFixtureSelection();
   assertReleasedDefinitions(publicationData);
   const existingChildren = new Set(await childPids(process.pid));
   const lifecycle = new NativeTestLifecycle('native web publication driver', currentNativeLifecycle());
@@ -195,8 +201,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   let provisioned:
     | {
         data: typeof import('../../../../specs/fixtures/web-publication.json');
-        fixture: PublicationFixture;
-        sitemapNativeIds: Record<'subject' | 'collection' | 'realm' | 'space' | 'board' | 'thread', string[]>;
+        sitemapNativeIds: Record<keyof PublicationFixture['sitemap'], string[]> | undefined;
       }
     | undefined;
   const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
@@ -275,50 +280,55 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const writers = await preparePublicationWriters(prepare, setupActor);
-    console.info(
-      `web-publication-driver-provision: native writers ready at ${Math.round(performance.now() - factoryStarted)}ms`,
-    );
-    // These inventories share only the prepared owner. Drain both before returning a setup failure.
+    const origin = publicOrigin;
+    const writers = selection?.verifiedAgent ? undefined : await preparePublicationWriters(prepare, setupActor, selection);
+    if (writers) {
+      console.info(
+        `web-publication-driver-provision: native writers ready at ${Math.round(performance.now() - factoryStarted)}ms`,
+      );
+    }
+    // Full runs prepare the two inventories concurrently. Drain any active
+    // writes before returning a setup failure.
     const inventories = [
-      seedPublicationSubjects(prepare, writers, data),
-      provisionCommunityPublication({
-        kernel: (path, init, persona = writers.baseWriter) => prepare(path, init, persona),
-        actor: setupActor,
-        publicOrigin,
-        locales: data.locales,
-        eligiblePerKind: data.discovery.eligiblePerKind,
-        verifiedHandle: data.routing.verifiedHandle,
-        subjectPath,
-      }),
+      writers && seedPublicationSubjects(prepare, writers, data, selection),
+      !selection && writers
+        ? provisionCommunityPublication({
+            kernel: (path, init, persona = writers.baseWriter) => prepare(path, init, persona),
+            actor: setupActor,
+            publicOrigin: origin,
+            locales: data.locales,
+            eligiblePerKind: data.discovery.eligiblePerKind,
+            verifiedHandle: data.routing.verifiedHandle,
+            subjectPath,
+          })
+        : undefined,
+      selection?.verifiedAgent
+        ? provisionVerifiedPublication(prepare, setupActor, origin, data.routing.verifiedHandle, subjectPath)
+        : undefined,
+      selection?.verifiedReader
+        ? openPublicationVerification(prepare).then(() => setupActor('verified-agent'))
+        : undefined,
     ] as const;
-    const [seeded, community] = await Promise.all(inventories).catch(async (error: unknown) => {
+    const [seeded, community, verified] = await Promise.all(inventories).catch(async (error: unknown) => {
       setup.abort(error);
       await Promise.allSettled(inventories);
       throw error;
     });
-    const { created } = seeded;
-    competingDate = seeded.proposeCompetingDate;
+    const created = seeded?.created;
+    competingDate = seeded?.proposeCompetingDate;
 
     const urlFor = (key: string, locale = 'en') => {
-      const subject = created.get(key);
+      const subject = created?.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);
-      return new URL(subjectPath(subject.id, subject.labels[locale] ?? subject.label, locale), publicOrigin).href;
+      return new URL(subjectPath(subject.id, subject.labels[locale] ?? subject.label, locale), origin).href;
     };
     const subjects = Object.fromEntries(
-      [...created.keys()].map((key) => [key, urlFor(key)]),
+      [...(created?.keys() ?? [])].map((key) => [key, urlFor(key)]),
     ) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
-      traversalViews.map((name) => {
-        const source =
-          name === 'inverse'
-            ? 'person'
-            : name === 'cast' || name === 'crew' || name === 'relations'
-              ? `${name}-work`
-              : 'book';
-        const subject = created.get(source)!;
+      (seeded?.views ?? []).map((name) => {
         const view = name === 'inverse' ? 'works' : name === 'cast' ? 'characters' : name === 'crew' ? 'credits' : name;
-        return [name, new URL(`${subjectPath(subject.id, subject.label)}/${view}`, publicOrigin).href];
+        return [name, `${urlFor(traversalSources[name])}/${view}`];
       }),
     ) as PublicationFixture['views'];
     const localeUrls = (key: string) =>
@@ -333,45 +343,69 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       'automated',
       ...Array.from({ length: 16 }, (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`),
     ];
-    const sitemap = {
-      subject: {
-        eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),
-        excluded: ['excluded-withheld', 'excluded-private', 'excluded-taken-down'].flatMap((key) =>
-          data.locales.map((locale) => urlFor(key, locale)),
-        ),
-      },
-      ...community.sitemap,
-    } as PublicationFixture['sitemap'];
-    const sitemapNativeIds = {
-      subject: sitemapSubjects.map((key) => created.get(key)!.id),
+    const sitemapNativeIds = community && {
+      subject: sitemapSubjects.map((key) => created!.get(key)!.id),
       ...community.nativeIds,
     };
     const fixture: PublicationFixture = {
       releaseDigest: activeBody.digest,
-      publicOrigin,
+      publicOrigin: origin,
       subjects,
       views,
-      details: new URL(`${new URL(subjects.book).pathname}/details`, publicOrigin).href,
-      qualifiedCredit: subjects.game,
-      staleBookZhHans: urlFor('book', 'zh-Hans').replace(/\/[^/]+$/, '/former-lantern-title'),
-      canonicalBookZhHans: urlFor('book', 'zh-Hans'),
-      verifiedSubject: community.verifiedSubjectUrl,
-      verifiedProfile: community.verifiedProfileUrl,
-      publicPage: subjects.book,
+      get details() {
+        return `${urlFor('book')}/details`;
+      },
+      get qualifiedCredit() {
+        return urlFor('game');
+      },
+      get staleBookZhHans() {
+        return urlFor('book', 'zh-Hans').replace(/\/[^/]+$/, '/former-lantern-title');
+      },
+      get canonicalBookZhHans() {
+        return urlFor('book', 'zh-Hans');
+      },
+      get verifiedSubject() {
+        const url = verified?.subjectUrl ?? community?.verifiedSubjectUrl;
+        if (!url) throw new Error('Publication fixture is missing the verified Subject');
+        return url;
+      },
+      get verifiedProfile() {
+        const url = verified?.profileUrl ?? community?.verifiedProfileUrl;
+        if (!url) throw new Error('Publication fixture is missing the verified profile');
+        return url;
+      },
+      get publicPage() {
+        return urlFor('book');
+      },
       personalRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', services.kernelOrigin).href,
       bannedRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', services.kernelOrigin).href,
-      privateCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000000', publicOrigin).href,
-      unknownCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000001', publicOrigin).href,
-      emptyPublicList: new URL('/en/subjects', publicOrigin).href,
-      preparingView: views.inverse,
-      unavailableView: views.inverse,
-      searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
-      sitemap,
+      privateCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000000', origin).href,
+      unknownCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000001', origin).href,
+      emptyPublicList: new URL('/en/subjects', origin).href,
+      get preparingView() {
+        return `${urlFor('person')}/works`;
+      },
+      get unavailableView() {
+        return `${urlFor('person')}/works`;
+      },
+      searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', origin).href,
+      get sitemap() {
+        if (!community) throw new Error('Publication fixture is missing the sitemap inventory');
+        return {
+          subject: {
+            eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),
+            excluded: ['excluded-withheld', 'excluded-private', 'excluded-taken-down'].flatMap((key) =>
+              data.locales.map((locale) => urlFor(key, locale)),
+            ),
+          },
+          ...community.sitemap,
+        };
+      },
     };
     const stack = await websiteReady;
-    provisioned = { data: structuredClone(data), fixture, sitemapNativeIds };
+    provisioned = { data: structuredClone(data), sitemapNativeIds };
     console.info(
-      `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
+      `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created?.size ?? 0}`,
     );
     return fixture;
   };
@@ -379,6 +413,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const settle = async () => {
     if (!provisioned) throw new Error('settle requires a provisioned publication fixture');
     const { data, sitemapNativeIds } = provisioned;
+    // Scoped cases read the current Subject/page APIs or a verified account
+    // already observed by provision. Sitemap and search inventory are independent.
+    if (!sitemapNativeIds) return;
     const routes = [
       ['collection', '/v1/sitemap/collections'],
       ['realm', '/v1/sitemap/realms'],

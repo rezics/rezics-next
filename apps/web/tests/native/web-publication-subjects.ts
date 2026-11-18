@@ -3,6 +3,8 @@ import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
+import type { PublishedSubject, RelationView } from '../../../../specs/web-publication-driver';
+import type { PublicationFixtureSelection } from './publication-fixture-selection';
 import type { NativeWebStack } from './stack';
 
 type Data = typeof import('../../../../specs/fixtures/web-publication.json');
@@ -10,6 +12,11 @@ type Subject = { id: string; type: string; label: string; labels: Record<string,
 type Snak = { property: { id: string }; value: { type: 'value'; content: unknown } };
 type Statement = Snak & { qualifiers?: Snak[]; references?: { parts: Snak[] }[] };
 const globalContext = '00000000-0000-8000-8000-000000000000';
+const labelTypes = new Map([
+  ['cast', 'wd:Q95074'],
+  ['crew', 'schema:Person'],
+  ['relations', 'schema:Book'],
+]);
 const snak = (property: string, content: unknown): Snak => ({
   property: { id: property },
   value: { type: 'value', content },
@@ -47,6 +54,7 @@ const post = (kernel: NativeWebStack['kernel'], path: string, body: unknown, per
 export async function preparePublicationWriters(
   kernel: NativeWebStack['kernel'],
   actor: NativeWebStack['authPersona'],
+  selection?: PublicationFixtureSelection,
 ) {
   async function writer(name: string, actions: string[]) {
     const persona = `publication-subject-${name}`;
@@ -87,10 +95,12 @@ export async function preparePublicationWriters(
     'context:create',
     'context:accept',
     'context:adopt',
-    'space:create',
-    'realm:create',
+    ...(selection ? [] : ['space:create', 'realm:create']),
   ]);
-  const batchWriter = await writer('targets', ['subject:create', 'subject:batch_write']);
+  const batchWriter =
+    !selection || (selection.view && labelTypes.has(selection.view))
+      ? await writer('targets', ['subject:create', 'subject:batch_write'])
+      : undefined;
   return { baseWriter, batchWriter };
 }
 
@@ -99,8 +109,19 @@ export async function seedPublicationSubjects(
   kernel: NativeWebStack['kernel'],
   { baseWriter, batchWriter }: Awaited<ReturnType<typeof preparePublicationWriters>>,
   data: Data,
+  selection?: PublicationFixtureSelection,
 ) {
   const created = new Map<string, Subject>();
+  const views = data.traversal.views.filter((view) => !selection || view === selection.view) as RelationView[];
+  const subjects = new Set<PublishedSubject>(selection?.subject ? [selection.subject] : []);
+  if (subjects.has('release')) subjects.add('game');
+  if (subjects.has('game') || subjects.has('book')) subjects.add('person');
+  const includes = (key: PublishedSubject) => !selection || subjects.has(key);
+  function requiredSubject(key: string): Subject {
+    const subject = created.get(key);
+    if (!subject) throw new Error(`Publication fixture is missing ${key}`);
+    return subject;
+  }
   async function create(
     key: string,
     type: string,
@@ -139,71 +160,73 @@ export async function seedPublicationSubjects(
     created.set(key, subject);
     return subject;
   }
-  const form = await create('light-novel', 'skos:Concept', data.subjects.book.form, [], {
-    descriptions: { en: 'Public work-form classification for the publication fixture.' },
-  });
-  const tag = await create('harem', 'skos:Concept', data.subjects.book.tag);
-  const pc = await create('pc', 'skos:Concept', data.subjects.game.platform);
-  const consolePlatform = await create('switch', 'skos:Concept', data.subjects.release.platform);
-  const diet = await create('vegetarian', 'skos:Concept', data.subjects.recipe.diet, [
-    snak('schema:sameAs', 'https://schema.org/VegetarianDiet'),
-  ]);
-  const person = await create('person', 'schema:Person', data.subjects.person.title, [], {
-    descriptions: { en: data.subjects.person.description },
-  });
-  const book = await create(
-    'book',
-    'schema:Book',
-    data.subjects.book.title,
-    [
-      snak('schema:author', person.id),
-      snak('wdt:P7937', form.id),
-      snak('schema:keywords', tag.id),
-      {
-        ...snak('schema:datePublished', date(data.traversal.date.original)),
-        references: reference(data.traversal.date.sourceOriginal),
-      },
-      snak('schema:wordCount', { amount: `+${data.subjects.book.wordCount}`, unit: '1' }),
-    ],
-    { descriptions: { en: data.subjects.book.description } },
-  );
-  await create(
-    'recipe',
-    'schema:Recipe',
-    data.subjects.recipe.title,
-    [
-      ...data.subjects.recipe.ingredients.map((text) => snak('schema:recipeIngredient', { language: 'en', text })),
-      snak('schema:recipeInstructions', {
-        language: 'en',
-        licence: 'CC-BY-4.0',
-        document: fromPlainText(data.subjects.recipe.instructions.join('\n\n')),
-      }),
-      snak('schema:suitableForDiet', diet.id),
-      snak('schema:cookTime', {
-        amount: `+${data.subjects.recipe.cookTimeMinutes}`,
-        unit: 'http://www.wikidata.org/entity/Q7727',
-      }),
-    ],
-    { descriptions: { en: data.subjects.recipe.description } },
-  );
+  if (includes('person')) {
+    await create('person', 'schema:Person', data.subjects.person.title, [], {
+      descriptions: { en: data.subjects.person.description },
+    });
+  }
+  if (includes('book')) {
+    const form = await create('light-novel', 'skos:Concept', data.subjects.book.form, [], {
+      descriptions: { en: 'Public work-form classification for the publication fixture.' },
+    });
+    const tag = await create('harem', 'skos:Concept', data.subjects.book.tag);
+    await create(
+      'book',
+      'schema:Book',
+      data.subjects.book.title,
+      [
+        snak('schema:author', requiredSubject('person').id),
+        snak('wdt:P7937', form.id),
+        snak('schema:keywords', tag.id),
+        {
+          ...snak('schema:datePublished', date(data.traversal.date.original)),
+          references: reference(data.traversal.date.sourceOriginal),
+        },
+        snak('schema:wordCount', { amount: `+${data.subjects.book.wordCount}`, unit: '1' }),
+      ],
+      { descriptions: { en: data.subjects.book.description } },
+    );
+  }
+  if (includes('recipe')) {
+    const diet = await create('vegetarian', 'skos:Concept', data.subjects.recipe.diet, [
+      snak('schema:sameAs', 'https://schema.org/VegetarianDiet'),
+    ]);
+    await create(
+      'recipe',
+      'schema:Recipe',
+      data.subjects.recipe.title,
+      [
+        ...data.subjects.recipe.ingredients.map((text) => snak('schema:recipeIngredient', { language: 'en', text })),
+        snak('schema:recipeInstructions', {
+          language: 'en',
+          licence: 'CC-BY-4.0',
+          document: fromPlainText(data.subjects.recipe.instructions.join('\n\n')),
+        }),
+        snak('schema:suitableForDiet', diet.id),
+        snak('schema:cookTime', {
+          amount: `+${data.subjects.recipe.cookTimeMinutes}`,
+          unit: 'http://www.wikidata.org/entity/Q7727',
+        }),
+      ],
+      { descriptions: { en: data.subjects.recipe.description } },
+    );
+  }
   for (const [key, type] of [
     ['organization', 'schema:Organization'],
     ['automated', 'schema:SoftwareApplication'],
-  ] as const)
+  ] as const) {
+    if (!includes(key)) continue;
     await create(key, type, data.subjects[key].title, [], {
       descriptions: { en: data.subjects[key].description },
     });
+  }
 
   const sourceRun = crypto.randomUUID();
-  const labelTypes = new Map([
-    ['cast', 'wd:Q95074'],
-    ['crew', 'schema:Person'],
-    ['relations', 'schema:Book'],
-  ]);
-  const labelViews = data.traversal.views.filter((view) => labelTypes.has(view));
-  const linkedViews = data.traversal.views.filter((view) => !labelTypes.has(view));
+  const labelViews = views.filter((view) => labelTypes.has(view));
+  const linkedViews = views.filter((view) => !labelTypes.has(view));
 
   async function createLabelTargets(suffix: string) {
+    if (!batchWriter) throw new Error('Publication traversal is missing its batch writer');
     const commands = labelViews.map((view): Extract<BatchCommand, { op: 'create' }> => {
       const subject = { type: labelTypes.get(view)!, labels: { en: `${view} ${suffix}` } };
       return {
@@ -244,15 +267,15 @@ export async function seedPublicationSubjects(
         const month = String(1 + Math.floor((index - 1) / 28)).padStart(2, '0');
         const day = String(1 + ((index - 1) % 28)).padStart(2, '0');
         return create(key, 'bf:Instance', label, [
-          snak('schema:exampleOfWork', book.id),
+          snak('schema:exampleOfWork', requiredSubject('book').id),
           snak('schema:datePublished', date(`2025-${month}-${day}`)),
         ]);
       }
       case 'contents':
-        return create(key, 'schema:Book', label, [snak('wdt:P361', book.id)]);
+        return create(key, 'schema:Book', label, [snak('wdt:P361', requiredSubject('book').id)]);
       case 'inverse':
         return create(key, 'schema:Book', label, [
-          { ...snak('schema:author', person.id), qualifiers: [position(index)] },
+          { ...snak('schema:author', requiredSubject('person').id), qualifiers: [position(index)] },
         ]);
       default:
         throw new Error(`Unsupported publication traversal view ${view}`);
@@ -262,10 +285,10 @@ export async function seedPublicationSubjects(
   // Finish each ordinal before the next. Kernel may execute a batch on several partitions.
   // Only bare targets use bulk create: linked targets publish selected statements with their initial revision.
   const suffixes: string[] = [];
-  for (let index = data.traversal.countPerView + 1; index >= 1; index--) {
+  for (let index = views.length ? data.traversal.countPerView + 1 : 0; index >= 1; index--) {
     const suffix = index > data.traversal.countPerView ? 'withheld' : String(index).padStart(3, '0');
     const writes = await Promise.allSettled([
-      createLabelTargets(suffix),
+      ...(labelViews.length ? [createLabelTargets(suffix)] : []),
       ...linkedViews.map((view) => createLinkedTarget(view, index, suffix)),
     ]);
     for (const write of writes) if (write.status === 'rejected') throw write.reason;
@@ -276,89 +299,102 @@ export async function seedPublicationSubjects(
     ['crew', 'schema:contributor', 'schema:Book'],
     ['relations', 'rezics:bangumiRelatedTo', 'schema:Book'],
   ] as const) {
+    if (!views.includes(view)) continue;
     const statements = suffixes.map((suffix, index) => ({
-      ...snak(property, created.get(`${view}-${suffix}`)!.id),
+      ...snak(property, requiredSubject(`${view}-${suffix}`).id),
       ...(view === 'crew' ? { qualifiers: [position(index + 1)] } : {}),
     }));
     await create(`${view}-work`, type, `Lantern ${view}`, statements);
   }
-  const character = await create('credit-character', 'wd:Q95074', data.traversal.credit.character);
-  const spoiler = await create('spoiler-character', 'wd:Q95074', `0 ${data.traversal.credit.spoiler}`);
-  const role = await create('credit-role', 'skos:Concept', data.traversal.credit.role);
-  const game = await create(
-    'game',
-    'schema:VideoGame',
-    data.subjects.game.title,
-    [
-      {
-        ...snak('wdt:P725', person.id),
-        qualifiers: [
-          snak('wdt:P453', character.id),
-          snak('wdt:P1932', data.traversal.credit.creditedName),
-          snak('wdt:P3831', role.id),
-          position(data.traversal.credit.position),
-        ],
-      },
-      snak('schema:character', character.id),
-      snak('schema:gamePlatform', pc.id),
-      {
-        ...snak('schema:character', spoiler.id),
-        qualifiers: [snak('rezics:spoilerLevel', { amount: '+1', unit: '1' })],
-      },
-    ],
-    { descriptions: { en: data.subjects.game.description } },
-  );
-  await create(
-    'release',
-    'wd:Q20631656',
-    data.subjects.release.title,
-    [
-      snak('schema:exampleOfWork', game.id),
-      snak('schema:gamePlatform', consolePlatform.id),
-      snak('schema:datePublished', date(data.subjects.release.date)),
-      snak('schema:inLanguage', data.subjects.release.language),
-    ],
-    { descriptions: { en: data.subjects.release.description } },
-  );
+  if (includes('game')) {
+    const pc = await create('pc', 'skos:Concept', data.subjects.game.platform);
+    const character = await create('credit-character', 'wd:Q95074', data.traversal.credit.character);
+    const spoiler = await create('spoiler-character', 'wd:Q95074', `0 ${data.traversal.credit.spoiler}`);
+    const role = await create('credit-role', 'skos:Concept', data.traversal.credit.role);
+    await create(
+      'game',
+      'schema:VideoGame',
+      data.subjects.game.title,
+      [
+        {
+          ...snak('wdt:P725', requiredSubject('person').id),
+          qualifiers: [
+            snak('wdt:P453', character.id),
+            snak('wdt:P1932', data.traversal.credit.creditedName),
+            snak('wdt:P3831', role.id),
+            position(data.traversal.credit.position),
+          ],
+        },
+        snak('schema:character', character.id),
+        snak('schema:gamePlatform', pc.id),
+        {
+          ...snak('schema:character', spoiler.id),
+          qualifiers: [snak('rezics:spoilerLevel', { amount: '+1', unit: '1' })],
+        },
+      ],
+      { descriptions: { en: data.subjects.game.description } },
+    );
+  }
+  if (includes('release')) {
+    const consolePlatform = await create('switch', 'skos:Concept', data.subjects.release.platform);
+    await create(
+      'release',
+      'wd:Q20631656',
+      data.subjects.release.title,
+      [
+        snak('schema:exampleOfWork', requiredSubject('game').id),
+        snak('schema:gamePlatform', consolePlatform.id),
+        snak('schema:datePublished', date(data.subjects.release.date)),
+        snak('schema:inLanguage', data.subjects.release.language),
+      ],
+      { descriptions: { en: data.subjects.release.description } },
+    );
+  }
   // The hidden target is linked before moderation, so omission proves current authorization.
-  for (const view of data.traversal.views)
+  for (const view of views)
     await json(
       await post(
         kernel,
-        `/v1/subjects/${created.get(`${view}-withheld`)!.id}:hide`,
+        `/v1/subjects/${requiredSubject(`${view}-withheld`).id}:hide`,
         { reason: 'Publication fixture withheld target' },
         'governor',
       ),
       200,
       `Withhold ${view} target`,
     );
-  for (const [index, title] of [...data.search.matchingBooks].reverse().entries())
-    await create(`search-book-${index + 1}`, 'schema:Book', title, [], {
-      labels: { en: title, [data.search.locale]: title },
-    });
-  for (let index = 1; index <= 16; index++)
-    await create(`sitemap-book-${String(index).padStart(2, '0')}`, 'schema:Book', `Public lantern ${index}`, [], {
-      descriptions: { en: `A public catalogue page ${index}.` },
-    });
-  await create('excluded-withheld', 'schema:Book', data.withheld[0]!);
-  await create('excluded-private', 'schema:Book', 'Private context lantern');
-  await create('excluded-taken-down', 'schema:Book', 'Taken-down lantern');
+  if (!selection) {
+    for (const [index, title] of [...data.search.matchingBooks].reverse().entries())
+      await create(`search-book-${index + 1}`, 'schema:Book', title, [], {
+        labels: { en: title, [data.search.locale]: title },
+      });
+    for (let index = 1; index <= 16; index++)
+      await create(`sitemap-book-${String(index).padStart(2, '0')}`, 'schema:Book', `Public lantern ${index}`, [], {
+        descriptions: { en: `A public catalogue page ${index}.` },
+      });
+    await create('excluded-withheld', 'schema:Book', data.withheld[0]!);
+    await create('excluded-private', 'schema:Book', 'Private context lantern');
+    await create('excluded-taken-down', 'schema:Book', 'Taken-down lantern');
+  }
 
-  // Fresh native readback is distinct from the subsequent served-page traversal.
-  const factual = await json<{ subject: { id: string; revision: number } }>(
-    await kernel(`/v1/subjects/${book.id}`),
-    200,
-    'Read publication book facts',
-  );
-  expect(factual.subject.id).toBe(book.id);
-  expect(factual.subject.revision).toBeGreaterThan(0);
-  console.info(
-    `web-publication-subjects: subjects=${created.size} book=${factual.subject.id} revision=${factual.subject.revision}`,
-  );
+  const book = created.get('book');
+  if (book) {
+    // Fresh native readback is distinct from the subsequent served-page traversal.
+    const factual = await json<{ subject: { id: string; revision: number } }>(
+      await kernel(`/v1/subjects/${book.id}`),
+      200,
+      'Read publication book facts',
+    );
+    expect(factual.subject.id).toBe(book.id);
+    expect(factual.subject.revision).toBeGreaterThan(0);
+    console.info(
+      `web-publication-subjects: subjects=${created.size} book=${factual.subject.id} revision=${factual.subject.revision}`,
+    );
+  }
   return {
     created,
+    views,
     async proposeCompetingDate() {
-      const path = `/v1/subjects/${book.id}`;
+      const path = `/v1/subjects/${requiredSubject('book').id}`;
       const proposal = await json<{ candidate: string }>(
         await post(
           kernel,
