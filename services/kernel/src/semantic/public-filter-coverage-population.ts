@@ -24,6 +24,8 @@ import type {
   SourceBindingRetainedDefinition as CustodyRetainedDefinition,
 } from './source-binding-port.ts';
 
+import { readBookRole } from './public-filter-book-role.ts';
+
 const statement = readFileSync(new URL('./public-filter-coverage-population.sql', import.meta.url), 'utf8');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export function nativePopulationStartId(locator: string): string {
@@ -44,8 +46,8 @@ type Head = {
   position: string | null;
   population_fenced: boolean | null;
 };
-type PopulationRequest = Extract<PrivacyReductionObservationRequest, { kind: 'population' }>;
-type Row = {
+export type PopulationRequest = Extract<PrivacyReductionObservationRequest, { kind: 'population' }>;
+export type PopulationBinding = {
   slot: number;
   observation: string;
   registration: string;
@@ -53,34 +55,20 @@ type Row = {
   covered: string;
   consumer: string;
   definition: string;
-  coverage_generation: string;
-  incarnation: string;
   bootstrap: string;
   read_definition: string;
   bootstrap_consumer: string;
   snapshot_kind: string;
   book_withdrawals: unknown;
   covered_generation: string;
-  coverage_root: string;
   source_id: string;
   configuration: string;
   owner_epoch: number;
-  route_digest: string;
   release_digest: string;
   capture: string;
   dependency_keys: PublicFilterDependencyKey[];
   coverage_keys: string[];
-  execution: string | null;
-  consumer_window: string | null;
-  start_id: string | null;
   start_generation: string | null;
-  start_deadline: string | null;
-  pending: boolean;
-  fenced: boolean;
-  admitted: boolean;
-  inserted_start: string | null;
-  started_page: string | null;
-  finished_page: string | null;
   page_id: string | null;
   page_state: string | null;
   page_rounds: number | null;
@@ -102,11 +90,29 @@ type Row = {
     page_raw: number | null;
     page_status: string | null;
   }[];
+};
+type Row = PopulationBinding & {
+  coverage_generation: string;
+  incarnation: string;
+  coverage_root: string;
+  route_digest: string;
+  execution: string | null;
+  consumer_window: string | null;
+  start_id: string | null;
+  start_deadline: string | null;
+  pending: boolean;
+  fenced: boolean;
+  admitted: boolean;
+  inserted_start: string | null;
+  started_page: string | null;
+  finished_page: string | null;
   heads: Head[];
   own_homes: number;
   own_subjects: number;
   own_births: number;
 };
+export type PopulationProof = Pick<Row, 'pending' | 'fenced' | 'heads'>;
+export type PopulationCost = Cost;
 type PublicationPopulation = Readonly<{
   job: string;
   bootstrap: string;
@@ -114,9 +120,10 @@ type PublicationPopulation = Readonly<{
 }>;
 
 function validBindings(
-  row: Row,
+  row: PopulationBinding,
   request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
   search: PublicFilterSearchBindingPort,
+  completed?: Row,
   publication?: PublicationPopulation,
 ) {
   const q = request.queried;
@@ -159,8 +166,9 @@ function validBindings(
   )
     return false;
   if (publication) {
-    if (row.execution === null || row.consumer_window !== null || row.page_id !== null) return false;
-    const execution = search.decodeState<CustodyExecution>(row.execution);
+    if (!completed || completed.execution === null || completed.consumer_window !== null || row.page_id !== null)
+      return false;
+    const execution = search.decodeState<CustodyExecution>(completed.execution);
     return (
       execution.id === request.execution &&
       isDeepStrictEqual(execution.start, request.start) &&
@@ -171,7 +179,7 @@ function validBindings(
   if (request.start !== null) {
     // Known relevant change is already sufficient to block; no own/child scan
     // is dispatched after this indexed fail-fast result.
-    if (row.heads.length) return true;
+    if (completed?.heads.length) return true;
     if (row.page_id !== null) {
       if (
         row.page_children.length !== row.page_rounds ||
@@ -179,7 +187,9 @@ function validBindings(
         row.page_children.length > 3 ||
         row.page_id !== nativePopulationStartId(request.start.observation) ||
         row.page_tail !== request.execution ||
-        (row.page_state === 'sealed' ? row.finished_page !== row.page_id : row.page_state !== 'finished')
+        (row.page_state === 'sealed'
+          ? completed !== undefined && completed.finished_page !== row.page_id
+          : row.page_state !== 'finished')
       )
         return false;
       let parent = row.boundary;
@@ -233,9 +243,9 @@ function validBindings(
         row.tail_consumed <= previous!.raw.length
       );
     }
-    if (row.execution === null || row.consumer_window === null) return false;
-    const execution = search.decodeState<CustodyExecution>(row.execution);
-    const window = search.decodeState<NativeWindow>(row.consumer_window);
+    if (!completed || completed.execution === null || completed.consumer_window === null) return false;
+    const execution = search.decodeState<CustodyExecution>(completed.execution);
+    const window = search.decodeState<NativeWindow>(completed.consumer_window);
     if (
       execution.id !== request.execution ||
       !validWindow(execution, window, request.start, 'representation' in capture) ||
@@ -325,7 +335,7 @@ function populationResult(
   if (
     cost.inputKeys > 1000 ||
     cost.bytes > 4 * 1024 * 1024 ||
-    !validBindings(row, request, search, publication) ||
+    !validBindings(row, request, search, row, publication) ||
     row.pending ||
     row.fenced ||
     row.heads.some(
@@ -356,17 +366,17 @@ function populationResult(
   };
 }
 
-/** One statement snapshot for one role. Each member names its own planned native
- * page or sealed tail. Only the complete, equal population controls share probes.
- * Child bindings, windows and own rows remain charged to each member.
+/** Each role reads its own current snapshot. Grouped Book pages bind every
+ * original plan before sharing publication and keyed owner probes.
  */
-export async function readPublicFilterPagePopulations(
+async function readPopulations(
   pool: Pool,
   routeKey: Uint8Array,
   requests: readonly PopulationRequest[],
   search: PublicFilterSearchBindingPort,
   access: PublicFilterAccessBindingPort,
   publication?: PublicationPopulation,
+  bookPage = true,
 ): Promise<PrivacyReductionObservation[]> {
   if (!requests.length || requests.length > MAX_PAGE_READS) throw new RangeError('Invalid population page width');
   const final = requests[0]!.start !== null;
@@ -387,8 +397,7 @@ export async function readPublicFilterPagePopulations(
   };
   try {
     requireDeadline();
-    const multiple = requests.length > 1;
-    if (publication && multiple) return unready();
+    if (publication && bookPage) return unready();
     const admitted = requests.map((request) => structuredClone(request));
     const members = admitted.map((request, slot) => {
       const q = request.queried;
@@ -412,7 +421,7 @@ export async function readPublicFilterPagePopulations(
       )
         throw new TypeError('Invalid publication population');
       const pageId = final ? null : search.coverageStart(requests[slot]!.context);
-      if (multiple && (q.snapshot.kind !== 'pit' || (!final && pageId === null)))
+      if (bookPage && (q.snapshot.kind !== 'pit' || (!final && pageId === null)))
         throw new TypeError('A composed population requires native pages');
       const start = publication
         ? null
@@ -442,6 +451,33 @@ export async function readPublicFilterPagePopulations(
       new Set(members.map((m) => m.start_id)).size !== members.length
     )
       return unready();
+    if (bookPage) {
+      for (const cost of costs) {
+        cost.inputKeys = cost.dependencyPoints = cost.rows = cost.resultWrites = 0;
+      }
+      dispatched = true;
+      const observations = await withRequestDeadline(deadline, () =>
+        withBoundedReadConnection(
+          pool,
+          deadline,
+          (client) =>
+            readBookRole(
+              client,
+              admitted,
+              members,
+              costs,
+              createHash('sha256').update(routeKey).digest('hex'),
+              deadline,
+              search,
+              (row, request) => validBindings(row, request, search),
+            ),
+          { isUncertainSettledQueryError: () => true },
+        ),
+      );
+      accounted = true;
+      requireDeadline();
+      return observations;
+    }
     const sql = statement.replace('semantic.privacy-role', final ? 'semantic.privacy-final' : 'semantic.privacy-start');
     const values = [
       JSON.stringify(members),
@@ -451,16 +487,9 @@ export async function readPublicFilterPagePopulations(
       members.length,
       MAX_PAGE_COST,
     ];
-    // Each member pays for its binding and returned row. Charge the shared SQL,
-    // parameter encoding and result envelope once, retaining the original wire total.
     const shared = costs[0]!;
     shared.statements++;
     shared.bytes = Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
-    for (const member of members.slice(1)) {
-      const bytes = Buffer.byteLength(JSON.stringify(member));
-      costs[member.slot]!.bytes += bytes;
-      shared.bytes -= bytes;
-    }
     dispatched = true;
     const result = await withRequestDeadline(deadline, () =>
       withBoundedReadConnection(
@@ -475,20 +504,12 @@ export async function readPublicFilterPagePopulations(
     );
     shared.bytes += Buffer.byteLength(search.encodeState(result.rows));
     if (!result.rows.length) {
-      // A missing common scope can follow successful work on some siblings.
-      // Without their row counts retain the failed-call reservation for each.
-      accounted = !multiple;
+      accounted = true;
       requireDeadline();
-      if (multiple) throw new TypeError('Incomplete native population bindings');
       return unready();
     }
-    if (result.rows.length !== admitted.length || result.rows.some((row, i) => row.slot !== i))
-      throw new TypeError('Incomplete native population bindings');
-    for (const row of result.rows.slice(1)) {
-      const bytes = Buffer.byteLength(search.encodeState(row));
-      costs[row.slot]!.bytes += bytes;
-      shared.bytes -= bytes;
-    }
+    if (result.rows.length !== 1 || result.rows[0]!.slot !== 0)
+      throw new TypeError('Incomplete native population binding');
     const observations = result.rows.map((row, slot) => {
       const member = members[slot]!;
       return populationResult(row, admitted[slot]!, costs[slot]!, member.start_id, member.page_id, search, publication);
@@ -500,9 +521,10 @@ export async function readPublicFilterPagePopulations(
     if (dispatched && !accounted) {
       // Unknown work on any submitted member keeps the full original reservation.
       for (const cost of costs) {
-        cost.inputKeys = 1000;
-        cost.dependencyPoints = 32 + 468 + 4;
-        cost.rows = 32 + 468 + 4;
+        if (bookPage) cost.resultWrites = Math.max(cost.resultWrites, final ? 1 : 2);
+        cost.inputKeys = Math.max(cost.inputKeys, 1000);
+        cost.dependencyPoints = Math.max(cost.dependencyPoints, 32 + 468 + 4);
+        cost.rows = Math.max(cost.rows, 32 + 468 + 4);
       }
     }
     if (error instanceof TypeError || error instanceof RangeError || error instanceof SyntaxError) return unready();
@@ -520,6 +542,16 @@ export async function readPublicFilterPagePopulations(
   }
 }
 
+export function readPublicFilterPagePopulations(
+  pool: Pool,
+  routeKey: Uint8Array,
+  requests: readonly PopulationRequest[],
+  search: PublicFilterSearchBindingPort,
+  access: PublicFilterAccessBindingPort,
+) {
+  return readPopulations(pool, routeKey, requests, search, access);
+}
+
 export async function readPublicFilterPopulation(
   pool: Pool,
   routeKey: Uint8Array,
@@ -528,6 +560,6 @@ export async function readPublicFilterPopulation(
   access: PublicFilterAccessBindingPort,
   publication?: PublicationPopulation,
 ): Promise<PrivacyReductionObservation> {
-  const [result] = await readPublicFilterPagePopulations(pool, routeKey, [request], search, access, publication);
+  const [result] = await readPopulations(pool, routeKey, [request], search, access, publication, false);
   return result!;
 }

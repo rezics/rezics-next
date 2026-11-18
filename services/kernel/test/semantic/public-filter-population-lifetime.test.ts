@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import type { Pool, PoolClient } from 'pg';
+import { newId } from '../../src/route/route.ts';
 import { Admission } from '../../src/http/admission.ts';
 import { readPage } from '../../src/presentation/reads.ts';
+import { readBookIdentities, type BookIdentityRead } from '../../src/search/composed-book-identities.ts';
 import { composedBookObservation, runBookCatalogueRead } from '../../src/search/composed-book-reads.ts';
 import { createNativePublicFilterSource } from '../../src/semantic/public-filter-source.ts';
 import {
@@ -117,7 +119,7 @@ function populationFixture() {
     start: null,
     context: { deadline },
   });
-  const capture = { after: null };
+  const capture = { after: null, bookTypeList: true };
   const definition = {
     readDefinition: 'definition',
     source: { id: 'source', partition: 0, epoch: 1, configuration: 'configuration' },
@@ -167,7 +169,7 @@ function populationFixture() {
     page_state: 'finished',
     page_rounds: 1,
     page_charged: 0,
-    page_ceiling: 200,
+    page_ceiling: 39,
     page_tail: executionId,
     tail_consumed: 0,
     boundary: null,
@@ -355,8 +357,12 @@ test('population start/final retention bounds native custody and replays the dur
   let dispatches = 0;
   const crossedClient = client(
     async (query) => {
-      dispatches++;
-      assert.match(query.text, /^\/\* semantic\.privacy-final \*\//);
+      if (query.text.startsWith('BEGIN') || query.text === 'SET LOCAL enable_seqscan = off' || query.text === 'COMMIT')
+        return { rows: [] };
+      if (query.text.startsWith('/* semantic.privacy-final */')) {
+        dispatches++;
+        return { rows: [{ generation: '1', pending: false, fenced: false, heads: [] }] };
+      }
       const submitted: { execution_id: string }[] = JSON.parse(String(query.values[0]));
       assert.deepEqual(
         submitted.map((member) => member.execution_id),
@@ -380,7 +386,7 @@ test('population start/final retention bounds native custody and replays the dur
   );
   assert.deepEqual(
     crossed.map((member) => 'statements' in member.cost && member.cost.statements),
-    [1, 0],
+    [5, 0],
   );
   const duplicate = await readPublicFilterPagePopulations(noCheckout, routeKey, [sibling, sibling], search, access);
   assert.deepEqual(
@@ -446,6 +452,173 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(transportRelease, transportError);
 });
 
+test('overlapping Book windows check each current original and terminal once and refuse the affected tail', async () => {
+  const plans = [populationFixture(), populationFixture()];
+  const subjects = Array.from({ length: 13 }, (_, index) => newId(index * 16));
+  const redirected = newId(16);
+  const deadline = Date.now() + 1000;
+  const finish: string[] = [];
+  const sqlRoles: string[] = [];
+  const queried = plans.map((p) => ({ ...p.queried, consumer: plans[0]!.queried.consumer }));
+  const rows = plans.map((p, i) => {
+    const ids = i === 0 ? subjects : subjects.slice(1);
+    const ownRows = ids.map((id) => ({ original: id, terminal: id === subjects[0] ? redirected : id }));
+    const child = p.row.page_children[0]!;
+    const parent = i === 1 ? randomUUID() : null;
+    const consumed = parent === null ? 0 : 1;
+    const previous = { raw: [{ id: subjects[0], sort: [subjects[0]] }], before: null, consumed: 0 };
+
+    return {
+      ...p.row,
+      slot: i,
+      queried: encode(queried[i]),
+      consumer: encode(queried[i]!.consumer),
+      bootstrap_consumer: encode(queried[i]!.consumer),
+      page_state: 'sealed',
+      boundary: parent,
+      boundary_consumed: consumed,
+      boundary_window: parent === null ? null : encode(previous),
+      page_charged: ids.length,
+      page_children: [
+        {
+          ...child,
+          page_parent: parent,
+          page_consumed: consumed,
+          page_raw: ids.length,
+          execution: encode({ id: p.executionId, start: p.start, ownRows }),
+          consumer_window: encode({
+            raw: ids.map((id) => ({ id, sort: [id] })),
+            parent,
+            consumed,
+            before: parent === null ? null : previous.raw[0]!.sort,
+            rounds: 1,
+            charged: ids.length,
+          }),
+        },
+      ],
+    };
+  });
+  const db = pool(async () =>
+    client(
+      async (query) => {
+        if (query.text.startsWith('-- Bind')) return { rows };
+        if (query.text.startsWith('/* semantic.privacy-final */')) {
+          sqlRoles.push('final');
+          return {
+            rows: [
+              {
+                pending: false,
+                fenced: false,
+                heads: [],
+                coverage_registration: 'registration',
+                coverage_bootstrap: plans[0]!.startId,
+                generation: '1',
+              },
+            ],
+          };
+        }
+        if (query.text.startsWith('/* semantic.own-rows */')) {
+          sqlRoles.push('own');
+          const [ids, homes] = query.values as [string[], number[]];
+          assert.deepEqual(new Set(ids), new Set([...subjects, redirected]));
+          assert.equal(ids.length, 14);
+          assert.equal(new Set(homes).size, 13);
+          return { rows: ids.map((id) => ({ id, admitted: id !== redirected, check_birth: false })) };
+        }
+        if (query.text.startsWith('UPDATE search.public_filter_coverage_page')) {
+          finish.push(...(query.values[0] as string[]));
+          return { rows: finish.map((id) => ({ id })) };
+        }
+        assert(
+          query.text.startsWith('BEGIN') || query.text === 'SET LOCAL enable_seqscan = off' || query.text === 'COMMIT',
+        );
+        return { rows: [] };
+      },
+      () => {},
+    ),
+  );
+  const result = await readPublicFilterPagePopulations(
+    db,
+    plans[0]!.routeKey,
+    plans.map((p, i) => ({ ...p.request(deadline), queried: queried[i]! })),
+    search,
+    access,
+  );
+  assert.deepEqual(
+    result.map((r) => r.status),
+    ['unready', 'observed'],
+  );
+  assert.deepEqual(finish, [plans[1]!.startId]);
+  assert.deepEqual(sqlRoles, ['final', 'own']);
+  // Two bindings and children, one parent role, thirteen home pairs, fourteen Subjects and one finish.
+  assert.equal(
+    result.reduce((n, r) => n + r.cost.dependencyPoints, 0),
+    2 * (7 + 1) + 32 + 2 * 13 + 14 + 1,
+  );
+});
+
+test('overlapping Book identity windows retain order and charge a refused original to its requesting reads', async () => {
+  const [first, shared, missing] = [randomUUID(), randomUUID(), randomUUID()] as const;
+  const calls: string[] = [];
+  const source = {
+    async readPublicFilterSubjectIdentities({ subjects }: BookIdentityRead['request']) {
+      calls.push(...subjects);
+      const cost = {
+        inputKeys: 2,
+        candidates: 0,
+        accessPoints: 1,
+        dependencyPoints: 2,
+        engineSearches: 0,
+        engineIteratorSteps: 0,
+        outputSlots: 0,
+        resultWrites: 0,
+        frontierWrites: 0,
+      };
+      if (subjects.includes(missing)) return { status: 'unready', reason: 'metadata_missing', cost };
+      return {
+        status: 'observed',
+        rows: subjects.map((subject) => ({
+          subject,
+          terminal: subject,
+          partition: 0,
+          securityRevision: '1',
+          currentRelease: 'release',
+        })),
+        cost,
+      };
+    },
+  } as BookIdentityRead['source'];
+  const charges = [0, 0];
+  const members = [
+    [shared, first],
+    [missing, shared],
+  ].map((subjects, i): BookIdentityRead => ({
+    source,
+    request: {
+      subjects,
+      meaning: { digest: 'release' } as BookIdentityRead['request']['meaning'],
+      inputLimit: 12,
+      context: { deadline: Date.now() + 1000 },
+    },
+    answer: Promise.withResolvers(),
+    admit: (work) => work(),
+    charge: (cost) => {
+      charges[i]! += cost.accessPoints + cost.dependencyPoints;
+    },
+  }));
+  const settled = await readBookIdentities(members, () => {});
+  for (const read of members) settled.get(read)!();
+  const [ready, refused] = await Promise.all(members.map((read) => read.answer.promise));
+  assert.deepEqual(
+    ready?.map((row) => row.subject),
+    [shared, first],
+  );
+  assert.equal(refused, undefined);
+  assert.deepEqual(calls.sort(), [shared, first, missing].sort());
+  assert.equal(charges[0]! + charges[1]!, 9);
+  assert(charges.every((points) => points >= 3));
+});
+
 test('nine Book lists yield admission through one START, bounded execution and a failed shared FINAL', async () => {
   const { row, queried, startRequest } = populationFixture();
   // Nine live plans exceed both the four page workers and the eight HTTP permits.
@@ -456,15 +629,50 @@ test('nine Book lists yield admission through one START, bounded execution and a
   const roles: string[] = [];
   let peak = 0;
   const deadline = Date.now() + 3000;
+  let members: {
+    slot: number;
+    queried: string;
+    page_id: string | null;
+    start_id: string;
+    execution_id: string | null;
+  }[] = [];
   const composedClient = client(
     async (query) => {
-      const members: {
-        slot: number;
-        queried: string;
-        page_id: string | null;
-        start_id: string;
-        execution_id: string | null;
-      }[] = JSON.parse(String(query.values[0]));
+      if (
+        query.text.startsWith('BEGIN') ||
+        query.text === 'SET LOCAL enable_seqscan = off' ||
+        query.text === 'COMMIT' ||
+        query.text === 'ROLLBACK'
+      )
+        return { rows: [] };
+      if (query.text.startsWith('-- Bind')) {
+        members = JSON.parse(String(query.values[0]));
+        return {
+          rows: members.map((m) => ({
+            ...row,
+            slot: m.slot,
+            queried: m.queried,
+            page_id: m.start_id,
+            page_children: m.execution_id
+              ? [
+                  {
+                    ...row.page_children[0]!,
+                    id: m.execution_id,
+                    execution: encode({
+                      id: m.execution_id,
+                      start: { observation: 'population:' + m.start_id },
+                      ownRows: [],
+                    }),
+                  },
+                ]
+              : [],
+            page_state: m.execution_id ? 'sealed' : 'planned',
+            page_tail: m.execution_id,
+            page_rounds: m.execution_id ? 1 : 0,
+          })),
+        };
+      }
+      if (query.text.startsWith('WITH starts')) return { rows: members.map((m) => ({ id: m.start_id })) };
       assert.equal(admission.running.normal, 1);
       assert.deepEqual(
         members.map((member) => member.start_id),
@@ -485,16 +693,7 @@ test('nine Book lists yield admission through one START, bounded execution and a
         members.map((member) => member.page_id),
         planned,
       );
-      return {
-        rows: members.map((m) => ({
-          ...row,
-          slot: m.slot,
-          queried: m.queried,
-          page_id: m.page_id,
-          started_page: m.page_id,
-          inserted_start: m.start_id,
-        })),
-      };
+      return { rows: [{ generation: '1', pending: false, fenced: false, heads: [] }] };
     },
     () => {},
   );

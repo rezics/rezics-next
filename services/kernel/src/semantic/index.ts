@@ -134,6 +134,8 @@ export {
 } from './public-filter-source-binding.ts';
 export { PublicFilterSourceDefinitionError } from './public-filter-source-binding.ts';
 export type {
+  NativeBookPreparation,
+  NativePublicFilterPreparation,
   NativePublicSource,
   NativePublicFilterPublication,
   NativePublicFilterPublicationRequest,

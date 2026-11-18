@@ -1,3 +1,4 @@
+import { MAX_PAGE_READS } from '@rezics/composition';
 import { isDeepStrictEqual } from 'node:util';
 import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -462,6 +463,15 @@ export type PublicSourceRepairPage =
       cost: PublicFilterCost;
     }>
   | PublicFilterBindingFailure;
+export type NativeBookPreparation = {
+  source: PublicFilterSource;
+  meaning: PublicFilterProjectionMeaning;
+  capture: PublicFilterSourceCaptureInput;
+  consumer: PublicFilterConsumer;
+  snapshot: 'pit' | 'prepared';
+  definition: PublicFilterSourceDefinition;
+  inputLimit: number;
+};
 export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
   Readonly<{
     readRepairStep(
@@ -605,10 +615,16 @@ export async function readNativePublicFilterPublicationCompletion(
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput =
   | (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] &
-      Readonly<{ inputLimit?: number; usePublishedCoverage?: true }>)
+      Readonly<{ inputLimit?: number; usePublishedCoverage?: true; definition?: PublicFilterSourceDefinition }>)
   | Readonly<{ bootstrap: string; inputLimit?: number }>;
 export type NativePublicFilterPreparation =
-  | PublicSourceBootstrapResult
+  | (Extract<PublicSourceBootstrapResult, { status: 'begun' }> & {
+      freshBook?: Readonly<{
+        unopened(): Promise<{ unopened: boolean; cost: PublicFilterCost } | PublicFilterBindingFailure>;
+        adopt(queried: PublicFilterQueriedObservation): ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
+      }>;
+    })
+  | PublicFilterBindingFailure
   | Readonly<{ status: 'repairing'; bootstrapId: string; cost: PublicFilterCost }>
   | Readonly<{
       status: 'preparing';
@@ -716,12 +732,40 @@ export async function readNativePublicFilterRepairStart(
   return nativeRepairStarts.get(binding)?.(request, context) ?? null;
 }
 
-/** A private factory association locates the native body; it cannot grant coverage or open a PIT. */
-export async function advanceNativePublicFilterPreparation(
+const nativeBookPageRestorations = new WeakMap<PublicFilterSourceBinding, PublicFilterSourceBinding['join']>();
+const nativeBookPreparations = new WeakMap<
+  PublicFilterSourceBinding,
+  (
+    members: readonly NativeBookPreparation[],
+    context: PublicFilterConsumerContext,
+  ) => Promise<NativePublicFilterPreparation[]>
+>();
+type BookPreparationGroup = { members: readonly NativeBookPreparation[] };
+
+/** A private factory association locates the native body. Each child still resolves its registration and cut. */
+export function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding,
+  input: { pageObservation: PublicFilterQueriedObservation },
+  context: PublicFilterConsumerContext,
+): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> | null>;
+export function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding,
+  input: BookPreparationGroup,
+  context: PublicFilterConsumerContext,
+): Promise<NativePublicFilterPreparation[] | null>;
+export function advanceNativePublicFilterPreparation(
   binding: PublicFilterSourceBinding,
   input: NativePreparationInput,
   context: PublicFilterConsumerContext,
-): Promise<NativePublicFilterPreparation | null> {
+): Promise<NativePublicFilterPreparation | null>;
+export async function advanceNativePublicFilterPreparation(
+  binding: PublicFilterSourceBinding,
+  input: NativePreparationInput | BookPreparationGroup | { pageObservation: PublicFilterQueriedObservation },
+  context: PublicFilterConsumerContext,
+) {
+  if ('pageObservation' in input)
+    return nativeBookPageRestorations.get(binding)?.({ queried: input.pageObservation }, context) ?? null;
+  if ('members' in input) return nativeBookPreparations.get(binding)?.(input.members, context) ?? null;
   return nativePreparations.get(binding)?.(input, context) ?? null;
 }
 
@@ -951,6 +995,9 @@ export function createNativePublicFilterSourceBinding(
     return (await readNativePublicFilterSourceDefinition(id, db, routeDigest, ports.search)).definition;
   }
   const readers = new Map<string, PublicFilterSource>();
+  // Only immutable definitions just resolved by this binding can be handed on
+  // to its original preparation. Registration and the native epoch are checked there.
+  const resolvedDefinitions = new WeakSet<PublicFilterSourceDefinition>();
   const sourceReader = (definition: PublicFilterSourceDefinition) =>
     readers.get(definition.source.id) ??
     ports.sourceFactory({
@@ -2256,7 +2303,7 @@ export function createNativePublicFilterSourceBinding(
   async function joinNativeCut(
     request: Parameters<PublicFilterSourceBinding['join']>[0],
     context: PublicFilterConsumerContext,
-    maintenance: boolean,
+    mode: 'serve' | 'repair' | 'book-page',
   ) {
     let input: typeof request;
     try {
@@ -2283,7 +2330,15 @@ export function createNativePublicFilterSourceBinding(
         cut.row.state === 'aborted'
       )
         throw new BindingError('binding_mismatch');
-      if (!maintenance) await requireServingCoverage(cut, db);
+      // An adopted Book cursor restores only the immutable original cut. Its
+      // planned page reads this same live publication at START before dispatch.
+      const originalPage =
+        mode === 'book-page' &&
+        retained.execution === null &&
+        cut.bootstrap.bookPopulation &&
+        cut.row.state === 'adopted' &&
+        cut.row.queried === retained.queried.snapshot.observation;
+      if (mode !== 'repair' && !originalPage) await requireServingCoverage(cut, db);
       if (retained.execution !== null) {
         const startLocator = retained.execution.start.observation;
         if (startLocator.startsWith('population:')) {
@@ -2324,7 +2379,7 @@ export function createNativePublicFilterSourceBinding(
             started.row.state === 'aborted'
           )
             throw new BindingError('binding_mismatch');
-          if (!maintenance) await requireServingCoverage(started, db);
+          if (mode !== 'repair') await requireServingCoverage(started, db);
         }
       }
       freeze(definition);
@@ -2343,9 +2398,9 @@ export function createNativePublicFilterSourceBinding(
   async function joinNative(
     request: Parameters<PublicFilterSourceBinding['join']>[0],
     context: PublicFilterConsumerContext,
-    maintenance = false,
+    mode: 'serve' | 'repair' | 'book-page' = 'serve',
   ): ReturnType<PublicFilterSourceBinding['join']> {
-    const joined = await joinNativeCut(request, context, maintenance);
+    const joined = await joinNativeCut(request, context, mode);
     if (joined.status !== 'joined') return joined;
     const { cut: _cut, ...result } = joined;
     return result;
@@ -2416,10 +2471,24 @@ export function createNativePublicFilterSourceBinding(
         if (!definition) throw new BindingError('configuration_changed');
         const native = await loadDefinition(definition.read_definition, db);
         freeze(native);
+        resolvedDefinitions.add(native);
         return { status: 'resolved' as const, definition: native, cost };
       });
     },
-    join: joinNative,
+    join: (request, context) => joinNative(request, context),
+  };
+  type CaptureMember = { bootstrap: string; definition: string; request_key: string; consumer: string };
+  type BookCutGroup = {
+    member: CaptureMember;
+    cost: BindingCost;
+    capture: (members: CaptureMember[]) => Promise<
+      | {
+          rows: readonly { definition: string | null; bootstrap: string | null; awaiting: boolean | null }[];
+          cost: BindingCost;
+        }
+      | PublicFilterBindingFailure
+    >;
+    answer: PromiseWithResolvers<{ bootstrap: string | null; awaiting: boolean | null }>;
   };
   async function beginRetained(
     request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
@@ -2427,6 +2496,8 @@ export function createNativePublicFilterSourceBinding(
     existing?: Awaited<ReturnType<typeof loadBootstrap>>,
     inputLimit = preparationInputLimit,
     usePublishedCoverage = false,
+    definition?: PublicFilterSourceDefinition,
+    collect?: (item: BookCutGroup) => void,
   ): Promise<NativePublicFilterPreparation> {
     const deadline = context.deadline;
     let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
@@ -2439,8 +2510,17 @@ export function createNativePublicFilterSourceBinding(
       return fail('binding_mismatch');
     }
     if (snapshot !== 'pit' && snapshot !== 'prepared') return fail('binding_mismatch');
-    const resolved = existing
-      ? { status: 'resolved' as const, definition: existing.definition, cost: publicFilterBindingCost() }
+    const known = existing?.definition ?? definition;
+    if (
+      definition &&
+      (!resolvedDefinitions.has(definition) ||
+        !ownsSource(request.source) ||
+        !isDeepStrictEqual(definition.meaning, request.meaning) ||
+        !isDeepStrictEqual(definition.capture, capture))
+    )
+      return fail('binding_mismatch');
+    const resolved = known
+      ? { status: 'resolved' as const, definition: known, cost: publicFilterBindingCost() }
       : await binding.resolve({ source: request.source, meaning: request.meaning, capture }, { deadline });
     if (resolved.status !== 'resolved') return resolved;
     readers.set(resolved.definition.source.id, request.source);
@@ -2489,8 +2569,108 @@ export function createNativePublicFilterSourceBinding(
                   OR s.security_revision::text IS DISTINCT FROM w->>'revision'
               ))`
           : 'NULL::jsonb';
-        const attached = await db.query<{ bootstrap: string }>(
-          `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
+        const newId = randomUUID();
+        const attachedCut = async (id: string) => {
+          const cut = await loadBootstrap('0:' + id, db, resolved.definition);
+          const bootstrap = cut.bootstrap;
+          // A conflict can return an earlier begun cut with an uncertain PIT.
+          // Only the UUID inserted by THIS invocation may take the fresh path.
+          if (!bookList || id !== newId || cut.row.state !== 'begun' || cut.row.queried !== null)
+            return { status: 'begun' as const, bootstrap, cost };
+          freeze(bootstrap);
+          return {
+            status: 'begun' as const,
+            bootstrap,
+            cost,
+            freshBook: {
+              unopened() {
+                // Recheck under the actual Search registration claim. A competing
+                // opener can complete between cut insertion and claim acquisition.
+                return run({ deadline }, async (cost, store) => {
+                  const result = await store.query(
+                    `/* semantic.native-keyed:4:9 */
+                    SELECT b.bootstrap FROM semantic.public_filter_bootstrap b
+                    JOIN core.partition p ON p.partition_no=b.partition_no AND p.write_state='active' AND p.epoch=b.owner_epoch
+                    JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,$2)
+                    WHERE (b.partition_no,b.bootstrap)=(0,$1) AND b.state='begun' AND b.queried IS NULL
+                      AND r.state='active' AND r.consumer_bootstrap=$3 AND r.consumer=$4
+                      AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o
+                        WHERE (o.partition_no,o.registration)=(0,r.id) AND o.state='open' AND o.prepared_build IS NULL
+                          AND md5(o.covered)=md5($5) AND o.covered=$5)`,
+                    [
+                      id,
+                      registration.registration.id,
+                      bootstrap.id,
+                      ports.search.encodeConsumer(bootstrap.consumer),
+                      ports.search.encodeState(bootstrap.covered),
+                    ],
+                  );
+                  return { unopened: result.rowCount === 1, cost };
+                });
+              },
+              adopt(queried: PublicFilterQueriedObservation) {
+                const q = structuredClone(queried);
+                return run({ deadline }, async (adoptionCost, store) => {
+                  const retained = await ports.search.readConsumerCustody(pool, { queried: q }, { deadline });
+                  addCost(adoptionCost, retained.cost);
+                  if (retained.status !== 'found') return { ...retained, cost: adoptionCost };
+                  requireSameDefinition(bootstrap.definition, retained.definition);
+                  if (
+                    !isDeepStrictEqual(retained.queried, q) ||
+                    !isDeepStrictEqual(q.consumer, bootstrap.consumer) ||
+                    q.snapshot.kind !== 'pit' ||
+                    !isDeepStrictEqual(retained.covered, bootstrap.covered)
+                  )
+                    throw new BindingError('binding_mismatch');
+                  const [adopted] = await nativeSourceQuery(store, adoptBootstrap, {
+                    bootstrap: id,
+                    observation: q.snapshot.observation,
+                  });
+                  if (!adopted) throw new BindingError('binding_mismatch');
+                  return { status: 'adopted' as const, bootstrap, queried: q, cost: adoptionCost };
+                });
+              },
+            },
+          };
+        };
+        const member = {
+          bootstrap: newId,
+          definition: resolved.definition.readDefinition,
+          request_key: hash(encode({ consumer, snapshot })),
+          consumer: encode(consumer),
+        };
+        const captureInputs = {
+          target: consumer.physicalTarget,
+          incarnation: consumer.incarnation,
+          definition: member.definition,
+          text_keys: [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+          owner_epoch: resolved.definition.source.epoch,
+        };
+        if (collect && bookList) {
+          // The group can spend the full bounded withdrawal proof. A failed
+          // or missing attachment remains charged and proceeds to ordinary recovery.
+          if (inputLimit - cost.inputKeys < 210 + 2) throw new BindingError('owner_unavailable');
+          const answer = Promise.withResolvers<{ bootstrap: string | null; awaiting: boolean | null }>();
+          collect({
+            member,
+            cost,
+            answer,
+            capture: (members) =>
+              run({ deadline }, async (shared, store) => {
+                try {
+                  const rows = await nativeSourceQuery(store, captureBookWithdrawals, { ...captureInputs, members });
+                  return { rows, cost: shared };
+                } catch {
+                  return fail(Date.now() >= deadline ? 'deadline' : 'owner_unavailable', shared);
+                }
+              }),
+          });
+          const captured = await answer.promise;
+          if (captured.bootstrap) return attachedCut(captured.bootstrap);
+          if (captured.awaiting) throw new BindingError('owner_unavailable');
+        } else {
+          const attached = await db.query<{ bootstrap: string }>(
+            `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
            WITH parent AS MATERIALIZED (
              SELECT * FROM ${coverage}
            ), cut AS MATERIALIZED (SELECT parent.*, ${withdrawals} AS withdrawals FROM parent)
@@ -2512,42 +2692,28 @@ export function createNativePublicFilterSourceBinding(
            )
            ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
            DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap::text`,
-          [
-            consumer.physicalTarget,
-            consumer.incarnation,
-            resolved.definition.readDefinition,
-            mixed ? [] : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
-            randomUUID(),
-            hash(encode({ consumer, snapshot })),
-            encode(consumer),
-            snapshot,
-            resolved.definition.source.epoch,
-            ...(mixed ? [ports.search.encodeConsumer(consumer)] : []),
-          ],
-        );
-        if (attached.rows[0]) {
-          const cut = await loadBootstrap('0:' + attached.rows[0].bootstrap, db, resolved.definition);
-          return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
-        }
-        if (bookList) {
-          // Reserve the bounded visibility proof and the final bootstrap lookup before dispatch.
-          if (inputLimit - cost.inputKeys < 192 + 2) throw new BindingError('owner_unavailable');
-          const result = await nativeSourceQuery(db, captureBookWithdrawals, {
-            target: consumer.physicalTarget,
-            incarnation: consumer.incarnation,
-            definition: resolved.definition.readDefinition,
-            text_keys: [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
-            bootstrap: randomUUID(),
-            request_key: hash(encode({ consumer, snapshot })),
-            consumer: encode(consumer),
-            owner_epoch: resolved.definition.source.epoch,
-          });
-          const withdrawal = Array.isArray(result) ? result[0] : result;
-          if (withdrawal?.bootstrap) {
-            const cut = await loadBootstrap('0:' + withdrawal.bootstrap, db, resolved.definition);
-            return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
+            [
+              consumer.physicalTarget,
+              consumer.incarnation,
+              resolved.definition.readDefinition,
+              mixed ? [] : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+              newId,
+              hash(encode({ consumer, snapshot })),
+              encode(consumer),
+              snapshot,
+              resolved.definition.source.epoch,
+              ...(mixed ? [ports.search.encodeConsumer(consumer)] : []),
+            ],
+          );
+          if (attached.rows[0]) return attachedCut(attached.rows[0].bootstrap);
+          if (bookList) {
+            // Reserve the bounded visibility proof and the final bootstrap lookup before dispatch.
+            if (inputLimit - cost.inputKeys < 210 + 2) throw new BindingError('owner_unavailable');
+            const result = await nativeSourceQuery(db, captureBookWithdrawals, { ...captureInputs, members: [member] });
+            const withdrawal = result[0];
+            if (withdrawal?.bootstrap) return attachedCut(withdrawal.bootstrap);
+            if (withdrawal?.awaiting) throw new BindingError('owner_unavailable');
           }
-          if (withdrawal?.awaiting) throw new BindingError('owner_unavailable');
         }
         if (mixed) {
           // A second read must not replace the baseline while its original repair
@@ -2704,7 +2870,7 @@ export function createNativePublicFilterSourceBinding(
   ) {
     const input = structuredClone(request),
       deadline = context.deadline;
-    const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
+    const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, 'repair');
     if (joined.status !== 'joined') return joined;
     let ackAttempted = false;
     const result = await run({ deadline }, async (cost, db) => {
@@ -2985,6 +3151,100 @@ export function createNativePublicFilterSourceBinding(
     accounts?: { ids: readonly string[]; observations?: ReadonlyMap<string, AccountDiscoveryRepairObservation> };
   };
   const repairReadBatch = new AsyncLocalStorage<RepairReadScope>();
+  async function beginBookPages(requests: readonly NativeBookPreparation[], context: PublicFilterConsumerContext) {
+    if (requests.length < 1 || requests.length > MAX_PAGE_READS) throw new RangeError('Invalid Book capture width');
+    const inputs = requests.map(({ source, definition, ...plan }) => ({
+      ...structuredClone(plan),
+      source,
+      definition,
+    }));
+    const waits = inputs.map(() => Promise.withResolvers<BookCutGroup | undefined>());
+    const first = inputs[0]!;
+    const scope = (v: NativeBookPreparation) => [
+      v.consumer.physicalTarget,
+      v.consumer.incarnation,
+      v.definition.source,
+      v.definition.meaning.digest,
+      v.definition.dependencyKeys,
+    ];
+    if (
+      inputs.some(
+        (v) =>
+          !resolvedDefinitions.has(v.definition) ||
+          v.snapshot !== 'pit' ||
+          !('bookTypeList' in v.capture) ||
+          v.capture.bookTypeList !== true ||
+          !isDeepStrictEqual(scope(v), scope(first)),
+      )
+    )
+      throw new TypeError('Incompatible Book captures');
+    if (inputs.length === 1)
+      return [await beginRetained(first, context, undefined, first.inputLimit, true, first.definition)];
+    const begun: Promise<NativePublicFilterPreparation>[] = [];
+    let next = 0;
+    // A parked member owns no checkout. Bound the registration and final cut loads on either side of the group.
+    async function prepare() {
+      while (next < inputs.length) {
+        const i = next++,
+          v = inputs[i]!;
+        begun[i] = beginRetained(v, context, undefined, v.inputLimit, true, v.definition, waits[i]!.resolve).finally(
+          () => waits[i]!.resolve(undefined),
+        );
+        void begun[i]!.catch(() => {});
+        await waits[i]!.promise;
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, inputs.length) }, prepare));
+    const byMember = await Promise.all(waits.map((w) => w.promise));
+    const group = byMember.filter((w) => w !== undefined);
+    if (group.length) {
+      try {
+        if (new Set(group.map((v) => v.member.definition)).size !== group.length)
+          throw new TypeError('Duplicate Book capture definition');
+        const result = await group[0]!.capture(group.map((v) => v.member));
+        // The SQL reservation includes the first cut. Attribute one cut to
+        // each plan, then split only the common proof and wire envelope.
+        const common = publicFilterBindingCost();
+        addCost(common, result.cost);
+        const dispatched = common.statements > 0;
+        if (dispatched) {
+          common.resultWrites--;
+          common.rows -= 2;
+          common.dependencyPoints -= 2;
+          common.inputKeys -= 4;
+        }
+        group.forEach((item, position) => {
+          for (const key of Object.keys(common) as (keyof BindingCost)[])
+            item.cost[key] += Math.floor((common[key] + position) / group.length);
+          if (dispatched) {
+            item.cost.resultWrites++;
+            item.cost.rows += 2;
+            item.cost.dependencyPoints += 2;
+            item.cost.inputKeys += 4;
+          }
+        });
+        if (!('rows' in result)) throw new BindingError(result.reason);
+        const byDefinition = new Map(result.rows.map((row) => [row.definition, row]));
+        if (byDefinition.size !== group.length || group.some((v) => !byDefinition.has(v.member.definition)))
+          throw new BindingError('binding_mismatch');
+        let position = 0;
+        async function attach() {
+          while (position < byMember.length) {
+            const index = position++,
+              member = byMember[index];
+            if (member) {
+              member.answer.resolve(byDefinition.get(member.member.definition)!);
+              await begun[index]!.catch(() => {});
+            }
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(4, group.length) }, attach));
+      } catch (error) {
+        for (const v of group) v.answer.reject(error);
+      }
+    }
+    return Promise.all(begun);
+  }
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
     async readRepairStep(request, context) {
@@ -3010,7 +3270,8 @@ export function createNativePublicFilterSourceBinding(
             : undefined;
         const reused = scope?.joined;
         const joined =
-          reused ?? (await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true));
+          reused ??
+          (await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, 'repair'));
         if (!reused) addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const { cut } = joined;
@@ -3461,7 +3722,7 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         // Preparation stays acyclic: this is basic immutable Search custody, never its settlement reader.
-        const joined = await joinNative({ queried, execution }, { deadline }, true);
+        const joined = await joinNative({ queried, execution }, { deadline }, 'repair');
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const cut = await loadBootstrap(receipt.bootstrap, db, joined.definition);
@@ -3652,7 +3913,11 @@ export function createNativePublicFilterSourceBinding(
         deadline = context.deadline;
       if (!Number.isInteger(input.inputLimit) || input.inputLimit < 1 || input.inputLimit > 256)
         throw new RangeError('Repair inputLimit must be 1 through 256');
-      const joined = await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true);
+      const joined = await joinNativeCut(
+        { queried: input.queried, execution: input.execution },
+        { deadline },
+        'repair',
+      );
       if (joined.status !== 'joined') return joined;
       return run({ deadline }, async (cost, db) => {
         addCost(cost, joined.cost);
@@ -3692,7 +3957,7 @@ export function createNativePublicFilterSourceBinding(
       return settleNative(input, context, original, true);
     },
   };
-  nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
+  nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, 'repair'));
   nativeRepairReadBatches.set(bootstrapBinding, async (input, context, read, accounts) => {
     const ids = accounts ? [...new Set(accounts.ids)] : [];
     const scope: RepairReadScope = {
@@ -3722,7 +3987,7 @@ export function createNativePublicFilterSourceBinding(
   });
   nativeRepairStarts.set(bootstrapBinding, async (request, context) => {
     const result = await run(context, async (cost, db) => {
-      const joined = await joinNative({ queried: request.queried }, context, true);
+      const joined = await joinNative({ queried: request.queried }, context, 'repair');
       addCost(cost, joined.cost);
       if (joined.status !== 'joined') throw new BindingError(joined.reason);
       const cut = await loadBootstrap(request.bootstrap, db, joined.definition);
@@ -3778,7 +4043,7 @@ export function createNativePublicFilterSourceBinding(
   });
   nativeAccountRepairs.set(bootstrapBinding, async (request, context) => {
     const result = await run(context, async (cost, db) => {
-      const joined = await joinNative({ queried: request.queried, execution: request.execution }, context, true);
+      const joined = await joinNative({ queried: request.queried, execution: request.execution }, context, 'repair');
       addCost(cost, joined.cost);
       if (joined.status !== 'joined') throw new BindingError(joined.reason);
       const cut = await loadBootstrap(request.bootstrap, db, joined.definition);
@@ -3817,9 +4082,18 @@ export function createNativePublicFilterSourceBinding(
     if (result.status !== 'account') throw new BindingError(result.reason);
     return result;
   });
+  nativeBookPageRestorations.set(bootstrapBinding, (request, context) => joinNative(request, context, 'book-page'));
+  nativeBookPreparations.set(bootstrapBinding, beginBookPages);
   nativePreparations.set(bootstrapBinding, async (input, context) => {
     if (!('bootstrap' in input))
-      return beginRetained(input, context, undefined, input.inputLimit, input.usePublishedCoverage === true);
+      return beginRetained(
+        input,
+        context,
+        undefined,
+        input.inputLimit,
+        input.usePublishedCoverage === true,
+        input.definition,
+      );
     const retained = await run(context, async (cost, db) => {
       const cut = await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
@@ -3876,7 +4150,7 @@ export function createNativePublicFilterSourceBinding(
       // Pin the original operands before any dispatch/adoption uncertainty. Search owns the
       // generation record; Source stores only its locator and its own original binding operands.
       if ('bootstrap' in input) {
-        const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, true);
+        const joined = await joinNative({ queried: input.queried, execution: input.execution }, { deadline }, 'repair');
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const cut = await loadBootstrap(input.bootstrap, db, joined.definition);

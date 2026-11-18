@@ -17,7 +17,13 @@ import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
 import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
-import { composedBookObservation } from './composed-book-reads.ts';
+import type { BookIdentityRow } from './composed-book-identities.ts';
+import {
+  composedBookCapture,
+  composedBookIdentities,
+  composedBookObservation,
+  restoreComposedBookCut,
+} from './composed-book-reads.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   installPublicFilterCoveragePage,
@@ -1531,10 +1537,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     execution: string | undefined,
     m: Meter,
     context: PublicFilterConsumerContext,
+    restorePage = false,
   ) {
-    const joined = m.take(
-      await binding.join({ queried: q, ...(execution === undefined ? {} : { execution }) }, context),
-    );
+    const restored = restorePage ? await restoreComposedBookCut(binding, q, context) : undefined;
+    const joined =
+      restored?.status === 'joined' && restored.bookPopulation
+        ? m.takePreparation(restored)
+        : m.take(
+            restored ??
+              (await binding.join({ queried: q, ...(execution === undefined ? {} : { execution }) }, context)),
+          );
     if (joined.status !== 'joined')
       throw new ConsumerFailure(joined.reason === 'deadline' ? 'deadline' : 'source_pending');
     if (
@@ -1616,13 +1628,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const subjects = readIdentities ? [...new Set(hits.map((hit) => hit.id))] : [];
     const remaining = m.inputLimit - m.cost.inputKeys;
     if (subjects.length > remaining) throw new ConsumerFailure('source_pending');
-    const identities =
-      readIdentities && subjects.length
-        ? m.take(await readIdentities({ subjects, meaning, inputLimit: remaining, context }))
-        : null;
-    if (identities && (identities.status !== 'observed' || identities.rows.length !== subjects.length))
-      throw new ConsumerFailure('source_pending');
-    const bySubject = identities && new Map(identities.rows.map((row) => [row.subject, row]));
+    let bySubject: Map<string, BookIdentityRow> | undefined;
+    if (readIdentities && subjects.length) {
+      const request = { subjects, meaning, inputLimit: remaining, context };
+      const grouped = composedBookIdentities(config.source, request, (cost) => m.take({ cost }));
+      const direct = grouped ? undefined : m.take(await readIdentities(request));
+      const identities = grouped ? await grouped : direct?.status === 'observed' ? direct.rows : undefined;
+      if (!identities || identities.length !== subjects.length) throw new ConsumerFailure('source_pending');
+      bySubject = new Map(identities.map((row) => [row.subject, row]));
+    }
     for (const [position, hit] of hits.entries()) {
       m.check();
       let source = bySubject?.get(hit.id);
@@ -1967,15 +1981,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     publication?: PublicFilterConsumer,
     inlinePublishedPreparation = false,
     bookPage?: boolean,
+    freshBook?: {
+      bootstrap: PublicSourceBootstrap;
+      adopt: (q: PublicFilterQueriedObservation) => ReturnType<PublicFilterSourceBootstrapBinding['adopt']>;
+    },
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     // Publication resumes its exact Source cut and this registration's Search materialization.
     // Source adopts the prepared observation after the original execution has been retained.
     // A resumed capture has no candidates yet. Its native bootstrap lookups
     // consume preparation inputs just as they do when starting a fresh cut.
-    let recovery = publication
-      ? null
-      : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+    let recovery = freshBook
+      ? { status: 'begun' as const, bootstrap: freshBook.bootstrap, queried: null }
+      : publication
+        ? null
+        : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
     const consumer = work.bootstrap.consumer;
     const job: PublicFilterConsumerJob = {
       consumer,
@@ -2303,7 +2323,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const adopted =
         recovered.status === 'adopted'
           ? recovered
-          : m.take(await binding.adopt({ bootstrap: work.bootstrap.id, queried: q }, context));
+          : m.take(
+              freshBook
+                ? await freshBook.adopt(q)
+                : await binding.adopt({ bootstrap: work.bootstrap.id, queried: q }, context),
+            );
       if (adopted.status !== 'adopted') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(adopted.queried, q) ||
@@ -2476,20 +2500,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         snapshot,
       };
       if (mixedPage) mixedPage.captureWitness = { stage: 'begin' };
-      const native = await advanceNativePublicFilterPreparation(
-        binding,
-        {
-          ...preparation,
-          ...(!publication &&
-          !('purpose' in canonical) &&
-          ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
-            ? { usePublishedCoverage: true as const }
-            : {}),
-          inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
-        },
-        context,
-      );
-      const begun = m.takePreparation(native ?? (await binding.begin(preparation, context)));
+      const inputLimit = Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE);
+      const group =
+        page && !publication && snapshot === 'pit' && 'bookTypeList' in canonical && canonical.bookTypeList
+          ? composedBookCapture(
+              binding,
+              { ...preparation, definition: resolved.definition, inputLimit },
+              context,
+              m.takePreparation,
+            )
+          : undefined;
+      const grouped = await group;
+      const native =
+        grouped ??
+        (await advanceNativePublicFilterPreparation(
+          binding,
+          {
+            ...preparation,
+            ...('bookTypeList' in canonical && canonical.bookTypeList ? { definition: resolved.definition } : {}),
+            ...(!publication &&
+            !('purpose' in canonical) &&
+            ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
+              ? { usePublishedCoverage: true as const }
+              : {}),
+            inputLimit,
+          },
+          context,
+        ));
+      const begun = grouped ?? m.takePreparation(native ?? (await binding.begin(preparation, context)));
       if (begun.status === 'repairing') {
         if (mixedPage) mixedPage.captureWitness = { stage: 'population-repair' };
         return {
@@ -2554,7 +2592,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         'bookTypeList' in canonical &&
         canonical.bookTypeList === true &&
         begun.bootstrap.coveragePublication !== undefined;
-      return await advanceCapture(work, encoded, m, context, page, publication, true, bookPage);
+      const fresh = bookPage && native?.status === 'begun' ? native.freshBook : undefined;
+      const claim = fresh && m.take(await fresh.unopened());
+      if (claim && !('unopened' in claim)) return m.unavailable('source_pending');
+      return await advanceCapture(
+        work,
+        encoded,
+        m,
+        context,
+        page,
+        publication,
+        true,
+        bookPage,
+        fresh && claim?.unopened ? { bootstrap: begun.bootstrap, adopt: fresh.adopt } : undefined,
+      );
     } catch (error) {
       return failure(error, m);
     }
@@ -2586,8 +2637,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const bookCut = page?.bookCut;
       if (bookCut && !isDeepStrictEqual(q, page?.queried)) return m.unavailable('observation_lost');
-      const cut = bookCut ?? (await join(q, undefined, m, context));
+      const cut = bookCut ?? (await join(q, undefined, m, context, !!page && !!prefix));
       const plan = cut.definition.capture;
+      if (
+        page &&
+        !bookCut &&
+        cut.bookPopulation &&
+        q.snapshot.kind === 'pit' &&
+        'bookTypeList' in plan &&
+        plan.bookTypeList
+      ) {
+        // A resumed page obtains its original immutable plan from native custody.
+        // Each refill uses that plan and FINAL verifies every durable execution.
+        page.bookCut = { definition: cut.definition, covered: cut.covered, bookPopulation: cut.bookPopulation };
+      }
       if ('representation' in plan !== mixed || ('purpose' in plan && mixed))
         return m.unavailable('registration_missing');
       const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m);
@@ -2745,7 +2808,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       encoded = await save(work, encoded, false, m);
       // The native Book page's FINAL validates the retained children, input
       // boundary, current coverage and own rows before publishing the result.
-      if (!bookCut) {
+      if (!page?.bookCut) {
         const finalJoined = await join(q, execution, m, context);
         if (
           !isDeepStrictEqual(finalJoined.execution, { id: execution, start: started.start, ownRows: rows }) ||
