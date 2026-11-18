@@ -1,18 +1,25 @@
 -- unbound: exact routed account and Subject keys on one physical database in a single statement snapshot.
 -- The public floor suffices for this native Access profile only with complete direct-account denial evidence.
-WITH viewer AS MATERIALIZED (
-  SELECT a.account_id, a.operator_relation_version, p.epoch, c.generation, c.epoch AS auth_epoch
-  FROM access.account a
-  JOIN core.partition p ON p.partition_no = ($1::integer >> 4) AND p.write_state = 'active' AND p.moved_to IS NULL
+WITH input AS NOT MATERIALIZED (
+  SELECT $1::integer AS viewer_route, $2::uuid AS viewer_id,
+         $3::bigint AS authn_floor, $4::uuid AS account_version,
+         $5::integer[] AS routes, $6::uuid[] AS ids,
+         $7::timestamptz AS observed_at, $8::timestamptz AS first_at
+), viewer AS MATERIALIZED (
+  SELECT a.account_id, a.operator_relation_version, p.epoch, c.generation, c.epoch AS auth_epoch,
+         i.observed_at
+  FROM input i
+  JOIN access.account a ON (a.route, a.account_id) = (i.viewer_route, i.viewer_id)
+  JOIN core.partition p ON p.partition_no = (i.viewer_route >> 4) AND p.write_state = 'active' AND p.moved_to IS NULL
   JOIN core.publication_authority_epoch c ON c.home_no = p.partition_no
-  WHERE (a.route, a.account_id) = ($1, $2::uuid) AND a.kind = 'actor' AND a.state = 'active'
-    AND $7::timestamptz >= $8::timestamptz
+  WHERE a.kind = 'actor' AND a.state = 'active' AND i.observed_at >= i.first_at
     AND NOT a.authn_fenced AND a.operator_account_id IS NULL AND a.membership_inverse_complete
-    AND a.minimum_authn_epoch = $3::bigint AND a.transaction_id = $4::uuid
-    AND NOT EXISTS (SELECT 1 FROM access.membership_inverse m WHERE (m.route, m.account_id) = ($1, $2))
-    AND NOT EXISTS (SELECT 1 FROM access.erasure e WHERE (e.route, e.account_id) = ($1, $2))
+    AND a.minimum_authn_epoch = i.authn_floor AND a.transaction_id = i.account_version
+    AND NOT EXISTS (SELECT 1 FROM access.membership_inverse m WHERE (m.route, m.account_id) = (i.viewer_route, i.viewer_id))
+    AND NOT EXISTS (SELECT 1 FROM access.erasure e WHERE (e.route, e.account_id) = (i.viewer_route, i.viewer_id))
 ), requested AS MATERIALIZED (
-  SELECT DISTINCT route, id FROM unnest($5::integer[], $6::uuid[]) k(route, id)
+  SELECT DISTINCT k.route, k.id
+  FROM input i CROSS JOIN LATERAL unnest(i.routes, i.ids) k(route, id)
 )
 SELECT k.id::text, s.visibility, s.security_revision::text, s.erasure_key::text, s.current_release,
        s.recorded_transaction_id::text AS birth, v.revision, v.recorded_transaction_id::text AS version,
@@ -23,7 +30,7 @@ SELECT k.id::text, s.visibility, s.security_revision::text, s.erasure_key::text,
        a.operator_relation_version::text,
        EXISTS (SELECT 1 FROM access.resource_denial d
          WHERE d.route = k.route AND d.resource_id = k.id AND d.action = 'subject:read'
-           AND d.subject_id = a.account_id AND d.subject_role = '' AND d.valid @> $7::timestamptz) AS denied
+           AND d.subject_id = a.account_id AND d.subject_role = '' AND d.valid @> a.observed_at) AS denied
 FROM viewer a LEFT JOIN (requested k
 JOIN LATERAL (SELECT epoch FROM core.partition WHERE partition_no = (k.route >> 4)
               AND write_state = 'active' AND moved_to IS NULL LIMIT 1) p ON true
