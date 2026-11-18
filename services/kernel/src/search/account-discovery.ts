@@ -482,7 +482,12 @@ export async function withDiscoveryTarget<T>(
 }
 
 /** Before the first external copy, persist its locator under the actual Account erasure fence. */
-async function locateAccount(pool: Pool, target: DiscoveryTarget, key: DiscoveryKey): Promise<boolean> {
+async function locateAccount(
+  pool: Pool,
+  target: DiscoveryTarget,
+  key: DiscoveryKey,
+  createsCopy: boolean,
+): Promise<boolean> {
   const result = await runCommand(pool, { partition: discoveryPartition(key.id) }, async (tx) => {
     // The account-home row serializes first registration with terminal deletion. Erasure's record is permanent.
     await tx.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
@@ -507,6 +512,10 @@ async function locateAccount(pool: Pool, target: DiscoveryTarget, key: Discovery
         events: [{ type: 'com.rezics.access.account-updated.v1', subject: key.id, data: { accountId: key.id } }],
       };
     }
+    // A deletion never creates a public copy. Its ordinary write step records
+    // the delete high water under physical custody. Publishing a copy notice
+    // here would let the relay overtake the repair's retained delete version.
+    if (!createsCopy) return noEffect(true);
     const inserted = await tx.query(
       `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind)
       VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING source_id`,
@@ -577,11 +586,14 @@ export function createDiscoveryProjection(options: {
         if (pendingClaimHomes().size > 0) throw new Error('Account discovery revision moved; retry');
       }
       actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined);
-      for (const key of chunk)
-        if (!(await locateAccount(pool, target, key))) {
+      const copies = new Set(actions.filter((action) => action.op === 'index').map((action) => action.id));
+      for (const key of chunk) {
+        const identity = discoveryDocumentId(registry, key);
+        if (!(await locateAccount(pool, target, key, copies.has(identity)))) {
           await eraseDiscoveryAccount(pool, search, registry, key.id);
-          actions = actions.filter((action) => action.id !== discoveryDocumentId(registry, key));
+          actions = actions.filter((action) => action.id !== identity);
         }
+      }
     } else {
       if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
       const snapshot = await readCreditIndexSnapshot(subject.source, partition, ids);
@@ -626,6 +638,19 @@ export function createDiscoveryProjection(options: {
         // Erasure can commit after source/locator reads; session custody excludes its physical purge.
         if (key.owner === 'accounts' && (await readErasureStatus(client, key.id)))
           throw new Error('Account erasure requires physical cleanup');
+        if (key.owner === 'accounts' && captureKey === null) {
+          // The repair keeps one immutable action after enrollment. A relay
+          // must keep its own frontier until that action settles, so it cannot
+          // move the permanent copy version ahead of the repair's dispatch.
+          const pendingRepair = await client.query(
+            `SELECT 1 FROM search.identity_writer
+             WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3
+               AND writer_token IS NOT NULL AND repair_locator IS NOT NULL
+               AND (repair_action IS NULL OR repair_account IS NOT NULL)`,
+            [discoveryPartition(key.id), index, key.id],
+          );
+          if (pendingRepair.rowCount) throw new SearchUnavailableError('Discovery Account repair is pending');
+        }
         const {
           rows: [old],
         } = await client.query<{ position: string; revision: string; settled: boolean; deleted: boolean }>(
@@ -760,6 +785,13 @@ export function createDiscoveryProjection(options: {
     const route = routeOf(id);
     if (route === null) throw new TypeError('Invalid discovery repair anchor');
     const partition = discoveryPartition(id);
+    // An Account repair already names its only native Discovery kind. Missing or fenced
+    // owner rows still require a versioned deletion for this exact identity.
+    if (owner === 'accounts') {
+      const actions = await prepareChunk(partition, owner, [{ owner, kind: 'account', route, id }], obligation);
+      if (actions.length !== 1) throw new Error('Native Account repair could not retain its keyed action');
+      return actions;
+    }
     // One keyed inventory page, not registry/kind or population fanout. Retain old kinds for deletion.
     const copies = (
       await pool.query<{ kind: string }>(
@@ -775,27 +807,13 @@ export function createDiscoveryProjection(options: {
       // An ID can name rows in both native owners. Their positions and deletion
       // obligations are independent, including when their UUID happens to agree.
       if (entry.owner !== owner) continue;
-      const key: DiscoveryKey =
-        entry.owner === 'accounts'
-          ? { owner: 'accounts', kind: 'account', route, id }
-          : { owner: 'semantic', kind, route, id };
-      selected.set(kind, registry.key(key));
+      selected.set(kind, registry.key({ owner: 'semantic', kind, route, id }));
     }
     if (owner === 'semantic' && subject?.owner === 'semantic') {
       const snapshot = await subject.source.read(partition, [id]);
       validateObservation(snapshot, partition, [id], obligation, true);
       for (const row of snapshot.subjects)
         selected.set(row.type, registry.key({ owner: 'semantic', kind: row.type, route, id }));
-    }
-    if (owner === 'accounts') {
-      const snapshot = validateAccountSnapshot(
-        await accounts.source.read(partition, [id]),
-        partition,
-        [id],
-        obligation,
-      );
-      if (snapshot.accounts.length)
-        selected.set('account', registry.key({ owner: 'accounts', kind: 'account', route, id }));
     }
     if (!selected.size) throw new Error('Native repair anchor has no owner key or retained physical copy');
     if (selected.size > 100) throw new Error('Discovery repair exceeds its bounded keyed action window');

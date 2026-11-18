@@ -18,6 +18,7 @@ import {
 } from '../../src/search/generations.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
+import { createDiscoveryRepairWriter } from '../../src/search/writer-guard.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -78,6 +79,7 @@ test('replay of a Subject changing between released Types deletes its old kind a
     );
     return BigInt(rows[0]!.position);
   }
+  let observeAccountRead: (() => Promise<void>) | undefined;
   const registry = createDiscoveryRegistry({
     release: bundledRelease,
     semantic: {
@@ -98,6 +100,9 @@ test('replay of a Subject changing between released Types deletes its old kind a
       source: {
         async read(requested, ids) {
           expect(requested).toBe(partition);
+          const observe = observeAccountRead;
+          observeAccountRead = undefined;
+          if (observe) await observe();
           return {
             partition,
             position: await position(),
@@ -234,6 +239,32 @@ test('replay of a Subject changing between released Types deletes its old kind a
     await projection.applyRepair(repaired);
     expect(await hit(personId)).toBeUndefined();
     expect(await hit(bookId)).toMatchObject({ _id: bookId });
+    const absent = newId(route);
+    const absentKey = discoveryDocumentId(registry, { owner: 'accounts', kind: 'account', route, id: absent });
+    const deletedAt = await position();
+    const deletion = await projection.prepareRepair(absent, end, 'accounts');
+    expect(deletion).toEqual([{ op: 'delete', id: absentKey, version: deletedAt }]);
+    expect(await position()).toBe(deletedAt);
+    expect(await projection.applyRepair(deletion)).toHaveLength(1);
+    expect(await hit(absentKey)).toBeUndefined();
+
+    const entered = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    observeAccountRead = () => {
+      entered.resolve();
+      return resume.promise;
+    };
+    const writer = createDiscoveryRepairWriter({ pool, search, projection, consumer });
+    const repair = writer.repairAccount(absent, 'withheld-account', { deadline: Date.now() + 10_000 });
+    try {
+      await Promise.race([entered.promise, repair]);
+      await expect(
+        projection.project(partition, [{ owner: 'accounts', kind: 'account', route, id: absent }]),
+      ).rejects.toThrow('Discovery Account repair is pending');
+    } finally {
+      resume.resolve();
+      await repair;
+    }
   } finally {
     await native.request('DELETE', `/${index}`).catch(() => undefined);
     await admin.query('DELETE FROM search.discovery_copy WHERE prefix=$1', [prefix]);
