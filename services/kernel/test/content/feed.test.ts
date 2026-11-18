@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readConfig, startServer } from '../../src/server.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -151,7 +152,7 @@ test('Default mixed feed composes real discovery, current Following and Continue
     );
     expect(savedEverything.status, JSON.stringify(savedEverything.body)).toBe(200);
     // A Realm adoption publishes the Book itself to followers of the native Space.
-    await driver.grant('editor', ['space:create', 'realm:create']);
+    await driver.grant('editor', ['space:create', 'realm:create'], PLATFORM_RESOURCE.id);
     const space = await driver.request('editor', 'POST', '/v1/spaces', { title: 'Native mixed feed Space' }, key());
     expect(space.status, JSON.stringify(space.body)).toBe(201);
     const spaceId = (space.body.space as { spaceId: string }).spaceId;

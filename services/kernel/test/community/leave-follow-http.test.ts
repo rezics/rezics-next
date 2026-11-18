@@ -292,7 +292,7 @@ test('departure revokes protected access before release and a ban clears only th
     ).toEqual([]);
     if (kind === 'ban') {
       expect(await followRows(member, target.spaceId)).toEqual([]);
-      const [{ receipts, events }] = effects;
+      const { receipts, events } = effects[0]!;
       const after = [{ receipts, events: [...events, expect.any(Object)] }];
       expect(await followEffects(member, target.spaceId)).toEqual(after);
       expect((await ban()).value.ban).toEqual(removed.value.ban);

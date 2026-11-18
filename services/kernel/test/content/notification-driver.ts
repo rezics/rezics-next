@@ -33,7 +33,7 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
-function resultMap<T>(value: ApiResult<unknown>, map: (body: unknown) => T): ApiResult<T> {
+function resultMap<Input, Output>(value: ApiResult<Input>, map: (body: Input) => Output): ApiResult<Output> {
   return { response: value.response, value: value.value === null ? null : map(value.value) };
 }
 
