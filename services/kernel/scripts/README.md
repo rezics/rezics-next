@@ -85,6 +85,10 @@ Decision: One Kernel check and its permitted rerun report every reached product 
 Use Reylo 0.7.0 with its optional platform engine installed; the removed per-database engine packages are unnecessary.
 The lockfile and Reylo's native engine launcher participate in SQL-analysis cache identity.
 
+Reylo accepts one occurrence of each named or positional bind in native SQL files, including `-- unbound` queries
+dispatched through the raw client. Bind a parameter once in a typed input CTE, or reuse the already constrained column
+when the query needs its value again. Preserve positional bind order and the existing read and lock predicates.
+
 Decision: SQL-derived work bounds include sqlcommenter bytes even though `.sql` omits the comment. Query modules use
 encoded source metadata; detached SQL declarations reserve a 512-byte comment envelope. Raw `.sql` dispatch may
 therefore consume less than its conservative declaration. Keep inferred cardinalities and nullability at call sites.
