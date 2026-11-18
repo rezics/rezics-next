@@ -1051,6 +1051,8 @@ CREATE TABLE search.identity_writer_gate (
     publication_home integer DEFAULT 0 NOT NULL,
     publication_after uuid,
     publication_revision bigint DEFAULT 0 NOT NULL,
+    publication_gate_from bigint,
+    publication_gate_through bigint,
     CONSTRAINT identity_writer_gate_check CHECK (((closed_token IS NULL) = (closed_transaction_id IS NULL))),
     CONSTRAINT identity_writer_gate_check1 CHECK (((closed_token IS NULL) = (closed_position IS NULL))),
     CONSTRAINT identity_writer_gate_check2 CHECK (((closed_token IS NULL) = (fence_generation = 0))),
@@ -2461,6 +2463,13 @@ CREATE INDEX identity_receiving_native_pending_target ON search.identity_receivi
 --
 
 CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (partition_no, physical_target, original_id) WHERE (writer_token IS NOT NULL);
+
+
+--
+-- Name: identity_writer_publication_gate_cut; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX identity_writer_publication_gate_cut ON search.identity_writer_gate USING btree (owner_epoch, publication_gate_through) WHERE ((partition_no = 0) AND (publication_gate_through IS NOT NULL));
 
 
 --
