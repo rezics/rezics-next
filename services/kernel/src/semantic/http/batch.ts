@@ -1,10 +1,12 @@
-import type { BatchWriteFailureStage } from '@rezics/definitions/bulk';
+import { BATCH_CONSTRAINT_NAME, type BatchWriteFailureStage } from '@rezics/definitions/bulk';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
-import { CommandUnavailableError } from '../../command/command.ts';
+import { CommandCommitUncertainError, CommandUnavailableError } from '../../command/command.ts';
 import { commandTimingSnapshot } from '../../command/timing.ts';
+import { isPostgresServerError } from '../../database/bounded-read-lifetime.ts';
 import {
   PROBLEM_TYPE_BASE,
   ProblemError,
+  isImportCatalogueWalk,
   logInternalError,
   problemResponse,
   problemSchema,
@@ -48,6 +50,8 @@ export type BulkWriteProblemBody = {
   contention_retries?: number;
   command_index?: number;
   failure_stage?: BatchWriteFailureStage;
+  sqlstate?: string;
+  constraint_name?: string;
   redirect?: { from: string; to: string };
 };
 
@@ -157,6 +161,24 @@ function mapBulkWriteError(
   return { problem: error };
 }
 
+/** Only the command's own COMMIT error establishes its stage. Batch timing includes concurrent commands. */
+function catalogueProposalDiagnostics(
+  error: unknown,
+): Pick<BulkWriteProblemBody, 'failure_stage' | 'sqlstate' | 'constraint_name'> {
+  const commit = error instanceof CommandCommitUncertainError;
+  const cause = commit ? error.cause : error;
+  const stage = commit ? { failure_stage: 'transaction_commit' as const } : {};
+  if (!isPostgresServerError(cause)) return stage;
+  const constraint = 'constraint' in cause ? cause.constraint : undefined;
+  return {
+    ...stage,
+    sqlstate: cause.code,
+    ...(typeof constraint === 'string' && BATCH_CONSTRAINT_NAME.test(constraint)
+      ? { constraint_name: constraint }
+      : {}),
+  };
+}
+
 export async function bulkWriteCommandProblem(
   error: unknown,
   options: {
@@ -189,7 +211,11 @@ export async function bulkWriteCommandProblem(
     ...(payload as BulkWriteProblemBody),
     ...bulkWriteDiagnostics(error, action),
     ...(response.status === 500
-      ? { command_index: options.commandIndex, failure_stage: options.failureStage ?? 'command_execution' }
+      ? {
+          command_index: options.commandIndex,
+          failure_stage: options.failureStage ?? 'command_execution',
+          ...(options.op === 'propose' && isImportCatalogueWalk() ? catalogueProposalDiagnostics(error) : {}),
+        }
       : {}),
     ...(mapped.redirect ? { redirect: mapped.redirect } : {}),
   };

@@ -1,7 +1,14 @@
 import { Database } from 'bun:sqlite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
+import {
+  BATCH_CONSTRAINT_NAME,
+  BATCH_SQLSTATE,
+  BATCH_WRITE_FAILURE_STAGES,
+  type BatchCommand,
+  type BatchWriteFailureStage,
+  type BatchWriteResult,
+} from '@rezics/definitions/bulk';
 import { reviewedCatalogueProblem } from './http.ts';
 import type { ImportTransportError } from './import-client.ts';
 import { formatSeedError, seedTransportError } from './seed-cli.ts';
@@ -51,6 +58,9 @@ export type SeedRemainingRequest = {
   transition?: BatchTransition;
   reason?: BatchReason;
   transactionPhase?: string;
+  failureStage?: BatchWriteFailureStage;
+  sqlstate?: string;
+  constraintName?: string;
 };
 
 const BATCH_ROUTE = '/v1/subjects:batchWrite';
@@ -78,6 +88,9 @@ const remainingFields = {
   transition: new RegExp(`^(?:${batchTransitions.join('|')})$`),
   reason: new RegExp(`^(?:${batchReasons.join('|')})$`),
   transactionPhase: /^[a-z_]{1,32}$/,
+  failureStage: new RegExp(`^(?:${BATCH_WRITE_FAILURE_STAGES.join('|')})$`),
+  sqlstate: BATCH_SQLSTATE,
+  constraintName: BATCH_CONSTRAINT_NAME,
 } as const;
 
 function admit(value: unknown, pattern: RegExp): string | undefined {
@@ -172,6 +185,13 @@ export function recordSeedBatchFailure(
       retryable: problem.retryable ?? transport?.retryable,
       correlationId: problem.request_id ?? transport?.correlationId,
       transactionPhase: problem.phase,
+      ...(command?.op === 'propose' && receipt?.status === 500 && problem.code === 'internal_error'
+        ? {
+            failureStage: problem.failure_stage,
+            sqlstate: problem.sqlstate,
+            constraintName: problem.constraint_name,
+          }
+        : {}),
     }),
   );
   return failure;
@@ -249,6 +269,9 @@ export function formatSeedRemainingRequest(remaining: SeedRemainingRequest): str
   // Required fields have their own admission bounds and are never sliced. Spend the remaining 240-character
   // budget on whole optional fields, so a long target cannot erase either the cause or the pending identity.
   const optional = [
+    safe.failureStage && `stage=${safe.failureStage}`,
+    safe.sqlstate && `sqlstate=${safe.sqlstate}`,
+    safe.constraintName && `constraint=${safe.constraintName}`,
     safe.transactionPhase && `transaction_phase=${safe.transactionPhase}`,
     safe.phase && `classification=${safe.phase}`,
     safe.networkCode && `network=${safe.networkCode}`,

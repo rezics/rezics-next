@@ -6,8 +6,16 @@ import { checkSubjectInput, checkSubjectStructure, checkStatementInput, type Vio
 export type { Violation } from './validate.ts';
 
 export const BATCH_LIMIT = 100;
-export const BATCH_WRITE_FAILURE_STAGES = ['cover_probe', 'source_fence', 'fence_retry', 'command_execution'] as const;
+export const BATCH_WRITE_FAILURE_STAGES = [
+  'cover_probe',
+  'source_fence',
+  'fence_retry',
+  'command_execution',
+  'transaction_commit',
+] as const;
 export type BatchWriteFailureStage = (typeof BATCH_WRITE_FAILURE_STAGES)[number];
+export const BATCH_SQLSTATE = /^[0-9A-Z]{5}$/;
+export const BATCH_CONSTRAINT_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 export const FIELD_GROUPS = ['facts', 'summary', 'cover'] as const;
 export type FieldGroup = (typeof FIELD_GROUPS)[number];
 export const SourceSchema = Type.Object({
