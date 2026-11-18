@@ -8,9 +8,15 @@ import { activeRelease } from '../../semantic/definitions.ts';
 import { withBoundedReadOnlyTransaction } from '../../database/pool.ts';
 import { deadlineFor, withRequestDeadline } from '../../request/deadline.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import { relatedReadEligibility } from '../../semantic/eligibility.ts';
+import { relatedReadDecisionEligibility, relatedReadEligibility } from '../../semantic/eligibility.ts';
 import { routeOf } from '../../route/route.ts';
-import type { Resource, AccessCheck } from '../../request/access.ts';
+import {
+  prepareReadDecisions,
+  type Access,
+  type AccessCheck,
+  type Actor,
+  type Resource,
+} from '../../request/access.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
@@ -162,12 +168,38 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
-    deadline?: number,
+    options: { deadline?: number; authority?: { access: Access; actor: Actor } } = {},
   ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
-    return completeCatalogue(deadline, async (original) => {
+    return completeCatalogue(options.deadline, async (original) => {
       // Close metadata custody before native SubjectReading prepares authorization and owns its snapshot.
       const release = active === undefined ? await readActiveRelease(original) : active;
       requireCatalogueTime(original);
+      const authority = options.authority;
+      // Prepare request authority once per summary attempt and verify the selected IDs on its snapshot.
+      const prepareBatch = authority?.access.prepareReadDecisions
+        ? async () => {
+            const decisions = await prepareReadDecisions(authority.access, {
+              actor: authority.actor,
+              actions: new Set(['subject:read']),
+              context: { pool, deadline: original },
+            });
+            const eligibility = relatedReadDecisionEligibility();
+            return async (client: Parameters<typeof decisions.decide>[0], ids: readonly string[]) => {
+              const allowed = new Map<string, boolean>();
+              for (let offset = 0; offset < ids.length; offset += 200) {
+                const batch = ids.slice(offset, offset + 200);
+                const read = await decisions.decide(client, {
+                  action: 'subject:read',
+                  resourceType: 'semantic.subject',
+                  ids: batch,
+                  eligibility,
+                });
+                for (const id of batch) allowed.set(id, read[id]?.allowed === true);
+              }
+              return allowed;
+            };
+          }
+        : undefined;
       const summaries = release
         ? await readSubjectSummaries(
             {
@@ -182,7 +214,7 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
                 const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
                 requireCatalogueTime(original);
                 return check;
-              }),
+              }, prepareBatch),
             },
             page.subjects.map((subject) => subject.id),
             { languages },
@@ -246,7 +278,7 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
         authorize,
         languages,
         release,
-        original,
+        { deadline: original },
       );
       return publicBases(filled, languages, release);
     });

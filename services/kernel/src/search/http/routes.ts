@@ -436,7 +436,10 @@ export function searchRoutes<App>(
                 ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
                 async complete(page) {
                   completed = publicBases(
-                    await fill(page, authorize, body.languages, active),
+                    await fill(page, authorize, body.languages, active, {
+                      deadline: job.deadline,
+                      ...(scopeAccess ? { authority: { access: scopeAccess, actor } } : {}),
+                    }),
                     body.languages ?? [],
                     active,
                   );
