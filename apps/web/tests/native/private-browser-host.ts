@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
+import { privateBrowserResponseBytes as maxResponseBytes } from './private-browser-socket.ts';
 
 const [portText, socketPath] = process.argv.slice(2);
 const port = Number(portText);
@@ -16,7 +17,6 @@ if (interfaces.length !== 1 || interfaces[0] !== 'lo') {
 }
 
 const maxRequestBytes = 4 * 1024 * 1024;
-const maxResponseBytes = 16 * 1024 * 1024;
 const server = createServer((request, response) => {
   if (
     request.url === '/__native_ready' ||

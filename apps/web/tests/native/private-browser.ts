@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
-import { ownBridgeSocket } from './private-browser-socket.ts';
+import { ownBridgeSocket, privateBrowserResponseBytes } from './private-browser-socket.ts';
 import { moduleContentType, type WebModuleTransfer } from './web-document-modules.ts';
 import { transportError, type WebModuleFailureTrace } from './web-module-failure.ts';
 import {
@@ -22,7 +22,7 @@ export type PrivateBrowser = {
   force(): Promise<void>;
 };
 
-const maxFrameBytes = Math.ceil((16 * 1024 * 1024 * 4) / 3) + 1024 * 1024;
+const maxFrameBytes = Math.ceil((privateBrowserResponseBytes * 4) / 3) + 1024 * 1024;
 const repositoryRoot = resolve(import.meta.dir, '../../../..');
 
 type BridgeRequest = {

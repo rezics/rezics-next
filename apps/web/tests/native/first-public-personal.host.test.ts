@@ -21,7 +21,10 @@ let auth: NativeAuthStack;
 nativeBeforeAll(lifecycle, 600_000, async () => {
   await prepareNativeAuthMessages();
   await prepareNativeWebSearch('first-public-personal');
-  stack = await startNativeWebStack({ bundledClient: true, observePersonalAccess: true });
+  stack = await startNativeWebStack({
+    bundledClient: process.env.NATIVE_WEB_BUNDLED_CLIENT === '1',
+    observePersonalAccess: true,
+  });
   auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
 });
 nativeAfterAll(lifecycle, 180_000);

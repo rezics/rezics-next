@@ -7,10 +7,12 @@ import { createOpenSearch } from '../../../../services/kernel/src/search/opensea
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
+import { observePersonalWebReturn } from './personal-web-return-observation.ts';
+import { privateBrowserResponseBytes } from './private-browser-socket.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { readSubjectPublicationFrontier } from './subject-publication-observation.ts';
-import { observeWebDocumentModules } from './web-document-modules.ts';
+import { moduleContentType, observeWebDocumentModules } from './web-document-modules.ts';
 import type { WebModuleFailureTrace } from './web-module-failure.ts';
 import { archiveProgressOperation } from './archive-progress-observation.ts';
 import { archiveLabelServerReply, type ArchiveLabelIdentity } from './archive-label-observation.ts';
@@ -60,7 +62,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await prepareNativeAuthMessages();
   if (!japaneseHydrationOnly) await prepareNativeWebSearch('library-archive');
   stack = await startNativeWebStack({
-    bundledClient: true,
+    bundledClient: japaneseHydrationOnly || process.env.NATIVE_WEB_BUNDLED_CLIENT === '1',
     observeBookSearchPreparation: !entryOnly && !japaneseHydrationOnly,
     observeArchiveEntry: true,
     observeArchiveProgress: true,
@@ -1171,7 +1173,17 @@ async function openOwnerArchive() {
     useHeadlessShell: true,
     traceModules: japaneseHydrationOnly,
   });
-  const signedIn = await auth.signIn('alice', { returnTo: '/en/library/export' });
+  const target = new URL('/en/library/export', stack.web);
+  const context = await auth.context('alice');
+  const observation = observePersonalWebReturn(context, target);
+  let signedIn;
+  try {
+    signedIn = await auth.signIn('alice', { context, returnTo: target.pathname });
+  } catch (cause) {
+    throw new Error(`Native Archive sign-in return to Export: ${JSON.stringify(observation.snapshot())}`, { cause });
+  } finally {
+    observation.stop();
+  }
   const page = signedIn.continueOnPage();
   await auth.settlePageApp();
   expect(auth.pageAppProcess(), 'Auth UI retired before the owner Archive journey').toBeUndefined();
@@ -1613,6 +1625,53 @@ async function restoreOwnerLibrary() {
 }
 
 if (japaneseHydrationOnly) {
+  nativeTest(
+    'serves the bundled Web runtime and hydration entry on signed-in Export',
+    30_000,
+    async () => {
+      const document = await stack.request('/en/library/export', 'alice');
+      expect(document.status).toBe(200);
+      expect(document.headers.get('content-type')).toContain('text/html');
+      const policy = document.headers
+        .get('content-security-policy')
+        ?.split(';')
+        .find((part) => part.trimStart().startsWith('script-src '));
+      const expected = ['/bundledDevClient.mjs', '/assets/index.js'];
+      const sources: string[] = [];
+      const rewriter = new HTMLRewriter().on('script[type="module"][src]', {
+        element(script) {
+          const nonce = script.getAttribute('nonce');
+          const admitted = Boolean(nonce && policy?.includes(`'nonce-${nonce}'`));
+          expect(admitted, 'module nonce admitted by script-src').toBe(true);
+          expect(script.hasAttribute('async'), 'ordered bundled bootstrap').toBe(false);
+          const src = script.getAttribute('src')!;
+          sources.push(expected.includes(src) ? src : 'unexpected module URL');
+        },
+      });
+      await rewriter.transform(document).arrayBuffer();
+      // Compare before fetching. Only these origin-relative paths may receive an asset request.
+      expect(sources).toEqual(expected);
+      for (const path of sources) {
+        const response = await stack.request(path);
+        expect(response.status, path).toBe(200);
+        expect(moduleContentType(response.headers.get('content-type')), path).toBe('javascript');
+        let bytes = 0;
+        let firstToken = '';
+        const decoder = new TextDecoder();
+        await response.body!.pipeTo(
+          new WritableStream({
+            write(chunk) {
+              bytes += chunk.byteLength;
+              if (bytes > privateBrowserResponseBytes) throw new Error(`${path} exceeds the private HTTP bridge limit`);
+              if (!firstToken) firstToken = decoder.decode(chunk, { stream: true }).trimStart().charAt(0);
+            },
+          }),
+        );
+        expect(firstToken !== '' && firstToken !== '<', `${path} script body`).toBe(true);
+      }
+    },
+    lifecycle,
+  );
   nativeTest(
     'owner hydrates Japanese Archive recovery after localized Export',
     300_000,
