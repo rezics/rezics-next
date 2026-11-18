@@ -15,7 +15,7 @@ import {
 } from './events.ts';
 
 export const CANONICAL_GENERATION_PAGE_SIZE = 200;
-const CANONICAL_GENERATION_SOURCE_BATCH_SIZE = 8;
+const CANONICAL_GENERATION_SOURCE_BATCH_SIZE = 32;
 const CANONICAL_GENERATION_SOURCE_CONCURRENCY = 4;
 const contextDirectoryChanged = 'com.rezics.semantic.context-directory.changed.v1';
 export type CanonicalGenerationDelivery = Readonly<{ partition: number; generation: string }>;
@@ -42,7 +42,9 @@ function copyPage(input: CanonicalGenerationPageRequest): CanonicalGenerationPag
   const { after, limit } = input;
   if (
     (after !== null && (!Number.isInteger(after) || after < 0 || after > 4095)) ||
-    !Number.isInteger(limit) || limit < 1 || limit > CANONICAL_GENERATION_PAGE_SIZE
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > CANONICAL_GENERATION_PAGE_SIZE
   )
     throw new TypeError('Invalid canonical generation delivery page');
   return { after, limit, ...(input.unannouncedOnly === true && { unannouncedOnly: true as const }) };
@@ -53,9 +55,15 @@ function nativeHome(event: CloudEvent): number {
   const partition = Number(source?.[1]);
   const epoch = Number(source?.[2]);
   if (
-    !source || !Number.isInteger(partition) || partition < 0 || partition > 4095 ||
-    !Number.isInteger(epoch) || epoch < 1 || epoch > 2147483647 ||
-    !/^[0-9]{19}$/.test(event.sequence) || BigInt(event.sequence) < 1n ||
+    !source ||
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition > 4095 ||
+    !Number.isInteger(epoch) ||
+    epoch < 1 ||
+    epoch > 2147483647 ||
+    !/^[0-9]{19}$/.test(event.sequence) ||
+    BigInt(event.sequence) < 1n ||
     BigInt(event.sequence) > maximumSerial
   )
     throw new TypeError('Invalid native canonical generation envelope');
@@ -76,21 +84,24 @@ export async function readCanonicalGenerationDeliveryPage(
   const result = await withBoundedReadConnection(
     pool,
     deadline,
-    (client) => deadlineClient(client, deadline).query<CanonicalGenerationDelivery>(
-      `SELECT partition_no AS partition,canonical_generation::text AS generation
+    (client) =>
+      deadlineClient(client, deadline).query<CanonicalGenerationDelivery>(
+        `SELECT partition_no AS partition,canonical_generation::text AS generation
        FROM semantic.partition_subjects
        WHERE partition_no>$1 AND canonical_delivered_generation<canonical_generation
          ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
        ORDER BY partition_no LIMIT $2`,
-      [after ?? -1, limit],
-    ),
+        [after ?? -1, limit],
+      ),
     { deadlineError: () => new AccessUnavailableError('deadline') },
   );
   requireAccessDeadline(deadline);
   for (const [index, home] of result.rows.entries()) {
     if (
-      !Number.isInteger(home.partition) || home.partition <= (result.rows[index - 1]?.partition ?? after ?? -1) ||
-      home.partition > 4095 || !validGeneration(home.generation)
+      !Number.isInteger(home.partition) ||
+      home.partition <= (result.rows[index - 1]?.partition ?? after ?? -1) ||
+      home.partition > 4095 ||
+      !validGeneration(home.generation)
     )
       throw new Error('Invalid committed canonical generation inventory');
   }
@@ -106,9 +117,9 @@ export async function readCanonicalGenerationDeliveryPage(
  * supply it. The native log retains the keyset continuation, so there is no second cursor table.
  * Replays may coalesce to a newer generation, but never reset Rating's existing rebuild cursor.
  *
- * The source emits at most eight native homes per turn before handing off the next page.
+ * The source emits at most 32 native homes per turn before handing off the next page.
  * This bounds how many relay homes a single recovery wake can place ahead of ordinary traffic.
- * Literal page cost: one <=8-row inventory seek, <=8 single-home commands (one keyed
+ * Literal page cost: one <=32-row inventory seek, <=32 single-home commands (one keyed
  * conditional counter update each), and at most one continuation command. Independent
  * home commands run in groups of four, and the continuation waits for the entire page.
  */
@@ -216,10 +227,11 @@ export async function deliverCanonicalGenerationEvent(
 export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
   const types = [
     CANONICAL_GENERATION_CONTINUATION,
-    ...Object.keys(SEMANTIC_EVENTS).filter((type) =>
-      type !== contextDirectoryChanged &&
-      !type.startsWith('com.rezics.semantic.canonical-generation.') &&
-      !type.startsWith('com.rezics.semantic.erasure.locator-'),
+    ...Object.keys(SEMANTIC_EVENTS).filter(
+      (type) =>
+        type !== contextDirectoryChanged &&
+        !type.startsWith('com.rezics.semantic.canonical-generation.') &&
+        !type.startsWith('com.rezics.semantic.erasure.locator-'),
     ),
     'com.rezics.subject.created.v1',
     'com.rezics.subject.visibility_changed.v1',
@@ -238,7 +250,11 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
         await resumeCanonicalGenerationDelivery(pool, event.data as CanonicalGenerationPageRequest);
       } else {
         if (!types.includes(event.type)) throw new TypeError('Unexpected canonical generation wake');
-        await resumeCanonicalGenerationDelivery(pool, { after: null, limit: CANONICAL_GENERATION_PAGE_SIZE, unannouncedOnly: true });
+        await resumeCanonicalGenerationDelivery(pool, {
+          after: null,
+          limit: CANONICAL_GENERATION_PAGE_SIZE,
+          unannouncedOnly: true,
+        });
       }
     },
   };

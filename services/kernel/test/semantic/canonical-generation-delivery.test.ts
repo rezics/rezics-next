@@ -22,17 +22,17 @@ import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { fixture, readContext } from './support/public-filter-source.ts';
 
-test('canonical delivery recovery yields after eight native homes even with a retained wide request', async () => {
+test('canonical delivery recovery yields after 32 native homes even with a retained wide request', async () => {
   const f = await fixture();
   try {
     const pool = f.db.openPool({ max: 5 });
     const request = { after: 0, limit: CANONICAL_GENERATION_PAGE_SIZE };
     const { homes } = await readCanonicalGenerationDeliveryPage(
       pool,
-      { ...request, limit: 9 },
+      { ...request, limit: 33 },
       { deadline: Date.now() + 2_000 },
     );
-    expect(homes).toHaveLength(9);
+    expect(homes).toHaveLength(33);
 
     await resumeCanonicalGenerationDelivery(pool, request);
     const { rows } = await f.db.admin.query(
@@ -40,8 +40,8 @@ test('canonical delivery recovery yields after eight native homes even with a re
       [CANONICAL_GENERATION_COMMITTED, CANONICAL_GENERATION_CONTINUATION],
     );
     expect(rows).toEqual([
-      ...homes.slice(0, 8).map((data) => ({ type: CANONICAL_GENERATION_COMMITTED, data })),
-      { type: CANONICAL_GENERATION_CONTINUATION, data: { after: homes[7]!.partition, limit: request.limit } },
+      ...homes.slice(0, 32).map((data) => ({ type: CANONICAL_GENERATION_COMMITTED, data })),
+      { type: CANONICAL_GENERATION_CONTINUATION, data: { after: homes[31]!.partition, limit: request.limit } },
     ]);
   } finally {
     await f.close();
@@ -55,10 +55,13 @@ test('overlapping canonical wakes announce a home once and startup can recover a
     const request = { after: home - 1, limit: 1 };
     const pool = f.db.openPool({ max: 2 });
     const wake = () => resumeCanonicalGenerationDelivery(pool, { ...request, unannouncedOnly: true });
-    const notices = async () => (await f.db.admin.query(
-      'SELECT data FROM core.outbox WHERE partition_no=$1 AND type=$2 ORDER BY position,event_seq',
-      [home, CANONICAL_GENERATION_COMMITTED],
-    )).rows.map(({ data }) => data);
+    const notices = async () =>
+      (
+        await f.db.admin.query(
+          'SELECT data FROM core.outbox WHERE partition_no=$1 AND type=$2 ORDER BY position,event_seq',
+          [home, CANONICAL_GENERATION_COMMITTED],
+        )
+      ).rows.map(({ data }) => data);
     const pending = await readCanonicalGenerationDeliveryPage(pool, request, readContext());
     expect(pending.homes).toHaveLength(1);
     await Promise.all([wake(), wake()]);
