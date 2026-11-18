@@ -315,6 +315,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       throw error;
     });
     const created = seeded?.created;
+    console.info(
+      `web-publication-driver-provision: fixture writes complete at ${Math.round(performance.now() - factoryStarted)}ms fixture-subjects=${created?.size ?? 0}`,
+    );
     competingDate = seeded?.proposeCompetingDate;
 
     const urlFor = (key: string, locale = 'en') => {
