@@ -1603,33 +1603,50 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     hits: readonly SearchResult['hits'][number][],
     m: Meter,
     context: PublicFilterConsumerContext,
+    identitiesOnly = false,
   ) {
     const rows: { original: string; terminal: string }[] = [];
     const accepted: number[] = [];
     const terminals = new Set<string>();
+    const readIdentities = identitiesOnly ? config.source.readPublicFilterSubjectIdentities : undefined;
+    const subjects = readIdentities ? [...new Set(hits.map((hit) => hit.id))] : [];
+    const remaining = m.inputLimit - m.cost.inputKeys;
+    if (subjects.length > remaining) throw new ConsumerFailure('source_pending');
+    const identities =
+      readIdentities && subjects.length
+        ? m.take(await readIdentities({ subjects, meaning, inputLimit: remaining, context }))
+        : null;
+    if (identities && (identities.status !== 'observed' || identities.rows.length !== subjects.length))
+      throw new ConsumerFailure('source_pending');
+    const bySubject = identities && new Map(identities.rows.map((row) => [row.subject, row]));
     for (const [position, hit] of hits.entries()) {
       m.check();
-      const page = m.take(
-        await config.source.readPublicFilterProjectionPage({
-          subject: hit.id,
-          meaning,
-          inputLimit: Math.max(1, m.inputLimit - m.cost.inputKeys),
-          frontier: null,
-          context,
-        }),
-      );
-      if (page.status !== 'complete') throw new ConsumerFailure('source_pending');
+      let source = bySubject?.get(hit.id);
+      if (!bySubject) {
+        const page = m.take(
+          await config.source.readPublicFilterProjectionPage({
+            subject: hit.id,
+            meaning,
+            inputLimit: Math.max(1, m.inputLimit - m.cost.inputKeys),
+            frontier: null,
+            context,
+          }),
+        );
+        if (page.status !== 'complete') throw new ConsumerFailure('source_pending');
+        source = page.source;
+      }
       if (
-        page.source.subject !== hit.id ||
-        page.source.partition !== hit.partition ||
-        page.source.securityRevision !== String(hit.securityRevision) ||
-        page.source.currentRelease !== meaning.digest
+        !source ||
+        source.subject !== hit.id ||
+        source.partition !== hit.partition ||
+        source.securityRevision !== String(hit.securityRevision) ||
+        source.currentRelease !== meaning.digest
       )
         throw new ConsumerFailure('source_pending');
-      rows.push({ original: hit.id, terminal: page.source.terminal });
-      if (!terminals.has(page.source.terminal)) {
+      rows.push({ original: hit.id, terminal: source.terminal });
+      if (!terminals.has(source.terminal)) {
         accepted.push(position);
-        terminals.add(page.source.terminal);
+        terminals.add(source.terminal);
       }
     }
     return { rows, accepted };
@@ -2659,7 +2676,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         positions = checked.accepted;
       } else {
         if (raw.some((hit) => 'key' in hit)) return m.unavailable('observation_lost');
-        const checked = await ownRows(raw as SearchResult['hits'], m, context);
+        // The installed Book TypeList uses only its released kind and name order.
+        // The receiver still checks current predicate, names and disclosure after this identity proof.
+        const checked = await ownRows(
+          raw as SearchResult['hits'],
+          m,
+          context,
+          q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList === true,
+        );
         rows = checked.rows;
         positions = checked.accepted;
       }
