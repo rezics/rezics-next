@@ -50,6 +50,7 @@ export const creatorOfferFixture: CreatorOffer = {
     acquisition: 'one-time-account-bound',
     quantity: 1,
   },
+  contentPost: null,
 };
 export const delistedCreatorOfferFixture: CreatorOffer = {
   ...creatorOfferFixture,

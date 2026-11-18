@@ -4,11 +4,12 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { parseEditionMetadata, type EditionMetadata } from '../content-editions/edition-api';
-import type { CreatorEditionMetadataReader } from './capabilities';
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { isContentPostTerms } from './benefit';
+import type { CreatorEditionMetadataReader } from './capabilities';
 import {
   parseMoneySchema,
   recordedMoneyUnit,
@@ -138,6 +139,7 @@ function validOffer(row: CreatorOffer): boolean {
     Number.isSafeInteger(row.revision) &&
     row.revision >= 1 &&
     (row.state === 'active' || row.state === 'delisted') &&
+    (row.contentPost == null || isContentPostTerms(row.contentPost, row.targetSubjectId)) &&
     (row.contentEdition === null ||
       (!!row.contentEdition &&
         row.contentEdition.benefit?.kind === 'content-edition' &&
@@ -195,7 +197,9 @@ export async function loadPreparedCreatorOffers(
       !page.offers.every(validOffer) ||
       (subject !== undefined &&
         page.offers.some(
-          (offer) => offer.contentEdition !== null && offer.contentEdition.creatorAccountId !== subject,
+          (offer) =>
+            (offer.contentEdition !== null && offer.contentEdition.creatorAccountId !== subject) ||
+            (offer.contentPost != null && offer.contentPost.creatorAccountId !== subject),
         )) ||
       !(page.next === null || (typeof page.next === 'string' && page.next.length > 0 && page.next.length <= 4096))
     )
@@ -213,6 +217,7 @@ export async function loadPreparedCreatorOffers(
         state,
         revision,
         contentEdition,
+        contentPost,
         moneyUnit,
         taxBehavior,
       }) => ({
@@ -249,6 +254,7 @@ export async function loadPreparedCreatorOffers(
                 acquisition: contentEdition.acquisition,
                 quantity: contentEdition.quantity,
               },
+        contentPost: contentPost ?? null,
       }),
     );
     return { kind: 'ready', offers, next: page.next };

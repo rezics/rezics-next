@@ -10,7 +10,7 @@ import { locales } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { cookie, SESSION_COOKIE } from '../session/cookies';
-import { capturedBenefit } from './benefit';
+import { capturedBenefit, isContentPostTerms } from './benefit';
 import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 import { UUID } from './price';
 
@@ -115,6 +115,7 @@ export function parseSubjectOffersPage(value: unknown, subjectId: string): Subje
         'taxBehavior',
         'revision',
         'contentEdition',
+        ...('contentPost' in row ? ['contentPost'] : []),
       ]) ||
       typeof row.id !== 'string' ||
       !UUID.test(row.id) ||
@@ -136,6 +137,8 @@ export function parseSubjectOffersPage(value: unknown, subjectId: string): Subje
     // Native discovery confirms original/terminal identity. Preserve the actual captured target, even after a merge.
     const benefit = capturedBenefit(row.contentEdition, row.targetSubjectId);
     if (benefit.kind === 'unavailable' || row.contentEdition === undefined) return null;
+    const contentPost = 'contentPost' in row ? row.contentPost : null;
+    if (contentPost !== null && !isContentPostTerms(contentPost, row.targetSubjectId)) return null;
     offers.push({
       id: row.id,
       targetSubjectId: row.targetSubjectId,
@@ -146,6 +149,7 @@ export function parseSubjectOffersPage(value: unknown, subjectId: string): Subje
       taxBehavior: recordedTaxBehavior(row),
       revision: row.revision,
       contentEdition: benefit.kind === 'mapped' ? benefit.terms : null,
+      contentPost,
     });
   }
   if (new Set(offers.map((offer) => offer.id)).size !== offers.length) return null;

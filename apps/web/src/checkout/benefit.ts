@@ -6,10 +6,31 @@ import { UUID } from './price';
 
 type NativeOffer = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['offers']>['get']>>['data']>['offer'];
 export type ContentEditionTerms = NonNullable<NativeOffer['contentEdition']>;
+type ContentPostTerms = NonNullable<NativeOffer['contentPost']>;
 export type CapturedBenefit = { kind: 'mapped'; terms: ContentEditionTerms } | { kind: 'unknown' | 'unavailable' };
 
 const id = v.pipe(v.string(), v.regex(UUID));
 const boundedText = v.pipe(v.string(), v.minLength(1), v.maxLength(256));
+const postTermsSchema = v.strictObject({
+  benefit: v.strictObject({
+    kind: v.literal('content-post'),
+    resourceType: v.literal('content.post'),
+    resource: v.strictObject({ route: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535)), id }),
+    action: v.literal('post:read'),
+  }),
+  creatorAccountId: id,
+  targetSubjectId: id,
+  saleTermsReference: v.literal('content-post-revisions-v1'),
+  delivery: v.literal('eligible-post-revisions'),
+  acquisition: v.literal('one-time-account-bound'),
+  quantity: v.literal(1),
+});
+
+/** Accept only the sanitized native Post terms for this captured target. */
+export function isContentPostTerms(value: unknown, targetSubjectId: string): value is ContentPostTerms {
+  return v.is(postTermsSchema, value) && value.targetSubjectId === targetSubjectId;
+}
+
 // Commerce's sanitized HTTP DTO, not the internal capture or Content's revision response.
 const termsSchema = v.strictObject({
   benefit: v.strictObject({

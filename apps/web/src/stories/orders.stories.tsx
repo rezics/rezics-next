@@ -26,6 +26,7 @@ const order: BuyerOrder = {
   settlement: 'paid',
   offerRevision: 1,
   contentEdition: null,
+  contentPost: null,
 };
 const next = 'story-signed/+?=next&recorded';
 function OrdersStory({
