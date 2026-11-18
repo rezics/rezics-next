@@ -44,7 +44,8 @@ that broke it.
 
 Start closeout with source, retained results and logs. Resolve questions those can answer by review. For missing
 required evidence or an observed defect, name the decision and use the smallest real check that reaches the owning
-boundary. Confirm the runner, selector and fixture contract before spending a host start.
+boundary. Confirm the runner, selector and fixture contract before spending a host start. Give the runner the native
+command shape it recognizes so it can stage the source closure. Read optional measurements from the existing result.
 
 Verify backend behavior through its API or owning worker with the original authority and compatible data. Reserve
 browser runs for behavior the browser owns, such as a real login return, hydration or client interaction. Stop
