@@ -21,7 +21,7 @@ const address = v.strictObject({
   catalogueId: id,
   publicationRevisionId: id,
   occurrenceId: id,
-  bodyLanguage: v.optional(bodyLanguage),
+  bodyLanguage: v.exactOptional(bodyLanguage),
   targetPostId: id,
   targetRevisionId: id,
   targetSha256: digest,
@@ -40,7 +40,7 @@ const metadata = v.variant('availability', [
     position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     kind: v.literal('chapter'),
     title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
-    bodyLanguage: v.optional(bodyLanguage),
+    bodyLanguage: v.exactOptional(bodyLanguage),
     target: v.strictObject({ threadId: id, postId: id, revisionId: id, sha256: digest }),
   }),
   v.strictObject({

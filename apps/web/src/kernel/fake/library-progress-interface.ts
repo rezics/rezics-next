@@ -20,13 +20,10 @@ function presentation(unitLabel: string, max: string): NativeProgressPresentatio
   };
 }
 
-type NativeMeasure = {
-  unit: string;
-  amount: string | null;
-  total: string | null;
+type NativeMeasure = NonNullable<NativeProgressSession['measures']>[number] & {
   presentation: NativeProgressPresentation;
 };
-type Session = NativeProgressSession & { measures: NativeMeasure[] };
+type Session = Omit<NativeProgressSession, 'measures'> & { measures: NativeMeasure[] };
 type ChangeIntent = { amount: string; measureId?: string } | { clear: true; measureId?: string };
 type Change = { id: string; revision: number; createdAt: string; intent: ChangeIntent };
 const chapter = presentation('chapters', '24');
