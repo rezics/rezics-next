@@ -1104,6 +1104,8 @@ ledger.
 When the owner's index and pins reach readiness, that transaction hands the nonempty logical Source to the
 existing canonical worker. After its bounded turns, a committed Semantic capture or enrollment step can identify
 one successor for that same owner and Collection. A pending registration without such progress waits for recovery.
+An authorized first-page range read returns `202 {preparing:true}` while the worker publishes the current nonempty
+owner generation. The route sends the existing private cache and retry headers.
 
 For an exhausted generation consisting entirely of explicit self-mapped entries, the worker's references supply
 the complete ordered population. The ordinary reader checks the current fact generation, active owner home,
@@ -1114,7 +1116,7 @@ A general reader captures its original mounted Source before reading its page if
 Each batch of up to 100 repeats current Subject disclosure and one-key scalar selection at fresh native time.
 This plan requires the active recording definition and retains rejected originals in the cursor basis.
 At limit 100 with 102 originals and an open gate, the Source window, time and scalar operations declare eight
-statements, 9,598 native rows, 3,961 points including checkouts, and zero identity metadata rows. These terms
+statements, 9,602 native rows, 3,963 points including checkouts, and zero identity metadata rows. These terms
 cover the prepared range reader. Mounted admission, viewer actions and list-fact projection retain their own
 currentness requirements. Closed-gate Access work must fit the remaining allowance.
 

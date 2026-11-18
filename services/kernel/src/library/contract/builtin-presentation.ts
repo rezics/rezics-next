@@ -29,7 +29,7 @@ export interface BuiltinMemberCapability<View, Query, Member> {
       revalidateOwner(): Promise<void>;
       readSourceVersion(): Promise<string>;
     },
-  ): Promise<{ members: Member[]; next: string | null }>;
+  ): Promise<{ members: Member[]; next: string | null } | { preparing: true }>;
   sourceVersion(actor: LibraryActor, source: View, deadline: number): Promise<string>;
   deadline(): number;
   invalidRequest(): Error;

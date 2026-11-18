@@ -464,10 +464,10 @@ export function nativeCollectionFootprint(
     return {
       statements: 1,
       candidateKeys: take,
-      // Fixed keyed owner, publication, scope, release and gate guards. Each raw key
+      // Fixed keyed owner, publication, scope, release, gate and pending support guards. Each raw key
       // reads one reference and at most one exact live entry.
-      nativeRows: 64 + 4 * take,
-      nativePoints: 24 + take,
+      nativeRows: 66 + 4 * take,
+      nativePoints: 25 + take,
       witnessKeys: 1 + take,
       emptySeeks: 1,
       identityMetadataRows: 0,
