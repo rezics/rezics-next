@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { PUBLIC_FILTER_SUBJECT_SCOPE } from './public-filter-coverage-pending.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { requireAccessDeadline, CommandUnavailableError } from '../access/unavailable.ts';
 
@@ -193,7 +194,7 @@ async function apply(pool: Pool, pending: Pending, enrollment: Enrollment, deadl
 export async function maintainPublicFilterCoverageHome(
   pool: Pool,
   partition: number,
-  context: Readonly<{ deadline: number }>,
+  context: Readonly<{ deadline: number; subjectWithdrawal?: boolean }>,
   limit = 1,
 ): Promise<Readonly<{ applied: number; more: boolean }>> {
   if (
@@ -222,8 +223,9 @@ export async function maintainPublicFilterCoverageHome(
     const pending = (
       await client.query<Pending>(
         `SELECT * FROM semantic.public_filter_privacy_pending
-       WHERE partition_no=$1 AND live ORDER BY input_key LIMIT 1 FOR UPDATE`,
-        [partition],
+       WHERE partition_no=$1 AND live ${context.subjectWithdrawal ? 'AND input_key=$2' : ''}
+       ORDER BY input_key LIMIT 1 FOR UPDATE`,
+        context.subjectWithdrawal ? [partition, PUBLIC_FILTER_SUBJECT_SCOPE] : [partition],
       )
     ).rows[0];
     if (!pending) return null;
