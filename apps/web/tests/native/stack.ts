@@ -1561,7 +1561,9 @@ async function startStack(): Promise<
       NATIVE_MEDIA_STORAGE_TOKEN: nativeMediaStorageToken,
     };
     const webCookies = new Map<string, Promise<string | undefined>>();
-    const webStateDirectory = await mkdtemp(join(tmpdir(), 'native-web-state-'));
+    const webStateRoot = process.env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? join(repositoryRoot, '.temp') : tmpdir();
+    mkdirSync(webStateRoot, { recursive: true });
+    const webStateDirectory = await mkdtemp(join(webStateRoot, 'native-web-state-'));
     const responseCookie = (response: Response, name: string) => {
       const value = response.headers
         .getSetCookie()
@@ -1951,7 +1953,8 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   }
   const environment = { ...process.env };
   const originalDatabaseUrl = environment.DATABASE_URL;
-  const viteCache = await prepareNativeWebCache(lifecycle, environment);
+  // Production preview reads the compiled Worker and assets directly from Cloudflare Build Output.
+  const viteCache = options.bundledClient ? undefined : await prepareNativeWebCache(lifecycle, environment);
   let analysisDatabase: string | undefined;
   let postgresContainer: string | undefined;
   let postgresSocketDirectory: string | undefined;
@@ -1968,7 +1971,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_OBSERVE_BOOK_LIBRARY_STATE: options.observeBookLibraryState ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_ENTRY: options.observeArchiveEntry ? '1' : undefined,
     NATIVE_WEB_OBSERVE_ARCHIVE_PROGRESS: options.observeArchiveProgress ? '1' : undefined,
-    WEB_VITE_CACHE_DIR: viteCache.directory,
+    WEB_VITE_CACHE_DIR: viteCache?.directory,
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
     NATIVE_WEB_SEMANTIC_FIRST_PUBLIC_EDITOR: options.semanticFirstPublicEditor ? '1' : '0',
     NATIVE_WEB_LOCAL_SHOWCASE_BOARD_CREATION: options.localShowcaseBoardCreation ? '1' : '0',
@@ -2090,7 +2093,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       }
     }
     stateDirectories.clear();
-    if (viteCache.dispose) {
+    if (viteCache?.dispose) {
       try {
         await viteCache.dispose();
       } catch (error) {

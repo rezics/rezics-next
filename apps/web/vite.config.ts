@@ -392,8 +392,25 @@ export default defineConfig((context) => {
   }
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
-  const bundledNativeClient =
-    context.command === 'serve' && !context.isPreview && testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1';
+  const previewRoot =
+    testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? process.env.NATIVE_WEB_PREVIEW_ROOT : undefined;
+  const workerPlugin = cloudflare({
+    viteEnvironment: { name: 'ssr' },
+    inspectorPort,
+    remoteBindings: false,
+    ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
+  });
+  if (previewRoot && context.isPreview) {
+    // Preview loads the emitted Worker manifest and assets into local workerd.
+    return {
+      root: previewRoot,
+      preview: {
+        allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
+        ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
+      },
+      plugins: [...workerPlugin, persistence.cleanupPlugin],
+    };
+  }
   const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
   const walkCacheDir = process.env.REZICS_WALK_STACK_SLOT
     ? resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT)
@@ -418,20 +435,8 @@ export default defineConfig((context) => {
   });
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
-    ...(bundledNativeClient
-      ? {
-          experimental: { bundledDev: true },
-          environments: {
-            client: {
-              // The private HTTP bridge cannot register a Rolldown client over Vite's WebSocket.
-              // Emit the split route chunks up front so dynamic imports use ordinary HTTP assets.
-              build: { rolldownOptions: { experimental: { devMode: { lazy: false } } } },
-            },
-          },
-        }
-      : {}),
+    ...(previewRoot ? { root: previewRoot, cacheDir: join(previewRoot, '.vite') } : {}),
     server: {
-      ...(bundledNativeClient ? { hmr: false as const } : {}),
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
@@ -443,7 +448,7 @@ export default defineConfig((context) => {
     html: { cspNonce: viteNonceMarker },
     resolve: { alias: [...workerResolveAliases] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
-    build: { assetsInlineLimit: 0 },
+    build: { assetsInlineLimit: 0, ...(previewRoot ? { sourcemap: false } : {}) },
     optimizeDeps: {
       // Keep client optimization bounded: Vite's cold scanner follows generated route chunks and walks every reader,
       // swapping dependency hashes while the first page is loading. Known optimizer dependencies are explicit;
@@ -461,38 +466,6 @@ export default defineConfig((context) => {
       },
     },
     plugins: traceWebVitePlugins([
-      bundledNativeClient &&
-        ({
-          name: 'native-web-bundled-client',
-          applyToEnvironment(environment) {
-            return environment.name === 'client';
-          },
-          configResolved(config) {
-            const client = config.environments.client!;
-            // The bundled resolver reads source dependencies directly. Its dev environment would still
-            // start an independent optimizer alongside Rolldown. Clear Start's merged optimizer inputs.
-            client.optimizeDeps = { ...client.optimizeDeps, noDiscovery: true, include: [], entries: [] };
-          },
-          outputOptions(options) {
-            // Bundled dev forces maps after reading build.sourcemap. The private browser only consumes the emitted JS.
-            return { ...options, sourcemap: false };
-          },
-          configureServer(server) {
-            const client = server.environments.client;
-            const bundle = client.bundledDev;
-            if (!bundle) throw new Error('Native Web requested a bundle without a bundled client environment');
-            const listen = client.listen.bind(client);
-            client.listen = async (server) => {
-              await listen(server);
-              // Cloudflare dispatches SSR directly to workerd. Wait for Vite to receive Rolldown's
-              // output callback, then require the exact entry Start puts in the document.
-              await bundle['waitForInitialBuildFinish']();
-              if (!bundle.memoryFiles.has('assets/index.js')) {
-                throw bundle['lastBuildError'] ?? new Error('Native Web did not emit /assets/index.js');
-              }
-            };
-          },
-        } satisfies Plugin),
       ...(viteCacheDir
         ? [
             {
@@ -539,7 +512,7 @@ export default defineConfig((context) => {
           },
         },
       },
-      ...(testRuntime
+      ...(testRuntime && !previewRoot
         ? [
             {
               name: 'rezics-test-env-bindings',
@@ -587,6 +560,7 @@ export default defineConfig((context) => {
       // The generated client route tree references every route. Split loaders and page components so their feature
       // graphs load with the visited route instead of blocking the root shell.
       tanstackStart({
+        ...(previewRoot ? { srcDirectory: relative(previewRoot, join(appRoot, 'src')) } : {}),
         router: {
           codeSplittingOptions: {
             defaultBehavior: [
@@ -602,12 +576,7 @@ export default defineConfig((context) => {
       react(),
       tailwindcss(),
       elysiaWorkerdTypebox(),
-      ...cloudflare({
-        viteEnvironment: { name: 'ssr' },
-        inspectorPort,
-        remoteBindings: false,
-        ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
-      }),
+      ...workerPlugin,
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
       {
         // Cloudflare's config hook enables discovery from the Worker entry. mergeConfig concatenates `entries`, so a

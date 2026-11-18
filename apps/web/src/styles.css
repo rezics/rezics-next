@@ -3,6 +3,7 @@
 @import '@fontsource-variable/geist-mono';
 @import '@rezics/ui/styles.css';
 @import '@rezics/editor/styles.css';
+@source "./**/*.{ts,tsx}";
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
 /* The navigation column's background is painted by the sidebar's gap, which stretches the full height of the page, so a
