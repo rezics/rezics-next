@@ -265,12 +265,16 @@ export function navigationUrls(page: Page): string[] {
   return urls;
 }
 
-export function observePasskeySignInOptions(page: Page, issuer: string): PlaywrightResponse[] {
-  const responses: PlaywrightResponse[] = [];
+export function observePasskeySignInOptions(page: Page, issuer: string) {
+  const responses: { status: number; body: Promise<unknown> }[] = [];
   page.on('response', (response) => {
     const { origin, pathname } = new URL(response.url());
-    if (origin === issuer && pathname === '/signin/passkey/options' && response.request().method() === 'POST')
-      responses.push(response);
+    if (origin === issuer && pathname === '/signin/passkey/options' && response.request().method() === 'POST') {
+      // Chromium releases the response body when the completed ceremony navigates.
+      const body = response.json();
+      void body.catch(() => {});
+      responses.push({ status: response.status(), body });
+    }
   });
   return responses;
 }

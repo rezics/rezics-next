@@ -329,8 +329,8 @@ async function manageAccountSecurity() {
     releasePasskeyOptions.resolve();
   }
   const signInOptions = passkeySignInOptions.at(-1);
-  expect(signInOptions?.status()).toBe(200);
-  expect(await signInOptions?.json()).toMatchObject({ rpId: 'rezics.com' });
+  expect(signInOptions?.status).toBe(200);
+  expect(await signInOptions?.body).toMatchObject({ rpId: 'rezics.com' });
   await alicePage.waitForURL((url) => `${url.pathname}${url.search}` === fixture.libraryTarget, { timeout: 30_000 });
   await alicePage.locator('#account-menu-button').waitFor({ state: 'visible' });
   expect(await exactCookie(aliceContext, stack.web, '__Host-rezics_session')).toBeDefined();
@@ -392,8 +392,8 @@ async function manageAccountSecurity() {
   await wrongRpPage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
   await wrongRpPage.locator('form[action="/signin"]').getByRole('alert').waitFor({ state: 'visible', timeout: 30_000 });
   const wrongRpOptions = wrongRpSignInOptions.at(-1);
-  expect(wrongRpOptions?.status()).toBe(200);
-  expect(await wrongRpOptions?.json()).toMatchObject({ rpId: 'rezics.com' });
+  expect(wrongRpOptions?.status).toBe(200);
+  expect(await wrongRpOptions?.body).toMatchObject({ rpId: 'rezics.com' });
   expect(wrongRpAssertionRequests).toEqual([]);
   expect(await exactCookie(wrongRpContext, stack.web, '__Host-rezics_session')).toBeUndefined();
   expect((await wrongRpPage.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
