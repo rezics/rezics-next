@@ -135,10 +135,14 @@ function isMountedRevisionRead(request: NativeKernelRequest, postId: string): bo
   );
 }
 
-function isHistoryFunctionRead(fixture: NativeDocumentAuthoringFixture, href: string, postId: string): boolean {
+function serverFunctionPayload(fixture: NativeDocumentAuthoringFixture, href: string) {
   const url = new URL(href);
-  if (url.origin !== new URL(fixture.stack.web).origin || !url.pathname.startsWith('/_serverFn/')) return false;
-  const payload = url.searchParams.get('payload');
+  if (url.origin !== new URL(fixture.stack.web).origin || !url.pathname.startsWith('/_serverFn/')) return null;
+  return url.searchParams.get('payload');
+}
+
+function isHistoryFunctionRead(fixture: NativeDocumentAuthoringFixture, href: string, postId: string): boolean {
+  const payload = serverFunctionPayload(fixture, href);
   return payload?.includes('"post-history"') === true && payload.includes(`"${postId}"`);
 }
 
@@ -208,7 +212,7 @@ async function observeMountedHistory(
 
 async function measureHistoryReads(
   fixture: NativeDocumentAuthoringFixture,
-  pageUrl: string,
+  threadId: string,
   context: BrowserContext,
   postId: string,
 ): Promise<number> {
@@ -223,7 +227,16 @@ async function measureHistoryReads(
   });
   try {
     historyPage.setDefaultTimeout(30_000);
-    await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+    // The account's thread mount makes its own Kernel reads. Finish that exact visit before measuring a click.
+    const [personal] = await Promise.all([
+      historyPage.waitForResponse((response) => {
+        const payload = serverFunctionPayload(fixture, response.url());
+        return payload?.includes('"readReactions"') === true && payload.includes(JSON.stringify(threadId));
+      }),
+      historyPage.goto(`${fixture.stack.web}/en/threads/${threadId}`, { waitUntil: 'domcontentloaded' }),
+    ]);
+    expect(personal.status()).toBe(200);
+    await personal.finished();
     await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
     const post = historyPage.locator(`#post-${postId}`);
     const button = await revealHistoryControl(post);
@@ -732,7 +745,6 @@ describe('native document authoring', () => {
 nativeTest('mounted revision history keeps its request bound as unrelated threads grow', timeout, async () => {
   const fixture = await createNativeDocumentAuthoringFixture();
   const { threadId, postId } = await seedDocumentHistory(fixture);
-  const threadUrl = `${fixture.stack.web}/en/threads/${threadId}`;
   const alice = await fixture.auth.signIn('alice', { sessionOnly: true });
   await alice.continueOnPage().close();
 
@@ -741,7 +753,7 @@ nativeTest('mounted revision history keeps its request bound as unrelated thread
   for (const target of [1, 8, 64]) {
     await createGrowthThreads(fixture, unrelated, target);
     unrelated = target;
-    const requests = await measureHistoryReads(fixture, threadUrl, alice.context, postId);
+    const requests = await measureHistoryReads(fixture, threadId, alice.context, postId);
     growthRequests.push({ unrelated, requests });
   }
   console.log(`native-document-authoring-growth ${JSON.stringify(growthRequests)}`);
