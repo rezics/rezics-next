@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import { capture, captureWarmup, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import { GrowthCaptureBudget, parseNativePlanNotice } from './growth-capture-budget.ts';
-import { captureWithFoldedCost, growthFailureEvidence } from './growth.ts';
+import { captureWithFoldedCost, costOf, growthFailureEvidence } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -63,6 +64,17 @@ test('an exhausted raw capture drains work, keeps bounded native evidence, and c
   );
   expect(recovered.value.rows[0]).toEqual({ value: 3 });
   expect(recovered.capture.statements).toEqual(['SELECT 3 AS value']);
+});
+
+test('warmup counts repeated background plans whose raw notices exceed the capture budget', async () => {
+  const db = database!;
+  const sql = `SELECT n FROM generate_series(1, 3) n /* ${'x'.repeat(64 * 1024)} */`;
+  const poll = AsyncResource.bind(() => db.pool.query(sql));
+  const { capture: warmup } = await captureWarmup(db, async () => {
+    for (let index = 0; index < 65; index++) await poll();
+    await db.pool.query('SELECT 1');
+  });
+  expect(costOf(warmup)).toMatchObject({ statements: 1, rows: 1, backgroundStatements: 65, backgroundRows: 195 });
 });
 
 test('a folded capacity failure drains its caller, keeps costs when available, and the next capture is clean', async () => {

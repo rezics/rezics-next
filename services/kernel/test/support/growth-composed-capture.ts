@@ -9,11 +9,3 @@ export function captureWithFoldedCost<T>(
 ): Promise<{ value: T; capture: CostFoldedCapture }> {
   return captureCostFoldedInternal(database, operation, options);
 }
-
-/** Internal counterpart for unmeasured warm-up and prepare runs in a folded growth check. */
-export function captureFoldedWarmup<T>(
-  database: GrowthDatabase,
-  operation: () => Promise<T>,
-): Promise<{ value: T; capture: CostFoldedCapture }> {
-  return captureCostFoldedInternal(database, operation, { includeBackends: true }, true);
-}
