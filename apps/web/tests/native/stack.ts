@@ -2007,6 +2007,11 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     stream?.on('data', (chunk: Buffer) => {
       output = (output + chunk).slice(-12_000);
     });
+  if (options.observePersonalAccess && host.stderr) {
+    createInterface({ input: host.stderr }).on('line', (line) => {
+      if (line.length <= 256 && line.startsWith('{"event":"library.logical-everything-unready",')) console.warn(line);
+    });
+  }
   // Process exit is the ownership boundary. The stdio `close` event can wait
   // for inherited pipes even after the host itself has ended.
   const exited = new Promise<void>((resolve) => host.once('exit', () => resolve()).once('error', () => resolve()));
