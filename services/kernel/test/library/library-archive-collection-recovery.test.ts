@@ -19,6 +19,7 @@ const scopes = [
   'library_entry:list',
   'copy:list',
   'progress_session:list',
+  'progress_session:read',
   'library_pin:list',
   'library_pin:update',
 ];
@@ -54,8 +55,8 @@ async function review(person: Identity, id: string, kind?: string | null) {
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   source = await f.identity(scopes);
-  await f.send('steward', 'POST', '/v1/platform/exposure/collections:open');
-  await f.send('steward', 'POST', '/v1/platform/exposure/personal_library:open');
+  for (const group of ['collections', 'personal_library', 'reading_progress'])
+    expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   subject = await f.createSubject('game');
   const made = await json(
     source,
