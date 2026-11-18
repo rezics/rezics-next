@@ -113,6 +113,27 @@ test('canonical discovery mapping and index-only reads attach one projection per
   expect(snapshot.creditSearch!.get(work)).toEqual({ state: 'unsupported' });
 });
 
+test('a moving credit observation does not produce an index action at the unchanged Subject version', async () => {
+  const partition = subjectPartition(work);
+  let current = false;
+  const source: SubjectSource = {
+    read: async () => ({ partition, position: 9n, subjects: [subject(work)] }),
+    count: async () => ({ partition, position: 9n, count: 1 }),
+    creditSearch: {
+      page: async () => ({ state: 'current', workId: work, observation: 'cut-1', entries: [], next: null }),
+      current: async () => true,
+      unchanged: async () => current,
+    },
+  };
+  await expect(readCreditIndexSnapshot(source, partition, [work])).rejects.toThrow('Credit index observation changed');
+  current = true;
+  const [action] = documentActions(await readCreditIndexSnapshot(source, partition, [work]), [work]);
+  expect(action).toMatchObject({
+    version: 9n,
+    document: { credit_search_complete: true, credited_names: [] },
+  });
+});
+
 test('canonical writer mapping admission refuses missing credited-name fields', async () => {
   const index = 'credit-test-subjects-g4';
   let mapping: unknown = discoveryIndexDefinition().mappings;

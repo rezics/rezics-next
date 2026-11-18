@@ -2544,7 +2544,8 @@ acceptance remain required for the mounted producer; the focused search tests do
 
 Decision: a Subject generation with the credit mapping publishes `credit_search_complete` and nested `credited_names`
 from the index-only snapshot (`readForIndex` or the `CreditSearchSource` port). Every non-complete state publishes
-`credit_search_complete: false` with no names, so a stale creator name cannot survive a prefix. The default relay,
+`credit_search_complete: false` with no names when the writer has an indexable cut. A moving credit observation
+retries the snapshot because a foreign-home change can leave the Subject's external version unchanged. The default relay,
 identity guard, coverage projector and generation reconciler select this writer from the immutable physical mapping;
 historical generations retain their existing shape.
 

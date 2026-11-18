@@ -287,7 +287,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
           for (const entry of Object.values(results).filter(({ status }) => status !== 200))
             assert(
               entry.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(entry.body.code)),
-              JSON.stringify(entry),
+              JSON.stringify({ who, response: entry, stages }),
             );
           if (Date.now() >= until) {
             const outcomes = Object.entries(results).map(([key, { status, body }]) => ({
