@@ -147,7 +147,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     }
     await expect(
       deliverCanonicalGenerationEvent(pool, first, async (tx, generation, envelope) => {
-        expect(generation).toEqual(first.data);
+        expect<unknown>(generation).toEqual(first.data);
         expect(envelope).toBe(first);
         const page = await rebuildRealmRankCanonicalOrder(tx, { partition, limit: 200 });
         return { ...page, canonicalGeneration: '0' };

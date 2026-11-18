@@ -608,7 +608,7 @@ test('publication repairs a newer settled Subject writer under its original Sour
       }
       const result = await runtime.publication.activate(job, context());
       last = result;
-      if (result.status === 'preparing') next = result.next;
+      if (result.status === 'preparing' && result.next) next = result.next;
       const proof = await retained();
       if (proof.ack_after > 0 && !original) {
         original = proof;
@@ -675,6 +675,7 @@ test('publication repairs a newer settled Subject writer under its original Sour
       if (result.status === 'activated') {
         expect(original).toBeDefined();
         expect(proof).toEqual({ ...original, ack_after: 4096 });
+        if (!historicalEffects) throw new Error('Missing original Source repair effects');
         expect(await effect()).toEqual(historicalEffects);
         expect((await subjectGenerations(search, prefix)).active).toBe(1);
         return;

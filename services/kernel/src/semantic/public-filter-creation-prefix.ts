@@ -5,7 +5,9 @@ import { publicFilterCreationConsumer } from './public-filter-creation-consumer.
 import type { PublicFilterCreationWindow } from './public-filter-creation-window.ts';
 
 type Meter = {
-  -readonly [Key in 'inputKeys' | 'rows' | 'dependencyPoints']: PublicFilterCost[Key];
+  -readonly [Key in 'inputKeys' | 'dependencyPoints']: PublicFilterCost[Key];
+} & {
+  rows: number;
 };
 type EventPoint = {
   position: string;

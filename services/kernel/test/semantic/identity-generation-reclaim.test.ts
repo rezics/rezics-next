@@ -13,7 +13,14 @@ import {
 test('released input retains its slot until a separate indexed empty-range proof commits', async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 2 });
   const job = { jobId: newId(0), epoch: 2n };
-  const [retired, current, admission, release, terminal, successor] = Array.from({ length: 6 }, () => newId(0));
+  const [retired, current, admission, release, terminal, successor] = [
+    newId(0),
+    newId(0),
+    newId(0),
+    newId(0),
+    newId(0),
+    newId(0),
+  ];
   const originals = Array.from({ length: 10 }, () => newId(0)).sort();
   const scope = 'a'.repeat(64);
   const state = async () =>
