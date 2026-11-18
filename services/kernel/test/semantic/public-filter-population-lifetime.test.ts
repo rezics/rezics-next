@@ -11,7 +11,10 @@ import {
   withPublicFilterCoverageStarts,
 } from '../../src/search/public-filter-coverage-page.ts';
 import { publicFilterCoverageKeys } from '../../src/semantic/public-filter-coverage-pending.ts';
-import { readPublicFilterPagePopulations, readPublicFilterPopulation } from '../../src/semantic/public-filter-coverage-population.ts';
+import {
+  readPublicFilterPagePopulations,
+  readPublicFilterPopulation,
+} from '../../src/semantic/public-filter-coverage-population.ts';
 import type {
   PrivacyReductionObservationRequest,
   PrivacyReductionStart,
@@ -44,10 +47,7 @@ const access = {
   },
 } as unknown as PublicFilterAccessBindingPort;
 
-function client(
-  query: (config: NativeQuery) => Promise<NativeResult>,
-  release: (error?: Error) => void,
-): PoolClient {
+function client(query: (config: NativeQuery) => Promise<NativeResult>, release: (error?: Error) => void): PoolClient {
   return { query, release } as unknown as PoolClient;
 }
 
@@ -105,10 +105,17 @@ function populationFixture() {
     },
   } as PopulationRequest['queried'];
   const request = (deadline: number): PopulationRequest => ({
-    kind: 'population', queried, start, execution: executionId, context: { deadline },
+    kind: 'population',
+    queried,
+    start,
+    execution: executionId,
+    context: { deadline },
   });
   const startRequest = (deadline: number): PopulationRequest => ({
-    kind: 'population', queried, start: null, context: { deadline },
+    kind: 'population',
+    queried,
+    start: null,
+    context: { deadline },
   });
   const capture = { after: null };
   const definition = {
@@ -166,17 +173,19 @@ function populationFixture() {
     boundary: null,
     boundary_consumed: 0,
     boundary_window: null,
-    page_children: [{
-      id: executionId,
-      execution: encode({ id: executionId, start, ownRows: [] }),
-      consumer_window: encode({ raw: [], parent: null, consumed: 0, before: null, rounds: 1, charged: 0 }),
-      page_ordinal: 1,
-      page_parent: null,
-      page_consumed: 0,
-      page_size: 200,
-      page_raw: 0,
-      page_status: 'complete',
-    }],
+    page_children: [
+      {
+        id: executionId,
+        execution: encode({ id: executionId, start, ownRows: [] }),
+        consumer_window: encode({ raw: [], parent: null, consumed: 0, before: null, rounds: 1, charged: 0 }),
+        page_ordinal: 1,
+        page_parent: null,
+        page_consumed: 0,
+        page_size: 200,
+        page_raw: 0,
+        page_status: 'complete',
+      },
+    ],
     heads: [],
     own_homes: 0,
     own_subjects: 0,
@@ -187,8 +196,13 @@ function populationFixture() {
 test('population start/final retention bounds native custody and replays the durable result at unchanged cost', async () => {
   const { routeKey, startId, executionId, start, queried, request, startRequest, row } = populationFixture();
   const fixedCost = {
-    candidates: 0, accessPoints: 0, engineSearches: 0, engineIteratorSteps: 0,
-    outputSlots: 0, resultWrites: 1, frontierWrites: 0,
+    candidates: 0,
+    accessPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 1,
+    frontierWrites: 0,
   };
 
   let unexpectedCheckouts = 0;
@@ -202,47 +216,75 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(preflight.reason, 'deadline');
   assert.equal(unexpectedCheckouts, 0);
   assert.deepEqual(preflight.cost, {
-    ...fixedCost, resultWrites: 0, inputKeys: 64, dependencyPoints: 32,
-    statements: 0, rows: 32, bytes: 0,
+    ...fixedCost,
+    resultWrites: 0,
+    inputKeys: 64,
+    dependencyPoints: 32,
+    statements: 0,
+    rows: 32,
+    bytes: 0,
   });
 
   let completeCheckout!: (value: PoolClient) => void;
-  const pendingCheckout = new Promise<PoolClient>((resolve) => { completeCheckout = resolve; });
+  const pendingCheckout = new Promise<PoolClient>((resolve) => {
+    completeCheckout = resolve;
+  });
   let lateQueries = 0;
   let lateRelease!: (error: Error | undefined) => void;
-  const lateReleased = new Promise<Error | undefined>((resolve) => { lateRelease = resolve; });
+  const lateReleased = new Promise<Error | undefined>((resolve) => {
+    lateRelease = resolve;
+  });
   const lateClient = client(async () => {
     lateQueries++;
     throw new Error('Late checkout dispatched a query');
   }, lateRelease);
   const late = await readPublicFilterPopulation(
-    pool(() => pendingCheckout), routeKey, startRequest(Date.now() + 200), search, access,
+    pool(() => pendingCheckout),
+    routeKey,
+    startRequest(Date.now() + 200),
+    search,
+    access,
   );
   assert.equal(late.status, 'unavailable');
   if (late.status !== 'unavailable') return;
   assert.equal(late.reason, 'deadline');
-  assert.deepEqual({ ...late.cost, bytes: 0 }, {
-    ...fixedCost, inputKeys: 1000, dependencyPoints: 504,
-    statements: 1, rows: 504, bytes: 0,
-  });
+  assert.deepEqual(
+    { ...late.cost, bytes: 0 },
+    {
+      ...fixedCost,
+      inputKeys: 1000,
+      dependencyPoints: 504,
+      statements: 1,
+      rows: 504,
+      bytes: 0,
+    },
+  );
   assert.ok('bytes' in late.cost && typeof late.cost.bytes === 'number' && late.cost.bytes > 0);
   completeCheckout(lateClient);
   assert.equal(await lateReleased, undefined);
   assert.equal(lateQueries, 0);
 
   let completeNative!: (value: NativeResult) => void;
-  const pendingNative = new Promise<NativeResult>((resolve) => { completeNative = resolve; });
+  const pendingNative = new Promise<NativeResult>((resolve) => {
+    completeNative = resolve;
+  });
   let retained = false;
   let stalledQuery: NativeQuery | undefined;
   let stalledRelease!: (error: Error | undefined) => void;
-  const stalledReleased = new Promise<Error | undefined>((resolve) => { stalledRelease = resolve; });
+  const stalledReleased = new Promise<Error | undefined>((resolve) => {
+    stalledRelease = resolve;
+  });
   const stalledClient = client((query) => {
     stalledQuery = query;
     retained = true; // Native completion is unknown to the caller, but retention committed.
     return pendingNative;
   }, stalledRelease);
   const stalled = await readPublicFilterPopulation(
-    pool(async () => stalledClient), routeKey, request(Date.now() + 200), search, access,
+    pool(async () => stalledClient),
+    routeKey,
+    request(Date.now() + 200),
+    search,
+    access,
   );
   assert.equal(stalled.status, 'unavailable');
   if (stalled.status !== 'unavailable') return;
@@ -255,23 +297,34 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(binding.page_id, null);
   assert.ok((await stalledReleased) instanceof Error);
   assert.deepEqual(stalled.cost, {
-    ...fixedCost, inputKeys: 1000, dependencyPoints: 504,
-    statements: 1, rows: 504, bytes: queryBytes(stalledQuery),
+    ...fixedCost,
+    inputKeys: 1000,
+    dependencyPoints: 504,
+    statements: 1,
+    rows: 504,
+    bytes: queryBytes(stalledQuery),
   });
   completeNative({ rows: [{ ...row, page_state: 'sealed', finished_page: startId }] });
 
   let replayQuery: NativeQuery | undefined;
   let replayReleases = 0;
-  const replayClient = client(async (query) => {
-    replayQuery = query;
-    assert.equal(retained, true);
-    return { rows: [row] };
-  }, (error) => {
-    assert.equal(error, undefined);
-    replayReleases++;
-  });
+  const replayClient = client(
+    async (query) => {
+      replayQuery = query;
+      assert.equal(retained, true);
+      return { rows: [row] };
+    },
+    (error) => {
+      assert.equal(error, undefined);
+      replayReleases++;
+    },
+  );
   const replay = await readPublicFilterPopulation(
-    pool(async () => replayClient), routeKey, request(Date.now() + 1000), search, access,
+    pool(async () => replayClient),
+    routeKey,
+    request(Date.now() + 1000),
+    search,
+    access,
   );
   assert.equal(replay.status, 'observed');
   if (replay.status !== 'observed') return;
@@ -283,43 +336,70 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(replayed.execution_id, binding.execution_id);
   assert.equal(replayed.start_id, binding.start_id);
   assert.deepEqual(replay.cost, {
-    ...fixedCost, inputKeys: 64 + row.coverage_keys.length, dependencyPoints: 32,
-    statements: 1, rows: 32, bytes: queryBytes(replayQuery) + Buffer.byteLength(encode([row])),
+    ...fixedCost,
+    inputKeys: 64 + row.coverage_keys.length,
+    dependencyPoints: 32,
+    statements: 1,
+    rows: 32,
+    bytes: queryBytes(replayQuery) + Buffer.byteLength(encode([row])),
   });
 
   // A matching population can't substitute the first page's finish for another
   // execution. Exercise the response mapping after the single native dispatch.
   const sibling: PopulationRequest = {
-    ...request(Date.now() + 1000), start: { observation: `population:${randomUUID()}` },
+    ...request(Date.now() + 1000),
+    start: { observation: `population:${randomUUID()}` },
     execution: randomUUID(),
     queried: { ...queried, snapshot: { ...queried.snapshot, observation: `0:${randomUUID()}` } },
   };
   let dispatches = 0;
-  const crossedClient = client(async (query) => {
-    dispatches++;
-    assert.match(query.text, /^\/\* semantic\.privacy-final \*\//);
-    const submitted: { execution_id: string }[] = JSON.parse(String(query.values[0]));
-    assert.deepEqual(submitted.map((member) => member.execution_id), [executionId, sibling.execution]);
-    return { rows: [row, { ...row, slot: 1, queried: encode(sibling.queried) }] };
-  }, () => {});
+  const crossedClient = client(
+    async (query) => {
+      dispatches++;
+      assert.match(query.text, /^\/\* semantic\.privacy-final \*\//);
+      const submitted: { execution_id: string }[] = JSON.parse(String(query.values[0]));
+      assert.deepEqual(
+        submitted.map((member) => member.execution_id),
+        [executionId, sibling.execution],
+      );
+      return { rows: [row, { ...row, slot: 1, queried: encode(sibling.queried) }] };
+    },
+    () => {},
+  );
   const crossed = await readPublicFilterPagePopulations(
-    pool(async () => crossedClient), routeKey, [request(Date.now() + 1000), sibling], search, access,
+    pool(async () => crossedClient),
+    routeKey,
+    [request(Date.now() + 1000), sibling],
+    search,
+    access,
   );
   assert.equal(dispatches, 1);
-  assert.deepEqual(crossed.map(member => member.status), ['observed', 'unready']);
-  assert.deepEqual(crossed.map(member => 'statements' in member.cost && member.cost.statements), [1, 0]);
-  const duplicate = await readPublicFilterPagePopulations(
-    noCheckout, routeKey, [sibling, sibling], search, access,
+  assert.deepEqual(
+    crossed.map((member) => member.status),
+    ['observed', 'unready'],
   );
-  assert.deepEqual(duplicate.map(member => member.status), ['unready', 'unready']);
+  assert.deepEqual(
+    crossed.map((member) => 'statements' in member.cost && member.cost.statements),
+    [1, 0],
+  );
+  const duplicate = await readPublicFilterPagePopulations(noCheckout, routeKey, [sibling, sibling], search, access);
+  assert.deepEqual(
+    duplicate.map((member) => member.status),
+    ['unready', 'unready'],
+  );
   assert.equal(unexpectedCheckouts, 0);
 
   const serverError = Object.assign(new Error('settled PostgreSQL rejection'), { code: '23505', severity: 'ERROR' });
   let serverReleaseCount = 0;
-  const serverClient = client(async () => { throw serverError; }, (error) => {
-    assert.equal(error, undefined);
-    serverReleaseCount++;
-  });
+  const serverClient = client(
+    async () => {
+      throw serverError;
+    },
+    (error) => {
+      assert.equal(error, undefined);
+      serverReleaseCount++;
+    },
+  );
   const serverDeadline = Date.now() + 1000;
   const originalNow = Date.now;
   const laterClockAccess = {
@@ -331,7 +411,11 @@ test('population start/final retention bounds native custody and replays the dur
   } as PublicFilterAccessBindingPort;
   try {
     const rejected = await readPublicFilterPopulation(
-      pool(async () => serverClient), routeKey, request(serverDeadline), search, laterClockAccess,
+      pool(async () => serverClient),
+      routeKey,
+      request(serverDeadline),
+      search,
+      laterClockAccess,
     );
     assert.equal(rejected.status, 'unavailable');
     if (rejected.status === 'unavailable') assert.equal(rejected.reason, 'dependency_unavailable');
@@ -342,9 +426,20 @@ test('population start/final retention bounds native custody and replays the dur
 
   const transportError = Object.assign(new Error('native response lost'), { code: 'ECONNRESET' });
   let transportRelease: Error | undefined;
-  const transportClient = client(async () => { throw transportError; }, (error) => { transportRelease = error; });
+  const transportClient = client(
+    async () => {
+      throw transportError;
+    },
+    (error) => {
+      transportRelease = error;
+    },
+  );
   const transport = await readPublicFilterPopulation(
-    pool(async () => transportClient), routeKey, request(Date.now() + 1000), search, access,
+    pool(async () => transportClient),
+    routeKey,
+    request(Date.now() + 1000),
+    search,
+    access,
   );
   assert.equal(transport.status, 'unavailable');
   if (transport.status === 'unavailable') assert.equal(transport.reason, 'dependency_unavailable');
@@ -429,7 +524,7 @@ test('nine Book lists yield admission through one START, bounded execution and a
       ]),
     ),
     async dispatch(request) {
-      const { limit } = await request.json() as { limit: number };
+      const { limit } = (await request.json()) as { limit: number };
       const id = planned[limit - 1]!;
       const context = { deadline, signal: request.signal };
       return runBookCatalogueRead(admission, context, async () => {

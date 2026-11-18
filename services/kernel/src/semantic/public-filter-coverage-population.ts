@@ -466,7 +466,10 @@ export async function readPublicFilterPagePopulations(
       withBoundedReadConnection(
         pool,
         deadline,
-        (client) => client.query<Row>({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) }),
+        (client) => {
+          const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+          return client.query<Row>(query);
+        },
         { isUncertainSettledQueryError: () => true },
       ),
     );
