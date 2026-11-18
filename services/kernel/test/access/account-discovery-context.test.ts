@@ -15,7 +15,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
 });
 afterAll(async () => db?.close());
-const read = (context = true) =>
+const read = (context = true, verifyAgent = false) =>
   readAccountDiscoverySummaries(
     {
       pool: db.pool,
@@ -25,7 +25,7 @@ const read = (context = true) =>
       deadline: Date.now() + 30000,
     },
     [...selected, selected[0]!],
-    { context },
+    { context, verifyAgent },
   );
 
 test('current native context keeps homonyms distinct, bounds UTF-8 before hydration and never changes indexed text', async () => {
@@ -55,6 +55,8 @@ test('current native context keeps homonyms distinct, bounds UTF-8 before hydrat
     followTarget: { state: 'unavailable' },
   });
   expect((await read(false)).get(selected[0]!)!.context).toBeUndefined();
+  const { context: _context, ...publicCard } = values.get(selected[0]!)!;
+  expect((await read(false, true)).get(selected[0]!)).toEqual(publicCard);
   expect((await accountDiscoverySource(db.pool).read(partitionOf(route), selected)).accounts[0]).not.toHaveProperty(
     'biography',
   );
@@ -76,6 +78,7 @@ test('current native context keeps homonyms distinct, bounds UTF-8 before hydrat
     selected[0],
   ]);
   expect((await read()).get(selected[0]!)).toBeNull();
+  expect((await read(false, true)).get(selected[0]!)).toBeNull();
   await db.admin.query(
     "UPDATE access.account SET authn_fenced=false, biography=repeat('界',1000) WHERE route=$1 AND account_id=$2",
     [route, selected[0]],
