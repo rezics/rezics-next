@@ -14,7 +14,10 @@ export type DiscoveryProducerOmission = Readonly<{
 export const SECOND_SCOPE_PUBLIC_METADATA_KINDS = Object.freeze(['collection', 'review', 'space'] as const);
 
 /** Classify each native metadata producer without turning one absent source into global unavailability. */
-export async function classifyDiscoveryMetadataProducers(producers: DiscoveryMetadataProducers): Promise<{
+export async function classifyDiscoveryMetadataProducers(
+  producers: DiscoveryMetadataProducers,
+  purpose?: 'population',
+): Promise<{
   availableKinds: DiscoveryMetadataKind[];
   omittedKinds: DiscoveryProducerOmission[];
   witnesses: DiscoveryCapabilityWitnesses;
@@ -28,7 +31,7 @@ export async function classifyDiscoveryMetadataProducers(producers: DiscoveryMet
       omittedKinds.push({ kind, state: 'unavailable' });
       continue;
     }
-    const readiness = await producer.readiness();
+    const readiness = await producer.readiness(purpose);
     if (kind === 'space' && readiness === 'ready')
       throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
     const state = typeof readiness === 'string' ? readiness : readiness.state;

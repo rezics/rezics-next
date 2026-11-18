@@ -300,7 +300,19 @@ export function createDefaultDiscoverySearch(
       observe('allocation', enrollmentOnly ? 'no_active_generation' : 'active');
       if (enrollmentOnly && (request.cursor || request.kindPage?.cursor))
         throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-      const ownerAdapters = await resolveDiscoveryOwnerAdapters(producers, activeGeneration.metadataKinds);
+      const ownerAdapters = await resolveDiscoveryOwnerAdapters(
+        producers,
+        activeGeneration.metadataKinds,
+        enrollmentOnly ? 'population' : undefined,
+      );
+      const missingKinds = activeGeneration.metadataKinds.filter((kind) => !ownerAdapters.metadataProducers[kind]);
+      if (missingKinds.length) {
+        observe('capability', missingKinds.includes('space') ? 'published_space_reader_missing' : 'capability_changed');
+        // The engine filter is part of the immutable Source definition. Wait for
+        // the admitted kinds before starting enrollment, so a temporarily unavailable
+        // reader cannot start another full repair for a subset of this generation.
+        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      }
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages,
