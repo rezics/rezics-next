@@ -282,8 +282,11 @@ export function evaluateDiscoveryCondition(
 }
 
 /** Counts must come from a certified query population, never the source's generation census or row length. */
-export function validateKindCountEvidence(registry: DiscoveryRegistry, count: KindCountEvidence): KindCountEvidence {
-  registry.get(count.kind);
+export function validateKindCountEvidence(
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
+  count: KindCountEvidence,
+): KindCountEvidence {
+  registeredDomains(registry, count.kind);
   if ('unavailable' in count) {
     if (count.unavailable !== true || Object.keys(count).some((key) => key !== 'kind' && key !== 'unavailable'))
       throw new TypeError('Invalid unavailable kind count');

@@ -305,6 +305,16 @@ test('Account-domain negation preserves not-applicable and incomplete evidence; 
     exact: false,
   });
   expect(() => validateKindCountEvidence(registry, { kind: 'account', value: 0, exact: false })).toThrow();
+  expect(validateKindCountEvidence(registryWithCollection, { kind: 'collection', value: 1, exact: false })).toEqual({
+    kind: 'collection',
+    value: 1,
+    exact: false,
+  });
+  expect(validateKindCountEvidence(registryWithCollection, { kind: 'collection', unavailable: true })).toEqual({
+    kind: 'collection',
+    unavailable: true,
+  });
+  expect(() => validateKindCountEvidence(registryWithCollection, { kind: 'review', unavailable: true })).toThrow();
 });
 
 test('canonical Discovery preserves Subject projection and owner identity on the adopted analyzer', () => {
