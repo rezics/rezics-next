@@ -45,6 +45,7 @@ import {
   discoveryFinalizationTrace,
   type DiscoveryFinalizationTrace,
 } from './discovery-finalization-trace.ts';
+import { advanceMaintenanceCuts, maintenanceCutCandidates } from './discovery-maintenance-cuts.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
@@ -2001,12 +2002,19 @@ export function readDiscoveryCuts(pool: Pool, prefix: string, generation: number
   );
 }
 
+type MaintenanceObservation = {
+  positions: Partial<Record<DiscoveryMetadataKind, bigint>>;
+  witnessCurrent: boolean;
+  refusal?: { kind: DiscoveryMetadataKind; error: unknown };
+};
+
 async function checkMetadataCuts(
   pool: Pool,
   chunk: readonly DiscoveryCut[],
   metadataProducers: DiscoveryMetadataProducers,
   requiredKinds: readonly string[],
   trace?: DiscoveryFinalizationTrace,
+  maintenance?: ReadonlyMap<DiscoveryCut, MaintenanceObservation>,
 ) {
   const readReviewPositions = requiredKinds.includes('review')
     ? metadataProducers.review?.readEmptyPositions
@@ -2028,22 +2036,34 @@ async function checkMetadataCuts(
             review: row.review_position,
             space: row.space_position,
           };
+          const candidate = maintenance?.get(row);
+          let mismatch: { state: 'metadata'; partition: number; kind: DiscoveryMetadataKind } | undefined;
           for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
             if (!requiredKinds.includes(kind)) continue;
-            const observation: { position: bigint; epoch?: number } =
-              kind === 'review' && review
-                ? { position: await review.position(row) }
-                : trace
-                  ? await trace.read(kind, row.partition, 1, () => metadataProducers[kind]!.read(row.partition, []))
-                  : await metadataProducers[kind]!.read(row.partition, []);
+            let observation: { position: bigint; epoch?: number };
+            try {
+              observation =
+                kind === 'review' && review
+                  ? { position: await review.position(row) }
+                  : trace
+                    ? await trace.read(kind, row.partition, 1, () => metadataProducers[kind]!.read(row.partition, []))
+                    : await metadataProducers[kind]!.read(row.partition, []);
+            } catch (error) {
+              if (!candidate || !mismatch) throw error;
+              // Reopen the already observed mismatches before propagating this sibling's refusal.
+              candidate.refusal = { kind, error };
+              return mismatch;
+            }
             trace?.observe(row, kind, observation.position);
             if (kind === 'collection') trace?.observe(row, 'collectionEpoch', observation.epoch);
             if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
               return { state: 'retire' as const, partition: row.partition, kind };
+            if (candidate) candidate.positions[kind] = observation.position;
             if (metadataPositions[kind] !== observation.position.toString())
-              return { state: 'metadata' as const, partition: row.partition, kind };
+              mismatch ??= { state: 'metadata', partition: row.partition, kind };
+            if (mismatch && (!candidate || observation.position.toString() !== row.head)) return mismatch;
           }
-          return { state: 'current' as const };
+          return mismatch ?? { state: 'current' as const };
         }).finally(() => review?.observed(row));
     },
   );
@@ -2056,13 +2076,14 @@ export async function checkDiscoveryCutBatch(
   metadataProducers: DiscoveryMetadataProducers,
   requiredKinds: readonly string[],
   trace?: DiscoveryFinalizationTrace,
+  maintenance?: ReadonlyMap<DiscoveryCut, MaintenanceObservation>,
 ) {
   const partitions = chunk.map(({ partition }) => partition);
   const readWitness = () => readAccountDiscoveryWitness(pool, partitions);
   const witnesses = await searchTurnCall(() =>
     trace ? trace.read('account-witness', partitions[0]!, partitions.length, readWitness) : readWitness(),
   );
-  const metadata = await checkMetadataCuts(pool, chunk, metadataProducers, requiredKinds, trace);
+  const metadata = await checkMetadataCuts(pool, chunk, metadataProducers, requiredKinds, trace, maintenance);
   return metadata.map((check, index) => {
     if (check.state === 'retire') return check;
     const row = chunk[index]!;
@@ -2080,6 +2101,13 @@ export async function checkDiscoveryCutBatch(
       claimRevision: witness?.claimRevision !== BigInt(row.claim_revision),
       ...(semanticWitnessChanged && { semanticWitness: true }),
     };
+    const candidate = maintenance?.get(row);
+    if (candidate)
+      candidate.witnessCurrent =
+        witness?.epoch === row.collection_epoch &&
+        !changed.accountRevision &&
+        !changed.claimRevision &&
+        !semanticWitnessChanged;
     const coreChanged = Object.values(changed).some(Boolean);
     // Carry the independent core observation even when a metadata owner rejected this home first.
     if (check.state === 'metadata') return { ...check, ...(coreChanged && { changed }) };
@@ -2154,14 +2182,31 @@ async function recheckDiscoveryCutBatch(
   metadataProducers: DiscoveryMetadataProducers,
   requiredKinds: readonly string[],
   trace?: DiscoveryFinalizationTrace,
+  candidates: readonly DiscoveryCut[] = [],
 ) {
-  const checks = await checkDiscoveryCutBatch(pool, chunk, metadataProducers, requiredKinds, trace);
+  const maintenance = new Map<DiscoveryCut, MaintenanceObservation>(
+    candidates.map((row) => [row, { positions: {}, witnessCurrent: false }]),
+  );
+  const checks = await checkDiscoveryCutBatch(pool, chunk, metadataProducers, requiredKinds, trace, maintenance);
   const retired = checks.find((check) => check.state === 'retire');
   if (retired) {
     trace?.step('retire-epoch');
     await retireDiscoveryCapability(pool, target);
     trace?.report({ outcome: 'native-epoch-changed', partition: retired.partition, kind: retired.kind });
     return { state: 'retiring' as const };
+  }
+  const observed = candidates.filter((row) => {
+    const observation = maintenance.get(row)!;
+    return (
+      observation.witnessCurrent &&
+      SECOND_SCOPE_PUBLIC_METADATA_KINDS.every((kind) => observation.positions[kind]?.toString() === row.head)
+    );
+  });
+  if (observed.length) {
+    const advanced = await withSearchConnection(pool, (client) => advanceMaintenanceCuts(client, target, observed));
+    for (const [index, row] of chunk.entries()) {
+      if (advanced.has(row.partition)) checks[index] = { state: 'current' };
+    }
   }
   const stale: ReturnType<typeof staleFrontier>[] = [];
   for (const [index, check] of checks.entries()) {
@@ -2192,10 +2237,22 @@ async function recheckDiscoveryCutBatch(
           return check.state === 'metadata' && earlier.includes(check.kind);
         });
         if (!remaining.length) continue;
-        const siblings = await checkMetadataCuts(pool, remaining, metadataProducers, [kind], trace);
-        const changed = siblings.flatMap((check, index) =>
-          check.state === 'metadata' ? [staleFrontier(remaining[index]!, check.kind)] : [],
-        );
+        const changed: ReturnType<typeof staleFrontier>[] = [];
+        const unread = remaining.filter((row) => {
+          const observation = maintenance.get(row);
+          if (observation?.refusal?.kind === kind) throw observation.refusal.error;
+          const position = observation?.positions[kind];
+          if (position === undefined) return true;
+          const frontier = staleFrontier(row, kind);
+          if (position.toString() !== frontier.position) changed.push(frontier);
+          return false;
+        });
+        if (unread.length) {
+          const siblings = await checkMetadataCuts(pool, unread, metadataProducers, [kind], trace);
+          siblings.forEach((check, index) => {
+            if (check.state === 'metadata') changed.push(staleFrontier(unread[index]!, check.kind));
+          });
+        }
         additionalMetadataFrontiers += await reopenDiscoveryFrontiers(pool, target, changed);
         stale.push(...changed);
       }
@@ -2523,11 +2580,19 @@ async function advanceDiscoveryTurn(
     .slice(0, DISCOVERY_CUT_BATCH_SIZE)
     .filter((row) => row.position !== row.head || row.semantic_position !== row.head);
   if (drift.length) {
-    const result = await recheckDiscoveryCutBatch(pool, target, drift, metadataProducers, requiredKinds, trace);
-    if (result.state !== 'changed' || !result.repairPartitions) return;
-    const progress = await advancePopulation('reconciling', result.repairPartitions);
-    if (progress === 'waiting-for-review-invalidation') return progress;
-    if (progress !== 'advanced' || !(await replayCurrent())) return;
+    const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS;
+    const candidates = kinds.every((kind) => requiredKinds.includes(kind))
+      ? maintenanceCutCandidates(drift).slice(0, Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + kinds.length)))
+      : [];
+    const result = await recheckDiscoveryCutBatch(pool, target, drift, metadataProducers, requiredKinds, trace, candidates);
+    if (result.state === 'retiring') return;
+    if (result.state === 'changed') {
+      if (!result.repairPartitions) return;
+      const progress = await advancePopulation('reconciling', result.repairPartitions);
+      if (progress === 'waiting-for-review-invalidation') return progress;
+      if (progress !== 'advanced') return;
+    }
+    if (!(await replayCurrent())) return;
     // Repair can perform real writes. Take the entire publication inventory again after it settles.
     observations = await readDiscoveryCuts(pool, prefix, target.generation);
     if (observations.length < PARTITIONS) return;

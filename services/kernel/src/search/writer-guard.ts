@@ -1224,8 +1224,8 @@ export function createSearchWriterGuard(options: {
     publicationDeadline(context);
     if (request.consumer.physicalTarget !== options.index || !/^[0-9a-f-]{36}$/.test(request.job))
       return pendingPublication();
-    const result = await tx.query<{ phase: string }>(
-      `SELECT phase FROM search.generation_publication WHERE partition_no=0 AND job=$1
+    const result = await tx.query<{ phase: string; family: string }>(
+      `SELECT phase,family FROM search.generation_publication WHERE partition_no=0 AND job=$1
        AND physical_target=$2 AND consumer=$3 AND native_incarnation=$4`,
       [request.job, options.index, request.consumer, request.consumer.incarnation],
     );
@@ -1240,7 +1240,7 @@ export function createSearchWriterGuard(options: {
     );
     publicationDeadline(context);
     if (erasure.rowCount !== 1) return pendingPublication();
-    return erasure.rows[0]!;
+    return { ...erasure.rows[0]!, family: null };
   }
   async function publicationSource(
     value: SearchWriterPublicationFence,
@@ -1283,7 +1283,7 @@ export function createSearchWriterGuard(options: {
     value: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
   ) {
-    await publicationJob(tx, value, context);
+    const job = await publicationJob(tx, value, context);
     const owner = await readPartition(tx, 0);
     publicationDeadline(context);
     const row = (
@@ -1305,7 +1305,7 @@ export function createSearchWriterGuard(options: {
       !isDeepStrictEqual(row.publication_consumer, value.consumer)
     )
       return pendingPublication();
-    return row;
+    return { ...row, subjectPublication: job.family === 'subjects' };
   }
   function publicationQueries(tx: CommandTransaction, context: PublicFilterConsumerContext): CommandTransaction {
     // Local SQL helpers may span several waits. Native receipt readers still receive the original tx.
@@ -1457,6 +1457,13 @@ export function createSearchWriterGuard(options: {
     if (row.publication_home !== 4096) return pendingPublication();
     return publication;
   }
+  // Only these three Subject publication commands move the gate without changing any mixed index or owner.
+  // The native command fence commits precisely this next home-zero position. A different write breaks the run.
+  function publicationPositions(parameter: 2 | 5) {
+    const next = `$${parameter}::bigint`;
+    return `publication_gate_from=CASE WHEN publication_gate_through=${next}-1 THEN publication_gate_from
+                                      ELSE ${next}-1 END,publication_gate_through=${next}`;
+  }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
@@ -1473,7 +1480,7 @@ export function createSearchWriterGuard(options: {
             publicationDeadline(context);
             await tx.query(lockPublicationFence, [options.index]);
             publicationDeadline(context);
-            await publicationJob(tx, input, context);
+            const job = await publicationJob(tx, input, context);
             await gate(publicationQueries(tx, context), receipt, target.incarnation, target.writeAlias);
             publicationDeadline(context);
             const row = (
@@ -1497,9 +1504,16 @@ export function createSearchWriterGuard(options: {
             const token = crypto.randomUUID();
             await tx.query(
               `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
-               publication_fence=$4,publication_home=0,publication_after=NULL,publication_revision=publication_revision+1
+               publication_fence=$4,publication_home=0,publication_after=NULL,publication_revision=publication_revision+1,
+               ${publicationPositions(5)}
                WHERE partition_no=0 AND physical_target=$1`,
-              [options.index, input.job, input.consumer, token],
+              [
+                options.index,
+                input.job,
+                input.consumer,
+                token,
+                job.family === 'subjects' ? String(receipt.position) : null,
+              ],
             );
             publicationDeadline(context);
             return { value: token, events: changed() };
@@ -1549,7 +1563,7 @@ export function createSearchWriterGuard(options: {
         if (moved) {
           await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
             publicationDeadline(context);
-            await native(tx, command.transactionId);
+            const receipt = await native(tx, command.transactionId);
             publicationDeadline(context);
             await tx.query(lockPublicationFence, [options.index]);
             publicationDeadline(context);
@@ -1558,9 +1572,9 @@ export function createSearchWriterGuard(options: {
             cost.frontierWrites++;
             await tx.query(
               `UPDATE search.identity_writer_gate SET publication_home=$3,publication_after=$4,
-              publication_revision=publication_revision+1
+              publication_revision=publication_revision+1,${publicationPositions(5)}
               WHERE partition_no=0 AND physical_target=$1 AND publication_fence=$2`,
-              [options.index, input.fence, nextHome, after],
+              [options.index, input.fence, nextHome, after, row.subjectPublication ? String(receipt.position) : null],
             );
             publicationDeadline(context);
             return { value: null, events: changed() };
@@ -1591,7 +1605,7 @@ export function createSearchWriterGuard(options: {
         await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
           publicationDeadline(context);
           cost.frontierWrites++;
-          await native(tx, command.transactionId);
+          const receipt = await native(tx, command.transactionId);
           publicationDeadline(context);
           await tx.query(lockPublicationFence, [options.index]);
           publicationDeadline(context);
@@ -1624,8 +1638,8 @@ export function createSearchWriterGuard(options: {
           await advanceWriterPublicationAdmission(tx, options.index);
           await tx.query(
             `UPDATE search.identity_writer_gate SET publication_released_fence=publication_fence,publication_fence=NULL,
-            publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1`,
-            [options.index],
+            publication_revision=publication_revision+1,${publicationPositions(2)} WHERE partition_no=0 AND physical_target=$1`,
+            [options.index, job.family === 'subjects' ? String(receipt.position) : null],
           );
           publicationDeadline(context);
           return { value: null, events: changed() };

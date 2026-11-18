@@ -84,6 +84,16 @@ index reopens its native population. After repair, publication reads replay fres
 inventory of all 4096 homes. If Content observes a change between its two empty-key Review snapshots, Search
 requests one fresh pair under the same maintenance deadline. A second refusal leaves publication pending.
 
+When all five certified cuts coincide at a positive position, the finalizer can advance them together after
+all native readers observe the new head and the Account epoch, Account revision and claim revision still match.
+One batch inspects at most 64 intervening positions in total. Each must contain exactly one intact event in the
+original epoch. A Semantic locator completion needs its completed delivery and original source position at or
+before the certified cut. A Search writer notification needs a position recorded by the ordinary Subject
+publication gate on a different physical target. The gate records its consecutive fence, cursor and release
+positions in the same commands that move it. Copy drains, index writes and erasure jobs supply no such proof.
+The update locks the exact generation, active home, caught-up receiver and original certified owner rows.
+An incomplete proof leaves the affected home on its existing reconciliation path.
+
 Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty
 partitions retain their actual epoch and position; subsequent relay advances use the ordinary checkpoint CAS.
 
