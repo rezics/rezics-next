@@ -1053,7 +1053,7 @@ type SummaryRetryState = {
 };
 
 function summaryRetryReference(
-  candidate: Pick<SynopsisChoice, 'statement' | 'language'> | SummaryCandidate | undefined,
+  candidate: Pick<SynopsisChoice, 'statement' | 'language'> | undefined,
 ): Omit<SummaryRetryTarget, 'subjectId' | 'locale'> | undefined {
   const statement = candidate?.statement;
   const content = statement?.value.type === 'value' ? statement.value.content : undefined;

@@ -2,6 +2,7 @@ import { CheckIcon, EllipsisIcon } from 'lucide-react';
 import {
   createContext,
   useContext,
+  type ComponentProps,
   type ComponentType,
   type MouseEvent,
   type PointerEventHandler,
@@ -72,7 +73,7 @@ export interface CoverCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelectedChange?: (selected: boolean, event: MouseEvent<HTMLButtonElement>) => void;
-  onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onSelect?: ComponentProps<typeof Checkbox>['onClick'];
   onPointerDown?: PointerEventHandler<HTMLElement>;
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
@@ -130,10 +131,7 @@ export function CoverCard({
   );
   const actions =
     menu != null || menuEntries != null || menuTrigger != null ? (
-      <span
-        data-slot="cover-card-actions"
-        className="relative z-20 flex shrink-0 items-center justify-center"
-      >
+      <span data-slot="cover-card-actions" className="relative z-20 flex shrink-0 items-center justify-center">
         {menuTrigger ?? (
           <Menu
             title={menuLabel ?? `More actions for ${title}`}
@@ -197,12 +195,7 @@ export function CoverCard({
         <>
           {onSelect && (
             <Field orientation="horizontal" className="absolute top-2 left-2 z-20 w-auto">
-              <Checkbox
-                aria-label={title}
-                checked={false}
-                data-shelf-select
-                onClick={onSelect}
-              />
+              <Checkbox aria-label={title} checked={false} data-shelf-select onClick={onSelect} />
             </Field>
           )}
         </>
