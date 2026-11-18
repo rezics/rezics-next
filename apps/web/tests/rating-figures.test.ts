@@ -101,24 +101,29 @@ test('question-driven save and clear include zero, enforce the live scale and pr
         : Response.json({ units: stored, revision: 1, at: '2026-10-31T00:00:00Z' });
     },
   });
-  const html = renderToStaticMarkup(
-    createElement(RatingControlView, {
-      question,
-      subjectId,
-      locale: 'en',
-      returnTo: `/en/subjects/${subjectId}/kokoro`,
-      state: { kind: 'ready', units: 0 },
-      pending: false,
-      failure: null,
-      onSet: () => {},
-      onClear: () => {},
-    }),
-  );
-  expect(html).toContain(`aria-label="${question.label}"`);
-  expect(html).toContain('max="40"');
-  expect(html).toContain('step="4"');
-  expect(html).toContain('0 / 40');
-  expect(html).toContain('method="post"');
+  for (const [units, display] of [[0, '0 / 10'], [40, '10 / 10']] as const) {
+    const html = renderToStaticMarkup(
+      createElement(RatingControlView, {
+        question,
+        subjectId,
+        locale: 'en',
+        returnTo: `/en/subjects/${subjectId}/kokoro`,
+        state: { kind: 'ready', units },
+        pending: false,
+        failure: null,
+        onSet: () => {},
+        onClear: () => {},
+      }),
+    );
+    expect(html).toContain(`aria-label="${question.label}"`);
+    expect(html).toContain('min="0"');
+    expect(html).toContain('max="40"');
+    expect(html).toContain('step="4"');
+    expect(html).toContain(`aria-valuenow="${units}"`);
+    expect(html).toContain(`aria-valuetext="${display}"`);
+    expect(html).toContain(`>${display}</output>`);
+    expect(html).toContain('method="post"');
+  }
 
   const cache = new QueryClient();
   const binding = ratingLease();
@@ -147,7 +152,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
     const reader = await preparedRatingReader(request, 'Bearer reader');
     expect(await readOwnRating(client, request, {}, subjectId)).toEqual({ reader, kind: 'ready', units });
   }
-  expect(await writeOwnRating(client, subjectId, 'Bearer reader', 2, crypto.randomUUID())).toBe(false);
+  expect(await writeOwnRating(client, subjectId, 'Bearer reader', 2, crypto.randomUUID())).toBe('rejected');
   expect(requests.filter((request) => ['PUT', 'DELETE'].includes(request.method))).toHaveLength(3);
   const before = cache.getQueryData(ownKey);
   expect(
@@ -276,7 +281,8 @@ test('subject and Search render published ready, pending and below-threshold fig
     const metadata = JSON.parse(head.scripts[0]!.children)['@graph'][0];
     for (const html of [subject, search]) {
       expect(html).not.toContain('7.9');
-      expect(html).not.toContain('Your rating');
+      expect(html).not.toContain('data-slot="rating-personal"');
+      expect(html).not.toContain('Your answer');
       if (figure.state === 'ready') {
         expect(html).toContain(`${figure.mean} out of 10`);
         expect(html).toContain('Global');
@@ -285,14 +291,22 @@ test('subject and Search render published ready, pending and below-threshold fig
       } else {
         expect(html).not.toContain('out of 10');
         expect(metadata).not.toHaveProperty('aggregateRating');
-        if (figure.state === 'updating') expect(html).toContain('publication is updating');
+        if (figure.state === 'updating') expect(html).toContain('The public rating is updating.');
         if (figure.count === 3) expect(html).toContain('3 ratings');
         if (figure.count === 0) expect(html).not.toContain('0 ratings');
       }
     }
+    if (figure.state === 'insufficient_data' && figure.count === 3) {
+      expect(subject).toContain('2 more ratings to show a score');
+      expect(search).toContain('More ratings are needed to publish an average.');
+    }
     expect(subject).toContain('Revision 7');
-    expect(subject).toContain('Bayesian');
-    expect(subject).toContain('after processing');
+    expect(subject).toContain(
+      'Order uses a score from the same question and Global population. The number shown is the public average.',
+    );
+    expect(subject).toContain(
+      'Ratings are published after a delay. Your vote can change before the public number updates.',
+    );
     for (const detail of ['VNDB', '87', '100', '267', '2026', 'ODbL-1.0', 'VNDB contributors'])
       expect(subject).toContain(detail);
     expect(search).not.toContain('VNDB');
