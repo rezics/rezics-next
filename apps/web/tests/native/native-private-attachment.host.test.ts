@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { describe, expect } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { createNativePrivateAttachmentFixture } from './native-private-attachment-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
-setDefaultTimeout(600_000);
+const timeout = 600_000;
 
 let originalImage: Buffer;
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -81,11 +82,12 @@ function downloadAuthorizations(stack: NativeWebStack, mediaId: string) {
 }
 
 describe('native private attachment flow', () => {
+  const lifecycle = new NativeTestLifecycle('native private attachment authoring');
   let stack: NativeWebStack;
   let auth: NativeAuthStack;
   let fixture: Awaited<ReturnType<typeof createNativePrivateAttachmentFixture>>;
 
-  beforeAll(async () => {
+  nativeBeforeAll(lifecycle, timeout, async () => {
     originalImage = await readFile(resolve(import.meta.dir, '../../public/cards/default.png'));
     stack = await startNativeWebStack();
     auth = await startAuthStack(stack);
@@ -95,12 +97,16 @@ describe('native private attachment flow', () => {
     );
   });
 
-  afterAll(async () => {
-    await auth?.stop();
-    await stack?.stop();
-  });
+  nativeAfterAll(lifecycle, timeout);
 
-  test('served composer publishes a private image and every download uses current native authorization', async () => {
+  nativeTest(
+    'served composer publishes a private image and every download uses current native authorization',
+    timeout,
+    publishPrivateAttachment,
+    lifecycle,
+  );
+
+  async function publishPrivateAttachment() {
     const alice = await auth.signIn('alice');
     expect((await alice.requestHeaders()).some((headers) => headers.has('authorization'))).toBe(false);
     const page = alice.context.pages()[0]!;
@@ -410,5 +416,5 @@ describe('native private attachment flow', () => {
         response: { status: 404, body: expect.stringContaining('not_found') },
       })),
     });
-  });
+  }
 });

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, setDefaultTimeout, test } from 'bun:test';
+import { describe } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -13,19 +13,21 @@ import {
 } from '@rezics/document';
 import type { BrowserContext, Page } from 'playwright';
 import { expect } from 'playwright/test';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
   createNativeDocumentAuthoringFixture,
   type NativeDocumentAuthoringFixture,
 } from './native-document-authoring-fixture.ts';
 
-setDefaultTimeout(600_000);
+const timeout = 600_000;
+const lifecycle = new NativeTestLifecycle('native document authoring');
 let fixture: NativeDocumentAuthoringFixture;
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, timeout, async () => {
   fixture = await createNativeDocumentAuthoringFixture();
 });
 
-afterAll(async () => fixture?.close());
+nativeAfterAll(lifecycle, timeout);
 
 type Post = {
   id: string;
@@ -139,7 +141,14 @@ async function measureHistoryReads(pageUrl: string, context: BrowserContext): Pr
 }
 
 describe('native document authoring', () => {
-  test('the served composer preserves authored documents, revisions, and access through native reads', async () => {
+  nativeTest(
+    'the served composer preserves authored documents, revisions, and access through native reads',
+    timeout,
+    preserveAuthoredDocuments,
+    lifecycle,
+  );
+
+  async function preserveAuthoredDocuments() {
     const aliceJourney = await fixture.auth.signIn('alice');
     const page = await aliceJourney.context.newPage();
     page.setDefaultTimeout(30_000);
@@ -537,5 +546,5 @@ describe('native document authoring', () => {
       growthRequests[0]!.requests,
       growthRequests[0]!.requests,
     ]);
-  });
+  }
 });
