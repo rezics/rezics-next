@@ -290,6 +290,8 @@ export async function createProfileEntryFixture(
           ).rowCount;
     }
     async function heldPrearmJobs(home: number): Promise<IdentityJobRef[]> {
+      // Mapping gates retain their exact job and epoch after publication for replay.
+      // The bridge, group and control rows still report any admission holds awaiting release.
       const pins = (
         await pool.query<{ job_id: string }>(
           `SELECT DISTINCT job_id::text AS job_id FROM (
@@ -305,8 +307,14 @@ export async function createProfileEntryFixture(
              SELECT prepare_job FROM semantic.identity_epoch_control
               WHERE partition_no=$1 AND prepare_job IS NOT NULL
              UNION ALL
-             SELECT pending_job FROM semantic.identity_epoch_home_gate
-              WHERE route BETWEEN $2 AND $3 AND pending_job IS NOT NULL
+             SELECT g.pending_job FROM semantic.identity_epoch_home_gate g
+              WHERE g.route BETWEEN $2 AND $3 AND g.pending_job IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM semantic.identity_epoch_job j
+                  JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active'
+                  WHERE j.partition_no=(get_byte(uuid_send(g.pending_job),10)*256+get_byte(uuid_send(g.pending_job),11))/16
+                    AND j.job_id=g.pending_job AND j.epoch=g.pending_epoch AND j.state='published'
+                )
              UNION ALL
              SELECT job_id FROM semantic.identity_epoch_job
               WHERE partition_no=$1 AND state NOT IN ('published','cancelled')
