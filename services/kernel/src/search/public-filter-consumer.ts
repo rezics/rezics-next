@@ -655,18 +655,21 @@ import {
   createDiscoveryProjection,
   nativeDiscoveryRegistry,
   readDiscoveryWriterPhysicalTarget,
+  validateAccountSnapshot,
 } from './account-discovery.ts';
+import { readCandidateHomes } from './discovery-current.ts';
 import { readOwnerCandidates, type DiscoveryOwnerCandidate } from './disclosure/owner-current.ts';
 import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
 import { discoveryAliasMatches, discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
-import type {
-  DiscoveryConsumerCaptureInput,
-  DiscoveryConsumerQuery,
-  DiscoveryEngineHit,
-  DiscoveryReadContext,
+import {
+  MAX_ACCOUNT_DISCOVERY_BATCH,
+  type DiscoveryConsumerCaptureInput,
+  type DiscoveryConsumerQuery,
+  type DiscoveryEngineHit,
+  type DiscoveryReadContext,
 } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
@@ -1698,23 +1701,41 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const accepted: number[] = [];
     const seen = new Set<string>();
     const metadata = await proveMetadataRows(hits, m, context);
+    const accounts = hits.filter(({ key }) => key.owner === 'accounts');
+    const accountRows = new Map<string, { position: bigint; revision: string }>();
+    if (accounts.length) {
+      const entry = config.registry?.get('account');
+      if (entry?.owner !== 'accounts' || accounts.some(({ key }) => key.kind !== entry.kind))
+        throw new ConsumerFailure('dependency_unavailable');
+      m.cost.inputKeys += accounts.length;
+      m.cost.accessPoints += accounts.length;
+      m.cost.dependencyPoints += accounts.length;
+      m.check();
+      await readCandidateHomes(
+        accounts.map(({ key }) => key),
+        async (partition, keys) => {
+          const ids = [...new Set(keys.map(({ id }) => id))];
+          for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+            m.check();
+            const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+            const observed = await entry.source.read(partition, chunk);
+            let snapshot;
+            try {
+              snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+            } catch {
+              throw new MixedOwnerPending();
+            }
+            for (const account of snapshot.accounts)
+              accountRows.set(account.id, { position: snapshot.position, revision: String(account.revision) });
+          }
+        },
+      );
+    }
     for (const [position, item] of hits.entries()) {
       m.check();
       if (item.key.owner === 'accounts') {
-        const entry = config.registry?.get(item.key.kind);
-        if (entry?.owner !== 'accounts') throw new ConsumerFailure('dependency_unavailable');
-        const partition = subjectPartition(item.key.id);
-        const snapshot = await entry.source.read(partition, [item.key.id]);
-        m.cost.inputKeys++;
-        m.cost.accessPoints++;
-        m.cost.dependencyPoints++;
-        if (
-          snapshot.partition !== partition ||
-          snapshot.position < BigInt(item.sourcePosition) ||
-          snapshot.accounts.length !== 1 ||
-          snapshot.accounts[0]!.id !== item.key.id ||
-          snapshot.accounts[0]!.revision.toString() !== item.revision
-        )
+        const account = accountRows.get(item.key.id);
+        if (!account || account.position < BigInt(item.sourcePosition) || account.revision !== item.revision)
           throw new MixedOwnerPending();
         rows.push({ original: item.key.id, terminal: item.key.id });
         const identity = `accounts:${item.key.id}`;

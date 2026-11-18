@@ -72,6 +72,24 @@ function partitioned<T extends { id: string }>(values: readonly T[]): Map<number
   return groups;
 }
 
+export async function readCandidateHomes<T extends { id: string }, Result>(
+  keys: readonly T[],
+  read: (partition: number, keys: readonly T[]) => Promise<Result>,
+): Promise<Result[]> {
+  const homes = [...partitioned(keys)];
+  const results: Result[] = [];
+  const concurrency = 4;
+  for (let offset = 0; offset < homes.length; offset += concurrency) {
+    const group = homes.slice(offset, offset + concurrency);
+    const settled = await Promise.allSettled(group.map(([partition, keys]) => read(partition, keys)));
+    for (const result of settled) {
+      if (result.status === 'rejected') throw result.reason;
+      results.push(result.value);
+    }
+  }
+  return results;
+}
+
 /** A missing summary after positive current evidence is unavailable, not an excluded candidate. */
 async function completeSummaries<T>(
   ids: readonly string[],
@@ -290,28 +308,31 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     return true;
   };
   if (source) {
-    for (const [partition, group] of partitioned(semantic.map(({ key }) => key))) {
-      const subjects: IndexedSubject[] = [];
-      let position: bigint | undefined;
-      const ids = [...new Set(group.map(({ id }) => id))];
-      for (let offset = 0; offset < ids.length; offset += 256) {
-        const chunk = ids.slice(offset, offset + 256);
-        const snapshot = await source.read(partition, chunk);
-        subjects.push(...validateRequestSourceSnapshot(snapshot, partition, chunk).values());
-        if (position !== undefined && position !== snapshot.position) unavailable();
-        position = snapshot.position;
-      }
-      if (
-        semantic.some(
-          (candidate) =>
-            partitionOf(candidate.key.route) === partition &&
-            'sourcePosition' in candidate &&
-            BigInt(candidate.sourcePosition) > position!,
+    await readCandidateHomes(
+      semantic.map(({ key }) => key),
+      async (partition, group) => {
+        const subjects: IndexedSubject[] = [];
+        let position: bigint | undefined;
+        const ids = [...new Set(group.map(({ id }) => id))];
+        for (let offset = 0; offset < ids.length; offset += 256) {
+          const chunk = ids.slice(offset, offset + 256);
+          const snapshot = await source.read(partition, chunk);
+          subjects.push(...validateRequestSourceSnapshot(snapshot, partition, chunk).values());
+          if (position !== undefined && position !== snapshot.position) unavailable();
+          position = snapshot.position;
+        }
+        if (
+          semantic.some(
+            (candidate) =>
+              partitionOf(candidate.key.route) === partition &&
+              'sourcePosition' in candidate &&
+              BigInt(candidate.sourcePosition) > position!,
+          )
         )
-      )
-        unavailable();
-      snapshots.set(partition, { partition, position: position!, subjects });
-    }
+          unavailable();
+        snapshots.set(partition, { partition, position: position!, subjects });
+      },
+    );
     const initialSource = (): SubjectSource => ({
       count: source.count.bind(source),
       ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
@@ -451,31 +472,34 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       }
       // Hydration and context disclosure can cross native I/O. Retire the whole semantic window
       // if its candidate anchors changed after the first current-source snapshot.
-      for (const [partition, group] of partitioned(selectedSemantic.map(({ key }) => key))) {
-        const baseline = snapshots.get(partition);
-        const ids = [...new Set(group.map(({ id }) => id))];
-        for (let offset = 0; offset < ids.length; offset += 256) {
-          const chunk = ids.slice(offset, offset + 256);
-          const after = await source.read(partition, chunk);
-          const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
-          if (!baseline || after.position !== baseline.position)
-            throw new SearchOperationError('search_restart_required');
-          const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
-          for (const id of chunk) {
-            const previous = previousRows.get(id);
-            const current = currentRows.get(id);
-            if (
-              !previous ||
-              !current ||
-              current.visibility !== 'visible' ||
-              current.redirect !== null ||
-              current.securityRevision !== previous.securityRevision ||
-              current.type !== previous.type
-            )
+      await readCandidateHomes(
+        selectedSemantic.map(({ key }) => key),
+        async (partition, group) => {
+          const baseline = snapshots.get(partition);
+          const ids = [...new Set(group.map(({ id }) => id))];
+          for (let offset = 0; offset < ids.length; offset += 256) {
+            const chunk = ids.slice(offset, offset + 256);
+            const after = await source.read(partition, chunk);
+            const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
+            if (!baseline || after.position !== baseline.position)
               throw new SearchOperationError('search_restart_required');
+            const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
+            for (const id of chunk) {
+              const previous = previousRows.get(id);
+              const current = currentRows.get(id);
+              if (
+                !previous ||
+                !current ||
+                current.visibility !== 'visible' ||
+                current.redirect !== null ||
+                current.securityRevision !== previous.securityRevision ||
+                current.type !== previous.type
+              )
+                throw new SearchOperationError('search_restart_required');
+            }
           }
-        }
-      }
+        },
+      );
     }
   }
   const accounts = candidates.filter(({ key }) => key.owner === 'accounts');
@@ -485,78 +509,87 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     if (!filter || currentDiscoveryFilter(filter, registry, entry.kind, release) === true) {
       const selectedAccounts = new Map<Candidate, IndexedAccount>();
       // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
-      for (const [partition, group] of partitioned(accounts.map(({ key }) => key))) {
-        const ids = [...new Set(group.map(({ id }) => id))];
-        const current = new Map<string, IndexedAccount>();
-        for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-          const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-          const observed = await entry.source.read(partition, chunk);
-          let snapshot;
-          try {
-            snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-          } catch {
-            unavailable();
-          }
-          if (
-            accounts.some(
-              (candidate) =>
-                chunk.includes(candidate.key.id) &&
-                'sourcePosition' in candidate &&
-                BigInt(candidate.sourcePosition) > snapshot.position,
+      const byHome = await readCandidateHomes(
+        accounts.map(({ key }) => key),
+        async (partition, group) => {
+          const ids = [...new Set(group.map(({ id }) => id))];
+          const current = new Map<string, IndexedAccount>();
+          for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+            const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+            const observed = await entry.source.read(partition, chunk);
+            let snapshot;
+            try {
+              snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+            } catch {
+              unavailable();
+            }
+            if (
+              accounts.some(
+                (candidate) =>
+                  chunk.includes(candidate.key.id) &&
+                  'sourcePosition' in candidate &&
+                  BigInt(candidate.sourcePosition) > snapshot.position,
+              )
             )
-          )
-            unavailable();
-          for (const account of snapshot.accounts) current.set(account.id, account);
-        }
-        const selected = accounts.filter((candidate) => {
-          const row = current.get(candidate.key.id);
-          if (!row || partitionOf(candidate.key.route) !== partition) return false;
-          if ('revision' in candidate) return row.revision.toString() === candidate.revision;
-          const document = candidate.document;
-          return (
-            document.owner === 'accounts' &&
-            row.revision.toString() === document.revision &&
-            row.handle === document.handle &&
-            row.displayName === document.display_name &&
-            row.accountKind === document.account_kind
-          );
-        });
-        for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
+              unavailable();
+            for (const account of snapshot.accounts) current.set(account.id, account);
+          }
+          const selected = accounts.filter((candidate) => {
+            const row = current.get(candidate.key.id);
+            if (!row || partitionOf(candidate.key.route) !== partition) return false;
+            if ('revision' in candidate) return row.revision.toString() === candidate.revision;
+            const document = candidate.document;
+            return (
+              document.owner === 'accounts' &&
+              row.revision.toString() === document.revision &&
+              row.handle === document.handle &&
+              row.displayName === document.display_name &&
+              row.accountKind === document.account_kind
+            );
+          });
+          return selected.map((candidate) => [candidate, current.get(candidate.key.id)!] as const);
+        },
+      );
+      for (const home of byHome) {
+        for (const [candidate, account] of home) selectedAccounts.set(candidate, account);
       }
       const selected = [...selectedAccounts.keys()];
       const summaries = await completeSummaries(
         selected.map(({ key }) => key.id),
         (ids) => entry.hydrate(ids, context),
       );
-      for (const [partition, group] of partitioned(selected.map(({ key }) => key))) {
-        const ids = [...new Set(group.map(({ id }) => id))];
-        for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-          const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-          const observed = await entry.source.read(partition, chunk);
-          let snapshot;
-          try {
-            snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-          } catch {
-            throw new SearchOperationError('search_restart_required');
-          }
-          const currentRows = new Map(snapshot.accounts.map((account) => [account.id, account]));
-          for (const id of chunk) {
-            const before = [...selectedAccounts.values()].find((row) => row.id === id);
-            const after = currentRows.get(id);
-            if (!before || !after) {
-              for (const candidate of selected) if (candidate.key.id === id) selectedAccounts.delete(candidate);
-              continue;
-            }
-            if (
-              after.revision !== before.revision ||
-              after.handle !== before.handle ||
-              after.displayName !== before.displayName ||
-              after.accountKind !== before.accountKind
-            )
+      await readCandidateHomes(
+        selected.map(({ key }) => key),
+        async (partition, group) => {
+          const ids = [...new Set(group.map(({ id }) => id))];
+          for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+            const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+            const observed = await entry.source.read(partition, chunk);
+            let snapshot;
+            try {
+              snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+            } catch {
               throw new SearchOperationError('search_restart_required');
+            }
+            const currentRows = new Map(snapshot.accounts.map((account) => [account.id, account]));
+            for (const id of chunk) {
+              const before = [...selectedAccounts.values()].find((row) => row.id === id);
+              const after = currentRows.get(id);
+              if (!before || !after) {
+                for (const candidate of selected) if (candidate.key.id === id) selectedAccounts.delete(candidate);
+                continue;
+              }
+              if (
+                after.revision !== before.revision ||
+                after.handle !== before.handle ||
+                after.displayName !== before.displayName ||
+                after.accountKind !== before.accountKind
+              )
+                throw new SearchOperationError('search_restart_required');
+            }
           }
-        }
-      }
+        },
+      );
       for (const candidate of selected) {
         const row = selectedAccounts.get(candidate);
         if (!row) continue;
