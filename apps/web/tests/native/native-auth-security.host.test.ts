@@ -51,7 +51,7 @@ async function manageAccountSecurity() {
   newcomerPage.setDefaultTimeout(15_000);
   const newcomerUrls = navigationUrls(newcomerPage);
   const signupTarget = fixture.libraryTarget;
-  await visitLibrarySignIn(newcomerPage, stack, signupTarget);
+  await visitLibrarySignIn(newcomerPage, stack, auth, signupTarget, 'signup-entry');
   const authorizationQuery = new URL(newcomerPage.url()).search;
   const authorization = new URLSearchParams(authorizationQuery);
   expect(authorization.get('client_id')).toBe('rezics-website');
@@ -124,7 +124,7 @@ async function manageAccountSecurity() {
   alicePage.setDefaultTimeout(15_000);
   const aliceUrls = navigationUrls(alicePage);
   const aliceIdentity = await stack.authPersona('alice');
-  await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
+  await visitLibrarySignIn(alicePage, stack, auth, fixture.libraryTarget, 'alice-password');
   const aliceSignIn = await submitPasswordSignIn(
     alicePage,
     { email: aliceIdentity.email, password: nativeAuthPassword },
@@ -139,7 +139,7 @@ async function manageAccountSecurity() {
   const bobPage = await bobContext.newPage();
   bobPage.setDefaultTimeout(15_000);
   const bobIdentity = await stack.authPersona('bob');
-  await visitLibrarySignIn(bobPage, stack, fixture.libraryTarget);
+  await visitLibrarySignIn(bobPage, stack, auth, fixture.libraryTarget, 'bob-password');
   const bobSignIn = await submitPasswordSignIn(
     bobPage,
     { email: bobIdentity.email, password: nativeAuthPassword },
@@ -272,7 +272,7 @@ async function manageAccountSecurity() {
   expect(await alicePasskey.getByText('Last used', { exact: false }).count()).toBe(0);
 
   // Step-up replaces the native session. Renew the Website connection through its normal authorization entry.
-  await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
+  await visitLibrarySignIn(alicePage, stack, auth, fixture.libraryTarget, 'renew-website');
   await alicePage.waitForURL(
     (url) => url.origin === webOrigin && `${url.pathname}${url.search}` === fixture.libraryTarget,
     {
@@ -298,7 +298,7 @@ async function manageAccountSecurity() {
   expect(await anonymousCatalogue.text()).toContain(fixture.book.title);
 
   const passkeySignInOptions = observePasskeySignInOptions(alicePage, auth.origin);
-  await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
+  await visitLibrarySignIn(alicePage, stack, auth, fixture.libraryTarget, 'passkey');
   await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
   const passkeySignInResponse = alicePage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/signin/passkey' && response.request().method() === 'POST',
@@ -327,7 +327,7 @@ async function manageAccountSecurity() {
   const wrongRpPage = await wrongRpContext.newPage();
   wrongRpPage.setDefaultTimeout(15_000);
   const wrongRpSignInOptions = observePasskeySignInOptions(wrongRpPage, auth.origin);
-  await visitLibrarySignIn(wrongRpPage, stack, fixture.libraryTarget);
+  await visitLibrarySignIn(wrongRpPage, stack, auth, fixture.libraryTarget, 'wrong-rp-passkey');
   await wrongRpPage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
   const wrongRpWebAuthn = await wrongRpContext.newCDPSession(wrongRpPage);
   await wrongRpWebAuthn.send('WebAuthn.enable');

@@ -18,6 +18,7 @@ export type PrivateBrowser = {
   browser: Browser;
   bridgeDirectory: string;
   processIdentity: NativeProcessIdentity;
+  tlsRejections(origin: string): { limit: number; connect: number };
   close(): Promise<void>;
   force(): Promise<void>;
 };
@@ -71,11 +72,12 @@ export async function launchPrivateBrowser(
     );
 
   const allowed = new Set<string>();
-  const secureOrigins = new Map<string, number>();
+  const secureOrigins = new Map<string, { port: number; limit: number; connect: number }>();
   for (const value of allowedOrigins) {
     const origin = new URL(value);
     allowed.add(origin.origin);
-    if (origin.protocol === 'https:') secureOrigins.set(origin.origin, Number(origin.port || 443));
+    if (origin.protocol === 'https:')
+      secureOrigins.set(origin.origin, { port: Number(origin.port || 443), limit: 0, connect: 0 });
   }
   const directory = join(repositoryRoot, '.temp', `pb-${crypto.randomUUID().slice(0, 8)}`);
   const socketPath = join(directory, 'bridge.sock');
@@ -134,14 +136,15 @@ export async function launchPrivateBrowser(
         socket.end('0\n');
         return;
       }
-      const targetPort = secureOrigins.get(targetOrigin);
-      if (targetPort === undefined || activeTlsTunnels >= maxTlsTunnels) {
+      const target = secureOrigins.get(targetOrigin);
+      if (!target || activeTlsTunnels >= maxTlsTunnels) {
+        if (target) target.limit++;
         socket.end('0\n');
         return;
       }
       activeTlsTunnels += 1;
       tunnelReserved = true;
-      tunnel = connectTcp(targetPort, '127.0.0.1');
+      tunnel = connectTcp(target.port, '127.0.0.1');
       tunnels.add(tunnel);
       const pending = initialData.length ? [initialData] : [];
       initialTunnelBytes = initialData.length;
@@ -156,8 +159,10 @@ export async function launchPrivateBrowser(
         tunnel!.pipe(socket);
       });
       tunnel.once('error', () => {
-        if (!tunnelEstablished) socket.end('0\n');
-        else socket.destroy();
+        if (!tunnelEstablished) {
+          target.connect++;
+          socket.end('0\n');
+        } else socket.destroy();
       });
       tunnel.once('close', () => {
         tunnels.delete(tunnel!);
@@ -462,6 +467,10 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
       browser,
       bridgeDirectory: directory,
       processIdentity: processOwnership.identity,
+      tlsRejections(origin) {
+        const target = secureOrigins.get(origin);
+        return { limit: target?.limit ?? 0, connect: target?.connect ?? 0 };
+      },
       async force() {
         if (processOwnership) await processOwnership.force();
         await forceBridgeClose();
