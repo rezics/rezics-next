@@ -31,6 +31,14 @@ function reading(fallback = false): SubjectPageData {
 }
 
 const longRealmTitle = `${realmRecording.realm.title} — Literature, translations and long-running reading discussions / 読書と翻訳について語り合うコミュニティ`;
+const continuation = { node: 'editions', cursor: 'current-native-cursor' };
+
+function continuedAddress(locale: string) {
+  const label = subjectPageTitle(reading(), locale);
+  const { href } = subjectHref({ id: recording.subject, label }, locale);
+  const search = new URLSearchParams({ ...continuation, realm: realmRecording.realm.realmId });
+  return `${href}/editions?${search}`;
+}
 
 function ContextPage({
   fallback = false,
@@ -60,15 +68,32 @@ function ContinuedGroup({ fallback = false }: { fallback?: boolean }) {
   const overview = reading(fallback);
   const locale = getLocale();
   const frame = subjectFrame(overview, locale)!;
-  const continuation = { node: 'editions', cursor: 'current-native-cursor' };
   const document: CompositionDocument = {
     root: { props: {} },
     content: [
-      { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } },
-      { type: 'SubjectList', props: { id: 'works', property: 'schema:author', limit: 12, paged: true } },
+      {
+        type: 'SubjectList',
+        props: { id: 'editions', title: m.subject_editions(), property: 'schema:exampleOfWork', limit: 12, paged: true },
+      },
+      {
+        type: 'SubjectList',
+        props: { id: 'works', title: m.subject_works(), property: 'schema:author', limit: 12, paged: true },
+      },
     ],
   };
-  const page: SubjectPageData = { ...overview, document, continuation, reads: {} };
+  const page: SubjectPageData = {
+    ...overview,
+    document,
+    continuation,
+    streams: {
+      selected: continuation.node,
+      entries: [
+        { node: 'editions', property: 'schema:exampleOfWork', direction: 'inverse' },
+        { node: 'works', property: 'schema:author', direction: 'inverse' },
+      ],
+    },
+    reads: {},
+  };
   const plan = planReads(platformRegistry, document, pageContext(page));
   page.reads[plan.nodes.editions!] = { status: 200, body: { links: [], next: 'next-native-cursor' } };
   page.reads[plan.nodes.works!] = { status: 204, body: {} };
@@ -101,8 +126,8 @@ const meta = {
   id: 'pages-subjects-context',
   parameters: { layout: 'fullscreen' },
   decorators: [
-    (Story) => (
-      <PatternStory visitor="Signed In" path={pagePaths.subject}>
+    (Story, { parameters }) => (
+      <PatternStory visitor="Signed In" path={parameters.continued ? continuedAddress(getLocale()) : pagePaths.subject}>
         <AppShell>
           <Story />
         </AppShell>
@@ -151,10 +176,12 @@ export const NormalGlobal: Story = {
 };
 
 export const FallbackContinuation: Story = {
+  parameters: { continued: true },
   render: () => <ContinuedGroup fallback />,
 };
 
 export const IndependentContinuation: Story = {
+  parameters: { continued: true },
   render: () => <ContinuedGroup />,
   play: async ({ canvasElement }) => {
     const continueLink = canvasElement.querySelector('[data-node="editions"] [data-slot="continue-group"]');
@@ -162,9 +189,11 @@ export const IndependentContinuation: Story = {
       'href',
       expect.stringContaining(`node=editions&cursor=next-native-cursor&realm=${realmRecording.realm.realmId}`),
     );
-    await expect(within(canvasElement).getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute(
-      'href',
-      expect.stringContaining('node=works'),
-    );
+    const streams = within(canvasElement).getByRole('navigation', { name: m.subject_relations() });
+    const works = within(streams).getByRole('link', { name: m.subject_works() });
+    const href = new URL(works.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(href.pathname).toMatch(/\/editions$/);
+    await expect(Object.fromEntries(href.searchParams)).toEqual({ node: 'works', realm: realmRecording.realm.realmId });
+    await expect(href.hash).toBe('#works');
   },
 };

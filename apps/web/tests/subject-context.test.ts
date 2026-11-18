@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectPageData } from '../src/features/pages/subject';
@@ -18,13 +17,12 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { subjectPageTitle, pageContext } = await import('../src/features/pages/subject');
 const {
   loadSubjectPage,
-  SubjectPage: SubjectPageContent,
+  SubjectPage,
   subjectBody,
   subjectPageJsonLd,
 } = await import('../src/features/pages/subject');
-const { withPageVisitHost } = await import('./helpers/subject-render');
-const SubjectPage = withPageVisitHost(SubjectPageContent);
-const { loadViewPages } = await import('../src/features/pages/subject-frame');
+const { renderSubject } = await import('./helpers/subject-render');
+const { loadViewPages, SubjectViewPage } = await import('../src/features/pages/subject-frame');
 const { assertSamePageContext, contextSubjectAddress, loadContextSubject } =
   await import('../src/features/pages/context-subject');
 const { contextHref } = await import('../src/features/pages/context-navigation');
@@ -60,8 +58,7 @@ function recordedPage(context = selected): SubjectPageData {
   return page;
 }
 
-// Deliberately unexecuted in the typing-only delivery; render the actual default Subject composition.
-test('Make selected Realm and Global fallback recovery usable on phones', () => {
+test('Make selected Realm and Global fallback recovery usable on phones', async () => {
   const longTitle = `${realmRecording.realm.title} — Literature, translations and long-running reading discussions / 読書と翻訳について語り合うコミュニティ`;
   const cases = [
     { name: 'SelectedRealm', title: realmRecording.realm.title },
@@ -88,36 +85,36 @@ test('Make selected Realm and Global fallback recovery usable on phones', () => 
         }
         const label = subjectPageTitle(page, locale);
         const address = subjectHref({ id: recording.subject, label }, locale).href;
+        const href = `${address}${'view' in state ? `/${state.view}` : ''}`;
+        const search = new URLSearchParams();
+        if (page.requestedRealm) search.set('realm', page.requestedRealm);
         if ('view' in state) {
-          page.document = {
+          const document: CompositionDocument = {
             root: { props: {} },
             content: [
-              { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', paged: true } },
+              {
+                type: 'SubjectList',
+                props: { id: 'editions', title: 'Editions', property: 'schema:exampleOfWork', limit: 12, paged: true },
+              },
             ],
           };
+          page.document = document;
           page.continuation = { node: 'editions', cursor: 'native+opaque-cursor' };
-          const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
+          const plan = planReads(platformRegistry, document, pageContext(page));
           page.reads = { [plan.nodes.editions!]: { status: 200, body: { links: [], next: 'next-native-cursor' } } };
+          search.set('node', page.continuation.node);
+          search.set('cursor', page.continuation.cursor);
         }
-        const client = new QueryClient();
-        let html: string;
-        try {
-          html = renderToString(
-            createElement(
-              QueryClientProvider,
-              { client },
-              createElement(SubjectPage, {
-                page,
-                locale,
-                messages,
-                subjectLabel: label,
-                ...('view' in state ? { view: state.view } : {}),
-              }),
-            ),
-          );
-        } finally {
-          client.clear();
-        }
+        const html = await renderSubject(
+          createElement(SubjectPage, {
+            page,
+            locale,
+            messages,
+            subjectLabel: label,
+            ...('view' in state ? { view: state.view } : {}),
+          }),
+          search.size ? `${href}?${search}` : href,
+        );
         const nav = html.match(/<nav\b[^>]*data-slot="page-context"[\s\S]*?<\/nav>/)?.[0];
         if ('global' in state) {
           expect(html).toContain(label);
@@ -125,7 +122,6 @@ test('Make selected Realm and Global fallback recovery usable on phones', () => 
           continue;
         }
         expect(nav).toContain(`aria-label="${m.subject_context_navigation({}, o)}"`);
-        const href = `${address}${'view' in state ? `/${state.view}` : ''}`;
         const links = Array.from(nav!.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g), (match) => ({
           href: match[1]!.replaceAll('&amp;', '&'),
           text: match[2],
@@ -220,26 +216,44 @@ describe('Close current Context and Realm Subject navigation cache and continuat
     const document: CompositionDocument = {
       root: { props: {} },
       content: [
-        { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } },
-        { type: 'SubjectList', props: { id: 'works', property: 'schema:author', limit: 12, paged: true } },
+        {
+          type: 'SubjectList',
+          props: { id: 'editions', title: 'Editions', property: 'schema:exampleOfWork', limit: 12, paged: true },
+        },
+        {
+          type: 'SubjectList',
+          props: { id: 'works', title: 'Works', property: 'schema:author', limit: 12, paged: true },
+        },
       ],
     };
     const cursor = 'native+opaque/cursor';
     const continuation = { node: 'editions', cursor };
-    const page: SubjectPageData = { ...overview, document, continuation, reads: {} };
+    const page: SubjectPageData = {
+      ...overview,
+      document,
+      continuation,
+      streams: {
+        selected: 'editions',
+        entries: [
+          { node: 'editions', property: 'schema:exampleOfWork', direction: 'inverse' },
+          { node: 'works', property: 'schema:author', direction: 'inverse' },
+        ],
+      },
+      reads: {},
+    };
     const plan = planReads(platformRegistry, document, { subject: page.subject, context: selected, continuation });
     page.reads[plan.nodes.editions!] = { status: 200, body: { links: [], next: 'next+native' } };
     page.reads[plan.nodes.works!] = { status: 204, body: {} };
-    const requests: {
-      target: { realm?: string; view?: string };
-      continuation?: unknown;
-      authorization: string | null;
-    }[] = [];
+    const requests: { body: unknown; authorization: string | null; path: string }[] = [];
     const client = createKernelClient('https://kernel.invalid', {
       fetch: (async (input, init) => {
         const request = new Request(input, init);
         const body = await request.json();
-        requests.push({ ...body, authorization: request.headers.get('authorization') });
+        requests.push({
+          body,
+          authorization: request.headers.get('authorization'),
+          path: new URL(request.url).pathname,
+        });
         return Response.json(body.target.view ? page : overview);
       }) as typeof fetch,
     });
@@ -248,33 +262,51 @@ describe('Close current Context and Realm Subject navigation cache and continuat
       node: 'editions',
       authorization: 'Bearer reader-a',
     });
-    expect(requests).toHaveLength(2);
-    expect(requests[0]).toMatchObject({
-      target: { realm, view: 'editions' },
-      continuation,
-      authorization: 'Bearer reader-a',
-    });
-    expect(requests[1]).toMatchObject({ target: { realm }, authorization: 'Bearer reader-a' });
-    expect(requests[1]?.continuation).toBeUndefined();
+    expect(requests).toEqual([
+      {
+        body: {
+          target: { subject: recording.subject, realm, view: 'editions' },
+          continuation,
+          stream: 'editions',
+          languages: ['en'],
+        },
+        authorization: 'Bearer reader-a',
+        path: '/v1/pages:read',
+      },
+      {
+        body: { target: { subject: recording.subject, realm }, languages: ['en'] },
+        authorization: 'Bearer reader-a',
+        path: '/v1/pages:read',
+      },
+    ]);
     if (loaded.kind !== 'page') throw new Error('Expected current page');
     expect(loaded.next).toBeUndefined();
+    expect(loaded.page.context).toEqual(selected);
+    expect(loaded.overview.context).toEqual(selected);
     expect(loaded.page.requestedRealm).toBe(realm);
-    const html = renderToString(
-      createElement(
-        QueryClientProvider,
-        { client: new QueryClient() },
-        createElement(SubjectPage, {
-          page: loaded.page,
-          locale: 'en',
-          messages,
-          view: 'editions',
-          subjectLabel: 'Current selected title',
-        }),
-      ),
+    const subjectLabel = subjectPageTitle(loaded.overview, 'en');
+    const address = subjectHref({ id: recording.subject, label: subjectLabel }, 'en').href;
+    const search = new URLSearchParams({ node: 'editions', cursor, realm });
+    const html = await renderSubject(
+      createElement(SubjectViewPage, {
+        page: loaded.page,
+        locale: 'en',
+        messages,
+        view: 'editions',
+        subjectLabel,
+        label: 'Editions',
+        frame: null,
+      }),
+      `${address}/editions?${search}`,
     );
-    expect(html).toContain('data-slot="continue-group"');
+    expect(html.match(/data-slot="continue-group"/g)).toHaveLength(1);
     expect(html).toContain(`/editions?node=editions&amp;cursor=next%2Bnative&amp;realm=${realm}`);
-    expect(html).toContain(`/works?node=works&amp;realm=${realm}`);
+    const siblingHref = html.match(/href="([^"]+#works)"/)?.[1];
+    if (!siblingHref) throw new Error('Expected a link to the first window of the Works stream');
+    const sibling = new URL(siblingHref.replaceAll('&amp;', '&'), 'https://rezics.invalid');
+    expect(sibling.pathname).toBe(`${address}/editions`);
+    expect(Object.fromEntries(sibling.searchParams)).toEqual({ node: 'works', realm });
+    expect(html).not.toContain('data-node="works"');
   });
 
   test('More retains the requested Realm but retires the old group when current Context or fallback changes', async () => {
@@ -369,13 +401,16 @@ describe('Close current Context and Realm Subject navigation cache and continuat
     });
     const result = await loadSubjectPage(client, page.subject!, undefined, 'en', { realm });
     if (result.kind !== 'page') throw new Error('Expected independently authorized Global fallback');
-    const html = renderToString(createElement(SubjectPage, { page: result.page, locale: 'en', messages }));
+    const address = contextSubjectAddress(result.page, 'en');
+    const html = await renderSubject(
+      createElement(SubjectPage, { page: result.page, locale: 'en', messages }),
+      `${address.href}?realm=${realm}`,
+    );
     expect(html).toContain('Reading Global');
     expect(html).toContain('Retry this selection');
     expect(html).not.toContain(realmRecording.realm.title);
     expect(html).not.toContain(`/realms/${realm}`);
     expect(html).toContain(`realm=${realm}`);
-    const address = contextSubjectAddress(result.page, 'en');
     expect(contextHref(`${address.href}/editions?node=editions&cursor=a%2Bb#items`, realm)).toBe(
       `${address.href}/editions?node=editions&cursor=a%2Bb&realm=${realm}#items`,
     );
