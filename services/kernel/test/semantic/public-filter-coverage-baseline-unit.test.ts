@@ -74,15 +74,7 @@ function receiver(onConnect = () => {}, onCommit = () => {}, originals = [{ part
           else if (sql.includes('SELECT consumer,state,coverage_generation'))
             rows = [{ consumer: original.binding.consumer, state: 'active', coverage_generation: '1' }];
           else if (sql.includes('SELECT definition::text,consumer,generation::text'))
-            rows = [
-              {
-                definition: original.binding.definition,
-                consumer: original.binding.consumer,
-                generation: '1',
-                after_home: 2,
-                root: 'b'.repeat(64),
-              },
-            ];
+            rows = [{ definition: original.binding.definition, consumer: original.binding.consumer, generation: '1' }];
           return { rows, rowCount: 1 };
         },
       };
@@ -99,39 +91,28 @@ test('owner verification and receiver adoption consume the original tuple after 
     Object.assign(binding.registration, { partition: 4, id: 'changed' });
     Object.assign(enrollment, { partition: 9, epoch: 10, sourcePosition: 99n, receipt: 'changed' });
   });
-  const adopted: unknown[] = [];
-  await adoptPublicFilterCoverageBaselinePage(
-    r.pool,
-    binding,
-    [enrollment],
-    Date.now() + 60_000,
-    async (client, result) => {
-      expect(typeof client.query).toBe('function');
-      adopted.push(result);
-    },
-  );
-  const root = hash(['b'.repeat(64), 2, original.enrollment.receipt]);
-  expect(adopted).toEqual([{ after: 3, root, generation: 1n }]);
-  expect(r.calls.find(({ sql }) => sql.includes('INSERT INTO search.public_filter_coverage_baseline'))?.values).toEqual(
-    [
-      0,
-      original.binding.registration.id,
-      original.binding.bootstrap,
-      2,
-      3,
-      '6',
-      '7',
-      '8',
-      '4',
-      '5',
-      original.enrollment.receipt,
-      'b'.repeat(64),
-      root,
-    ],
-  );
-  expect(r.calls.find(({ sql }) => sql.includes('INSERT INTO search.public_filter_coverage_home'))?.sql).toContain(
-    '0,true,$9',
-  );
+  await adoptPublicFilterCoverageBaselinePage(r.pool, binding, [enrollment], Date.now() + 60_000);
+  const pages = r.calls.filter(({ sql }) => sql.includes('semantic.adopt_public_filter_baseline_page'));
+  expect(pages).toHaveLength(1);
+  expect(pages[0]?.values).toEqual([
+    original.binding.registration.id,
+    original.binding.bootstrap,
+    original.binding.definition,
+    original.binding.consumer,
+    true,
+    JSON.stringify([
+      {
+        partition: 2,
+        epoch: 3,
+        source_position: '6',
+        creation_position: '7',
+        enqueue_revision: '8',
+        revision: '4',
+        claim_revision: '5',
+        receipt: original.enrollment.receipt,
+      },
+    ]),
+  ]);
   expect(r.counts()).toEqual({ connections: 2, releases: 2 });
 });
 
@@ -197,7 +178,7 @@ test('accessors, proxy registrations and coercible positions refuse before any c
     const f = make(),
       r = receiver();
     await expect(
-      adoptPublicFilterCoverageBaselinePage(r.pool, f.binding, [f.enrollment], Date.now() + 60_000, async () => {}),
+      adoptPublicFilterCoverageBaselinePage(r.pool, f.binding, [f.enrollment], Date.now() + 60_000),
     ).rejects.toBeInstanceOf(TypeError);
     expect(r.counts()).toEqual({ connections: 0, releases: 0 });
   }
@@ -231,17 +212,11 @@ test('a missing original stops the page at its last verified home', async () => 
     { partition: 2, valid: true },
     { partition: 4, valid: true },
   ]);
-  const advanced: number[] = [];
-  await adoptPublicFilterCoverageBaselinePage(
-    r.pool,
-    binding,
-    enrollments,
-    Date.now() + 60_000,
-    async (_, adoption) => {
-      advanced.push(adoption.after);
-    },
-  );
-  expect(advanced).toEqual([3]);
+  await adoptPublicFilterCoverageBaselinePage(r.pool, binding, enrollments, Date.now() + 60_000);
+  const pages = r.calls.filter(({ sql }) => sql.includes('semantic.adopt_public_filter_baseline_page'));
+  expect(pages).toHaveLength(1);
+  const submitted = JSON.parse(pages[0]?.values[5] as string);
+  expect(submitted.map(({ partition }: { partition: number }) => partition)).toEqual([2]);
   expect(r.counts()).toEqual({ connections: 2, releases: 2 });
 });
 

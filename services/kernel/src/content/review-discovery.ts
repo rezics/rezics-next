@@ -104,7 +104,10 @@ export type ReviewDiscoveryCount =
 export type ReviewDiscoverySource = Readonly<{
   read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
   /** Exact current positions for requests with no Review identities. */
-  readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+  readEmptyPositions?(
+    partitions: readonly number[],
+    options?: Readonly<{ omitChanged?: boolean }>,
+  ): Promise<ReadonlyMap<number, bigint>>;
   /** Coherent terminal first pages for homes with no raw Review candidates. */
   readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   hydrate(partition: number, ids: readonly string[]): Promise<ReviewDiscoveryHydration>;
@@ -1032,7 +1035,7 @@ export function createReviewDiscoverySource(
       }
       return pages;
     },
-    async readEmptyPositions(partitions) {
+    async readEmptyPositions(partitions, { omitChanged = false } = {}) {
       const requested = emptyReviewHomes(partitions);
       if (requested.length === 0) return new Map();
 
@@ -1063,6 +1066,7 @@ export function createReviewDiscoverySource(
       for (const [partition, cut] of cuts) {
         const row = after.get(partition);
         const current = cutState(partition, row ? [row] : [], 1);
+        if (omitChanged && current.status === 'ready' && !sameCut(cut, current.cut)) continue;
         requireSameCut(cut, current, 'empty-position');
         positions.set(partition, current.position);
       }

@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { nativePopulationStartId, readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import {
   readOriginalPublicFilterProjectionPage,
@@ -27,7 +28,6 @@ import beginBootstrap from './public-filter-source-binding-begin.sql';
 import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
 import abortBootstrap from './public-filter-source-binding-abort.sql';
-import accountPage from './public-filter-source-binding-account-page.sql';
 import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import {
@@ -621,19 +621,23 @@ const nativeAccountRepairs = new WeakMap<
     }>
   >
 >();
-// One verified reply may carry the exact Subject bodies already read by that
-// invocation. A copied reply or another binding cannot recover this evidence.
-const subjectPublicationRepairEvidence = new WeakMap<
+type NativeRepairEvidence = Readonly<{
+  repairs: readonly PublicSourceRepair[];
+  account: AccountDiscoveryRepairObservation | null;
+}>;
+// A verified response may carry bodies already checked by that invocation.
+// A copied response or another binding cannot recover this evidence.
+const publicFilterRepairEvidence = new WeakMap<
   Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
-  Readonly<{ binding: PublicFilterSourceBinding; repairs: readonly PublicSourceRepair[] }>
+  Readonly<{ binding: PublicFilterSourceBinding; evidence: NativeRepairEvidence }>
 >();
 
-export function nativeSubjectPublicationRepairEvidence(
+export function nativePublicFilterRepairEvidence(
   binding: PublicFilterSourceBinding,
   step: Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
-): readonly PublicSourceRepair[] | undefined {
-  const evidence = subjectPublicationRepairEvidence.get(step);
-  return evidence?.binding === binding ? evidence.repairs : undefined;
+): NativeRepairEvidence | undefined {
+  const evidence = publicFilterRepairEvidence.get(step);
+  return evidence?.binding === binding ? evidence.evidence : undefined;
 }
 
 type NativeRepairStartInput = Readonly<{
@@ -649,6 +653,24 @@ const nativeRepairStarts = new WeakMap<
   ) => Promise<Readonly<{ start: PrivacyReductionStart; cost: PublicFilterCost }>>
 >();
 const nativeRepairJoins = new WeakMap<PublicFilterSourceBinding, PublicFilterSourceBinding['join']>();
+type RepairReadBatch = <T>(
+  input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
+  context: PublicFilterConsumerContext,
+  read: () => Promise<T>,
+) => Promise<T>;
+const nativeRepairReadBatches = new WeakMap<PublicFilterSourceBinding, RepairReadBatch>();
+
+/** Share the immutable execution join within an independent Search settlement.
+ * Each Source step still checks its predecessor, owner data and current cut.
+ */
+export function withNativePublicFilterRepairReadBatch<T>(
+  binding: PublicFilterSourceBinding,
+  input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
+  context: PublicFilterConsumerContext,
+  read: () => Promise<T>,
+): Promise<T> {
+  return nativeRepairReadBatches.get(binding)?.(input, context, read) ?? read();
+}
 
 export async function joinNativePublicFilterRepair(
   binding: PublicFilterSourceBinding,
@@ -1223,6 +1245,18 @@ export function createNativePublicFilterSourceBinding(
       projection: null,
     };
   }
+  function closedCreationBridge(record: RepairRecord) {
+    const { input, next, bridgeEvents } = record;
+    if (
+      input.phase !== 'bridge' ||
+      !input.bridge ||
+      next.phase !== 'window' ||
+      next.partition !== input.bridge.partition + 1 ||
+      (input.bridge.position <= input.bridge.through && !bridgeEvents)
+    )
+      return undefined;
+    return input.bridge;
+  }
   async function advanceCreationBridge(
     bootstrap: string,
     state: RepairState,
@@ -1291,11 +1325,18 @@ export function createNativePublicFilterSourceBinding(
       result = await readPublicFilterCreationEvent(db, input, context);
     }
     const event = result.event;
-    if (event === null) {
+    const action = event === null ? null : publicFilterCreationAction(event.type, accounts);
+    // A replay keeps its original successor, including earlier receipts that
+    // recorded the exhausted cursor as a separate step.
+    const closedByRange =
+      receipt &&
+      action === null &&
+      result.next.position > window.through &&
+      (!retained || retained.next.phase === 'window');
+    if (event === null || closedByRange) {
       const { bridge: _bridge, ...rest } = state;
-      return { next: { ...rest, partition: home + 1, epoch: null, phase: 'window' } };
+      return { next: { ...rest, partition: home + 1, epoch: null, phase: 'window' }, receipt };
     }
-    const action = publicFilterCreationAction(event.type, accounts);
     if (action === null) return { next: { ...state, partition: home, bridge: result.next }, receipt };
     const route = event.subject === null ? null : routeOf(event.subject);
     if (route === null || (action === 'semantic' && partitionOf(route) !== home))
@@ -2526,33 +2567,7 @@ export function createNativePublicFilterSourceBinding(
             }
             if (receipts.length !== start - cut.row.account_after + count) break;
           }
-          await adoptPublicFilterCoverageBaselinePage(
-            db,
-            baseline,
-            receipts,
-            deadline,
-            async (client, adopted, receipt) => {
-              const advanced = await nativeSourceQuery(client, accountPage, {
-                bootstrap: inserted.bootstrap,
-                after_partition: receipt.partition,
-                next_partition: adopted.after,
-                head_count: 1,
-                coverage_generation: String(adopted.generation),
-                coverage_root: adopted.root,
-                registration: baseline.registration.id,
-                heads: [
-                  {
-                    partition: receipt.partition,
-                    epoch: receipt.epoch,
-                    revision: String(receipt.revision),
-                    claim_revision: String(receipt.claimRevision),
-                  },
-                ],
-              });
-              if (advanced.length !== 1)
-                throw new CommandUnavailableError('contention', baseline.registration.partition);
-            },
-          );
+          await adoptPublicFilterCoverageBaselinePage(db, baseline, receipts, deadline);
           if (failure) throw failure.reason;
         } catch (error) {
           if (ports.access.classifyUnavailability(error) !== 'contention') throw error;
@@ -2645,16 +2660,9 @@ export function createNativePublicFilterSourceBinding(
           }
         }
       } else if (original) {
-        if (
-          original.input.phase !== 'bridge' ||
-          !original.input.bridge ||
-          original.input.partition !== seal.home ||
-          original.input.bridge.position <= original.input.bridge.through ||
-          original.next.partition !== seal.home + 1 ||
-          original.next.phase !== 'window'
-        )
-          throw new BindingError('binding_mismatch');
-        windows.push(original.input.bridge);
+        const window = closedCreationBridge(original);
+        if (!window || window.partition !== seal.home) throw new BindingError('binding_mismatch');
+        windows.push(window);
       }
       const verify = async () => {
         if (original?.windowBatch) return; // The authority read checks every retained verified window.
@@ -2861,6 +2869,11 @@ export function createNativePublicFilterSourceBinding(
     );
   }
 
+  const repairReadBatch = new AsyncLocalStorage<{
+    input: Omit<NativeSourceRepairStepRead, 'predecessor'>;
+    deadline: number;
+    joined?: Extract<Awaited<ReturnType<typeof joinNativeCut>>, { status: 'joined' }>;
+  }>();
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
     async readRepairStep(request, context) {
@@ -2876,8 +2889,18 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         const bootstrapId = nativeId(input.bootstrap);
-        const joined = await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true);
-        addCost(cost, joined.cost);
+        const batch = repairReadBatch.getStore();
+        const scope =
+          batch?.deadline === deadline &&
+          batch.input.bootstrap === input.bootstrap &&
+          batch.input.execution === input.execution &&
+          isDeepStrictEqual(batch.input.queried, input.queried)
+            ? batch
+            : undefined;
+        const reused = scope?.joined;
+        const joined =
+          reused ?? (await joinNativeCut({ queried: input.queried, execution: input.execution }, { deadline }, true));
+        if (!reused) addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const { cut } = joined;
         if (
@@ -2887,6 +2910,7 @@ export function createNativePublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
+        if (scope) scope.joined = joined;
         const row = await nativeSourceQuery(db, repairRead, {
           bootstrap: bootstrapId,
           execution: input.execution,
@@ -3045,6 +3069,7 @@ export function createNativePublicFilterSourceBinding(
               : { ...record.input, projection: record.output.frontier };
         } else if (record.account) {
           if (
+            !('representation' in cut.definition.capture) ||
             record.input.owner !== 'accounts' ||
             record.input.phase !== 'account' ||
             record.input.subject !== record.account.id ||
@@ -3215,13 +3240,14 @@ export function createNativePublicFilterSourceBinding(
           encode(expectedBridgeEvents ?? null) !== encode(record.bridgeEvents ?? null)
         )
           throw new BindingError('binding_mismatch');
-        const current = await loadBootstrap(input.bootstrap, db);
+        const current = await loadBootstrap(input.bootstrap, db, scope ? cut.definition : undefined);
         if (
           current.row.state !== 'adopted' ||
           current.row.queried !== cut.row.queried ||
           !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
+        const closedWindow = closedCreationBridge(record);
         await retainPublicFilterRepairVerification(
           db,
           chain,
@@ -3232,12 +3258,8 @@ export function createNativePublicFilterSourceBinding(
             complete: row.complete,
             inputLimit: row.input_limit,
             digests: row.repair_locator_digests!,
-            ...(record.input.phase === 'bridge' &&
-            record.input.bridge &&
-            record.input.bridge.position > record.input.bridge.through &&
-            record.next.phase === 'window' &&
-            record.next.partition === record.input.partition + 1
-              ? { closedHome: record.input.partition }
+            ...(closedWindow
+              ? { closedHome: closedWindow.partition }
               : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
                 ? { closedHome: record.windowBatch.from }
                 : {}),
@@ -3265,8 +3287,11 @@ export function createNativePublicFilterSourceBinding(
           })),
           cost,
         };
-        if (subjectPublication && repairs.length === receiptDigests.length)
-          subjectPublicationRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
+        if (repairs.length === receiptDigests.length)
+          publicFilterRepairEvidence.set(result, {
+            binding: bootstrapBinding,
+            evidence: { repairs, account: record.account ?? null },
+          });
         return result;
       });
       if (!observer) return pending;
@@ -3538,6 +3563,9 @@ export function createNativePublicFilterSourceBinding(
     },
   };
   nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
+  nativeRepairReadBatches.set(bootstrapBinding, (input, context, read) =>
+    repairReadBatch.run({ input: structuredClone(input), deadline: context.deadline }, read),
+  );
   nativeRepairStarts.set(bootstrapBinding, async (request, context) => {
     const result = await run(context, async (cost, db) => {
       const joined = await joinNative({ queried: request.queried }, context, true);

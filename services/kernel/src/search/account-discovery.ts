@@ -1092,7 +1092,7 @@ export async function eraseDiscoveryAccount(
   });
   if (copies === null) return;
   for (const target of copies) {
-    await locateAccount(pool, target, { owner: 'accounts', kind: 'account', route, id: accountId });
+    await locateAccount(pool, target, { owner: 'accounts', kind: 'account', route, id: accountId }, false);
     await withDiscoveryTarget(
       pool,
       search,

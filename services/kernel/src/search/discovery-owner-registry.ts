@@ -99,8 +99,9 @@ export function readDiscoveryScope(pool: Pool, prefix: string, deadline: number,
 export async function resolveDiscoveryOwnerAdapters(
   producers: Pick<DiscoveryProducerEntry, 'ownerAdapters' | 'metadataProducers'>,
   publishedKinds?: readonly string[],
+  purpose?: 'population',
 ): Promise<ResolvedDiscoveryOwnerAdapters> {
-  const classification = await classifyDiscoveryMetadataProducers(producers.metadataProducers);
+  const classification = await classifyDiscoveryMetadataProducers(producers.metadataProducers, purpose);
   const published = publishedKinds === undefined ? undefined : new Set(publishedKinds);
   const available = new Set(
     classification.availableKinds.filter((kind) => published === undefined || published.has(kind)),

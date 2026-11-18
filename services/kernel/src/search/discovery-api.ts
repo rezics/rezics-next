@@ -331,7 +331,7 @@ export type DiscoveryMetadataProducer = Readonly<{
     }>
   >;
   position(partition: number): Promise<bigint>;
-  /** Native position observations for certification requests that carry no identities. */
+  /** Exact position observations for requests without identities. An omitted home has no stable cut. */
   readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   readEmptyStamps?(partitions: readonly number[]): Promise<ReadonlyMap<number, { epoch: number; position: bigint }>>;
   /** Native first pages with no raw candidates. Omitted homes require the normal page reader. */

@@ -57,7 +57,8 @@ test('core certification rejects a concurrent native cut and fenced home without
       ...entry.subjects,
       async countPartitions(partitions: readonly number[]) {
         const census = await entry.subjects.countPartitions!(partitions);
-        if (partitions.includes(home!) && !moved) {
+        const selectedHome = home;
+        if (selectedHome !== undefined && partitions.includes(selectedHome) && !moved) {
           moved = true;
           const client = await writer.connect();
           await client.query('BEGIN');
@@ -65,14 +66,14 @@ test('core certification rejects a concurrent native cut and fenced home without
             const cut = (
               await client.query(
                 'UPDATE core.partition SET position=position+1 WHERE partition_no=$1 RETURNING epoch,position::text',
-                [home],
+                [selectedHome],
               )
             ).rows[0]!;
-            const subject = `018f0000-0000-7000-8000-${(home * 16).toString(16).padStart(4, '0')}00000091`;
+            const subject = `018f0000-0000-7000-8000-${(selectedHome * 16).toString(16).padStart(4, '0')}00000091`;
             await client.query(
               `INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
                VALUES($1,$2,0,1,$3,$4,'com.rezics.subject.created.v1',$5,jsonb_build_object('id',$5::text))`,
-              [home, cut.position, cut.epoch, crypto.randomUUID(), subject],
+              [selectedHome, cut.position, cut.epoch, crypto.randomUUID(), subject],
             );
             await client.query('COMMIT');
           } catch (error) {

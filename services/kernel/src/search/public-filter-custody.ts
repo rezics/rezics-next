@@ -4,6 +4,7 @@ import { encodeGenerationPublicationQueried } from './generation-publication-pin
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
+import { withNativePublicFilterRepairReadBatch } from './native-bindings.ts';
 import repairTransaction from './public-filter-custody-repair-transaction.sql';
 import repairFinish from './public-filter-custody-repair-finish.sql';
 import repairWriter from './public-filter-custody-repair-writer.sql';
@@ -737,7 +738,7 @@ export async function readPublicFilterRepairSettlement(
       const copies = new Map<string, string>();
       const latest = new Map<string, PublicFilterRepairWriterReceipt>();
       const effects: { page: number; item: number; receipt: string }[] = [];
-      const append = async (ordinal: number, intent: string) => {
+      const append = async (ordinal: number, intent: string, previousIntent: string | null) => {
         const page = decode<RetainedRepairPage>(intent);
         if (
           !page.sourceStep ||
@@ -747,10 +748,9 @@ export async function readPublicFilterRepairSettlement(
           throw new Failure('binding_mismatch');
         // The native producer CAS advances through every page. Check adjacent retained links at
         // each selected page; complete Source chain/window proof belongs to the final owner read.
-        const previous = ordinal === 0 ? null : await repairPage.run(db, { ...keys, ordinal: ordinal - 1 });
         if (
-          (ordinal > 0 && !previous) ||
-          page.predecessor !== (previous ? decode<RetainedRepairPage>(previous.intent).frontier : null)
+          (ordinal > 0 && previousIntent === null) ||
+          page.predecessor !== (previousIntent === null ? null : decode<RetainedRepairPage>(previousIntent).frontier)
         )
           throw new Failure('binding_mismatch');
         pages.push({ ordinal, intent, page });
@@ -848,7 +848,7 @@ export async function readPublicFilterRepairSettlement(
         const row = await repairPages.run(db, { ...keys, after });
         if (!row) break;
         if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
-        await append(row.ordinal, row.intent);
+        await append(row.ordinal, row.intent, row.previous_intent);
         after = row.ordinal;
       }
       if (after !== state.pages - 1) {
@@ -857,7 +857,8 @@ export async function readPublicFilterRepairSettlement(
           ordinal: state.pages - 1,
         });
         if (!last) throw new Failure('owner_unavailable');
-        await append(state.pages - 1, last.intent);
+        const previous = state.pages === 1 ? null : await repairPage.run(db, { ...keys, ordinal: state.pages - 2 });
+        await append(state.pages - 1, last.intent, previous?.intent ?? null);
       }
       const last = pages.at(-1)!;
       if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
@@ -947,23 +948,21 @@ export async function readPublicFilterRepairSettlement(
     };
     const staged = await local(load);
     // No held Search checkout, transaction, writer lock or foreign-home lease crosses this boundary.
-    for (const entry of staged.basis.pages) {
-      await withRequestDeadline(context.deadline, () =>
-        verifyPublicFilterRepairSourcePage(
-          binding,
-          {
-            bootstrap: staged.state.bootstrap,
-            queried: q,
-            execution: input.execution,
-            predecessor: entry.page.predecessor,
-          },
-          entry.page,
-          context,
-          charge,
-          allowance?.maintenance,
-        ),
-      );
-    }
+    const sourceExecution = { bootstrap: staged.state.bootstrap, queried: q, execution: input.execution };
+    const verifySources = async () => {
+      for (const entry of staged.basis.pages)
+        await withRequestDeadline(context.deadline, () =>
+          verifyPublicFilterRepairSourcePage(
+            binding,
+            { ...sourceExecution, predecessor: entry.page.predecessor },
+            entry.page,
+            context,
+            charge,
+          ),
+        );
+    };
+    await (withNativePublicFilterRepairReadBatch?.(binding, sourceExecution, context, verifySources) ??
+      verifySources());
     return await local(async (db, raw) => {
       const final = await load(db, raw);
       if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');

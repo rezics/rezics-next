@@ -23,6 +23,7 @@ import type {
 } from '../../src/search/public-filter-consumer-contract.ts';
 import type { PublicFilterSource } from '../../src/semantic/public-filter-source-contract.ts';
 import * as accountDiscovery from '../../src/search/account-discovery.ts';
+import * as ownerRegistry from '../../src/search/discovery-owner-registry.ts';
 import * as definitions from '../../src/semantic/definitions.ts';
 import * as hydration from '../../src/search/discovery-hydration.ts';
 
@@ -464,14 +465,25 @@ afterEach(() => {
   for (const spy of spies.splice(0)) spy.mockRestore();
 });
 
-test('default discovery owns hydration languages before activeRelease', async () => {
+test('default discovery owns hydration languages and waits for registered metadata readers', async () => {
   const languages: Array<readonly string[] | undefined> = [];
+  const serving: string[] = [];
   const gate = deferred();
+  let metadataKinds: NonNullable<Awaited<ReturnType<typeof ownerRegistry.readDiscoveryScope>>>['metadataKinds'] = [];
   spies.push(
     spyOn(definitions, 'activeRelease').mockImplementation(async () => {
       await gate.promise;
       return { digest: bundledDigest, head: 1, release: bundledRelease };
     }),
+    spyOn(ownerRegistry, 'readDiscoveryScope').mockImplementation(async () => ({
+      prefix: 'own-',
+      generation: 1,
+      uuid: 'index',
+      incarnation: 'allocation',
+      state: 'populating',
+      capability: null,
+      metadataKinds,
+    })),
     spyOn(accountDiscovery, 'nativeDiscoveryRegistry').mockImplementation(
       async (_pool, _routeKey, _subjects, options) => {
         languages.push(options?.languages ? [...options.languages] : options?.languages);
@@ -483,12 +495,8 @@ test('default discovery owns hydration languages before activeRelease', async ()
       throw new Error('owned languages recorded');
     }),
   );
-  const pool = { query: async () => ({ rows: [] }), options: { connectionString: '' } } as unknown as Pool;
-  const access = new Proxy({} as Access, {
-    get() {
-      throw new Error('Unexpected Access read');
-    },
-  });
+  const pool = { connect: unused, query: unused, options: { connectionString: '' } } as unknown as Pool;
+  const access = { authorize: unused, authenticate: unused } as unknown as Access;
   const producers = createDiscoveryProducerEntry({
     clock: () => new Date(),
     pool,
@@ -501,11 +509,7 @@ test('default discovery owns hydration languages before activeRelease', async ()
       pool,
       deadlineNow: () => Date.now(),
       routeKey: new Uint8Array(32).fill(1),
-      access: new Proxy({} as Access, {
-        get() {
-          throw new Error('Unexpected Access read');
-        },
-      }),
+      access,
       search: {
         request: async () => ({ status: 503, body: {} }),
         bulk: async () => ({ errors: true }),
@@ -513,17 +517,14 @@ test('default discovery owns hydration languages before activeRelease', async ()
       prefix: 'own-',
       clock: () => new Date(now),
       keys,
+      observeServing: ({ result }) => serving.push(result),
     },
-    producers,
+    { ...producers, metadataProducers: {} },
   );
   try {
     const request = liveRequest();
     const pending = discovery.open('anonymous', request, {
-      access: new Proxy({} as Access, {
-        get() {
-          throw new Error('Unexpected Access read');
-        },
-      }),
+      access,
       actor: { kind: 'anonymous' },
       deadline: now + 30_000,
     });
@@ -532,6 +533,17 @@ test('default discovery owns hydration languages before activeRelease', async ()
     gate.resolve();
     await expect(pending).rejects.toMatchObject({ code: 'index_not_ready' });
     expect(languages).toEqual([['en', 'fr']]);
+
+    metadataKinds = ['review'];
+    await expect(
+      discovery.open('anonymous', liveRequest(), {
+        access,
+        actor: { kind: 'anonymous' },
+        deadline: now + 30_000,
+      }),
+    ).rejects.toMatchObject({ code: 'index_not_ready' });
+    expect(serving.at(-1)).toBe('capability_changed');
+    expect(languages).toHaveLength(1);
   } finally {
     await discovery.close();
   }
