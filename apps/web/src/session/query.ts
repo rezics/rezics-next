@@ -64,7 +64,7 @@ export const exposureQuery = queryOptions({
 /** Read-only registry hosts use an isolated client seeded with an anonymous session. */
 export const AnonymousSessionContext = createContext(false);
 
-function useBrowserSession(): BrowserSession {
+export function useBrowserSession(): BrowserSession {
   const anonymous = useContext(AnonymousSessionContext);
   const client = useQueryClient();
   const read = useCallback(() => client.ensureQueryData(sessionQuery), [client]);
