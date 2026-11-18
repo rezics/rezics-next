@@ -15,6 +15,7 @@ export function createBuiltinMembersApplication<View, Query, Member>(
     if (actor.kind !== 'account') throw native.notFound();
     return native.readPage(actor, id, {
       ...options,
+      source,
       limit,
       deadline,
       async revalidateOwner() {

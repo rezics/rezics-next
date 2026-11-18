@@ -63,6 +63,28 @@ function key(accountId: string): [number, string] {
   return [route, accountId];
 }
 
+/** Independent native sources which can contribute a member to Everything. */
+export async function readOwnerFactPresence(client: Client, accountId: string) {
+  const { rows } = await client.query<{
+    entry: boolean;
+    personal: boolean;
+    session: boolean;
+    copy: boolean;
+    label: boolean;
+  }>(
+    `SELECT
+    EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
+    (EXISTS(SELECT 1 FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2
+      AND (note IS NOT NULL OR priority IS NOT NULL))
+      OR EXISTS(SELECT 1 FROM library.entry_source_observation WHERE route=$1 AND account_id=$2)) AS personal,
+    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state <> 'retired') AS session,
+    EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND deletion_id IS NULL) AS copy,
+    EXISTS(SELECT 1 FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND deleted_at IS NULL) AS label`,
+    key(accountId),
+  );
+  return rows[0]!;
+}
+
 /** Pure native reads: absent control is unbuilt, never an empty/ready owner. */
 export async function readOwnerIndexFrontier(client: Client, accountId: string): Promise<OwnerIndexFrontier | null> {
   const { rows } = await client.query<Control>(

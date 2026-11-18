@@ -1062,7 +1062,7 @@ export function createCollectionReads(
       ...options,
       deadline,
       ...(admission.filter && admission.releaseDigest
-        ? { query: { filter: admission.filter, releaseDigest: admission.releaseDigest } }
+        ? { query: { filter: admission.filter, releaseDigest: admission.releaseDigest, admission } }
         : {}),
     });
   }

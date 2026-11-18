@@ -30,6 +30,30 @@ function sameSource(left: CollectionSourceObservation, right: CollectionSourceOb
   );
 }
 
+export function builtinMemberCursorBinding(
+  actor: Actor,
+  collectionId: string,
+  limit: number,
+  query?: { filter: FilterDocument; releaseDigest: string },
+) {
+  return {
+    route: 'GET /v1/collections/:collectionId/members',
+    viewer: actor.kind === 'account' ? actor.accountId : null,
+    query: {
+      collectionId,
+      limit,
+      order: 'id',
+      source: 'private_builtin',
+      ...(query
+        ? {
+            filter: createHash('sha256').update(canonicalize(query.filter)!).digest('hex'),
+            release: query.releaseDigest,
+          }
+        : {}),
+    },
+  };
+}
+
 /**
  * Common canonical member caller. The delivered Source owns candidate order, alias completion,
  * original+terminal disclosure and source-scoped identity currentness. No raw-ID page is normalized here.
@@ -52,22 +76,7 @@ export async function readCollectionSourceMembers(
   },
 ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
   const clock = deps.clock ?? systemClock;
-  const binding = {
-    route: 'GET /v1/collections/:collectionId/members',
-    viewer: input.actor.kind === 'account' ? input.actor.accountId : null,
-    query: {
-      collectionId: input.collectionId,
-      limit: input.limit,
-      order: 'id',
-      source: 'private_builtin',
-      ...(input.query
-        ? {
-            filter: createHash('sha256').update(canonicalize(input.query.filter)!).digest('hex'),
-            release: input.query.releaseDigest,
-          }
-        : {}),
-    },
-  };
+  const binding = builtinMemberCursorBinding(input.actor, input.collectionId, input.limit, input.query);
   const position = input.cursor == null ? null : await decodeListCursor(deps.tokens, binding, input.cursor, clock());
   if (
     position &&

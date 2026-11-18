@@ -17,6 +17,7 @@ export interface BuiltinMemberCapability<View, Query, Member> {
     actor: LibraryActor,
     id: string,
     options: BuiltinMemberOptions<Query> & {
+      source: View;
       limit: number;
       deadline: number;
       revalidateOwner(): Promise<void>;

@@ -406,7 +406,7 @@ export function matchOwnerFilterCatalogue(
           evidence.facts.map((fact) => fact.statement),
           leaf.clause,
         );
-  if (matches) return true;
+  if (matches !== false) return matches;
   return evidence.coverage?.basis === evidence.basis && evidence.progress === null ? false : 'not_proven';
 }
 

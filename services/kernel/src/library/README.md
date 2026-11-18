@@ -993,9 +993,15 @@ final owner, complete Source, disclosure and version comparisons run after this 
 existing unavailable response without delivering either the page or its headers. The cursor binding, activity order,
 readiness, and BASIC shape are unchanged.
 
-This is default caller composition, not native readiness or main proof. Logical headerless and Content reaction
-group bindings retain their existing readiness boundary. For an admitted catalogue-plus-owner request, Search
-passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
+For revision-zero private Everything, the owner's current shelf count can admit an ID-ordered direct read of up
+to two requested pages of explicit Entries. Indexed probes must establish that Entries cover the whole
+population. Each original must map to itself and the bounded Entry seeks must reach EOF at the admitted count.
+The reader can apply one released statement range using Semantic's complete public selection and the shared Search
+matcher. The signed continuation binds the owner fact version, partition epoch and evidence for the complete
+population, including exclusions. FULL presentation and viewer overlays retain their final currentness checks.
+Other logical Source shapes and Content reaction groups retain their existing readiness boundary.
+
+For an admitted catalogue-plus-owner request, Search passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
 Library revalidates that execution and its privacy-reduction closure. Owner-only and mixed predicates use the
 same captured Library Source and same caller reservation for native identity, preparation, candidate work and
 final disclosure. A catalogue-source owner filter without that actual Search query remains unavailable; a
