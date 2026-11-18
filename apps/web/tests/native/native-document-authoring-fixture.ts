@@ -2,6 +2,19 @@ import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
+const boardOwner = 'document-board-owner';
+const creationActions = ['space:create', 'realm:create', 'subject:create'];
+const boardOwnerScopes = [
+  ...creationActions,
+  'space:manage',
+  'context:read',
+  'realm:read',
+  'realm:manage',
+  'realm:participate',
+  'subject:read',
+  'board:create',
+  'board:read',
+];
 
 type Account = Awaited<ReturnType<NativeWebStack['authPersona']>>;
 type ApiObject = Record<string, unknown>;
@@ -12,22 +25,27 @@ async function requireStatus(response: Response, status: number, label: string):
   return text ? (JSON.parse(text) as ApiObject) : {};
 }
 
-async function write(stack: NativeWebStack, persona: string, path: string, body: unknown): Promise<ApiObject> {
+async function write(
+  stack: NativeWebStack,
+  actor: string | Account,
+  path: string,
+  body: unknown,
+  { method = 'POST', ifMatch }: { method?: 'POST' | 'PUT'; ifMatch?: string } = {},
+): Promise<ApiObject> {
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'idempotency-key': JSON.stringify(crypto.randomUUID()),
+  });
+  if (ifMatch !== undefined) headers.set('if-match', JSON.stringify(ifMatch));
+  if (typeof actor !== 'string') headers.set('authorization', actor.authorization);
   return requireStatus(
     await stack.kernel(
       path,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        },
-        body: JSON.stringify(body),
-      },
-      persona,
+      { method, headers, body: JSON.stringify(body) },
+      typeof actor === 'string' ? actor : undefined,
     ),
-    201,
-    `POST ${path}`,
+    method === 'POST' ? 201 : 200,
+    `${method} ${path}`,
   );
 }
 
@@ -46,21 +64,30 @@ export type NativeDocumentAuthoringFixture = {
 export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocumentAuthoringFixture> {
   const stack = await startNativeWebStack();
   const auth = await startAuthStack(stack);
-  const [alice, bob, governor] = await Promise.all([
+  const [alice, bob, owner, editor] = await Promise.all([
     stack.authPersona('alice'),
     stack.authPersona('bob'),
-    stack.authPersona('governor'),
+    stack.authPersona(boardOwner),
+    stack.authPersona('editor'),
   ]);
-  const editor = await stack.authPersona('editor');
 
-  const schemeResponse = await write(stack, 'editor', '/v1/subjects', {
+  await write(stack, 'governor', '/v1/grants', {
+    resource: { route: 0, id: globalContext },
+    subject: { kind: 'account', id: owner.accountId },
+    actions: creationActions,
+    valid: '(,)',
+  });
+  // The ordinary Space and Realm owner roles authorize the remaining fixture writes.
+  const creator = await stack.authPersona(boardOwner, boardOwnerScopes);
+
+  const schemeResponse = await write(stack, creator, '/v1/subjects', {
     type: 'skos:ConceptScheme',
     labels: { en: 'Native document authoring scheme' },
   });
   const scheme = schemeResponse.subject as { id: string };
   if (!scheme?.id) throw new Error('Native scheme response did not contain its subject id');
 
-  const conceptResponse = await write(stack, 'editor', '/v1/subjects', {
+  const conceptResponse = await write(stack, creator, '/v1/subjects', {
     type: 'skos:Concept',
     labels: { en: 'Native document authoring' },
     statements: {
@@ -75,13 +102,13 @@ export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocu
   const concept = conceptResponse.subject as { id: string };
   if (!concept?.id) throw new Error('Native concept response did not contain its subject id');
 
-  const spaceResponse = await write(stack, 'governor', '/v1/spaces', {
+  const spaceResponse = await write(stack, creator, '/v1/spaces', {
     title: 'Native document authoring space',
   });
   const space = spaceResponse.space as { spaceId: string };
   if (!space?.spaceId) throw new Error('Native space response did not contain its space id');
 
-  const realmResponse = await write(stack, 'governor', '/v1/realms', {
+  const realmResponse = await write(stack, creator, '/v1/realms', {
     spaceId: space.spaceId,
     title: 'Native document authoring realm',
     visibility: 'public',
@@ -90,35 +117,28 @@ export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocu
   const realm = realmResponse.realm as { realmId: string; headRevisionId: string };
   if (!realm?.realmId || !realm.headRevisionId) throw new Error('Native realm response was incomplete');
 
-  const schemeUpdate = await stack.kernel(
-    `/v1/realms/${realm.realmId}/boardScheme`,
-    {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        'if-match': JSON.stringify(realm.headRevisionId),
-      },
-      body: JSON.stringify({ schemeId: scheme.id }),
-    },
-    'governor',
-  );
-  const updatedRealmBody = await requireStatus(schemeUpdate, 200, 'PUT /v1/realms/:id/boardScheme');
+  const updatedRealmBody = await write(stack, creator, `/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, {
+    method: 'PUT',
+    ifMatch: realm.headRevisionId,
+  });
   const updatedRealm = updatedRealmBody.realm as { headRevisionId: string };
   if (!updatedRealm?.headRevisionId) throw new Error('Native realm scheme response was incomplete');
 
-  const boardResponse = await write(stack, 'governor', `/v1/realms/${realm.realmId}/boards`, {
+  const boardResponse = await write(stack, creator, `/v1/realms/${realm.realmId}/boards`, {
     conceptId: concept.id,
     title: 'Native document authoring',
     visibility: 'published',
+    purpose: 'discussion',
   });
-  const board = boardResponse.board as { id: string; route: number };
+  const board = boardResponse.board as { id: string; route: number; realmId: string; visibility: string; purpose: string };
   if (!board?.id || !Number.isInteger(board.route)) throw new Error('Native board response was incomplete');
+  if (board.realmId !== realm.realmId || board.visibility !== 'published' || board.purpose !== 'discussion')
+    throw new Error('Native fixture did not create a published discussion board in the requested Realm');
   const growthWriters = [
     { persona: 'alice', accountId: alice.accountId },
     { persona: 'bob', accountId: bob.accountId },
     { persona: 'editor', accountId: editor.accountId },
-    { persona: 'governor', accountId: governor.accountId },
+    { persona: boardOwner, accountId: owner.accountId },
   ];
 
   const accountsResponse = await stack.kernel(
