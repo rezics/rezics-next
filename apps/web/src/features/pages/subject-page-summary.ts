@@ -1,7 +1,7 @@
 import { documentRead, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { PublicFigure } from './subject-ratings';
 import { originalLanguage } from '../../subject/language';
-import { subjectHref } from '../../subject/subject-href';
+import { keepSearch, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { contextHref } from './context-navigation';
 import { statementDocument } from './documents';
@@ -69,10 +69,8 @@ export function subjectPageJsonLd(
   );
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
   const subjectLabel = subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject));
-  const href = contextHref(
-    subjectHref({ id: read.subject.id, label: subjectLabel }, locale).href,
-    subjectPageRealm(page),
-  );
+  const path = keepSearch(subjectHref({ id: read.subject.id, label: subjectLabel }, locale).href);
+  const href = contextHref(path, subjectPageRealm(page));
   const graph = subjectJsonLd({
     subject: {
       ...read.subject,
