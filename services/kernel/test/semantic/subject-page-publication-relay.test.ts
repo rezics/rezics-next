@@ -17,12 +17,15 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
 import type { PublicationRunner, PublicationStore, SubjectKey } from './subject-page-local-publication.test.ts';
 
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000193',
+  moderator: '019a1b2c-3d4e-7f00-8a00-ed170e000194',
+};
 // Only type imports from admitted native acceptance. Its tests are never registered here.
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 let access: Access;
-let real: Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>;
-const editor = '019a1b2c-3d4e-7f00-8a00-ed170e000193';
+let real: Awaited<ReturnType<typeof createRealAccess<typeof accounts>>>;
 const routeKey = new Uint8Array(32).fill(93);
 const origin = Date.now();
 let now = new Date(origin);
@@ -38,6 +41,7 @@ const actions = [
   'moderation:hide',
   'source_fence:takedown',
 ];
+const restoreAction = 'moderation:takedown';
 type Owner = { kind: 'subject' | 'source-fence'; route: number; key: string };
 type Time = { effectiveAt: string | null; evidence: 'known' | 'missing' };
 type Delta = {
@@ -64,12 +68,13 @@ const repairType = 'com.rezics.semantic.subject_page.repair_requested.v1';
 beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
-  real = await createRealAccess(db.admin, { editor }, actions, { clock });
+  real = await createRealAccess(db.admin, accounts, actions, { clock });
   await db.admin.query("UPDATE access.account SET rate_tier='trusted' WHERE route=$1 AND account_id=$2", [
-    routeOf(editor),
-    editor,
+    routeOf(accounts.editor),
+    accounts.editor,
   ]);
   for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', restoreAction);
   app = createKernel({
     pool: db.pool,
     routeKey,
@@ -85,13 +90,18 @@ beforeAll(async () => {
 afterAll(async () => {
   if (db) await db.close();
 });
-async function post(path: string, body: unknown, status = 200, key = randomUUID()) {
+async function post(
+  path: string,
+  body: unknown,
+  status = 200,
+  { key = randomUUID(), bearer = real.bearer('editor') }: { key?: string; bearer?: string } = {},
+) {
   const send = () =>
     app.handle(
       new Request(`http://kernel.test${path}`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${real.bearer('editor')}`,
+          authorization: `Bearer ${bearer}`,
           'content-type': 'application/json',
           'idempotency-key': `"${key}"`,
         },
@@ -344,7 +354,13 @@ test('durable Relay delivers dependency and original-time owner changes with res
 
     // Delayed delivery of a forward dependency emitted before the owner changed.
     at(4);
-    await post(`/v1/subjects/${owner.key}:restore`, { reason: 'New public period' });
+    const restorePath = `/v1/subjects/${owner.key}:restore`;
+    const restoreBody = { reason: 'New public period' };
+    const denied = await post(restorePath, restoreBody, 403, {
+      bearer: await real.bearerFor('editor', [restoreAction]),
+    });
+    expect(denied).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
+    await post(restorePath, restoreBody, 200, { bearer: await real.bearerFor('moderator', [restoreAction]) });
     let late: SubjectKey;
     do {
       late = key((await book(owner.key)).id);
@@ -479,7 +495,7 @@ test('Content native original period evidence survives repeated takeDown, readFe
   const removedAt = at(22);
   const input = { source: source.source, externalId, fieldGroup: 'facts', reason: 'Original period' };
   const receipt = randomUUID();
-  await post('/v1/sourceFences:takedown', input, 200, receipt);
+  await post('/v1/sourceFences:takedown', input, 200, { key: receipt });
   const nativeTime = await db.admin.query<{ taken_down_at: string; matches_command_time: boolean }>(
     `SELECT taken_down_at::text AS taken_down_at,
       taken_down_at = $5::timestamptz AS matches_command_time
@@ -507,7 +523,7 @@ test('Content native original period evidence survives repeated takeDown, readFe
     takedownId: fence.takedownId,
   });
   at(23);
-  await post('/v1/sourceFences:takedown', input, 200, receipt);
+  await post('/v1/sourceFences:takedown', input, 200, { key: receipt });
   await post('/v1/sourceFences:takedown', input);
   expect((await readFences(db.admin, [tuple]))[0]).toMatchObject({
     takenDown: true,
