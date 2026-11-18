@@ -910,8 +910,16 @@ async function startDriver(
       async grant(persona, actions, resourceId) {
         if (persona === 'anonymous') throw new Error('Anonymous is not an account grant recipient');
         const target = resourceId ?? PLATFORM_RESOURCE.id;
-        const grantor = target === GLOBAL_CONTEXT || target === PLATFORM_RESOURCE.id ? governor : editor;
-        await grantAccount(accounts[persona], actions, resourceId, grantor);
+        if (target === GLOBAL_CONTEXT || target === PLATFORM_RESOURCE.id) {
+          await grantAccount(accounts[persona], actions, target, governor);
+          return;
+        }
+        // Subject moderation authorizes at the Global Context.
+        const isModeration = (action: string) => action === 'moderation:hide' || action === 'moderation:takedown';
+        const moderation = actions.filter(isModeration);
+        const local = actions.filter((action) => !isModeration(action));
+        if (moderation.length) await grantAccount(accounts[persona], moderation, GLOBAL_CONTEXT, governor);
+        if (local.length) await grantAccount(accounts[persona], local, target, editor);
       },
       async projection(state) {
         if ((options.linkProjection ?? 'owned') === 'external')
