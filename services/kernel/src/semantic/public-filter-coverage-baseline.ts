@@ -188,8 +188,6 @@ export async function beginPublicFilterCoverageBaseline(pool: Pool, input: Bindi
   });
 }
 
-type Adoption = Readonly<{ after: number; root: string; generation: bigint }>;
-
 function requireReceipt(binding: Binding, receipt: AccountDiscoveryEnrollment) {
   if (
     !Number.isInteger(receipt.partition) ||
@@ -285,158 +283,15 @@ async function verifyReceipts(
   return length < 0 ? receipts : receipts.slice(0, length);
 }
 
-type Preparation = {
-  definition: string;
-  consumer: string;
-  generation: string;
-  after_home: number;
-  root: string;
-};
-
-async function adoptReceipt(
-  client: PoolClient,
-  binding: Binding,
-  preparation: Preparation,
-  receipt: AccountDiscoveryEnrollment,
-): Promise<Adoption> {
-  if (preparation.after_home < receipt.partition)
-    throw new CommandUnavailableError('contention', binding.registration.partition);
-  const keys = [binding.registration.partition, binding.registration.id, binding.bootstrap, receipt.partition];
-  if (preparation.after_home > receipt.partition) {
-    const replay = (
-      await client.query<{ receipt: string; root: string }>(
-        `/* semantic.native-keyed:1:1 */
-           SELECT receipt,root FROM search.public_filter_coverage_baseline
-         WHERE (partition_no,registration,bootstrap,source_home)=($1,$2,$3,$4)`,
-        keys,
-      )
-    ).rows[0];
-    if (!replay || replay.receipt !== receipt.receipt)
-      throw new CommandUnavailableError('contention', binding.registration.partition);
-    return { after: receipt.partition + 1, root: replay.root, generation: BigInt(preparation.generation) };
-  }
-  const root = hash([preparation.root, receipt.partition, receipt.receipt]);
-  await client.query(
-    `/* semantic.native-keyed:3:3 */
-       INSERT INTO search.public_filter_coverage_baseline
-        (partition_no,registration,bootstrap,source_home,source_epoch,source_position,creation_position,
-         native_enqueue_revision,native_revision,native_claim_revision,receipt,predecessor,root)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [
-      ...keys,
-      receipt.epoch,
-      String(receipt.sourcePosition),
-      String(receipt.creationPosition),
-      String(receipt.enqueueRevision),
-      binding.accounts ? String(receipt.revision) : null,
-      binding.accounts ? String(receipt.claimRevision) : null,
-      receipt.receipt,
-      preparation.root,
-      root,
-    ],
-  );
-  // Enrollment alone grants no repaired coverage, even for an empty home.
-  // Keep the native domains distinct and leave the same summary behind until
-  // genuine Source verification AND receiver settlement acknowledge it.
-  const current = (
-    await client.query<{ source_epoch: number }>(
-      `/* semantic.native-keyed:1:1 */
-         SELECT source_epoch FROM search.public_filter_coverage_home
-       WHERE (partition_no,registration,source_home)=($1,$2,$3) FOR UPDATE`,
-      [binding.registration.partition, binding.registration.id, receipt.partition],
-    )
-  ).rows[0];
-  if (current && current.source_epoch !== receipt.epoch) {
-    const changed = (
-      await client.query<{ generation: string }>(
-        `/* semantic.native-keyed:1:1 */
-           UPDATE search.public_filter_registration SET coverage_generation=coverage_generation+1
-         WHERE (partition_no,id)=($1,$2) RETURNING coverage_generation::text AS generation`,
-        [binding.registration.partition, binding.registration.id],
-      )
-    ).rows[0]!;
-    await client.query(
-      `/* semantic.native-keyed:2:2 */
-         UPDATE search.public_filter_coverage_home SET source_epoch=$4,relevant_position=$5,
-           native_enqueue_revision=$6,native_revision=$7,native_claim_revision=$8,
-           acknowledged_position=0,acknowledged_native_enqueue=0,
-           acknowledged_native_revision=NULL,acknowledged_native_claim_revision=NULL,
-           baseline_bootstrap=$10,acknowledged_baseline=NULL,
-           last_change_generation=$9,behind=true
-         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
-      [
-        binding.registration.partition,
-        binding.registration.id,
-        receipt.partition,
-        receipt.epoch,
-        String(receipt.sourcePosition),
-        String(receipt.enqueueRevision),
-        binding.accounts ? String(receipt.revision) : null,
-        binding.accounts ? String(receipt.claimRevision) : null,
-        changed.generation,
-        binding.bootstrap,
-      ],
-    );
-  } else if (!current) {
-    await client.query(
-      `/* semantic.native-keyed:3:3 */
-         INSERT INTO search.public_filter_coverage_home
-           (partition_no,registration,source_home,source_epoch,relevant_position,
-            native_enqueue_revision,native_revision,native_claim_revision,last_change_generation,behind,
-            baseline_bootstrap)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,true,$9)`,
-      [
-        binding.registration.partition,
-        binding.registration.id,
-        receipt.partition,
-        receipt.epoch,
-        String(receipt.sourcePosition),
-        String(receipt.enqueueRevision),
-        binding.accounts ? String(receipt.revision) : null,
-        binding.accounts ? String(receipt.claimRevision) : null,
-        binding.bootstrap,
-      ],
-    );
-  } else {
-    // A late baseline cannot inherit an earlier preparation's repaired state.
-    // Preserve actual change generation and native positions; this receipt is
-    // an enrollment obligation, not another Source change or a receiver ACK.
-    await client.query(
-      `/* semantic.native-keyed:2:2 */
-         UPDATE search.public_filter_coverage_home SET baseline_bootstrap=$4,behind=true
-         WHERE (partition_no,registration,source_home)=($1,$2,$3)`,
-      [binding.registration.partition, binding.registration.id, receipt.partition, binding.bootstrap],
-    );
-  }
-  const advanced = await client.query(
-    `/* semantic.native-keyed:2:2 */
-       UPDATE search.public_filter_coverage_preparation SET after_home=$4,root=$5
-       WHERE (partition_no,registration,bootstrap)=($1,$2,$3) AND after_home=$6`,
-    [
-      binding.registration.partition,
-      binding.registration.id,
-      binding.bootstrap,
-      receipt.partition + 1,
-      root,
-      receipt.partition,
-    ],
-  );
-  if (advanced.rowCount !== 1) throw new CommandUnavailableError('contention', binding.registration.partition);
-  preparation.after_home = receipt.partition + 1;
-  preparation.root = root;
-  return { after: preparation.after_home, root, generation: BigInt(preparation.generation) };
-}
-
-/** Adopt a verified contiguous prefix with one registration lock. The caller
- * advances Source in this transaction, after each original receiver receipt,
- * so both existing per-home guards observe the same predecessor and root.
+/** Adopt a verified contiguous prefix with one registration lock. Advance
+ * Source after each original receiver receipt so both per-home guards observe
+ * the same predecessor and root.
  */
 export async function adoptPublicFilterCoverageBaselinePage(
   pool: Pool,
   input: Binding,
   enrollments: readonly AccountDiscoveryEnrollment[],
   deadline: number,
-  advance: (client: PoolClient, adopted: Adoption, receipt: AccountDiscoveryEnrollment) => Promise<void>,
 ): Promise<void> {
   const binding = snapshotBinding(input);
   if (!Array.isArray(enrollments) || types.isProxy(enrollments) || enrollments.length > maxPublicFilterEnrollmentHomes)
@@ -452,23 +307,35 @@ export async function adoptPublicFilterCoverageBaselinePage(
       throw new CommandUnavailableError('contention', receipt.partition);
   }
   if (receipts.length === 0) return;
+  if (binding.registration.partition !== 0)
+    throw new CommandUnavailableError('contention', binding.registration.partition);
   const verified = await verifyReceipts(pool, binding, receipts, deadline);
   await transaction(pool, deadline, async (client) => {
     await lockRegistration(client, binding);
-    const preparation = (
-      await client.query<Preparation>(
-        `/* semantic.native-keyed:1:1 */
-         SELECT definition::text,consumer,generation::text,after_home,root
-         FROM search.public_filter_coverage_preparation
-         WHERE (partition_no,registration,bootstrap)=($1,$2,$3) FOR UPDATE`,
-        [binding.registration.partition, binding.registration.id, binding.bootstrap],
-      )
-    ).rows[0];
-    if (!preparation || preparation.definition !== binding.definition || preparation.consumer !== binding.consumer)
-      throw new CommandUnavailableError('contention', binding.registration.partition);
-    for (const receipt of verified) {
-      const adopted = await adoptReceipt(client, binding, preparation, receipt);
-      await advance(client, adopted, receipt);
-    }
+    // Reserve the original per-home Search and Source footprints. The SQL
+    // function removes transport round trips while keeping the guarded writes.
+    await client.query(
+      `/* semantic.native-keyed:${16 * verified.length + 1}:${16 * verified.length + 1}:${6 * verified.length} */
+       SELECT semantic.adopt_public_filter_baseline_page($1,$2,$3,$4,$5,$6::jsonb)`,
+      [
+        binding.registration.id,
+        binding.bootstrap,
+        binding.definition,
+        binding.consumer,
+        binding.accounts,
+        JSON.stringify(
+          verified.map((receipt) => ({
+            partition: receipt.partition,
+            epoch: receipt.epoch,
+            source_position: String(receipt.sourcePosition),
+            creation_position: String(receipt.creationPosition),
+            enqueue_revision: String(receipt.enqueueRevision),
+            revision: String(receipt.revision),
+            claim_revision: String(receipt.claimRevision),
+            receipt: receipt.receipt,
+          })),
+        ),
+      ],
+    );
   });
 }

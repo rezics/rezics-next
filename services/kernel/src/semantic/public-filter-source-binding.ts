@@ -27,7 +27,6 @@ import beginBootstrap from './public-filter-source-binding-begin.sql';
 import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
 import abortBootstrap from './public-filter-source-binding-abort.sql';
-import accountPage from './public-filter-source-binding-account-page.sql';
 import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import {
@@ -2526,33 +2525,7 @@ export function createNativePublicFilterSourceBinding(
             }
             if (receipts.length !== start - cut.row.account_after + count) break;
           }
-          await adoptPublicFilterCoverageBaselinePage(
-            db,
-            baseline,
-            receipts,
-            deadline,
-            async (client, adopted, receipt) => {
-              const advanced = await nativeSourceQuery(client, accountPage, {
-                bootstrap: inserted.bootstrap,
-                after_partition: receipt.partition,
-                next_partition: adopted.after,
-                head_count: 1,
-                coverage_generation: String(adopted.generation),
-                coverage_root: adopted.root,
-                registration: baseline.registration.id,
-                heads: [
-                  {
-                    partition: receipt.partition,
-                    epoch: receipt.epoch,
-                    revision: String(receipt.revision),
-                    claim_revision: String(receipt.claimRevision),
-                  },
-                ],
-              });
-              if (advanced.length !== 1)
-                throw new CommandUnavailableError('contention', baseline.registration.partition);
-            },
-          );
+          await adoptPublicFilterCoverageBaselinePage(db, baseline, receipts, deadline);
           if (failure) throw failure.reason;
         } catch (error) {
           if (ports.access.classifyUnavailability(error) !== 'contention') throw error;
