@@ -544,33 +544,50 @@ async function runBookCatalogueJourney(): Promise<void> {
     books: new URL(books.url()).pathname,
     searches,
   });
-  await books.close();
+  // Retire Alice's browser context and drain the host observer before taking the anonymous baseline.
+  await alice.context.close();
+  await stack.syncKernelRequests();
+  const beforePublicRead = stack.kernelRequests().length;
 
   const anonymousContext = await auth.newContext('anonymous');
   const anonymousPage = await anonymousContext.newPage();
-  const beforePublicRead = stack.kernelRequests().length;
   const publicResponse = await anonymousPage.goto(bookReaderUrl, { waitUntil: 'domcontentloaded' });
   if (publicResponse?.status() !== 200)
     throw new Error(`anonymous public Book detail expected HTTP 200, received ${publicResponse?.status() ?? 'none'}`);
+  const documentRequest = publicResponse.request();
+  const [cookies, authorization] = await Promise.all([
+    documentRequest.headerValue('cookie'),
+    documentRequest.headerValue('authorization'),
+  ]);
+  expect({ cookies: cookies !== null, bearer: authorization !== null }, 'anonymous Book document credentials').toEqual({
+    cookies: false,
+    bearer: false,
+  });
   await pageReady(anonymousPage, 'anonymous public Book detail');
-  await browserExpect(
-    anonymousPage.getByRole('heading', { level: 1, name: subjects.book.label, exact: true }),
-  ).toBeVisible();
-  const publicText = await anonymousPage.getByRole('main').innerText();
+  const publicMain = anonymousPage.getByRole('main');
+  await browserExpect(publicMain.getByRole('heading', { level: 1, name: subjects.book.label, exact: true })).toBeVisible();
+  await browserExpect(publicMain.getByText(subjects.book.text, { exact: true })).toBeVisible();
+  const publicText = await publicMain.innerText();
   expect(publicText).not.toContain(states.bookCompleted.label);
   expect(publicText).not.toContain(states.bookPlanned.label);
+  await anonymousContext.close();
   await stack.syncKernelRequests();
   const anonymousPrivateReads = stack
     .kernelRequests()
     .slice(beforePublicRead)
-    .filter((request) => request.method === 'GET' && request.url.startsWith('/v1/libraryEntries'));
-  expect(anonymousPrivateReads, 'anonymous public reading makes no private Library entry request').toHaveLength(0);
+    .filter(({ method, url }) => method === 'GET' && /^\/v1\/libraryEntries(?:[/?]|$)/u.test(url))
+    .map(({ url, responseStatus, authorization }) => ({
+      path: url.split('?', 1)[0],
+      status: responseStatus ?? null,
+      hasBearer: authorization !== null,
+    }));
   stage('anonymous public authorization boundary', {
     status: publicResponse.status(),
     personalStateText: 'absent',
     privateEntryReads: anonymousPrivateReads.length,
+    ...(anonymousPrivateReads.length ? { requests: anonymousPrivateReads } : {}),
   });
-  await anonymousContext.close();
+  expect(anonymousPrivateReads, 'anonymous public reading makes no private Library entry request').toHaveLength(0);
 
   const signedOutContext = await auth.newContext('anonymous');
   const signedOutPage = await signedOutContext.newPage();
