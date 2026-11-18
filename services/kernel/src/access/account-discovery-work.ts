@@ -1,11 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { maintainPublicFilterCoverageHome } from '../semantic/public-filter-coverage-maintenance.ts';
+import {
+  maintainPublicFilterCoverageHome,
+  nextPublicFilterCoverageHome,
+} from '../semantic/public-filter-coverage-maintenance.ts';
 import type { Pool } from 'pg';
 import type { CloudEvent } from '../events/log.ts';
 import { noEffect, runCommand } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { classifyUnavailability } from './unavailable.ts';
@@ -163,7 +166,24 @@ export const ACCOUNT_DISCOVERY_START_DELAY_MS = 1_000;
 export const ACCOUNT_DISCOVERY_STEP_MS = 10;
 export const ACCOUNT_DISCOVERY_RETRY_MS = 1_000;
 export const ACCOUNT_DISCOVERY_MAX_RETRY_MS = 60_000;
-const PARTITIONS = 4096;
+async function nextRedriveHome(pool: Pool, from: number): Promise<number | null> {
+  const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const access = await withBoundedReadConnection(pool, deadline, async (client) => {
+    const result = await client.query<{ partition_no: number | null }>(
+      `SELECT min(route)/16 AS partition_no FROM (
+        (SELECT route FROM access.account_discovery_intent WHERE route>=$1 ORDER BY route,account_id LIMIT 1)
+        UNION ALL
+        (SELECT route FROM access.account_discovery_claim_intent WHERE route>=$1 ORDER BY route,account_id LIMIT 1)
+      ) pending`,
+      [from * 16],
+    );
+    return result.rows[0]?.partition_no ?? null;
+  });
+  const source = await nextPublicFilterCoverageHome(pool, from, deadline);
+  if (access === null) return source;
+  if (source === null) return access;
+  return Math.min(access, source);
+}
 
 /** Timer port keeps scheduling tests independent of wall time and global timers. */
 export type AccountDiscoveryTimers = {
@@ -182,11 +202,10 @@ const timers: AccountDiscoveryTimers = {
  * most one pool connection, leaving the rest for boot and foreground requests.
  * It starts after SDK launch with a one-second grace. Ordinary recovery yields
  * to pool pressure. An admitted withdrawal can queue its bounded Source step.
- * The 15-minute idle interval issues no queries. An empty 4096-home pass costs 32,768 SQL statements
- * (two intent reads plus BEGIN, timeout, owner, head, pending and COMMIT per home), about 35 SQL/s
- * averaged over pass + idle at the minimum 10 ms step, versus about 800 SQL/s
- * continuously before backoff. Events wake only their home without restarting
- * that idle scan. Durable intents make coalesced in-memory wakeups disposable.
+ * A pass seeks the next home with a native intent or live Source interval.
+ * Empty passes use two bounded statements then enter the 15-minute idle interval.
+ * Events wake only their home without restarting that pass. Durable intents make
+ * coalesced in-memory wakeups disposable.
  */
 export function registerAccountDiscoveryWork(context: WorkContext, time: AccountDiscoveryTimers = timers): void {
   const wakeups = new Set<number>();
@@ -226,12 +245,13 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
     let running = false;
     let partition = 0;
     let passWorked = false;
+    let passHadWork = false;
     let preferSweep = false;
     let preferWithdrawal = true;
     let sweepAt = time.now() + ACCOUNT_DISCOVERY_START_DELAY_MS;
     let availableAt = sweepAt;
     let retry = ACCOUNT_DISCOVERY_RETRY_MS;
-    type Turn = { home: number; kind: 'sweep' | 'wake' | 'withdrawal' };
+    type Turn = { home: number; kind: 'seek' | 'sweep' | 'wake' | 'withdrawal' };
     let failed: Turn | undefined;
     let cancel: (() => void) | undefined;
     let pending: Promise<void> = Promise.resolve();
@@ -257,15 +277,32 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         time.now() >= sweepAt && (preferSweep || (accountHome === undefined && withdrawal === undefined));
       let turn: Turn;
       if (failed) turn = failed;
-      else if (!pressure && sweepDue) turn = { home: partition, kind: 'sweep' };
+      else if (!pressure && sweepDue) turn = { home: partition, kind: 'seek' };
       else if (withdrawal !== undefined && (pressure || preferWithdrawal || accountHome === undefined))
         turn = { home: withdrawal, kind: 'withdrawal' };
       else turn = { home: accountHome!, kind: 'wake' };
-      const { home, kind } = turn;
-      const sweep = kind === 'sweep';
-      const queue = kind === 'withdrawal' ? withdrawals : wakeups;
-      if (!sweep) queue.delete(home);
       try {
+        if (turn.kind === 'seek') {
+          const home = await nextRedriveHome(pool, turn.home);
+          if (home === null) {
+            const now = time.now();
+            const rest = passHadWork ? ACCOUNT_DISCOVERY_RETRY_MS : ACCOUNT_DISCOVERY_IDLE_MS;
+            sweepAt = now + (passWorked ? ACCOUNT_DISCOVERY_STEP_MS : rest);
+            availableAt = now;
+            failed = undefined;
+            retry = ACCOUNT_DISCOVERY_RETRY_MS;
+            partition = 0;
+            passWorked = false;
+            passHadWork = false;
+            preferSweep = false;
+            return;
+          }
+          turn = { home, kind: 'sweep' };
+        }
+        const { home, kind } = turn;
+        const sweep = kind === 'sweep';
+        const queue = kind === 'withdrawal' ? withdrawals : wakeups;
+        if (!sweep) queue.delete(home);
         const result =
           kind === 'withdrawal'
             ? await maintainPublicFilterCoverageHome(pool, home, {
@@ -282,23 +319,19 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
           if (result.more) queue.add(home);
           return;
         }
+        passHadWork = true;
         passWorked ||= result.more || ('delivered' in result && result.delivered > 0);
-        if (!result.more) {
-          partition = (partition + 1) % PARTITIONS;
-          if (partition === 0) {
-            sweepAt = time.now() + (passWorked ? ACCOUNT_DISCOVERY_STEP_MS : ACCOUNT_DISCOVERY_IDLE_MS);
-            passWorked = false;
-          }
-        }
+        partition = result.more ? home : home + 1;
       } catch (error) {
-        if (!sweep) queue.add(home);
+        if (turn.kind === 'wake') wakeups.add(turn.home);
+        if (turn.kind === 'withdrawal') withdrawals.add(turn.home);
         failed = turn;
         // A failed step never completes its frontier. Retry from durable state,
         // including after an unexpected database defect, with fresh command custody.
         // Keep diagnostics finite and free of query text, Account data and stacks.
         console.error('Account discovery redrive failed', {
-          home,
-          source: kind,
+          home: turn.home,
+          source: turn.kind,
           reason: classifyUnavailability(error) ?? 'unexpected',
           retryInMs: retry,
         });

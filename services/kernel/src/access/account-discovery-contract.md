@@ -51,14 +51,15 @@ activation. This observation creates no readiness/ACK, permission mirror or reta
 `redriveAccountDiscovery({pool, clock?}, partition, limit?)` and `registerAccountDiscoveryWork(context)`.
 An intent is `{route, accountId, revision}` with a decimal revision string; foreign consumption verifies its
 persisted source obligation before starting the separate Account-anchor command. The ordinary Accounts work
-module installs event wakeups and a bounded partition sweep by default. Source delivery emits the real durable
+module installs event wakeups and bounded recovery through the native pending indexes. Source delivery emits the real durable
 `com.rezics.access.account-discovery-changed.v1` event with `{route, accountId, revision, source:'account'|'claim'}`.
 Delivery atomically replaces the exact pending obligation with that event; it is never a Search repair ACK.
 
 Recovery scheduling uses one serial worker for sweep and coalesced source-event wakeups, holding at most one
 pool connection. It starts one second after service launch. Ordinary sweep and Account work yield while foreground
-checkouts are waiting or only one pool slot remains. A full pass with no delivery or coverage progress sleeps for the named
-`ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes); a source event wakes its home without restarting that idle pass.
+checkouts are waiting or only one pool slot remains. Each sweep takes two bounded reads to find the next Account intent,
+claim intent or live Source interval. An empty pass sleeps for `ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes).
+A pass with remaining work and no progress retries after one second. A source event wakes its home during either wait.
 A committed Subject hide or takedown wakes its home at effect admission. Under pool pressure, the serial worker
 queues the exact Subject key for a bounded Source step. This lets the receiver apply the interval while readers
 are waiting for it. With capacity available, withdrawal turns share the worker with Account wakes and the sweep.
@@ -70,9 +71,8 @@ origin, reason and retry delay, never raw errors, SQL, Account data or stacks. A
 the sweep frontier. Each retry rereads durable obligations and obtains current native command custody; no saved
 revision or authority is reused. Stopping cancels recovery and drains an in-flight step even when that step fails.
 Persisted intents remain the recovery authority until atomically replaced by durable events.
-An empty home currently executes eight SQL statements: two intent reads, then coverage BEGIN, timeout setting,
-owner read, enrollment-head read, pending read and COMMIT. Thus an empty 4096-home pass costs **32,768** statements;
-the earlier 36,864 count does not match this implementation. Idle intervals execute none.
+The exact selected home still uses the original delivery and coverage transactions. An empty pass costs two SQL
+statements, and idle intervals execute none.
 `test/access/account-discovery-work.test.ts` pins startup/pool admission, empty-pass idle and timed recovery,
 event coalescing, pressure backoff/reset, fault-cleared recovery and shutdown with a fake clock and pool.
 `test/access/account-discovery-source.test.ts` also pins an actual durable obligation across a failed delivery
