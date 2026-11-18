@@ -122,7 +122,7 @@ test('the recorded native page joins its visible creators and editions without a
     `/en/subjects/${id}`,
   );
   const result = head(loaded.page);
-  const json = JSON.parse(result.scripts[0]!.children);
+  const json = JSON.parse(result.scripts[0]!.children)['@graph'][0];
   const creatorLabel = recorded.reads.r0.body.related[creator].labels.en;
   const creatorPath = subjectHref({ id: creator, label: creatorLabel }, 'en').href;
   const creatorVisit = new URL(creatorPath, origin);
@@ -158,7 +158,7 @@ test('the recorded native page joins its visible creators and editions without a
 test('the head and structured image use only the currently authorized visible cover variants and localized title', async () => {
   const page = fixture({ cover });
   const result = head(page, 'ja');
-  const json = JSON.parse(result.scripts[0]!.children);
+  const json = JSON.parse(result.scripts[0]!.children)['@graph'][0];
   const html = await renderSubject(
     createElement(SubjectPage, { page, locale: 'ja', messages, renderJsonLd: false }),
     `/ja/subjects/${id}`,
@@ -183,7 +183,7 @@ test('the head and structured image use only the currently authorized visible co
     const hidden = head(fixture({ cover: unavailable }));
     expect(meta(hidden, 'og:image')).toBe(`${origin}/cards/default.png`);
     expect(meta(hidden, 'og:image:alt')).toBe('REZICS');
-    expect(JSON.parse(hidden.scripts[0]!.children)).not.toHaveProperty('image');
+    expect(JSON.parse(hidden.scripts[0]!.children)['@graph'][0]).not.toHaveProperty('image');
     expect(JSON.stringify(hidden)).not.toContain(cover.media);
   }
 });
@@ -228,7 +228,7 @@ test('identity, rank, native ratings and related failures retain the public disc
       },
     },
   });
-  const json = JSON.parse(result.scripts[0]!.children);
+  const json = JSON.parse(result.scripts[0]!.children)['@graph'][0];
   expect(json.sameAs).toBe(identity);
   expect(json.identifier).toEqual([
     { '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL123W' },
@@ -244,7 +244,7 @@ test('identity, rank, native ratings and related failures retain the public disc
   const suppressed = head(
     fixture({ statements: { 'schema:sameAs': [statement('schema:sameAs', 'url', identity), preferred] } }),
   );
-  expect(JSON.parse(suppressed.scripts[0]!.children)).not.toHaveProperty('sameAs');
+  expect(JSON.parse(suppressed.scripts[0]!.children)['@graph'][0]).not.toHaveProperty('sameAs');
 });
 
 test('unavailable public targets retain truthful failures and cannot populate a fallback with old subject data', async () => {
@@ -340,6 +340,6 @@ test('title years use the reader and structured-data date meaning', () => {
     const result = head(page);
     expect(subjectFrame(page, 'en')?.date?.includes('2099') ?? false).toBe(year);
     expect(meta(result, 'og:title')!.includes('2099')).toBe(year);
-    expect(Object.hasOwn(JSON.parse(result.scripts[0]!.children), 'datePublished')).toBe(year);
+    expect(Object.hasOwn(JSON.parse(result.scripts[0]!.children)['@graph'][0], 'datePublished')).toBe(year);
   }
 });

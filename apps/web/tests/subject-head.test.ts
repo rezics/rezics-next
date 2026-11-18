@@ -169,12 +169,12 @@ test('subject metadata uses the localized label, type and available year, locali
 
 test('structured data uses the released type, keeps the fallback mapping, and adds only public breadcrumbs', () => {
   const page = makePage({ labels: { en: 'The Lamp' }, aliases: { en: ['Old Lamp'] } });
-  const releaseType = JSON.parse(
+  const { '@graph': [releaseType, breadcrumbs] } = JSON.parse(
     head(page, 'en', { schemaOrgType: 'https://schema.org/CreativeWorkSeries' }).scripts[0]!.children!,
   );
   expect(releaseType['@type']).toBe('CreativeWorkSeries');
   expect(releaseType.alternateName).toEqual(['Old Lamp']);
-  expect(releaseType['@graph']).toContainEqual({
+  expect(breadcrumbs).toEqual({
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'REZICS', item: 'https://rezics.example.test/en' },
@@ -193,10 +193,10 @@ test('structured data uses the released type, keeps the fallback mapping, and ad
     ],
   });
 
-  const mapped = JSON.parse(head(page, 'en', { schemaOrgType: undefined }).scripts[0]!.children!);
+  const mapped = JSON.parse(head(page, 'en', { schemaOrgType: undefined }).scripts[0]!.children!)['@graph'][0];
   expect(mapped['@type']).toBe('Book');
   const unknown = makePage({ type: 'wd:Q5', labels: { en: 'A Person' } });
-  const fallback = JSON.parse(head(unknown, 'en', { typeLabel: undefined }).scripts[0]!.children!);
+  const fallback = JSON.parse(head(unknown, 'en', { typeLabel: undefined }).scripts[0]!.children!)['@graph'][0];
   expect(fallback['@type']).toBe('Thing');
   expect(JSON.stringify(fallback)).not.toContain('Private');
 });
@@ -221,7 +221,7 @@ test('aggregateRating is present only for the shown Global native average and us
     realms: [],
     own: null,
   };
-  const json = JSON.parse(head(page, 'en', { ratings }).scripts[0]!.children!);
+  const json = JSON.parse(head(page, 'en', { ratings }).scripts[0]!.children!)['@graph'][0];
   expect(json.aggregateRating).toEqual({
     '@type': 'AggregateRating',
     ratingValue: 8.4,
@@ -232,7 +232,8 @@ test('aggregateRating is present only for the shown Global native average and us
   expect(JSON.stringify(json)).not.toContain('imported');
   expect(JSON.stringify(json)).not.toContain('private-realm');
   const noMean = { ...ratings, figure: { ...ratings.figure, count: 5, mean: null } };
-  expect(JSON.parse(head(page, 'en', { ratings: noMean }).scripts[0]!.children!).aggregateRating).toBeUndefined();
+  const belowThreshold = JSON.parse(head(page, 'en', { ratings: noMean }).scripts[0]!.children!)['@graph'][0];
+  expect(belowThreshold.aggregateRating).toBeUndefined();
 });
 
 test('thin subjects and later relations pages are noindex, while the page cover is the only high-priority image', async () => {

@@ -273,7 +273,7 @@ test('subject and Search render published ready, pending and below-threshold fig
       path: `/en/subjects/${subjectId}/kokoro`,
       ...(data.figure.kind === 'ready' ? { ratings: { figure: data.figure.value } } : {}),
     });
-    const metadata = JSON.parse(head.scripts[0]!.children);
+    const metadata = JSON.parse(head.scripts[0]!.children)['@graph'][0];
     for (const html of [subject, search]) {
       expect(html).not.toContain('7.9');
       expect(html).not.toContain('Your rating');

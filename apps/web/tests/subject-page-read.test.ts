@@ -58,7 +58,10 @@ test('a subject page is one page read rendered from its template', async () => {
   expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}/${slug('Natsume Sōseki')}"[^>]*>Natsume Sōseki</a>`));
   const script = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html);
   expect(script).not.toBeNull();
-  expect(JSON.parse(script![1]!)).toMatchObject({ '@context': 'https://schema.org', '@type': 'Book', name: 'Kokoro' });
+  expect(JSON.parse(script![1]!)).toMatchObject({
+    '@context': 'https://schema.org',
+    '@graph': [{ '@type': 'Book', name: 'Kokoro' }, { '@type': 'BreadcrumbList' }],
+  });
   const tale = renderToString(createElement(SubjectPage, { page: await loaded(taketori), locale: 'en', messages }));
   expect(tale).toContain(`href="/en/subjects/${shortStory}/${slug('short story')}"`);
   expect(tale).not.toContain(`/subjects/${mergedGenre}`);

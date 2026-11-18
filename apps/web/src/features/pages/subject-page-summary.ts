@@ -73,7 +73,7 @@ export function subjectPageJsonLd(
     subjectHref({ id: read.subject.id, label: subjectLabel }, locale).href,
     subjectPageRealm(page),
   );
-  const json = subjectJsonLd({
+  const graph = subjectJsonLd({
     subject: {
       ...read.subject,
       statements: Object.fromEntries(
@@ -143,11 +143,12 @@ export function subjectPageJsonLd(
     }
   };
   visit(page.document.content);
+  const [subjectNode] = graph['@graph'];
   for (const [property, references] of inverseItems) {
-    const existing = Object.hasOwn(json, property)
-      ? Array.isArray(json[property])
-        ? json[property]
-        : [json[property]!]
+    const existing = Object.hasOwn(subjectNode, property)
+      ? Array.isArray(subjectNode[property])
+        ? subjectNode[property]
+        : [subjectNode[property]!]
       : [];
     const seen = new Set(
       existing.flatMap((entry) => (isRecord(entry) && typeof entry['@id'] === 'string' ? [entry['@id']] : [])),
@@ -161,9 +162,9 @@ export function subjectPageJsonLd(
       values.push(reference);
       added = true;
     }
-    if (added) json[property] = values;
+    if (added) subjectNode[property] = values;
   }
-  return serializeJsonLd(json);
+  return serializeJsonLd(graph);
 }
 
 export type { SubjectPageData } from './page-model';

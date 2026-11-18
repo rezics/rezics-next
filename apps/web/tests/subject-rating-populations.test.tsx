@@ -508,7 +508,7 @@ test('Independent healthy rating sources survive sibling failures with targeted 
   });
   expect(JSON.stringify(head)).not.toContain('Current Realm');
   expect(JSON.stringify(head)).not.toContain(preparedReader);
-  const ld = JSON.parse(head.scripts[0]!.children);
+  const ld = JSON.parse(head.scripts[0]!.children)['@graph'][0];
   expect(ld.aggregateRating).toMatchObject({ ratingValue: 8, ratingCount: count, bestRating: 10 });
   expect(
     JSON.stringify(dehydrate(cache, { shouldDehydrateQuery: (query) => query.queryKey[0] === 'subject-rating' })),

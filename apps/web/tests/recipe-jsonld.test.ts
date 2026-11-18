@@ -27,7 +27,7 @@ test('the actual released minute quantity publishes a schema.org Recipe Duration
     related: {},
     locale: 'en',
     url: 'https://rezics.com/en/subjects/recipe',
-  } as never);
+  } as never)['@graph'][0];
   expect(jsonld['@type']).toBe('Recipe');
   expect(jsonld.cookTime).toBe('PT25M');
 });
@@ -115,7 +115,7 @@ test('Recipe diet, ingredients and instructions match the public statements and 
     },
     locale: 'en',
     url: 'https://rezics.com/en/subjects/recipe',
-  } as never);
+  } as never)['@graph'][0];
   expect(jsonld.cookTime).toBe('PT25M');
   expect(JSON.stringify(jsonld.suitableForDiet)).toContain('VegetarianDiet');
   expect(jsonld.recipeIngredient).toEqual(['2 carrots', '1 litre water']);

@@ -118,7 +118,7 @@ test('unsupported calendars, precisions and uncertainty stay distinct and struct
       related: {},
       locale: 'en',
       url: 'https://example.org/work',
-    });
+    })['@graph'][0];
     expect(jsonld).not.toHaveProperty('datePublished');
     expect(jsonld.name).toBe('Work');
   }

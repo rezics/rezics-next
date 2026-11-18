@@ -150,7 +150,7 @@ test('withheld Recipe diet stays out of the overlay and JSON-LD keeps hydrated i
     digest: bundledDigest,
     definitions,
   };
-  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!);
+  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!)['@graph'][0];
   expect(json).not.toHaveProperty('suitableForDiet');
   expect(JSON.stringify(json.recipeInstructions)).toContain('Chop the carrots.');
 });
@@ -314,7 +314,7 @@ test('released Book form, word count and tag agree in JSON-LD and withheld autho
       (statement) => statement.value.content,
     ),
   ).toEqual([tag]);
-  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!);
+  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin: 'https://public.example.test' })!)['@graph'][0];
   expect(json.wordCount).toBe(1_200_001);
   expect(JSON.stringify(json.additionalType)).toContain('Light novel');
   expect(JSON.stringify(json.keywords)).toContain('Harem');
@@ -325,7 +325,7 @@ test('released Book form, word count and tag agree in JSON-LD and withheld autho
 test('configured public origin is the only host in sharing metadata and JSON-LD', () => {
   const page = structuredClone(recorded) as SubjectPageData;
   const origin = 'https://canonical.example.test';
-  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin })!);
+  const json = JSON.parse(subjectPageJsonLd(page, 'en', { origin })!)['@graph'][0];
   expect(json.url.startsWith(`${origin}/`)).toBe(true);
   expect(json.url).not.toContain('untrusted-host.invalid');
   expect(json.image === undefined || JSON.stringify(json.image).includes(origin)).toBe(true);
@@ -362,7 +362,7 @@ test('Person, Organization and automated agent JSON-LD publish sameAs and omit w
     page.catalogue = { state: 'released', type, digest: bundledDigest, definitions };
     const json = JSON.parse(
       subjectPageJsonLd(page, 'en', { origin, schemaOrgType: `https://schema.org/${schemaType}` })!,
-    );
+    )['@graph'][0];
     expect(json['@type']).toBe(schemaType);
     expect(json.sameAs).toBe('https://wikidata.org/entity/Q1');
     expect(JSON.stringify(json)).not.toContain(hidden);
