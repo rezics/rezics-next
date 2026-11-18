@@ -755,7 +755,7 @@ async function walkCommandFailure(request?: SeedRemainingRequest): Promise<WalkC
   if (
     request?.transition !== 'batch-receipt' ||
     request.reason !== 'command-refused' ||
-    request.op !== 'propose' ||
+    (request.op !== 'create' && request.op !== 'propose') ||
     request.status !== 500 ||
     request.code !== 'internal_error'
   )

@@ -27,6 +27,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { creditSlot } from '../src/showcase-current-reads.ts';
+import { seedBatchRemainingRequest } from '../src/seed-remaining-request.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -596,7 +597,12 @@ for (const operation of ['create', 'propose'] as const)
       let exhausted = true;
       const port = captureShowcaseCommands(
         {
-          async batch({ commands: page }: BatchWriteRequest): Promise<BatchWriteResult> {
+          async batch(
+            { commands: page }: BatchWriteRequest,
+            _signal?: AbortSignal,
+            retry?: 'admission',
+          ): Promise<BatchWriteResult> {
+            expect(retry).toBe('admission');
             sent.push(page);
             if (page.length > (operation === 'create' ? 1 : 4)) throw new Error('unbounded staff vocabulary envelope');
             return {
@@ -612,6 +618,7 @@ for (const operation of ['create', 'propose'] as const)
                         status: 503,
                         code: 'transaction_retry_exhausted',
                         retryable: true,
+                        effect_status: 'not_applied',
                       },
                     }
                   : {
@@ -626,16 +633,27 @@ for (const operation of ['create', 'propose'] as const)
         } as CrossMediaPort,
         journal,
       );
+      const readIds: string[] = [];
       const write = () =>
         writeBangumiStaffVocabularyCommands({
           port,
           journal,
           commands,
           async read(subjectId) {
+            readIds.push(subjectId);
             return { subject: { id: subjectId, type: 'skos:Concept' } } as unknown as ReviewedSubjectRead;
           },
         });
-      await expect(write()).rejects.toThrow('Bangumi staff vocabulary write failed: 503');
+      const failure = await write().catch((error: unknown) => error);
+      expect(seedBatchRemainingRequest(failure)).toMatchObject({
+        transition: 'batch-receipt',
+        reason: 'command-refused',
+        op: operation,
+        externalId: commands[4]!.source.external_id,
+        status: 503,
+        code: 'transaction_retry_exhausted',
+      });
+      expect(readIds).toEqual([]);
       expect(sent).toEqual(
         operation === 'create'
           ? commands.slice(0, 5).map((command) => [command])

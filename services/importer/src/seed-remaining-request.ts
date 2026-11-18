@@ -190,12 +190,15 @@ export function recordSeedBatchFailure(
       retryable: problem.retryable ?? transport?.retryable,
       correlationId: problem.request_id ?? transport?.correlationId,
       transactionPhase: problem.phase,
-      ...(command?.op === 'propose' && receipt?.status === 500 && problem.code === 'internal_error'
+      ...((command?.op === 'create' || command?.op === 'propose') &&
+      receipt?.status === 500 &&
+      problem.code === 'internal_error'
         ? {
             commandIndex: problem.command_index,
             failureStage: problem.failure_stage,
-            sqlstate: problem.sqlstate,
-            constraintName: problem.constraint_name,
+            ...(command.op === 'propose'
+              ? { sqlstate: problem.sqlstate, constraintName: problem.constraint_name }
+              : {}),
           }
         : {}),
     }),
