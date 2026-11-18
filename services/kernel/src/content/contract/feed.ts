@@ -418,6 +418,7 @@ export type FeedFollowingPort = Readonly<{
   page(input: {
     actor: FeedAccountActor;
     limit: number;
+    selectedActivityIds?: readonly string[];
     languages: readonly string[];
     kind?: string;
     boundary: string;

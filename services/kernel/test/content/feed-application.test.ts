@@ -154,8 +154,11 @@ test('Home prepares viewer actions during enrichment and publishes only survivor
     },
     continuation: { page: async () => ({ subjects: [], next: null }) },
     following: {
-      async page() {
-        if (++followingReads === 2) await discoveryFinished.promise;
+      async page({ selectedActivityIds }) {
+        if (++followingReads === 2) {
+          expect(selectedActivityIds).toEqual([following.id]);
+          await discoveryFinished.promise;
+        } else expect(selectedActivityIds).toBeUndefined();
         return { candidates: [{ item: following }], next: false };
       },
     },

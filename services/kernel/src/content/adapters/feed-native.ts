@@ -342,15 +342,26 @@ export function createNativeFeedPorts(
       async page(input) {
         const actor = asPlatformActor(input.actor, liveActor());
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const page = await activities.pageFollowingActivity(
-          actor.accountId,
-          {
-            limit: input.limit,
-            boundary: input.boundary,
-            ...(input.cursor ? { cursor: input.cursor } : {}),
-          },
-          input.deadline,
-        );
+        const page =
+          input.selectedActivityIds === undefined
+            ? await activities.pageFollowingActivity(
+                actor.accountId,
+                {
+                  limit: input.limit,
+                  boundary: input.boundary,
+                  ...(input.cursor ? { cursor: input.cursor } : {}),
+                },
+                input.deadline,
+              )
+            : {
+                activities: await activities.readFollowingActivity(
+                  actor.accountId,
+                  input.selectedActivityIds,
+                  input.boundary,
+                  input.deadline,
+                ),
+                next: null,
+              };
         const ids = [
           ...new Set(
             page.activities.flatMap((activity) => [
@@ -359,7 +370,6 @@ export function createNativeFeedPorts(
             ]),
           ),
         ];
-        const summaries = await publicSummary.read(input.actor, ids, input.languages, input.deadline);
         const threadIds = [
           ...new Set(
             page.activities.flatMap((activity) =>
@@ -367,7 +377,14 @@ export function createNativeFeedPorts(
             ),
           ),
         ];
-        const disclosed = await discloseThreads(content, threadIds, { actor, deadline: input.deadline });
+        const [subjectRead, threadRead] = await Promise.allSettled([
+          publicSummary.read(input.actor, ids, input.languages, input.deadline),
+          discloseThreads(content, threadIds, { actor, deadline: input.deadline }),
+        ]);
+        if (subjectRead.status === 'rejected') throw subjectRead.reason;
+        if (threadRead.status === 'rejected') throw threadRead.reason;
+        const summaries = subjectRead.value;
+        const disclosed = threadRead.value;
         const threads = new Map(threadIds.map((id, index) => [id, disclosed[index]!.value]));
         const authorIds = new Map<string, string>();
         let candidates = await Promise.all(

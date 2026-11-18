@@ -71,6 +71,7 @@ export type DiscoveryServingObservation = Readonly<{
   generationState?: string;
   captureRole?: 'enrollment' | 'serving';
   witness?: PublicFilterCaptureWitness | undefined;
+  remainingAtStartMs?: number;
   stage: 'allocation' | 'capture' | 'query' | 'repair' | 'capability' | 'final';
   result:
     | 'no_active_generation'
@@ -304,8 +305,17 @@ export function createDefaultDiscoverySearch(
         throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       }
       const generation = activeGeneration.generation;
-      const observe = (stage: DiscoveryServingObservation['stage'], result: DiscoveryServingObservation['result']) =>
-        config.observeServing?.({ generation, stage, result });
+      const observe = (
+        stage: DiscoveryServingObservation['stage'],
+        result: DiscoveryServingObservation['result'],
+        remainingAtStartMs?: number,
+      ) =>
+        config.observeServing?.({
+          generation,
+          stage,
+          result,
+          ...(remainingAtStartMs === undefined ? {} : { remainingAtStartMs }),
+        });
       const enrollmentOnly = activeGeneration.state !== 'active';
       observe('allocation', enrollmentOnly ? 'no_active_generation' : 'active');
       if (enrollmentOnly && (request.cursor || request.kindPage?.cursor))
@@ -407,14 +417,15 @@ export function createDefaultDiscoverySearch(
           async finish() {
             if (!page) throw new Error('Native page was not opened');
             const native = await page;
+            const remaining = config.observeServing ? nativeContext.deadline - config.deadlineNow() : undefined;
             try {
               await native.finish();
             } catch (error) {
-              if (config.observeServing) observe('final', native.failure(error).reason);
+              if (config.observeServing) observe('final', native.failure(error).reason, remaining);
               throw error;
             }
             await confirmCapability();
-            observe('final', 'finished');
+            observe('final', 'finished', remaining);
           },
           async dispose() {
             if (page) await (await page).dispose();

@@ -131,6 +131,20 @@ export function createFeedActivityStore(deps: { pool: Pool; clock: KernelClock; 
       page(target, query, deadline),
     pageFollowingActivity: (accountId: string, query: ActivityPageQuery & { boundary?: string }, deadline: number) =>
       page({ accountId }, query, deadline),
+    async readFollowingActivity(accountId: string, ids: readonly string[], boundary: string, deadline: number) {
+      if (!ids.length) return [];
+      feedPageLimit(ids.length);
+      const route = feedRoute(accountId);
+      const cutoff = new Date(clock().getTime() - FEED_RETENTION_MS).toISOString();
+      return feedSnapshot(deps.pool, route, deadline, async (client) => {
+        const result = await client.query<{ activity: ActivityRef }>(
+          `SELECT activity FROM content.feed_inbox WHERE route=$1 AND account_id=$2
+           AND activity_id=ANY($3::text[]) AND occurred_at>$4 AND occurred_at<=$5`,
+          [route, accountId, ids, cutoff, boundary],
+        );
+        return result.rows.map(({ activity }) => activity);
+      });
+    },
     async recordTargetActivity(activity: ActivityRef, deadline: number): Promise<void> {
       validateActivity(activity);
       const route = feedRoute(activity.target.id);

@@ -162,7 +162,7 @@ export function createFeedApplication(
         if (lane === 'continue') next.resume = position.resume;
       };
 
-      const loadLane = async (lane: FeedLane) => {
+      const loadLane = async (lane: FeedLane, selectedFollowing?: readonly string[]) => {
         if (position[lane] === false) return;
         try {
           if (lane === 'discovery') {
@@ -220,6 +220,7 @@ export function createFeedApplication(
           const page = await ports.following.page({
             actor: account,
             limit: widths.following,
+            ...(selectedFollowing === undefined ? {} : { selectedActivityIds: selectedFollowing }),
             languages,
             deadline,
             boundary: position.boundary,
@@ -238,8 +239,8 @@ export function createFeedApplication(
         }
       };
 
-      const loadLanes = async (selected: readonly FeedLane[]) => {
-        const outcomes = await Promise.allSettled(selected.map(loadLane));
+      const loadLanes = async (selected: readonly FeedLane[], selectedFollowing?: readonly string[]) => {
+        const outcomes = await Promise.allSettled(selected.map((lane) => loadLane(lane, selectedFollowing)));
         for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
       };
       try {
@@ -355,7 +356,8 @@ export function createFeedApplication(
             // The native Following and Continue reads themselves authorize the
             // selected private activity after the viewer read has settled.
             await viewerRead;
-            await loadLanes(selectedLanes);
+            const followingIds = feedItems.filter(({ source }) => source === 'following').map(({ id }) => id);
+            await loadLanes(selectedLanes, followingIds);
           };
           if (retainedDiscovery && selected.includes('discovery')) {
             const discovery = retainedDiscovery;
