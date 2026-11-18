@@ -83,8 +83,9 @@ export function startRelays(
           }
           return;
         }
-        // A busy writer can move the head during every apply. Release the slot once
-        // this scan's work is covered so other partitions and consumers get their turn.
+        // Release the slot at this scan's captured head or the next batch boundary
+        // after new read demand. The next ordinary scan resumes its committed checkpoint.
+        if (priority.size > 0) return;
         if (singleBatch || result.status === 'busy' || result.envelopes === 0 || result.position >= through) return;
       }
     } catch (error) {
