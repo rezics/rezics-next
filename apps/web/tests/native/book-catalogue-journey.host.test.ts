@@ -637,25 +637,42 @@ async function runBookCatalogueJourney(): Promise<void> {
   const bobSession = await bob.context.request.get(`${issuerOrigin}/session`);
   expect(bobSession.status(), 'issuer session status').toBe(200);
   expect((await bobSession.json()).account_id === bobAccountId, 'issuer session belongs to Bob').toBe(true);
+
+  const bobMain = bobPage.getByRole('main');
+  await browserExpect(bobMain.getByText(/^No entries match .+ in this view$/u)).toBeVisible();
   await stack.syncKernelRequests();
-  const typedShelfReads = stack
+  const shelfReads = stack
     .kernelRequests()
     .slice(beforeShelfReturn)
-    .filter(({ fixtureRequest, method, url }) => {
-      const address = new URL(url, stack.kernelOrigin);
-      return (
-        !fixtureRequest &&
-        method === 'GET' &&
-        address.pathname === '/v1/libraryEntries' &&
-        address.searchParams.get('type') === 'schema:Book'
-      );
-    });
+    .filter(
+      ({ fixtureRequest, method, url }) =>
+        !fixtureRequest && method === 'GET' && new URL(url, stack.kernelOrigin).pathname === '/v1/libraryEntries',
+    );
+  const typedShelfReads = shelfReads
+    .filter(({ url }) => {
+      const types = new URL(url, stack.kernelOrigin).searchParams.getAll('type');
+      return types.length === 1 && types[0] === 'schema:Book';
+    })
+    .map(({ responseStatus, access }) => ({
+      status: responseStatus ?? null,
+      actor: access?.authenticated ? (access.actorId === bobAccountId ? 'bob' : 'other') : 'unobserved',
+    }));
+  stage('signed-in native Book shelf', {
+    address: shelfPath,
+    mountedEntries: 'empty',
+    path: '/v1/libraryEntries',
+    type: 'schema:Book',
+    shelfReads: shelfReads.length,
+    typedReads: typedShelfReads.length,
+    reads: typedShelfReads.slice(0, 6),
+  });
+  expect(typedShelfReads.length, 'observed native typed Book shelf reads').toBeGreaterThan(0);
+  expect(typedShelfReads.some(({ status }) => status === 200), 'native typed Book shelf returned HTTP 200').toBe(true);
   expect(
-    typedShelfReads.some(({ responseStatus }) => responseStatus === 200) &&
-      typedShelfReads.every(({ access }) => access?.actorId === bobAccountId),
-    'native typed shelf read succeeded as Bob',
+    typedShelfReads.every(({ actor }) => actor === 'bob'),
+    'all native typed Book shelf reads authenticated Bob',
   ).toBe(true);
-  await browserExpect(bobPage.getByRole('main')).not.toContainText(subjects.book.label);
+  await browserExpect(bobMain).not.toContainText(subjects.book.label);
   await browserExpect(exactShelfRow(bobPage, subjects.book)).toHaveCount(0);
   const otherEntry = await stack.kernel(`${changePath}?view=FULL`, undefined, 'bob');
   expect(otherEntry.status, 'Bob cannot read the Book entry owned by Alice').toBe(404);
