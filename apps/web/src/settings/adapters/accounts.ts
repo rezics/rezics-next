@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import type { SessionEnv } from '../../session/client';
@@ -413,7 +413,7 @@ export function serializeAccountRenameResult(result: AccountRenameResult): Accou
 }
 
 /** Setup and native faults stay in this envelope; createServerFn only supplies the POST/CSRF boundary. */
-export async function runAccountRenameHandler(): Promise<AccountRenameResult> {
+export const runAccountRenameHandler = createServerOnlyFn(async (): Promise<AccountRenameResult> => {
   try {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');
@@ -433,7 +433,7 @@ export async function runAccountRenameHandler(): Promise<AccountRenameResult> {
   } catch (error) {
     return serializeAccountRenameResult(accountRenameSetupFailure(error));
   }
-}
+});
 
 /** Browser-only region read; POST uses the ordinary Origin and session CSRF checks. */
 export const readAccountRename = createServerFn({ method: 'POST' }).handler(runAccountRenameHandler);
