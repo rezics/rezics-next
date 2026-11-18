@@ -3,6 +3,8 @@ import { slug } from '@rezics/definitions/slug';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { BrowserContext, ConsoleMessage, Page, Request, Response as PlaywrightResponse } from 'playwright';
+import { authPageModuleCategory } from './auth-page-app.ts';
+import type { NativeAuthStack } from './auth-stack.ts';
 import type { NativeWebStack } from './stack.ts';
 import { moduleContentType } from './web-document-modules.ts';
 
@@ -273,29 +275,44 @@ export function observePasskeySignInOptions(page: Page, issuer: string): Playwri
   return responses;
 }
 
-export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, returnTo: string): Promise<void> {
+export async function visitLibrarySignIn(
+  page: Page,
+  stack: NativeWebStack,
+  auth: NativeAuthStack,
+  returnTo: string,
+  stage: 'signup-entry' | 'alice-password' | 'bob-password' | 'renew-website' | 'passkey' | 'wrong-rp-passkey',
+): Promise<void> {
   const target = `${stack.web}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
   const webOrigin = new URL(stack.web).origin;
-  const issuerOrigin = new URL(stack.issuerOrigin).origin;
+  const issuer = new URL(stack.issuerOrigin);
   const returnPath = new URL(returnTo, webOrigin).pathname;
   const route = ({ origin, pathname }: URL) => {
     if (origin === webOrigin) {
       if (pathname === '/auth/sign-in' || pathname === '/auth/callback') return pathname;
       return pathname === returnPath ? 'website-return' : 'website-other';
     }
-    if (origin !== issuerOrigin) return 'outside';
+    if (origin !== issuer.origin) return 'outside';
     return ['/authorize', '/login', '/consent'].includes(pathname) ? pathname : 'issuer-other';
   };
-  const module = ({ origin, pathname }: URL) => {
-    const site = origin === issuerOrigin ? 'issuer' : origin === webOrigin ? 'website' : 'outside';
-    if (site === 'outside') return site;
-    if (pathname === '/__native-turnstile.js') return `${site}-turnstile`;
-    if (pathname.startsWith('/@vite/') || pathname === '/@react-refresh') return `${site}-dev-client`;
-    if (pathname.startsWith('/src/')) return `${site}-source`;
-    if (pathname.startsWith('/auth-assets/') || pathname.startsWith('/assets/')) return `${site}-asset`;
-    return `${site}-dependency`;
+  const module = (url: URL) => {
+    let site = 'outside';
+    if (url.origin === issuer.origin) site = 'issuer';
+    else if (url.origin === webOrigin) site = 'website';
+    else if (url.hostname === issuer.hostname) site = 'different-issuer-origin';
+    else if (['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) site = 'loopback';
+    const scheme = url.protocol === 'https:' ? 'https' : url.protocol === 'http:' ? 'http' : 'other';
+    const port = url.port ? Number(url.port) : scheme === 'https' ? 443 : scheme === 'http' ? 80 : undefined;
+    return { site, scheme, port, category: authPageModuleCategory(url.pathname) };
   };
-  type Transfer = { category: string; status?: number; mime?: string; failure?: string };
+  type Transfer = {
+    category: string;
+    site?: string;
+    scheme?: string;
+    port?: number;
+    status?: number;
+    mime?: string;
+    failure?: string;
+  };
   const documents: Transfer[] = [];
   const scripts = { requested: 0, finished: 0, failed: 0, aborted: 0 };
   const failures = new Map<string, Transfer>();
@@ -309,7 +326,7 @@ export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, retu
     if (type !== 'document' && type !== 'script') return;
     if (request.serviceWorker() || request.frame() !== page.mainFrame()) return;
     const url = new URL(request.url());
-    const details = { category: type === 'document' ? route(url) : module(url) };
+    const details = type === 'document' ? { category: route(url) } : module(url);
     requests.set(request, details);
     if (type === 'script') scripts.requested++;
     else if (documents.length < 8) documents.push(details);
@@ -322,7 +339,8 @@ export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, retu
     details.mime = moduleContentType(response.headers()['content-type']);
     if (
       request.resourceType() === 'script' &&
-      (details.status >= 400 || (details.status < 300 && details.mime !== 'javascript'))
+      details.status !== 304 &&
+      (details.status >= 300 || details.mime !== 'javascript')
     )
       recordFailure(details);
   };
@@ -342,14 +360,17 @@ export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, retu
   };
   const onConsole = (message: ConsoleMessage) => {
     if (message.type() !== 'error') return;
-    if (/mime type/iu.test(message.text())) browserErrors.add('script-mime');
-    if (/content security policy/iu.test(message.text())) browserErrors.add('script-policy');
+    const text = message.text();
+    if (/mime type/iu.test(text)) browserErrors.add('script-mime');
+    if (/content security policy/iu.test(text))
+      browserErrors.add(/\bscript-src\b/iu.test(text) ? 'script-policy' : 'other-policy');
   };
   const onPageError = ({ message }: Error) => {
     if (/dynamically imported module|module script/iu.test(message)) browserErrors.add('module-load');
     else if (/hydrat/iu.test(message)) browserErrors.add('hydration');
     else browserErrors.add('page-error');
   };
+  const pageModules = auth.observePageModules();
   page.on('request', onRequest);
   page.on('response', onResponse);
   page.on('requestfinished', onFinished);
@@ -357,21 +378,26 @@ export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, retu
   page.on('console', onConsole);
   page.on('pageerror', onPageError);
   let phase = 'navigation';
+  const hydrationSelector = 'html[data-hydrated]';
   try {
     await page.goto(target, { waitUntil: 'domcontentloaded' });
     phase = 'hydration';
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await page.locator(hydrationSelector).waitFor({ state: 'attached', timeout: 120_000 });
   } catch (error) {
     const outcome = error instanceof Error && error.name === 'TimeoutError' ? 'timed out' : 'failed';
     const evidence = {
+      stage,
+      selector: phase === 'hydration' ? hydrationSelector : undefined,
       currentRoute: route(new URL(page.url())),
       documents,
       scripts,
       failures: [...failures.values()],
       browserErrors: [...browserErrors],
+      ...pageModules.snapshot(),
     };
     throw new Error(`Native browser sign-in ${phase} ${outcome} ${JSON.stringify(evidence)}`);
   } finally {
+    pageModules.close();
     page.off('request', onRequest);
     page.off('response', onResponse);
     page.off('requestfinished', onFinished);

@@ -16,6 +16,17 @@ type App = {
   persistenceDirectory?: string;
 };
 
+export function authPageModuleCategory(pathname: string): string {
+  if (pathname === '/__native-turnstile.js') return 'turnstile';
+  if (pathname.startsWith('/@vite/') || pathname === '/@react-refresh') return 'dev-client';
+  if (/\/node_modules\/\.vite\/deps(?:[_/]|$)/u.test(pathname)) return 'optimized-dependency';
+  if (pathname.startsWith('/@fs/')) return 'filesystem-module';
+  if (pathname.startsWith('/@id/')) return 'virtual-module';
+  if (pathname.startsWith('/src/')) return 'source';
+  if (pathname.startsWith('/auth-assets/') || pathname.startsWith('/assets/')) return 'asset';
+  return 'dependency';
+}
+
 /** The issuer bridge survives each finite Auth UI process. */
 export function createNativeAuthPageApp(
   lifecycle: NativeTestLifecycle,

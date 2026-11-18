@@ -4,8 +4,9 @@ import { type Browser, type BrowserContext, type Page, type Response as Playwrig
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
+import { moduleContentType } from './web-document-modules.ts';
 import { traceWebModuleFailure, type WebModuleFailureTrace } from './web-module-failure.ts';
-import { createNativeAuthPageApp } from './auth-page-app.ts';
+import { authPageModuleCategory, createNativeAuthPageApp } from './auth-page-app.ts';
 import {
   currentNativeLifecycle,
   settledWithin,
@@ -54,10 +55,19 @@ type NativeSignInOptions = {
   openSignIn?: (page: Page) => Promise<void>;
 };
 type NativeSignup = { accountId: string; handle: string };
+type AuthPageModuleDelivery = { category: string; mime: string; delivery: string };
 
 export type NativeAuthStack = {
   moduleFailureTrace?: WebModuleFailureTrace;
   origin: string;
+  observePageModules(): {
+    snapshot(): {
+      vitePort: number;
+      viteModules: AuthPageModuleDelivery[];
+      issuerTunnelRejections: { limit: number; connect: number };
+    };
+    close(): void;
+  };
   pageAppProcess(): NativeProcessIdentity | undefined;
   settlePageApp(): Promise<void>;
   browserMemoryObservation(): { sampledAt: number; rssBytes: number; peakRssBytes: number } | null;
@@ -224,6 +234,7 @@ export async function startAuthStack(
   });
   let activeJourneys = 0;
   const pendingPageResponses = new Set<Promise<void>>();
+  const pageModuleObservers = new Set<(module: AuthPageModuleDelivery) => void>();
   let retirementRequested = false;
   const observedContexts = new Set<BrowserContext>();
   const hasIssuerFrame = () =>
@@ -258,6 +269,13 @@ export async function startAuthStack(
     const drained = Promise.withResolvers<void>();
     pendingPageResponses.add(drained.promise);
     if (request.headers.get('sec-fetch-dest') === 'document') retirementRequested = false;
+    const source = new URL(request.url);
+    const recordScript = (delivery: string, response?: Response) => {
+      if (!pageModuleObservers.size || request.headers.get('sec-fetch-dest') !== 'script') return;
+      const category = authPageModuleCategory(source.pathname);
+      const mime = moduleContentType(response?.headers.get('content-type'));
+      for (const observe of pageModuleObservers) observe({ category, mime, delivery });
+    };
     const release = () => {
       pendingPageResponses.delete(drained.promise);
       drained.resolve();
@@ -265,10 +283,14 @@ export async function startAuthStack(
     };
     try {
       await pageApp.ensure();
-      const source = new URL(request.url);
       const response = await fetch(new Request(new URL(source.pathname + source.search, appOrigin), request), {
         redirect: 'manual',
       });
+      const status = response.status;
+      recordScript(
+        response.ok ? 'served' : status === 304 ? 'cached' : status < 400 ? 'redirect' : 'http-error',
+        response,
+      );
       if (!response.body) {
         release();
         return response;
@@ -280,6 +302,7 @@ export async function startAuthStack(
         .finally(release);
       return new Response(stream.readable, response);
     } catch (error) {
+      recordScript('fetch-failed');
       release();
       throw error;
     }
@@ -701,6 +724,30 @@ export async function startAuthStack(
     return {
       origin,
       ...(moduleFailureTrace && { moduleFailureTrace }),
+      observePageModules() {
+        const viteModules = new Map<string, AuthPageModuleDelivery>();
+        const observe = (module: AuthPageModuleDelivery) => {
+          if (viteModules.size < 12) viteModules.set(JSON.stringify(module), module);
+        };
+        const initial = privateBrowser!.tlsRejections(nativeIssuer.origin);
+        pageModuleObservers.add(observe);
+        return {
+          snapshot() {
+            const current = privateBrowser!.tlsRejections(nativeIssuer.origin);
+            return {
+              vitePort: port,
+              viteModules: [...viteModules.values()],
+              issuerTunnelRejections: {
+                limit: current.limit - initial.limit,
+                connect: current.connect - initial.connect,
+              },
+            };
+          },
+          close() {
+            pageModuleObservers.delete(observe);
+          },
+        };
+      },
       pageAppProcess: () => pageApp.process(),
       async settlePageApp() {
         // A new request can start a generation while the previous one retires.
