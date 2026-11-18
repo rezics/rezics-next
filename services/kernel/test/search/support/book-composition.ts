@@ -211,7 +211,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
 
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
-      anchors.push(originals[grain]!);
+      anchors.push({ id: originals[grain]!.id, type });
       for (let ordinal = 1; ordinal < 11; ordinal++) {
         anchors.push(await createAnchor(type, `AAA ${grain} ${String(ordinal).padStart(2, '0')}`, false));
       }

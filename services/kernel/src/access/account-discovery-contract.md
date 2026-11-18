@@ -59,6 +59,8 @@ Recovery scheduling uses one serial worker for sweep and coalesced source-event 
 pool connection. It starts one second after service launch and yields while foreground checkouts are waiting
 or only one pool slot remains. A full pass with no delivery or coverage progress sleeps for the named
 `ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes); a source event wakes its home without restarting that idle pass.
+A committed Subject hide or takedown wakes its home at effect admission. The scheduled maintainer applies the
+original Source interval and receiver receipts. Durable effect delivery can repeat the wake after a restart.
 A productive pass continues catch-up. Decision: every failed step retains its exact home and sweep/wakeup origin,
 and retries with exponential 1–60 second backoff, which events cannot bypass; success resets the delay.
 Classified unavailability and unexpected defects have distinct bounded diagnostics containing only home,

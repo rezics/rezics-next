@@ -1899,7 +1899,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     // Publication resumes its exact Source cut and this registration's Search materialization.
     // Source adopts the prepared observation after the original execution has been retained.
-    let recovery = publication ? null : m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+    // A resumed capture has no candidates yet. Its native bootstrap lookups
+    // consume preparation inputs just as they do when starting a fresh cut.
+    let recovery = publication
+      ? null
+      : m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
     const consumer = work.bootstrap.consumer;
     const job: PublicFilterConsumerJob = {
       consumer,
@@ -2214,7 +2218,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const q = work.queried!;
     await physical(q, m, context);
     if (!work.adopted && !publication) {
-      const recovered = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
+      const recovered = m.takePreparation(await binding.recover({ bootstrap: work.bootstrap.id }, context));
       if (recovered.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(recovered.bootstrap), work.bootstrap))
@@ -2358,7 +2362,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             },
             cost: m.cost,
           };
-        return advanceCapture(retained, old.consumer_work, m, context, page, publication);
+        return await advanceCapture(retained, old.consumer_work, m, context, page, publication);
       }
       if (config.discoveryPreparation === 'enrollment') {
         const parent = await m.sql<{ has_work: boolean }>(
