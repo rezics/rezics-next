@@ -189,7 +189,7 @@ export const Discussion: Story = {
   play: async (context) => {
     await atView(context, 'discussion');
     await expect(
-      await within(context.canvasElement).findByRole('link', { name: bookDiscussionTitles[0] }),
+      await within(context.canvasElement).findByRole('link', { name: bookDiscussionTitles[0]! }),
     ).toBeVisible();
   },
 };

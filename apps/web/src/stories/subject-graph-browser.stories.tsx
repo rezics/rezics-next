@@ -74,6 +74,7 @@ function reading(query: StoryQuery = {}, state: StoryState = 'relations', locale
         property: { id: selectedEdge.property, data_type: 'wikibase-item' },
         value: { type: 'value' as const, content: selectedEdge.to },
         rank: 'normal' as const,
+        rezics: { release: 'sha256:story', revision: 1 },
         qualifiers: [
           {
             property: { id: 'schema:description', data_type: 'string' },

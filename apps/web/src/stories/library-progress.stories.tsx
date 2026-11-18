@@ -148,7 +148,7 @@ export const UnknownUnitLongTitles: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findAllByText(m.library_progress_unit_unspecified());
-    const details = canvasElement.querySelector('ol > li details')!;
+    const details = canvasElement.querySelector<HTMLDetailsElement>('ol > li details')!;
     expect(details).not.toHaveAttribute('open');
     expect(within(details).getByText(m.library_history_unavailable())).not.toBeVisible();
     expect(details.querySelector('code')).not.toBeVisible();
@@ -163,7 +163,7 @@ export const UnknownUnitDetailsOpen: Story = {
   name: 'Optional native progress details opened by keyboard',
   play: async (context) => {
     await UnknownUnitLongTitles.play?.(context);
-    const details = context.canvasElement.querySelector('ol > li details')!;
+    const details = context.canvasElement.querySelector<HTMLDetailsElement>('ol > li details')!;
     details.querySelector('summary')!.focus();
     await userEvent.keyboard('{Enter}');
     expect(details).toHaveAttribute('open');

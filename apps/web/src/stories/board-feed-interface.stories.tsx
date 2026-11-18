@@ -96,18 +96,14 @@ function FeedExamples({
         : loaded.authors;
   return (
     <main dir={direction} className="mx-auto min-w-0 max-w-4xl space-y-12 p-4 text-foreground sm:p-8">
-      <BoardFeed
-        boardId={loaded.board.id}
-        sort={sort}
-        page={page}
-        authors={authors}
-        now={now}
-        actions={
-          <Button variant="outline" onClick={action}>
-            {actionLabel}
-          </Button>
-        }
-      />
+      <Button
+        variant="outline"
+        className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+        onClick={action}
+      >
+        {actionLabel}
+      </Button>
+      <BoardFeed boardId={loaded.board.id} sort={sort} page={page} authors={authors} now={now} />
       {variant === 'multiple' ? (
         <>
           <BoardFeed boardId={loaded.board.id} sort="active" page={page} authors={authors} now={now} />

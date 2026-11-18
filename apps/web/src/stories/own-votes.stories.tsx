@@ -265,7 +265,7 @@ export const UnsavedSelectionDecision: StoryType = {
   play: async ({ canvasElement }) => {
     const { dialog } = await requestAnotherAnswer(canvasElement);
     await expect(dialog.getByRole('alertdialog')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: m.library_my_ratings_stay() })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: m.library_my_ratings_stay() })).toHaveFocus();
   },
 };
 export const SelectionStayAndDiscard: StoryType = {
@@ -274,7 +274,7 @@ export const SelectionStayAndDiscard: StoryType = {
     const { canvas, dialog } = await requestAnotherAnswer(canvasElement);
     await userEvent.click(dialog.getByRole('button', { name: m.library_my_ratings_stay() }));
     await expect(canvas.getByRole('spinbutton')).toHaveValue(2);
-    await expect(canvas.getByRole('spinbutton')).toBeFocused();
+    await expect(canvas.getByRole('spinbutton')).toHaveFocus();
     await userEvent.click(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })[0]!);
     await expect(canvas.getByRole('spinbutton')).toHaveValue(2);
     await expect(dialog.queryByRole('alertdialog')).toBeNull();
@@ -283,7 +283,7 @@ export const SelectionStayAndDiscard: StoryType = {
     const selected = canvasElement.querySelector<HTMLElement>('[data-selected]')!;
     await expect(selected).toHaveAttribute('data-own-vote-target', targetA);
     await expect(selected).toHaveAttribute('data-own-vote-question', questionB);
-    await expect(within(selected).getByRole('button', { name: m.library_my_ratings_inspect() })).toBeFocused();
+    await expect(within(selected).getByRole('button', { name: m.library_my_ratings_inspect() })).toHaveFocus();
     await userEvent.click(within(selected).getByRole('button', { name: m.library_my_ratings_edit() }));
     await expect(canvas.getByRole('spinbutton')).toHaveValue(4);
     await expect(canvas.getByRole('spinbutton')).toHaveAttribute('max', '4');

@@ -52,18 +52,17 @@ function recoveryTransport(
       if (scenario === 'failed-read' && reads++ === 0) return { state: 'unavailable' };
       return { state: 'ready', value, csrfToken: 'illustrative-checkpoint-csrf' };
     },
-    write: async ({ data }) => {
-      const result: CheckpointWrite = {
-        state: 'ready',
-        value:
-          data.command.kind === 'clear'
-            ? { state: 'none', subjectId: ids.post }
-            : {
-                ...saved,
-                address: data.command.address,
-                revision: '8',
-              },
-      };
+    write: async ({ data: { command } }) => {
+      let next: CheckpointView = { state: 'none', subjectId: ids.post };
+      if (command.kind === 'save') {
+        const { bodyLanguage, ...address } = command.address;
+        next = {
+          ...saved,
+          address: { ...address, ...(bodyLanguage === undefined ? {} : { bodyLanguage }) },
+          revision: '8',
+        };
+      }
+      const result = { state: 'ready', value: next } as const;
       const first = writes++ === 0;
       if ((scenario === 'unknown-save' || scenario === 'unknown-clear') && first) {
         // Native may have applied it; only replaying the original command can settle its outcome.

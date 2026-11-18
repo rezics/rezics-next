@@ -441,8 +441,8 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
 }
 
 export const originalRequestJourney =
-  (kind: RecoveryKind): NonNullable<Story['play']> =>
-  async ({ canvasElement }) => {
+  (kind: RecoveryKind) =>
+  async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const view = within(canvasElement);
     const label =
       kind === 'create'
