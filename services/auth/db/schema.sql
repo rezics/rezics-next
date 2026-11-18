@@ -3372,28 +3372,6 @@ END $$;
 
 
 --
--- Name: auth_session_revocation_result_immutable(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_session_revocation_result_immutable() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.session_revocation_binding IS NOT NULL OR NEW.session_revocation_binding IS NOT NULL THEN
-    IF OLD.session_revocation_binding IS NULL OR
-       ROW(NEW.receipt_id,NEW.account_id,NEW.purpose,NEW.minimum_authn_epoch) IS DISTINCT FROM
-       ROW(OLD.receipt_id,OLD.account_id,OLD.purpose,OLD.minimum_authn_epoch) OR
-       (NEW.session_revocation_binding IS NOT NULL AND
-         (NEW.session_revocation_binding IS DISTINCT FROM OLD.session_revocation_binding OR
-          NEW.session_revocation_completed_at IS DISTINCT FROM OLD.session_revocation_completed_at)) THEN
-      RAISE EXCEPTION 'Session revocation result is immutable' USING ERRCODE='55000';
-    END IF;
-  END IF;
-  -- Native minimization may clear both fields. It cannot later restore an ACK.
-  RETURN NEW;
-END $$;
-
-
---
 -- Name: auth_session_erasure_barrier(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3448,6 +3426,29 @@ BEGIN
   IF cardinality(keys)=64 THEN
     DELETE FROM session WHERE id=keys[1];
   END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_session_revocation_result_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_session_revocation_result_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.session_revocation_binding IS NOT NULL OR NEW.session_revocation_binding IS NOT NULL THEN
+    IF OLD.session_revocation_binding IS NULL OR
+       ROW(NEW.receipt_id,NEW.account_id,NEW.purpose,NEW.minimum_authn_epoch) IS DISTINCT FROM
+       ROW(OLD.receipt_id,OLD.account_id,OLD.purpose,OLD.minimum_authn_epoch) OR
+       (NEW.session_revocation_binding IS NOT NULL AND
+         (NEW.session_revocation_binding IS DISTINCT FROM OLD.session_revocation_binding OR
+          NEW.session_revocation_completed_at IS DISTINCT FROM OLD.session_revocation_completed_at)) THEN
+      RAISE EXCEPTION 'Session revocation result is immutable' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  -- Native minimization may clear both fields. It cannot later restore an ACK.
   RETURN NEW;
 END $$;
 
@@ -3850,28 +3851,12 @@ CREATE TABLE public.auth_effect_receipt (
     erasure_source_client_owner_id text,
     session_revocation_binding jsonb,
     session_revocation_completed_at timestamp with time zone,
-    CONSTRAINT auth_session_revocation_result CHECK ((
-      (session_revocation_binding IS NULL AND session_revocation_completed_at IS NULL) OR
-      (session_revocation_binding IS NOT NULL AND session_revocation_completed_at IS NOT NULL
-        AND jsonb_typeof(session_revocation_binding)='object'
-        AND octet_length(session_revocation_binding::text)<=4096
-        AND purpose='session-revocation' AND operation_key IS NULL
-        AND minimum_authn_epoch>0
-        AND session_revocation_binding->>'accountId'=account_id
-        AND session_revocation_binding->>'minimumAuthnEpoch'=minimum_authn_epoch::text
-        AND receipt_id='session-revocation:'||(session_revocation_binding->>'continuationId')
-        AND session_revocation_binding->>'continuationDigest' ~ '^[0-9a-f]{64}$'
-        AND session_revocation_binding->>'operationDigest' ~ '^[0-9a-f]{64}$'
-        AND session_revocation_binding->>'stepDigest' ~ '^[0-9a-f]{64}$'
-        AND session_revocation_binding->>'commandKeyPrefix' ~ '^wf:[0-9a-f]{64}$'
-        AND session_revocation_binding->>'stepKey'=(session_revocation_binding->>'commandKeyPrefix')||':revoke-auth-sessions'
-        AND session_revocation_binding ?& ARRAY['operationKey','barrierReceiptId','barrierTransactionId','authorizationReceiptId'])
-    ) IS TRUE),
     CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text, 'add-passkey'::text, 'remove-passkey'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
     CONSTRAINT auth_effect_receipt_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
     CONSTRAINT auth_effect_receipt_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
     CONSTRAINT auth_effect_receipt_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
-    CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
+    CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0)),
+    CONSTRAINT auth_session_revocation_result CHECK (((((session_revocation_binding IS NULL) AND (session_revocation_completed_at IS NULL)) OR ((session_revocation_binding IS NOT NULL) AND (session_revocation_completed_at IS NOT NULL) AND (jsonb_typeof(session_revocation_binding) = 'object'::text) AND (octet_length((session_revocation_binding)::text) <= 4096) AND (purpose = 'session-revocation'::text) AND (operation_key IS NULL) AND (minimum_authn_epoch > 0) AND ((session_revocation_binding ->> 'accountId'::text) = account_id) AND ((session_revocation_binding ->> 'minimumAuthnEpoch'::text) = (minimum_authn_epoch)::text) AND (receipt_id = ('session-revocation:'::text || (session_revocation_binding ->> 'continuationId'::text))) AND ((session_revocation_binding ->> 'continuationDigest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((session_revocation_binding ->> 'operationDigest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((session_revocation_binding ->> 'stepDigest'::text) ~ '^[0-9a-f]{64}$'::text) AND ((session_revocation_binding ->> 'commandKeyPrefix'::text) ~ '^wf:[0-9a-f]{64}$'::text) AND ((session_revocation_binding ->> 'stepKey'::text) = ((session_revocation_binding ->> 'commandKeyPrefix'::text) || ':revoke-auth-sessions'::text)) AND (session_revocation_binding ?& ARRAY['operationKey'::text, 'barrierReceiptId'::text, 'barrierTransactionId'::text, 'authorizationReceiptId'::text]))) IS TRUE))
 );
 
 
@@ -7339,8 +7324,6 @@ CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON p
 
 CREATE TRIGGER auth_native_credential_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_credential_terminal_fence();
 
-CREATE TRIGGER auth_session_revocation_result_immutable BEFORE UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_session_revocation_result_immutable();
-
 
 --
 -- Name: auth_native_credential_terminal auth_native_credential_terminal_immutable; Type: TRIGGER; Schema: public; Owner: -
@@ -7487,6 +7470,13 @@ CREATE TRIGGER auth_restore_replay_immutable BEFORE DELETE OR UPDATE ON public.a
 --
 
 CREATE TRIGGER auth_restore_source_immutable BEFORE UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_restore_source_immutable();
+
+
+--
+-- Name: auth_effect_receipt auth_session_revocation_result_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_session_revocation_result_immutable BEFORE UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_session_revocation_result_immutable();
 
 
 --
