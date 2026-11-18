@@ -9,7 +9,6 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import {
   assertGrowthAccessPaths,
   capture,
-  checkGrowth,
   costOf,
   costOfPlan,
   isControlStatement,
@@ -108,7 +107,7 @@ function requestPlanWork(raw: Capture) {
   return { returnedRows, inclusiveBlocks };
 }
 
-type ExactReadingCheck = Omit<GrowthCheck, 'operation'> & {
+type ExactReadingCheck = Pick<GrowthCheck, 'grow' | 'seededRelations'> & {
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<number>;
 };
 
@@ -146,10 +145,9 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
     axis === 'private attachments'
       ? ['content.knowledge_notebook', 'content.knowledge_structure_revision']
       : ['content.knowledge_revision'];
-  test(`native exact solution reads stay bounded as ${axis} grow`, () => exactReading());
-  test(`native exact solution reads stay bounded at the 100,000-row scale for ${axis}`, () => exactReading(ownerScales));
+  test(`native exact solution reads stay bounded at the 100,000-row scale for ${axis}`, exactReading);
 
-  async function exactReading(scales?: readonly number[]) {
+  async function exactReading() {
     const f = await postPublicationFixture();
     try {
       const { subject } = await f.command('/v1/subjects', {
@@ -241,7 +239,7 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
         });
         const observer = observeSql(db.pool);
         try {
-          const name = `Knowledge exact source and concealed revision / ${axis}${scales ? ' / owner scales' : ''}`;
+          const name = `Knowledge exact source and concealed revision / ${axis} / owner scales`;
           const readyPath = exactPath(solution);
           const hiddenPath = exactPath(hidden);
           let baseline: Buffer | undefined;
@@ -298,11 +296,6 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
             }
           }
           const check: ExactReadingCheck = {
-            name,
-            scales: [64, 512, 4096],
-            rule: 'series',
-            bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-            byteBounds: { responseBytes: 'constant' },
             seededRelations,
             async grow(database, scale, previous) {
               // Each private attachment writes two rows. Keep each seed transaction within 500 rows.
@@ -356,46 +349,43 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               return httpBodyBytes;
             },
           };
-          const ownerSamples = scales ? await measureOwnerScales(db, check, scales) : undefined;
-          const samples = ownerSamples ?? (await checkGrowth(db, check)).samples;
+          const samples = await measureOwnerScales(db, check, ownerScales);
           console.info(
             JSON.stringify({
               name,
               timings,
               sampledPeakRssBytes,
-              ownerRequests: ownerSamples?.map(({ scale, requests }) => ({ scale, requests })),
+              ownerRequests: samples.map(({ scale, requests }) => ({ scale, requests })),
               samples: samples.map(({ scale, cost, relationSizes }) => ({ scale, cost, relationSizes })),
             }),
           );
           assertGrowthAccessPaths(name, samples, accessPaths);
-          if (ownerSamples) {
-            const first = ownerSamples[0]!;
-            const firstRequest = first.requests[0]!;
-            expect(firstRequest.returnedRows).toBeGreaterThan(0);
-            expect(firstRequest.statements).toBeGreaterThan(0);
-            expect(firstRequest.httpBodyBytes).toBeGreaterThan(0);
-            const firstBlocks = medianCounted(first.requests).inclusiveBlocks!;
-            expect(firstBlocks).toBeGreaterThan(0);
-            for (const { scale, requests, repetitions } of ownerSamples) {
-              const context = `${name} at ${scale} added rows`;
-              for (const request of requests) {
-                expect(request.returnedRows, context).toBe(firstRequest.returnedRows);
-                expect(request.statements, context).toBe(firstRequest.statements);
-                expect(request.httpBodyBytes, context).toBe(firstRequest.httpBodyBytes);
-              }
-              // Even a query returning one row can enumerate private inputs. Include
-              // every scan in the nested plans when bounding rows on the growing tables.
-              for (const cost of repetitions)
-                for (const relation of seededRelations) {
-                  expect(cost.relations[relation]?.rows ?? 0, `${context}: ${relation}`).toBeLessThanOrEqual(
-                    first.repetitions[0]!.relations[relation]?.rows ?? 0,
-                  );
-                }
-              // Budget one extra B-tree page per tenfold increase for each of the
-              // five authority probes and the source body read.
-              const extraBlocks = 6 * Math.ceil(Math.log10(scale / first.scale));
-              expect(medianCounted(requests).inclusiveBlocks!, context).toBeLessThanOrEqual(firstBlocks + extraBlocks);
+          const first = samples[0]!;
+          const firstRequest = first.requests[0]!;
+          expect(firstRequest.returnedRows).toBeGreaterThan(0);
+          expect(firstRequest.statements).toBeGreaterThan(0);
+          expect(firstRequest.httpBodyBytes).toBeGreaterThan(0);
+          const firstBlocks = medianCounted(first.requests).inclusiveBlocks!;
+          expect(firstBlocks).toBeGreaterThan(0);
+          for (const { scale, requests, repetitions } of samples) {
+            const context = `${name} at ${scale} added rows`;
+            for (const request of requests) {
+              expect(request.returnedRows, context).toBe(firstRequest.returnedRows);
+              expect(request.statements, context).toBe(firstRequest.statements);
+              expect(request.httpBodyBytes, context).toBe(firstRequest.httpBodyBytes);
             }
+            // Even a query returning one row can enumerate private inputs. Include
+            // every scan in the nested plans when bounding rows on the growing tables.
+            for (const cost of repetitions)
+              for (const relation of seededRelations) {
+                expect(cost.relations[relation]?.rows ?? 0, `${context}: ${relation}`).toBeLessThanOrEqual(
+                  first.repetitions[0]!.relations[relation]?.rows ?? 0,
+                );
+              }
+            // Budget one extra B-tree page per tenfold increase for each of the
+            // five authority probes and the source body read.
+            const extraBlocks = 6 * Math.ceil(Math.log10(scale / first.scale));
+            expect(medianCounted(requests).inclusiveBlocks!, context).toBeLessThanOrEqual(firstBlocks + extraBlocks);
           }
         } finally {
           await observer.close();
