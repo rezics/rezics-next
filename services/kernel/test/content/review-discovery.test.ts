@@ -362,7 +362,7 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
 
 test('a changed Review home leaves the other native empty positions usable', async () => {
   const source = createReviewDiscoverySource(
-    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey, tokens },
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, tokens },
     () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
   );
   const changing = 4093;

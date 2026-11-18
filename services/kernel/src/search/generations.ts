@@ -1941,7 +1941,7 @@ async function certifyEmptyDiscoveryFrontiers(
           return current && current.position === position && isDeepStrictEqual(current.witness, witness);
         })
         .map((value) => ({ ...value, epoch: value.row.native_epoch }));
-      const stableMetadata: { row: Population; position: bigint; epoch: number | null }[] = [];
+      const stableMetadata: { row: Population; position: bigint; epoch: number | null; witness?: undefined }[] = [];
       for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
         const entries = metadata.filter(({ row }) => row.owner === kind);
         if (!entries.length) continue;
@@ -1971,11 +1971,7 @@ async function certifyEmptyDiscoveryFrontiers(
   if (!proved.length) return new Set<Population>();
   const rows = proved.map(({ row }) => row);
   const certificates = initialEmptyCertificates(pool, target, rows);
-  await Promise.all(
-    proved.map((proof) =>
-      certificates.save(proof.row, proof.position, proof.epoch, 'witness' in proof ? proof.witness : undefined),
-    ),
-  );
+  await Promise.all(proved.map((proof) => certificates.save(proof.row, proof.position, proof.epoch, proof.witness)));
   return new Set(rows);
 }
 
