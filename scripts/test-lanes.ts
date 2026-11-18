@@ -1039,20 +1039,10 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
         return outcome!;
       },
       (outcome) => {
+        // A test already isolated by an exact name has no competing lane to remove.
+        if (isolatedSelection) return null;
         const report = reportsByFile.get(outcome.file);
-        const growthFailures = classifyGrowthFailures(outcome, report);
-        if (growthFailures) return growthFailures;
-        const loadFailures = classifyLoadInducedFailures(outcome, report);
-        if (isolatedSelection && loadFailures?.length === 1) {
-          const output = outcome.error?.message.replace(/\u001b\[[0-9;]*m/g, '') ?? '';
-          if (
-            /^Ran 1 test across 1 file\./m.test(output) &&
-            /^[ \t]+\^ this test timed out after \d+ms\./m.test(output)
-          ) {
-            return null;
-          }
-        }
-        return loadFailures;
+        return classifyGrowthFailures(outcome, report) ?? classifyLoadInducedFailures(outcome, report);
       },
     );
     const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);

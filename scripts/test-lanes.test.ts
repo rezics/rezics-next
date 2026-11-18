@@ -788,16 +788,19 @@ test('a file whose only failures are timeouts or deadline errors is rerun once a
   });
 });
 
-test('a single named case that times out keeps its original failure at default concurrency', async () => {
+test.each([
+  [
+    'Bun timeout',
+    "test('selected case', async () => { await Bun.sleep(100); }, 20);",
+    'this test timed out after 20ms',
+  ],
+  ['Kernel deadline', "test('selected case', () => { throw new Error('deadline_exceeded'); });", 'deadline_exceeded'],
+])('a single named case keeps its original %s at default concurrency', async (_failureType, declaration, error) => {
   await withDirectory(async (directory) => {
     const module = resolve(directory, 'module');
     const file = 'test/diagnostic.test.ts';
     writeTestFiles(module, {
-      [file]: [
-        "import { test } from 'bun:test';",
-        "test('selected case', async () => { await Bun.sleep(100); }, 20);",
-        "test('another case', () => {});",
-      ].join('\n'),
+      [file]: ["import { test } from 'bun:test';", declaration, "test('another case', () => {});"].join('\n'),
     });
     const env = laneEnvironment(directory, 1);
     delete env.FIXTURE_CHECK_CONCURRENCY;
@@ -825,7 +828,7 @@ test('a single named case that times out keeps its original failure at default c
     });
     expect(result).toEqual({ failed: [file], concurrency: 6 });
     expect(failure).toContain('1 filtered out');
-    expect(failure).toContain('this test timed out after 20ms');
+    expect(failure).toContain(error);
     expect(created).toEqual(['fixture_test_1']);
     expect(dropped).toEqual(created);
   });

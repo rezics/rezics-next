@@ -209,9 +209,8 @@ PostgreSQL through an independent TCP-to-Unix child rather than a same-process p
 Owned compiler databases are rechecked inside their exact container and at the host-facing endpoint before each mapper
 workspace. The first post-failure readiness error includes the container identity, later mapper consumers stop when it
 fails, and the compiler result remains primary.
-Keep diagnostic reruns visible. Mixed failures with load signals may be rerun. A Bun case timeout keeps its initial
-verdict when an anchored name filter runs one case in a one-file run, regardless of configured concurrency. Exclude
-cleanup failures. Preserve security TTLs, explicit deadlines and work budgets. A deadline multiplier cannot prove
+Keep diagnostic reruns visible. Mixed suites with load signals may be rerun in isolation. A one-file run with an
+anchored name filter already runs in isolation and keeps its initial verdict. Exclude cleanup failures. Preserve security TTLs, explicit deadlines and work budgets. A deadline multiplier cannot prove
 deployment. Distinguish product and infrastructure failures. Verify baselines before counting passes.
 
 Infrastructure failures, including check transport, rsync exit 24, SSH drops and killed Git processes, are retried
