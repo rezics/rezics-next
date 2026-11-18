@@ -79,6 +79,8 @@ test('warmup counts repeated background plans whose raw notices exceed the captu
     const cost = costOf(warmup);
     expect([cost.statements, cost.rows]).toEqual([1, 3]);
     expect([cost.backgroundStatements, cost.backgroundRows]).toEqual([65, 195]);
+    expect(cost.relations).toEqual({});
+    expect(cost.backgroundCosts).toEqual({});
   });
 });
 

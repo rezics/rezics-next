@@ -1624,7 +1624,7 @@ async function captureInternal<T>(
   let costFolder: GrowthCostFolder | undefined;
   if (retentionMode === 'cost-folded') {
     try {
-      costFolder = new GrowthCostFolder(budget);
+      costFolder = new GrowthCostFolder(budget, mode === 'measured');
     } catch (error) {
       recordGrowthFailureEvidence(error, {
         phase: 'capture-setup',

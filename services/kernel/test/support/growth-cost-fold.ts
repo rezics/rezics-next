@@ -215,6 +215,7 @@ function relationRecord(relations: readonly RelationCost[]): Cost['relations'] {
 
 export class GrowthCostFolder {
   readonly #budget: GrowthCaptureBudget;
+  readonly #retainRelationDetails: boolean;
   readonly #foreground = new Map<number, MutableOccurrence>();
   readonly #background = new Map<number, MutableOccurrence>();
   readonly #planNotices: FoldedPlanNotice[] = [];
@@ -230,8 +231,9 @@ export class GrowthCostFolder {
   #unownedForegroundNoticeCount = 0;
   #unownedBackgroundNoticeCount = 0;
 
-  constructor(budget: GrowthCaptureBudget) {
+  constructor(budget: GrowthCaptureBudget, retainRelationDetails = true) {
     this.#budget = budget;
+    this.#retainRelationDetails = retainRelationDetails;
     this.#budget.retainFoldedSummary('foreground', 'folder indexes and unowned summary', 0, FOLDED_OBJECT_BYTES * 3);
   }
 
@@ -396,8 +398,9 @@ export class GrowthCostFolder {
       ownerSummary.planEntries++;
       ownerSummary.catalogOnly = ownerSummary.catalogOnly && catalogOnly;
       if (evidence.node !== undefined) ownerSummary.node = evidence.node;
-      for (const relation of evidence.relationCosts)
-        mergeRelation(ownerSummary.relations, relation, this.#budget, side);
+      if (this.#retainRelationDetails)
+        for (const relation of evidence.relationCosts)
+          mergeRelation(ownerSummary.relations, relation, this.#budget, side);
       for (const limitation of limitations) {
         if (ownerSummary.limitations.has(limitation)) continue;
         this.#budget.retainFoldedSummary(side, 'plan limitation', 0, chargedText(limitation, 24));
@@ -416,6 +419,7 @@ export class GrowthCostFolder {
       const rows = Math.round(evidence.rows);
       this.#backgroundRows = checkedAdd(this.#backgroundRows, rows, 'Folded background rows');
       this.#backgroundBlocks = checkedAdd(this.#backgroundBlocks, evidence.blocks, 'Folded background blocks');
+      if (!this.#retainRelationDetails) return;
       if (queryText === undefined) {
         const limitation = `Background plan backgroundPlans[${notice.index}] entry ${entryIndex} has no native Query Text for background execution grouping`;
         if (!ownerSummary?.limitations.has(limitation)) {
