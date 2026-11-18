@@ -106,7 +106,9 @@ export function startOutcomeWorkerProcess(
     output = (output + text).slice(-65_536);
     const lines = `${outputRemainder}${text}`.split(/\r?\n/);
     outputRemainder = lines.pop() ?? '';
-    for (const line of lines) if (line.includes('outcome-worker phase=')) process.stderr.write(`${line}\n`);
+    for (const line of lines)
+      if (line.includes('outcome-worker phase=') || line.startsWith('Mixed Home rejected cuts '))
+        process.stderr.write(`${line}\n`);
   };
   child.stdout!.on('data', append);
   child.stderr!.on('data', append);
