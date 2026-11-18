@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -597,7 +597,7 @@ function ResultAssignment({
   );
 }
 
-function EvidenceValue({ label, children }: { label: string; children: string }) {
+function EvidenceValue({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="h-auto break-words text-xs text-muted-foreground">{label}</dt>

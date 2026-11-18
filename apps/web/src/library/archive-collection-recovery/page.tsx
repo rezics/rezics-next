@@ -197,7 +197,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         type="button"
         variant="outline" className={actionClass}
         disabled={snapshot.busy || locked || !snapshot.selected.size}
-        onClick={() => touch(journey.prepareReview())}
+        onClick={() => journey.prepareReview()}
       >
         {m.library_archive_recovery_open_review()}
       </Button>

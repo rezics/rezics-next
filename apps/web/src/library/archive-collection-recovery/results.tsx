@@ -87,7 +87,7 @@ function OutcomeRow({
 }: {
   item: RecoveryOutcomesPage['outcomes'][number];
   index: number;
-  title?: string;
+  title: string | undefined;
 }) {
   const reason = reasonText(item.outcomeReason);
   return (
@@ -336,7 +336,7 @@ export function ArchiveRecoveryResults({
           page={receiving}
           window={receivingWindow}
           busy={receivingBusy}
-          targets={targets}
+          {...(targets === undefined ? {} : { targets })}
           {...receivingActions}
         />
       ) : null}

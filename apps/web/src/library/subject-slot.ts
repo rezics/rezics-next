@@ -29,7 +29,7 @@ export type SubjectSlotEntry = {
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
-  incarnationId?: string | null;
+  incarnationId?: string | null | undefined;
 };
 
 export function subjectSlotStateLabel(_state: LibraryEntryStateRead): string {

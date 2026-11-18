@@ -609,7 +609,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
             context={row ? <ArchiveNativeReviewSummary row={row} /> : null}
             operation={
               <>
-                <ArchiveChoiceSummary choice={choice.choice} row={row} />
+                <ArchiveChoiceSummary choice={choice.choice} {...(row === undefined ? {} : { row })} />
                 <Button
                   type="button"
                   variant="outline" className={control}

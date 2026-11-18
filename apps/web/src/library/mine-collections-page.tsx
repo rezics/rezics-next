@@ -13,6 +13,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { LibraryNavigation } from './library-nav';
+import { PinControl } from './pin-control';
 import { matchesPinsOrigin, type LibraryPinsRead } from './pins-read';
 import { useLibraryReadOrigin, type AcceptedPinsOrigin } from './pins-current';
 import {
@@ -296,7 +297,7 @@ function MineCollectionsViewerRead({
   );
 }
 
-function browseRecords(collections: readonly MineCollection[], viewerId?: string): CollectionBrowseRecord[] {
+function browseRecords(collections: readonly MineCollection[], viewerId?: string | null): CollectionBrowseRecord[] {
   const savedQueryIds = new Set(viewerId ? ownedSavedQueries(collections, viewerId).map(({ id }) => id) : []);
   return collections
     .filter(({ id }) => !savedQueryIds.has(id))

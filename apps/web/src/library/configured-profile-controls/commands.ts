@@ -24,7 +24,7 @@ export type GuardedOutcome =
 export function createGuardedCommand<Input extends { idempotencyKey: string }, Result>(
   sender: GuardedSender<Input, Result>,
   credential: string,
-  operands: Input,
+  operands: NoInfer<Input>,
 ): GuardedCommand<Input, Result> {
   return {
     sender,

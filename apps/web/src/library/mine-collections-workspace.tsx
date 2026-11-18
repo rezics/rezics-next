@@ -17,7 +17,7 @@ export function MineCollectionsWorkspace({
   directory: ReactNode;
   savedQueries?: ReactNode;
   pins: LibraryPinsRead;
-  pinsOrigin?: AcceptedPinsOrigin;
+  pinsOrigin?: AcceptedPinsOrigin | undefined;
   signedIn: boolean;
 }) {
   const showPins = signedIn && pins.state === 'loaded' && pins.pins.length > 0;
@@ -42,7 +42,7 @@ function MineCollectionsPinManagement({
   visible,
 }: {
   pins: LibraryPinsRead;
-  pinsOrigin?: AcceptedPinsOrigin;
+  pinsOrigin: AcceptedPinsOrigin | undefined;
   visible: boolean;
 }) {
   const openerRef = useRef<HTMLElement>(null);

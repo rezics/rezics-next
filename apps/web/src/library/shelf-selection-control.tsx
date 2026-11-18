@@ -9,7 +9,7 @@ export function ShelfSelectionControl({
   className,
 }: {
   label: string;
-  selection?: ShelfSelectionProps;
+  selection?: ShelfSelectionProps | undefined;
   className?: string;
 }) {
   if (

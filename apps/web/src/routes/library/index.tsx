@@ -15,12 +15,21 @@ import { labelUndoRevisionParam } from '../../library/labels-address';
 import { resolveShelfPresentation } from '../../library/shelf-preferences';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import type { SessionEnv } from '../../session/client';
-import { shelfAddressIssues, shelfCursor, validateShelfSearch } from '../../library/shelf-params';
+import { shelfAddressIssues, shelfCursor, validateShelfSearch, type ShelfSearch } from '../../library/shelf-params';
 import { LibraryPresentationBoundary } from '../../library/shelf-preferences-current';
 import { readCurrentShelfPreferences } from '../../settings/shelf-preferences-current';
 import type { ShelfPreferenceSnapshot } from '../../library/settings-adapter';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+
+type LibrarySearch = ShelfSearch & {
+  labelResult?: string;
+  undoKey?: string;
+  undoLabelId?: string;
+  undoSubjectId?: string;
+  undoAssignmentId?: string;
+  undoRevision?: string | undefined;
+};
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/i;
 const readLabelShelf = createServerFn({ method: 'GET' })
@@ -118,7 +127,7 @@ export const Route = createFileRoute('/library/')({
     if (sessionAccess.state === 'signed-in') await prepareExposure(context.context.queryClient);
     return { sessionAccess };
   },
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): LibrarySearch => ({
     ...validateShelfSearch(search),
     ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
     ...(typeof search.undoKey === 'string' ? { undoKey: search.undoKey } : {}),

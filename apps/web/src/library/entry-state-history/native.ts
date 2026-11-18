@@ -46,7 +46,7 @@ export async function listEntryStateHistory(
   limit = 20,
 ): Promise<HistoryRead<EntryStatePage>> {
   try {
-    const result = await client.libraryEntries({ subjectId }).stateHistory.get({
+    const result = await client.libraryEntries({ subjectId })['state-history'].get({
       query: { limit, ...(cursor === undefined ? {} : { cursor }) },
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
@@ -66,7 +66,7 @@ export async function reviewEntryStateChange(
   changeRevision: number,
 ): Promise<HistoryRead<EntryStateReview>> {
   try {
-    const result = await client.libraryEntries({ subjectId }).stateHistory({ changeRevision }).get({
+    const result = await client.libraryEntries({ subjectId })['state-history']({ changeRevision }).get({
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
@@ -86,16 +86,14 @@ export async function restoreEntryState(
 ): Promise<RestoreResult> {
   try {
     const headers = { authorization, 'idempotency-key': JSON.stringify(command.key) };
-    const result = await client
-      .libraryEntries({ subjectId: command.subjectId })
-      .stateHistory({ changeRevision: command.changeRevision })
-      .$restore.post(
-        { incarnationId: command.incarnationId, currentRevision: command.currentRevision },
-        {
-          headers,
-          fetch: { cache: 'no-store', redirect: 'manual' },
-        },
-      );
+    const history = client.libraryEntries({ subjectId: command.subjectId })['state-history'];
+    const result = await history({ changeRevision: command.changeRevision }).$restore.post(
+      { incarnationId: command.incarnationId, currentRevision: command.currentRevision },
+      {
+        headers,
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      },
+    );
     if (!result.error) {
       const entry = receiveEntry(result.data?.libraryEntry, command.subjectId);
       return entry &&

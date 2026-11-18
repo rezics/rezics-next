@@ -868,7 +868,7 @@ function PrivateEntryReview({
         savedObservation: sourceSavedObservation,
         disabled: !writeAllowed || annotationCommand !== null || annotationBusy.current,
         writeAllowed,
-        viewer,
+        viewer: viewer ?? null,
         originLifetime: origin.lifetime,
         announceConflict: !!displayedSource && sourceNotice === 'conflict',
         headingRef: sourceHeading,
