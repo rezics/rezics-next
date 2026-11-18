@@ -983,6 +983,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
           (screenSelection === null && screenEntry !== null)))
     )
       return;
+    const fullView = isView(subject?.[2]) && subject?.[2] !== 'overview';
     const fragment = url.hash === '' ? '#connections' : url.hash;
     const franchiseReturn = parseWorkFranchiseReturn(fragment);
     const finiteWorkRegion = Boolean(
@@ -1015,6 +1016,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
       fragment !== '#subject-heading' &&
+      !(fullView && node !== null && fragment === `#${node}`) &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
       !(subject && workCastVisitReturn(fragment)) &&
@@ -1035,7 +1037,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
       return;
-    return `${url.pathname}${url.search}${fragment}`;
+    // Full Subject views have their own headings. Keep their fragmentless addresses exact.
+    return `${url.pathname}${url.search}${fullView ? url.hash : fragment}`;
   } catch {
     return;
   }

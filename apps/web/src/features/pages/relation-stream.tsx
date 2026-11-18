@@ -8,7 +8,7 @@ import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { subjectViewHref } from '../../subject/subject-href';
-import { workCastVisitReturn } from './subject-visit-navigation';
+import { subjectVisitReturn, workCastVisitReturn } from './subject-visit-navigation';
 import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
 import { creditVisit } from '../catalogue/credit-inspection/model';
@@ -502,6 +502,14 @@ function StreamState({
   const base = value.subject
     ? subjectViewHref({ id: value.subject, label: value.subjectLabel ?? '' }, value.locale, currentView)
     : undefined;
+  let returnTo = subjectVisitReturn(value.currentHref, value.locale);
+  if (returnTo && pageCursor !== null && pageCursor !== currentCursor(section, routeHref)) {
+    // In-place pagination changes the stream window without changing the browser address.
+    const source = new URL(returnTo, 'https://rezics.invalid');
+    source.searchParams.set('node', node);
+    source.searchParams.set('cursor', pageCursor);
+    returnTo = `${source.pathname}${source.search}${source.hash}`;
+  }
   const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
   const query = new URLSearchParams({ node, ...(cursor ? { cursor } : {}), ...(realm ? { realm } : {}) });
   const href = base ? `${base}?${query}` : undefined;
@@ -709,7 +717,7 @@ function StreamState({
           navigation={castNavigation}
         />
       ) : items.length ? (
-        <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
+        <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} returnTo={returnTo} />
       ) : !visibleError ? (
         section.ok ? (
           <p role="status">{cursor ? m.public_read_sparse({}, options) : m.subject_relation_empty_page({}, options)}</p>

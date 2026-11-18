@@ -61,6 +61,7 @@ function ItemCard({
   retireInspection,
   creditVisit,
   destinationHref,
+  returnTo,
 }: {
   item: Item;
   value: RowValue;
@@ -75,6 +76,7 @@ function ItemCard({
   retireInspection?: () => void;
   creditVisit?: CreditVisit | undefined;
   destinationHref?: string;
+  returnTo?: string | undefined;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -108,7 +110,8 @@ function ItemCard({
     creditVisit && item.credit
       ? creditDestinationHref(href, creditVisit, item.credit, value.locale, withSubjectVisitReturn)
       : href;
-  const href = creditHref(destination);
+  const creditedDestination = creditHref(destination);
+  const href = returnTo ? withSubjectVisitReturn(creditedDestination, returnTo, value.locale) : creditedDestination;
   const creditValue =
     creditVisit && item.credit
       ? {
@@ -210,6 +213,7 @@ export function CoverList({
   openExactEditions = false,
   memberCatalogue,
   creditVisit,
+  returnTo,
 }: {
   items: Item[];
   value: RowValue & { subject?: string | null };
@@ -228,6 +232,8 @@ export function CoverList({
   /** Current native TypeList rows only; this public seam never carries personal state or actions. */
   memberCatalogue?: Readonly<Record<string, CatalogueRowContext>>;
   creditVisit?: CreditVisit | undefined;
+  /** The current full relation view for rows without a more specific return. */
+  returnTo?: string | undefined;
 }) {
   const creditRoot = useRef<HTMLDivElement>(null);
   const context = value.context;
@@ -300,6 +306,7 @@ export function CoverList({
         value={value}
         {...(visit?.link ? { link: visit.link } : {})}
         {...(visit?.href ? { destinationHref: visit.href } : {})}
+        returnTo={returnTo}
         credit={credits}
         {...(item.credit && creditVisit
           ? {
