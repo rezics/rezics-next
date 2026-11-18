@@ -236,6 +236,8 @@ export async function createBookComposition(setupDeadline: number) {
     const request = (who: 'alice' | 'anonymous' | 'suspended') =>
       fixture.request(who, 'POST', '/v1/pages:read', { target: { route }, languages: ['en'] });
     async function read(who: 'alice' | 'anonymous', warm = false) {
+      // Alice's warmup follows publication waits. The measured read uses the anonymous path.
+      if (who === 'alice') await fixture.renewCredential('alice');
       const until = Date.now() + 120_000;
       for (;;) {
         const response = await request(who);
@@ -285,6 +287,8 @@ export async function createBookComposition(setupDeadline: number) {
       },
       async grow(from: number, to: number) {
         assert.equal(population.size, from);
+        // Each scale can start after the previous scale's publication wait.
+        await fixture.renewCredential('editor');
         for (let ordinal = from; ordinal < to; ordinal++) {
           const subject = await fixture.createSubject(
             BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!,

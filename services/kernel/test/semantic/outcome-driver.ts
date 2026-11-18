@@ -253,6 +253,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
     verifiedAutomated(name: string, operator: Account): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
+    renewCredential(account: Account): Promise<void>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
@@ -960,6 +961,12 @@ async function startDriver(
         person,
         verifiedAutomated,
         signIn,
+        async renewCredential(account) {
+          if (completion) throw new Error('Semantic outcome fixture is closed');
+          const original = credentials.get(account);
+          if (!original) throw new Error('Renewal requires an existing native fixture account');
+          account.bearer = await issue(original.login, original.scopes);
+        },
         scopeVariant,
         async openFeatures(groups) {
           if (completion) throw new Error('Semantic outcome fixture is closed');

@@ -187,6 +187,7 @@ export interface ReleasedDiscoveryFixture {
   ): Promise<void>;
   scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
   signIn(persona: DiscoveryAccountName | 'suspended'): Promise<HttpResponse>;
+  renewCredential(persona: 'alice' | 'editor'): Promise<void>;
   /** Trusted test SQL on the owned kernel database, within the existing native read-only transaction. */
   inspect<Row extends QueryResultRow = QueryResultRow>(
     sql: string,
@@ -619,6 +620,11 @@ export async function createReleasedDiscoveryFixture(
         if (persona === 'suspended') return driver.fixtures.signIn(await driver.fixtures.person('suspended'));
         if (!Object.hasOwn(personas, persona)) throw new Error('Sign-in requires a named discovery account');
         return driver.fixtures.signIn(personas[persona]);
+      },
+      async renewCredential(persona) {
+        requireOpen();
+        const account = persona === 'editor' ? await driver.fixtures.person('editor') : personas[persona];
+        await driver.fixtures.renewCredential(account);
       },
       async reviewedCatalogueOperator(persona) {
         requireOpen();
