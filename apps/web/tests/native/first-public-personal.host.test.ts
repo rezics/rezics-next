@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
-import type { Page } from 'playwright';
+import type { BrowserContext, Page } from 'playwright';
 import { decodePreferenceValues } from '@rezics/client';
 import { PROBLEMS } from '../../../../services/kernel/src/http/problem-error.ts';
 import { LIBRARY_PAGE_LIMIT } from '../../src/library/reads.ts';
@@ -8,6 +8,7 @@ import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from 
 import { prepareLibraryDirectory } from './library-directory-readiness.ts';
 import { createLibraryEntry, prepareLibraryEntryCreator } from './library-navigation-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { observePersonalWebReturn } from './personal-web-return-observation.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
@@ -28,11 +29,25 @@ nativeAfterAll(lifecycle, 180_000);
 async function accountPage(persona: 'alice' | 'bob', path: string) {
   // newContext registers the fresh context with the active nativeTest lifecycle.
   const context = await auth.newContext(persona);
-  const journey = await auth.signIn(persona, { context, returnTo: path });
-  const page = journey.continueOnPage();
+  const page = await signInForPersonalPage(persona, context, path);
   await auth.settlePageApp();
   await browserExpect(page).toHaveURL(new URL(path, stack.web).href);
   return page;
+}
+
+async function signInForPersonalPage(persona: 'alice' | 'bob', context: BrowserContext, path: string) {
+  const target = new URL(path, stack.web);
+  const observation = observePersonalWebReturn(context, target);
+  try {
+    return (await auth.signIn(persona, { context, returnTo: path })).continueOnPage();
+  } catch (cause) {
+    throw new Error(
+      `Native personal Web return to ${target.pathname}: ${JSON.stringify(observation.snapshot())}`,
+      { cause },
+    );
+  } finally {
+    observation.stop();
+  }
 }
 
 async function openFeature(feature: 'personal_library' | 'reading_progress') {
@@ -73,6 +88,8 @@ nativeTest(
   'W14 returns from the exact Subject to the filtered private state shelf',
   240_000,
   async () => {
+    // Ordered shelves use the native reading-progress admission in addition to entry exposure.
+    await openFeature('reading_progress');
     const subject = await createTrackedSubject();
     const { libraryEntry } = await read(`/v1/libraryEntries/${subject.id}?view=FULL`, 'alice');
     expect(libraryEntry.subjectId).toBe(subject.id);
@@ -133,6 +150,7 @@ nativeTest(
   240_000,
   async () => {
     await openFeature('personal_library');
+    await openFeature('reading_progress');
     const alice = await accountPage('alice', library);
     await alice.locator('[data-shelf-filters]').getByRole('link', { name: 'Labels', exact: true }).click();
     await browserExpect(alice).toHaveURL(new URL(`${library}/labels`, stack.web).href);
@@ -459,8 +477,7 @@ nativeTest(
       )
       .toBe(false);
     await account.close();
-    const replacement = await auth.signIn('bob', { context: page.context(), returnTo: settings });
-    const replacementPage = replacement.continueOnPage();
+    const replacementPage = await signInForPersonalPage('bob', page.context(), settings);
     await auth.settlePageApp();
     await browserExpect(covers(replacementPage)).toHaveAttribute('aria-checked', String(!show));
     await page.bringToFront();
