@@ -10,19 +10,13 @@ import { statementBytes } from '../database/statement-bytes.ts';
 import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-native-work.ts';
 import { LIBRARY_SUBJECT_PAGE_LIMIT } from '../library/contract/presentation.ts';
 import type { AccountActor, Access } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { holdsCurrentStatements } from '../search/current-leaf.ts';
 import type { FactClause } from '../search/disclosure/admission.ts';
 import { hasVerifiedReleaseDigest } from './definition-release-read.ts';
 import { freeze } from './core/freeze.ts';
-import {
-  classifyIdentityMappings,
-  type IdentitySourceEvidence,
-  type IdentityControlEvidence,
-  type IdentityPendingEvidence,
-} from './identity-core/mapping.ts';
 import { statementSlotId } from './item.ts';
-import { privateRangeQuery, preparedScalarRangeQuery } from './private-range-query.ts';
+import { preparedScalarRangeQuery } from './private-range-query.ts';
 import type { SelectedLeafFact } from './scope-leaf-evidence.ts';
 import { normalizeSourceStatement } from './scope-leaf-selection.ts';
 
@@ -37,7 +31,6 @@ type Dependencies = {
   deadline: number;
 };
 type Rank = SelectedLeafFact['rank'];
-type RecordedDefinition = { digest: string; datatype: 'time' | 'quantity' | null };
 type Tuple = {
   slotOperation: 'expand' | 'assert' | 'retract' | null;
   count: number;
@@ -50,7 +43,6 @@ type Tuple = {
   expanded: boolean | null;
   operation: string | null;
   sameRelease: boolean | null;
-  recording: RecordedDefinition | null;
   revision: number | null;
   sourceBytes: number | null;
   bodyRank: Rank | null;
@@ -68,22 +60,12 @@ type Row = {
     current_release: string;
   };
   meaning: { head: number; digest: string };
-  source: IdentitySourceEvidence;
-  control: IdentityControlEvidence & IdentityPendingEvidence & { control_epoch: number };
-  subject_definition: RecordedDefinition | null;
   tuples: Tuple[] | null;
 };
-type Decision = Readonly<
-  { original: string; terminal: string; epoch: string } & (
-    | { state: 'withheld'; matches: false }
-    | { state: 'disclosed'; matches: boolean; facts: readonly SelectedLeafFact[] }
-  )
->;
 const unknown = Object.freeze({ status: 'unknown' as const });
 
-export function privateCatalogueRangeFootprint(sql: string, values: readonly unknown[]) {
-  const prepared = sql === preparedScalarRangeQuery();
-  if ((!prepared && sql !== privateRangeQuery()) || values.length !== 12) return undefined;
+function privateCatalogueRangeFootprint(sql: string, values: readonly unknown[]) {
+  if (sql !== preparedScalarRangeQuery() || values.length !== 12) return undefined;
   const [route, owner, floor, version, routes, ids, at, firstAt, slots, property, digest, width] = values;
   if (
     typeof owner !== 'string' ||
@@ -109,10 +91,7 @@ export function privateCatalogueRangeFootprint(sql: string, values: readonly unk
     Buffer.byteLength(property) > 256 ||
     typeof digest !== 'string' ||
     !/^sha256:[0-9a-f]{64}$/.test(digest) ||
-    typeof width !== 'number' ||
-    !Number.isInteger(width) ||
-    width < 1 ||
-    width > (prepared ? 1 : 32) ||
+    width !== 1 ||
     ids.some(
       (id, i) =>
         routeOf(id) === null ||
@@ -122,34 +101,28 @@ export function privateCatalogueRangeFootprint(sql: string, values: readonly unk
     )
   )
     return undefined;
-  const n = ids.length,
-    raw = n * width;
-  // Eight fixed points (viewer standing and global meaning). Per original: six disclosure,
-  // six identity, a recorded definition, two slot heads and one ordered raw range. Per raw key: three privacy,
-  // two payload, four provenance and one recorded definition probe. Checkout is metered separately by the page.
+  const n = ids.length;
+  // Eight fixed viewer and meaning points. Each original has six disclosure points,
+  // two slot heads and at most one raw key. The owner query admits its identity scope separately.
   return {
     statements: 1,
-    candidateKeys: n + raw,
-    witnessKeys: 1 + n + raw,
-    identityMetadataRows: prepared ? 0 : 6 * n,
-    nativePoints: prepared ? 8 + 8 * n + 10 * raw : 8 + 16 * n + 10 * raw,
+    candidateKeys: 2 * n,
+    witnessKeys: 1 + 2 * n,
+    identityMetadataRows: 0,
+    nativePoints: 8 + 18 * n,
     // Prepared selection reads the same six disclosure points (18 rows including input),
     // two slot heads (four rows), then raw order, privacy, payload and provenance
     // (ten points, twenty rows per raw key). The scope observation lives on the owner query.
-    nativeRows: prepared ? 24 + 22 * n + 20 * raw : 24 + 36 * n + 28 * raw,
+    nativeRows: 24 + 42 * n,
     emptySeeks: 1,
-    bytes: statementBytes(sql) + Buffer.byteLength(JSON.stringify(values)) + 2 + 4096 * n + 2048 * raw,
+    bytes: statementBytes(sql) + Buffer.byteLength(JSON.stringify(values)) + 2 + 6144 * n,
   };
 }
 
 function selectedFacts(row: Row, slot: string, meaning: Meaning) {
   const tuples = row.tuples;
   if (!tuples?.length) return null;
-  if (
-    row.authority.current_release !== meaning.releaseDigest &&
-    (!row.subject_definition || row.subject_definition.digest !== row.authority.current_release)
-  )
-    return null;
+  if (row.authority.current_release !== meaning.releaseDigest) return null;
   const first = tuples[0]!;
   if (first.count === 0) return tuples.length === 1 && first.ordinal === null ? [] : null;
   if (first.count !== tuples.length) return null;
@@ -162,23 +135,20 @@ function selectedFacts(row: Row, slot: string, meaning: Meaning) {
     if (t.concealed) continue;
     if (!t.located || t.located !== slot || t.sameProperty !== true) return null;
     if (t.slotOperation !== 'expand' && (t.expanded || t.operation !== 'assert')) continue;
-    if (!t.scalar || t.sourceBytes !== 0 || t.revision === null) return null;
-    const recording = t.sameRelease
-      ? { digest: meaning.releaseDigest, datatype: meaning.release.properties[meaning.leaf.property]!.datatype }
-      : t.recording;
-    if (!recording?.datatype) return null;
+    if (!t.scalar || t.sourceBytes !== 0 || t.revision === null || t.sameRelease !== true) return null;
+    const datatype = meaning.release.properties[meaning.leaf.property]!.datatype;
     const rank = t.slotOperation === 'expand' ? t.rank : t.bodyRank;
     if (!rank) continue;
     const statement = normalizeSourceStatement(
       meaning.leaf.property,
       { value: t.value },
-      { [meaning.leaf.property]: { datatype: recording.datatype } },
+      { [meaning.leaf.property]: { datatype } },
     );
     if (!statement) continue;
     // A routed quantity unit needs independent target disclosure. Qualifiers and imported
     // provenance also require separate owner evidence outside this scalar profile.
     if (statement.facet?.kind === 'quantity' && routeOf(statement.facet.unit) !== null) return null;
-    facts.push({ witness: t.witness, rank, revision: t.revision, release: recording.digest, statement });
+    facts.push({ witness: t.witness, rank, revision: t.revision, release: meaning.releaseDigest, statement });
   }
   return facts;
 }
@@ -205,56 +175,12 @@ function scalarDecision(row: Row, id: string, slot: string, meaning: Meaning) {
   return typeof matches === 'boolean' ? { state: 'disclosed' as const, matches, facts } : null;
 }
 
-function decision(row: Row, id: string, slot: string, meaning: Meaning): Decision | null {
-  const home = partitionOf(routeOf(id)!);
-  const [mapping] = classifyIdentityMappings([{ original: id, sourceHome: home }], {
-    sourceOwners: [{ partition_no: home, epoch: row.authority.epoch, write_state: 'active' }],
-    sourceRows: [row.source],
-    controlOwners: [
-      { partition_no: row.control.partition_no, epoch: row.control.control_epoch, write_state: 'active' },
-    ],
-    pendingRows: [row.control],
-    currentRows: [row.control],
-  });
-  if (mapping?.state !== 'mapped' || mapping.terminal !== id) return null;
-  const pair = { original: id, terminal: id, epoch: mapping.epoch.toString() };
-  const scalar = scalarDecision(row, id, slot, meaning);
-  return scalar && { ...pair, ...scalar };
-}
-
-/** For an admitted, complete, id-ordered private entry population. The caller owns the
- * population and page ledger, native read times, and final check after presentation.
- * Each nonempty slice (at most 100 originals) costs one statement in each phase.
- * maxSlotKeys bounds compact history or selected Global adoption ordinals per original.
- * Exceeding it invalidates the batch, including an otherwise provable positive.
- */
-export async function observePrivateCatalogueRange(
-  deps: Dependencies,
-  originals: readonly string[],
-  input: Meaning,
-  time: AuthoritativeTime,
-) {
-  return observeRange(deps, originals, input, time, privateRangeQuery(), decision);
-}
-
-/** Proves scalar decisions and fresh Subject disclosure only. The owner separately
- * checks its published self-pairs and committed identity scope across both phases. */
-export function observePreparedScalarRange(
-  deps: Dependencies,
-  originals: readonly string[],
-  input: Meaning,
-  time: AuthoritativeTime,
-) {
-  return observeRange(deps, originals, input, time, preparedScalarRangeQuery(), scalarDecision);
-}
-
-async function observeRange<T extends object>(
+/** Proves scalar selection and fresh disclosure for separately guarded prepared identities. */
+export async function observePreparedScalarRange(
   { pool, actor, ownerId, access, work, deadline }: Dependencies,
   originals: readonly string[],
   input: Meaning,
   time: AuthoritativeTime,
-  sql: string,
-  select: (row: Row, id: string, slot: string, meaning: Meaning) => T | null,
 ) {
   if (
     actor.kind !== 'account' ||
@@ -271,6 +197,7 @@ async function observeRange<T extends object>(
     input.leaf.qualifiers?.length
   )
     return unknown;
+  const sql = preparedScalarRangeQuery();
   const meaning = { ...input, leaf: structuredClone(input.leaf) };
   const def = meaning.release.properties[meaning.leaf.property];
   if (!def || def.relation || !['time', 'quantity'].includes(def.datatype)) return unknown;
@@ -316,9 +243,9 @@ async function observeRange<T extends object>(
     requireAccessDeadline(until);
     authoritativeTimeValue(at);
     if (rows.length !== ids.length) return null;
-    const decisions: T[] = [];
+    const decisions: NonNullable<ReturnType<typeof scalarDecision>>[] = [];
     for (const [i, row] of rows.entries()) {
-      const d = select(row, ids[i]!, slots[i]!, meaning);
+      const d = scalarDecision(row, ids[i]!, slots[i]!, meaning);
       if (!d) return null;
       decisions.push(d);
     }
