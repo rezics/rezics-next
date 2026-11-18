@@ -68,7 +68,10 @@ import type { Pool, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
 import { planPublicFilterEnrollment } from './public-filter-preparation-budget.ts';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
-import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import {
+  retainedAccountDiscoveryRepairCurrent,
+  type AccountDiscoveryRepairObservation,
+} from '../access/account-discovery-source.ts';
 import type {
   DiscoveryConsumerCaptureInput,
   PublicCanonicalCaptureInput,
@@ -2501,21 +2504,37 @@ export function createNativePublicFilterSourceBinding(
         if (mixed) {
           // A second read must not replace the baseline while its original repair
           // is scanning, verifying writers or acknowledging the receiver homes.
-          const pending = await db.query<{ bootstrap: string }>(
-            `/* semantic.native-keyed:6:8 */
-             SELECT b.bootstrap::text FROM search.public_filter_coverage_home h
+          const pending = await db.query<{ bootstrap: string; complete: boolean }>(
+            `/* semantic.native-keyed:8:11 */
+             SELECT b.bootstrap::text,coalesce(seal.ready,false) AS complete FROM search.public_filter_coverage_home h
              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,h.baseline_bootstrap)
              JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,b.queried)
+             LEFT JOIN LATERAL (
+               SELECT true AS ready FROM semantic.public_filter_repair_step s
+               WHERE (s.partition_no,s.bootstrap,s.execution)=(0,b.bootstrap,h.acknowledged_execution)
+                 AND s.verified_root IS NOT NULL AND s.verified_next IS NULL AND s.complete AND s.ack_after=4096
+             ) seal ON true
              WHERE (h.partition_no,h.registration,h.source_home)=(0,$1,0)
                AND b.state='adopted' AND b.consumer=$2 AND b.read_definition=$3 AND b.coverage_publication IS NULL
                AND o.registration=h.registration AND o.consumer_bootstrap='0:'||b.bootstrap::text
-               AND o.state='open' AND o.expires_at>$4 AND NOT EXISTS (
-                 SELECT 1 FROM semantic.public_filter_repair_step seal
-                 WHERE (seal.partition_no,seal.bootstrap,seal.execution)=(0,b.bootstrap,h.acknowledged_execution)
-                   AND seal.verified_root IS NOT NULL AND seal.verified_next IS NULL AND seal.complete AND seal.ack_after=4096
-               )`,
-            [registration.registration.id, encode(consumer), resolved.definition.readDefinition, Date.now()],
+               AND o.state='open' AND ((o.expires_at>$4 AND seal.ready IS NULL)
+                 OR (seal.ready AND EXISTS (
+                   SELECT 1 FROM search.discovery_generation g
+                   WHERE g.partition_no=0 AND g.prefix=regexp_replace($5,'discovery-g[1-9][0-9]*$','')
+                     AND g.prefix||'discovery-g'||g.generation::text=$5 AND g.index_uuid=$6
+                     AND g.state IN ('populating','replaying','reconciling','ready')
+                 )))`,
+            [
+              registration.registration.id,
+              encode(consumer),
+              resolved.definition.readDefinition,
+              Date.now(),
+              consumer.physicalTarget,
+              consumer.incarnation,
+            ],
           );
+          // A completed preparation holds its original baseline through alias publication, even after its PIT expires.
+          if (pending.rows[0]?.complete) throw new BindingError('owner_unavailable');
           if (pending.rows[0])
             return { status: 'repairing' as const, bootstrapId: '0:' + pending.rows[0].bootstrap, cost };
         }
@@ -3115,7 +3134,9 @@ export function createNativePublicFilterSourceBinding(
           } else current = await ports.access.readAccountRepair(db, record.account.id, { deadline });
           if (
             !current ||
-            !isDeepStrictEqual({ ...current, position: record.account.position }, record.account) ||
+            !(proof
+              ? retainedAccountDiscoveryRepairCurrent(record.account, current)
+              : isDeepStrictEqual({ ...current, position: record.account.position }, record.account)) ||
             record.account.head.partition !== record.input.partition ||
             record.account.head.epoch !== record.input.epoch
           )
@@ -3279,7 +3300,7 @@ export function createNativePublicFilterSourceBinding(
           encode(expectedBridgeEvents ?? null) !== encode(record.bridgeEvents ?? null)
         )
           throw new BindingError('binding_mismatch');
-        const current = await loadBootstrap(input.bootstrap, db, scope ? cut.definition : undefined);
+        const current = await loadBootstrap(input.bootstrap, db, cut.definition);
         if (
           current.row.state !== 'adopted' ||
           current.row.queried !== cut.row.queried ||

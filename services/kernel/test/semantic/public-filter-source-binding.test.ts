@@ -1,9 +1,10 @@
 import { runCommand } from '../../src/command/command.ts';
-import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
+import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
+import { encode as encodeSearch, tree } from '../../src/search/public-filter-codec.ts';
 import { checkGrowth, seed } from '../support/growth.ts';
 import { publicationJob } from './support/public-filter-binding.ts';
 import { expect, test } from 'bun:test';
@@ -26,6 +27,54 @@ import {
 } from './support/public-filter-source.ts';
 
 type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
+
+test('native mixed coverage shares pagination widths while preserving the exact public capture and consumer controls', async () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  try {
+    const capture = { representation: 'discovery-v1', sort: 'id', text: undefined, size: 41, pageSize: 20 };
+    const narrow = { ...capture, size: 15, pageSize: 7 };
+    const encodeCapture = (value: unknown) => JSON.stringify(tree(value, 'value'));
+    const parent = crypto.randomUUID(),
+      child = crypto.randomUUID();
+    const consumer = {
+      catalogue: null,
+      physicalTarget: 'native-mixed-discovery-g2',
+      incarnation: crypto.randomUUID(),
+      consumerGeneration: crypto.randomUUID(),
+      meaningDigest: 'release',
+      readDefinition: child,
+      projectionGeneration: child,
+    };
+    const comparison = await pool.query(
+      `SELECT semantic.public_filter_mixed_page_scope($1)=semantic.public_filter_mixed_page_scope($2) AS same,
+         semantic.public_filter_mixed_page_scope($1)=semantic.public_filter_mixed_page_scope($3) AS changed,
+         semantic.public_filter_mixed_page_scope($4) IS NULL AS invalid_width,
+         semantic.public_filter_mixed_consumer_for_definition($5,$6,$7) AS parent,
+         semantic.public_filter_mixed_consumer_for_definition($5,$7,$6) IS NULL AS different_child`,
+      [
+        encodeCapture(capture),
+        encodeCapture(narrow),
+        encodeCapture({ ...narrow, text: null }),
+        encodeCapture({ ...narrow, size: narrow.size + 1 }),
+        encodeSearch(consumer),
+        child,
+        parent,
+      ],
+    );
+    expect(comparison.rows).toEqual([
+      {
+        same: true,
+        changed: false,
+        invalid_width: true,
+        different_child: true,
+        parent: encodeSearch({ ...consumer, projectionGeneration: parent, readDefinition: parent }),
+      },
+    ]);
+  } finally {
+    await pool.end();
+  }
+});
+
 /** Drive the same bounded native preparation used by Search, retaining its original cut. */
 async function prepareSource(
   f: Awaited<ReturnType<typeof fixture>>,

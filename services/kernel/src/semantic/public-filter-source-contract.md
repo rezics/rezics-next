@@ -826,6 +826,9 @@ settlement, checking native owner, retained pin, baseline receipt and current or
 heads around the staged foreign work. Each read checks that the home log still covers the captured through-position.
 Unrelated commands can append beyond that position during settlement. A changed owner, security witness, tuple or incomplete seal remains
 unavailable. No native connection remains held across the foreign phases.
+When Search reopens a durably verified Account receipt, Access checks the same keyed public facts and claim binding.
+Unrelated advances in either home can coexist with that receipt in the original owner epoch. The Source enrollment
+baseline and its acknowledgement retain their original home and enqueue revisions.
 
 Decision: new retained steps batch up to `min(input_limit,128)` contiguous empty Semantic homes, Account-key homes,
 or creation windows. Raw Subject and Account keys follow their existing owner advancement and projection paths.
@@ -903,6 +906,11 @@ home/key revision CAS retain responsibility for pending retirement across every 
 
 The installed maintained-population/page-root path owns current coverage through refills and final projection.
 Captured-prefix repair/ACK never independently authorizes old observations or default delivery.
+Mixed Discovery can attach a fully acknowledged baseline after alias publication while its original settlement
+records remain retained. Each served page obtains a fresh observation. Native page widths with identical public
+capture scope can attach the same baseline. The retained definitions still bind their exact width, and attachment
+checks the complete tagged capture apart from `size` and `pageSize`, the compiler closure, the exact Search
+consumer controls and the current physical generation. A new attachment seeks up to four compatible definitions.
 
 New original repair traversals include Account rows, Account intents and claim
 intents in each native home. Each arm seeks at most one raw key; all returned

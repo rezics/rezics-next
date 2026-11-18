@@ -9,6 +9,7 @@ import {
   readAccountDiscoveryBindings,
   readAccountDiscoveryRepairObservation,
   readAccountDiscoveryRepairObservations,
+  retainedAccountDiscoveryRepairCurrent,
 } from '../../src/access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
@@ -53,6 +54,9 @@ test('native repair observes Account keys across homes and rechecks a fenced key
     expect(fenced.get(first)).toMatchObject({ id: first, account: null, binding: null });
     expect(fenced.get(first)!.head.revision).toBeGreaterThan(original.get(first)!.head.revision);
     expect(fenced.get(second)).toEqual(original.get(second));
+    expect(retainedAccountDiscoveryRepairCurrent(original.get(first)!, fenced.get(first)!)).toBe(false);
+    expect(fenced.get(missing)!.head.revision).toBeGreaterThan(original.get(missing)!.head.revision);
+    expect(retainedAccountDiscoveryRepairCurrent(original.get(missing)!, fenced.get(missing)!)).toBe(true);
   } finally {
     await pool.query('DELETE FROM access.account WHERE (route,account_id) IN (($1,$2),($3,$4))', [
       firstRoute,

@@ -308,6 +308,28 @@ export type AccountDiscoveryRepairObservation = Readonly<{
   binding: Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer B> ? B | null : never;
 }>;
 
+/** A retained keyed receipt can survive changes elsewhere in its Account or claim home. */
+export function retainedAccountDiscoveryRepairCurrent(
+  original: AccountDiscoveryRepairObservation,
+  current: AccountDiscoveryRepairObservation,
+): boolean {
+  const covers = (before: AccountDiscoveryReductionHead, after: AccountDiscoveryReductionHead) =>
+    after.partition === before.partition &&
+    after.epoch === before.epoch &&
+    after.revision >= before.revision &&
+    after.claimRevision >= before.claimRevision;
+  return (
+    current.id === original.id &&
+    current.position >= original.position &&
+    covers(original.head, current.head) &&
+    (original.claimHead === null
+      ? current.claimHead === null
+      : current.claimHead !== null && covers(original.claimHead, current.claimHead)) &&
+    isDeepStrictEqual(current.account, original.account) &&
+    isDeepStrictEqual(current.binding, original.binding)
+  );
+}
+
 /** Compare two native Account/claim snapshots under the same caller deadline. */
 export async function readAccountDiscoveryRepairObservations(
   pool: Pool,
