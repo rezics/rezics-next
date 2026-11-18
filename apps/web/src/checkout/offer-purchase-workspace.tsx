@@ -105,7 +105,7 @@ export function OfferPurchaseWorkspace({
               {m.offer_full_titles()}
             </h2>
             <Button type="button" variant="outline" onClick={() => onFullTitlesOpenChange(false)}>
-              {m.close()}
+              {m.subject_choice_close()}
             </Button>
           </div>
           {supportingDetails}

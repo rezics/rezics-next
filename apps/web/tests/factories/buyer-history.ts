@@ -19,5 +19,6 @@ export function order(viewer: string, n = viewer === 'A' ? 1 : 2): BuyerOrder {
     taxCode: 'txcd_10302000',
     amountTaxMinor: null,
     contentEdition: null,
+    contentPost: null,
   };
 }

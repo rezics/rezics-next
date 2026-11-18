@@ -15,6 +15,7 @@ export const subjectOfferFixture: SubjectOffer = {
   taxBehavior: 'exclusive',
   revision: 3,
   contentEdition: fixedEditionTerms,
+  contentPost: null,
 };
 export type SubjectPurchaseStoryState =
   | 'ready'

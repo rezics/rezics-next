@@ -29,6 +29,7 @@ export const activeEntitlement: BuyerEntitlement = {
   orderId: paid.order.id,
   targetSubjectId: paid.order.targetSubjectId,
   contentEdition: null,
+  contentPost: null,
   summary: paid.order.subject,
   active: true,
   grantedAt: paid.order.createdAt,
