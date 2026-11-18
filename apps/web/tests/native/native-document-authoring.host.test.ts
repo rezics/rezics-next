@@ -241,6 +241,8 @@ async function measureHistoryReads(
     const post = historyPage.locator(`#post-${postId}`);
     const button = await revealHistoryControl(post);
     await expect(button).toBeVisible();
+    // Shell reads may still be running after the thread's personal response. Start the cost window at idle.
+    await historyPage.waitForLoadState('networkidle');
     const controlId = await button.getAttribute('aria-controls');
     // Browser traffic only appears in the test process after sampling the stack host.
     const before = (await fixture.stack.sampleKernelRequests()).length;
@@ -260,6 +262,7 @@ async function measureHistoryReads(
     const revisionReads = requests.filter((request) => isMountedRevisionRead(request, postId));
     expect(revisionReads.map(({ responseStatus }) => responseStatus)).toEqual([200]);
     expect(revisionReads[0]?.authorization?.startsWith('Bearer ')).toBe(true);
+    expect(requests.map((request) => request.url.split('?', 1)[0])).toEqual([`/v1/posts/${postId}/revisions`]);
     return requests.length;
   } finally {
     await historyPage.close();
