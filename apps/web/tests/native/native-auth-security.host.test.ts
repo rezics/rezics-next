@@ -97,7 +97,9 @@ async function manageAccountSecurity() {
   const newcomerId = await issuerProxy.signupAccountId(newcomerEmail, newcomerHandle);
   expect([fixture.accountIds.alice, fixture.accountIds.bob]).not.toContain(newcomerId);
   const callbackQuery = new URL(callback.url()).searchParams;
-  expect(callbackQuery.get('state') === authorizationState, 'Callback matches the signup authorization state').toBe(true);
+  expect(callbackQuery.get('state') === authorizationState, 'Callback matches the signup authorization state').toBe(
+    true,
+  );
   expect(
     Boolean(callbackQuery.get('code')) && !callbackQuery.has('error'),
     'Callback carries an authorization code',
@@ -266,9 +268,12 @@ async function manageAccountSecurity() {
 
   // Step-up replaces the native session. Renew the Website connection through its normal authorization entry.
   await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
-  await alicePage.waitForURL((url) => url.origin === webOrigin && `${url.pathname}${url.search}` === fixture.libraryTarget, {
-    timeout: 30_000,
-  });
+  await alicePage.waitForURL(
+    (url) => url.origin === webOrigin && `${url.pathname}${url.search}` === fixture.libraryTarget,
+    {
+      timeout: 30_000,
+    },
+  );
   await alicePage.locator('#account-menu-button').waitFor({ state: 'visible' });
   await signOutWebsiteAndAuth(alicePage);
   await alicePage.reload({ waitUntil: 'domcontentloaded' });

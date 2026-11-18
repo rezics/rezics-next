@@ -2435,7 +2435,13 @@ async function advanceDiscoveryTurn(
       WHERE prefix=$1 AND generation=$2 AND ${pending}
       AND ($5::int[] IS NULL OR partition_no=ANY($5))
       AND ($4::boolean = false OR owner <> 'review') ORDER BY partition_no,owner LIMIT $3`,
-            [prefix, target.generation, DISCOVERY_POPULATIONS_PER_ADVANCE, reviewInvalidationPending, partitions ?? null],
+            [
+              prefix,
+              target.generation,
+              DISCOVERY_POPULATIONS_PER_ADVANCE,
+              reviewInvalidationPending,
+              partitions ?? null,
+            ],
           )
         ).rows,
     );
@@ -2458,9 +2464,7 @@ async function advanceDiscoveryTurn(
           const emptyIndexProbe = phase === 'reconciling' ? metadataEmptyIndexProbe(search, target, batch) : undefined;
           const coreRows = reads ? [] : batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
           const guardedEmptyProbe =
-            phase === 'reconciling'
-              ? reconciliationEmptyIndexProbe(pool, search, target, coreRows, batch)
-              : undefined;
+            phase === 'reconciling' ? reconciliationEmptyIndexProbe(pool, search, target, coreRows, batch) : undefined;
           const coreReads = coreReconciliationBatch(pool, coreRows);
           return async (population) => {
             try {
@@ -2584,7 +2588,15 @@ async function advanceDiscoveryTurn(
     const candidates = kinds.every((kind) => requiredKinds.includes(kind))
       ? maintenanceCutCandidates(drift).slice(0, Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + kinds.length)))
       : [];
-    const result = await recheckDiscoveryCutBatch(pool, target, drift, metadataProducers, requiredKinds, trace, candidates);
+    const result = await recheckDiscoveryCutBatch(
+      pool,
+      target,
+      drift,
+      metadataProducers,
+      requiredKinds,
+      trace,
+      candidates,
+    );
     if (result.state === 'retiring') return;
     if (result.state === 'changed') {
       if (!result.repairPartitions) return;

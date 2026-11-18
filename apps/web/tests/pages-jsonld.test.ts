@@ -105,7 +105,9 @@ test("a subject's public representation becomes schema.org JSON-LD", () => {
         isbn: '978-4-10-101013-7',
         numberOfPages: 248,
         cookTime: 'PT45M',
-        identifier: [{ '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL45804W' }],
+        identifier: [
+          { '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL45804W' },
+        ],
       },
       {
         '@type': 'BreadcrumbList',

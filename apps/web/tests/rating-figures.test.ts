@@ -101,7 +101,10 @@ test('question-driven save and clear include zero, enforce the live scale and pr
         : Response.json({ units: stored, revision: 1, at: '2026-10-31T00:00:00Z' });
     },
   });
-  for (const [units, display] of [[0, '0 / 10'], [40, '10 / 10']] as const) {
+  for (const [units, display] of [
+    [0, '0 / 10'],
+    [40, '10 / 10'],
+  ] as const) {
     const html = renderToStaticMarkup(
       createElement(RatingControlView, {
         question,

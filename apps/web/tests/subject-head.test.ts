@@ -169,9 +169,9 @@ test('subject metadata uses the localized label, type and available year, locali
 
 test('structured data uses the released type, keeps the fallback mapping, and adds only public breadcrumbs', () => {
   const page = makePage({ labels: { en: 'The Lamp' }, aliases: { en: ['Old Lamp'] } });
-  const { '@graph': [releaseType, breadcrumbs] } = JSON.parse(
-    head(page, 'en', { schemaOrgType: 'https://schema.org/CreativeWorkSeries' }).scripts[0]!.children!,
-  );
+  const {
+    '@graph': [releaseType, breadcrumbs],
+  } = JSON.parse(head(page, 'en', { schemaOrgType: 'https://schema.org/CreativeWorkSeries' }).scripts[0]!.children!);
   expect(releaseType['@type']).toBe('CreativeWorkSeries');
   expect(releaseType.alternateName).toEqual(['Old Lamp']);
   expect(breadcrumbs).toEqual({

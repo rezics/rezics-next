@@ -12,8 +12,11 @@ import { m } from '../src/paraglide/messages.js';
 import type { SubjectPageData } from '../src/features/pages/subject';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
-const { SubjectPage: SubjectPageContent, pageContext, pageRelationProperties } =
-  await import('../src/features/pages/subject');
+const {
+  SubjectPage: SubjectPageContent,
+  pageContext,
+  pageRelationProperties,
+} = await import('../src/features/pages/subject');
 const { withPageVisitHost } = await import('./helpers/subject-render');
 const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { Window } = await import(

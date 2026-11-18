@@ -461,24 +461,25 @@ export default defineConfig((context) => {
       },
     },
     plugins: traceWebVitePlugins([
-      bundledNativeClient && {
-        name: 'native-web-bundled-client-ready',
-        configureServer(server) {
-          const client = server.environments.client;
-          const bundle = client.bundledDev;
-          if (!bundle) throw new Error('Native Web requested a bundle without a bundled client environment');
-          const listen = client.listen.bind(client);
-          client.listen = async (server) => {
-            await listen(server);
-            // Cloudflare dispatches SSR directly to workerd. Wait for Vite to receive Rolldown's
-            // output callback, then require the exact entry Start puts in the document.
-            await bundle['waitForInitialBuildFinish']();
-            if (!bundle.memoryFiles.has('assets/index.js')) {
-              throw bundle['lastBuildError'] ?? new Error('Native Web did not emit /assets/index.js');
-            }
-          };
-        },
-      } satisfies Plugin,
+      bundledNativeClient &&
+        ({
+          name: 'native-web-bundled-client-ready',
+          configureServer(server) {
+            const client = server.environments.client;
+            const bundle = client.bundledDev;
+            if (!bundle) throw new Error('Native Web requested a bundle without a bundled client environment');
+            const listen = client.listen.bind(client);
+            client.listen = async (server) => {
+              await listen(server);
+              // Cloudflare dispatches SSR directly to workerd. Wait for Vite to receive Rolldown's
+              // output callback, then require the exact entry Start puts in the document.
+              await bundle['waitForInitialBuildFinish']();
+              if (!bundle.memoryFiles.has('assets/index.js')) {
+                throw bundle['lastBuildError'] ?? new Error('Native Web did not emit /assets/index.js');
+              }
+            };
+          },
+        } satisfies Plugin),
       ...(viteCacheDir
         ? [
             {

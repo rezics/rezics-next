@@ -294,7 +294,9 @@ nativeTest(
     await filters.getByRole('button', { name: 'Apply filters', exact: true }).click();
     await browserExpect(page).toHaveURL(
       (url) =>
-        url.pathname === collectionPath && url.searchParams.get(filterKey) === filterValue && !url.searchParams.has('cursor'),
+        url.pathname === collectionPath &&
+        url.searchParams.get(filterKey) === filterValue &&
+        !url.searchParams.has('cursor'),
       { timeout: 120_000 },
     );
     const more = page

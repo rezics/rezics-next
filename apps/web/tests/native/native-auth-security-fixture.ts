@@ -64,17 +64,23 @@ export async function startNativeAuthIssuerProxy(): Promise<NativeAuthIssuerProx
       forwarded.headers.delete('host');
       if (request.method !== 'POST' || incoming.pathname !== '/signup') return fetch(forwarded, { redirect: 'manual' });
 
-      const identity = forwarded.clone().json().then(
-        (body: { email?: unknown; handle?: unknown } | null) => ({ email: body?.email, handle: body?.handle }),
-        () => undefined,
-      );
+      const identity = forwarded
+        .clone()
+        .json()
+        .then(
+          (body: { email?: unknown; handle?: unknown } | null) => ({ email: body?.email, handle: body?.handle }),
+          () => undefined,
+        );
       const response = await fetch(forwarded, { redirect: 'manual' });
       if (response.status === 201) {
         // The browser can navigate as soon as it receives this receipt. Read a copy at the issuer boundary.
-        const receipt = response.clone().json().then(
-          (body: { accountId?: unknown } | null) => body?.accountId,
-          () => undefined,
-        );
+        const receipt = response
+          .clone()
+          .json()
+          .then(
+            (body: { accountId?: unknown } | null) => body?.accountId,
+            () => undefined,
+          );
         signupReceipts.push(
           Promise.all([identity, receipt]).then(([submitted, accountId]) => {
             const { email, handle } = submitted ?? {};

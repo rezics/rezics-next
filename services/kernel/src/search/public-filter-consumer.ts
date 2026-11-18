@@ -173,8 +173,7 @@ export function compilePublicFilterConsumerCapture(
     throw new TypeError('Capture requires explicit filterDocument and parsed text');
   const copied = structuredClone(input);
   const meaning = structuredClone(acceptedMeaning);
-  if (!hasExactPublicFilterMeaning(meaning))
-    throw new TypeError('Capture requires an exact accepted release');
+  if (!hasExactPublicFilterMeaning(meaning)) throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
   validateCatalogueCoverage(copied);
 
@@ -784,10 +783,7 @@ type NativeGenerationOutcome = (NativePublicFilterPublicationCompletion | Public
   Readonly<{ advanced?: boolean; enrollmentAdvanced?: boolean }>;
 const generationSources = new WeakMap<
   PublicDiscoveryConsumerOperations,
-  (
-    input: NativeGenerationInput,
-    context: PublicFilterConsumerContext,
-  ) => Promise<NativeGenerationOutcome>
+  (input: NativeGenerationInput, context: PublicFilterConsumerContext) => Promise<NativeGenerationOutcome>
 >();
 
 /** Advance the existing native preparation/repair owner; this grants no serving authority. */
@@ -1897,10 +1893,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         binding,
         {
           bootstrap: work.bootstrap.id,
-          inputLimit: Math.max(
-            0,
-            m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
-          ),
+          inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
         },
         context,
       );
@@ -1950,9 +1943,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const direct = page && inlinePublishedPreparation && work.bootstrap.coveragePublication;
       if (page && !direct) return { status: 'preparing', repair: job, cost: m.cost };
       const plan = recovery.bootstrap.definition.capture;
-      const batchSize = direct && 'pageSize' in plan && plan.pageSize !== undefined
-        ? Math.min(PUBLIC_FILTER_PREPARATION_BATCH_SIZE, 2 * plan.pageSize + 2)
-        : PUBLIC_FILTER_PREPARATION_BATCH_SIZE;
+      const batchSize =
+        direct && 'pageSize' in plan && plan.pageSize !== undefined
+          ? Math.min(PUBLIC_FILTER_PREPARATION_BATCH_SIZE, 2 * plan.pageSize + 2)
+          : PUBLIC_FILTER_PREPARATION_BATCH_SIZE;
       const legacy = Array.isArray(work.prepared) && Array.isArray(work.preparedRows);
       if (!legacy && (work.prepared !== undefined || work.preparedRows !== undefined))
         throw new ConsumerFailure('observation_lost');
@@ -2325,12 +2319,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         binding,
         {
           ...preparation,
-          ...(!publication && !('representation' in canonical) && !('purpose' in canonical) &&
-            canonical.catalogueCoverage !== true ? { usePublishedCoverage: true as const } : {}),
-          inputLimit: Math.max(
-            0,
-            m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
-          ),
+          ...(!publication &&
+          !('representation' in canonical) &&
+          !('purpose' in canonical) &&
+          canonical.catalogueCoverage !== true
+            ? { usePublishedCoverage: true as const }
+            : {}),
+          inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
         },
         context,
       );
@@ -3179,7 +3174,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           } else if (original.publication.queried.snapshot.kind === 'prepared') {
             const q = original.publication.queried;
             const loaded = await load({ consumer: input.consumer, job: q.snapshot.observation }, m);
-            if (!(await finishPreparationBuild(loaded.work, q, m, context, true))) return m.unavailable('source_pending');
+            if (!(await finishPreparationBuild(loaded.work, q, m, context, true)))
+              return m.unavailable('source_pending');
           }
           return { ...original, cost: m.cost };
         }

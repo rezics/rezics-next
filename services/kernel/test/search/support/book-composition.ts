@@ -3,7 +3,12 @@ import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { planReads, platformRegistry } from '@rezics/composition';
 import type { Subject } from '../../../../../specs/semantic-driver.ts';
 import { withBoundedReadConnection } from '../../../src/database/pool.ts';
-import { readSubjectIndexUuid, subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
+import {
+  readSubjectIndexUuid,
+  subjectAlias,
+  subjectGenerations,
+  subjectIndexName,
+} from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import {
@@ -89,10 +94,7 @@ export async function createBookComposition(setupDeadline: number) {
                 matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
               })),
             ),
-            publicationJobs(deadline).then(
-              (jobs) => jobs.map(({ consumer: _consumer, ...job }) => job),
-              String,
-            ),
+            publicationJobs(deadline).then((jobs) => jobs.map(({ consumer: _consumer, ...job }) => job), String),
           ]);
           return { active, physical, jobs };
         } catch (error) {
@@ -117,8 +119,9 @@ export async function createBookComposition(setupDeadline: number) {
             const subjects = response.body.subjects;
             assert(Array.isArray(subjects));
             const missing = originals
-              .filter(({ id, type, label }) =>
-                !subjects.some((entry) => entry.id === id && entry.type === type && entry.labels.en === label),
+              .filter(
+                ({ id, type, label }) =>
+                  !subjects.some((entry) => entry.id === id && entry.type === type && entry.labels.en === label),
               )
               .map(({ id }) => id);
             lastPublicRead = { status: response.status, missing };
@@ -190,7 +193,11 @@ export async function createBookComposition(setupDeadline: number) {
     // Use the same three authored grains as the Book journey for initial publication.
     // The installed worker owns Source repair and activation while the anonymous read waits.
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) await createAnchor(type, `AAA ${grain} 00`, true);
-    const published = await waitForPublication(originals.map(({ id }) => id), setupDeadline, originals);
+    const published = await waitForPublication(
+      originals.map(({ id }) => id),
+      setupDeadline,
+      originals,
+    );
 
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
@@ -201,7 +208,11 @@ export async function createBookComposition(setupDeadline: number) {
     }
     const hidden = await createAnchor('schema:Book', 'AAA 0 00 concealed', true);
     assert.deepEqual(
-      await waitForPublication([...anchors, hidden].map(({ id }) => id), setupDeadline, originals),
+      await waitForPublication(
+        [...anchors, hidden].map(({ id }) => id),
+        setupDeadline,
+        originals,
+      ),
       published,
     );
     await fixture.grant('editor', ['moderation:hide'], hidden.id);
