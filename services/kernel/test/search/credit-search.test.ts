@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import subjectsMapping from '../../db/search/indices/subjects.json';
 import {
   CREDIT_SEARCH_LIMITS,
   currentCreditSearchMatch,
@@ -8,6 +9,7 @@ import {
 } from '../../src/search/credit-search.ts';
 import { creditSearchIndexDefinition } from '../../src/search/credit-search-mapping.ts';
 import { subjectIndexDefinition } from '../../src/search/indices.ts';
+import { calendarIndexDefinition } from '../../src/search/release-search-calendar.ts';
 
 const entry = (id = 'statement', targetId = 'creator'): CreditSearchEntry => ({
   witness: {
@@ -96,12 +98,13 @@ describe('bounded credited-name projection consumer', () => {
   });
 
   test('additive mapping preserves the installed analyzer, names and sort definitions', () => {
-    const base = subjectIndexDefinition();
+    const base = calendarIndexDefinition(subjectsMapping);
     const before = structuredClone(base);
     const mapped = creditSearchIndexDefinition(base) as {
       mappings: { _meta: Record<string, unknown>; properties: Record<string, unknown> };
     };
     expect(base).toEqual(before);
+    expect(mapped).toEqual(subjectIndexDefinition());
     expect(mapped.mappings.properties.credited_names).toMatchObject({ type: 'nested', dynamic: 'strict' });
     expect(mapped.mappings.properties.credit_search_complete).toEqual({ type: 'boolean' });
     expect(mapped.mappings._meta.credit_search_format).toBe(1);
