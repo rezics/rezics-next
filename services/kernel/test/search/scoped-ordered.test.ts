@@ -24,9 +24,13 @@ const nativePreconnect = globalThis.fetch.preconnect;
 // real unimplemented native producer. They do not inject verdicts or manufacture captures.
 test('closed ordering API imports the canonical native ordinal key and raw row contract', () => {
   type Order = ReturnType<typeof createSearchScopeOrder>;
+  type ScopedObservations = Omit<
+    ReturnType<typeof createIdentityScopedObservations>,
+    'advanceFrozenLibrarySourceRetirement'
+  >;
   expectTypeOf<Parameters<Order['rawOrdinal']>[1]>().toEqualTypeOf<NativeOrdinalKey | null>();
   expectTypeOf<Awaited<ReturnType<Order['rawOrdinal']>>>().toEqualTypeOf<RawOrdinalCollectionPrefix>();
-  expectTypeOf<ReturnType<typeof createIdentityScopedObservations>>().toEqualTypeOf<IdentityScopedObservations>();
+  expectTypeOf<ScopedObservations>().toEqualTypeOf<Pick<IdentityScopedObservations, keyof IdentityScopedObservations>>();
   expectTypeOf<Parameters<typeof createSearchScopeForService>[1]>().toEqualTypeOf<LeafOptions>();
 });
 

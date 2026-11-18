@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test';
+import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { Pool, type QueryConfig } from 'pg';
+import { Pool } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { withCompiledCommandControls } from '../../src/command/command.ts';
 import time from '../../src/command/time.sql';
@@ -8,6 +9,7 @@ import commandFence from '../../src/command/fence.sql';
 import commandNoEffect from '../../src/command/no-effect-fence.sql';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
+import type { NativeReadQueryConfig } from '../../src/database/bounded-read-lifetime.ts';
 import partitionRead from '../../src/partition/read.sql';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { anonymousSubjectFormulaBound, createAccess } from '../../src/access/permission.ts';
@@ -41,9 +43,12 @@ import {
   sizedSearchIdentityPlanSql,
 } from '../../src/search/identity-receiving-native-work.ts';
 import type {
+  HoldRow,
   OperationRow,
+  StoredReceipt,
   StoredReferences,
   StoredSource,
+  WriterRow,
 } from '../../src/search/identity-receiving-native-internal.ts';
 import {
   lockSearchIdentityOriginalSql,
@@ -122,6 +127,7 @@ import projectionHeadPage from '../../src/semantic/public-filter-projection-head
 import projectionCurrentHead from '../../src/semantic/public-filter-projection-head-current.sql';
 import structuralGate from '../../src/semantic/identity-epoch-store-select-home-gate.sql';
 import type { IdentityFrontier, IdentityStepProgress, IdentityStepReceipt } from '../../src/semantic/identity-epoch-contract.ts';
+import type { SearchWriterPreparation } from '../../src/semantic/contract/domain-ports.ts';
 import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
@@ -180,6 +186,11 @@ const otherControlHome = 0x843;
 const prefix = 'directory-probe-';
 const index = prefix + 'subjects-g1';
 const alias = `${index}-writer-${'a'.repeat(32)}`;
+
+function expectWriterProgress(result: SearchWriterPreparation, transactionId: string | null | undefined) {
+  assert(typeof transactionId === 'string', 'Expected a retained writer transaction ID');
+  expect(result).toEqual({ state: 'progress', transactionId });
+}
 
 test.each([
   { label: 'selects the initial merge key', intent: 'merge', resumed: false, mode: 'input' },
@@ -407,7 +418,7 @@ test.each([
       : [],
     ...(adoptedRelation && { relation_facet_overflow: relationRoster }),
   });
-  let oldBuild = crypto.randomUUID();
+  let oldBuild: string = crypto.randomUUID();
   const oldHeads = mode === 'retire' ? [0, writerHome] : [];
   let oldMeaning = bundledDigest;
   let oldGeneration = '4';
@@ -447,7 +458,7 @@ test.each([
   const forbidden = () => {
     throw new Error('Unexpected Access or Pool call');
   };
-  pool.query = (async (query: string | QueryConfig, positional: unknown[]) => {
+  pool.query = (async (query: string | NativeReadQueryConfig, positional: unknown[]) => {
     const connection = await pool.connect();
     try {
       return await connection.query(query, positional);
@@ -475,10 +486,10 @@ test.each([
   ];
   const observedLocks: string[] = [];
   const planSql = searchNativeReceivingStatements();
-  let previousPlan = crypto.randomUUID();
+  let previousPlan: string = crypto.randomUUID();
   let previousJob = newId(jobHome << 4);
-  let previousClose = crypto.randomUUID();
-  type NativeWriter = Record<string, string | number | boolean | null>;
+  let previousClose: string = crypto.randomUUID();
+  type NativeWriter = Partial<WriterRow> & { closed_transaction_id: string; repair_locator: string };
   let retainedAction: string | undefined;
   let preparedWriter: NativeWriter | undefined;
   let predecessorWriter: NativeWriter | undefined;
@@ -525,7 +536,7 @@ test.each([
   let appliedPosition = applicationPosition();
   let retiredScope = false;
   let copyLocator: unknown;
-  let copySettlement: { partition: number; transactionId: string; epoch: number; position: string } | undefined;
+  let copySettlement: StoredReceipt | undefined;
   let reconciledCopy: string | undefined;
   let controlPosition = 0;
   const nativePosition = () => {
@@ -597,7 +608,7 @@ test.each([
   let replaceClient = false;
   let readOnly = false;
   const driver = {
-    async query(input: string | QueryConfig, positional: unknown[] = []) {
+    async query(input: string | NativeReadQueryConfig, positional: unknown[] = []) {
       const sql = typeof input === 'string' ? input : input.text;
       const values = typeof input === 'string' ? positional : (input.values ?? []);
       if (sql.startsWith('BEGIN')) readOnly = sql.endsWith('READ ONLY');
@@ -1447,11 +1458,14 @@ test.each([
       else if (sql === planSql.reconcile.sql) {
         expect(values[2]).toBe(0);
         copySettlement = JSON.parse(String(values[4]));
+        const visiblePosition = committedOperation?.visible_position;
+        const visibleTransaction = committedOperation?.visible_transaction_id;
+        assert(typeof visiblePosition === 'string' && typeof visibleTransaction === 'string');
         expect(copySettlement).toEqual({
           partition: writerHome,
           epoch: 1,
-          position: committedOperation?.visible_position,
-          transactionId: committedOperation?.visible_transaction_id,
+          position: visiblePosition,
+          transactionId: visibleTransaction,
         });
         reconciledCopy = String(values[3]);
         rows = [{ copy_no: 0 }];
@@ -1578,8 +1592,8 @@ test.each([
         sql === planSql.applied.sql
       ) {
         if (sql === planSql.applied.sql && values[6] === true) {
-          expect(writing?.transactionId).toBe(writingOperation?.applied_transaction_id);
-          expect(writing?.frontier).toEqual(writingOperation?.frontier);
+          expect<string | null | undefined>(writing?.transactionId).toBe(writingOperation?.applied_transaction_id);
+          expect<IdentityFrontier | null | undefined>(writing?.frontier).toEqual(writingOperation?.frontier);
           if (rejectNativeApplicationProof) return { rows: [], rowCount: 0 };
         }
         if (foreignCapture && sql === receivingStatements.insertApplied) {
@@ -2100,10 +2114,7 @@ test.each([
           ]);
           return;
         }
-        expect(await prepare(pool, progress.receipt)).toEqual({
-          state: 'progress',
-          transactionId: scopeSteps()[1]?.transactionId,
-        });
+        expectWriterProgress(await prepare(pool, progress.receipt), scopeSteps()[1]?.transactionId);
         expect(scopeSteps()[1]?.frontier.after).toEqual([
           'search-writer-admitted',
           progress.receipt.native.transactionId,
@@ -2123,10 +2134,7 @@ test.each([
               )
             : locks,
         );
-        expect(await prepare(pool, progress.receipt)).toEqual({
-          state: 'progress',
-          transactionId: scopeSteps()[2]?.transactionId,
-        });
+        expectWriterProgress(await prepare(pool, progress.receipt), scopeSteps()[2]?.transactionId);
         expect(scopeSteps()[2]?.frontier.after).toEqual([
           'search-writer-support',
           progress.receipt.native.transactionId,
@@ -2135,29 +2143,29 @@ test.each([
           bundledDigest,
         ]);
         const retiringHomes = [...oldHeads];
-        expect(await prepare(pool, progress.receipt)).toEqual({
-          state: 'progress',
-          transactionId: scopeSteps()[3]?.transactionId,
-        });
-        const nextSupport = async (expected: readonly unknown[]) => {
+        expectWriterProgress(await prepare(pool, progress.receipt), scopeSteps()[3]?.transactionId);
+        const nextSupport = async (expected: IdentityFrontier['after']) => {
           const position = committed.length;
-          expect(await prepare(pool, progress.receipt)).toEqual({
-            state: 'progress',
-            transactionId: committed[position]?.transactionId,
-          });
-          expect(committed[position]?.frontier.after.slice(2, 2 + expected.length)).toEqual(expected);
+          expectWriterProgress(await prepare(pool, progress.receipt), committed[position]?.transactionId);
+          expect<IdentityFrontier['after'] | undefined>(
+            committed[position]?.frontier.after.slice(2, 2 + expected.length),
+          ).toEqual(expected);
         };
         if (canonicalTerms) {
           if (completeMerge) {
             const retiring = ['original', 'retiring', oldBuild, String(Number(newGeneration) - 1)];
-            expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual([...retiring, retiringHomes[0]]);
+            const firstRetiringHome = retiringHomes[0];
+            assert(firstRetiringHome !== undefined);
+            expect(scopeSteps()[3]?.frontier.after.slice(2)).toEqual([...retiring, firstRetiringHome]);
             for (const home of retiringHomes.slice(1)) await nextSupport([...retiring, home]);
             await nextSupport(['original', 'progress']);
+            assert(retainedBuild !== undefined);
             expect(retainedBuild).not.toBe(oldBuild);
             expect(committed.at(-1)?.frontier.after.slice(4, 6)).toEqual([retainedBuild, newGeneration]);
           } else {
             expect(scopeSteps()[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
           }
+          assert(retainedBuild !== undefined);
           await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
           if (adoptedRelation) {
             await nextSupport(['original', 'progress', retainedBuild, newGeneration]);
@@ -2203,6 +2211,7 @@ test.each([
         } else {
           if (bothVisible) {
             expect(scopeSteps()[3]?.frontier.after.slice(2, 4)).toEqual(['original', 'progress']);
+            assert(retainedOriginalBuild !== undefined);
             await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
             if (crossHome) await nextSupport(['original', 'progress', retainedOriginalBuild, newGeneration]);
             await nextSupport(['original', 'complete', retainedOriginalBuild, newGeneration]);
@@ -2217,6 +2226,7 @@ test.each([
             const originalCursors = bothVisible ? ['-1', String(writerHome)] : [];
             if (crossHome) originalCursors.push(String(terminalHome));
             expect(projectionHeadCursors).toEqual(originalCursors);
+            assert(retainedBuild !== undefined);
             await nextSupport(['terminal', 'progress', retainedBuild, newGeneration]);
             if (mode === 'superseded') {
               await nextSupport(['terminal', 'restart']);
@@ -2312,8 +2322,9 @@ test.each([
             terminalBuildCurrent = true;
           }
           const checked = await prepare(pool, acceptance.receipt);
-          expect(checked).toEqual({ state: 'progress', transactionId: committed.at(-1)?.transactionId });
-          expect(committed.at(-1)?.frontier.after.slice(2, 4)).toEqual(['binding', retainedPlan?.source.locator.planId]);
+          expectWriterProgress(checked, committed.at(-1)?.transactionId);
+          assert(retainedPlan);
+          expect(committed.at(-1)?.frontier.after.slice(2, 4)).toEqual(['binding', retainedPlan.source.locator.planId]);
           expect(commonPlan).toBeUndefined();
           expect(hold).toBeUndefined();
           if (foreignCapture) {
@@ -2323,10 +2334,7 @@ test.each([
             expect(commonPlan).toBeUndefined();
             expect(hold).toBeUndefined();
           }
-          expect(await prepare(pool, acceptance.receipt)).toEqual({
-            state: 'progress',
-            transactionId: commonPlan?.transaction_id,
-          });
+          expectWriterProgress(await prepare(pool, acceptance.receipt), commonPlan?.transaction_id);
           expect(await prepare(pool, acceptance.receipt)).toEqual({ state: 'prepared' });
           expect(engineReads).toBe(preparationReads);
           const staged = await directoryStep();
@@ -2405,7 +2413,7 @@ test.each([
               creatorRenamed = false;
             }
             const captured = await prepare(pool, request);
-            expect(captured).toEqual({ state: 'progress', transactionId: retainedBulk?.transaction });
+            expectWriterProgress(captured, retainedBulk?.transaction);
             expect(committedOperation?.state).toBe('dispatched');
             expect(receiptText).toBeUndefined();
             expect(retainedBulk?.bulk).toEqual({
@@ -2448,10 +2456,7 @@ test.each([
             await expect(prepare(pool, request)).rejects.toThrow('Synthetic allocation lookup lost');
             expect(bulkCalls).toBe(1);
             unavailableAllocation = false;
-            expect(await prepare(pool, request)).toEqual({
-              state: 'progress',
-              transactionId: committedOperation?.visible_transaction_id,
-            });
+            expectWriterProgress(await prepare(pool, request), committedOperation?.visible_transaction_id);
             expect(committedOperation?.state).toBe('visible');
             expect(receiptText).toContain('"kind":"bulk"');
             const expectedAllocationReads =
@@ -2498,8 +2503,8 @@ test.each([
               expect(bulkCalls).toBe(1);
             }
             const applied = await prepare(pool, applicationRequest.receipt);
-            expect(applied).toEqual({ state: 'progress', transactionId: committedOperation?.applied_transaction_id });
-            expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan?.effect_key]);
+            expectWriterProgress(applied, committedOperation?.applied_transaction_id);
+            expect(committed.at(-1)?.frontier.after).toEqual([selected, retainedPlan.effect_key]);
             expect(committedOperation?.applied_position).toBe(
               writerHome === jobHome ? String(controlPosition) : String(applicationPosition()),
             );
@@ -2516,11 +2521,11 @@ test.each([
               expect(JSON.parse(receivingContinuation.after_key!).phase ?? null).toBe(phase);
             }
             expect(receivingContinuation.state).toBe('settled');
-            if (priorVisible) expect(copySettlement?.transactionId).toBe(committedOperation?.visible_transaction_id);
-            expect(await prepare(pool, request)).toEqual({
-              state: 'progress',
-              transactionId: controlCustody?.transaction_id,
-            });
+            if (priorVisible)
+              expect<string | null | undefined>(copySettlement?.transactionId).toBe(
+                committedOperation?.visible_transaction_id,
+              );
+            expectWriterProgress(await prepare(pool, request), controlCustody?.transaction_id);
             if (mode === 'dispatch') {
               releaseOwnerAdvanced = true;
               await expect(prepare(pool, request)).rejects.toThrow('Native Search releaseHold: changed');
@@ -2529,10 +2534,7 @@ test.each([
               releaseOwnerAdvanced = false;
               lateReleaseCheck = false;
             }
-            expect(await prepare(pool, request)).toEqual({
-              state: 'progress',
-              transactionId: receivingContinuation.released_transaction_id,
-            });
+            expectWriterProgress(await prepare(pool, request), receivingContinuation.released_transaction_id);
             expect(receivingContinuation.state).toBe('released');
             expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
             const retired = await directoryStep();
@@ -2556,7 +2558,7 @@ test.each([
               expect(identityEpochReceiptLocator(job, 'search-canonical-index', complete).ok).toBe(true);
             }
             if (foreignCapture) {
-              const capturedTransactions = (store: Capture['store'], partition?: number) =>
+              const capturedTransactions = (store: Capture['store'], partition?: number): readonly string[] =>
                 capturedEvents.slice(captureStart)
                   .filter((event) => event.store === store && (partition === undefined || event.partition === partition))
                   .map(({ transactionId }) => transactionId);
@@ -2573,14 +2575,17 @@ test.each([
                 );
                 expect(checkpoints).toEqual(Array(controlSteps).fill(admissionTransaction));
               }
-              expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([committedOperation?.applied_transaction_id]);
+              const appliedTransaction = committedOperation?.applied_transaction_id;
+              assert(typeof appliedTransaction === 'string');
+              expect(capturedTransactions('identity_epoch_receiving_effect')).toEqual([appliedTransaction]);
               expect(capturedTransactions('identity_epoch_effect_receipt')).toEqual([
                 admissionTransaction,
                 admissionTransaction,
               ]);
-              expect(capturedTransactions('identity_epoch_receiving_plan')).toEqual([commonPlan?.transaction_id]);
-              expect(capturedTransactions('identity_epoch_receiving_record')).toEqual([hold?.accepted_transaction_id]);
-              expect(capturedTransactions('identity_epoch_receiving_custody')).toEqual([controlCustody?.transaction_id]);
+              assert(commonPlan && hold && controlCustody);
+              expect(capturedTransactions('identity_epoch_receiving_plan')).toEqual([commonPlan.transaction_id]);
+              expect(capturedTransactions('identity_epoch_receiving_record')).toEqual([hold.accepted_transaction_id]);
+              expect(capturedTransactions('identity_epoch_receiving_custody')).toEqual([controlCustody.transaction_id]);
             }
             if (nativePermission) {
               expect(permissionTimes).toBeGreaterThan(0);
@@ -2716,7 +2721,7 @@ test.each([
       writerHome = terminalHome;
       predecessorWriter = previous.writer;
       previousPlan = previous.planId;
-      previousClose = previous.writer.closed_transaction_id!;
+      previousClose = previous.writer.closed_transaction_id;
       oldBuild = previous.build!.build;
       const heads = projectionDependencyHomes.get(oldBuild)!;
       expect(heads).toEqual(selected === first ? [firstHome, otherControlHome] : [otherControlHome]);

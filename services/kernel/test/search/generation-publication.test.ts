@@ -380,6 +380,7 @@ test('scheduled preparation resumes its stored publication and advances four met
     if (original.status !== 'preparing') throw new Error(original.reason);
     await maintenance.run(id, (await read()).revision);
     const retained = (await read()).locator.publication;
+    if (retained === null) throw new Error('The original publication was not retained');
     expect(retained).toBe(original.job.job);
     await maintenance.stop();
     maintenance = start();
