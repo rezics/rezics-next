@@ -1,13 +1,8 @@
 import { importCommandPages } from './import-client.ts';
+import type { CrossMediaPort } from './showcase-contract.ts';
 import type { Database } from 'bun:sqlite';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import {
-  checkBatchWrite,
-  type BatchCommand,
-  type BatchWriteRequest,
-  type BatchWriteResult,
-  type Source,
-} from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand, type BatchWriteResult, type Source } from '@rezics/definitions/bulk';
 import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import type { SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
@@ -266,7 +261,7 @@ export function graphEdgeCommandKey(draft: GraphEdgeDraft): string {
 }
 
 type GraphCommand = { command: BatchCommand };
-type GraphBatch = (request: BatchWriteRequest) => Promise<BatchWriteResult>;
+type GraphBatch = CrossMediaPort['batch'];
 
 function graphCommandPages<Entry extends GraphCommand>(entries: Entry[], limit?: number): Entry[][] {
   try {
@@ -290,7 +285,7 @@ async function writeGraphPage(page: GraphCommand[], port: { batch: GraphBatch },
     );
   }
   try {
-    return await port.batch(request);
+    return await port.batch(request, undefined, 'admission');
   } catch (error) {
     throw recordSeedBatchFailure(
       error,
@@ -1167,7 +1162,7 @@ export class CrossMediaGraph {
 
   private async retractMissingRelations(
     input: {
-      batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
+      batch: GraphBatch;
       claim(owner: { source: string; external_id: string }): Claim | null;
       nativeType(externalId: string, alias?: string): string | undefined;
       currentRelationEndpoint(

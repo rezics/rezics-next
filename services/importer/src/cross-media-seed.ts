@@ -2945,7 +2945,7 @@ export async function seedCrossMedia(
         return read !== null && observePersonIdentity(identity, read).state === 'current';
       },
       fence: (input) => port.fence(input),
-      batch: (request) => port.batch(request),
+      batch: (...args) => port.batch(...args),
       journal: {
         prepare: (command) => {
           const owner = { source: command.source.source, external_id: command.source.external_id };

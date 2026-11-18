@@ -35,6 +35,7 @@ import {
   createImportFetch,
   forwardImportRequestStart,
   importRetryState,
+  MAX_IMPORT_ATTEMPTS,
   MAX_IMPORT_BODY_BYTES,
   MAX_IMPORT_DEADLINE_MS,
   MAX_IMPORT_WAIT_MS,
@@ -380,20 +381,12 @@ function requestFailure(
 }
 
 /** Reuse only an explicit, still-open Retry-After hint left by the bounded fetch layer. */
-function subjectReadOverloadResumeDelay(
-  error: unknown,
+function hintedRetryDelay(
+  retry: ImportRetryState | undefined,
   now: number,
   maxWaitMs: number,
   maxTotalWaitMs: number,
 ): number | undefined {
-  if (
-    !(error instanceof ImportTransportError) ||
-    error.status !== 503 ||
-    error.code !== 'overloaded' ||
-    !error.retryable
-  )
-    return;
-  const retry = error.retry;
   if (!retry || retry.stopped !== undefined || retry.notBefore === undefined || retry.deadline <= now) return;
   const delay = Math.max(0, retry.notBefore - now);
   if (delay > maxWaitMs || delay > maxTotalWaitMs || now + delay >= retry.deadline) return;
@@ -432,12 +425,21 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
   const correlationValue =
     request?.correlationId ?? (reply.response ? importCorrelationId(reply.response) : undefined) ?? field('request_id');
   const correlationId = safeDiagnosticField(correlationValue, /^[A-Za-z0-9._:-]{1,128}$/u, 128);
+  const retry = reply.response ? importRetryState(reply.response) : undefined;
+  const batchAdmissionRefused =
+    request?.method === 'POST' &&
+    request.path === '/v1/subjects:batchWrite' &&
+    field('status') === reply.status &&
+    field('effect_status') === 'not_applied' &&
+    field('retryable') === true &&
+    safeType === `https://rezics.com/problems/${safeCode}` &&
+    ((reply.status === 503 && safeCode === 'overloaded') || (reply.status === 429 && safeCode === 'rate_limited'));
   return new ImportTransportError(
     reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
     safeCode,
     field('retryable') === true,
-    reply.response ? importRetryState(reply.response) : undefined,
+    retry && batchAdmissionRefused ? { ...retry, batchAdmissionRefused: true } : retry,
     undefined,
     {
       ...(request ?? fallback),
@@ -567,6 +569,10 @@ export function createImportTransport(options: ImportTransportOptions) {
       !origin.hash,
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
+  // Graph delivery owns retries across the whole sealed page, including mixed receipts.
+  const admissionRequests = new WeakSet<AbortSignal>();
+  const singleAttemptFetch =
+    options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider, maxAttempts: 1 });
   let lastRequest: { method: string; path: string } | undefined;
   const observedFetch: typeof fetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -580,7 +586,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       const stopForwarding = options.importFetch ? () => {} : forwardImportRequestStart(callerSignal, request.signal);
       try {
         if (options.importFetch) notifyImportRequestStart(callerSignal, now());
-        const reply = await importFetch(request);
+        const fetchRequest = callerSignal && admissionRequests.has(callerSignal) ? singleAttemptFetch : importFetch;
+        const reply = await fetchRequest(request);
         if (options.onDeniedResponse && (reply.status === 401 || reply.status === 403)) {
           await options.onDeniedResponse({
             method: request.method,
@@ -612,10 +619,15 @@ export function createImportTransport(options: ImportTransportOptions) {
   const exchange = (call: () => Promise<ClientResponse>, expected: number | readonly number[], signal?: AbortSignal) =>
     response(call, expected, signal, () => lastRequest);
 
-  async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
+  async function sendBatch(
+    body: BatchWriteRequest,
+    signal?: AbortSignal,
+    admissionOnly = false,
+  ): Promise<BatchWriteResult> {
     const results: BatchWriteResult['results'] = [];
-    let indices = body.commands.map((_, index) => index);
+    const pages = [body.commands.map((_, index) => index)];
     const controller = new AbortController();
+    if (admissionOnly) admissionRequests.add(controller.signal);
     const aborted = () => controller.abort(signal?.reason);
     signal?.throwIfAborted();
     signal?.addEventListener('abort', aborted, { once: true });
@@ -636,14 +648,43 @@ export function createImportTransport(options: ImportTransportOptions) {
     };
     const stopObserving = observeImportRequestStart(controller.signal, startDeadline);
     try {
-      for (let attempt = 0; ; attempt++) {
-        const request = { commands: indices.map((index) => body.commands[index]!) };
+      let attemptLimit = maxAttempts;
+      for (let attempt = 1; pages.length; attempt++) {
+        if (deadline !== undefined && now() >= deadline)
+          controller.abort(new DOMException('Import batch deadline exceeded', 'TimeoutError'));
+        const sent = pages.shift()!;
+        const request = { commands: sent.map((index) => body.commands[index]!) };
         if (options.client) startDeadline(now());
-        const reply = await exchange(
-          () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
-          200,
-          controller.signal,
-        );
+        let reply: Awaited<ReturnType<typeof exchange>>;
+        try {
+          reply = await exchange(
+            () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
+            200,
+            controller.signal,
+          );
+        } catch (error) {
+          if (!admissionOnly || !(error instanceof ImportTransportError)) throw error;
+          if (!error.retry?.batchAdmissionRefused || error.retry.notBefore === undefined) throw error;
+          const delay = hintedRetryDelay(error.retry, now(), maxWaitMs, maxTotalWaitMs - scheduledWait);
+          if (delay === undefined || (deadline !== undefined && now() + delay >= deadline)) throw error;
+          if (error.status === 503 && options.maxAttempts === undefined) attemptLimit = MAX_IMPORT_ATTEMPTS;
+          const spareAttempts = attemptLimit - attempt - pages.length;
+          if (spareAttempts < 1) throw error;
+          scheduledWait += delay;
+          await wait(delay, controller.signal, options.sleep);
+          const readyAt = now();
+          if (readyAt < error.retry.notBefore || readyAt >= Math.min(error.retry.deadline, deadline ?? Infinity))
+            throw error;
+          // Each command takes a native permit. On overload, share the remaining sends
+          // between smaller sequential requests, keeping every sealed command intact.
+          if (error.status === 503 && sent.length > 1 && spareAttempts >= 2) {
+            const middle = Math.ceil(sent.length / 2);
+            pages.unshift(sent.slice(0, middle), sent.slice(middle));
+          } else {
+            pages.unshift(sent);
+          }
+          continue;
+        }
         const invalidReceipt = () => {
           const correlationId = safeDiagnosticField(reply.headers.get('x-request-id'), /^[A-Za-z0-9._:-]+$/u, 128);
           return new ImportTransportError(reply.status, undefined, 'invalid_batch_receipt', false, undefined, undefined, {
@@ -659,29 +700,39 @@ export function createImportTransport(options: ImportTransportOptions) {
         if (result.results.length !== request.commands.length) throw invalidReceipt();
         result.results.forEach((item, index) => {
           if (item.key !== request.commands[index]!.key) throw invalidReceipt();
-          results[indices[index]!] = item;
+          results[sent[index]!] = item;
         });
-        indices = indices.filter((index) => {
+        const refused = sent.filter((index) => {
           const item = results[index]!;
-          return (item.status === 503 || item.status === 429) && 'problem' in item && item.problem.retryable === true;
+          return (
+            (item.status === 503 || item.status === 429) &&
+            'problem' in item &&
+            item.problem.retryable === true &&
+            (!admissionOnly ||
+              (item.problem.status === item.status &&
+                'effect_status' in item.problem &&
+                item.problem.effect_status === 'not_applied'))
+          );
         });
-        const delay = 100 * 2 ** attempt;
+        const delay = 100 * 2 ** (attempt - 1);
         if (
-          !indices.length ||
-          attempt + 1 >= maxAttempts ||
+          !refused.length ||
+          attempt + pages.length >= attemptLimit ||
           delay > maxWaitMs ||
           delay > maxTotalWaitMs - scheduledWait ||
           (deadline !== undefined && now() + delay >= deadline)
         )
-          return { results };
+          continue;
         // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
         scheduledWait += delay;
         await wait(delay, controller.signal, options.sleep);
-        if (deadline !== undefined && now() >= deadline) return { results };
+        if (deadline === undefined || now() < deadline) pages.unshift(refused);
       }
+      return { results };
     } finally {
       clearDeadline?.();
       stopObserving();
+      admissionRequests.delete(controller.signal);
       signal?.removeEventListener('abort', aborted);
     }
   }
@@ -814,8 +865,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       signal,
     );
   }
-  async function batch(input: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
-    return sendBatch(requestBody(input, bodyLimit), signal);
+  async function batch(input: BatchWriteRequest, signal?: AbortSignal, retry?: 'admission'): Promise<BatchWriteResult> {
+    return sendBatch(requestBody(input, bodyLimit), signal, retry === 'admission');
   }
   async function batches(input: BatchWriteRequest['commands'], signal?: AbortSignal): Promise<BatchWriteResult[]> {
     signal?.throwIfAborted();
@@ -1017,9 +1068,14 @@ export function createImportTransport(options: ImportTransportOptions) {
             }
             break;
           } catch (error) {
-            const delay = resumedOverload
-              ? undefined
-              : subjectReadOverloadResumeDelay(error, now(), maxWaitMs, maxTotalWaitMs);
+            const delay =
+              !resumedOverload &&
+              error instanceof ImportTransportError &&
+              error.status === 503 &&
+              error.code === 'overloaded' &&
+              error.retryable
+                ? hintedRetryDelay(error.retry, now(), maxWaitMs, maxTotalWaitMs)
+                : undefined;
             if (delay !== undefined && now() + delay < deadline) {
               resumedOverload = true;
               await wait(delay, readSignal, options.sleep);
