@@ -1177,13 +1177,34 @@ async function openOwnerArchive() {
   const target = new URL('/en/library/export', stack.web);
   const context = await auth.context('alice');
   const observation = observePersonalWebReturn(context, target);
+  const trace = japaneseHydrationOnly ? auth.moduleFailureTrace : undefined;
   let signedIn;
   try {
-    signedIn = await auth.signIn('alice', { context, returnTo: target.pathname });
+    signedIn = await auth.signIn('alice', {
+      context,
+      returnTo: target.pathname,
+      ...(trace && {
+        observePage: async (page: Page) => {
+          trace.document = await observeWebDocumentModules(page, target, (url) =>
+            archiveModuleLabel(url, target.origin),
+          );
+        },
+      }),
+    });
   } catch (cause) {
-    throw new Error(`Native Archive sign-in return to Export: ${JSON.stringify(observation.snapshot())}`, { cause });
+    const result = observation.snapshot();
+    const modules = trace?.document?.snapshot();
+    const bootstrap = trace?.document && (await settledWithin(trace.document.bootstrap(), 500).catch(() => null));
+    throw new Error(`Native Archive sign-in return to Export: ${JSON.stringify({ ...result, modules, bootstrap })}`, {
+      cause,
+    });
   } finally {
     observation.stop();
+    if (trace?.document) {
+      const document = trace.document;
+      delete trace.document;
+      await settledWithin(document.close(), 500).catch(() => {});
+    }
   }
   const page = signedIn.continueOnPage();
   await auth.settlePageApp();

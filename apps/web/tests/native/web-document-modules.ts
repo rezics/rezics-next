@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from 'playwright';
@@ -10,6 +11,12 @@ export function moduleContentType(value: string | null | undefined): string {
 }
 
 const sourceRoot = resolve(import.meta.dir, '../../src');
+const compiledEntry = /^\/assets\/index-[\w-]+\.js$/u;
+
+function assetDigest(url: URL, origin: string): string | undefined {
+  if (url.origin !== origin || !/^\/assets\/[\w.$-]+\.js$/u.test(url.pathname)) return;
+  return createHash('sha256').update(url.pathname).digest('hex').slice(0, 16);
+}
 
 // Only report paths that name Web source in this checkout. Dependency paths, URL queries and
 // unknown paths may contain host or account data and keep the caller's fixed module label.
@@ -36,9 +43,11 @@ export type WebModuleTransfer = {
 type Script = {
   url: string;
   importer: string | undefined;
+  initiator: string;
   redirected: boolean;
   wireStatus?: number;
   wireMime?: string;
+  status?: number;
   mime?: string;
 };
 type Failure = {
@@ -63,6 +72,7 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
     let loader: string | undefined;
     let followingDocuments = 0;
     let overflow = false;
+    let entry: { script: Script; delivery: 'pending' | 'finished' | 'failed' | 'redirected' } | undefined;
 
     session.on(
       'Network.requestWillBeSent',
@@ -73,19 +83,26 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
           else if (request.url === target.href) loader = loaderId;
           return;
         }
-        if (loaderId !== loader || type !== 'Script') return;
+        if (!loader || loaderId !== loader || type !== 'Script') return;
         if (redirectResponse) {
           const script = requests.get(requestId);
-          if (script && !failures.has('redirect')) {
+          if (script) {
+            if (entry?.script === script) entry.delivery = 'redirected';
             script.wireStatus = redirectResponse.status;
-            failures.set('redirect', { script, reason: 'redirect', observedMs: now() });
+            if (!failures.has('redirect') && failures.size < 12)
+              failures.set('redirect', { script, reason: 'redirect', observedMs: now() });
           }
         }
-        requests.set(requestId, {
+        const script = {
           url: request.url,
           importer: initiator.url ?? initiator.stack?.callFrames[0]?.url,
+          initiator: initiator.type,
           redirected: Boolean(redirectResponse),
-        });
+        };
+        requests.set(requestId, script);
+        const url = new URL(script.url);
+        if (!entry && url.origin === target.origin && compiledEntry.test(url.pathname))
+          entry = { script, delivery: 'pending' };
       },
     );
     session.on('Network.responseReceivedExtraInfo', ({ requestId, statusCode, headers }) => {
@@ -98,6 +115,7 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
     session.on('Network.responseReceived', ({ requestId, response }) => {
       const script = requests.get(requestId);
       if (!script) return;
+      script.status = response.status;
       script.mime = moduleContentType(response.mimeType);
       const reason = response.status >= 400 ? `http-${response.status}` : script.mime;
       if (reason !== 'javascript' && !failures.has(reason) && failures.size < 12)
@@ -106,15 +124,18 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
     session.on('Network.loadingFailed', ({ requestId, errorText, canceled, blockedReason, corsErrorStatus }) => {
       const script = requests.get(requestId);
       if (!script) return;
+      requests.delete(requestId);
+      if (entry?.script === script) entry.delivery = 'failed';
       const reason = /^net::ERR_[A-Z0-9_]{1,40}$/u.test(errorText) ? errorText : 'request-failed';
       const cors = corsErrorStatus?.corsError;
-      const key = [reason, canceled, blockedReason, cors].join('/');
-      // Keep one example per outcome and release unrelated failures even during a cancellation burst.
+      const key = [reason, canceled, blockedReason, cors, script.url].join('/');
       if (!failures.has(key) && failures.size < 12)
         failures.set(key, { script, reason, canceled, blocked: blockedReason, cors, observedMs: now() });
-      else requests.delete(requestId);
     });
-    session.on('Network.loadingFinished', ({ requestId }) => requests.delete(requestId));
+    session.on('Network.loadingFinished', ({ requestId }) => {
+      if (entry && entry.script === requests.get(requestId)) entry.delivery = 'finished';
+      requests.delete(requestId);
+    });
     await session.send('Network.enable', { maxTotalBufferSize: 0, maxResourceBufferSize: 0, maxPostDataSize: 0 });
 
     return {
@@ -136,8 +157,21 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
       snapshot() {
         const describe = (href: string) => {
           const url = new URL(href);
-          return { module: label(url), source: webSource(url, target.origin) };
+          return {
+            module: label(url),
+            source: webSource(url, target.origin),
+            assetDigest: assetDigest(url, target.origin),
+          };
         };
+        const describeScript = (script: Script) => ({
+          ...describe(script.url),
+          initiator: script.initiator,
+          importer: script.importer && URL.canParse(script.importer) ? describe(script.importer) : undefined,
+          wireStatus: script.wireStatus,
+          wireMime: script.wireMime,
+          status: script.status,
+          mime: script.mime,
+        });
         // The loader can reject an import before Chromium emits a response event for its dependency.
         let unexpectedUpstream;
         for (const [href, transfer] of transfers) {
@@ -156,19 +190,45 @@ export async function observeWebDocumentModules(page: Page, target: URL, label: 
           followingDocuments,
           overflow,
           unexpectedUpstream,
+          entry: entry && { ...describeScript(entry.script), delivery: entry.delivery },
+          pendingCount: requests.size,
+          pending: [...requests.values()].slice(0, 6).map(describeScript),
           failures: [...failures.values()].map(({ script, ...failure }) => {
             const transfer = transfers.get(script.url);
             return {
               ...failure,
-              ...describe(script.url),
-              importer: script.importer && URL.canParse(script.importer) ? describe(script.importer) : undefined,
-              wireStatus: script.wireStatus,
-              wireMime: script.wireMime,
-              mime: script.mime,
+              ...describeScript(script),
               bridgeForUrl: transfer && transfer.attempts > 1 ? { attempts: transfer.attempts } : (transfer ?? null),
             };
           }),
         };
+      },
+      bootstrap() {
+        return page.evaluate(
+          ({ origin, pathname }) => {
+            if (location.origin !== origin || location.pathname !== pathname) return null;
+            const globals = window as Window & {
+              __TSS_START_OPTIONS__?: unknown;
+              $_TSR?: { router?: unknown; initialized?: boolean; streamEnded?: boolean; hydrated?: boolean };
+            };
+            const router = globals.$_TSR;
+            const entry = document.querySelector<HTMLScriptElement>('script[type="module"][src]');
+            const nonce = document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.content;
+            return {
+              moduleScript: Boolean(entry),
+              entryNonceMatches: Boolean(nonce && entry?.nonce === nonce),
+              clientLoadFailed: document.documentElement.hasAttribute('data-client-load-failed'),
+              hydrated: document.documentElement.hasAttribute('data-hydrated'),
+              startOptions: Boolean(globals.__TSS_START_OPTIONS__),
+              routerBootstrap: Boolean(router),
+              routerPayload: Boolean(router?.router),
+              routerInitialized: router?.initialized === true,
+              streamEnded: router?.streamEnded === true,
+              routerHydrated: router?.hydrated === true,
+            };
+          },
+          { origin: target.origin, pathname: target.pathname },
+        );
       },
       close: () => session.detach(),
     };
