@@ -649,7 +649,9 @@ test('mounted phone, following and Subject readers publish query changes after s
     default: '/font.woff2',
   }));
   const { AppShell } = await import('../src/shell/app-shell');
-  const { SubjectPage } = await import('../src/features/pages/subject');
+  const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+  const { withPageVisitHost } = await import('./helpers/subject-render');
+  const SubjectPage = withPageVisitHost(SubjectPageContent);
   const { default: recorded } = await import('../src/kernel/recorded/subject-page.json');
   const { browserObservation } = await import('../src/session/observation');
   const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
@@ -672,6 +674,7 @@ test('mounted phone, following and Subject readers publish query changes after s
     basis: 'current-visible-unread',
     witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
   });
+  const { performanceAmbientTree } = await import('./performance-ambient');
   const errors = spyOn(console, 'error');
   try {
     await withUi(async (ui) => {
@@ -695,10 +698,12 @@ test('mounted phone, following and Subject readers publish query changes after s
         ui.render(
           client,
           <RouterContextProvider router={router}>
-            <AppShell search={<input aria-label="Search" />}>
-              <QueryEvent />
-              <SubjectPage page={page} locale="en" messages={messages} />
-            </AppShell>
+            {performanceAmbientTree(
+              <AppShell search={<input aria-label="Search" />}>
+                <QueryEvent />
+                <SubjectPage page={page} locale="en" messages={messages} />
+              </AppShell>,
+            )}
           </RouterContextProvider>,
           true,
         );
