@@ -74,7 +74,7 @@ function statusText(state: OwnMediaRead['state']): string {
   }
 }
 
-function purposeText(purpose: OwnMediaInventoryEntry['purpose']): string {
+function purposeText(purpose: OwnMediaInventoryEntry['purpose']): string | undefined {
   switch (purpose) {
     case 'post-image':
       return m.own_media_kind_post_image();
@@ -86,6 +86,8 @@ function purposeText(purpose: OwnMediaInventoryEntry['purpose']): string {
       return m.own_media_kind_realm_banner();
     case 'cover':
       return m.own_media_kind_cover();
+    case 'knowledge-image':
+      return undefined;
   }
 }
 
