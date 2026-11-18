@@ -1,5 +1,10 @@
+import { decideExposure } from '@rezics/access';
 import { memoizedValue } from '../memoized.ts';
+import { privateSubjectDisclosureFootprint } from '../semantic/private-subject-disclosure.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
+import readTime from '../command/time.sql';
+import { everythingWindowFootprint } from './logical-everything-window.ts';
+import entryWindow from './logical-everything-entries.sql';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 
@@ -21,7 +26,7 @@ import {
   type CommandTransaction,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -171,6 +176,14 @@ function headerSQL() {
 function logicalBindingSQL() {
   return memoizedValue(logicalBindingSQL, () => logicalBindingQuery.sql);
 }
+function openEverythingBindingSQL() {
+  return memoizedValue(openEverythingBindingSQL, () => {
+    const gate = normal(opening.sql).replace(/\$(\d+)/g, (_, n: string) => '$' + (4 + Number(n)));
+    return `SELECT b.*,g.open AS "groupOpen" FROM (${normal(logicalBindingSQL())}) b CROSS JOIN (${gate}) g
+      WHERE g.open AND EXISTS (SELECT 1 FROM core.partition
+        WHERE partition_no=0 AND write_state='active' AND moved_to IS NULL)`;
+  });
+}
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
 import stateSize from './owner-filter-entry-size.sql';
@@ -280,6 +293,7 @@ function costs() {
       register(logicalEverythingQuery.sql, fixed(32, 5, 256));
       for (const sql of [headerSQL(), fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
       register(logicalBindingSQL(), fixed(68, 9, 4096));
+      register(openEverythingBindingSQL(), fixed(80, 11, 4096));
       // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
       register(scopeIdentitySQL, fixed(4, 1, 4608));
       register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
@@ -346,6 +360,7 @@ function costs() {
         bytes: 256 * Number(v[4]),
       }));
       register(permissionTime.sql, fixed(1, 0, 256));
+      register(readTime.sql, fixed(1, 0, 256));
       register(opening.sql, fixed(8, 1, 256));
       // The inverse owner admits <=1000 groups; the anchored view reads one account plus that native inverse range.
       register(inverse.sql, fixed(4004, 1, 128128));
@@ -389,6 +404,38 @@ export function nativeCollectionFootprint(
   work?: NativeCollectionWork,
 ): WorkDimensions | undefined {
   if (work) revalidateBoundLibraryIdentityWork(work);
+  const disclosure = privateSubjectDisclosureFootprint(sql, values);
+  if (disclosure) return disclosure;
+  const window = everythingWindowFootprint(sql, values);
+  if (window) return window;
+  if (sql === entryWindow.sql) {
+    const [route, owner, collection, partition, limit] = values;
+    if (
+      values.length !== 5 ||
+      typeof owner !== 'string' ||
+      routeOf(owner) !== route ||
+      typeof collection !== 'string' ||
+      routeOf(collection) !== route ||
+      typeof route !== 'number' ||
+      partitionOf(route) !== partition ||
+      typeof limit !== 'number' ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 200
+    )
+      return undefined;
+    const take = limit + 1;
+    return {
+      statements: 1,
+      candidateKeys: take,
+      nativeRows: 64 + 4 * take,
+      nativePoints: 18,
+      witnessKeys: 0,
+      emptySeeks: 1,
+      identityMetadataRows: 0,
+      bytes: Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)) + take * 256,
+    };
+  }
   // Transaction controls and the two shared native capture SETs access no relation, but their literal statements
   // and bytes remain charged. Access group admission uses BEGIN READ ONLY inside this captured operation.
   const control = [
@@ -692,7 +739,13 @@ export function readNativeCollectionMetadataWithWork(
 /** Resolve a logical key against current owner/access/source rows without manufacturing Collection metadata. */
 export function readNativeLogicalBuiltinBinding(
   pool: Pool,
-  input: Options & { access: Access; actor: Actor; at: AuthoritativeTime; collectionId: string },
+  input: Options & {
+    access: Access;
+    actor: Actor;
+    at: AuthoritativeTime;
+    collectionId: string;
+    ordinaryPage?: boolean;
+  },
 ) {
   if (input.tx || input.commandTx) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(input.at);
@@ -706,49 +759,71 @@ export function readNativeLogicalBuiltinBinding(
     )
       return { binding: null };
 
-    const access = accessRoot(input.access);
-    try {
-      await admitGroup({
-        pool,
-        access: () => access,
-        actor,
-        group: 'collections',
-        clientAction: 'collection:read',
-        deadline: input.deadline,
-        clock: () => new Date(authoritativeTimeValue(input.at)),
-      });
-    } catch (error) {
-      if (error instanceof PlatformClosedError) return { binding: null };
-      throw error;
-    }
-
     const route = routeOf(actor.accountId)!;
-    const row = (
-      await readOnly(pool, input, work, (client) =>
-        client.query<{
-          accountRoute: number | null;
-          accountId: string | null;
-          accountKind: 'actor' | 'organization' | null;
-          accountState: string | null;
-          fenced: boolean | null;
-          minimumAuthnEpoch: string | null;
-          partitionState: string | null;
-          partitionEpoch: number | null;
-          partitionPosition: string | null;
-          sourceVersion: string | null;
-          ownerIndexPhase: string | null;
-          personalCoverageReady: boolean | null;
-          pendingLabelRepair: boolean;
-          pendingOwnerPin: boolean;
-          referenceAccountId: string | null;
-          profileId: string | null;
-          stateSetId: string | null;
-          stateId: string | null;
-          stateSupported: boolean;
-          likedVersion: string;
-        }>(logicalBindingSQL(), [route, actor.accountId, input.collectionId, partitionOf(route)]),
+    const keys = [route, actor.accountId, input.collectionId, partitionOf(route)];
+    type Row = {
+      groupOpen?: boolean;
+      accountRoute: number | null;
+      accountId: string | null;
+      accountKind: 'actor' | 'organization' | null;
+      accountState: string | null;
+      fenced: boolean | null;
+      minimumAuthnEpoch: string | null;
+      partitionState: string | null;
+      partitionEpoch: number | null;
+      partitionPosition: string | null;
+      sourceVersion: string | null;
+      ownerIndexPhase: string | null;
+      personalCoverageReady: boolean | null;
+      pendingLabelRepair: boolean;
+      pendingOwnerPin: boolean;
+      referenceAccountId: string | null;
+      profileId: string | null;
+      stateSetId: string | null;
+      stateId: string | null;
+      stateSupported: boolean;
+      likedVersion: string;
+    };
+    let row: Row | undefined;
+    if (input.ordinaryPage && input.collectionId === builtinCollectionId(actor.accountId, { kind: 'everything' })) {
+      // The installed opening query admits only the open branch of the real Collections gate.
+      // A closed gate still needs the original Access check, funded from this same attempt.
+      const gate = bind(opening, { at: authoritativeTimeValue(input.at), group: 'collections' });
+      row = await withBoundedReadConnection(
+        pool,
+        input.deadline,
+        async (client) => (await client.query<Row>(openEverythingBindingSQL(), [...keys, ...gate])).rows[0],
+      );
+      if (
+        row &&
+        !decideExposure({
+          exposure: { kind: 'gate', group: 'collections' },
+          open: row.groupOpen === true,
+          actor: actor.kind,
+          clientScope: actor.scopes.includes('collection:read'),
+          gateAuthority: false,
+        }).allowed
       )
-    ).rows[0];
+        row = undefined;
+    }
+    if (!row) {
+      const access = accessRoot(input.access);
+      try {
+        await admitGroup({
+          pool,
+          access: () => access,
+          actor,
+          group: 'collections',
+          clientAction: 'collection:read',
+          deadline: input.deadline,
+          clock: () => new Date(authoritativeTimeValue(input.at)),
+        });
+      } catch (error) {
+        if (error instanceof PlatformClosedError) return { binding: null };
+        throw error;
+      }
+      row = (await readOnly(pool, input, work, (client) => client.query<Row>(logicalBindingSQL(), keys))).rows[0];
+    }
     if (
       !row ||
       row.accountRoute !== route ||

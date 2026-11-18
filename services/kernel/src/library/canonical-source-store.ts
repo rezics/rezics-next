@@ -1,3 +1,4 @@
+import publication from './logical-everything-publication.sql';
 import { nativeSourceFence } from './native-source-fence.ts';
 export { nativeSourceFence } from './native-source-fence.ts';
 /** Derived native access paths. References and ready pointers never grant membership or Access. */
@@ -212,6 +213,7 @@ import {
   readNativeCollectionWorkingMetadata,
   readNativeCollectionRawPage,
   type NativeCollectionMetadata,
+  type NativeLogicalBuiltinBinding,
 } from './collection-source-native.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
@@ -581,6 +583,90 @@ export async function observeCanonicalSource(pool: Pool, input: CanonicalCall): 
     throw error;
   }
 }
+/** The actor-bound logical lookup has admitted the account and gate. Join the worker's
+ * publication to the current fact head, then repeat Semantic's actual scope revalidation. */
+export async function readPublishedEverythingState(
+  pool: Pool,
+  binding: NativeLogicalBuiltinBinding,
+  l: CollectionSourceLedger,
+  observations: LibrarySemanticObservationCapability,
+) {
+  if (binding.key.kind !== 'everything' || !binding.ready || binding.sourceFence === null) return null;
+  const values = [binding.route, binding.collectionId, binding.accountId, binding.sourceFence, binding.epoch];
+  const rows = await l.bounded(
+    {
+      nativeRows: 64,
+      nativePoints: 17,
+      statements: 1,
+      emptySeeks: 1,
+      bytes: Buffer.byteLength(publication.sql) + Buffer.byteLength(JSON.stringify(values)) + 16 * 1024,
+    },
+    () =>
+      withBoundedReadConnection(
+        pool,
+        l.deadline,
+        async (client) =>
+          (
+            await client.query<{
+              version: string;
+              incarnation: string;
+              generation: string;
+              basis: CanonicalBasis;
+              identity: NativeSourceIdentity;
+              capture: string;
+              revision: string;
+            }>(publication.sql, values)
+          ).rows,
+      ),
+    (rows) => ({ emptySeeks: rows.length ? 0 : 1 }),
+  );
+  if (!rows.length) return null;
+  const [row] = rows;
+  if (
+    rows.length !== 1 ||
+    !row ||
+    row.incarnation !== binding.collectionId + ':everything' ||
+    row.version !== binding.sourceFence
+  )
+    throw new ProblemError('semantic_not_ready');
+  const metadata: NativeCollectionMetadata = {
+    route: binding.route,
+    collectionId: binding.collectionId,
+    curatorAccountId: binding.accountId,
+    incarnation: row.incarnation,
+    createdAt: null,
+    state: 'active',
+    revision: 0,
+    authority: 'private_builtin',
+    visibility: 'private',
+    membershipKind: 'dynamic',
+    builtinKind: 'everything',
+    releaseDigest: null,
+    profileId: null,
+    stateSetId: null,
+    stateId: null,
+    outputGeneration: null,
+    outputPublication: null,
+    sourceGeneration: row.version,
+    factFence: row.version,
+    stamp: { partition: binding.partition, epoch: binding.epoch, position: binding.position },
+  };
+  if (!isDeepStrictEqual(row.identity, nativeSourceIdentity(metadata))) throw new ProblemError('semantic_not_ready');
+  const capture = await revalidateCapture(
+    pool,
+    { key: scopeKey(row.identity), captureId: row.capture, committedRevision: BigInt(row.revision) },
+    l,
+    observations,
+  );
+  if (!capture || !same(row.basis, observedBasis(metadata, capture))) throw new ProblemError('semantic_not_ready');
+  return {
+    metadata,
+    basis: row.basis,
+    generation: row.generation,
+    queryCapture: { id: row.capture, revision: row.revision },
+  };
+}
+
 export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall): Promise<CanonicalReadyRead> {
   input = bindSemanticObservations(input);
   const l = ledger(input);

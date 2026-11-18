@@ -1004,12 +1004,10 @@ a state clear. Its worker repairs earlier personal rows and deleted-label child 
 fact writer lock. When the only physical assignments belong to deleted parents, a completed directory with no
 pending parent repair and no support can establish an empty Everything in the same owner snapshot.
 
-A nonempty headerless Everything outside the direct plan still needs canonical ordering and complete original
-groups. The canonical sweep visits stored Collection headers, and the scope and generation foreign keys require
-that same parent. Settled owner input coverage alone supplies neither canonical identity nor a prepared members
-episode. The [reservation contract](members-preparation-contract.md#local-api-and-authority) requires an active
-curated header. A read-only Search preparation can look up an exact published scope. Its worker restores the
-lossless compiler definition from Semantic and resumes the retained capture across registration retries.
+Outside the entry-only plan, a nonempty logical Everything needs its published canonical generation and
+complete original groups. The [canonical Source](#required-built-ins-and-personal-space) owns that publication.
+The [reservation contract](members-preparation-contract.md#local-api-and-authority) still requires an active
+curated header. A read-only Search preparation uses the published scope and the admitted query and release.
 
 For an admitted catalogue-plus-owner request, Search passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
 Library revalidates that execution and its privacy-reduction closure. Owner-only and mixed predicates use the
@@ -1095,8 +1093,15 @@ and revision with the exhausted id-ordered generation. Search can use that publi
 id-order filter. It still binds the viewer, expanded predicate, release and required public evidence to the query.
 The worker reuses a current committed registration when advancing the canonical generation. The reader spends
 the remaining page allowance across refills and compares the full query basis, including native bigint positions.
-A mounted positive still requires an original-and-terminal disclosure batch that fits the 12-statement page.
-The current single-original Source check reserves 128 statements before calling Subject resolution.
+The mounted statement-range reader selects the current generation and its ordered original, terminal, driver and
+fact keys in a bounded suffix. Each key retains its live support decision. A trailing incomplete group supplies
+ordering evidence only. Semantic discloses the directed pairs in batches of up to 100 on the owner page ledger.
+The reader compares the ordered filter decisions and evidence, the Source and the owner fact head after FULL
+projection, then revalidates every disclosure batch at fresh native time. The entry-only reader uses the same
+disclosure port on its complete self-mapped population. An ordinary scalar point read requires a priced
+literal for every lookup. Current per-Subject mapping and catalogue selection do not provide a complete
+102-entry direct range read within the ordinary 12 statements. Published scope revalidation and Search
+preparation also need to fit both page phases before a mounted positive can be accepted.
 
 The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
 and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.

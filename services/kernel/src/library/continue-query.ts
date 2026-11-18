@@ -74,7 +74,7 @@ export async function readContinueOwnerPage(
       routeOf(String(cursor.after[3])) === null)
   )
     throw new ProblemError('invalid_cursor');
-  const work = continueOwnerQueryWork(input.limit);
+  const work = continueOwnerQueryWork(input.limit, input.deadline);
   const collectionId = builtinCollectionId(input.actor.accountId, {
     kind: 'everything',
   });
