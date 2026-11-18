@@ -6,7 +6,7 @@ import { releaseProgress, type ReleaseProgress, type ReleaseRequest } from './ho
 
 type Result = { status: number; data?: unknown; error?: unknown };
 type Options = {
-  headers: Record<string, string>;
+  headers: { 'idempotency-key': string };
   fetch: { signal: AbortSignal; cache: 'no-store'; redirect: 'manual' };
 };
 export type ReleaseCommand = (

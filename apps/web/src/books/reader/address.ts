@@ -19,7 +19,7 @@ export const bookLanguagePreferenceSchema = v.pipe(
     language: v.nullable(language),
     preferredLanguages: v.array(language),
   }),
-  v.check(bookLanguagePreferenceWithinBounds),
+  v.check((preference) => bookLanguagePreferenceWithinBounds(preference)),
 );
 
 const searchSchema = v.pipe(

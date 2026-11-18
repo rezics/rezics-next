@@ -152,7 +152,7 @@ export function HostedBookReader({
     <BookReaderView
       {...props}
       reader={reader}
-      languageSource={source.languages}
+      {...(source.languages ? { languageSource: source.languages } : {})}
       locale={locale}
       {...(focusOnRead !== undefined ? { focusOwner: focusOnRead.owner } : {})}
       restart={() => {

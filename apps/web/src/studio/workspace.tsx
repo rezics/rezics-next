@@ -864,7 +864,7 @@ export function StudioWorkbench({
                 />
                 <RichTextEditor
                   {...editorPresentation}
-                  upload={upload}
+                  {...(upload ? { upload } : {})}
                   labels={editorLabels}
                   lang={editorPresentation?.lang ?? locale}
                   key={`${postId}:${selected.editorGeneration}`}

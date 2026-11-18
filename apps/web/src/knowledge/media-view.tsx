@@ -165,7 +165,7 @@ export function useKnowledgeImageRenderer(
           own={own}
           alt={alt}
           locale={locale}
-          ownedOriginal={!image ? ownedOriginal?.(mediaId) : null}
+          ownedOriginal={!image ? (ownedOriginal?.(mediaId) ?? null) : null}
         />
       );
     },
