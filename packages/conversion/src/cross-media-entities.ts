@@ -353,7 +353,7 @@ export function vndbRecordUrl(externalId: string, revision?: string | null): str
   return revision ? `https://vndb.org/${externalId}.${revision}` : `https://vndb.org/${externalId}`;
 }
 
-type Normalized = Record<string, unknown>;
+type Normalized = Record<string, unknown> & { images?: { large: string } };
 export type CrossMediaEntityConversion = ConvertedRecord<BatchCommand> & {
   outcome: 'converted' | 'ignored';
   digest: string;
@@ -1506,6 +1506,18 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     if (archiveRole !== undefined) normalized.role = archiveRole;
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+    const imagesValue = own(raw, 'images', '/images');
+    const images = imagesValue === undefined || imagesValue === null ? null : object(imagesValue, '/images');
+    const large = images ? own(images, 'large', '/images/large') : undefined;
+    if (typeof large === 'string') {
+      try {
+        normalized.images = { large: safeSourceUrl(large, ['lain.bgm.tv']) };
+      } catch {
+        diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
+      }
+    } else if (large !== undefined) {
+      diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
+    }
     const characterMeasurements = projectBangumiCharacterMeasurements(own(raw, 'infobox', '/infobox'));
     if (characterMeasurements.evidence.length)
       normalized.characterPhysicalProfile = { fields: characterMeasurements.evidence };
@@ -1556,6 +1568,8 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'bangumi-person') {
     type = selectedPersonType!;
     normalized.type = own(raw, 'type', '/type');
+    const imageUrl = bangumiPersonImageUrl(raw);
+    if (imageUrl) normalized.images = { large: imageUrl };
     if (personNameProjection) diagnostics.push(...personNameProjection.diagnostics);
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
@@ -1687,7 +1701,9 @@ function convert(
   const kind =
     crossMediaEntityKind(sourceKind, input.external_id, input.record) ?? fail('/external_id', 'unsupported_type');
   const projected = project(kind, input);
-  const digest = sourceDigest(projected.normalized);
+  // Staging retains portrait inputs for cover delivery. Existing fact keys keep their original digest.
+  const { images: portrait, ...recordFacts } = projected.normalized;
+  const digest = sourceDigest(recordFacts);
   const revision = options.converterRevision ?? converter_revision;
   const sourceId = context.source === undefined ? sourceKind : context.source;
   const metadata = {
@@ -1716,7 +1732,7 @@ function convert(
     sourceKind === 'bangumi'
       ? bangumiRecordUrl(input.external_id)
       : vndbRecordUrl(input.external_id, input.record_revision);
-  const creatorImageUrl = kind === 'bangumi-person' ? bangumiPersonImageUrl(input.record as object) : undefined;
+  const creatorImageUrl = kind === 'bangumi-person' ? portrait?.large : undefined;
   const references = (): BatchReference[] => [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] },
   ];
@@ -1861,20 +1877,7 @@ function convert(
   const coverAssets: Omit<MediaImportRequest, 'containerId'>[] = [];
   const mediaImportIntents: MediaImportRequest[] = [];
   if (kind === 'bangumi-character') {
-    const raw = object(input.record, '/record');
-    const imagesValue = own(raw, 'images', '/images');
-    const images = imagesValue === undefined || imagesValue === null ? null : object(imagesValue, '/images');
-    const large = images ? own(images, 'large', '/images/large') : undefined;
-    let sourceUrl: string | undefined;
-    if (typeof large === 'string') {
-      try {
-        sourceUrl = safeSourceUrl(large, ['lain.bgm.tv']);
-      } catch {
-        diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
-      }
-    } else if (large !== undefined) {
-      diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
-    }
+    const sourceUrl = portrait?.large;
     if (sourceUrl) {
       const coverDigest = crossMediaCoverDigest(digest, sourceUrl);
       const recordReference: BatchReference = {

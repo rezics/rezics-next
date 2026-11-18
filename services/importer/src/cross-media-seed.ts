@@ -16,6 +16,7 @@ import type { SourceVocabularyGap } from '@rezics/conversion';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
+  crossMediaCoverDigest,
   isFamilyRelationTerm,
   liveActionWorkType,
   mapSourceEnumeration,
@@ -2699,6 +2700,9 @@ export async function seedCrossMedia(
           const expectedIntent = (
             conversion as typeof conversion & { mediaImportIntents?: typeof input.mediaImportIntents }
           ).mediaImportIntents?.[0];
+          const expectedDigest = source.externalId.startsWith('character:')
+            ? crossMediaCoverDigest(conversion.digest, source.sourceUrl)
+            : conversion.digest;
           ensure(
             expectedIntent &&
               JSON.stringify(expectedIntent) === JSON.stringify(intent) &&
@@ -2708,7 +2712,7 @@ export async function seedCrossMedia(
               intent.provenance.external_id === source.externalId &&
               intent.provenance.record_revision === source.sourceRevision &&
               intent.provenance.field_group === 'cover' &&
-              intent.provenance.digest === conversion.digest &&
+              intent.provenance.digest === expectedDigest &&
               intent.credit.rightsHolder === '(c) rights holder' &&
               intent.credit.via.name === 'Bangumi' &&
               intent.credit.via.url === bangumiRecordUrl(source.externalId) &&
