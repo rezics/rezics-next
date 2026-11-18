@@ -11,12 +11,14 @@ import {
 } from './book-catalogue-journey-fixture.ts';
 import {
   assertShelfPage,
+  bookCatalogueStage as stage,
   exactShelfRow,
   exactType,
   openNewTabFromLink,
   pageReady,
   problemCode,
 } from './book-catalogue-browser.ts';
+import { assertAnonymousBookDetail, assertBookShelfSignInReturn } from './book-shelf-return.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { sampleNativeMemory, sampleOwnedWebRunMemory } from './native-memory.ts';
 import {
@@ -67,10 +69,6 @@ nativeAfterAll(lifecycle, 240_000);
 
 const identities = () => [fixture.subjects.book, fixture.subjects.series, fixture.subjects.edition] as const;
 const types = ['schema:Book', 'schema:BookSeries', 'bf:Instance'] as const;
-
-function stage(name: string, evidence: Record<string, unknown>): void {
-  console.info('book-catalogue-journey-stage', JSON.stringify({ stage: name, ...evidence }));
-}
 
 function readerMemory(stageName: string, page: Page): void {
   if (process.env.NATIVE_WEB_BOOK_MEMORY !== '1') return;
@@ -546,151 +544,11 @@ async function runBookCatalogueJourney(): Promise<void> {
   });
   // Retire Alice's browser context and drain the host observer before taking the anonymous baseline.
   await alice.context.close();
-  await stack.syncKernelRequests();
-  const beforePublicRead = stack.kernelRequests().length;
-
-  const anonymousContext = await auth.newContext('anonymous');
-  const anonymousPage = await anonymousContext.newPage();
-  const publicResponse = await anonymousPage.goto(bookReaderUrl, { waitUntil: 'domcontentloaded' });
-  if (publicResponse?.status() !== 200)
-    throw new Error(`anonymous public Book detail expected HTTP 200, received ${publicResponse?.status() ?? 'none'}`);
-  const documentRequest = publicResponse.request();
-  const [cookies, authorization] = await Promise.all([
-    documentRequest.headerValue('cookie'),
-    documentRequest.headerValue('authorization'),
+  await assertAnonymousBookDetail(stack, auth, bookReaderUrl, subjects.book, [
+    states.bookCompleted.label,
+    states.bookPlanned.label,
   ]);
-  expect({ cookies: cookies !== null, bearer: authorization !== null }, 'anonymous Book document credentials').toEqual({
-    cookies: false,
-    bearer: false,
-  });
-  await pageReady(anonymousPage, 'anonymous public Book detail');
-  const publicMain = anonymousPage.getByRole('main');
-  await browserExpect(publicMain.getByRole('heading', { level: 1, name: subjects.book.label, exact: true })).toBeVisible();
-  await browserExpect(publicMain.getByText(subjects.book.text, { exact: true })).toBeVisible();
-  const publicText = await publicMain.innerText();
-  expect(publicText).not.toContain(states.bookCompleted.label);
-  expect(publicText).not.toContain(states.bookPlanned.label);
-  await anonymousContext.close();
-  await stack.syncKernelRequests();
-  const anonymousPrivateReads = stack
-    .kernelRequests()
-    .slice(beforePublicRead)
-    .filter(({ method, url }) => method === 'GET' && /^\/v1\/libraryEntries(?:[/?]|$)/u.test(url))
-    .map(({ url, responseStatus, authorization }) => ({
-      path: url.split('?', 1)[0],
-      status: responseStatus ?? null,
-      hasBearer: authorization !== null,
-    }));
-  stage('anonymous public authorization boundary', {
-    status: publicResponse.status(),
-    personalStateText: 'absent',
-    privateEntryReads: anonymousPrivateReads.length,
-    ...(anonymousPrivateReads.length ? { requests: anonymousPrivateReads } : {}),
-  });
-  expect(anonymousPrivateReads, 'anonymous public reading makes no private Library entry request').toHaveLength(0);
-
-  const signedOutContext = await auth.newContext('anonymous');
-  const shelfPath = `/en/library?type=${encodeURIComponent('schema:Book')}`;
-  const shelfAddress = new URL(shelfPath, stack.web);
-  const issuerOrigin = new URL(auth.origin).origin;
-  const beforeShelfReturn = stack.kernelRequests().length;
-  const bob = await auth.signIn('bob', {
-    context: signedOutContext,
-    async openSignIn(page) {
-      const response = await page
-        .goto(shelfAddress.href, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-        .catch(() => {
-          throw new Error('The signed-out Book shelf navigation did not reach a document');
-        });
-      if (response?.status() !== 200)
-        throw new Error(`Expected issuer login document HTTP 200, received ${response?.status() ?? 'none'}`);
-      const login = response.request();
-      const authorize = login.redirectedFrom();
-      const signIn = authorize?.redirectedFrom();
-      const shelf = signIn?.redirectedFrom();
-      const loginAddress = new URL(login.url());
-      const authorizeAddress = authorize && new URL(authorize.url());
-      const signInAddress = signIn && new URL(signIn.url());
-
-      // Authorization URLs carry transaction data. Assert predicates without printing their values.
-      expect(shelf?.url() === shelfAddress.href && shelf.redirectedFrom() === null, 'typed shelf request').toBe(true);
-      expect(signInAddress?.origin === origin && signInAddress.pathname === '/auth/sign-in', 'Web sign-in hop').toBe(true);
-      expect(signInAddress?.searchParams.getAll('return_to').length, 'Web sign-in received one return target').toBe(1);
-      expect(signInAddress?.searchParams.get('return_to') === shelfPath, 'exact typed return target').toBe(true);
-      expect(
-        authorizeAddress?.origin === issuerOrigin &&
-          authorizeAddress.pathname === '/authorize' &&
-          authorizeAddress.searchParams.get('redirect_uri') === `${origin}/auth/callback`,
-        'issuer authorization hop for the Web callback',
-      ).toBe(true);
-      expect(loginAddress.origin === issuerOrigin && loginAddress.pathname === '/login', 'issuer login hop').toBe(true);
-      stage('signed-out shelf sign-in return', { signInPath: '/auth/sign-in', returnTo: shelfPath, issuerPath: '/login' });
-    },
-  });
-  const bobPage = bob.continueOnPage();
-  await auth.settlePageApp();
-  expect(auth.pageAppProcess(), 'Auth UI retired after returning Bob to his shelf').toBeUndefined();
-  expect(bobPage.url() === shelfAddress.href, 'callback returned to the exact typed Web shelf').toBe(true);
-  await pageReady(bobPage, 'signed-in exact shelf return');
-  await assertShelfPage(bobPage, 'schema:Book');
-  const { accountId: bobAccountId } = await stack.authPersona('bob');
-  const bobSession = await bob.context.request.get(`${issuerOrigin}/session`);
-  expect(bobSession.status(), 'issuer session status').toBe(200);
-  expect((await bobSession.json()).account_id === bobAccountId, 'issuer session belongs to Bob').toBe(true);
-
-  const bobMain = bobPage.getByRole('main');
-  async function observeTypedShelf() {
-    await stack.syncKernelRequests();
-    const shelfReads = stack
-      .kernelRequests()
-      .slice(beforeShelfReturn)
-      .filter(
-        ({ fixtureRequest, method, url }) =>
-          !fixtureRequest && method === 'GET' && new URL(url, stack.kernelOrigin).pathname === '/v1/libraryEntries',
-      );
-    const typedShelfReads = shelfReads
-      .filter(({ url }) => {
-        const types = new URL(url, stack.kernelOrigin).searchParams.getAll('type');
-        return types.length === 1 && types[0] === 'schema:Book';
-      })
-      .map(({ responseStatus, access }) => ({
-        status: responseStatus ?? null,
-        actor: access?.authenticated ? (access.actorId === bobAccountId ? 'bob' : 'other') : 'unobserved',
-      }));
-    return { shelfReads, typedShelfReads };
-  }
-  let observedShelf = await observeTypedShelf();
-  await browserExpect
-    .poll(async () => {
-      observedShelf = await observeTypedShelf();
-      return observedShelf.typedShelfReads.some(({ status, actor }) => status === 200 && actor === 'bob');
-    }, { message: 'native typed Book shelf returned HTTP 200 as Bob' })
-    .toBe(true);
-  const { shelfReads, typedShelfReads } = observedShelf;
-  stage('signed-in native Book shelf', {
-    address: shelfPath,
-    path: '/v1/libraryEntries',
-    type: 'schema:Book',
-    shelfReads: shelfReads.length,
-    typedReads: typedShelfReads.length,
-    reads: typedShelfReads.slice(0, 6),
-  });
-  expect(
-    typedShelfReads.every(({ actor }) => actor === 'bob'),
-    'all native typed Book shelf reads authenticated Bob',
-  ).toBe(true);
-  await browserExpect(bobMain).not.toContainText(subjects.book.label);
-  await browserExpect(exactShelfRow(bobPage, subjects.book)).toHaveCount(0);
-  const otherEntry = await stack.kernel(`${changePath}?view=FULL`, undefined, 'bob');
-  expect(otherEntry.status, 'Bob cannot read the Book entry owned by Alice').toBe(404);
-  expect(problemCode(await otherEntry.text()), 'cross-viewer Library entry outcome').toBe('not_found');
-  stage('other-person exact shelf', {
-    persona: 'bob',
-    address: shelfPath,
-    aliceBookState: 'absent',
-    nativeEntryStatus: otherEntry.status,
-  });
-  await signedOutContext.close();
+  await assertBookShelfSignInReturn(stack, auth, subjects.book, states.bookPlanned);
 }
 
 nativeTest(

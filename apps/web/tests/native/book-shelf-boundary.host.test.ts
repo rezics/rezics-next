@@ -4,24 +4,33 @@ import { dirname, resolve } from 'node:path';
 import type { Page, Response } from 'playwright';
 import { expect as browserExpect } from 'playwright/test';
 import { PROBLEMS } from '../../../../services/kernel/src/http/problem-error.ts';
+import { readWebTestSelectionContext } from '../../scripts/selection.ts';
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import {
   assertShelfPage,
   exactShelfRow,
   exactType,
   openNewTabFromLink,
+  pageReady,
   problemCode,
 } from './book-catalogue-browser.ts';
 import { startBookCatalogueJourneyFixture, type BookShelfBoundaryFixture } from './book-catalogue-journey-fixture.ts';
+import { assertAnonymousBookDetail, assertBookShelfSignInReturn, typedBookShelfPath } from './book-shelf-return.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 
 const lifecycle = new NativeTestLifecycle('native mounted Book shelf boundary');
 let fixture: BookShelfBoundaryFixture;
 const evidence = resolve(import.meta.dir, '../../../../.temp/book-shelf-boundary/evidence.json');
 const shelfPath = '/en/library';
+const shelfReturnTest = 'Bob signs in from the typed Book shelf and sees only his own saved Book';
+const selection = readWebTestSelectionContext();
+const shelfReturnOnly =
+  selection?.selectedFiles.length === 1 &&
+  selection.selectedFiles[0] === 'tests/native/book-shelf-boundary.host.test.ts' &&
+  selection.normalizedArgv.includes(`--test-name-pattern=^${shelfReturnTest}$`);
 
 nativeBeforeAll(lifecycle, 600_000, async () => {
-  fixture = await startBookCatalogueJourneyFixture('shelf-boundary');
+  fixture = await startBookCatalogueJourneyFixture(shelfReturnOnly ? 'shelf-return' : 'shelf-boundary');
 });
 nativeAfterAll(lifecycle, 240_000);
 
@@ -228,3 +237,30 @@ nativeTest(
   },
   lifecycle,
 );
+
+if (shelfReturnOnly) {
+  nativeTest(
+    shelfReturnTest,
+    720_000,
+    async () => {
+      const { stack, auth, book, bookPlanned } = fixture;
+      const alice = await auth.signIn('alice', { returnTo: typedBookShelfPath });
+      const alicePage = alice.continueOnPage();
+      await auth.settlePageApp();
+      expect(auth.pageAppProcess(), 'Auth UI retired after returning Alice to her shelf').toBeUndefined();
+      await pageReady(alicePage, 'Alice’s exact Book shelf');
+      await assertShelfPage(alicePage, 'schema:Book');
+      const row = exactShelfRow(alicePage, book);
+      const link = row.getByRole('link', { name: book.label, exact: true });
+      await browserExpect(link).toBeVisible();
+      await browserExpect(row.getByText(bookPlanned.label, { exact: true })).toBeVisible();
+      const href = await link.getAttribute('href');
+      if (!href) throw new Error('Alice’s exact Book shelf row did not link to the public Book');
+      await alice.context.close();
+
+      await assertAnonymousBookDetail(stack, auth, new URL(href, stack.web).href, book, [bookPlanned.label]);
+      await assertBookShelfSignInReturn(stack, auth, book, bookPlanned);
+    },
+    lifecycle,
+  );
+}

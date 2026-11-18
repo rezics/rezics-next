@@ -113,6 +113,16 @@ and the first shelf link. It checks the exact planned Book row after the popup h
 server-function statuses, browser session evidence, and the corresponding native Kernel reads. A failed shelf
 assertion also records bounded browser and Worker diagnostics.
 
+To isolate the signed-out return to the typed Book shelf after Alice's signed-in and anonymous boundaries:
+
+```sh
+bun apps/web/scripts/check.ts --host tests/native/book-shelf-boundary.host.test.ts \
+  '--test-name-pattern=^Bob signs in from the typed Book shelf and sees only his own saved Book$'
+```
+
+This selection uses the real Auth return and the same final shelf assertions as the full journey. The stage log
+records the mounted request's exact query, observed actor and returned Book row, including on assertion failure.
+
 Evidence status: the worker authored the native fixture and mounted journey but did not execute it. No browser or
 native outcome is claimed here. The controller must run this command on a containing candidate and record the
 fixture's actual Search identities, localized Books and type-filtered visits, literary reader identities, shelf

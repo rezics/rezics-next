@@ -49,7 +49,7 @@ type NativeRelease = {
   };
 };
 type NativeSubjectCreate = Parameters<KernelClient['subjects']['post']>[0];
-type NativeState = { id: string; label: string };
+export type NativeState = { id: string; label: string };
 type LibraryEntryRead = { subjectId: string; state: string; revision: number };
 export type BookShelfBoundaryFixture = {
   stack: NativeWebStack;
@@ -364,6 +364,7 @@ async function createLibraryEntry(
   stack: NativeWebStack,
   subject: BookCatalogueIdentity,
   state: NativeState,
+  persona: 'alice' | 'bob' = 'alice',
 ): Promise<LibraryEntryRead> {
   const response = await stack.kernel(
     `/v1/libraryEntries/${encodeURIComponent(subject.id)}`,
@@ -372,7 +373,7 @@ async function createLibraryEntry(
       headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
       body: JSON.stringify({ state: state.id }),
     },
-    'alice',
+    persona,
   );
   const body = await responseJson<{ libraryEntry: LibraryEntryRead }>(
     response,
@@ -382,6 +383,19 @@ async function createLibraryEntry(
   if (body.libraryEntry.subjectId !== subject.id || body.libraryEntry.state !== state.id)
     throw new Error(`PUT /v1/libraryEntries/${subject.id} returned a mismatched entry`);
   return body.libraryEntry;
+}
+
+export async function createBobBookEntry(stack: NativeWebStack, state: NativeState) {
+  const marker = `bookshelf${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const book = await createSubject(
+    stack,
+    marker,
+    'schema:Book',
+    `Native Book Shelf ${marker}: Harbor Almanac`,
+    'A harbor keeper records the first winter at a new lighthouse.',
+  );
+  const entry = await createLibraryEntry(stack, book, state, 'bob');
+  return { book, entry };
 }
 
 function searchSubjectMap(page: NativeSearchPage): Map<string, NativeSearchSubject> {
@@ -694,20 +708,22 @@ async function readPlannedBookShelf(stack: NativeWebStack, book: BookCatalogueId
   return { status: response.status, subjectId: bookEntry.subjectId, state: bookEntry.state };
 }
 
+type BookShelfScope = 'shelf-boundary' | 'shelf-return';
 export function startBookCatalogueJourneyFixture(
   options: BookCatalogueJourneyOptions,
 ): Promise<BookCatalogueJourneyFixture>;
-export function startBookCatalogueJourneyFixture(scope: 'shelf-boundary'): Promise<BookShelfBoundaryFixture>;
+export function startBookCatalogueJourneyFixture(scope: BookShelfScope): Promise<BookShelfBoundaryFixture>;
 export async function startBookCatalogueJourneyFixture(
-  scope: 'shelf-boundary' | BookCatalogueJourneyOptions,
+  scope: BookShelfScope | BookCatalogueJourneyOptions,
 ): Promise<BookCatalogueJourneyFixture | BookShelfBoundaryFixture> {
-  const shelfOnly = scope === 'shelf-boundary';
-  if (!shelfOnly) await prepareNativeAuthMessages();
+  const shelfOnly = typeof scope === 'string';
+  const observeShelfReturn = scope !== 'shelf-boundary';
+  if (observeShelfReturn) await prepareNativeAuthMessages();
   const searchContainer = shelfOnly ? undefined : await prepareSearch();
   const stack = await startNativeWebStack({
     writeRateOverrides,
     observeBookSearchPreparation: !shelfOnly,
-    observeBookLibraryState: !shelfOnly,
+    observeBookLibraryState: observeShelfReturn,
     observePersonalAccess: true,
   });
   let auth: NativeAuthStack | undefined;
@@ -751,7 +767,7 @@ export async function startBookCatalogueJourneyFixture(
       await openLibraryGates(stack);
       await createLibraryEntry(stack, book, bookPlanned);
       const nativeShelf = await readPlannedBookShelf(stack, book, bookPlanned);
-      auth = await startAuthStack(stack);
+      auth = await startAuthStack(stack, observeShelfReturn ? { preparedMessages: true, useHeadlessShell: true } : {});
       return { stack, auth, book, bookPlanned, nativeShelf };
     }
     const edition = await createSubject(

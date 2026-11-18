@@ -3,6 +3,10 @@ import { expect as browserExpect } from 'playwright/test';
 import type { Locator, Page } from 'playwright';
 import type { BookCatalogueIdentity, BookCatalogueType } from './book-catalogue-journey-fixture.ts';
 
+export function bookCatalogueStage(name: string, evidence: Record<string, unknown>): void {
+  console.info('book-catalogue-journey-stage', JSON.stringify({ stage: name, ...evidence }));
+}
+
 export async function pageReady(page: Page, stageName: string): Promise<void> {
   page.setDefaultTimeout(45_000);
   try {

@@ -44,6 +44,7 @@ const NATIVE_AUTH_PAGE_IDLE_SECONDS = 120;
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 type LibraryStateRevision = { state: string; revision: number };
+type BookShelfEntryObservation = LibraryStateRevision & { subjectId: string };
 
 function libraryStateRevision(value: unknown): LibraryStateRevision | undefined {
   if (!value || typeof value !== 'object' || !('state' in value) || !('revision' in value)) return;
@@ -51,6 +52,19 @@ function libraryStateRevision(value: unknown): LibraryStateRevision | undefined 
   if (typeof state !== 'string' || !libraryEntryStateWrite(state)) return;
   if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 1) return;
   return { state, revision };
+}
+
+async function bookShelfEntries(response: Response): Promise<BookShelfEntryObservation[] | undefined> {
+  const body = (await response.clone().json().catch(() => null)) as { libraryEntries?: unknown } | null;
+  if (!Array.isArray(body?.libraryEntries) || body.libraryEntries.length > 20) return;
+  const entries: BookShelfEntryObservation[] = [];
+  for (const value of body.libraryEntries as unknown[]) {
+    const state = libraryStateRevision(value);
+    if (!state || !value || typeof value !== 'object' || !('subjectId' in value) || typeof value.subjectId !== 'string')
+      return;
+    entries.push({ subjectId: value.subjectId, ...state });
+  }
+  return entries;
 }
 
 export type NativeKernelRequest = {
@@ -70,6 +84,8 @@ export type NativeKernelRequest = {
   archiveLabel?: ArchiveLabelIdentity;
   libraryStateCommand?: LibraryStateRevision;
   libraryStateAcknowledgement?: LibraryStateRevision;
+  /** Bounded row coordinates from the installed Book shelf list response. */
+  bookShelfEntries?: BookShelfEntryObservation[];
   /** Only the subject selector is retained for observed Hosted checkpoint saves. */
   hostedReadingSubjectId?: string;
   failure?: { status: number; body: string };
@@ -113,7 +129,7 @@ export type NativeWebStackOptions = {
   writeRateOverrides?: string;
   /** Collect elapsed spans from this isolated Book fixture's durable Search worker. */
   observeBookSearchPreparation?: boolean;
-  /** Observe only state and revision on the mounted Book fixture's Library entry update. */
+  /** Observe Book shelf row coordinates and entry state updates. */
   observeBookLibraryState?: boolean;
   /** Observe Entry upload and preview responses for the mounted Archive fixture. */
   observeArchiveEntry?: boolean;
@@ -1379,6 +1395,15 @@ async function startStack(): Promise<
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           observed.responseStatus = response.status;
+          if (
+            observeBookLibraryState &&
+            !observed.fixtureRequest &&
+            request.method === 'GET' &&
+            url.pathname === '/v1/libraryEntries' &&
+            response.status === 200
+          ) {
+            observed.bookShelfEntries = await bookShelfEntries(response);
+          }
           if (bookLibraryStateRoute && response.status === 200) {
             const body = (await response.clone().json().catch(() => null)) as {
               libraryEntry?: { subjectId?: unknown };
