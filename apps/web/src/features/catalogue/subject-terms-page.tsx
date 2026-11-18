@@ -1538,8 +1538,6 @@ function SubjectTermsPageLive({
                   omittedLanguages={resolved.omittedLanguages}
                   removals={resolved.removals}
                   patch={resolved.patch}
-                  etag={comparison.snapshot.etag}
-                  revision={comparison.snapshot.subject.revision}
                   reviewed={reviewCurrent}
                   locale={locale}
                   fieldLabel={fieldLabel}

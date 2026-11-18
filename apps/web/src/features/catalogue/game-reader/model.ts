@@ -323,7 +323,7 @@ function comparisonRelated(value: unknown): value is WorkReleaseCard['related'] 
   return record(value) && Object.entries(value).every(([id, summary]) => comparisonSummary(summary, id));
 }
 
-function comparisonSnak(value: unknown): value is GameStatement['qualifiers'][number] {
+function comparisonSnak(value: unknown): boolean {
   if (
     !record(value) ||
     !record(value.property) ||
@@ -355,7 +355,7 @@ function comparisonStatement(value: unknown, fieldFact = true): value is GameSta
     Array.isArray(value.references) &&
     (!fieldFact || value.references.length <= 32) &&
     value.references.every(
-      (reference) =>
+      (reference: unknown) =>
         record(reference) &&
         typeof reference.hash === 'string' &&
         Array.isArray(reference.parts) &&

@@ -88,7 +88,8 @@ export function ReferenceReusePanel({
     const propertyId = `${prefix}-property`;
     const occurrenceId = sameProperty.length > 1 ? `${prefix}-occurrence` : undefined;
     const valueId = `${prefix}-value`;
-    const qualifierIds = draft.statement.qualifiers.map((_, index) => `${prefix}-qualifier-${index}`);
+    const qualifiers = draft.statement.qualifiers ?? [];
+    const qualifierIds = qualifiers.map((_, index) => `${prefix}-qualifier-${index}`);
     const heading = (
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 [overflow-wrap:anywhere]">
         <span id={propertyId} className="font-medium">
@@ -104,11 +105,11 @@ export function ReferenceReusePanel({
     const details = (
       <div className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
         <div id={valueId} className="min-w-0">
-          <PartValue part={draft.statement.value} read={read} locale={locale} />
+          <PartValue part={draft.statement} read={read} locale={locale} />
         </div>
-        {!!draft.statement.qualifiers.length && (
+        {qualifiers.length > 0 && (
           <ul className="min-w-0 space-y-1">
-            {draft.statement.qualifiers.map((part, index) => (
+            {qualifiers.map((part, index) => (
               <li
                 id={qualifierIds[index]}
                 key={index}
