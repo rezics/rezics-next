@@ -155,17 +155,22 @@ async function manageAccountSecurity() {
   await alicePage.goto(`${stack.web}${fixture.book.path}`, { waitUntil: 'domcontentloaded' });
   await alicePage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   expect(await alicePage.getByRole('heading', { name: fixture.book.title, exact: true }).count()).toBe(1);
-  const state = alicePage.getByRole('combobox', { name: 'Library state', exact: true });
-  await state.click();
-  await alicePage.getByRole('option', { name: 'Planned', exact: true }).click();
-  await alicePage.getByRole('alert').filter({ hasText: 'Library state saved.' }).waitFor();
+  const library = alicePage.getByRole('region', { name: 'Library', exact: true });
+  await library.getByRole('combobox', { name: 'Library state', exact: true }).click();
+  await alicePage.getByRole('option', { name: fixture.book.planned.label, exact: true }).click();
+  const review = library.getByRole('region', { name: 'Review library state', exact: true });
+  await review.getByText('No personal entry', { exact: true }).waitFor({ state: 'visible' });
+  await review.getByRole('button', { name: 'Save state', exact: true }).click();
+  await library.getByRole('alert').filter({ hasText: 'Library state saved.' }).waitFor();
   const personalRead = await stack.kernel(
-    `/v1/libraryEntries?subjectId=${encodeURIComponent(fixture.book.id)}&view=FULL`,
+    `/v1/libraryEntries/${encodeURIComponent(fixture.book.id)}?view=FULL`,
     {},
     'alice',
   );
   expect(personalRead.status).toBe(200);
-  expect(await personalRead.text()).toContain('planned');
+  expect(await personalRead.json()).toMatchObject({
+    libraryEntry: { subjectId: fixture.book.id, state: fixture.book.planned.id },
+  });
 
   await alicePage.locator('#account-menu-button').click();
   await alicePage.locator('[data-account-security-settings]').click();
