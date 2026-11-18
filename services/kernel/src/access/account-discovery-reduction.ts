@@ -405,7 +405,7 @@ export async function enrollAccountDiscoveryHome(
   );
 }
 
-export const accountDiscoveryEnrollmentGroupSize = 8;
+export const accountDiscoveryEnrollmentGroupSize = 16;
 export const accountDiscoveryEnrollmentProbeInputs = 8;
 
 /** Enroll complete new mixed homes under their native writer locks. Existing

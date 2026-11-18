@@ -308,7 +308,9 @@ export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
   );
 }
 
-export const PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT = 16;
+// Source budgets both authority reads and the receiver's contiguous commit on
+// the same native allowance before admitting any prefix of this range.
+export const PUBLIC_FILTER_REPAIR_ACK_BATCH_LIMIT = 24;
 
 /** Additional indexed ranges within this terminal's already verified chain. */
 export async function readPublicFilterRepairHomeBatches(

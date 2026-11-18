@@ -4306,7 +4306,7 @@ CREATE FUNCTION semantic.retain_public_filter_repair_ack() RETURNS trigger
     AS $$
 BEGIN
   IF (OLD.verified_home IS NOT NULL AND NEW.verified_home IS DISTINCT FROM OLD.verified_home)
-    OR NEW.ack_after<OLD.ack_after OR NEW.ack_after>OLD.ack_after+16
+    OR NEW.ack_after<OLD.ack_after OR NEW.ack_after>OLD.ack_after+24
     OR (NEW.ack_after<>OLD.ack_after AND
       (NOT OLD.complete OR OLD.verified_root IS NULL OR OLD.verified_next IS NOT NULL)) THEN
     RAISE EXCEPTION 'Original repair window and contiguous ACK progress cannot be replaced'

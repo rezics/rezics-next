@@ -39,7 +39,7 @@ test('native mixed enrollment groups new homes and keeps each original pinned re
       keys: ['["type"]', '["domain","accounts"]'],
       keyLimit: 2,
     };
-    const partitions = [4079, 4080, 4081];
+    const partitions = Array.from({ length: 16 }, (_, index) => 4066 + index);
     const found = await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions }, readContext());
     if (!found) throw new Error('Fresh mixed enrollment was refused');
     expect(found.map(({ partition }) => partition)).toEqual(partitions);
