@@ -22,14 +22,9 @@ const serverOwnerSnapshot: BrowserSessionOwnerSnapshot = { client: null, revisio
 let ownerSnapshot = serverOwnerSnapshot;
 const ownerListeners = new Set<() => void>();
 
-function notifyOwnerListeners(): void {
-  for (const listener of [...ownerListeners]) listener();
-}
-
-function advanceOwnerSnapshot(observation: ReturnType<typeof browserObservation>): void {
-  // Guards read the new authority immediately. React subscribers update after the cache stack unwinds.
+function publishOwnerSnapshot(): void {
   ownerSnapshot = { client: owners.at(-1)?.client ?? null, revision: ownerSnapshot.revision + 1 };
-  observation.publish(notifyOwnerListeners);
+  for (const listener of [...ownerListeners]) listener();
 }
 
 /** Identifies the active useSession cache without exposing its credentials or session payload. */
@@ -46,7 +41,7 @@ function sessionAuthorityEvent(event: BrowserCacheEvent) {
   return (
     event.type === 'added' ||
     event.type === 'removed' ||
-    (event.type === 'updated' && ['success', 'error', 'invalidate', 'fetch'].includes(event.action.type))
+    (event.type === 'updated' && ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type))
   );
 }
 
@@ -92,23 +87,18 @@ export function subscribeBrowserSession(
     entry.listeners.add(notify);
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
+      owners.push(entry);
+      publishOwnerSnapshot();
       const observation = browserObservation(client);
-      let previousObservation = observation.getSnapshot();
       const publish = () => {
         for (const subscriber of [...entry.listeners]) subscriber();
       };
       entry.unsubscribeCache = observation.subscribeCache((event) => {
         if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQueryKey[0]) {
-          const currentObservation = observation.getSnapshot();
-          if (owners.at(-1) === entry && (currentObservation !== previousObservation || sessionAuthorityEvent(event)))
-            advanceOwnerSnapshot(observation);
-          previousObservation = currentObservation;
+          if (owners.at(-1) === entry && sessionAuthorityEvent(event)) publishOwnerSnapshot();
           observation.publish(publish);
         }
       });
-      previousObservation = observation.getSnapshot();
-      owners.push(entry);
-      advanceOwnerSnapshot(observation);
     }
   }
 
@@ -127,7 +117,7 @@ export function subscribeBrowserSession(
         const ownerIndex = owners.indexOf(entry);
         const wasCurrentOwner = ownerIndex !== -1 && ownerIndex === owners.length - 1;
         if (ownerIndex !== -1) owners.splice(ownerIndex, 1);
-        if (wasCurrentOwner) advanceOwnerSnapshot(browserObservation(client));
+        if (wasCurrentOwner) publishOwnerSnapshot();
         entry.unsubscribeCache?.();
         entry.unsubscribeCache = undefined;
       }
