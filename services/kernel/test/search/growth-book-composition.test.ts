@@ -94,6 +94,8 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     warmupSettlementOnly: true,
     async warmup() {
       await world.read('anonymous', true);
+      // The measured request uses the already-published native generation.
+      await world.pauseBackgroundWork();
     },
     operation: measurePage,
     counted: {

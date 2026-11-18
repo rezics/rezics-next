@@ -232,6 +232,8 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
   const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
     await publishBookOriginals(setupDeadline, cleanupMs);
   try {
+    const search = fixture.search;
+    assert(search);
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
       anchors.push({ id: originals[grain]!.id, type });
@@ -326,12 +328,14 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     return {
       database,
       read,
+      pauseBackgroundWork: () => search.backgroundWork('paused'),
       async denied() {
         const response = requireStatus(await request('suspended'), 401, 'Read with revoked credentials');
         assert.equal(response.body.code, 'invalid_credentials');
         assert(!Object.hasOwn(response.body, 'reads'));
       },
       async grow(from: number, to: number) {
+        await search.backgroundWork('running');
         assert.equal(population.size, from);
         for (let ordinal = from; ordinal < to; ordinal++) {
           const subject = await createSubject(

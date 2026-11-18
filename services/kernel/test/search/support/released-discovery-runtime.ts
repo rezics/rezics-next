@@ -61,6 +61,7 @@ export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   /** Instrumentation is observable and cannot be mistaken for process-kill evidence. */
   readonly workerKind: ReleasedDiscoveryWorkerKind;
   indexing(state: 'paused' | 'running'): Promise<void>;
+  backgroundWork(state: 'paused' | 'running'): Promise<void>;
   converge(subjects: readonly CreatedSubject[]): Promise<void>;
   rebuild(): Promise<{ generation: number; previous: number | null }>;
   barrier(boundary: ReleasedTransportBoundary): ReleasedTransportBarrier;
@@ -162,6 +163,11 @@ export function releasedDiscoveryRuntime(
     );
     return pending;
   }
+  async function startInstrumentedWorker() {
+    if (!kernelPool || !env) throw new Error('Instrumented worker is unavailable');
+    instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
+    await instrumentedWorker.request<WorkerStats>('init', { env });
+  }
   function workerRequest<T>(method: string, params?: unknown): Promise<T> {
     if (instrumentedWorker) return instrumentedWorker.request<T>(method, params);
     if (worker) return worker.rpc.request<T>(method, params);
@@ -234,6 +240,16 @@ export function releasedDiscoveryRuntime(
       operation(() =>
         workerOperation(async () => {
           await workerRequest('indexing', { state });
+        }),
+      ),
+    backgroundWork: (state) =>
+      operation(() =>
+        workerOperation(async () => {
+          if (!kernelPool) throw new Error('Background work control requires the owned instrumented worker');
+          if (state === 'paused') {
+            await instrumentedWorker?.close();
+            instrumentedWorker = undefined;
+          } else if (!instrumentedWorker) await startInstrumentedWorker();
         }),
       ),
     converge: (subjects) =>
@@ -363,10 +379,8 @@ export function releasedDiscoveryRuntime(
           OPENSEARCH_URL: proxy!.url,
           KERNEL_SEARCH_PREFIX: prefix,
         });
-        if (kernelPool) {
-          instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
-          await instrumentedWorker.request<WorkerStats>('init', { env });
-        } else {
+        if (kernelPool) await startInstrumentedWorker();
+        else {
           worker = startOutcomeWorkerProcess(
             env,
             initialInstant === undefined ? {} : { frozenInstant: initialInstant },
