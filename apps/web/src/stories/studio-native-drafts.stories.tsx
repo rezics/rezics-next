@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
@@ -444,7 +444,7 @@ export const UncertainIntent: Story = {
   },
 };
 
-const inShell: NonNullable<Story['decorators']>[number] = (Story) => (
+const inShell: Decorator<{ scenario: Scenario }> = (Story) => (
   <PatternStory path="/studio" visitor="Signed In">
     <AppShell>
       <Story />

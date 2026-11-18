@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
-import type { RevisedPost } from '../threads/actions';
+import type { CurrentPost, RevisedPost } from '../threads/actions';
 import { prepareWriting, type SavedWriting } from '../threads/local-writing-draft';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
 import type {
@@ -97,6 +97,7 @@ function examplePost(body: DocumentSnapshot, visibility: 'draft' | 'published' =
     securityRevision: 'illustrative-security-revision',
     route: 0,
     authorId: accountId,
+    attribution: { id: accountId, kind: 'actor', displayName: null },
     parentId: null,
     subjectIds: [subjectId],
     boardId,
@@ -109,7 +110,7 @@ function examplePost(body: DocumentSnapshot, visibility: 'draft' | 'published' =
     licence: 'LicenseRef-rezics-terms',
     createdAt: '2026-10-28T09:42:00.000Z',
     revisedAt: '2026-10-28T10:42:00.000Z',
-  } satisfies RevisedPost;
+  } satisfies RevisedPost & CurrentPost;
 }
 
 function entry(overrides: Partial<OwnDraftEntry> = {}): OwnDraftEntry {

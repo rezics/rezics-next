@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { BoundFunctions, queries } from '@testing-library/dom';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -46,7 +47,7 @@ function localizedZonePath(id: string, route = ''): string {
   return `/${getLocale()}/zones/${id}${route ? `/${route}` : ''}`;
 }
 
-async function linkForHref(view: ReturnType<typeof within>, href: string): Promise<HTMLElement> {
+async function linkForHref(view: BoundFunctions<typeof queries>, href: string): Promise<HTMLElement> {
   const links = await view.findAllByRole('link');
   const link = links.find((candidate) => candidate.getAttribute('href') === href);
   if (!link) throw new Error(`The configured Zone navigation omitted ${href}.`);

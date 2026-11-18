@@ -463,7 +463,7 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
   useEffect(() => {
     let current = true;
     const fallback = globalThis.fetch;
-    const transport: typeof fetch = async (input, init) => {
+    const transport = async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
       if (!url.pathname.startsWith(`/v1/hostedCatalogues/${illustrativeBookIds.catalogue}`))
@@ -487,7 +487,7 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
         status: result.state === 'ready' ? 200 : 503,
       });
     };
-    globalThis.fetch = transport;
+    globalThis.fetch = Object.assign(transport, { preconnect: fallback.preconnect });
     void runtime.book.ready.then(() => {
       if (current) setTransportReady(true);
     });
@@ -507,29 +507,30 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
       const catalogueId = decodeURIComponent(url.pathname.split('/').at(-2)!);
       let value: HostedBookVisit;
       if (search.view === 'catalogues') {
+        const reply = async () => {
+          if (state === 'failed' && retry === 0) {
+            return Response.json({}, { status: 503 });
+          }
+          const row = {
+            catalogueId: illustrativeBookIds.catalogue,
+            revisionId: illustrativeBookIds.release,
+            sourceRevisionId: illustrativeBookIds.structure,
+            threadId: illustrativeBookIds.thread,
+            kind: 'publication',
+            title: 'The observatory, the coast, and the long way home / 天文台から海へ',
+          };
+          return Response.json({
+            subjectId: illustrativeBookIds.post,
+            items: search.cursor === illustrativeBookCursor ? [] : [row],
+            nextCursor: !search.cursor
+              ? illustrativeBookCursor
+              : search.cursor === illustrativeBookCursor
+                ? illustrativeBookLastCursor
+                : null,
+          });
+        };
         const native = createKernelClient('https://illustrative-discovery.test', {
-          fetch: async () => {
-            if (state === 'failed' && retry === 0) {
-              return Response.json({}, { status: 503 });
-            }
-            const row = {
-              catalogueId: illustrativeBookIds.catalogue,
-              revisionId: illustrativeBookIds.release,
-              sourceRevisionId: illustrativeBookIds.structure,
-              threadId: illustrativeBookIds.thread,
-              kind: 'publication',
-              title: 'The observatory, the coast, and the long way home / 天文台から海へ',
-            };
-            return Response.json({
-              subjectId: illustrativeBookIds.post,
-              items: search.cursor === illustrativeBookCursor ? [] : [row],
-              nextCursor: !search.cursor
-                ? illustrativeBookCursor
-                : search.cursor === illustrativeBookCursor
-                  ? illustrativeBookLastCursor
-                  : null,
-            });
-          },
+          fetch: Object.assign(reply, { preconnect: globalThis.fetch.preconnect }),
         });
         const read = await readHostedDiscovery(native, null, catalogueId, search.cursor, controller.signal);
         value = read.state === 'ready' ? { state: 'catalogues', page: read.value } : read;

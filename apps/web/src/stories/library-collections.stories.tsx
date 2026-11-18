@@ -41,7 +41,7 @@ function render(
       visitor="Signed In"
       path={path}
       credentialMode="session"
-      onReady={path === '/collections/new' ? captureCreationVisit : undefined}
+      {...(path === '/collections/new' ? { onReady: captureCreationVisit } : {})}
     />
   );
 }

@@ -6,6 +6,14 @@ import { PageStory, PatternStory } from './page';
 import { RecoveryJourney } from '../library/archive-progress-recovery/page';
 import { ProgressRecoveryJourney } from '../library/archive-progress-recovery/controller';
 import type { ProgressChoices } from '../library/progress-profile';
+import {
+  EXPORT_COMPLETENESS,
+  EXPORT_COVERAGE,
+  EXPORT_FORMAT,
+  EXPORT_PRIVACY,
+  EXPORT_SECTIONS,
+  EXPORT_VERSION,
+} from '../library/private-export/contract';
 import type {
   Application,
   Holdings,
@@ -20,19 +28,32 @@ const id = '00000000-0000-4000-8000-000000000031';
 const subjectId = '00000000-0000-4000-8000-000000000032';
 const sourceId = '00000000-0000-4000-8000-000000000033';
 const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+const sessionTotal = { rows: 1, recordBytes: 500 };
 const manifest: Holdings['manifest'] = {
-  format: 'https://rezics.com/formats/library-export',
-  version: 1,
+  format: EXPORT_FORMAT,
+  version: EXPORT_VERSION,
+  coverage: EXPORT_COVERAGE,
   exportId: id,
   capturedAt: '2024-02-01T00:00:00.000Z',
   expiresAt,
-  privacy: 'private',
-  completeness: 'supported-native-facts',
-  sections: ['sessions'],
-  omissions: {},
+  privacy: EXPORT_PRIVACY,
+  completeness: EXPORT_COMPLETENESS,
+  sections: [...EXPORT_SECTIONS],
+  omissions: {
+    trash: 'excluded; current live facts and retained session history only',
+    providerIdentifiers:
+      'only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers',
+    personalImportEvidence:
+      'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
+    commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
+    publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
+    reimport: 'reviewed recovery of supported native facts only; unsupported evidence never authorizes execution',
+  },
   fullExport: false,
-  rows: 1,
-  recordBytes: 500,
+  ...sessionTotal,
+  sectionTotals: Object.fromEntries(
+    EXPORT_SECTIONS.map((section) => [section, section === 'sessions' ? sessionTotal : { rows: 0, recordBytes: 0 }]),
+  ) as Holdings['manifest']['sectionTotals'],
 };
 const operands: ReviewInput = {
   sessionId: sourceId,
