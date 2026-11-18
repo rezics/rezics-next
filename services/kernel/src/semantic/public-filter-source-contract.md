@@ -828,8 +828,10 @@ Unrelated commands can append beyond that position during settlement. A changed 
 unavailable. No native connection remains held across the foreign phases.
 
 Decision: new retained steps batch up to `min(input_limit,128)` contiguous empty Semantic homes, Account-key homes,
-or creation windows. A scan stops at the first raw Subject/Account key or the first home with a captured outbox
-interval; that item follows the existing owner advancement, projection or event path. The immutable step stores the
+or creation windows. Raw Subject and Account keys follow their existing owner advancement and projection paths.
+Mixed Discovery can also close up to 16 contiguous windows in one read when every captured position has exactly
+one event and none require a Subject or Account repair. A gap, incomplete event group or relevant event leaves
+that home for ordinary repair. The immutable step stores the
 ordered rows' digest and exact input limit, so replay recomputes the same owner/key/window prefix. Empty creation
 windows also store packed `(epoch,base,receipt)` tuples. Independent `verified_home` metadata indexes their range
 start; settlement resolves the acknowledged home from that retained range and re-reads its current window before
@@ -945,8 +947,9 @@ indexes and receipt frontiers, not a resource safety clock or permission copy.
 
 - Touches: original repair predecessor/window proofs and pins, keyed current Source/Account authority,
   actual Search physical receiver/writer/copy/refresh custody, and the same registration home summary.
-- Bound: one retained home per funded ACK step, with native verification on both sides of staged foreign
-  work; joins, control keys, failures and replay remain charged. No serving sweep or allowance reset is added.
+- Bound: one home for an individual window or up to 16 contiguous homes from retained batches per funded ACK step.
+  Native verification runs on both sides of staged foreign work. Joins, control keys, failures and replay remain
+  charged. Search returns its measured custody cost to Source, which charges that cost once.
 - Growth check: mixed ACK gap/p+1, missing-seal, old-cut, late-writer and physical no-resurrection controls
   remain deferred native obligations. Authored regression and workspace typing do not establish their outcome.
 

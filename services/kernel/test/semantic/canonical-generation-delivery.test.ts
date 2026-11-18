@@ -63,7 +63,7 @@ test('overlapping canonical wakes announce a home once and startup can recover a
     expect(pending.homes).toHaveLength(1);
     await Promise.all([wake(), wake()]);
     await wake();
-    expect(await notices()).toEqual(pending.homes);
+    expect(await notices()).toEqual([...pending.homes]);
     expect((await readCanonicalGenerationDeliveryPage(pool, request, readContext())).homes).toEqual(pending.homes);
     await resumeCanonicalGenerationDelivery(pool, request);
     expect(await notices()).toEqual([...pending.homes, ...pending.homes]);

@@ -125,32 +125,39 @@ export async function enrollAccountDiscoveryHome(
         await client.query(
           `SET LOCAL statement_timeout = '${Math.max(1, Math.floor(context.deadline - Date.now()))}ms'`,
         );
+        // Materialized dependencies acquire the Core, Account and Source locks in order.
+        // The pending read still takes a fresh statement snapshot after those locks are held.
         const owner = (
-          await client.query<{ epoch: number; position: string; write_state: string }>(
-            '/* semantic.native-keyed:1:1 */ SELECT epoch,position::text,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
+          await client.query<{
+            epoch: number;
+            position: string;
+            write_state: string;
+            revision: string | null;
+            claim_revision: string | null;
+            source_position: string | null;
+          }>(
+            `/* semantic.native-keyed:3:3 */
+             WITH owner AS MATERIALIZED (
+               SELECT partition_no,epoch,position,write_state FROM core.partition
+               WHERE partition_no=$1 FOR SHARE
+             ), account AS MATERIALIZED (
+               SELECT partition_no,revision,claim_revision FROM access.account_discovery_population
+               WHERE partition_no=(SELECT partition_no FROM owner WHERE write_state='active') FOR UPDATE
+             ), source AS MATERIALIZED (
+               SELECT partition_no,position FROM semantic.public_filter_privacy_head
+               WHERE partition_no=(SELECT partition_no FROM account) FOR UPDATE
+             )
+             SELECT owner.epoch,owner.position::text,owner.write_state,
+               account.revision::text,account.claim_revision::text,source.position::text AS source_position
+             FROM owner LEFT JOIN account USING(partition_no) LEFT JOIN source USING(partition_no)`,
             [input.partition],
           )
         ).rows[0];
         if (!owner || owner.write_state !== 'active')
           throw new CommandUnavailableError(owner?.write_state === 'moved' ? 'moved' : 'fenced', input.partition);
-        // The Source lock depends on the locked Account row. The pending read
-        // takes a fresh statement snapshot after both writer locks are held.
-        const heads = (
-          await client.query<{ revision: string; claim_revision: string; position: string }>(
-            `/* semantic.native-keyed:3:3 */
-             WITH account AS MATERIALIZED (
-               SELECT partition_no,revision,claim_revision FROM access.account_discovery_population
-               WHERE partition_no=$1 FOR UPDATE
-             ), source AS MATERIALIZED (
-               SELECT partition_no,position FROM semantic.public_filter_privacy_head
-               WHERE partition_no=(SELECT partition_no FROM account) FOR UPDATE
-             )
-             SELECT account.revision::text,account.claim_revision::text,source.position::text
-             FROM account CROSS JOIN source`,
-            [input.partition],
-          )
-        ).rows[0];
-        if (!heads) throw new CommandUnavailableError('contention', input.partition);
+        const { revision, claim_revision: claimRevision, source_position: sourcePosition } = owner;
+        if (revision === null || claimRevision === null || sourcePosition === null)
+          throw new CommandUnavailableError('contention', input.partition);
         const { enqueue_revision: enqueueRevision, original } = (
           await client.query<{
             enqueue_revision: string;
@@ -258,29 +265,17 @@ export async function enrollAccountDiscoveryHome(
                     input.registration.id,
                     input.readDefinition,
                     owner.epoch,
-                    heads.position,
+                    sourcePosition,
                     owner.position,
                     enqueueRevision,
-                    input.accounts ? heads.revision : null,
-                    input.accounts ? heads.claim_revision : null,
+                    input.accounts ? revision : null,
+                    input.accounts ? claimRevision : null,
                     keyDigest,
                   ]),
                 )
                 .digest('hex')
             : null);
         if (!original?.complete) {
-          // Allocate under the Source home lock, shared with fanout window capture.
-          // A later enrollment must stay outside that window even when its key
-          // sorts before the retained registration frontier.
-          const generation = (
-            await client.query<{ enrollment_generation: string }>(
-              `/* semantic.native-keyed:1:1 */
-               UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
-               WHERE partition_no=$1 RETURNING enrollment_generation::text`,
-              [input.partition],
-            )
-          ).rows[0];
-          if (!generation) throw new CommandUnavailableError('fenced', input.partition);
           // The writer locks serialize enrollment for this home. Install a new
           // home with its final page state before inserting its compiler edges.
           if (!original) {
@@ -300,9 +295,9 @@ export async function enrollAccountDiscoveryHome(
                 input.registration.id,
                 input.readDefinition,
                 owner.epoch,
-                heads.position,
-                input.accounts ? heads.revision : null,
-                input.accounts ? heads.claim_revision : null,
+                sourcePosition,
+                input.accounts ? revision : null,
+                input.accounts ? claimRevision : null,
                 keyDigest,
                 creationConsumer,
                 admitted.at(-1) ?? keyAfter,
@@ -314,21 +309,23 @@ export async function enrollAccountDiscoveryHome(
             );
             if (inserted.rowCount !== 1) throw new CommandUnavailableError('contention', input.partition);
           }
-          await client.query(
-            `/* semantic.native-keyed:${2 * admitted.length}:${2 * admitted.length}:${admitted.length} */
-             INSERT INTO semantic.public_filter_key_enrollment
-             (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
-           SELECT $1,k,$2,$3,$4,$6::bigint FROM unnest($5::text[]) k
-           ON CONFLICT DO NOTHING`,
-            [
-              input.partition,
-              input.registration.partition,
-              input.registration.id,
-              input.bootstrap,
-              admitted,
-              generation.enrollment_generation,
-            ],
+          // Allocate under the Source lock shared with fanout window capture, then use
+          // exactly that generation for each new edge, irrespective of key order.
+          const generation = await client.query(
+            `/* semantic.native-keyed:${1 + 2 * admitted.length}:${1 + 2 * admitted.length}:${admitted.length} */
+             WITH generation AS (
+               UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
+               WHERE partition_no=$1 RETURNING enrollment_generation
+             ), edges AS (
+               INSERT INTO semantic.public_filter_key_enrollment
+                 (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
+               SELECT $1,k,$2,$3,$4,generation.enrollment_generation FROM generation CROSS JOIN unnest($5::text[]) k
+               ON CONFLICT DO NOTHING
+             )
+             SELECT enrollment_generation FROM generation`,
+            [input.partition, input.registration.partition, input.registration.id, input.bootstrap, admitted],
           );
+          if (generation.rowCount !== 1) throw new CommandUnavailableError('fenced', input.partition);
           if (original) {
             const advanced = await client.query(
               `/* semantic.native-keyed:1:1 */
@@ -345,9 +342,9 @@ export async function enrollAccountDiscoveryHome(
                 input.bootstrap,
                 admitted.at(-1) ?? keyAfter,
                 complete,
-                heads.position,
-                input.accounts ? heads.revision : null,
-                input.accounts ? heads.claim_revision : null,
+                sourcePosition,
+                input.accounts ? revision : null,
+                input.accounts ? claimRevision : null,
                 owner.position,
                 enqueueRevision,
                 receipt,
@@ -361,11 +358,9 @@ export async function enrollAccountDiscoveryHome(
         return Object.freeze({
           partition: input.partition,
           epoch: owner.epoch,
-          revision: BigInt(original?.complete ? (original.native_revision ?? heads.revision) : heads.revision),
-          claimRevision: BigInt(
-            original?.complete ? (original.native_claim_revision ?? heads.claim_revision) : heads.claim_revision,
-          ),
-          sourcePosition: BigInt(original?.complete ? original.source_position : heads.position),
+          revision: BigInt(original?.complete ? (original.native_revision ?? revision) : revision),
+          claimRevision: BigInt(original?.complete ? (original.native_claim_revision ?? claimRevision) : claimRevision),
+          sourcePosition: BigInt(original?.complete ? original.source_position : sourcePosition),
           creationPosition: BigInt(original?.complete ? original.creation_position! : owner.position),
           enqueueRevision: BigInt(original?.complete ? original.native_enqueue_revision! : enqueueRevision),
           keyDigest,

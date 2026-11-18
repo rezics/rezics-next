@@ -4,7 +4,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createPool, withConnection } from '../../src/database/pool.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { newId } from '../../src/route/route.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
@@ -27,6 +27,7 @@ import { createDiscoveryIndexer } from '../../src/search/indexer.ts';
 import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -87,6 +88,13 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       metadataProducers: resolved.metadataProducers,
     };
     await advanceDiscovery(options);
+    const consumer = discoveryConsumer(prefix, generation);
+    const replayHome = homes - 1;
+    const replayId = newId(replayHome * 16);
+    const later = await runCommand(pool, { partition: replayHome }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.search.recent-changed.v1', subject: replayId, data: { accountId: replayId } }],
+    }));
 
     // Omitted homes have no rows and cannot pass the full generation's inventory check.
     await pool.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND partition_no >= $2', [prefix, homes]);
@@ -130,6 +138,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     }
     expect(heldReview).toBe(true);
     expect(wideEmptyProofs).toBeGreaterThan(0);
+    await advanceDiscovery(options);
+    const reconciling = (await discoveryGenerations(pool, prefix))[0]!;
+    expect(reconciling.state).toBe('reconciling');
+    const replay = createDiscoveryIndexer(
+      pool,
+      createDiscoveryProjection({ ...options, target: reconciling }),
+      consumer,
+    );
+    expect(await replay.run(replayHome)).toMatchObject({ status: 'read', position: later.position });
     await expect(advanceDiscovery(options)).rejects.toThrow('Discovery population partitions are incomplete');
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
@@ -224,7 +241,6 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     const route = home * 16;
     const id = newId(route);
     const target = (await discoveryGenerations(pool, prefix))[0]!;
-    const consumer = discoveryConsumer(prefix, generation);
     const relay = createDiscoveryIndexer(pool, createDiscoveryProjection({ ...options, target }), consumer);
     const checkpoint = async () =>
       (
@@ -271,6 +287,61 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(account.rows).toEqual([{ complete: false, certified: false }]);
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('populating');
     expect(await checkpoint()).toBe(noise.position.toString());
+
+    const projection = createDiscoveryProjection({ ...options, target });
+    const repair = createDiscoveryRepairWriter({
+      pool,
+      search,
+      consumer,
+      projection,
+    });
+    const deadline = Date.now() + 15_000;
+    const present = await repair.repairAccount(id, 'present', { deadline });
+    const absent = await repair.repairAccount(newId(route), 'absent', { deadline });
+    const indexed = present.effects.find(({ action }) => action.op === 'index')?.action;
+    expect(indexed).toBeDefined();
+    expect(absent.effects.every(({ action }) => action.op === 'delete')).toBe(true);
+    let winnerReads = 0;
+    const measuredSearch: typeof search = {
+      ...search,
+      request(...args) {
+        if (args[1].endsWith('/_search')) winnerReads++;
+        return search.request(...args);
+      },
+    };
+    const verify = () =>
+      withConnection(pool, async (client) => {
+        await client.query('BEGIN');
+        try {
+          await verifyDiscoveryRepairWriterReceipts(client, measuredSearch, index, [present, absent]);
+        } finally {
+          await client.query('ROLLBACK');
+        }
+      });
+    await verify();
+    expect(winnerReads).toBe(1);
+    const advanced = await runCommand(pool, { partition: home }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.search.recent-changed.v1', subject: id, data: { accountId: id } }],
+    }));
+    expect(advanced.position).toBeGreaterThan(indexed!.version);
+    await projection.project(home, [{ owner: 'accounts', kind: 'account', id, route }], advanced.position);
+    expect(
+      (
+        await pool.query(
+          `SELECT position::text,settled FROM search.discovery_copy
+       WHERE (route,source_id,prefix,generation,kind)=($1,$2,$3,$4,'account')`,
+          [route, id, prefix, generation],
+        )
+      ).rows,
+    ).toEqual([{ position: String(advanced.position), settled: true }]);
+    await verify();
+    expect(winnerReads).toBe(2);
+    const removed = await search.request('DELETE', `/${index}/_doc/${encodeURIComponent(indexed!.id)}`, undefined, {
+      query: { refresh: 'wait_for' },
+    });
+    expect(removed.status).toBe(200);
+    await expect(verify()).rejects.toThrow('Native generation keys or external versions do not match');
   } finally {
     try {
       const owned = await search.request<{ indices: { name: string }[] }>(

@@ -60,7 +60,7 @@ export async function readPublicFilterRepairVerification(pool: Pool, chain: Chai
   return row;
 }
 
-function pageRoot(parentRoot: string, page: Page) {
+export function publicFilterRepairPageRoot(parentRoot: string, page: Page) {
   return hash([parentRoot, page.step, page.predecessor, page.state, page.complete, page.inputLimit, page.digests]);
 }
 
@@ -116,7 +116,7 @@ export async function retainPublicFilterRepairVerification(
     );
     const retained = proof.rows[0];
     requireAccessDeadline(context.deadline);
-    if (!retained || retained.root !== pageRoot(retained.parent_root ?? chain.binding, page))
+    if (!retained || retained.root !== publicFilterRepairPageRoot(retained.parent_root ?? chain.binding, page))
       throw new CommandUnavailableError('contention', 0);
     return false;
   }
@@ -184,7 +184,7 @@ export async function retainPublicFilterRepairVerification(
       if (!proof?.admitted) throw new CommandUnavailableError('fenced', 0);
       if (proof.step === null) throw new CommandUnavailableError('contention', 0);
       const ordinal = proof.parent_ordinal === null ? 1n : BigInt(proof.parent_ordinal) + 1n;
-      const root = pageRoot(proof.parent_root ?? chain.binding, page);
+      const root = publicFilterRepairPageRoot(proof.parent_root ?? chain.binding, page);
       if (proof.root !== null) {
         if (proof.binding !== chain.binding || proof.root !== root || BigInt(proof.ordinal!) !== ordinal)
           throw new CommandUnavailableError('contention', 0);

@@ -12,7 +12,7 @@ import repairGate from './public-filter-custody-repair-gate.sql';
 import repairOwner from './public-filter-custody-repair-owner.sql';
 import repairTarget from './public-filter-custody-repair-target.sql';
 import repairRegistration from './public-filter-custody-repair-registration.sql';
-import repairEffect from './public-filter-custody-repair-effect.sql';
+import repairEffects from './public-filter-custody-repair-effects.sql';
 import repairPage from './public-filter-custody-repair-page.sql';
 import repairPages from './public-filter-custody-repair-pages.sql';
 import repairState from './public-filter-custody-repair-state.sql';
@@ -23,11 +23,13 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import {
   verifyPublicFilterRepairWriterReceipt,
+  verifyDiscoveryRepairWriterReceipts,
   readPublicFilterRepairPhysicalTarget,
   repairWriterPosition,
   validatePublicFilterRepairWriterEvidence,
   isDiscoveryRepairWriterReceipt,
   type PublicFilterRepairWriterReceipt,
+  type DiscoveryRepairWriterReceipt,
   inspectSearchRepairWriter,
   type SupersededSearchRepair,
 } from './writer-guard.ts';
@@ -36,7 +38,7 @@ import { validateRefreshResponse } from './write-actions.ts';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection, withoutQueryAccounting } from '../database/pool.ts';
 import { withBoundedReadLifetime, type NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
@@ -208,23 +210,25 @@ function connection<T>(meter: Meter, work: (client: PoolClient) => Promise<T>, u
   let physical: PoolClient | undefined;
   return withBoundedReadLifetime(
     (bounded) =>
-      withConnection(pool, async (raw) => {
-        physical = raw;
-        const observed = Object.create(raw) as PoolClient;
-        observed.query = ((query: NativeReadQueryConfig) => {
-          const complete = queryCompletion.getStore();
-          // Observe the physical reply even when its caller has already expired.
-          return raw.query(query).then((result) => {
-            complete?.(result);
-            return result;
-          });
-        }) as PoolClient['query'];
-        try {
-          return await bounded(observed);
-        } finally {
-          if (unfinished?.()) discardConnection(raw, new Failure('owner_unavailable'));
-        }
-      }),
+      withoutQueryAccounting(() =>
+        withConnection(pool, async (raw) => {
+          physical = raw;
+          const observed = Object.create(raw) as PoolClient;
+          observed.query = ((query: NativeReadQueryConfig) => {
+            const complete = queryCompletion.getStore();
+            // Observe the physical reply even when its caller has already expired.
+            return raw.query(query).then((result) => {
+              complete?.(result);
+              return result;
+            });
+          }) as PoolClient['query'];
+          try {
+            return await bounded(observed);
+          } finally {
+            if (unfinished?.()) discardConnection(raw, new Failure('owner_unavailable'));
+          }
+        }),
+      ),
     (_client, error) => discardConnection(physical!, error),
     context.deadline,
     work,
@@ -593,6 +597,7 @@ export async function readPublicFilterRepairSettlement(
   const meter = operationCost(pool, context);
   const allowance = repairAllowance.getStore();
   const spent = allowance?.spent ?? cost();
+  const inputLimit = 1000;
   const input = structuredClone(request);
   try {
     check(context);
@@ -609,7 +614,7 @@ export async function readPublicFilterRepairSettlement(
       // The owning publication meter charges maintenance by native inputs.
       const width = Math.max(allowance?.maintenance ? inputs : spent.candidates + meter.candidates, 1);
       if (
-        inputs > 1000 ||
+        inputs > inputLimit ||
         spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
         spent.rows + meter.rows > 64 + 16 * width ||
         spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints > 16 + 8 * width
@@ -737,8 +742,7 @@ export async function readPublicFilterRepairSettlement(
       }[] = [];
       const copies = new Map<string, string>();
       const latest = new Map<string, PublicFilterRepairWriterReceipt>();
-      const effects: { page: number; item: number; receipt: string }[] = [];
-      const append = async (ordinal: number, intent: string, previousIntent: string | null) => {
+      const append = (ordinal: number, intent: string, previousIntent: string | null) => {
         const page = decode<RetainedRepairPage>(intent);
         if (
           !page.sourceStep ||
@@ -754,6 +758,55 @@ export async function readPublicFilterRepairSettlement(
         )
           throw new Failure('binding_mismatch');
         pages.push({ ordinal, intent, page });
+      };
+      let after = -1;
+      for (;;) {
+        // Reserve both page lookups per requested entry before sending the batch.
+        const width = Math.min(16, Math.floor((inputLimit - spent.inputKeys - meter.inputKeys - 5) / 2));
+        if (width < 1) throw new Failure('owner_unavailable');
+        meter.inputKeys += 2 * width;
+        const rows = await repairPages.run(db, { ...keys, after, width });
+        meter.inputKeys -= 2 * (width - rows.length);
+        for (const row of rows) {
+          if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
+          append(row.ordinal, row.intent, row.previous_intent);
+          after = row.ordinal;
+        }
+        if (rows.length < width) break;
+      }
+      if (after !== state.pages - 1) {
+        const last = await repairPage.run(db, { ...keys, ordinal: state.pages - 1 });
+        if (!last) throw new Failure('owner_unavailable');
+        const previous = state.pages === 1 ? null : await repairPage.run(db, { ...keys, ordinal: state.pages - 2 });
+        append(state.pages - 1, last.intent, previous?.intent ?? null);
+      }
+      const last = pages.at(-1)!;
+      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
+      const coordinates: { page: number; item: number }[] = [];
+      const retainCoordinate = (page: number, item: number) => {
+        meter.inputKeys += 2;
+        admit();
+        coordinates.push({ page, item });
+      };
+      for (const { ordinal, page } of pages) {
+        if (page.account) {
+          if (page.repairs.length || page.complete) throw new Failure('binding_mismatch');
+          retainCoordinate(ordinal, 0);
+        }
+        for (const [item, repair] of page.repairs.entries()) {
+          if (repair.projection.status === 'complete') retainCoordinate(ordinal, item);
+        }
+      }
+      if (coordinates.length && spent.inputKeys + meter.inputKeys + 4 > inputLimit)
+        throw new Failure('owner_unavailable');
+      const effects = coordinates.length ? await repairEffects.run(db, { ...keys, coordinates }) : [];
+      if (
+        effects.length !== coordinates.length ||
+        effects.some(({ page, item }, index) => page !== coordinates[index]?.page || item !== coordinates[index]?.item)
+      )
+        throw new Failure('owner_unavailable');
+      const effectAt = new Map(effects.map(({ page, item, receipt }) => [`${page}:${item}`, receipt]));
+      for (const { ordinal, page } of pages) {
         for (const [item, repair] of page.repairs.entries()) {
           meter.candidates++;
           meter.inputKeys++;
@@ -774,14 +827,9 @@ export async function readPublicFilterRepairSettlement(
             copies.set(repair.source.subject, sourceKey);
             continue;
           }
-          const effect = await repairEffect.run(db, {
-            ...keys,
-            page: ordinal,
-            item,
-          });
+          const effect = effectAt.get(`${ordinal}:${item}`);
           if (!effect) throw new Failure('owner_unavailable');
-          effects.push({ page: ordinal, item, receipt: effect.receipt });
-          const receipt = decode<PublicFilterRepairWriterReceipt>(effect.receipt);
+          const receipt = decode<PublicFilterRepairWriterReceipt>(effect);
           const locator = encode({
             observation: q.snapshot.observation,
             execution: input.execution,
@@ -809,13 +857,12 @@ export async function readPublicFilterRepairSettlement(
           copies.delete(receipt.subject);
         }
         if (page.account) {
-          if (page.repairs.length || page.complete) throw new Failure('binding_mismatch');
           meter.candidates++;
           meter.inputKeys++;
           admit();
-          const effect = await repairEffect.run(db, { ...keys, page: ordinal, item: 0 });
+          const effect = effectAt.get(`${ordinal}:0`);
           if (!effect) throw new Failure('owner_unavailable');
-          const receipt = decode<PublicFilterRepairWriterReceipt>(effect.receipt);
+          const receipt = decode<PublicFilterRepairWriterReceipt>(effect);
           if (
             !isDiscoveryRepairWriterReceipt(receipt) ||
             receipt.owner !== 'accounts' ||
@@ -838,30 +885,9 @@ export async function readPublicFilterRepairSettlement(
               receipt.enrollment.position <= previous.completion.position)
           )
             throw new Failure('binding_mismatch');
-          effects.push({ page: ordinal, item: 0, receipt: effect.receipt });
           latest.set(receipt.subject, receipt);
         }
-      };
-      let after = -1;
-      for (;;) {
-        admit();
-        const row = await repairPages.run(db, { ...keys, after });
-        if (!row) break;
-        if (row.ordinal <= after || row.ordinal >= state.pages) throw new Failure('binding_mismatch');
-        await append(row.ordinal, row.intent, row.previous_intent);
-        after = row.ordinal;
       }
-      if (after !== state.pages - 1) {
-        const last = await repairPage.run(db, {
-          ...keys,
-          ordinal: state.pages - 1,
-        });
-        if (!last) throw new Failure('owner_unavailable');
-        const previous = state.pages === 1 ? null : await repairPage.run(db, { ...keys, ordinal: state.pages - 2 });
-        await append(state.pages - 1, last.intent, previous?.intent ?? null);
-      }
-      const last = pages.at(-1)!;
-      if (!last.page.complete || last.page.frontier !== null) throw new Failure('owner_unavailable');
       if (copies.size) throw new Failure('owner_unavailable');
       const physical = await readPublicFilterRepairPhysicalTarget(db, search, q.consumer.physicalTarget);
       if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
@@ -968,6 +994,7 @@ export async function readPublicFilterRepairSettlement(
       if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
       let publication: { phase: string; fence: string | null } | null | undefined;
       let superseded: SupersededSearchRepair | undefined;
+      const mixedReceipts: DiscoveryRepairWriterReceipt[] = [];
       for (const original of [...final.latest.values()].sort(
         (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
       )) {
@@ -1009,13 +1036,15 @@ export async function readPublicFilterRepairSettlement(
             }
           }
         }
-        await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+        if (isDiscoveryRepairWriterReceipt(receipt)) mixedReceipts.push(receipt);
+        else await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
       }
       if (superseded) {
         const attempt = publicationRepair.getStore();
         if (attempt?.job === input.execution) attempt.writer = superseded;
         throw new Failure('identity_pending');
       }
+      await verifyDiscoveryRepairWriterReceipts(db, search, q.consumer.physicalTarget, mixedReceipts);
       const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (

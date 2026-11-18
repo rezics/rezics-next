@@ -1,6 +1,7 @@
 import { runCommand } from '../../src/command/command.ts';
-import { withConnection } from '../../src/database/pool.ts';
+import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { checkGrowth, seed } from '../support/growth.ts';
@@ -365,20 +366,23 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       if (steps === 0) {
         const sharedDeadline = readContext();
         const root = { ...original, predecessor: null };
+        expect(
+          await withNativePublicFilterRepairReadBatch(binding, original, sharedDeadline, () =>
+            binding.readRepairStep(root, sharedDeadline),
+          ),
+        ).toMatchObject({ reason: 'owner_unavailable' });
+        const scan = await binding.readRepairStep(root, readContext());
+        expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
+        if (scan.status !== 'verified') throw new Error(scan.reason);
         await withNativePublicFilterRepairReadBatch(binding, original, sharedDeadline, async () => {
           const first = await binding.readRepairStep(root, sharedDeadline);
           const second = await binding.readRepairStep(root, sharedDeadline);
           expect(first.status).toBe('verified');
           expect(second).toMatchObject({ status: 'verified', step: page.frontier, receipts: [] });
           expect(second.cost.inputKeys).toBeLessThan(first.cost.inputKeys);
+          expect(second.cost.frontierWrites).toBe(0);
           expect(second.cost.inputKeys).toBeGreaterThan(0);
         });
-        const scan = await binding.readRepairStep(
-          { bootstrap: original.bootstrap, queried: retained.queried, execution, predecessor: null },
-          readContext(),
-        );
-        expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
-        if (scan.status !== 'verified') throw new Error(scan.reason);
         expect(nativePublicFilterRepairEvidence(binding, scan)).toEqual({ repairs: [], account: null });
         expect(nativePublicFilterRepairEvidence(binding, structuredClone(scan))).toBeUndefined();
         const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
@@ -392,15 +396,8 @@ test('native Source repair receipts revalidate original steps, replay, and curre
         continue;
       }
       found = true;
-      const step = await binding.readRepairStep(
-        {
-          bootstrap: original.bootstrap,
-          queried: retained.queried,
-          execution,
-          predecessor: frontier,
-        },
-        readContext(),
-      );
+      const stepInput = { ...original, predecessor: frontier };
+      const step = await binding.readRepairStep(stepInput, readContext());
       expect(step).toMatchObject({
         status: 'verified',
         step: page.frontier,
@@ -442,8 +439,17 @@ test('native Source repair receipts revalidate original steps, replay, and curre
         )
       ).rows[0]!;
       try {
-        await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch + 1);
-        expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+        const settlementDeadline = readContext();
+        await withNativePublicFilterRepairReadBatch(recovered, original, settlementDeadline, async () => {
+          expect(await recovered.readRepairStep(stepInput, settlementDeadline)).toMatchObject({
+            status: 'verified',
+            step: step.step,
+            receipts: step.receipts,
+          });
+          await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch + 1);
+          expect((await recovered.readRepairStep(stepInput, settlementDeadline)).status).not.toBe('verified');
+          expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+        });
       } finally {
         await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch);
       }
@@ -753,6 +759,20 @@ test('native Source replays its original creation window after the same home adv
     expect(
       (await binding.adopt({ bootstrap: begun.bootstrap.id, queried: retained.queried }, readContext())).status,
     ).toBe('adopted');
+    let callerQueries = 0;
+    const ownCustody = await withQueryAccounting(
+      {
+        query: (_statement, _operands, dispatch) => {
+          callerQueries++;
+          return dispatch();
+        },
+        connection: (dispatch) => dispatch(),
+      },
+      () => custody.read({ queried: retained.queried }, readContext()),
+    );
+    expect(ownCustody.status).toBe('found');
+    expect(ownCustody.cost.statements).toBeGreaterThan(0);
+    expect(callerQueries).toBe(0);
     const acquired = await custody.acquire(retained.queried, readContext());
     if (acquired.status !== 'acquired') throw new Error(acquired.reason);
     try {
@@ -939,6 +959,32 @@ test('native Source replays its original creation window after the same home adv
       status: 'unavailable',
       reason: 'owner_unavailable',
     });
+    const positions: bigint[] = [];
+    for (let home = 4000; home < 4004; home++) {
+      const id = newId(home * 16);
+      const committed = await runCommand(f.db.pool, { partition: home }, async () => ({
+        value: null,
+        events: [
+          home === 4003
+            ? { type: 'com.rezics.access.account-updated.v1', subject: id, data: { accountId: id } }
+            : {
+                type: 'com.rezics.semantic.canonical-generation.committed.v1',
+                subject: id,
+                data: { partition: home, generation: '1' },
+              },
+        ],
+      }));
+      positions.push(committed.position);
+    }
+    const mixedWindows = await readPublicFilterCreationPrefix(
+      f.db.pool,
+      { bootstrap: request.bootstrap.slice(2), from: 4000, inputLimit: 64, accounts: true },
+      readContext(),
+      { inputKeys: 0, rows: 0, dependencyPoints: 0 },
+    );
+    expect(mixedWindows.map(({ window }) => [window.partition, window.through])).toEqual(
+      positions.slice(0, 3).map((position, offset) => [4000 + offset, position]),
+    );
   } finally {
     await custody.close();
     if (created) await search.request('DELETE', `/${index}`);

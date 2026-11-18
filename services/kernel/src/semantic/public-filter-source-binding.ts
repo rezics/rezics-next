@@ -44,6 +44,7 @@ import {
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
 import { readPublicFilterCreationPrefix } from './public-filter-creation-prefix.ts';
 import {
+  publicFilterRepairPageRoot,
   readPublicFilterRepairVerification,
   readPublicFilterRepairVerificationTip,
   retainPublicFilterRepairVerification,
@@ -54,6 +55,7 @@ import {
 } from './public-filter-repair-chain.ts';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
+import repairProof from './public-filter-source-binding-repair-proof.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
 import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairSourceScan from './public-filter-source-binding-repair-source-scan.sql';
@@ -1363,13 +1365,14 @@ export function createNativePublicFilterSourceBinding(
       receipt,
     };
   }
-  async function scanPublicationCreationPrefix(
+  async function scanIrrelevantCreationPrefix(
     bootstrap: string,
     state: RepairState,
     inputLimit: number,
     db: Pool,
     context: PublicFilterConsumerContext,
     cost: BindingCost,
+    accounts: boolean,
     retained?: NonNullable<RepairRecord['windowBatch']>,
   ) {
     if (
@@ -1388,6 +1391,7 @@ export function createNativePublicFilterSourceBinding(
         bootstrap: nativeId(bootstrap),
         from: state.partition,
         inputLimit,
+        ...(accounts && { accounts: true }),
         ...(retained?.through === undefined ? {} : { through: retained.through }),
       },
       context,
@@ -1904,12 +1908,26 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
+      const accounts = 'representation' in bootstrap.definition.capture;
       const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined;
       const prefix = scanPrefix
-        ? await scanPublicationCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, replay?.windowBatch)
+        ? await scanIrrelevantCreationPrefix(
+            bootstrap.id,
+            state,
+            inputLimit,
+            db,
+            context,
+            cost,
+            accounts,
+            replay?.windowBatch,
+          )
         : null;
-      const scanned =
+      const windows =
         prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
+      const scanned =
+        !replay && accounts && windows.next.phase === 'bridge'
+          ? ((await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, true)) ?? windows)
+          : windows;
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -2911,11 +2929,16 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('binding_mismatch');
         if (scope) scope.joined = joined;
-        const row = await nativeSourceQuery(db, repairRead, {
+        const chain = repairChain(cut.bootstrap, joined);
+        const keys = {
           bootstrap: bootstrapId,
           execution: input.execution,
           predecessor: input.predecessor ?? '',
-        });
+        };
+        // Settlement reopens a durable verification prefix. Resolve its original
+        // page, predecessor and native link together before rechecking live evidence.
+        const proof = scope ? await nativeSourceQuery(db, repairProof, { ...keys, binding: chain.binding }) : null;
+        const row = scope ? proof : await nativeSourceQuery(db, repairRead, keys);
         if (!row || row.receipt_protocol !== 1 || row.input_limit === null || row.predecessor !== input.predecessor)
           throw new BindingError('owner_unavailable');
         const record = decode<RepairRecord>(row.state);
@@ -2923,17 +2946,18 @@ export function createNativePublicFilterSourceBinding(
         // Resolve the actual native predecessor, not an asserted matching cursor.
         // Its immutable successor binds the next input even on a crash/replay.
         if (input.predecessor !== null) {
-          const predecessor = await nativeSourceQuery(db, repairState, {
-            bootstrap: bootstrapId,
-            execution: input.execution,
-            step: input.predecessor,
-          });
-          if (
-            !predecessor ||
-            predecessor.complete ||
-            predecessor.receipt_protocol !== 1 ||
-            encode(decode<RepairRecord>(predecessor.state).next) !== encode(record.input)
-          )
+          let predecessorState = proof?.predecessor_state;
+          if (!proof) {
+            const predecessor = await nativeSourceQuery(db, repairState, {
+              bootstrap: bootstrapId,
+              execution: input.execution,
+              step: input.predecessor,
+            });
+            if (!predecessor || predecessor.complete || predecessor.receipt_protocol !== 1)
+              throw new BindingError('binding_mismatch');
+            predecessorState = predecessor.state;
+          }
+          if (!predecessorState || encode(decode<RepairRecord>(predecessorState).next) !== encode(record.input))
             throw new BindingError('binding_mismatch');
         } else if (
           record.input.partition !== 0 ||
@@ -2950,7 +2974,6 @@ export function createNativePublicFilterSourceBinding(
         ) {
           throw new BindingError('binding_mismatch');
         }
-        const chain = repairChain(cut.bootstrap, joined);
         if (!uuid.test(row.step) || !uuid.test(record.input.advance)) throw new BindingError('binding_mismatch');
         const subjectPublication = boundSubjectPublication(cut, input) && record.account === undefined;
         let repairs: PublicSourceRepair[] = [];
@@ -2965,7 +2988,7 @@ export function createNativePublicFilterSourceBinding(
             record.output !== null ||
             record.account !== undefined ||
             receiptDigests.length !== 0 ||
-            !(await readPublicFilterRepairVerification(db, chain, input.predecessor))
+            (!proof && !(await readPublicFilterRepairVerification(db, chain, input.predecessor)))
           )
             throw new BindingError('owner_unavailable');
           expected = record.input;
@@ -3099,18 +3122,20 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
           if (record.input.phase === 'window' && record.windowBatch) {
-            if (record.windowBatch.through !== undefined && !boundSubjectPublication(cut, input))
+            const accounts = 'representation' in cut.definition.capture;
+            if (record.windowBatch.through !== undefined && !accounts && !boundSubjectPublication(cut, input))
               throw new BindingError('binding_mismatch');
             const scanned =
               record.windowBatch.through === undefined
                 ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
-                : await scanPublicationCreationPrefix(
+                : await scanIrrelevantCreationPrefix(
                     input.bootstrap,
                     record.input,
                     row.input_limit,
                     db,
                     { deadline },
                     cost,
+                    accounts,
                     record.windowBatch,
                   );
             if (!scanned) throw new BindingError('owner_unavailable');
@@ -3248,31 +3273,35 @@ export function createNativePublicFilterSourceBinding(
         )
           throw new BindingError('configuration_changed');
         const closedWindow = closedCreationBridge(record);
-        await retainPublicFilterRepairVerification(
-          db,
-          chain,
-          {
-            step: row.step,
-            predecessor: row.predecessor,
-            state: row.state,
-            complete: row.complete,
-            inputLimit: row.input_limit,
-            digests: row.repair_locator_digests!,
-            ...(closedWindow
-              ? { closedHome: closedWindow.partition }
-              : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
-                ? { closedHome: record.windowBatch.from }
-                : {}),
-          },
-          { deadline },
-          (controls) => {
+        const closedHome =
+          closedWindow?.partition ??
+          (record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
+            ? record.windowBatch.from
+            : undefined);
+        const page = {
+          step: row.step,
+          predecessor: row.predecessor,
+          state: row.state,
+          complete: row.complete,
+          inputLimit: row.input_limit,
+          digests: row.repair_locator_digests!,
+          ...(closedHome === undefined ? {} : { closedHome }),
+        };
+        if (proof) {
+          if (
+            (closedHome !== undefined && proof.verified_home !== closedHome) ||
+            proof.verified_root !== publicFilterRepairPageRoot(proof.predecessor_root ?? chain.binding, page)
+          )
+            throw new BindingError('binding_mismatch');
+        } else {
+          await retainPublicFilterRepairVerification(db, chain, page, { deadline }, (controls) => {
             cost.rows += controls.rows;
             cost.dependencyPoints += controls.rows;
             cost.inputKeys += controls.keys;
             cost.bytes += controls.bytes;
             cost.frontierWrites += controls.frontierWrites ?? 0;
-          },
-        );
+          });
+        }
         const result = {
           status: 'verified' as const,
           step: row.step,

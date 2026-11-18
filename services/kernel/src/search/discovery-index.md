@@ -51,12 +51,13 @@ Relays reread current owner truth for event keys and retain the actual source po
 writer records a per-kind keyed deletion high-water, validates the target UUID and allocation incarnation, and writes
 only to the target's write alias. A stale event cannot restore a deleted key at the same native position.
 
-After population, the generation catches up its replay checkpoint and replays every native metadata population before
-reconciling indexed identities against current owner truth. Native replay finds newly eligible identities absent from
-the target; the indexed pass removes withdrawals. Each advancement selects at most 128 durable owner/partition
-frontiers and settles them in groups of at most eight. Every page remains bounded by its native producer and commits
-its own cursor only after the exact target actions settle; a failed group is drained before its error is retried. This
-amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
+After population, checkpoint replay and owner reconciliation can advance concurrently. Reconciliation replays every
+native metadata population before checking indexed identities against current owner truth. Native replay finds newly
+eligible identities absent from the target. The indexed pass removes withdrawals. Each advancement selects at most
+128 durable owner/partition frontiers and settles them in groups of at most eight. Every page remains bounded by its
+native producer and commits its own cursor only after the exact target actions settle. A failed group drains before
+its error is retried. Batching shares registry and capability-witness setup across the group, while each frontier
+retains its own producer evidence.
 Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
 Initial population batches can commit empty first pages together after fresh capability checks. Each producer checks
 for raw candidates in its exact homes. Review also compares fresh native cuts across two snapshots. A home with raw
