@@ -40,7 +40,7 @@ export async function readDiaryPage(
       ...(cursor ? { cursor } : {}),
     },
     headers: { authorization },
-    fetch: { cache: 'no-store', redirect: 'manual', signal },
+    fetch: { cache: 'no-store', redirect: 'manual', signal: signal ?? null },
   });
   signal?.throwIfAborted();
   if (!result.error && result.data) return { kind: 'ready', page: result.data };
@@ -61,7 +61,7 @@ export async function readConsumptionSummary(
   signal?.throwIfAborted();
   const result = await client.libraryConsumptionSummary.get({
     headers: { authorization },
-    fetch: { cache: 'no-store', redirect: 'manual', signal },
+    fetch: { cache: 'no-store', redirect: 'manual', signal: signal ?? null },
   });
   signal?.throwIfAborted();
   if (!result.error && result.data) return { kind: 'ready', summary: result.data };
@@ -94,7 +94,7 @@ export async function readReportedYearSummary(
   const result = await client.libraryReportedYearSummary.get({
     query: { year },
     headers: { authorization },
-    fetch: { cache: 'no-store', redirect: 'manual', signal },
+    fetch: { cache: 'no-store', redirect: 'manual', signal: signal ?? null },
   });
   signal?.throwIfAborted();
   if (!result.error && result.data?.year === year) return { kind: 'ready', value: result.data };

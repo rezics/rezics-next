@@ -34,7 +34,7 @@ export const diaryLongReflection = [
   '<em>This stays literal private text.</em>',
 ].join('\n\n');
 
-const baseSession: NativeProgressSession = {
+const baseSession = {
   id: diarySessionId,
   subjectId,
   versionSubjectId: versionId,
@@ -58,7 +58,7 @@ const baseSession: NativeProgressSession = {
     structure: 'unverified',
     recording: { state: 'supported', inputRules: { min: '0', step: '1', total: 'optional' } },
   },
-};
+} satisfies NativeProgressSession;
 
 function initialJournal(id: string, scenario: PrivateDiaryScenario): ProgressSessionJournal {
   return {

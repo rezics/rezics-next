@@ -26,12 +26,21 @@ const coverage = { initializedSessions: v.nullable(count), retainedSessions: v.n
 const snapshot = { state: v.literal('snapshot'), revision };
 const currentness = <S extends string>(source: S) =>
   v.strictObject({ ...snapshot, source: v.literal(source), retainedSourceRevision: revision });
-const profile = v.strictObject({
-  provenance: v.picklist(['profile', 'legacy']),
-  releaseDigest: v.pipe(v.string(), v.regex(/^sha256:[0-9a-f]{64}$/)),
-  profileId: text(1024),
-  acceptingType: v.nullable(text(1024)),
-});
+const releaseDigest = v.pipe(v.string(), v.regex(/^sha256:[0-9a-f]{64}$/));
+const profile = v.variant('provenance', [
+  v.strictObject({
+    provenance: v.literal('profile'),
+    releaseDigest,
+    profileId: text(1024),
+    acceptingType: text(1024),
+  }),
+  v.strictObject({
+    provenance: v.literal('legacy'),
+    releaseDigest,
+    profileId: v.literal('legacy-fixed-v1'),
+    acceptingType: v.nullable(text(1024)),
+  }),
+]);
 const completionCounts = {
   completedOccurrences: count,
   distinctCompletedSubjects: count,

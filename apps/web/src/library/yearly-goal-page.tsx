@@ -59,7 +59,7 @@ type FocusRequest = {
   destination: FocusDestination;
   revision: number;
   generation: number;
-  year?: number;
+  year: number | undefined;
   viewerSubject: string | null;
   api: YearlyGoalPageApi;
 };
@@ -111,11 +111,11 @@ function YearlyGoalScreen({
   const editActionRef = useRef<HTMLButtonElement>(null);
   const clearActionRef = useRef<HTMLButtonElement>(null);
   const clearConfirmRef = useRef<HTMLButtonElement>(null);
-  const targetResultRef = useRef<HTMLElement>(null);
+  const targetResultRef = useRef<HTMLParagraphElement>(null);
   const refreshActionRef = useRef<HTMLButtonElement>(null);
   const retryExactRef = useRef<HTMLButtonElement>(null);
   const readbackRetryRef = useRef<HTMLButtonElement>(null);
-  const resultStatusRef = useRef<HTMLElement>(null);
+  const resultStatusRef = useRef<HTMLParagraphElement>(null);
   const [focusSequence, setFocusSequence] = useState(0);
   const live = () => api !== undefined && (api.current?.() ?? true);
 
