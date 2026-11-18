@@ -1,3 +1,4 @@
+import { runBookCatalogueRead } from '../composed-book-reads.ts';
 import { hasPublicBookSearchShape } from '../request.ts';
 import { knowledgeDiscoveryRoutes } from '../http.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -408,7 +409,7 @@ export function searchRoutes<App>(
         }
         async function catalogue(): Promise<SearchHttpResponse> {
           const check = await prepare();
-          return admission.run('normal', job, async () => {
+          return runBookCatalogueRead(admission, job, async () => {
             if (
               !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {
                 deadlineError: () => new ProblemError('deadline_exceeded'),

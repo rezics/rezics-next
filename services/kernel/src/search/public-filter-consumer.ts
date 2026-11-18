@@ -17,6 +17,7 @@ import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
 import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
+import { composedBookObservation } from './composed-book-reads.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   installPublicFilterCoveragePage,
@@ -1164,7 +1165,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   type Page = {
     context: PublicFilterConsumerContext;
     captureWitness?: PublicFilterCaptureWitness;
-    bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered'>;
+    bookPopulation?: string;
+    bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'>;
     m: Meter;
     id: string | null;
     queried: PublicFilterQueriedObservation | null;
@@ -1277,9 +1279,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page.id = id;
     page.queried = q;
     page.use = use;
-    const observed = await withPublicFilterCoverageStart(page.context, id, () =>
-      observe(q, null, undefined, page.m, page.context),
-    );
+    const observed = await observe(q, null, undefined, page.m, page.context, page);
     if (!observationIsDisclosableFromUnknown(observed)) throw new ConsumerFailure('source_pending');
     page.start = observed.start;
   }
@@ -1551,14 +1551,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     execution: string | undefined,
     m: Meter,
     context: PublicFilterConsumerContext,
+    page?: Page,
   ) {
-    const observed = m.take(
-      await config.source.readPrivacyReductionHeads(
-        start === null
-          ? { kind: 'population', queried: q, start: null, context }
-          : { kind: 'population', queried: q, start, execution: execution!, context },
-      ),
-    );
+    const request =
+      start === null
+        ? { kind: 'population' as const, queried: q, start, context }
+        : { kind: 'population' as const, queried: q, start, execution: execution!, context };
+    const grouped = page?.id
+      ? composedBookObservation(config.source, page.bookPopulation, page.id, request, m.take)
+      : undefined;
+    const read = () => config.source.readPrivacyReductionHeads(request);
+    const observed = grouped
+      ? await grouped
+      : m.take(await (page?.id && start === null ? withPublicFilterCoverageStart(context, page.id, read) : read()));
     if (observed.status !== 'observed') throw new ConsumerFailure('source_pending');
     if (observed.coverage !== 'all_native_homes' || !observed.routingComplete)
       throw new ConsumerFailure('routing_incomplete');
@@ -2341,7 +2346,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (page && bookCut) {
       // Native adoption has bound this exact cut and PIT. START checks the
       // live publication and immutable definition before the first search.
-      page.bookCut = { definition: bookCut.definition, covered: bookCut.covered };
+      page.bookCut = {
+        definition: bookCut.definition,
+        covered: bookCut.covered,
+        ...(bookCut.bookPopulation ? { bookPopulation: bookCut.bookPopulation } : {}),
+      };
       return { status: 'captured', queried: q, repair: job, cost: m.cost };
     }
     try {
@@ -2615,7 +2624,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         after = prefix.consumed === 0 ? previous.before : previous.raw[prefix.consumed - 1]!.sort;
       }
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
-      if (page) await beginPage(page, q, use, prefix, previousEncoded, allowance);
+      if (page) {
+        if (cut.bookPopulation) page.bookPopulation = cut.bookPopulation;
+        await beginPage(page, q, use, prefix, previousEncoded, allowance);
+      }
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
       if ('blocking' in started && !observationIsDisclosableFromUnknown(started)) return preparing();
       if (!(await finishPreparationBuild(work, q, m, context))) return preparing();
@@ -3641,7 +3653,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             ],
           );
           if (sealed.rowCount !== 1) throw new ConsumerFailure('observation_lost');
-          const final = await observe(page.queried, page.start, page.tail, page.m, context);
+          const final = await observe(page.queried, page.start, page.tail, page.m, context, page);
           if (!observationIsDisclosableFromUnknown(final)) throw new ConsumerFailure('source_pending');
           page.m.check();
           page.finished = true;

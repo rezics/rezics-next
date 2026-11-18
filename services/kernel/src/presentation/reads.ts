@@ -15,6 +15,7 @@ import { SESSION_HEADER } from '../http/request.ts';
 import { ProblemError, problemResponse } from '../http/problem.ts';
 import type { FieldError } from '../http/problem.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { runComposedPageReads } from '../search/composed-book-reads.ts';
 import { validateSearchLimit } from '../search/hits.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { decodeSession, encodeSession, mergeSession } from '../tokens/session.ts';
@@ -899,26 +900,15 @@ async function executePageReads(options: Parameters<typeof readPage>[0], lifetim
     ) + documentIds.length,
   );
   const completed = new Array<DispatchResult | undefined>(distinctReads.length);
-  const failures = new Array<{ error: unknown } | undefined>(distinctReads.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (!lifetime.signal.aborted) {
-      const index = next++;
-      if (index >= distinctReads.length) return;
-      try {
-        lifetime.check();
-        completed[index] = await execute(distinctReads[index]!);
-      } catch (error) {
-        failures[index] = { error };
-      }
-    }
-  };
   await withPublicStatementReader(() =>
-    Promise.all(Array.from({ length: Math.min(4, distinctReads.length) }, () => worker())),
+    runComposedPageReads(
+      distinctReads,
+      async (read, index) => {
+        completed[index] = await execute(read);
+      },
+      () => lifetime.check(),
+    ),
   );
-  lifetime.check();
-  const failedAt = failures.findIndex((failure) => failure !== undefined);
-  if (failedAt !== -1) throw failures[failedAt]!.error;
 
   const byCanonical = new Map(observed);
   for (let index = 0; index < distinctReads.length; index++) {

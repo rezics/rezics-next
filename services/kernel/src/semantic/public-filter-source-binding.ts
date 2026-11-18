@@ -357,6 +357,7 @@ export type PublicFilterSourceBinding = Readonly<{
   ): Promise<
     | Readonly<{
         status: 'joined';
+        bookPopulation?: string;
         definition: PublicFilterSourceDefinition;
         queried: PublicFilterQueriedObservation;
         covered: PrivacyReductionStart;
@@ -376,6 +377,8 @@ export type PublicSourceBootstrap = Readonly<{
   covered: PrivacyReductionStart;
   /** An immutable parent job for this serving cut, resolved through native coverage. */
   coveragePublication?: string;
+  /** Scheduling hint only. Grouped Source roles independently verify all persisted controls. */
+  bookPopulation?: string;
 }>;
 export type PublicSourceBootstrapResult =
   | Readonly<{
@@ -996,6 +999,21 @@ export function createNativePublicFilterSourceBinding(
       snapshot: row.snapshot_kind,
       covered: { observation: locator },
       ...(row.coverage_publication ? { coveragePublication: row.coverage_publication } : {}),
+      ...(row.coverage_publication &&
+      row.coverage_generation !== null &&
+      row.snapshot_kind === 'pit' &&
+      'bookTypeList' in definition.capture &&
+      definition.capture.bookTypeList === true
+        ? {
+            bookPopulation: JSON.stringify([
+              row.coverage_publication,
+              row.coverage_generation,
+              row.owner_epoch,
+              row.withdrawal_digest,
+              definition.dependencyKeys,
+            ]),
+          }
+        : {}),
     };
     return { row, definition, bootstrap };
   }
@@ -2312,6 +2330,7 @@ export function createNativePublicFilterSourceBinding(
       freeze(definition);
       return {
         status: 'joined' as const,
+        ...(cut.bootstrap.bookPopulation ? { bookPopulation: cut.bootstrap.bookPopulation } : {}),
         definition,
         queried: retained.queried,
         covered: retained.covered,

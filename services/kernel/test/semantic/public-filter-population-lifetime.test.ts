@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import type { Pool, PoolClient } from 'pg';
+import { Admission } from '../../src/http/admission.ts';
+import { readPage } from '../../src/presentation/reads.ts';
+import { composedBookObservation, runBookCatalogueRead } from '../../src/search/composed-book-reads.ts';
+import { createNativePublicFilterSource } from '../../src/semantic/public-filter-source.ts';
 import {
   publicFilterCoverageStart,
   withPublicFilterCoverageStarts,
@@ -83,7 +87,7 @@ test('one composed START releases only the native page contexts it enrolled', as
   assert.equal(publicFilterCoverageStart(second.context), null);
 });
 
-test('population start/final retention bounds native custody and replays the durable result at unchanged cost', async () => {
+function populationFixture() {
   const routeKey = Uint8Array.from([7, 11, 13]);
   const startId = randomUUID();
   const executionId = randomUUID();
@@ -177,6 +181,11 @@ test('population start/final retention bounds native custody and replays the dur
     own_homes: 0,
     own_subjects: 0,
   };
+  return { routeKey, startId, executionId, start, queried, request, startRequest, row };
+}
+
+test('population start/final retention bounds native custody and replays the durable result at unchanged cost', async () => {
+  const { routeKey, startId, executionId, start, queried, request, startRequest, row } = populationFixture();
   const fixedCost = {
     candidates: 0, accessPoints: 0, engineSearches: 0, engineIteratorSteps: 0,
     outputSlots: 0, resultWrites: 1, frontierWrites: 0,
@@ -340,4 +349,127 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(transport.status, 'unavailable');
   if (transport.status === 'unavailable') assert.equal(transport.reason, 'dependency_unavailable');
   assert.equal(transportRelease, transportError);
+});
+
+test('nine Book lists yield admission through one START, bounded execution and a failed shared FINAL', async () => {
+  const { row, queried, startRequest } = populationFixture();
+  // Nine live plans exceed both the four page workers and the eight HTTP permits.
+  // Lose the FINAL reply after all tails arrive. Every child must retain its own failure and cost.
+  const admission = new Admission();
+  const planned = Array.from({ length: 9 }, () => randomUUID());
+  const held = new Set<string>();
+  const roles: string[] = [];
+  let peak = 0;
+  const deadline = Date.now() + 3000;
+  const composedClient = client(
+    async (query) => {
+      const members: {
+        slot: number;
+        queried: string;
+        page_id: string | null;
+        start_id: string;
+        execution_id: string | null;
+      }[] = JSON.parse(String(query.values[0]));
+      assert.equal(admission.running.normal, 1);
+      assert.deepEqual(
+        members.map((member) => member.start_id),
+        planned,
+      );
+      assert.equal(held.size, planned.length);
+      if (query.text.startsWith('/* semantic.privacy-final */')) {
+        roles.push('final');
+        assert.deepEqual(
+          members.map((member) => member.execution_id),
+          planned.map((id) => 'tail-' + id),
+        );
+        throw Object.assign(new Error('Final reply lost'), { code: 'ECONNRESET' });
+      }
+      roles.push('start');
+      assert.match(query.text, /^\/\* semantic\.privacy-start \*\//);
+      assert.deepEqual(
+        members.map((member) => member.page_id),
+        planned,
+      );
+      return {
+        rows: members.map((m) => ({
+          ...row,
+          slot: m.slot,
+          queried: m.queried,
+          page_id: m.page_id,
+          started_page: m.page_id,
+          inserted_start: m.start_id,
+        })),
+      };
+    },
+    () => {},
+  );
+  const unused = () => assert.fail('Unexpected owner lookup in population role');
+  const source = createNativePublicFilterSource(
+    {
+      pool: pool(async () => composedClient),
+      routeKey: new Uint8Array(32),
+      access: { authenticate: unused, authorize: unused },
+      clock: () => new Date(),
+    },
+    unused,
+    { ...search, coverageStart: publicFilterCoverageStart },
+    access,
+  );
+  const composed = await readPage({
+    incoming: new Request('http://kernel/v1/pages:read'),
+    deadline,
+    session: { ring: { current: 1, keys: new Map([[1, new Uint8Array(32)]]) }, scope: 'public' },
+    reads: Object.fromEntries(
+      planned.map((id, index) => [
+        id,
+        {
+          kind: 'search',
+          body: { sort: 'name', filter: { type: { in: ['schema:Book'] } }, limit: index + 1 },
+        },
+      ]),
+    ),
+    async dispatch(request) {
+      const { limit } = await request.json() as { limit: number };
+      const id = planned[limit - 1]!;
+      const context = { deadline, signal: request.signal };
+      return runBookCatalogueRead(admission, context, async () => {
+        held.add(id);
+        try {
+          const member = {
+            ...startRequest(deadline),
+            queried: {
+              ...queried,
+              snapshot: { ...queried.snapshot, observation: '0:' + id },
+            },
+          };
+          const start = await composedBookObservation(source, 'publication', id, member, (status) => status);
+          assert(start?.status === 'observed' && start.start.observation === 'population:' + id);
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          peak = Math.max(peak, admission.running.normal);
+          const final = await composedBookObservation(
+            source,
+            'publication',
+            id,
+            {
+              ...member,
+              start: start.start,
+              execution: 'tail-' + id,
+            },
+            (status) => status,
+          );
+          assert(final?.status === 'unavailable' && final.cost.dependencyPoints === 504);
+          return Response.json({ code: 'index_not_ready' }, { status: 503 });
+        } finally {
+          held.delete(id);
+        }
+      });
+    },
+  });
+  assert.deepEqual(roles, ['start', 'final']);
+  assert.equal(peak, 4);
+  assert.equal(held.size, 0);
+  assert.deepEqual(
+    Object.values(composed.results).map((result) => result.status),
+    planned.map(() => 503),
+  );
 });
