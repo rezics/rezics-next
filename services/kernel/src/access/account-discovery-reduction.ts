@@ -90,6 +90,47 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead &
     complete: boolean;
   }>;
 
+type EnrollmentInput = Readonly<{
+  bootstrap: string;
+  registration: Readonly<{ partition: number; id: string }>;
+  readDefinition: string;
+  keys: readonly string[];
+  keyLimit: number;
+}>;
+
+function enrollmentKeys(keys: readonly string[]) {
+  const ordered = [...new Set(keys)].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  return { ordered, digest: createHash('sha256').update(JSON.stringify(ordered)).digest('hex') };
+}
+
+function enrollmentReceipt(
+  input: EnrollmentInput,
+  partition: number,
+  epoch: number,
+  positions: Readonly<{ source: string; creation: string; enqueue: string }>,
+  revisions: Readonly<{ account: string | null; claim: string | null }>,
+  keyDigest: string,
+) {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        partition,
+        input.bootstrap,
+        input.registration.partition,
+        input.registration.id,
+        input.readDefinition,
+        epoch,
+        positions.source,
+        positions.creation,
+        positions.enqueue,
+        revisions.account,
+        revisions.claim,
+        keyDigest,
+      ]),
+    )
+    .digest('hex');
+}
+
 /** Enrol one bounded page of the immutable compiler closure in its writer home.
  * Account writers and enrollment take population -> Source head -> enrollment.
  * No registration-home transaction is held across this operation. The original
@@ -98,23 +139,18 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead &
  */
 export async function enrollAccountDiscoveryHome(
   pool: Pool,
-  input: Readonly<{
-    partition: number;
-    bootstrap: string;
-    registration: Readonly<{ partition: number; id: string }>;
-    readDefinition: string;
-    keys: readonly string[];
-    accounts: boolean;
-    keyLimit: number;
-  }>,
+  input: EnrollmentInput &
+    Readonly<{
+      partition: number;
+      accounts: boolean;
+    }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<AccountDiscoveryEnrollment> {
   if (!Number.isInteger(input.partition) || input.partition < 0 || input.partition > 4095)
     throw new RangeError('Enrollment requires an exact native home');
   if (!Number.isInteger(input.keyLimit) || input.keyLimit < 1 || input.keyLimit > 450)
     throw new RangeError('Enrollment requires a funded compiler-key page');
-  const keys = [...new Set(input.keys)].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
-  const keyDigest = createHash('sha256').update(JSON.stringify(keys)).digest('hex');
+  const { ordered: keys, digest: keyDigest } = enrollmentKeys(input.keys);
   const creationConsumer = publicFilterCreationConsumer(input.bootstrap);
   const { withConnection, discardConnection } = await import('../database/pool.ts');
   return withRequestDeadline(context.deadline, () =>
@@ -256,24 +292,14 @@ export async function enrollAccountDiscoveryHome(
         const receipt =
           original?.receipt ??
           (complete
-            ? createHash('sha256')
-                .update(
-                  JSON.stringify([
-                    input.partition,
-                    input.bootstrap,
-                    input.registration.partition,
-                    input.registration.id,
-                    input.readDefinition,
-                    owner.epoch,
-                    sourcePosition,
-                    owner.position,
-                    enqueueRevision,
-                    input.accounts ? revision : null,
-                    input.accounts ? claimRevision : null,
-                    keyDigest,
-                  ]),
-                )
-                .digest('hex')
+            ? enrollmentReceipt(
+                input,
+                input.partition,
+                owner.epoch,
+                { source: sourcePosition, creation: owner.position, enqueue: enqueueRevision },
+                { account: input.accounts ? revision : null, claim: input.accounts ? claimRevision : null },
+                keyDigest,
+              )
             : null);
         if (!original?.complete) {
           // The writer locks serialize enrollment for this home. Install a new
@@ -367,6 +393,195 @@ export async function enrollAccountDiscoveryHome(
           receipt,
           complete: original?.complete || complete,
         });
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(client, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
+}
+
+export const accountDiscoveryEnrollmentGroupSize = 8;
+export const accountDiscoveryEnrollmentProbeInputs = 8;
+
+/** Enroll complete new mixed homes under their native writer locks. Existing
+ * pins or receipts leave the group untouched for the retained single-home path.
+ */
+export async function enrollNewAccountDiscoveryHomes(
+  pool: Pool,
+  input: EnrollmentInput & Readonly<{ partitions: readonly number[] }>,
+  context: Readonly<{ deadline: number }>,
+): Promise<readonly AccountDiscoveryEnrollment[] | null> {
+  const partitions = [...input.partitions];
+  if (
+    partitions.length < 1 ||
+    partitions.length > accountDiscoveryEnrollmentGroupSize ||
+    partitions.some(
+      (home, index) =>
+        !Number.isInteger(home) || home < 0 || home > 4095 || (index > 0 && home !== partitions[index - 1]! + 1),
+    )
+  )
+    throw new RangeError('Enrollment requires a bounded contiguous native home group');
+  const { ordered: keys, digest: keyDigest } = enrollmentKeys(input.keys);
+  if (
+    !Number.isInteger(input.keyLimit) ||
+    input.keyLimit < 1 ||
+    input.keyLimit > 450 ||
+    keys.length > input.keyLimit ||
+    partitions.length * (15 + 2 * keys.length) > 1000
+  )
+    throw new RangeError('Enrollment requires funded complete compiler-key pages');
+  const creationConsumer = publicFilterCreationConsumer(input.bootstrap);
+  const { withConnection, discardConnection } = await import('../database/pool.ts');
+  return withRequestDeadline(context.deadline, () =>
+    withConnection(pool, async (client) => {
+      requireAccessDeadline(context.deadline);
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `SET LOCAL statement_timeout = '${Math.max(1, Math.floor(context.deadline - Date.now()))}ms'`,
+        );
+        const count = partitions.length;
+        // Keep the same Core -> Account -> Source lock order as each native
+        // writer. Each lock class acquires homes in ascending partition order.
+        const owners = await client.query<{
+          partition: number;
+          epoch: number;
+          creation: string;
+          account: string | null;
+          claim: string | null;
+          source: string | null;
+          state: string;
+        }>(
+          `/* semantic.native-keyed:${3 * count}:${3 * count} */
+           WITH owner AS MATERIALIZED (
+             SELECT partition_no,epoch,position,write_state FROM core.partition
+             WHERE partition_no=ANY($1::integer[]) ORDER BY partition_no FOR SHARE
+           ), account AS MATERIALIZED (
+             SELECT a.partition_no,a.revision,a.claim_revision
+             FROM access.account_discovery_population a JOIN owner USING(partition_no)
+             WHERE owner.write_state='active' ORDER BY a.partition_no FOR UPDATE OF a
+           ), source AS MATERIALIZED (
+             SELECT s.partition_no,s.position FROM semantic.public_filter_privacy_head s JOIN account USING(partition_no)
+             ORDER BY s.partition_no FOR UPDATE OF s
+           )
+           SELECT owner.partition_no AS partition,owner.epoch,owner.position::text AS creation,
+             owner.write_state AS state,account.revision::text AS account,account.claim_revision::text AS claim,
+             source.position::text AS source
+           FROM owner LEFT JOIN account USING(partition_no) LEFT JOIN source USING(partition_no)
+           ORDER BY owner.partition_no`,
+          [partitions],
+        );
+        if (
+          owners.rows.length !== count ||
+          owners.rows.some(
+            ({ state, account, claim, source }) =>
+              state !== 'active' || account === null || claim === null || source === null,
+          )
+        ) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+        // This snapshot follows the writer locks. A retry must open its
+        // original tuple in the retained path before advancing any key frontier.
+        const carries = await client.query<{ partition: number; enqueue: string; retained: boolean }>(
+          `/* semantic.native-keyed:${3 * count}:${3 * count} */
+           SELECT h.partition,coalesce(p.enqueue_revision::text,'0') AS enqueue,
+             (e.bootstrap IS NOT NULL OR c.consumer IS NOT NULL) AS retained
+           FROM unnest($1::integer[]) h(partition)
+           LEFT JOIN semantic.public_filter_privacy_pending p
+             ON (p.partition_no,p.input_key)=(h.partition,'["domain","accounts"]')
+           LEFT JOIN semantic.public_filter_home_enrollment e ON (e.partition_no,e.bootstrap)=(h.partition,$2)
+           LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(h.partition,$3)
+           ORDER BY h.partition`,
+          [partitions, input.bootstrap, creationConsumer],
+        );
+        if (carries.rows.some((row) => row.retained)) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+        const pin = await client.query(
+          `/* semantic.native-keyed:${2 * count}:${2 * count} */
+           INSERT INTO core.consumer_checkpoint(partition_no,consumer)
+           SELECT partition,$2 FROM unnest($1::integer[]) h(partition) ON CONFLICT DO NOTHING`,
+          [partitions, creationConsumer],
+        );
+        if (pin.rowCount !== count) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+        const rows = owners.rows.map(({ partition, epoch, creation, account, claim, source }, index) => {
+          const enqueue = carries.rows[index]!.enqueue;
+          const receipt = enrollmentReceipt(
+            input,
+            partition,
+            epoch,
+            { source: source!, creation, enqueue },
+            { account, claim },
+            keyDigest,
+          );
+          return { partition, epoch, creation, account: account!, claim: claim!, source: source!, enqueue, receipt };
+        });
+        const inserted = await client.query(
+          `/* semantic.native-keyed:${5 * count}:${5 * count} */
+           INSERT INTO semantic.public_filter_home_enrollment
+             (partition_no,bootstrap,registration_partition,registration,read_definition,owner_epoch,
+              source_position,native_revision,native_claim_revision,key_digest,creation_consumer,
+              key_after,complete,creation_position,native_enqueue_revision,receipt)
+           SELECT h.partition,$2,$3,$4,$5::text::uuid,h.epoch,h.source,h.account,h.claim,$6,$7,$8,
+             true,h.creation,h.enqueue,h.receipt
+           FROM jsonb_to_recordset($1::jsonb)
+             h(partition integer,epoch integer,source bigint,account bigint,claim bigint,
+               creation bigint,enqueue bigint,receipt text)
+           WHERE $5::text::uuid::text=$5::text ON CONFLICT (partition_no,bootstrap) DO NOTHING`,
+          [
+            JSON.stringify(rows),
+            input.bootstrap,
+            input.registration.partition,
+            input.registration.id,
+            input.readDefinition,
+            keyDigest,
+            creationConsumer,
+            keys.at(-1) ?? null,
+          ],
+        );
+        if (inserted.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);
+        const generationInputs = count * (1 + 2 * keys.length);
+        const generation = await client.query(
+          `/* semantic.native-keyed:${generationInputs}:${generationInputs}:${count * keys.length} */
+           WITH generation AS (
+             UPDATE semantic.public_filter_privacy_head SET enrollment_generation=enrollment_generation+1
+             WHERE partition_no=ANY($1::integer[]) RETURNING partition_no,enrollment_generation
+           ), edges AS (
+             INSERT INTO semantic.public_filter_key_enrollment
+               (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
+             SELECT partition_no,k,$2,$3,$4,enrollment_generation FROM generation CROSS JOIN unnest($5::text[]) k
+             ON CONFLICT DO NOTHING
+           )
+           SELECT enrollment_generation FROM generation`,
+          [partitions, input.registration.partition, input.registration.id, input.bootstrap, keys],
+        );
+        if (generation.rowCount !== count) throw new CommandUnavailableError('contention', partitions[0]!);
+        requireAccessDeadline(context.deadline);
+        await client.query('COMMIT');
+        return rows.map(({ partition, epoch, account, claim, source, creation, enqueue, receipt }) =>
+          Object.freeze({
+            partition,
+            epoch,
+            revision: BigInt(account),
+            claimRevision: BigInt(claim),
+            sourcePosition: BigInt(source),
+            creationPosition: BigInt(creation),
+            enqueueRevision: BigInt(enqueue),
+            keyDigest,
+            receipt,
+            complete: true,
+          }),
+        );
       } catch (error) {
         try {
           await client.query('ROLLBACK');

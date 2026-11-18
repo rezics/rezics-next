@@ -2572,6 +2572,7 @@ export function createNativePublicFilterSourceBinding(
           'catalogueCoverage' in capture && capture.catalogueCoverage === true,
         );
         const compilerKeys = baseline.accounts ? [...keys, PUBLIC_FILTER_ACCOUNT_DOMAIN].sort() : keys;
+        const grouped = baseline.accounts ? ports.access.newAccountEnrollment : undefined;
         if (cut.row.account_after !== cut.row.coverage_after) throw new BindingError('owner_unavailable');
         try {
           if (cut.row.coverage_generation === null) await beginPublicFilterCoverageBaseline(db, baseline, deadline);
@@ -2579,29 +2580,46 @@ export function createNativePublicFilterSourceBinding(
             inputBudget: Math.min(preparationInputLimit, inputLimit) - cost.inputKeys,
             keyCount: compilerKeys.length,
             homesLeft: 4096 - cut.row.account_after,
+            ...(grouped ? { probeInputsPerHome: grouped.probeInputsPerHome } : {}),
           });
           const receipts: AccountDiscoveryEnrollment[] = [];
-          // Bound checkout concurrency within the production pool. Each Access
-          // commit still holds exactly its own native writer-home locks.
+          const nativeInput = {
+            bootstrap: inserted.bootstrap,
+            registration: baseline.registration,
+            readDefinition: baseline.definition,
+            keys: compilerKeys,
+            keyLimit: page.keyLimit,
+          };
           const enrollment = (partition: number) =>
             ports.access.enrollAccountHome(
               db,
               {
                 partition,
-                bootstrap: inserted.bootstrap,
-                registration: baseline.registration,
-                readDefinition: baseline.definition,
-                keys: compilerKeys,
+                ...nativeInput,
                 accounts: baseline.accounts,
-                keyLimit: page.keyLimit,
               },
               { deadline },
             );
           let failure: PromiseRejectedResult | undefined;
           while (receipts.length < page.homes) {
             const start = cut.row.account_after + receipts.length;
-            const count = Math.min(3, page.homes - receipts.length);
-            const batch = await Promise.allSettled(Array.from({ length: count }, (_, i) => enrollment(start + i)));
+            const remaining = page.homes - receipts.length;
+            const count = Math.min(remaining, grouped?.groupSize ?? 3);
+            const partitions = Array.from({ length: count }, (_, i) => start + i);
+            const fresh =
+              grouped && compilerKeys.length <= page.keyLimit
+                ? await grouped.enroll(db, { ...nativeInput, partitions }, { deadline })
+                : null;
+            if (fresh) {
+              receipts.push(...fresh);
+              continue;
+            }
+            const batch: PromiseSettledResult<AccountDiscoveryEnrollment>[] = [];
+            for (let offset = 0; offset < count; offset += 3) {
+              const ready = await Promise.allSettled(partitions.slice(offset, offset + 3).map(enrollment));
+              batch.push(...ready);
+              if (ready.some((result) => result.status === 'rejected' || !result.value.complete)) break;
+            }
             for (const result of batch) {
               if (result.status === 'rejected') {
                 failure = result;

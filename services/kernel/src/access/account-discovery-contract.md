@@ -433,6 +433,12 @@ key frontier completes. A step inserts at most 450 keys and respects the narrowe
 its enrollment edge and foreign-key check along with the native controls. Replays of a
 sealed receipt retain its original positions and tuple rather than current heads.
 
+Mixed Discovery can enroll up to eight fresh contiguous homes in one native
+transaction when the full compiler closure fits each home's allowance. Writer
+locks are acquired in partition order within each owner. A retained receipt or
+pin sends the group through the existing single-home path, with the probe
+charged to the Source allowance.
+
 `semantic/public-filter-coverage-baseline.ts` verifies a page of exact committed owner receipts
 after releasing the writer homes, then adopts the verified contiguous prefix in one registration transaction.
 The predecessor/root chain and the Source cursor advance through every original home in that transaction. The original covered

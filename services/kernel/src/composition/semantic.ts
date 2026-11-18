@@ -17,7 +17,14 @@ import {
   readAccountDiscoveryRepairObservation,
   readAccountDiscoveryRepairObservations,
 } from '../access/account-discovery-source.ts';
-import { accessCheck, classifyUnavailability, enrollAccountDiscoveryHome } from '../access/adapters/index.ts';
+import {
+  accessCheck,
+  accountDiscoveryEnrollmentGroupSize,
+  accountDiscoveryEnrollmentProbeInputs,
+  classifyUnavailability,
+  enrollAccountDiscoveryHome,
+  enrollNewAccountDiscoveryHomes,
+} from '../access/adapters/index.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
@@ -132,6 +139,11 @@ function sourceBindingAccessPort(): PublicFilterAccessBindingPort {
     readAccountRepairs: readAccountDiscoveryRepairObservations,
     readAccountRepair: readAccountDiscoveryRepairObservation,
     enrollAccountHome: enrollAccountDiscoveryHome,
+    newAccountEnrollment: Object.freeze({
+      groupSize: accountDiscoveryEnrollmentGroupSize,
+      probeInputsPerHome: accountDiscoveryEnrollmentProbeInputs,
+      enroll: enrollNewAccountDiscoveryHomes,
+    }),
     classifyUnavailability,
     requireDeadline: requireAccessDeadline,
     isUnavailable: (error: unknown) => error instanceof AccessUnavailableError,

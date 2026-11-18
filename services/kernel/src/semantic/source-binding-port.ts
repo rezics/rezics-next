@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
 import type { Access, AccessCheck, Actor, Resource } from '../access/index.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import type { AccountDiscoveryEnrollment, enrollAccountDiscoveryHome } from '../access/adapters/index.ts';
+import type {
+  AccountDiscoveryEnrollment,
+  enrollAccountDiscoveryHome,
+  enrollNewAccountDiscoveryHomes,
+} from '../access/adapters/index.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerCaptureInput,
@@ -173,6 +177,11 @@ export type PublicFilterAccessBindingPort = Readonly<{
     input: Parameters<typeof enrollAccountDiscoveryHome>[1],
     context: PublicFilterConsumerContext,
   ): Promise<AccountDiscoveryEnrollment>;
+  readonly newAccountEnrollment?: Readonly<{
+    groupSize: number;
+    probeInputsPerHome: number;
+    enroll: typeof enrollNewAccountDiscoveryHomes;
+  }>;
   classifyUnavailability(error: unknown): string | undefined;
   requireDeadline(deadline: number): void;
   isUnavailable(error: unknown): boolean;

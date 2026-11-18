@@ -11,13 +11,15 @@ export function planPublicFilterEnrollment(
     inputBudget: number;
     keyCount: number;
     homesLeft: number;
+    probeInputsPerHome?: number;
   }>,
 ): Readonly<{ homes: number; keyLimit: number }> {
   const available = input.inputBudget - pageInputs;
+  const probeInputs = input.probeInputsPerHome ?? 0;
   const keyLimit = Math.min(maxKeysPerHome, Math.floor((available - homeInputs) / 2));
   if (input.homesLeft <= 0 || available < homeInputs || (keyLimit < 1 && input.keyCount > 0))
     return { homes: 0, keyLimit: 0 };
-  const fullHomeInputs = homeInputs + 2 * input.keyCount;
+  const fullHomeInputs = homeInputs + 2 * input.keyCount + probeInputs;
   return {
     homes: Math.min(input.homesLeft, Math.max(1, Math.floor(available / fullHomeInputs))),
     keyLimit: Math.max(1, Math.min(keyLimit, input.keyCount)),

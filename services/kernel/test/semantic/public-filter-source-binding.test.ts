@@ -1,4 +1,5 @@
 import { runCommand } from '../../src/command/command.ts';
+import { enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes } from '../../src/access/adapters/index.ts';
 import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
@@ -27,6 +28,53 @@ import {
 } from './support/public-filter-source.ts';
 
 type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
+
+test('native mixed enrollment groups new homes and keeps each original pinned receipt on replay', async () => {
+  const pool = createPool(process.env.DATABASE_URL!);
+  try {
+    const input = {
+      bootstrap: crypto.randomUUID(),
+      registration: { partition: 0, id: 'mixed-enrollment-fixture' },
+      readDefinition: crypto.randomUUID(),
+      keys: ['["type"]', '["domain","accounts"]'],
+      keyLimit: 2,
+    };
+    const partitions = [4079, 4080, 4081];
+    const found = await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions }, readContext());
+    if (!found) throw new Error('Fresh mixed enrollment was refused');
+    expect(found.map(({ partition }) => partition)).toEqual(partitions);
+    expect(found.every(({ complete, receipt }) => complete && receipt?.length === 64)).toBe(true);
+    for (const receipt of found) {
+      expect(
+        await enrollAccountDiscoveryHome(
+          pool,
+          { ...input, partition: receipt.partition, accounts: true },
+          readContext(),
+        ),
+      ).toEqual(receipt);
+    }
+    expect(
+      await enrollNewAccountDiscoveryHomes(pool, { ...input, partitions: [4081, 4082] }, readContext()),
+    ).toBeNull();
+    const effects = await pool.query(
+      `SELECT e.partition_no AS home,coalesce(sum(1) FILTER (WHERE k.input_key IS NOT NULL),0)::integer AS keys,
+          bool_and(c.consumer IS NOT NULL AND c.position<=e.creation_position) AS pinned
+       FROM semantic.public_filter_home_enrollment e
+       LEFT JOIN semantic.public_filter_key_enrollment k USING(partition_no,bootstrap)
+       LEFT JOIN core.consumer_checkpoint c ON (c.partition_no,c.consumer)=(e.partition_no,e.creation_consumer)
+       WHERE e.bootstrap=$1 GROUP BY e.partition_no ORDER BY e.partition_no`,
+      [input.bootstrap],
+    );
+    expect(effects.rows).toEqual(partitions.map((home) => ({ home, keys: 2, pinned: true })));
+    const unpinned = await pool.query(
+      'SELECT 1 FROM core.consumer_checkpoint WHERE partition_no=4082 AND consumer=$1',
+      ['public_filter_' + input.bootstrap.replaceAll('-', '')],
+    );
+    expect(unpinned.rowCount).toBe(0);
+  } finally {
+    await pool.end();
+  }
+});
 
 test('native mixed coverage shares pagination widths while preserving the exact public capture and consumer controls', async () => {
   const pool = createPool(process.env.DATABASE_URL!);
