@@ -168,7 +168,7 @@ async function prepareLeafAccess(pool: Pool, subject: string, options: LeafOptio
       pool,
       deadline: options.deadline,
       ...(options.nativeT === undefined ? {} : { time: options.nativeT }),
-      work: work.accounting,
+      work: work.authorization,
     },
   );
 }
@@ -451,10 +451,36 @@ export async function readScopeLeafEvidence(
   request: LeafRequest,
   options: LeafOptions,
 ): Promise<LeafEvidence> {
+  return readLeafEvidence(pool, request, options);
+}
+
+/** A finite owner population buys Subject Access separately from raw statement keys. An account's
+ * native inverse/denial probes must never consume or enlarge the selected statement window.
+ */
+export async function readCataloguePointEvidence(
+  pool: Pool,
+  request: LeafRequest,
+  options: Extract<LeafOptions, { actor: Actor }> & { actor: Extract<Actor, { kind: 'account' }> },
+  authorizationBudget: LeafWork,
+) {
+  for (const axis of workAxes)
+    if (!Number.isSafeInteger(authorizationBudget[axis]) || authorizationBudget[axis] <= 0)
+      throw new RangeError('Invalid catalogue point authorization budget');
+  const authorization = new LeafNativeWork(authorizationBudget, options.deadline);
+  const evidence = await readLeafEvidence(pool, request, options, authorization.accounting);
+  return { evidence, authorization: authorization.usage() };
+}
+
+async function readLeafEvidence(
+  pool: Pool,
+  request: LeafRequest,
+  options: LeafOptions,
+  authorization?: LeafNativeWork['accounting'],
+): Promise<LeafEvidence> {
   validateBudget(request?.budget);
   validateRevalidation(request);
   validateProgress(request);
-  const work = new LeafNativeWork(request.budget, options.deadline);
+  const work = new LeafNativeWork(request.budget, options.deadline, authorization);
   // Work admission has no receipt-producing native adapter in its owning module.
   // Refuse BEFORE IO rather than borrowing a request Actor or hiding owner IO.
   if (options.work) {

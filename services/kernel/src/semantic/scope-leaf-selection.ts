@@ -229,9 +229,11 @@ export async function verifyNativeKindTypeAnchor(
 export class LeafNativeWork {
   private reserved: AccessWork = { ...EMPTY_ACCESS_WORK };
   readonly accounting: AccessWorkAccounting;
+  readonly authorization: AccessWorkAccounting;
   constructor(
     readonly budget: AccessWork,
     readonly deadline: number,
+    authorization?: AccessWorkAccounting,
   ) {
     this.accounting = new AccessWorkAccounting(
       {
@@ -256,6 +258,7 @@ export class LeafNativeWork {
       },
       deadline,
     );
+    this.authorization = authorization ?? this.accounting;
   }
   remaining(axis: keyof AccessWork): number {
     return this.budget[axis] - this.reserved[axis];

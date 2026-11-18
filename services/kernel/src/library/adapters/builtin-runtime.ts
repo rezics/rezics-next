@@ -1,4 +1,6 @@
 import { readLikedOriginalPage, readLikedOriginalVersion } from '../liked-source.ts';
+import { readLogicalEverythingMembers } from '../logical-everything-members.ts';
+import type { CollectionMemberAdmission } from '../owner-filter.ts';
 import { readOwnerMembers } from '../owner-index-members.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { nextOwnerPin } from '../owner-index-metadata.ts';
@@ -13,7 +15,12 @@ import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from '../builtin-identity.ts';
 import { readBuiltinStateReference } from '../builtin-reference-store.ts';
-import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from '../owner-index.ts';
+import {
+  readOwnerFactPresence,
+  readOwnerIndexFrontier,
+  readOwnerOriginalPrefix,
+  readOwnerOriginalTruth,
+} from '../owner-index.ts';
 import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { CollectionKind } from '../collection-kind.ts';
 import type { OwnerQueryDependencies } from '../builtin-runtime-query.ts';
@@ -71,23 +78,6 @@ const boundedSnapshotOptions = {
   isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
   isUncertainSettledQueryError: () => true,
 };
-
-async function nativePresence(client: Client, actor: AccountActor) {
-  const { rows } = await client.query<{
-    entry: boolean;
-    session: boolean;
-    copy: boolean;
-    label: boolean;
-  }>(
-    `SELECT
-    EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
-    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state <> 'retired') AS session,
-    EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND deletion_id IS NULL) AS copy,
-    EXISTS(SELECT 1 FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND deleted_at IS NULL) AS label`,
-    [routeOf(actor.accountId), actor.accountId],
-  );
-  return rows[0]!;
-}
 
 /** Logical owner reads share the native account/scopes boundary. They create no header, grant, receipt or work. */
 export function createNativeBuiltinRuntime(
@@ -237,7 +227,7 @@ export function createNativeBuiltinRuntime(
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) return [];
-      const presence = await nativePresence(client, owner);
+      const presence = await readOwnerFactPresence(client, owner.accountId);
       if (presence.entry || presence.session || presence.copy) {
         const coverage = await readOwnerIndexFrontier(client, owner.accountId);
         if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
@@ -284,7 +274,7 @@ export function createNativeBuiltinRuntime(
   }
   const members = createBuiltinMembersApplication<
     BuiltinCollectionView,
-    { filter: FilterDocument; releaseDigest: string },
+    { filter: FilterDocument; releaseDigest: string; admission?: CollectionMemberAdmission },
     DynamicMemberView
   >({
     read: (actor, id, deadline) => read(actor, id, 'collection:read', deadline, true),
@@ -300,7 +290,7 @@ export function createNativeBuiltinRuntime(
           return page.subjects.length === 0 && page.next === null;
         }
         if (source.builtinKind !== 'everything') return false;
-        const presence = await nativePresence(client, owner);
+        const presence = await readOwnerFactPresence(client, owner.accountId);
         return !Object.values(presence).some(Boolean);
       }, deadline);
     },
@@ -311,6 +301,21 @@ export function createNativeBuiltinRuntime(
         throw new ProblemError('dependency_unavailable', {
           detail: 'Built-in members require current Access and cursor keys.',
         });
+      if (
+        options.source.builtinKind === 'everything' &&
+        options.source.revision === 0 &&
+        (!options.query || options.query.admission)
+      ) {
+        const direct = await readLogicalEverythingMembers(
+          { ...config, access, tokens },
+          actor,
+          collectionId,
+          options.query?.admission,
+          options,
+          options.deadline,
+        );
+        if (direct) return direct;
+      }
       return readOwnerMembers(
         { ...config, access, tokens },
         {
