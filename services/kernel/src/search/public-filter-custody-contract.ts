@@ -145,6 +145,7 @@ export type RetainedRepairSettlement = Readonly<{
   fence: Readonly<{
     transaction: string;
     incarnation: string;
+    allocation?: string;
     writeAlias: string;
     sourceEpoch: number;
     refresh: unknown;

@@ -70,7 +70,7 @@ function record(value: unknown): value is Record<string, unknown> {
 // with enough remaining input allowance for producer and independent replay reads.
 const PUBLIC_FILTER_REPAIR_INPUT_LIMIT = 64;
 const PUBLIC_FILTER_REPAIR_INPUT_RESERVE = 768;
-const SUBJECT_PUBLICATION_REPAIR_HOME_LIMIT = 128;
+const PUBLIC_FILTER_REPAIR_HOME_LIMIT = 128;
 const SUBJECT_PUBLICATION_REPAIR_PAGES_PER_TURN = 4;
 export const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
 export const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
@@ -2835,6 +2835,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         previous = encodeNative(state);
       }
       const subjectPublication = publication !== undefined && !('representation' in retained.definition.capture);
+      const mixedPreparation =
+        config.discoveryPreparation === 'repair' && 'representation' in retained.definition.capture;
       const progress = () => ({ status: 'progress' as const, job, cost: m.cost });
       let advanced = 0;
       while (!state.closed) {
@@ -2870,7 +2872,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 execution: work.execution,
                 frontier: state.frontier,
                 inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
-                ...(subjectPublication && { homeLimit: SUBJECT_PUBLICATION_REPAIR_HOME_LIMIT }),
+                ...((subjectPublication || mixedPreparation) && { homeLimit: PUBLIC_FILTER_REPAIR_HOME_LIMIT }),
               },
               context,
             ),

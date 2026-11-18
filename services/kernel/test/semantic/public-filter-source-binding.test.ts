@@ -1009,12 +1009,14 @@ test('native Source replays its original creation window after the same home adv
       reason: 'owner_unavailable',
     });
     const positions: bigint[] = [];
-    for (let home = 4000; home < 4004; home++) {
+    const firstMixedHome = 4000;
+    const accountHome = firstMixedHome + 31;
+    for (let home = firstMixedHome; home <= accountHome; home++) {
       const id = newId(home * 16);
       const committed = await runCommand(f.db.pool, { partition: home }, async () => ({
         value: null,
         events: [
-          home === 4003
+          home === accountHome
             ? { type: 'com.rezics.access.account-updated.v1', subject: id, data: { accountId: id } }
             : {
                 type: 'com.rezics.semantic.canonical-generation.committed.v1',
@@ -1027,12 +1029,12 @@ test('native Source replays its original creation window after the same home adv
     }
     const mixedWindows = await readPublicFilterCreationPrefix(
       f.db.pool,
-      { bootstrap: request.bootstrap.slice(2), from: 4000, inputLimit: 64, accounts: true },
+      { bootstrap: request.bootstrap.slice(2), from: firstMixedHome, inputLimit: 128, accounts: true },
       readContext(),
       { inputKeys: 0, rows: 0, dependencyPoints: 0 },
     );
     expect(mixedWindows.map(({ window }) => [window.partition, window.through])).toEqual(
-      positions.slice(0, 3).map((position, offset) => [4000 + offset, position]),
+      positions.slice(0, -1).map((position, offset) => [firstMixedHome + offset, position]),
     );
   } finally {
     await custody.close();

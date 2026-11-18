@@ -820,7 +820,8 @@ privacy revalidation remain mandatory. A moved owner, changed Source or missing 
 unavailable. No whole rebuild or creation/change coverage is inferred from one page. Search's committed
 `readPublicFilterRepairSettlement` verifies actual repaired winners, dispatch, copies, writers and refresh
 custody through its staged native owner reads. Its reopened mixed settlement checks the retained receipts against
-the exact writer, gate and Core rows held by that transaction, then verifies current physical winners. Source `settle`
+the exact writer, gate and Core rows held by that transaction, then verifies current physical winners. Reopening the
+same mixed allocation can use its retained successful refresh with those current winner reads. Source `settle`
 uses the independently verified original terminal chain and its indexed closed-home windows.
 Each funded settlement step replays that exact original window before and after the genuine Search
 settlement, checking native owner, retained pin, baseline receipt and current original Source/Account
@@ -833,8 +834,9 @@ baseline and its acknowledgement retain their original home and enqueue revision
 
 Decision: new retained steps batch up to `min(input_limit,128)` contiguous empty Semantic homes, Account-key homes,
 or creation windows. Raw Subject and Account keys follow their existing owner advancement and projection paths.
-Mixed Discovery can also close up to 16 contiguous windows in one read when every captured position has exactly
-one event and none require a Subject or Account repair. A gap, incomplete event group or relevant event leaves
+Mixed Discovery can also close up to 32 contiguous windows in one funded read when every captured position has
+exactly one event and none require a Subject or Account repair. The larger offer applies to creation windows.
+A gap, incomplete event group or relevant event leaves
 that home for ordinary repair. The immutable step stores the
 ordered rows' digest and exact input limit, so replay recomputes the same owner/key/window prefix. Empty creation
 windows also store packed `(epoch,base,receipt)` tuples. Independent `verified_home` metadata indexes their range

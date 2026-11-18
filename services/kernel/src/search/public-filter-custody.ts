@@ -1069,19 +1069,33 @@ export async function readPublicFilterRepairSettlement(
         if (attempt?.job === input.execution) attempt.writer = superseded;
         throw new Failure('identity_pending');
       }
+      const physical = final.basis.physical;
+      const allocation =
+        'allocation' in physical && typeof physical.allocation === 'string' ? physical.allocation : undefined;
       if (mixedReceipts.length) {
-        const { physical } = final.basis;
-        if (!('allocation' in physical) || typeof physical.allocation !== 'string')
-          throw new Failure('binding_mismatch');
-        const target = {
-          incarnation: physical.incarnation,
-          writeAlias: physical.writeAlias,
-          allocation: physical.allocation,
-        };
+        if (allocation === undefined) throw new Failure('binding_mismatch');
+        const target = { incarnation: physical.incarnation, writeAlias: physical.writeAlias, allocation };
         await verifyDiscoveryRepairWinners(db, search, q.consumer.physicalTarget, target, mixedReceipts);
       }
-      const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
-      validateRefreshResponse(refreshed.status, refreshed.body);
+      const priorFence = final.state.fence;
+      // The original refresh belongs to this closed execution and allocation.
+      // Every reopen still observes the exact current physical winners above.
+      const retainedRefresh =
+        priorFence !== null &&
+        allocation !== undefined &&
+        priorFence.allocation === allocation &&
+        priorFence.incarnation === physical.incarnation &&
+        priorFence.writeAlias === physical.writeAlias &&
+        priorFence.sourceEpoch === final.retained.definition.source.epoch;
+      let refresh: unknown;
+      if (retainedRefresh) {
+        refresh = priorFence.refresh;
+        validateRefreshResponse(200, refresh);
+      } else {
+        const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
+        validateRefreshResponse(refreshed.status, refreshed.body);
+        refresh = refreshed.body;
+      }
       if (
         !isDeepStrictEqual(
           await readPublicFilterRepairPhysicalTarget(db, search, q.consumer.physicalTarget),
@@ -1102,9 +1116,10 @@ export async function readPublicFilterRepairSettlement(
         fence: {
           transaction: transaction.id,
           incarnation: final.basis.physical.incarnation,
+          ...(allocation === undefined ? {} : { allocation }),
           writeAlias: final.basis.physical.writeAlias,
           sourceEpoch: retained.definition.source.epoch,
-          refresh: refreshed.body,
+          refresh,
         },
       };
       const stored = await repairFinish.run(db, {

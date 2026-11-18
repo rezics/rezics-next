@@ -1876,7 +1876,9 @@ export function createNativePublicFilterSourceBinding(
       state.owner !== 'accounts' &&
       ((state.phase === 'scan' && (!replay || replay.scan)) ||
         (state.phase === 'window' && (!replay || replay.windowBatch)));
-    const offeredLimit = (scansHomes ? request.homeLimit : undefined) ?? request.inputLimit;
+    const mixed = 'representation' in bootstrap.definition.capture;
+    const offeredLimit =
+      (scansHomes && (!mixed || state.phase === 'window') ? request.homeLimit : undefined) ?? request.inputLimit;
     // A lost reply or upgrade replays the exact original range and digest.
     const inputLimit = old?.input_limit ?? offeredLimit;
     if (inputLimit !== offeredLimit && inputLimit !== request.inputLimit) throw new BindingError('owner_unavailable');
@@ -1917,8 +1919,8 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
-      const accounts = 'representation' in bootstrap.definition.capture;
-      const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined;
+      const accounts = mixed;
+      const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined && !mixed;
       const prefix = scanPrefix
         ? await scanIrrelevantCreationPrefix(
             bootstrap.id,
@@ -1933,10 +1935,11 @@ export function createNativePublicFilterSourceBinding(
         : null;
       const windows =
         prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
-      const scanned =
+      const closed =
         !replay && accounts && windows.next.phase === 'bridge'
-          ? ((await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, true)) ?? windows)
-          : windows;
+          ? await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, true)
+          : null;
+      const scanned = closed && closed.next.partition > windows.next.partition ? closed : windows;
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -3603,7 +3606,7 @@ export function createNativePublicFilterSourceBinding(
           (!Number.isInteger(input.homeLimit) ||
             input.homeLimit < input.inputLimit ||
             input.homeLimit > repairHomeBatchLimit ||
-            !boundSubjectPublication(cut, input))
+            (!('representation' in cut.definition.capture) && !boundSubjectPublication(cut, input)))
         )
           throw new BindingError('binding_mismatch');
         if (cut.row.coverage_publication) throw new BindingError('owner_unavailable');
