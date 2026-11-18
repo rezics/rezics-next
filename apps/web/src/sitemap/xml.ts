@@ -23,6 +23,11 @@ export function assertXmlText(value: string, label: string): void {
   if (forbidden.test(value)) throw new Error(`${label} contains a character XML cannot carry`);
 }
 
+function sitemapUrl(href: string): string {
+  assertXmlText(href, `Sitemap URL ${shown(href)}`);
+  return new URL(href).href;
+}
+
 export function assertOrigin(origin: string): void {
   let valid = false;
   try {
@@ -60,10 +65,13 @@ export function familyXml(origin: string, paths: PagePaths, lastmod?: string): {
     if (alternates === '') {
       alternates = links
         .filter((link) => link.rel === 'alternate' && link.hrefLang !== 'x-default')
-        .map((link) => `<xhtml:link rel="alternate" hreflang="${link.hrefLang}" href="${escapeXml(link.href)}"/>`)
+        .map(
+          (link) =>
+            `<xhtml:link rel="alternate" hreflang="${link.hrefLang}" href="${escapeXml(sitemapUrl(link.href))}"/>`,
+        )
         .join('');
     }
-    const loc = links[0]!.href;
+    const loc = sitemapUrl(links[0]!.href);
     urls.push(loc);
     xml += `<url><loc>${escapeXml(loc)}</loc>${lastmod === undefined ? '' : `<lastmod>${lastmod}</lastmod>`}${alternates}</url>`;
   }

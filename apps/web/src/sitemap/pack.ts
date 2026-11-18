@@ -76,7 +76,6 @@ export async function packShards(origin: string, families: readonly SitemapFamil
       throw new Error(`${name} has an invalid lastmod: ${shown(String(family.lastmod))}`);
     const { xml, urls } = familyXml(origin, family.paths, lastmod);
     for (const url of urls) {
-      assertXmlText(url, `${name} URL`);
       if (seen.has(url)) throw new Error(`${name} has a duplicate URL: ${shown(url)}`);
       seen.add(url);
     }

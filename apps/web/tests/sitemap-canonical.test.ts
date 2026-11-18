@@ -63,7 +63,7 @@ test('canonical reader paths reach sitemap and HTML unchanged across sparse lang
     expect(xml.xml.match(/<xhtml:link /gu)).toHaveLength(64);
     for (const locale of locales) {
       const links = pageLinks('https://public.example', locale, '/', pagePaths);
-      expect(xml.urls).toContain(links[0]!.href);
+      expect(xml.urls).toContain(new URL(links[0]!.href).href);
       for (const alternate of locales)
         expect(links).toContainEqual({
           rel: 'alternate',

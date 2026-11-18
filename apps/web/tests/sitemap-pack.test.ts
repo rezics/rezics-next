@@ -48,7 +48,7 @@ test("packShards writes a dated family's eight locale URLs as entries, each with
   const xml = xmlOf(shards[0]!);
 
   const escape = (value: string) =>
-    value
+    new URL(value).href
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
@@ -68,7 +68,7 @@ test("packShards writes a dated family's eight locale URLs as entries, each with
   });
   expect(xml).toBe(`${declaration}${urlset}${entries.join('')}</urlset>`);
   expect(xml).toContain('/en/search/a&amp;b');
-  expect(xml).toContain('/ja/search/&lt;&quot;x&apos;&gt;');
+  expect(xml).toContain('/ja/search/%3C%22x&apos;%3E');
   expect(xml.match(/<url>/g)).toHaveLength(8);
   expect(xml.match(/<xhtml:link /g)).toHaveLength(64);
   expect(xml).not.toMatch(/x-default|changefreq|priority/);
