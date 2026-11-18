@@ -1,6 +1,8 @@
 import type { AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
+import { readLogicalEverythingMembers } from './logical-everything-members.ts';
+import { ownerQueryWork } from './builtin-runtime-query.ts';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, readAccount, readAccountCommandState } from './access-port.ts';
@@ -1060,17 +1062,46 @@ export function createCollectionReads(
     options: CollectionMemberQuery,
     deadline: number,
     readViewerFacts?: ReadMemberViewerFacts,
+    logical?: BuiltinCollectionView,
+    beforeGeneralPage?: () => Promise<void>,
   ) {
     if (options.filter === undefined && options.sort === undefined) {
       return builtins.members(viewer, id, { ...options, deadline });
     }
     const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
+    let pageWork;
+    if (
+      viewer.kind === 'account' &&
+      logical?.builtinKind === 'everything' &&
+      logical.revision === 0 &&
+      admission.filter
+    ) {
+      pageWork = ownerQueryWork(options.limit ?? 20, options.view ?? 'BASIC', deadline);
+      const prepared = await readLogicalEverythingMembers(
+        dependencies,
+        viewer,
+        id,
+        admission,
+        { ...options, ...(readViewerFacts ? { readViewerFacts } : {}) },
+        deadline,
+        pageWork,
+      );
+      if (prepared) return prepared;
+    }
+    await beforeGeneralPage?.();
     return builtins.members(viewer, id, {
       ...options,
       deadline,
       ...(readViewerFacts ? { readViewerFacts } : {}),
       ...(admission.filter && admission.releaseDigest
-        ? { query: { filter: admission.filter, releaseDigest: admission.releaseDigest, admission } }
+        ? {
+            query: {
+              filter: admission.filter,
+              releaseDigest: admission.releaseDigest,
+              admission,
+              ...(pageWork ? { pageWork } : {}),
+            },
+          }
         : {}),
     });
   }
@@ -1082,10 +1113,13 @@ export function createCollectionReads(
     options: CollectionMemberQuery = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
     readViewerFacts?: ReadMemberViewerFacts,
+    beforeGeneralPage?: () => Promise<void>,
   ) {
     pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view', 'languages']);
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
-    if (logical) return readBuiltinMembers(viewer, collectionId, options, deadline, readViewerFacts);
+    if (logical)
+      return readBuiltinMembers(viewer, collectionId, options, deadline, readViewerFacts, logical, beforeGeneralPage);
+    await beforeGeneralPage?.();
     const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
     if (collection.membershipKind === 'dynamic') {
@@ -1136,7 +1170,7 @@ export function createCollectionReads(
     result: T,
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
     revalidate?: () => Promise<void>,
-  ) {
+  ): Promise<T & { viewerFacts?: ViewerPersonalActionsPage }> {
     if (viewer.kind !== 'account' || result.members.length === 0) return result;
     if (result.members.length > MAX_VIEWER_FACTS_ROWS)
       throw new RangeError('Collection personal actions accept at most 100 raw members');

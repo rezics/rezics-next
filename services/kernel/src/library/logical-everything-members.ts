@@ -2,27 +2,31 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import { systemClock } from '../clock.ts';
-import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  withCompiledCommandControls,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decideExposure } from '@rezics/access';
-import { readEverythingFilterTuple } from './logical-everything-filter.ts';
-import { observeEverythingPairs } from './logical-everything-window.ts';
+import { observePreparedScalarRange } from '../semantic/private-catalogue-range.ts';
+import { libraryScopeSourceKey } from '../semantic/identity-scoped-observations.ts';
+import { LIBRARY_SUBJECT_PAGE_LIMIT } from './contract/presentation.ts';
 import type { ownerQueryWork } from './builtin-runtime-query.ts';
 import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { PlatformClosedError } from '../access/contract/errors.ts';
 import { accessRoot, admitGroup } from './access-port.ts';
-import { mapPresentationBounded } from './application/presentation-bounds.ts';
 import { builtinCollectionId } from './builtin-identity.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import type { PresentationDependencies } from './collection-presentation.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
-import { requireLibraryPresentation } from './domain-binding.ts';
 import { builtinMemberCursorBinding } from './owner-index-members.ts';
-import { WORK_AXES, zeroWorkDimensions } from './core/index.ts';
 import { grantCapable, type GrantedAccount } from './account-grant.ts';
 import { instrumentNativeCollectionWork } from './collection-native-work.ts';
 import {
@@ -37,20 +41,11 @@ import { type CollectionMemberAdmission, type CollectionMemberQuery } from './ow
 
 const digest = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const changed = () => new ProblemError('stale_cursor');
-type ObservationPhase = 'initial' | 'revalidation';
-type ReadinessStage =
-  | 'admission'
-  | 'entry-coverage'
-  | 'identity-coverage'
-  | 'identity-mapping'
-  | `${ObservationPhase}-point`
-  | `${ObservationPhase}-subject-currentness`
-  | 'list-facts'
-  | 'presented-members';
+type ReadinessStage = 'admission' | 'scalar-selection' | 'list-facts' | 'presented-members';
 
 /**
  * Direct id-order plan for a revision-zero Everything whose entire native population is explicit entries.
- * The writer's current shelf count admits two bounded entry windows before any enumeration. Other fact
+ * The canonical worker proves identity and order over the whole generation. Other fact
  * families, stored Collections and larger populations keep their ordinary Source plan.
  */
 export async function readLogicalEverythingMembers(
@@ -94,7 +89,7 @@ export async function readLogicalEverythingMembers(
     return null;
 
   const releaseDigest = admission.releaseDigest;
-  const rangeLeaf = leaf;
+  const meaning = { release: admission.release, releaseDigest, leaf: leaf.clause };
   const route = routeOf(actor.accountId)!;
   const limit = options.limit ?? 20;
   const clock = deps.clock ?? systemClock;
@@ -115,18 +110,24 @@ export async function readLogicalEverythingMembers(
   )
     throw new ProblemError('invalid_cursor');
 
-  const owner = requireLibraryPresentation();
+  const sourceKey = libraryScopeSourceKey(
+    { route, collectionId, incarnation: collectionId + ':everything', scope: 'private_builtin' },
+    { accountId: actor.accountId },
+  );
   const onPage = <T>(operation: () => Promise<T>) =>
     ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
       instrumentNativeCollectionWork(deps.pool, ledger.physical, nativeCollectionFootprint, operation),
     );
-  async function population() {
-    const values = [route, actor.accountId, collectionId, partitionOf(route), 2 * limit];
+  async function population(at: AuthoritativeTime, take: number) {
+    const values = [route, actor.accountId, collectionId, partitionOf(route), take, sourceKey];
     type EntryRow = {
       version: string;
       epoch: number;
-      position: string;
-      n: number;
+      accountTuple: string;
+      accountVersion: string;
+      generation: string;
+      capture: string;
+      revision: string;
       id: string | null;
       explicit: boolean;
       kind: GrantedAccount['kind'];
@@ -144,7 +145,7 @@ export async function readLogicalEverythingMembers(
         (
           await client.query<EntryRow & { groupOpen: boolean; gateHome: boolean }>(openEverythingEntryWindowSQL(), [
             ...values,
-            ...collectionsOpeningValues(clock().toISOString()),
+            ...collectionsOpeningValues(authoritativeTimeValue(at)),
           ])
         ).rows,
     );
@@ -197,128 +198,87 @@ export async function readLogicalEverythingMembers(
       )
     )
       throw new ProblemError('not_found');
+    const stamp = {
+      epoch: head.epoch,
+      version: head.version,
+      accountTuple: head.accountTuple,
+      accountVersion: head.accountVersion,
+      generation: head.generation,
+      capture: head.capture,
+      revision: head.revision,
+      releaseHead: head.releaseHead,
+    };
     const ids: string[] = [];
+    if (!take) return { stamp, ids };
+    // A full window still has an unexamined suffix. Other fact shapes use the general reader.
+    if (rows.length >= take || !head.id) return null;
     for (const row of rows) {
-      if (!row.id || !row.explicit || routeOf(row.id) === null || (ids.length && row.id <= ids.at(-1)!))
-        throw unready('entry-coverage');
+      if (!row.id || !row.explicit || routeOf(row.id) === null || (ids.length && row.id <= ids.at(-1)!)) return null;
       ids.push(row.id);
     }
-    if (ids.length !== head.n) throw unready('entry-coverage');
-    return {
-      epoch: head.epoch,
-      position: head.position,
-      version: head.version,
-      head: head.releaseHead,
-      ids,
-    };
+    return { stamp, ids };
   }
 
-  const first = await onPage(population);
-  if (!first) {
-    if (cursor?.ok && cursor.after[0] === collectionId) throw changed();
-    return null;
-  }
-  const disclosure = { ...deps, actor, routeKey, deadline };
-  const { ids, version, epoch } = first;
-  // Count both mapping passes before allocating the first. A prepared Source may still be able
-  // to serve its own cursor from the remaining page work, without an entry mapping walk.
-  const available = ledger.sourceAllowance().remaining;
-  const mappingCost = { ...zeroWorkDimensions() };
-  for (let offset = 0; offset < ids.length; offset += 100) {
-    const cost = owner.semanticObservations.canonical.mappingWork(ids.slice(offset, offset + 100));
-    for (const axis of WORK_AXES) mappingCost[axis] += 2 * cost[axis];
-  }
-  if (WORK_AXES.some((axis) => mappingCost[axis] > available[axis])) {
-    if (cursor?.ok) throw unready('identity-coverage', 'work-budget');
-    return null;
-  }
-  async function mappingEpochs() {
-    const mappings = [];
-    for (let offset = 0; offset < ids.length; offset += 100) {
-      const originals = ids.slice(offset, offset + 100);
-      const reserved = ledger.physical.reserve(owner.semanticObservations.canonical.mappingWork(originals));
-      reserved.dispatch();
-      const current = await owner.readMappings(deps.pool, originals).finally(() => reserved.settle());
-      if (current.length !== originals.length) throw unready('identity-coverage');
-      for (const [i, mapping] of current.entries()) {
-        // The entry index proves canonical order only for this complete self-mapped population.
-        if (mapping.state !== 'mapped' || mapping.original !== originals[i] || mapping.terminal !== originals[i])
-          throw unready('identity-mapping');
-        mappings.push(mapping.epoch.toString());
-      }
-    }
-    return mappings;
-  }
-  const mappings = await ledger.physical.withinAllowance(ledger.sourceAllowance(), mappingEpochs);
-  const head = first.head;
-  const batchDeps = { ...disclosure, work: ledger.physical };
-  const pairs = ids.map((original) => ({ original, terminal: original }));
-  const readTime = () =>
-    onPage(() => withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock)));
   async function atReadTime<T>(operation: (at: AuthoritativeTime) => Promise<T>) {
-    const at = await readTime();
+    const at = await onPage(() =>
+      withCompiledCommandControls(deps.pool, () =>
+        withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock, deps.pool)),
+      ),
+    );
     try {
       return await operation(at);
     } finally {
       releaseOperationalTime(at);
     }
   }
-  type Subjects = Awaited<ReturnType<typeof observeEverythingPairs>>;
-  async function observe(subjects: Subjects, phase: ObservationPhase, at: AuthoritativeTime) {
-    const rows = await mapPresentationBounded(subjects.decisions, async (decision) => {
-      const id = decision.original;
-      if (decision.state === 'withheld') return { id, visible: false, matches: false };
-      return readEverythingFilterTuple(disclosure, at, id, rangeLeaf, (reason) =>
-        reportUnready(`${phase}-point`, reason),
+  const disclosure = { ...deps, actor, routeKey, deadline };
+  const scalarDeps = { ...disclosure, work: ledger.physical, ownerId: actor.accountId };
+  const observation = await atReadTime(async (at) => {
+    const first = await onPage(() => population(at, 2 * limit + 1));
+    if (!first) return null;
+    const ids: string[] = [];
+    const batches = [];
+    for (let offset = 0; offset < first.ids.length; offset += LIBRARY_SUBJECT_PAGE_LIMIT) {
+      const originals = first.ids.slice(offset, offset + LIBRARY_SUBJECT_PAGE_LIMIT);
+      const batch = await ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
+        observePreparedScalarRange(scalarDeps, originals, meaning, at),
       );
-    });
-    return {
-      ids: rows.filter((row) => row.matches).map((row) => row.id),
-      basis: digest([version, epoch, head, mappings, rows]),
-    };
-  }
-  const { subjects, observed } = await atReadTime(async (at) => {
-    let subjects: Subjects;
-    try {
-      subjects = await ledger.physical.withinAllowance(ledger.sourceAllowance(), () =>
-        observeEverythingPairs(batchDeps, pairs, at),
-      );
-    } catch (error) {
-      reportUnready('initial-subject-currentness', error instanceof ProblemError ? error.code : undefined);
-      throw error;
+      if (batch.status !== 'complete') {
+        if (cursor?.ok) throw unready('scalar-selection');
+        return null;
+      }
+      batches.push(batch);
+      for (const [i, decision] of batch.decisions.entries()) if (decision.matches) ids.push(originals[i]!);
     }
-    return { subjects, observed: await onPage(() => observe(subjects, 'initial', at)) };
+    return { first: first.stamp, ids, batches, basis: digest([first.stamp, batches.map((batch) => batch.basis)]) };
   });
+  if (!observation) {
+    if (cursor?.ok) throw changed();
+    return null;
+  }
+  const { first, ids, batches, basis } = observation;
   if (
     cursor?.ok &&
     (cursor.epoch !== first.epoch ||
       cursor.after[0] !== collectionId ||
-      cursor.after[1] !== observed.basis ||
+      cursor.after[1] !== basis ||
       cursor.after[2] !== first.version ||
-      !observed.ids.includes(String(cursor.after[3])))
+      !ids.includes(String(cursor.after[3])))
   )
     throw changed();
   const after = cursor?.ok ? String(cursor.after[3]) : null;
-  const remaining = observed.ids.filter((id) => after === null || id > after);
+  const remaining = ids.filter((id) => after === null || id > after);
   const shown = remaining.slice(0, limit).map((subjectId) => ({ kind: 'dynamic' as const, subjectId }));
   const revalidateViewer = options.view === 'FULL' ? await options.readViewerFacts?.(shown) : undefined;
   const revalidate = async () => {
-    if (
-      (await atReadTime((at) => onPage(() => observe(subjects, 'revalidation', at)))).basis !== observed.basis ||
-      !isDeepStrictEqual(await ledger.physical.withinAllowance(ledger.sourceAllowance(), mappingEpochs), mappings) ||
-      !isDeepStrictEqual(await onPage(population), first)
-    )
-      throw changed();
     await revalidateViewer?.();
-    const fresh = await readTime();
-    try {
-      await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => subjects.revalidate(fresh));
-    } catch (error) {
-      reportUnready('revalidation-subject-currentness', error instanceof ProblemError ? error.code : undefined);
-      throw error;
-    } finally {
-      releaseOperationalTime(fresh);
-    }
+    await atReadTime(async (fresh) => {
+      for (const batch of batches) {
+        if (!(await ledger.physical.withinAllowance(ledger.sourceAllowance(), () => batch.revalidate(fresh))))
+          throw changed();
+      }
+      if (!isDeepStrictEqual((await onPage(() => population(fresh, 0)))?.stamp, first)) throw changed();
+    });
   };
   let members = shown;
   if (options.view === 'FULL') {
@@ -338,7 +298,7 @@ export async function readLogicalEverythingMembers(
     deps.tokens,
     binding,
     remaining.length > limit
-      ? { epoch: first.epoch, after: [collectionId, observed.basis, first.version, shown.at(-1)!.subjectId] }
+      ? { epoch: first.epoch, after: [collectionId, basis, first.version, shown.at(-1)!.subjectId] }
       : null,
     clock,
   );

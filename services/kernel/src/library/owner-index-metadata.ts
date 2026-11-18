@@ -68,7 +68,7 @@ export async function applyOwnerPinMeaning(tx: OperationalTransaction, accountId
     WHERE route=$1 AND account_id=$2 AND pin=$3::jsonb AND NOT meaning_ready FOR UPDATE`,
     [...key, JSON.stringify(meaning.pin)],
   );
-  if (!found.rows.length) return;
+  if (!found.rows.length) return false;
   for (const state of meaning.states) {
     const reference = await tx.query(
       `INSERT INTO library.builtin_collection_reference AS current
@@ -91,4 +91,5 @@ export async function applyOwnerPinMeaning(tx: OperationalTransaction, accountId
     WHERE route=$1 AND account_id=$2 AND pin=$3::jsonb`,
     [...key, JSON.stringify(meaning.pin)],
   );
+  return true;
 }

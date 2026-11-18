@@ -275,7 +275,12 @@ export function createNativeBuiltinRuntime(
   }
   const members = createBuiltinMembersApplication<
     BuiltinCollectionView,
-    { filter: FilterDocument; releaseDigest: string; admission?: CollectionMemberAdmission },
+    {
+      filter: FilterDocument;
+      releaseDigest: string;
+      admission?: CollectionMemberAdmission;
+      pageWork?: ReturnType<typeof ownerQueryWork>;
+    },
     DynamicMemberView
   >({
     read: (actor, id, deadline) => read(actor, id, 'collection:read', deadline, true),
@@ -301,8 +306,14 @@ export function createNativeBuiltinRuntime(
         throw new ProblemError('dependency_unavailable', {
           detail: 'Built-in members require current Access and cursor keys.',
         });
-      const ledger = ownerQueryWork(options.limit, options.view ?? 'BASIC', options.deadline);
-      if (options.source.builtinKind === 'everything' && options.source.revision === 0 && options.query?.admission) {
+      const ledger =
+        options.query?.pageWork ?? ownerQueryWork(options.limit, options.view ?? 'BASIC', options.deadline);
+      if (
+        !options.query?.pageWork &&
+        options.source.builtinKind === 'everything' &&
+        options.source.revision === 0 &&
+        options.query?.admission
+      ) {
         const direct = await readLogicalEverythingMembers(
           { ...config, access, tokens },
           actor,

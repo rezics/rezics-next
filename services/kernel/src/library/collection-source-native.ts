@@ -197,7 +197,7 @@ export function everythingEntryWindowSQL() {
 }
 export function openEverythingEntryWindowSQL() {
   return memoizedValue(openEverythingEntryWindowSQL, () => {
-    const gate = normal(opening.sql).replace(/\$(\d+)/g, (_, n: string) => '$' + (5 + Number(n)));
+    const gate = normal(opening.sql).replace(/\$(\d+)/g, (_, n: string) => '$' + (6 + Number(n)));
     return `WITH gate AS MATERIALIZED (SELECT g.open, EXISTS (SELECT 1 FROM core.partition
         WHERE partition_no=0 AND write_state='active' AND moved_to IS NULL) AS live FROM (${gate}) g)
       SELECT gate.open AS "groupOpen", gate.live AS "gateHome", w.* FROM gate
@@ -435,13 +435,13 @@ export function nativeCollectionFootprint(
   const window = everythingWindowFootprint(sql, values);
   if (window) return window;
   if (sql === everythingEntryWindowSQL() || sql === openEverythingEntryWindowSQL()) {
-    const [route, owner, collection, partition, limit] = values;
+    const [route, owner, collection, partition, limit, sourceKey] = values;
     if (
       (sql === everythingEntryWindowSQL()
-        ? values.length !== 5
-        : values.length !== 5 + opening.params.length ||
+        ? values.length !== 6
+        : values.length !== 6 + opening.params.length ||
           opening.params.some((name, index) => {
-            const value = values[5 + index];
+            const value = values[6 + index];
             return name === 'group'
               ? value !== 'collections'
               : name !== 'at' || typeof value !== 'string' || value.length > 64;
@@ -454,20 +454,24 @@ export function nativeCollectionFootprint(
       partitionOf(route) !== partition ||
       typeof limit !== 'number' ||
       !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > 200
+      typeof sourceKey !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(sourceKey) ||
+      limit < 0 ||
+      limit > 201
     )
       return undefined;
-    const take = limit + 1;
+    const take = limit;
     return {
       statements: 1,
       candidateKeys: take,
-      nativeRows: 76 + 6 * take,
-      nativePoints: 21,
-      witnessKeys: 0,
+      // Fixed keyed owner, publication, scope, release and gate guards. Each raw key
+      // reads one reference and at most one exact live entry.
+      nativeRows: 64 + 4 * take,
+      nativePoints: 24 + take,
+      witnessKeys: 1 + take,
       emptySeeks: 1,
       identityMetadataRows: 0,
-      bytes: Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)) + take * 512,
+      bytes: Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)) + 2 + Math.max(1, take) * 640,
     };
   }
   // Transaction controls and the two shared native capture SETs access no relation, but their literal statements

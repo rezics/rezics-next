@@ -1033,7 +1033,11 @@ async function commitObservedScope(
 }
 
 /** Bounded native population capture precedes canonical mapping; source originals include rejects/order inputs. */
-export async function advanceCanonicalSourceCapture(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead> {
+export async function advanceCanonicalSourceCapture(
+  pool: Pool,
+  input: CanonicalCall,
+  continueRegistration = false,
+): Promise<CanonicalAuthorityRead> {
   input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
@@ -1156,8 +1160,21 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       capture: { kind: 'library', capture: completed.capture, frontier: row.frontier, allowance: l.allowance() },
     });
     takeScopeWork(l, registered.work);
-    if (registered.status !== 'registered')
-      return notReady(l, registered.status === 'pending' ? 'registration_pending' : 'identity');
+    if (registered.status === 'pending') {
+      const progress = registered.progressTransaction;
+      if (continueRegistration && metadata.createdAt === null && progress) {
+        await mutate(pool, input, l, metadata, (tx) =>
+          enqueueIntent(tx, {
+            queue: 'maintenance',
+            workflowName: CANONICAL_SOURCE_WORKFLOW,
+            workflowId: `${CANONICAL_SOURCE_WORKFLOW}:${input.collectionId}:registration:${progress}`,
+            input: { accounts: [metadata.curatorAccountId!], collectionId: input.collectionId },
+          }),
+        );
+      }
+      return notReady(l, 'registration_pending');
+    }
+    if (registered.status !== 'registered') return notReady(l, 'identity');
     const observation = registered.observation;
     if (!observation) return notReady(l, 'identity');
     await mutate(pool, input, l, metadata, async (tx) => {
