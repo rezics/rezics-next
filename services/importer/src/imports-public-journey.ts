@@ -13,6 +13,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { WALK_COMMIT_CAUSES, type WalkCommitCause } from '@rezics/definitions/bulk';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
@@ -714,7 +715,7 @@ export async function captureSeedStderr(
 
 type WalkCommandFailure =
   | { state: 'unavailable' }
-  | { state: 'matched'; category: string; firstProjectFrame?: string };
+  | { state: 'matched'; category: string; commitCause?: WalkCommitCause; firstProjectFrame?: string };
 
 const kernelErrorNames = [
   'TypeError',
@@ -792,7 +793,16 @@ async function walkCommandFailure(request?: SeedRemainingRequest): Promise<WalkC
         ? 'postgres_server'
         : (kernelErrorNames.find((name) => name === event.name) ?? 'unknown');
       const frame = await firstProjectFrame(event.stack).catch(() => undefined);
-      return { state: 'matched', category, ...(frame ? { firstProjectFrame: frame } : {}) };
+      const commitCause =
+        category === 'CommandCommitUncertainError' && request.failureStage === 'transaction_commit'
+          ? WALK_COMMIT_CAUSES.find((cause) => cause === event.commit_cause)
+          : undefined;
+      return {
+        state: 'matched',
+        category,
+        ...(commitCause ? { commitCause } : {}),
+        ...(frame ? { firstProjectFrame: frame } : {}),
+      };
     }
   } catch {
     // Losing the private supervisor observation must preserve the original seed refusal.

@@ -14,6 +14,15 @@ export const BATCH_WRITE_FAILURE_STAGES = [
   'transaction_commit',
 ] as const;
 export type BatchWriteFailureStage = (typeof BATCH_WRITE_FAILURE_STAGES)[number];
+/** Private catalogue walk evidence for an uncertain COMMIT. */
+export const WALK_COMMIT_CAUSES = [
+  'command_deadline',
+  'pg_query_timeout',
+  'socket_timeout',
+  'connection_lost',
+  'unknown',
+] as const;
+export type WalkCommitCause = (typeof WALK_COMMIT_CAUSES)[number];
 export const BATCH_SQLSTATE = /^[0-9A-Z]{5}$/;
 export const BATCH_CONSTRAINT_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 export const FIELD_GROUPS = ['facts', 'summary', 'cover'] as const;

@@ -15,6 +15,7 @@ export {
   type FieldError,
 } from './problem-error.ts';
 import { commandTimingSnapshot } from '../command/timing.ts';
+import type { WalkCommitCause } from '@rezics/definitions/bulk';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
@@ -100,6 +101,7 @@ export function logInternalError(options: {
   route?: string | undefined;
   cause: unknown;
   commandIndex?: number | undefined;
+  commitCause?: WalkCommitCause;
   event?: 'internal_error' | 'dependency_unavailable';
 }): void {
   const { requestId, method, route, cause, commandIndex } = options;
@@ -114,6 +116,7 @@ export function logInternalError(options: {
       ...(code === undefined ? {} : { code }),
       stack: cause instanceof Error ? cause.stack : undefined,
       ...(commandIndex === undefined ? {} : { command_index: commandIndex }),
+      ...(options.commitCause === undefined ? {} : { commit_cause: options.commitCause }),
     }),
   );
 }

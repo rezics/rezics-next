@@ -1,4 +1,4 @@
-import { BATCH_CONSTRAINT_NAME, type BatchWriteFailureStage } from '@rezics/definitions/bulk';
+import { BATCH_CONSTRAINT_NAME, type BatchWriteFailureStage, type WalkCommitCause } from '@rezics/definitions/bulk';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandCommitUncertainError, CommandUnavailableError } from '../../command/command.ts';
 import { commandTimingSnapshot } from '../../command/timing.ts';
@@ -179,6 +179,24 @@ function catalogueProposalDiagnostics(
   };
 }
 
+function walkCommitCause(cause: unknown): WalkCommitCause {
+  if (cause instanceof CommandUnavailableError && cause.reason === 'deadline') return 'command_deadline';
+  if (!(cause instanceof Error)) return 'unknown';
+  if (cause.message === 'Query read timeout') return 'pg_query_timeout';
+  const code = 'code' in cause ? cause.code : undefined;
+  if (code === 'ETIMEDOUT') return 'socket_timeout';
+  if (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ECONNABORTED' ||
+    cause.message === 'Connection terminated unexpectedly' ||
+    cause.message === 'Connection terminated' ||
+    cause.message === 'Client has encountered a connection error and is not queryable'
+  )
+    return 'connection_lost';
+  return 'unknown';
+}
+
 export async function bulkWriteCommandProblem(
   error: unknown,
   options: {
@@ -203,6 +221,12 @@ export async function bulkWriteCommandProblem(
       route: BULK_WRITE_ROUTE,
       cause: error,
       commandIndex: options.commandIndex,
+      ...(options.op === 'propose' &&
+        isImportCatalogueWalk() &&
+        error instanceof CommandCommitUncertainError &&
+        !isPostgresServerError(error.cause)
+        ? { commitCause: walkCommitCause(error.cause) }
+        : {}),
     });
   const payload: unknown = await response.json();
   if (!isRecord(payload) || typeof payload.code !== 'string' || typeof payload.status !== 'number')
