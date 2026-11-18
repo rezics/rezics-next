@@ -49,7 +49,16 @@ const authorityWork = Object.freeze({
   bytes: 1024 * 1024,
 });
 const changed = () => new ProblemError('stale_cursor');
-const unready = () => new ProblemError('semantic_not_ready');
+type ObservationPhase = 'initial' | 'revalidation';
+type ReadinessStage =
+  | 'admission'
+  | 'entry-coverage'
+  | 'identity-coverage'
+  | 'identity-mapping'
+  | `${ObservationPhase}-point`
+  | `${ObservationPhase}-subject-currentness`
+  | 'list-facts'
+  | 'presented-members';
 
 /**
  * Direct id-order plan for a revision-zero Everything whose entire native population is explicit entries.
@@ -66,10 +75,21 @@ export async function readLogicalEverythingMembers(
 ) {
   const routeKey = deps.routeKey;
   if (!routeKey || collectionId !== builtinCollectionId(actor.accountId, { kind: 'everything' })) return null;
+  let reported = false;
+  function reportUnready(stage: ReadinessStage, reason?: string) {
+    // Concurrent Subject reads can encounter the same refusal. Log the first stage once per direct read.
+    if (reported) return;
+    reported = true;
+    console.warn(JSON.stringify({ event: 'library.logical-everything-unready', stage, reason }));
+  }
+  function unready(stage: ReadinessStage, reason?: string) {
+    reportUnready(stage, reason);
+    return new ProblemError('semantic_not_ready');
+  }
   if (admission) {
     const admitted = readNativeCollectionMemberAdmission(admission);
     if (!admitted || admitted.pool !== deps.pool || admitted.actor !== actor || admitted.deadline < deadline)
-      throw unready();
+      throw unready('admission');
   }
   const leaf = admission?.plan?.leaves[0];
   if (
@@ -162,7 +182,7 @@ export async function readLogicalEverythingMembers(
         ids.push(...rows.map((row) => row.id));
         if (rows.length < take) break;
       }
-      if (ids.length !== count) throw unready();
+      if (ids.length !== count) throw unready('entry-coverage');
       return { epoch: head.epoch, position: head.position, version: head.version, ids };
     });
   }
@@ -179,11 +199,11 @@ export async function readLogicalEverythingMembers(
     for (let offset = 0; offset < ids.length; offset += 100) {
       const originals = ids.slice(offset, offset + 100);
       const current = await owner.readMappings(deps.pool, originals);
-      if (current.length !== originals.length) throw unready();
+      if (current.length !== originals.length) throw unready('identity-coverage');
       for (const [i, mapping] of current.entries()) {
         // The entry index proves canonical order only for this complete self-mapped population.
         if (mapping.state !== 'mapped' || mapping.original !== originals[i] || mapping.terminal !== originals[i])
-          throw unready();
+          throw unready('identity-mapping');
         mappings.push(mapping.epoch.toString());
       }
     }
@@ -197,14 +217,14 @@ export async function readLogicalEverythingMembers(
   }
   const mappings = await mappingEpochs();
   const head = await meaningHead();
-  async function observe() {
+  async function observe(phase: ObservationPhase) {
     const subjects = await readSubjectSummaryObservation(disclosure, ids);
     const at = await withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock));
     try {
       const rows = await mapPresentationBounded(ids, async (id) => {
         if (subjects.summaries.get(id)?.id !== id) return { id, visible: false, matches: false };
         if (!leaf || leaf.kind !== 'catalogue') return { id, visible: true, matches: true };
-        const { evidence } = await readCataloguePointEvidence(
+        const { evidence, readinessReason } = await readCataloguePointEvidence(
           deps.pool,
           {
             subject: id,
@@ -216,13 +236,14 @@ export async function readLogicalEverythingMembers(
           { ...disclosure, nativeT: at },
           authorityWork,
         );
-        if (evidence.state !== 'current' || evidence.progress || evidence.coverage?.basis !== evidence.basis)
-          throw unready();
+        if (evidence.state !== 'current') throw unready(`${phase}-point`, readinessReason ?? evidence.state);
+        if (evidence.progress || evidence.coverage?.basis !== evidence.basis)
+          throw unready(`${phase}-point`, evidence.progress ? 'partial-selection' : 'missing-coverage');
         const matches = matchOwnerFilterCatalogue(leaf, evidence);
-        if (typeof matches !== 'boolean') throw unready();
+        if (typeof matches !== 'boolean') throw unready(`${phase}-point`, 'unknown-match');
         return { id, visible: true, matches, evidence: digest([evidence.basis, evidence.facts]) };
       });
-      if (!(await subjects.current())) throw unready();
+      if (!(await subjects.current())) throw unready(`${phase}-subject-currentness`);
       return {
         ids: rows.filter((row) => row.matches).map((row) => row.id),
         basis: digest([version, epoch, head, mappings, rows]),
@@ -231,7 +252,7 @@ export async function readLogicalEverythingMembers(
       releaseOperationalTime(at);
     }
   }
-  const observed = await observe();
+  const observed = await observe('initial');
   if (
     cursor?.ok &&
     (cursor.epoch !== first.epoch ||
@@ -246,7 +267,7 @@ export async function readLogicalEverythingMembers(
   const shown = remaining.slice(0, limit).map((subjectId) => ({ kind: 'dynamic' as const, subjectId }));
   const revalidate = async () => {
     if (
-      (await observe()).basis !== observed.basis ||
+      (await observe('revalidation')).basis !== observed.basis ||
       !isDeepStrictEqual(await mappingEpochs(), mappings) ||
       (await meaningHead()) !== head ||
       !isDeepStrictEqual(await population(), first)
@@ -255,12 +276,17 @@ export async function readLogicalEverythingMembers(
   };
   let members = shown;
   if (options.view === 'FULL') {
-    members = await attachCollectionListFacts(disclosure, shown, {
-      ...(options.languages ? { languages: options.languages } : {}),
-      revalidate,
-    });
+    try {
+      members = await attachCollectionListFacts(disclosure, shown, {
+        ...(options.languages ? { languages: options.languages } : {}),
+        revalidate,
+      });
+    } catch (error) {
+      if (error instanceof ProblemError && error.code === 'semantic_not_ready') reportUnready('list-facts');
+      throw error;
+    }
   } else await revalidate();
-  if (members.length !== shown.length) throw unready();
+  if (members.length !== shown.length) throw unready('presented-members');
   return listMemberPage(
     members,
     deps.tokens,
