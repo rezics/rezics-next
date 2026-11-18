@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { canonicalRedirect, keepSearch, subjectUrlForView } from '../../features/pages/subject-queries';
+import { validateViewCursor } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime.js';
 
 const redirectRelations = createServerFn({ method: 'GET', strict: false })
@@ -15,10 +16,11 @@ const redirectRelations = createServerFn({ method: 'GET', strict: false })
       !('locale' in input) ||
       typeof input.locale !== 'string' ||
       !('search' in input) ||
-      typeof input.search !== 'string' ||
-      input.search.length > 2048
+      typeof input.search !== 'string'
     )
       throw notFound();
+    const cursor = validateViewCursor(new URLSearchParams(input.search.split('#', 1)[0]).get('cursor') ?? undefined);
+    if (input.search.length > 2048 + (cursor ? encodeURIComponent(cursor).length : 0)) throw notFound();
     return { id: input.id, locale: input.locale, search: input.search };
   })
   .handler(async ({ data }) => {
