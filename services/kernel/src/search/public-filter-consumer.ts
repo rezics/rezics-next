@@ -2919,16 +2919,25 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             context,
             charge,
           ));
-        // Foreign owner calls have ended. Reopen and compare immutable local custody before dispatch.
-        const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
-        if (
-          finalCustody.status !== 'found' ||
-          !isDeepStrictEqual(finalCustody.definition, retained.definition) ||
-          !isDeepStrictEqual(finalCustody.covered, retained.covered) ||
-          !isDeepStrictEqual(finalCustody.execution, retained.execution)
-        )
-          return m.unavailable('observation_lost');
-        await physical(q, m, context);
+        const emptyDiscoveryProgress =
+          config.discoveryPreparation === 'repair' &&
+          !intent.complete &&
+          !intent.repairs.length &&
+          !intent.account &&
+          !work.repairPage;
+        // An empty mixed page advances only the open observation and exact execution CAS.
+        // Reopen native custody and the physical target before dispatch or terminal closure.
+        if (!emptyDiscoveryProgress) {
+          const finalCustody = m.take(await custody.read({ queried: q, execution: work.execution }, context));
+          if (
+            finalCustody.status !== 'found' ||
+            !isDeepStrictEqual(finalCustody.definition, retained.definition) ||
+            !isDeepStrictEqual(finalCustody.covered, retained.covered) ||
+            !isDeepStrictEqual(finalCustody.execution, retained.execution)
+          )
+            return m.unavailable('observation_lost');
+          await physical(q, m, context);
+        }
         if (intent.predecessor !== state.frontier || (intent.complete ? intent.frontier !== null : !intent.frontier))
           return m.unavailable('source_pending');
         if (work.repairPage) {
