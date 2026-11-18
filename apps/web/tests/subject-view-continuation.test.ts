@@ -140,9 +140,9 @@ test('a cursor refused by the owner list route answers the not-found result', as
   expect(loaded.kind).toBe('missing');
 });
 
-test('view cursors are strings of at most 2048 characters', () => {
-  expect(validateViewCursor('x'.repeat(2048))).toHaveLength(2048);
-  expect(() => validateViewCursor('x'.repeat(2049))).toThrow();
+test('view cursors are strings of at most 4096 characters', () => {
+  expect(validateViewCursor('x'.repeat(4096))).toHaveLength(4096);
+  expect(() => validateViewCursor('x'.repeat(4097))).toThrow();
   expect(() => validateViewCursor(['cursor'])).toThrow();
 });
 
@@ -326,15 +326,15 @@ test('a page beyond the first of any full view, relations included, carries robo
   }
 }, 300_000);
 
-test('a cursor longer than 2048 characters, or one the owner read refuses with 400, answers the not-found page', async () => {
+test('a cursor longer than 4096 characters, or one the owner read refuses with 400, answers the not-found page', async () => {
   for (const view of ['editions', 'lists', 'relations'] as const) {
     const path = await viewAddress(subject, view);
-    for (const cursor of ['x'.repeat(2049), 'refuse']) {
+    for (const cursor of ['x'.repeat(4097), 'refuse']) {
       const response = await documentAt(`${path}?cursor=${cursor}`);
       expect(response.status).toBe(404);
       expect(bodyMarkup(await response.text())).not.toContain('First item 1');
     }
-    expect((await documentAt(`${path}?cursor=${'x'.repeat(2048)}`)).status).toBe(200);
+    expect((await documentAt(`${path}?cursor=${'x'.repeat(4096)}`)).status).toBe(200);
   }
 }, 300_000);
 
