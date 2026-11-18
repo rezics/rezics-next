@@ -1026,7 +1026,7 @@ async function readSubjectNative(
         let reason: SubjectLinkWaitReason = 'deadline';
         const ready = await waitForSubjectLinks(
           pool,
-          [...(summaries.seen ?? []), component],
+          summaries.seen ?? [],
           subjectId,
           deadline,
           [],
@@ -1035,6 +1035,7 @@ async function readSubjectNative(
             reason = observed;
           },
           summaries.observeMissingCheckpoint,
+          component,
         );
         requireAccessDeadline(deadline);
         if (!ready) throw new SubjectProjectionPreparingError(terminal ? 'merged-member' : 'subject', stage, reason);
