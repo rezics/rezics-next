@@ -10,6 +10,7 @@ import {
   subjectIndexName,
 } from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
+import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import {
   createReleasedDiscoveryFixture,
@@ -216,8 +217,8 @@ export async function createBookComposition(setupDeadline: number) {
       ),
       published,
     );
-    await fixture.grant('editor', ['moderation:hide'], hidden.id);
-    requireStatus(
+    await fixture.grant('editor', ['moderation:hide'], GLOBAL_CONTEXT);
+    const concealment = requireStatus(
       await fixture.request(
         'editor',
         'POST',
@@ -228,6 +229,8 @@ export async function createBookComposition(setupDeadline: number) {
       200,
       'Hide the indexed Book',
     );
+    assert.equal(concealment.body.subject, hidden.id);
+    assert.equal(concealment.body.visibility, 'hidden');
     await publishTypeLists(fixture, [{ route, document }]);
     assert(Date.now() < setupDeadline, 'Book catalogue setup expired while publishing TypeLists');
     const request = (who: 'alice' | 'anonymous' | 'suspended') =>
