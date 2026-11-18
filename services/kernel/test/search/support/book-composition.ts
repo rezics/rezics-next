@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { planReads, platformRegistry } from '@rezics/composition';
+import type { Subject } from '../../../../../specs/semantic-driver.ts';
 import { withBoundedReadConnection } from '../../../src/database/pool.ts';
-import { withRequestDeadline } from '../../../src/request/deadline.ts';
 import { readSubjectIndexUuid, subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
@@ -28,7 +28,7 @@ const document = composedLimitDocument(lists);
 const plan = planReads(platformRegistry, document, { subject: null });
 type Anchor = { id: string; type: string };
 
-export async function createBookComposition() {
+export async function createBookComposition(setupDeadline: number) {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
@@ -61,11 +61,10 @@ export async function createBookComposition() {
     const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
     const prefix = fixture.search.indexPrefix;
     const index = subjectAlias(prefix);
-    let published: { generation: number; uuid: string } | undefined;
     const publicationJobs = (deadline: number) =>
       withBoundedReadConnection(pool, deadline, (connection) => readPublicationJobs(connection, prefix));
 
-    async function indexed(ids: readonly string[], coldBook?: Anchor) {
+    async function indexed(ids: readonly string[], until: number) {
       async function count(target: string, signal?: AbortSignal) {
         const { body } = await engine.request<{ count: number; _shards: { failed: number } }>(
           'POST',
@@ -99,11 +98,9 @@ export async function createBookComposition() {
         }
       }
 
-      const until = Date.now() + 120_000;
-      const signal = AbortSignal.timeout(120_000);
+      const signal = AbortSignal.timeout(Math.max(1, until - Date.now()));
       let alias: number | 'HTTP 404' | undefined;
       let observed: Awaited<ReturnType<typeof observeGenerations>> | undefined;
-      let lastPublicRead: { status: number; code: unknown } | undefined;
       while (Date.now() < until) {
         try {
           alias = await count(index, signal);
@@ -115,17 +112,12 @@ export async function createBookComposition() {
         if (alias === ids.length) {
           const { active } = await subjectGenerations(engine, prefix, undefined, signal);
           assert(active === 1, 'The isolated Subject alias must resolve to its first native generation');
-          const uuid = await withRequestDeadline(until, () => readSubjectIndexUuid(engine, prefix, active));
-          if (Date.now() >= until) break;
-          if (published) {
-            assert.deepEqual({ generation: active, uuid }, published);
-            return;
-          }
-          assert(coldBook);
+          const uuid = await readSubjectIndexUuid(engine, prefix, active);
           const target = subjectIndexName(prefix, active);
-          const settled = (await publicationJobs(until)).some(
+          const publication = (await publicationJobs(until)).find(
             (job) =>
               job.family === 'subjects' &&
+              job.generation === String(active) &&
               job.physical_target === target &&
               job.native_incarnation === uuid &&
               job.meaning_digest === fixture.release.digest &&
@@ -135,51 +127,79 @@ export async function createBookComposition() {
               job.source_sealed &&
               job.source_ack_after === 4096,
           );
-          if (settled) {
-            const response = await withRequestDeadline(until, () =>
-              fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: 'AAA', languages: ['en'] }),
-            );
-            lastPublicRead = { status: response.status, code: response.body.code };
-            if (Date.now() >= until) break;
-            if (response.status === 200) {
-              const subjects = response.body.subjects;
-              assert(Array.isArray(subjects));
-              if (subjects.some(({ id, type }) => id === coldBook.id && type === coldBook.type)) {
-                published = { generation: active, uuid };
-                return;
-              }
-            } else {
-              assert(
-                response.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(response.body.code)),
-                JSON.stringify(lastPublicRead),
-              );
-            }
-          }
+          if (publication && Date.now() < until) return { generation: active, uuid, job: publication.job };
         }
         const remaining = until - Date.now();
         if (remaining <= 0) break;
-        // Sample native publication and projection once, within the original alias wait.
+        // Capture the physical projection and the owner frontier while the wait still has time.
         if (remaining <= 5_000 && !observed) observed = await observeGenerations(Math.min(until, Date.now() + 2_000));
-        await Bun.sleep(Math.min(100, Math.max(0, until - Date.now())));
+        await Bun.sleep(Math.min(250, Math.max(0, until - Date.now())));
       }
       throw new Error(
-        `Search did not serve the ${ids.length} released originals in 120s ` +
-          `(alias: ${alias ?? 'unobserved'}, public read: ${JSON.stringify(lastPublicRead ?? null)}, ` +
+        `Search publication did not settle for ${ids.length} originals before the deadline ` +
+          `(alias: ${alias ?? 'unobserved'}, ` +
           `generation snapshot: ${JSON.stringify(observed ?? null)})`,
       );
     }
+    // One Book, Series, Edition and revocation control share a term for the native default Search read.
+    const marker = 'cataloguepublication';
+    const originals: (Anchor & { label: string })[] = [];
+    async function createAnchor(type: string, name: string, readBack: boolean) {
+      assert(Date.now() < setupDeadline, 'Book catalogue setup expired before Subject creation');
+      const created = await fixture.createSubject(type, readBack ? `${name} ${marker}` : name);
+      const anchor = { id: created.id, type };
+      if (readBack) {
+        const response = requireStatus(await fixture.read(created), 200, 'Read the original public Subject');
+        const subject = response.body.subject as Subject;
+        assert.equal(subject.id, created.id);
+        assert.equal(subject.type, type);
+        const label = subject.labels.en;
+        assert(typeof label === 'string' && label.startsWith(`${name} ${marker}`));
+        originals.push({ ...anchor, label });
+      }
+      return anchor;
+    }
+
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
       for (let ordinal = 0; ordinal < 11; ordinal++) {
-        const { id } = await fixture.createSubject(type, `AAA ${grain} ${String(ordinal).padStart(2, '0')}`);
-        const anchor = { id, type };
-        // Use the first Book to finish cold publication before the composed-cost population arrives.
-        if (anchors.length === 0) await indexed([id], anchor);
-        anchors.push(anchor);
+        anchors.push(await createAnchor(type, `AAA ${grain} ${String(ordinal).padStart(2, '0')}`, ordinal === 0));
       }
     }
-    const hidden = await fixture.createSubject('schema:Book', 'AAA 0 00 concealed');
-    await indexed([...anchors.map(({ id }) => id), hidden.id]);
+    const hidden = await createAnchor('schema:Book', 'AAA 0 00 concealed', true);
+    const published = await indexed([...anchors, hidden].map(({ id }) => id), setupDeadline);
+
+    let missing = originals;
+    let lastResponse = 'unobserved';
+    while (missing.length) {
+      assert(
+        Date.now() < setupDeadline,
+        `Public Search did not disclose ${missing.map(({ id }) => id).join(', ')} before setup expired (${lastResponse})`,
+      );
+      const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
+        text: marker,
+        languages: ['en'],
+      });
+      lastResponse = `HTTP ${response.status}`;
+      if (response.status === 200) {
+        const subjects = response.body.subjects;
+        assert(Array.isArray(subjects));
+        missing = originals.filter(
+          (original) =>
+            !subjects.some(
+              ({ id, type, labels }) => id === original.id && type === original.type && labels.en === original.label,
+            ),
+        );
+      } else {
+        lastResponse += ` ${response.body.code}`;
+        assert(
+          response.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(response.body.code)),
+          JSON.stringify(response.body),
+        );
+      }
+      if (missing.length) await Bun.sleep(250);
+    }
+    assert(Date.now() < setupDeadline, 'Public Search disclosed the originals after the setup deadline');
     await fixture.grant('editor', ['moderation:hide'], hidden.id);
     requireStatus(
       await fixture.request(
@@ -193,6 +213,7 @@ export async function createBookComposition() {
       'Hide the indexed Book',
     );
     await publishTypeLists(fixture, [{ route, document }]);
+    assert(Date.now() < setupDeadline, 'Book catalogue setup expired while publishing TypeLists');
     const request = (who: 'alice' | 'anonymous' | 'suspended') =>
       fixture.request(who, 'POST', '/v1/pages:read', { target: { route }, languages: ['en'] });
     async function read(who: 'alice' | 'anonymous', warm = false) {
@@ -255,12 +276,16 @@ export async function createBookComposition() {
           population.add(subject.id);
         }
         assert.equal(population.size, to);
-        await indexed([...population]);
+        assert.deepEqual(await indexed([...population], Date.now() + 120_000), published);
       },
       close: () => fixture.close(),
     };
   } catch (error) {
-    await owner?.close();
+    try {
+      await owner?.close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Book catalogue setup and cleanup failed', { cause: error });
+    }
     throw error;
   }
 }

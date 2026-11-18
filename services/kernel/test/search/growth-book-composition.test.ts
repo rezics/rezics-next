@@ -17,13 +17,16 @@ import { checkGrowth } from '../support/growth.ts';
 import { createBookComposition } from './support/book-composition.ts';
 import { captureComposedPage } from './support/composed-page-cost.ts';
 
+// Use the installed Book journey's single setup window for publication before growth capture.
+const setupMs = 600_000;
+const cleanupMs = 180_000;
 let world: Awaited<ReturnType<typeof createBookComposition>>;
 beforeAll(async () => {
-  world = await createBookComposition();
-}, 240_000);
+  world = await createBookComposition(Date.now() + setupMs);
+}, setupMs + cleanupMs);
 afterAll(async () => {
   await world?.close();
-}, 180_000);
+}, cleanupMs);
 
 async function measurePage() {
   const { sample, value: outputSlots } = await captureComposedPage(() => world.read('anonymous'));
