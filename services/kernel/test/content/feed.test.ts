@@ -10,6 +10,7 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { CANONICAL_SOURCE_WORKFLOW } from '../../src/library/canonical-source-store.ts';
 import { OWNER_INDEX_WORKFLOW } from '../../src/library/owner-index-work.ts';
+import type { DiscoveryServingObservation } from '../../src/search/default-discovery.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import type { FeedItem, FeedPage } from '../../src/content/feed-contract.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
@@ -21,13 +22,14 @@ import { createFeedActivityStore } from '../../src/content/feed-activity.ts';
 import { decodeFeedCursor, feedBinding, fingerprint } from '../../src/content/feed-cursor.ts';
 import { withBoundedReadOnlyTransaction } from '../../src/database/pool.ts';
 
-async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
+async function eventually<T>(read: () => Promise<T | undefined>, onTimeout?: () => void): Promise<T> {
   const end = Date.now() + 150_000;
   while (Date.now() < end) {
     const result = await read();
     if (result !== undefined) return result;
     await Bun.sleep(100);
   }
+  onTimeout?.();
   throw new Error('Default feed native sources did not become ready');
 }
 
@@ -97,11 +99,11 @@ test('Default mixed feed composes real discovery, current Following and Continue
   const prefix = `feed-${randomUUID().replaceAll('-', '').slice(0, 20)}-`;
   const search = createOpenSearch(endpoint);
   const observations = new Set<string>();
-  function observe(phase: string, readiness: Record<string, boolean | string> = {}) {
+  function observe(phase: string, readiness: Record<string, boolean | string | DiscoveryServingObservation> = {}) {
     const message = JSON.stringify({ phase, ...readiness });
     if (observations.has(message)) return;
     observations.add(message);
-    console.info('Mixed Home readiness', message);
+    console.info('Mixed Home readiness', JSON.stringify({ phase, ...readiness, elapsedMs: Date.now() - startedAt }));
   }
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
@@ -239,11 +241,22 @@ test('Default mixed feed composes real discovery, current Following and Continue
         { accounts: [viewer.accountId], frontier: null, metadata },
       );
     }
-    server = await startServer(config); // Its createKernel consumes the ordinary Search producer.
+    let serving: DiscoveryServingObservation | undefined;
+    server = await startServer({
+      ...config,
+      ...(process.env.REZICS_MIXED_HOME_TIMING === '1'
+        ? {
+            observeDiscoveryServing(value: DiscoveryServingObservation) {
+              serving = value;
+            },
+          }
+        : {}),
+    });
     observe('feed server ready');
     async function page(account: typeof viewer | null, stream = 'home', cursor?: string) {
       const query = new URLSearchParams({ stream, limit: '20' });
       if (cursor) query.set('cursor', cursor);
+      serving = undefined;
       const response = await fetch(new URL(`/v1/feedItems?${query}`, server!.url), {
         headers: { ...(account ? { authorization: `Bearer ${account.bearer}` } : {}), 'accept-language': 'en' },
       });
@@ -254,34 +267,55 @@ test('Default mixed feed composes real discovery, current Following and Continue
     }
     const readProgressAt = Math.min(Date.now() + 145_000, startedAt + 232_000);
     let observedDiscoveryProgress = false;
-    const anonymous = await eventually(async () => {
-      const result = await page(null);
-      const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
-      const projection = subjectReactions(row);
-      const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
-      observe('anonymous Discovery', {
-        discovery: result.sources.discovery,
-        bookPresent: row !== undefined,
-        expectedReaction,
-      });
-      if (
-        process.env.REZICS_MIXED_HOME_TIMING === '1' &&
-        result.sources.discovery === 'preparing' &&
-        !observedDiscoveryProgress &&
-        Date.now() >= readProgressAt
-      ) {
-        observedDiscoveryProgress = true;
-        if (worker) reportMixedHomeFinalization(worker.recentOutput, prefix);
-        const elapsedMs = Date.now() - startedAt;
-        try {
-          const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
-          console.info('Mixed Home discovery generation', JSON.stringify({ elapsedMs, generations }));
-        } catch (error) {
-          console.info('Mixed Home discovery generation observation failed', String(error));
+    const pollStarted = Date.now();
+    let requestStarted = pollStarted;
+    let responseReceived = pollStarted;
+    const anonymous = await eventually(
+      async () => {
+        requestStarted = Date.now();
+        const result = await page(null);
+        responseReceived = Date.now();
+        const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
+        const projection = subjectReactions(row);
+        const expectedReaction = projection?.counts.state === 'available' && projection.counts.values.love === 1;
+        observe('anonymous Discovery', {
+          discovery: result.sources.discovery,
+          ...(serving ? { serving } : {}),
+          bookPresent: row !== undefined,
+          expectedReaction,
+        });
+        if (
+          process.env.REZICS_MIXED_HOME_TIMING === '1' &&
+          result.sources.discovery === 'preparing' &&
+          !observedDiscoveryProgress &&
+          Date.now() >= readProgressAt
+        ) {
+          observedDiscoveryProgress = true;
+          if (worker) reportMixedHomeFinalization(worker.recentOutput, prefix);
+          const elapsedMs = Date.now() - startedAt;
+          try {
+            const generations = await readMixedDiscoveryProgress(runtime.databaseUrl, prefix);
+            console.info('Mixed Home discovery generation', JSON.stringify({ elapsedMs, generations }));
+          } catch (error) {
+            console.info('Mixed Home discovery generation observation failed', String(error));
+          }
         }
-      }
-      return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
-    });
+        return result.sources.discovery === 'ready' && expectedReaction ? result : undefined;
+      },
+      () => {
+        if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+          console.info(
+            'Mixed Home last anonymous response',
+            JSON.stringify({
+              serving,
+              requestStartedMs: requestStarted - pollStarted,
+              responseReceivedMs: responseReceived - pollStarted,
+            }),
+          );
+      },
+    );
+    if (process.env.REZICS_MIXED_HOME_TIMING === '1')
+      expect(serving).toMatchObject({ generation: expect.any(Number), stage: 'final', result: 'finished' });
     expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
     expect(anonymous.feedItems.every((item) => item.source === 'discovery' && !('continue' in item))).toBe(true);
     const anonymousSubject = anonymous.feedItems.find((item) => item.key.id === book)!;

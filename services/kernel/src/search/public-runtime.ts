@@ -64,6 +64,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     digest: string,
     context: PublicFilterConsumerContext,
     queried?: PublicFilterQueriedObservation,
+    observeAllocation?: (generation: number | null) => void,
   ): Promise<PublicDiscoveryConsumerOperations>;
   publication: SearchGenerationPublication;
   preparePublication(
@@ -333,7 +334,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     return current;
   }
   return {
-    openDiscovery(registry, digest, context, queried) {
+    openDiscovery(registry, digest, context, queried, observeAllocation) {
       return track(async () => {
         checkDeadline(context);
         const release = await requestMeaning(context);
@@ -354,6 +355,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           },
         );
         checkDeadline(context);
+        observeAllocation?.(result.rows.length === 1 ? result.rows[0]!.generation : null);
         if (result.rows.length !== 1) notReady();
         const allocation = result.rows[0]!;
         if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
