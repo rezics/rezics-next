@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  BATCH_LIMIT,
   BATCH_CONSTRAINT_NAME,
   BATCH_SQLSTATE,
   BATCH_WRITE_FAILURE_STAGES,
@@ -55,6 +56,7 @@ export type SeedRemainingRequest = {
   failurePhase?: string;
   networkCode?: string;
   correlationId?: string;
+  commandIndex?: number;
   transition?: BatchTransition;
   reason?: BatchReason;
   transactionPhase?: string;
@@ -110,6 +112,9 @@ function safeRemainingRequest(value: {
     if (field !== undefined) Object.assign(remaining, { [key]: field });
   }
   if (Number.isInteger(value.status) && value.status! >= 100 && value.status! <= 599) remaining.status = value.status!;
+  const index = value.commandIndex;
+  if (typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < BATCH_LIMIT)
+    remaining.commandIndex = index;
   if (typeof value.retryable === 'boolean') remaining.retryable = value.retryable;
   return remaining;
 }
@@ -187,6 +192,7 @@ export function recordSeedBatchFailure(
       transactionPhase: problem.phase,
       ...(command?.op === 'propose' && receipt?.status === 500 && problem.code === 'internal_error'
         ? {
+            commandIndex: problem.command_index,
             failureStage: problem.failure_stage,
             sqlstate: problem.sqlstate,
             constraintName: problem.constraint_name,

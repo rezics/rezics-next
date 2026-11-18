@@ -13,8 +13,8 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
-import { walkStackAdmitted } from '../../../scripts/stack-run.ts';
-import { walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
+import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
+import { walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
@@ -184,6 +184,7 @@ type WalkPrerequisite = {
   manifest?: string;
   report?: string;
   remainingRequest?: SeedRemainingRequest;
+  kernelFailure?: WalkCommandFailure;
 };
 
 type WalkRun = {
@@ -532,7 +533,7 @@ Cause: ${cause}
 
 ${attribution}${first ? ' No catalogue current read or browser path was exercised after the failed seed.' : ''}
 
-Use the returned ${stage}.log.${remainingRequest ? ` Inspect ${first ? 'remaining-request.json' : 'seed-reopen-remaining-request.json'} for the observed operation and preserve any sealed command for replay through the ordinary API.` : ''} Rerun the recorded command with its original selection. Preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions.
+Use the returned ${stage}.log.${remainingRequest ? ` Inspect ${first ? 'remaining-request.json' : 'seed-reopen-remaining-request.json'} for the observed operation. Preserve the sealed command and its receipt when available.` : ''} Rerun the recorded walk with its original selection on a fresh admitted stack. Preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions.
 `,
     );
   }
@@ -709,6 +710,94 @@ export async function captureSeedStderr(
   pending += final;
   if (SEED_PHASE_LINE.test(pending)) write(pending);
   return stderr;
+}
+
+type WalkCommandFailure =
+  | { state: 'unavailable' }
+  | { state: 'matched'; category: string; firstProjectFrame?: string };
+
+const kernelErrorNames = [
+  'TypeError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'AggregateError',
+  'NestedPoolCheckoutError',
+  'RetiredReadClientError',
+  'CommandCommitUncertainError',
+  'Error',
+] as const;
+
+/** Keep a location in the pinned source, never a stack line, exception message or host path. */
+async function firstProjectFrame(stack: unknown): Promise<string | undefined> {
+  if (typeof stack !== 'string') return undefined;
+  const frames: { file: string; line: string }[] = [];
+  const projectLocation =
+    /^((?:services\/kernel|packages\/[a-z0-9-]+)\/src\/(?:[a-z0-9-]+\/)*[a-z0-9.-]+\.ts):([1-9]\d{0,5}):\d{1,6}\)?$/;
+  for (const line of stack.split('\n').slice(1, 24)) {
+    if (!/^\s+at /.test(line)) continue;
+    const offset = line.lastIndexOf(`${root}/`);
+    if (offset === -1) continue;
+    const location = projectLocation.exec(line.slice(offset + root.length + 1));
+    if (location) frames.push({ file: location[1]!, line: location[2]! });
+  }
+  if (!frames.length) return undefined;
+  const files = [...new Set(frames.map(({ file }) => file))];
+  const tracked = await Bun.$`git ls-tree --name-only HEAD -- ${files}`.cwd(root).quiet().nothrow();
+  if (tracked.exitCode !== 0) return undefined;
+  const known = new Set(tracked.stdout.toString().trimEnd().split('\n'));
+  const first = frames.find(({ file }) => known.has(file));
+  return first && `${first.file}:${first.line}`;
+}
+
+async function walkCommandFailure(request?: SeedRemainingRequest): Promise<WalkCommandFailure | undefined> {
+  if (
+    request?.transition !== 'batch-receipt' ||
+    request.reason !== 'command-refused' ||
+    request.op !== 'propose' ||
+    request.status !== 500 ||
+    request.code !== 'internal_error'
+  )
+    return undefined;
+  if (!request.correlationId || request.commandIndex === undefined) return { state: 'unavailable' };
+  try {
+    const walkId = walkAcceptanceId(process.env);
+    if (!walkId) return { state: 'unavailable' };
+    const log = Bun.file(walkStackLogPath(root, walkId));
+    const end = log.size;
+    const tail = await log.slice(Math.max(0, end - 1024 * 1024), end).text();
+    for (const line of tail.split('\n')) {
+      if (
+        line.length > 65_536 ||
+        !line.startsWith('{"event":"internal_error",') ||
+        !line.includes(request.correlationId)
+      )
+        continue;
+      let event: unknown;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (
+        !isRecord(event) ||
+        event.event !== 'internal_error' ||
+        event.method !== 'POST' ||
+        event.route !== '/v1/subjects:batchWrite' ||
+        event.request_id !== request.correlationId ||
+        event.command_index !== request.commandIndex
+      )
+        continue;
+      const category = request.sqlstate
+        ? 'postgres_server'
+        : (kernelErrorNames.find((name) => name === event.name) ?? 'unknown');
+      const frame = await firstProjectFrame(event.stack).catch(() => undefined);
+      return { state: 'matched', category, ...(frame ? { firstProjectFrame: frame } : {}) };
+    }
+  } catch {
+    // Losing the private supervisor observation must preserve the original seed refusal.
+  }
+  return { state: 'unavailable' };
 }
 
 async function command(name: 'seed' | 'seed-reopen', args: string[], env: NodeJS.ProcessEnv) {
@@ -1789,16 +1878,20 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
       });
       return seeded;
     } catch (error) {
+      const kernelFailure = await walkCommandFailure(remainingRequest);
       prerequisites.push({
         stage,
         elapsedMs: Date.now() - started,
         cause: walkFailureCause(error),
         ...(report ? { report } : {}),
         ...(remainingRequest ? { remainingRequest } : {}),
+        ...(kernelFailure ? { kernelFailure } : {}),
       });
       if (remainingRequest) {
         const name = stage === 'seed' ? 'remaining-request.json' : 'seed-reopen-remaining-request.json';
-        await writeFile(resolve(evidenceRoot, name), JSON.stringify(remainingRequest), { mode: 0o600 });
+        await writeFile(resolve(evidenceRoot, name), JSON.stringify({ ...remainingRequest, kernelFailure }), {
+          mode: 0o600,
+        });
       }
       return null;
     }
