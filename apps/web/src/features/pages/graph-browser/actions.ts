@@ -1,5 +1,5 @@
 import { expectedCandidateReader } from '../visit-host-port';
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { fetchGuideRelease } from '../../catalogue/definition-guide';
 import {
@@ -70,21 +70,24 @@ function address(value: unknown) {
   };
 }
 
-export async function exploreContext(locale: string, expectedReader: string | null, signal?: AbortSignal) {
-  const { env } = await import('cloudflare:workers');
-  const { prepareSession, sessionSubject, viewerCredential } = await import('../../../session/request');
-  const { kernelClient } = await import('../../../kernel/client');
-  setResponseHeader('cache-control', 'private, no-store');
-  signal?.throwIfAborted();
-  const request = getRequest();
-  await prepareSession(request, env as import('../../../session/client').SessionEnv);
-  signal?.throwIfAborted();
-  const reader = sessionSubject(request);
-  const authorization = viewerCredential(request) ?? undefined;
-  if (expectedReader === null ? !!reader || !!authorization : reader !== expectedReader || !authorization) return null;
-  signal?.throwIfAborted();
-  return { client: kernelClient(locale), authorization };
-}
+export const exploreContext = createServerOnlyFn(
+  async (locale: string, expectedReader: string | null, signal?: AbortSignal) => {
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../../../session/request');
+    const { kernelClient } = await import('../../../kernel/client');
+    setResponseHeader('cache-control', 'private, no-store');
+    signal?.throwIfAborted();
+    const request = getRequest();
+    await prepareSession(request, env as import('../../../session/client').SessionEnv);
+    signal?.throwIfAborted();
+    const reader = sessionSubject(request);
+    const authorization = viewerCredential(request) ?? undefined;
+    if (expectedReader === null ? !!reader || !!authorization : reader !== expectedReader || !authorization)
+      return null;
+    signal?.throwIfAborted();
+    return { client: kernelClient(locale), authorization };
+  },
+);
 
 export const readSubjectGraphBrowser = createServerFn({ method: 'POST', strict: false })
   .validator(address)
