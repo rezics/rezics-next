@@ -102,17 +102,17 @@ test('default seed publishes the cited VN work link on its own identity and refr
     });
     expect(grant.status).toBe(201);
 
-    async function candidates(subject: string, property: string) {
-      const response = await editor.http(
-        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
-      );
+    async function candidates(subject: string, property: string, target?: string) {
+      const query = new URLSearchParams({ property, context: globalContext, limit: '100' });
+      if (target) query.set('target', target);
+      const response = await editor.http(`/v1/subjects/${subject}/candidates?${query}`);
       expect(response.status).toBe(200);
       return response.body as { candidates: Candidate[]; adoption: { head: number } | null };
     }
-    async function acceptAdopt(subject: string, property: string) {
+    async function acceptAdopt(subject: string, property: string, target?: string) {
       const seen = new Set<string>();
       for (;;) {
-        const listing = await candidates(subject, property);
+        const listing = await candidates(subject, property, target);
         const next = listing.candidates.find(
           (candidate) => candidate.source && !candidate.retracted && !seen.has(candidate.id),
         );
@@ -122,6 +122,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
           const adopted = await editor.http(`/v1/subjects/${subject}:adopt`, {
             context: globalContext,
             property,
+            ...(target ? { target } : {}),
             mode: 'replace',
             expected_head: listing.adoption?.head ?? null,
             selection: live.map((candidate) => ({ candidate: candidate.id, rank: 'normal' })),
@@ -211,7 +212,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
       vnId,
     );
 
-    const bridgeCandidates = await candidates(vnId, 'rezics:crossMediaCounterpart');
+    const bridgeCandidates = await candidates(vnId, 'rezics:crossMediaCounterpart', animeId);
     const bridge = bridgeCandidates.candidates.find((candidate) => candidate.source?.external_id === sourceWork)!;
     expect(bridge).toMatchObject({
       statement: { value: { content: animeId } },
@@ -237,7 +238,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
         ),
       ),
     ).toBe(true);
-    await acceptAdopt(vnId, 'rezics:crossMediaCounterpart');
+    await acceptAdopt(vnId, 'rezics:crossMediaCounterpart', animeId);
     await acceptAdopt(vnId, 'schema:url');
 
     const currentVn = await read(vnId);
@@ -280,13 +281,11 @@ test('default seed publishes the cited VN work link on its own identity and refr
     );
     expect(refreshed.workLinks[0]?.candidateDigest).not.toBe(first.workLinks[0]?.candidateDigest);
     const afterFence = await read(vnId);
-    expect(afterFence.subject.statements['rezics:crossMediaCounterpart']?.map((item) => item.value.content)).toContain(
-      animeId,
-    );
-    expect(afterFence.subject.statements['schema:url']?.map((item) => item.value.content)).toContain(linkedUrl);
-    expect(afterFence.subject.statements['schema:url']?.map((item) => item.value.content)).not.toContain(
-      'https://bgm.tv/subject/101',
-    );
+    const counterparts = afterFence.subject.statements['rezics:crossMediaCounterpart'] ?? [];
+    expect(counterparts.map((item) => item.value.content)).not.toContain(animeId);
+    const urls = (afterFence.subject.statements['schema:url'] ?? []).map((item) => item.value.content);
+    expect(urls).not.toContain(linkedUrl);
+    expect(urls).not.toContain('https://bgm.tv/subject/101');
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
