@@ -165,6 +165,7 @@ async function readSnapshot(
     partition: number;
     envelopes?: number;
     observe?: (progress: ProjectionProgress) => void;
+    noEffects?: (envelopes: readonly Envelope[]) => boolean;
   },
 ) {
   const limit = validateOptions(options);
@@ -184,8 +185,16 @@ async function readSnapshot(
         envelopes: limit,
       });
       const parsed = parseRows(rows, options.partition, checkpoint);
+      const last = parsed.envelopes.at(-1);
+      const advanced = last !== undefined && !options.observe && options.noEffects?.(parsed.envelopes) === true;
+      if (advanced)
+        await advanceCheckpoint.run(client, {
+          ...key,
+          epoch: last.epoch,
+          position: last.position,
+        });
       await client.query('COMMIT');
-      return { checkpoint, ...parsed, rows: options.observe ? rows : undefined };
+      return { checkpoint, ...parsed, advanced, rows: options.observe ? rows : undefined };
     } catch (error) {
       return rollbackEventTransaction(client, error);
     }
@@ -269,6 +278,8 @@ export async function projectBatch(
     apply: (envelopes: readonly Envelope[]) => Promise<void>;
     envelopes?: number;
     observe?: (progress: ProjectionProgress) => void;
+    /** Recognize a validated batch with no apply effects for this consumer. */
+    noEffects?: (envelopes: readonly Envelope[]) => boolean;
   },
 ): Promise<BatchResult> {
   options.observe?.({ stage: 'read' });
@@ -292,7 +303,7 @@ export async function projectBatch(
       ...(reason ? { reason } : {}),
     });
   }
-  if (envelopes.length > 0) {
+  if (envelopes.length > 0 && !snapshot.advanced) {
     await options.apply(envelopes);
     const last = envelopes.at(-1)!;
     options.observe?.({ stage: 'checkpoint' });

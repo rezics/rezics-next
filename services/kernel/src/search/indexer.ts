@@ -17,6 +17,13 @@ import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
+import {
+  CANONICAL_GENERATION_COMMITTED,
+  CANONICAL_GENERATION_CONTINUATION,
+  CANONICAL_GENERATION_DELIVERED,
+  CANONICAL_GENERATION_REBUILD_CONTINUED,
+} from '../semantic/canonical-generation-events.ts';
+import { SEMANTIC_LOCATOR_ADVANCED } from '../semantic/erasure-locator-receipt.ts';
 
 export { IndexWriteError } from './write-actions.ts';
 
@@ -117,6 +124,14 @@ export function createSubjectIndexer(options: {
   };
 }
 
+const discoveryMaintenanceEvents: ReadonlySet<string> = new Set([
+  CANONICAL_GENERATION_COMMITTED,
+  CANONICAL_GENERATION_CONTINUATION,
+  CANONICAL_GENERATION_DELIVERED,
+  CANONICAL_GENERATION_REBUILD_CONTINUED,
+  SEMANTIC_LOCATOR_ADVANCED,
+]);
+
 /** The shared relay captures both owners in one 64-envelope checkpoint obligation. */
 export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjection, consumer: string): Relay {
   return {
@@ -125,6 +140,8 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
       return projectBatch(pool, {
         consumer,
         partition,
+        noEffects: (envelopes) =>
+          envelopes.every(({ events }) => events.every(({ type }) => discoveryMaintenanceEvents.has(type))),
         apply: async (envelopes) => {
           const subjects = new Set<string>(),
             accounts = new Set<string>(),

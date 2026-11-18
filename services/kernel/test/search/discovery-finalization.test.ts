@@ -342,8 +342,28 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     });
     const delivered = events.find(({ type }) => type === CANONICAL_GENERATION_DELIVERED)!;
     expect(BigInt(delivered.sequence)).toBe(BigInt(completed.rows[0]!.position) + 1n);
-    await createSemanticLocatorEffect(pool).run(delivered);
-    await advanceDiscovery(options);
+    const collectionProducer = resolved.metadataProducers.collection!;
+    const readStamps = collectionProducer.readEmptyStamps!.bind(collectionProducer);
+    let locatorCompleted = false;
+    await expect(
+      advanceDiscovery({
+        ...options,
+        metadataProducers: {
+          ...resolved.metadataProducers,
+          collection: {
+            ...collectionProducer,
+            async readEmptyStamps(partitions) {
+              if (!locatorCompleted && partitions.includes(noticeHome)) {
+                locatorCompleted = true;
+                await createSemanticLocatorEffect(pool).run(delivered);
+              }
+              return readStamps(partitions);
+            },
+          },
+        },
+      }),
+    ).resolves.toBe('waiting-for-replay');
+    expect(locatorCompleted).toBe(true);
     expect(indexedReads).toBe(locatorReads);
     expect(
       (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,

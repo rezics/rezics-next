@@ -122,6 +122,8 @@ test('a refused retained Home final removes Discovery before private viewer rows
   const calls: string[] = [];
   const selectionOpened = Promise.withResolvers<void>();
   const viewerReady = Promise.withResolvers<void>();
+  const discoveryFinished = Promise.withResolvers<void>();
+  let followingReads = 0;
   const defaults = ports();
   const app = createFeedApplication({
     ...defaults,
@@ -140,6 +142,7 @@ test('a refused retained Home final removes Discovery before private viewer rows
             },
             async finish() {
               calls.push('final');
+              discoveryFinished.resolve();
               throw new FeedRefusedError('dependency_unavailable');
             },
             async close() {
@@ -150,7 +153,12 @@ test('a refused retained Home final removes Discovery before private viewer rows
       },
     },
     continuation: { page: async () => ({ subjects: [], next: null }) },
-    following: { page: async () => ({ candidates: [{ item: following }], next: false }) },
+    following: {
+      async page() {
+        if (++followingReads === 2) await discoveryFinished.promise;
+        return { candidates: [{ item: following }], next: false };
+      },
+    },
     finish: {
       ...defaults.finish,
       async personalActions(items, _actor, _languages, _deadline, finalAdmission) {

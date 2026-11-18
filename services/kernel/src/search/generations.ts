@@ -2383,6 +2383,7 @@ async function checkMetadataCuts(
             space: row.space_position,
           };
           const candidate = maintenance?.get(row);
+          const head = BigInt(row.head);
           let mismatch: { state: 'metadata'; partition: number; kind: DiscoveryMetadataKind } | undefined;
           for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
             if (!requiredKinds.includes(kind)) continue;
@@ -2409,6 +2410,9 @@ async function checkMetadataCuts(
             if (kind === 'collection') trace?.observe(row, 'collectionEpoch', observation.epoch);
             if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
               return { state: 'retire' as const, partition: row.partition, kind };
+            // This read can land beyond the shared head captured before the
+            // owner probes. Re-observe that head before comparing certificates.
+            if (observation.position > head) return { state: 'moving' as const, partition: row.partition };
             if (candidate) candidate.positions[kind] = observation.position;
             if (metadataPositions[kind] !== observation.position.toString())
               mismatch ??= { state: 'metadata', partition: row.partition, kind };
@@ -2438,7 +2442,7 @@ export async function checkDiscoveryCutBatch(
   );
   const metadata = await checkMetadataCuts(pool, chunk, metadataProducers, requiredKinds, trace, maintenance);
   return metadata.map((check, index) => {
-    if (check.state === 'retire') return check;
+    if (check.state === 'retire' || check.state === 'moving') return check;
     const row = chunk[index]!;
     const witness = witnesses.get(row.partition);
     trace?.observe(row, 'witnessEpoch', witness?.epoch);
@@ -2480,6 +2484,7 @@ function staleFrontier(row: DiscoveryCut, owner: Population['owner']) {
   return {
     partition: row.partition,
     owner,
+    head: row.head,
     position: positions[owner],
     ...(owner === 'accounts' && { revision: row.revision, claim_revision: row.claim_revision }),
     ...(owner === 'semantic' && { revision: row.semantic_revision, claim_revision: row.semantic_claim_revision }),
@@ -2508,7 +2513,8 @@ async function reopenDiscoveryFrontiers(
              native_complete=CASE WHEN p.owner IN ('accounts','semantic') THEN p.native_complete ELSE false END,
              continuation=CASE WHEN p.owner IN ('accounts','semantic') THEN p.continuation ELSE NULL END
            FROM bound,jsonb_to_recordset($5::jsonb)
-             AS stale(partition integer,owner text,position bigint,revision bigint,claim_revision bigint,epoch integer)
+             AS stale(partition integer,owner text,head bigint,position bigint,revision bigint,claim_revision bigint,epoch integer)
+           JOIN core.partition h ON h.partition_no=stale.partition AND h.position=stale.head
            WHERE p.prefix=$1 AND p.generation=bound.generation AND p.partition_no=stale.partition
              AND p.owner=stale.owner AND p.certified AND p.reconcile_position IS NOT DISTINCT FROM stale.position
              AND (stale.revision IS NULL OR (p.revision,p.claim_revision)=(stale.revision,stale.claim_revision))
@@ -2555,7 +2561,7 @@ async function recheckDiscoveryCutBatch(
       SECOND_SCOPE_PUBLIC_METADATA_KINDS.every((kind) => observation.positions[kind]?.toString() === row.head)
     );
   });
-  let waitingForReplay = false;
+  let waitingForReplay = checks.some((check) => check.state === 'moving');
   if (observed.length) {
     const proved = new Set<number>();
     const homesPerWrite = Math.floor(DISCOVERY_CUT_BATCH_SIZE / (2 + SECOND_SCOPE_PUBLIC_METADATA_KINDS.length));
@@ -2670,7 +2676,7 @@ export async function advanceDiscovery(options: AdvanceDiscoveryOptions) {
 async function advanceDiscoveryTurn(
   options: AdvanceDiscoveryOptions,
   trace?: DiscoveryFinalizationTrace,
-): Promise<void | 'waiting-for-review-invalidation'> {
+): Promise<void | 'waiting-for-review-invalidation' | 'waiting-for-replay'> {
   const { pool, search, prefix, registry } = options;
   const metadataProducers = searchTurnMetadataProducers(options.metadataProducers ?? {}, 'population');
   const requiredKinds = options.requiredKinds ?? Object.keys(metadataProducers);
@@ -2983,7 +2989,8 @@ async function advanceDiscoveryTurn(
       trace,
       maintenance?.candidates,
     );
-    if (result.state === 'retiring' || result.state === 'waiting-for-replay') return;
+    if (result.state === 'retiring') return;
+    if (result.state === 'waiting-for-replay') return result.state;
     if (result.state === 'changed') {
       if (!result.repairPartitions) return;
       const progress = await advancePopulation('reconciling', result.repairPartitions);
@@ -2991,11 +2998,11 @@ async function advanceDiscoveryTurn(
       if (progress !== 'advanced') return;
     }
     if (maintenance?.deferred.size) return;
-    if (!(await replayCurrent())) return;
+    if (!(await replayCurrent())) return 'waiting-for-replay';
     // Repair can perform real writes. Take the entire publication inventory again after it settles.
     observations = await readDiscoveryCuts(pool, prefix, target.generation);
     if (observations.length < PARTITIONS) return;
-  } else if (!caughtUp) return;
+  } else if (!caughtUp) return 'waiting-for-replay';
   if (observations.length !== PARTITIONS) throw new Error('Discovery population partitions are incomplete');
   let reopenedCuts = false;
   for (let offset = 0; offset < observations.length; offset += DISCOVERY_CUT_BATCH_SIZE) {
@@ -3012,7 +3019,8 @@ async function advanceDiscoveryTurn(
       trace,
       maintenance?.candidates,
     );
-    if (result.state === 'retiring' || result.state === 'waiting-for-replay' || maintenance?.deferred.size) return;
+    if (result.state === 'waiting-for-replay') return result.state;
+    if (result.state === 'retiring' || maintenance?.deferred.size) return;
     // Later homes can expose independent changes on this same bounded inventory.
     // A changed batch prevents publication until every reopened frontier is certified again.
     if (result.state === 'changed') reopenedCuts = true;

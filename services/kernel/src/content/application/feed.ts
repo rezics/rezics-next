@@ -323,10 +323,12 @@ export function createFeedApplication(
         if (confirmed.rewind)
           rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
 
+        let discoveryFinished = false;
         const publishDiscovery = async () => {
-          if (!retainedDiscovery || sources.discovery !== 'ready') return;
+          if (discoveryFinished || !retainedDiscovery || sources.discovery !== 'ready') return;
           try {
             await retainedDiscovery.finish();
+            discoveryFinished = true;
           } catch (error) {
             rewind(new Set<FeedLane>(['discovery']), error);
           }
@@ -345,10 +347,18 @@ export function createFeedApplication(
             await loadLanes(selectedLanes);
           };
           if (retainedDiscovery && selected.includes('discovery')) {
+            const discovery = retainedDiscovery;
             const discoveryIds = feedItems.filter((item) => item.source === 'discovery').map(({ id }) => id);
+            const loadCurrentDiscovery = async () => {
+              const candidates = await discovery.current(discoveryIds);
+              await viewerReady;
+              await discovery.finish();
+              discoveryFinished = true;
+              return candidates;
+            };
             const current = await Promise.allSettled([
               loadCurrentLanes(selected.filter((lane) => lane !== 'discovery')),
-              retainedDiscovery.current(discoveryIds),
+              loadCurrentDiscovery(),
             ] as const);
             if (current[0].status === 'rejected') throw current[0].reason;
             if (current[1].status === 'rejected') discoveryFailure = current[1];

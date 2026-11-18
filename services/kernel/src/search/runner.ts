@@ -478,7 +478,7 @@ export function startDiscoveryIndexing(options: {
     const metadataProducers = ownerAdapters?.metadataProducers;
     const reviewSource = producers?.reviewSource ?? options.reviewSource;
     let readiness: Error | undefined;
-    let waitingForReviewInvalidation = false;
+    let waitingForProducer = false;
     try {
       const result = await advanceDiscovery({
         ...options,
@@ -488,7 +488,7 @@ export function startDiscoveryIndexing(options: {
         ...(metadataProducers ? { metadataProducers } : {}),
         ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
       });
-      waitingForReviewInvalidation = result === 'waiting-for-review-invalidation';
+      waitingForProducer = result !== undefined;
     } catch (error) {
       if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
         throw error;
@@ -497,9 +497,10 @@ export function startDiscoveryIndexing(options: {
     if (stopped || paused) return;
     const generations = await discoveryGenerations(options.pool, options.prefix);
     if (stopped || paused) return;
+    // Let the native producer or relay acquire the locks the finalization turn needs it to move.
     delay =
       !readiness &&
-      !waitingForReviewInvalidation &&
+      !waitingForProducer &&
       generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
         ? 0
         : (options.intervalMs ?? 100);
