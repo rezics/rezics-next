@@ -2,8 +2,10 @@ import { expect } from 'bun:test';
 import { expect as browserExpect } from 'playwright/test';
 import type { Page } from 'playwright';
 import { decodePreferenceValues } from '@rezics/client';
+import { PROBLEMS } from '../../../../services/kernel/src/http/problem-error.ts';
 import { LIBRARY_PAGE_LIMIT } from '../../src/library/reads.ts';
 import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { prepareLibraryDirectory } from './library-directory-readiness.ts';
 import { createLibraryEntry, prepareLibraryEntryCreator } from './library-navigation-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
@@ -205,11 +207,25 @@ nativeTest(
     }
     await createDatedEntry('Everything result outside the range', 1985);
 
-    const { collections } = (await read(`/v1/collections?curatorAccountId=${owner.accountId}&limit=100`, 'bob')) as {
-      collections: { id: string; builtinKind?: string }[];
+    await prepareLibraryDirectory(stack, owner.accountId, signal);
+    const directory = await stack.kernel(`/v1/collections?curatorAccountId=${owner.accountId}&limit=100`, {}, 'bob');
+    if (directory.status !== 200) {
+      const problem: unknown = directory.headers.get('content-type')?.startsWith('application/problem+json')
+        ? await directory.json().catch(() => null)
+        : null;
+      const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
+      const knownCode = typeof code === 'string' && Object.hasOwn(PROBLEMS, code) ? code : 'unclassified';
+      throw new Error(
+        `Collections setup after owner index readiness: GET /v1/collections as Bob for Bob returned ${directory.status} ${knownCode}`,
+      );
+    }
+    const { collections } = (await directory.json()) as {
+      collections: { id: string; builtinKind?: string; curatorAccountId: string; visibility: string }[];
     };
     const everything = collections.find((collection) => collection.builtinKind === 'everything');
     if (!everything) throw new Error('The native owner directory did not return Everything');
+    expect(everything.curatorAccountId).toBe(owner.accountId);
+    expect(everything.visibility).toBe('private');
     const collectionPath = `/en/collections/${encodeURIComponent(everything.id)}`;
     const membersPath = `/v1/collections/${encodeURIComponent(everything.id)}/members`;
     async function mountedMemberQuery(start: number, cursor: string | null) {
