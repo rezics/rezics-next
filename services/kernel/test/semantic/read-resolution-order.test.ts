@@ -6,6 +6,7 @@ import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import type { CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { fullView } from '../../src/library/views.ts';
@@ -44,7 +45,14 @@ const accounts = {
 };
 const realAccess = await createRealAccess(admin, accounts, actions);
 const libraryAccess = realAccess.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-const kernel = createKernel({ pool, access: realAccess.access, tokens, routeKey, writeRate: realAccess.writeRate });
+const kernel = createKernel({
+  pool,
+  access: realAccess.access,
+  tokens,
+  routeKey,
+  receiptKeys: testReceiptKeys(),
+  writeRate: realAccess.writeRate,
+});
 const writer = actor('writer');
 const subjectMergeAuthorization: CommandAuthorization = {
   action: 'subject:merge',
