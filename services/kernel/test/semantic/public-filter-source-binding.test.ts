@@ -368,7 +368,7 @@ test('native Source repair receipts revalidate original steps, replay, and curre
         );
         expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
         if (scan.status !== 'verified') throw new Error(scan.reason);
-        expect(nativePublicFilterRepairEvidence(binding, scan)).toEqual([]);
+        expect(nativePublicFilterRepairEvidence(binding, scan)).toEqual({ repairs: [], account: null });
         expect(nativePublicFilterRepairEvidence(binding, structuredClone(scan))).toBeUndefined();
         const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
         expect(nativePublicFilterRepairEvidence(restarted, scan)).toBeUndefined();

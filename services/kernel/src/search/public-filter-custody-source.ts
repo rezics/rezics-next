@@ -95,7 +95,8 @@ export async function verifyPublicFilterRepairSourcePage(
     )
   )
     throw new PublicFilterRepairSourceError('binding_mismatch');
-  const nativeRepairs = nativePublicFilterRepairEvidence?.(binding, step);
+  const evidence = nativePublicFilterRepairEvidence?.(binding, step);
+  const nativeRepairs = evidence?.repairs;
   if (nativeRepairs && nativeRepairs.length !== repairs.length)
     throw new PublicFilterRepairSourceError('binding_mismatch');
   for (const [item, receipt] of receipts.entries()) {
@@ -118,21 +119,22 @@ export async function verifyPublicFilterRepairSourcePage(
     if (!isDeepStrictEqual(repairBody(sourceRepair(verifiedRepair)), repairBody(repairs[item]!)))
       throw new PublicFilterRepairSourceError('binding_mismatch');
   }
-  charge();
-  const nativeAccount = nativeRepairs
-    ? null
-    : await owner(() => readNativePublicFilterAccountRepair(binding, request, context));
-  if (nativeAccount) charge(nativeAccount.cost);
-  if (expected.account !== undefined && !isDeepStrictEqual(expected.account, nativeAccount?.account))
+  let account = evidence?.account;
+  if (!evidence) {
+    charge();
+    const nativeAccount = await owner(() => readNativePublicFilterAccountRepair(binding, request, context));
+    if (nativeAccount) charge(nativeAccount.cost);
+    account = nativeAccount?.account;
+  }
+  if (expected.account !== undefined && !isDeepStrictEqual(expected.account, account))
     throw new PublicFilterRepairSourceError('binding_mismatch');
-  if (nativeAccount?.account && (repairs.length || step.complete))
-    throw new PublicFilterRepairSourceError('binding_mismatch');
+  if (account && (repairs.length || step.complete)) throw new PublicFilterRepairSourceError('binding_mismatch');
   return {
     sourceStep: step.step,
     predecessor: step.predecessor,
     frontier: step.frontier,
     complete: step.complete,
     repairs,
-    ...(nativeAccount?.account ? { account: nativeAccount.account } : {}),
+    ...(account ? { account } : {}),
   };
 }

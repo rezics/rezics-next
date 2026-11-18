@@ -620,20 +620,23 @@ const nativeAccountRepairs = new WeakMap<
     }>
   >
 >();
-// A verified response may carry the exact Subject bodies and absence of an
-// Account obligation from that invocation. A copied response or another
-// binding cannot recover this evidence.
+type NativeRepairEvidence = Readonly<{
+  repairs: readonly PublicSourceRepair[];
+  account: AccountDiscoveryRepairObservation | null;
+}>;
+// A verified response may carry bodies already checked by that invocation.
+// A copied response or another binding cannot recover this evidence.
 const publicFilterRepairEvidence = new WeakMap<
   Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
-  Readonly<{ binding: PublicFilterSourceBinding; repairs: readonly PublicSourceRepair[] }>
+  Readonly<{ binding: PublicFilterSourceBinding; evidence: NativeRepairEvidence }>
 >();
 
 export function nativePublicFilterRepairEvidence(
   binding: PublicFilterSourceBinding,
   step: Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
-): readonly PublicSourceRepair[] | undefined {
+): NativeRepairEvidence | undefined {
   const evidence = publicFilterRepairEvidence.get(step);
-  return evidence?.binding === binding ? evidence.repairs : undefined;
+  return evidence?.binding === binding ? evidence.evidence : undefined;
 }
 
 type NativeRepairStartInput = Readonly<{
@@ -3030,6 +3033,7 @@ export function createNativePublicFilterSourceBinding(
               : { ...record.input, projection: record.output.frontier };
         } else if (record.account) {
           if (
+            !('representation' in cut.definition.capture) ||
             record.input.owner !== 'accounts' ||
             record.input.phase !== 'account' ||
             record.input.subject !== record.account.id ||
@@ -3247,8 +3251,11 @@ export function createNativePublicFilterSourceBinding(
           })),
           cost,
         };
-        if (record.account === undefined && repairs.length === receiptDigests.length)
-          publicFilterRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
+        if (repairs.length === receiptDigests.length)
+          publicFilterRepairEvidence.set(result, {
+            binding: bootstrapBinding,
+            evidence: { repairs, account: record.account ?? null },
+          });
         return result;
       });
       if (!observer) return pending;
