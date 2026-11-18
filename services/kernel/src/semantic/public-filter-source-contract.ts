@@ -100,6 +100,24 @@ export type PublicFilterProjectionRequest = Readonly<{
 
 export type PublicFilterProjectionRetirement = Readonly<{ build: string; generation: string; partition: number }>;
 
+export type PublicFilterSubjectIdentityRequest = Readonly<{
+  subjects: readonly string[];
+  meaning: PublicFilterProjectionMeaning;
+  inputLimit: number;
+  context: PublicFilterReadContext;
+}>;
+export type PublicFilterSubjectIdentities =
+  | Readonly<{
+      status: 'observed';
+      rows: readonly Pick<
+        PublicFilterProjectionObservation,
+        'subject' | 'terminal' | 'partition' | 'securityRevision' | 'currentRelease'
+      >[];
+      cost: PublicFilterCost;
+    }>
+  | Unready
+  | Unavailable;
+
 type Unready = Readonly<{
   status: 'unready';
   retirement?: PublicFilterProjectionRetirement;
@@ -262,6 +280,9 @@ export type PrivacyReductionObservation =
 /** Native Semantic source, composed additively with the existing subjectSource. */
 export type PublicFilterSource = Readonly<{
   readPublicFilterProjectionPage(request: PublicFilterProjectionRequest): Promise<PublicFilterProjectionPage>;
+  readPublicFilterSubjectIdentities?(
+    request: PublicFilterSubjectIdentityRequest,
+  ): Promise<PublicFilterSubjectIdentities>;
   readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
   readPrivacyReductionPage(request: PrivacyReductionLogRequest): Promise<PrivacyReductionLogPage>;
 }>;
