@@ -54,7 +54,7 @@ import { accessCheck, AuthenticationError, prepareReadDecisions } from '../../re
 import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
-import { ProblemError, problemSchema } from '../../http/problem.ts';
+import { isImportCatalogueWalk, ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadDecisionEligibility, relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
@@ -1330,6 +1330,8 @@ function subjectRoutes(
           runNative: (read) => admission.run('normal', job, read),
           readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
           seen: [...session.components],
+          observeMissingCheckpoint:
+            request.headers.get('x-rezics-walk-subject-read') === 'source-scheme' && isImportCatalogueWalk(),
           ...(selectedSynopsis ? { selectedSynopsis } : {}),
           ...(reviewIdentity ? { reviewIdentity } : {}),
           ...(query.includeViewerActions ? { includeViewerActions: true } : {}),

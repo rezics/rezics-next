@@ -125,6 +125,7 @@ export type SubjectReadOptions = {
   authorize?: SummaryDependencies['authorize'];
   prepareSummaryBatch?: () => Promise<SubjectSummaryBatchAuthorizer>;
   seen?: readonly SubjectComponent[];
+  observeMissingCheckpoint?: boolean;
   deadline?: number;
   prepareAuthorization?: () => Promise<AccessCheck>;
   prepareAuthorize?: (id: string) => Promise<AccessCheck>;
@@ -157,6 +158,7 @@ export type SubjectReadingPageRequest = {
   ) => Promise<T>;
   readAs: <T>(read: () => Promise<T>) => Promise<T>;
   seen: readonly SubjectComponent[];
+  observeMissingCheckpoint?: boolean;
   selectedSynopsis?: SelectedSynopsisInput;
   reviewIdentity?: ReviewedPersonSource;
   includeViewerActions?: boolean;
@@ -965,6 +967,7 @@ async function readSubjectNative(
           (observed) => {
             reason = observed;
           },
+          summaries.observeMissingCheckpoint,
         );
         requireAccessDeadline(deadline);
         if (!ready) throw new SubjectProjectionPreparingError(terminal ? 'merged-member' : 'subject', stage, reason);
@@ -1478,6 +1481,7 @@ async function readSubjectPage(
           : {}),
         authorize: authorizeSummary,
         seen: input.seen,
+        ...(input.observeMissingCheckpoint ? { observeMissingCheckpoint: true } : {}),
         ...(yieldAdmission ? { yieldAdmission } : {}),
         deadline,
         prepareSummaryBatch: input.authorization.prepareSummaryBatch,
