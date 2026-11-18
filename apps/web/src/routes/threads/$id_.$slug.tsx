@@ -756,6 +756,7 @@ export function ThreadReadingPost({
   readAuthority,
   historyReadAuthority = readAuthority,
   connectingHistoryPost,
+  historySessionPending = false,
   authors,
   mentions,
   documentMedia,
@@ -790,6 +791,7 @@ export function ThreadReadingPost({
   readAuthority?: object | undefined;
   historyReadAuthority?: object | undefined;
   connectingHistoryPost?: ThreadPost;
+  historySessionPending?: boolean;
   authors: PageAuthors;
   mentions: DocumentMentions;
   documentMedia?: ThreadDocumentMedia | undefined;
@@ -909,12 +911,14 @@ export function ThreadReadingPost({
       target.id,
     ],
   );
+  // The public page can hydrate before the browser knows which reader owns the first click.
+  const historyReady = !historySessionPending && !editing && Boolean(historyRevisionId);
   const mountedHistory = useRef<object | undefined>(undefined);
   useLayoutEffect(() => {
-    if (!connectingHistoryPost) mountedHistory.current = !editing && historyRevisionId ? historyScope : undefined;
-  }, [connectingHistoryPost, editing, historyRevisionId, historyScope]);
+    if (!connectingHistoryPost) mountedHistory.current = historyReady ? historyScope : undefined;
+  }, [connectingHistoryPost, historyReady, historyScope]);
   // The list stays inert while its new caller connects. Keep only a matching history visit already mounted.
-  const showHistory = historyRevisionId && (!connectingHistoryPost || mountedHistory.current === historyScope);
+  const showHistory = historyReady && (!connectingHistoryPost || mountedHistory.current === historyScope);
   previousLifetime.current = lifetime;
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.serverSnapshot);
   useLayoutEffect(() => lifetime.connect(), [lifetime]);

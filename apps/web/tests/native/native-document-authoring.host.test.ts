@@ -235,6 +235,7 @@ async function measureHistoryReads(
     const panel = post.getByRole('region', { name: 'Revision history', exact: true });
     try {
       await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
+      expect(await panel.getAttribute('id')).toBe(controlId);
     } catch (error) {
       const observation = await observeMountedHistory(fixture, historyPage, postId, controlId, before);
       console.info(

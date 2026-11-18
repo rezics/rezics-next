@@ -276,7 +276,7 @@ async function mountRoute({
   threadId: string;
   cursor?: string;
   mode?: Mode;
-  session?: Session;
+  session?: Session | Promise<Session>;
   strict?: boolean;
   slugName?: string;
   rememberedTitle?: string | null;
@@ -288,7 +288,8 @@ async function mountRoute({
   if (rememberedTitle !== undefined) rememberThreadSlug(threadId, rememberedTitle);
   notifyManager.setScheduler((callback) => callback());
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionQuery.queryKey, session);
+  if (session instanceof Promise) void client.fetchQuery({ ...sessionQuery, queryFn: () => session });
+  else client.setQueryData(sessionQuery.queryKey, session);
   const knownSlug = rememberedThreadSlug(threadId);
   const expectedSlug = knownSlug === slugName ? undefined : slugName;
   if (seedPage) client.setQueryData(threadPageQuery(threadId, cursor, mode, expectedSlug).queryKey, seedPage);
@@ -339,7 +340,7 @@ async function mountRoute({
       pageReads[index]!.work.resolve(result);
       await operation.catch(() => undefined);
     });
-    if (session.state === 'signed-in' && !('redirect' in result)) {
+    if (!(session instanceof Promise) && session.state === 'signed-in' && !('redirect' in result)) {
       await settleUntil(() => personalReads.length > personalBefore);
     } else {
       await flush();
@@ -709,7 +710,8 @@ test('signed-in page and bounded personal data compose, including a null-CSRF re
 test('a public thread rereads reply advice for the signed-in browser viewer', async () => {
   const { authoredReadingPage } = await import('../src/kernel/fake/thread-reading-page');
   const threadId = id(125);
-  const page = await mountRoute({ threadId, mode: 'anonymous', session: signedOut });
+  const session = deferred<Session>();
+  const page = await mountRoute({ threadId, mode: 'anonymous', session: session.promise });
   const historyResult = deferred<PostHistoryReadData>();
   const historyReader = spyOn(readModule, 'readPostHistory').mockImplementation(async ({ data }) =>
     historicalReadEnvelope(
@@ -724,7 +726,11 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
     await page.settlePage(0, publicPage);
     expect(page.host.textContent).toContain('Public page before session preparation');
     expect(page.host.querySelector('input[name="idempotency_key"]')).toBeNull();
-    await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn()));
+    const historyControl = () => page.host.querySelector<HTMLButtonElement>('button[aria-controls^="post-history-"]');
+    const details = page.host.querySelector<HTMLDetailsElement>('[data-slot="post-reading-inspection"] > details')!;
+    details.open = true;
+    expect(historyControl()).toBeNull();
+    await act(async () => session.resolve(signedIn()));
     expect(page.host.textContent).toContain('Public page before session preparation');
     await until(() => pageReads.length === 2, 'the account reading page');
     expect(pageReads[1]!.data).toMatchObject({
@@ -736,8 +742,7 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
 
     const post = publicPage.posts.posts[0]!;
     if (post.availability !== 'available') throw new Error('Expected a published Post fixture');
-    page.host.querySelector<HTMLDetailsElement>('[data-slot="post-reading-inspection"] > details')!.open = true;
-    const historyControl = () => page.host.querySelector<HTMLButtonElement>('button[aria-controls^="post-history-"]');
+    expect(details.open && details.isConnected).toBe(true);
     const control = historyControl()!;
     await act(async () => control.click());
     expect(control.getAttribute('aria-expanded')).toBe('true');
@@ -780,6 +785,9 @@ test('a public thread rereads reply advice for the signed-in browser viewer', as
     const historyPanel = window.document.getElementById(control.getAttribute('aria-controls')!);
     expect(historyPanel?.hidden).toBe(false);
     expect(historyPanel?.querySelectorAll('[data-history-summary]')).toHaveLength(2);
+    await act(async () => page.client.setQueryData(sessionQuery.queryKey, signedIn()));
+    expect(control.isConnected).toBe(false);
+    expect(page.host.querySelectorAll('[data-history-summary]')).toHaveLength(0);
     expect(historyReader).toHaveBeenCalledTimes(1);
   } finally {
     historyResult.resolve({ available: false });

@@ -515,6 +515,7 @@ export function ThreadReading({
                       post={post}
                       readAuthority={readAuthority}
                       historyReadAuthority={historyReadAuthority}
+                      historySessionPending={session === 'unknown'}
                       {...(preserveHistoryOnConnect
                         ? { connectingHistoryPost: sourcePage.posts.posts[row.index]! }
                         : {})}
