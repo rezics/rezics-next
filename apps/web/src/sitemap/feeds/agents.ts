@@ -39,7 +39,7 @@ export const feed: SitemapFeed<AgentItem> = {
   async read(cursor) {
     const result = await kernelClient()['agent-pages'].get({
       query: { ...(cursor === null ? {} : { cursor }), limit: 1_000 },
-      fetch: { cache: 'no-store', redirect: 'error' },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (result.status !== 200 || result.error)
       throw Object.assign(new Error(`Sitemap feed agents returned ${result.status}`), {

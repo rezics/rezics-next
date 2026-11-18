@@ -93,7 +93,7 @@ export async function readErasureStatus(
     const response = await fetcher(url, {
       method: 'GET',
       cache: 'no-store',
-      redirect: 'error',
+      redirect: 'manual',
       headers: { authorization, accept: 'application/json', 'cache-control': 'no-store' },
       signal: AbortSignal.timeout(10_000),
     });
