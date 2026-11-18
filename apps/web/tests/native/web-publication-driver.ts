@@ -3,7 +3,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import publicationData from '../../../../specs/fixtures/web-publication.json';
 import { readFile } from 'node:fs/promises';
-import { startNativeWebStack } from './stack';
+import { startNativeWebStack, type NativeCredentials, type NativeWebServices, type NativeWebStack } from './stack';
 import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
 import { provisionCommunityPublication } from './publication-community-fixture.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
@@ -159,12 +159,17 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   assertReleasedDefinitions(publicationData);
   const existingChildren = new Set(await childPids(process.pid));
   const lifecycle = new NativeTestLifecycle('native web publication driver', currentNativeLifecycle());
-  const stack = await lifecycle.run(
+  let onServicesReady!: (services: NativeWebServices) => void;
+  const servicesReady = new Promise<NativeWebServices>((resolve) => {
+    onServicesReady = resolve;
+  });
+  const websiteReady = lifecycle.run(
     'start native web publication driver',
     startupTimeoutMs,
-    () => startNativeWebStack(),
+    () => startNativeWebStack({ onServicesReady }),
     false,
   );
+  const services = await Promise.race([servicesReady, websiteReady]);
   let host: ProcessInfo;
   try {
     host = await ownedStackHost(existingChildren);
@@ -175,12 +180,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
   const interruptionRestores = new Set<() => Promise<void>>();
-  const directCredentials = new Map<Persona, Awaited<ReturnType<typeof stack.credentials>>>();
-  const setupActors = new Map<string, ReturnType<typeof stack.authPersona>>();
+  const directCredentials = new Map<Persona, NativeCredentials>();
+  const setupActors = new Map<string, ReturnType<typeof services.authPersona>>();
   const setupActor = (persona: string) => {
     let actor = setupActors.get(persona);
     if (!actor) {
-      actor = stack.authPersona(persona);
+      actor = services.authPersona(persona);
       setupActors.set(persona, actor);
     }
     return actor;
@@ -197,14 +202,14 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const feedMeasurements = new Map<string, { times: number[]; retries: number }>();
   // Only native setup/control requests retry. Served documents must retain their
   // original HTTP response, including retryable failures and manual redirects.
-  const kernel: typeof stack.kernel = async (path, init, persona) => {
+  const kernel: NativeWebStack['kernel'] = async (path, init, persona) => {
     // Fixture authors write to Kernel with their issued bearer. Website sessions belong to served reads.
     const headers = new Headers(init?.headers);
     if (persona && persona !== 'anonymous') headers.set('authorization', (await setupActor(persona)).authorization);
     for (let attempt = 0; ; attempt++) {
       const started = performance.now();
-      const response = await stack.kernel(path, { ...init, headers });
-      const measurements = feedMeasurements.get(new URL(path, stack.kernelOrigin).pathname);
+      const response = await services.kernel(path, { ...init, headers });
+      const measurements = feedMeasurements.get(new URL(path, services.kernelOrigin).pathname);
       measurements?.times.push(performance.now() - started);
       if (response.ok) return response;
       const problem = (await response
@@ -221,6 +226,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     }
   };
   const request: WebPublicationDriver['request'] = async (url, persona, headers) => {
+    const stack = await websiteReady;
     const before = stack.kernelRequests().length;
     let response: Response;
     if (ownerReadInterrupted) {
@@ -254,7 +260,14 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const provision = async (data: typeof import('../../../../specs/fixtures/web-publication.json')) => {
     const started = performance.now();
     assertReleasedDefinitions(data);
-    const active = await kernel('/v1/definitions/active');
+    const setup = new AbortController();
+    const signal = AbortSignal.any([lifecycle.signal, setup.signal]);
+    void websiteReady.catch((error: unknown) => setup.abort(error));
+    const prepare: typeof kernel = (path, init, persona) => {
+      signal.throwIfAborted();
+      return kernel(path, { ...init, signal }, persona);
+    };
+    const active = await prepare('/v1/definitions/active');
     if (!active.ok) throw new Error(`Could not read released definition: ${active.status} ${await active.text()}`);
     const activeBody = (await active.json()) as { digest: string };
     if (activeBody.digest !== bundledDigest)
@@ -262,12 +275,10 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const writers = await preparePublicationWriters(kernel, setupActor);
-    const setup = new AbortController();
-    const prepare: typeof kernel = (path, init, persona) => {
-      setup.signal.throwIfAborted();
-      return kernel(path, { ...init, signal: setup.signal }, persona);
-    };
+    const writers = await preparePublicationWriters(prepare, setupActor);
+    console.info(
+      `web-publication-driver-provision: native writers ready at ${Math.round(performance.now() - factoryStarted)}ms`,
+    );
     // These inventories share only the prepared owner. Drain both before returning a setup failure.
     const inventories = [
       seedPublicationSubjects(prepare, writers, data),
@@ -347,8 +358,8 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       verifiedSubject: community.verifiedSubjectUrl,
       verifiedProfile: community.verifiedProfileUrl,
       publicPage: subjects.book,
-      personalRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', stack.kernelOrigin).href,
-      bannedRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', stack.kernelOrigin).href,
+      personalRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', services.kernelOrigin).href,
+      bannedRead: new URL('/v1/subjects/00000000-0000-4000-8000-000000000000', services.kernelOrigin).href,
       privateCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000000', publicOrigin).href,
       unknownCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000001', publicOrigin).href,
       emptyPublicList: new URL('/en/subjects', publicOrigin).href,
@@ -357,6 +368,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
       sitemap,
     };
+    const stack = await websiteReady;
     provisioned = { data: structuredClone(data), fixture, sitemapNativeIds };
     console.info(
       `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created.size}`,
@@ -490,10 +502,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       throw new Error('revokeAlice is delivered by a later task');
     },
     async configurePublicOrigin(origin) {
+      const stack = await websiteReady;
       await stack.restartWeb({ publicOrigin: origin });
       publicOrigin = origin;
     },
     async interrupt(kind) {
+      const stack = await websiteReady;
       const target = kind === 'subject-view' ? await durableWorker(host.pid) : host;
       if (kind === 'owner-read') {
         // Cache fixture bearer credentials before stopping the stack host. The

@@ -89,7 +89,14 @@ export type NativeAccountOperationActor = {
   accountId: string;
   scopes: readonly string[];
 };
+export type NativeWebServices = Pick<NativeWebStack, 'authPersona' | 'kernelOrigin'> & {
+  /** Service setup uses an issued bearer directly, before a website session can exist. */
+  kernel(path: string, init?: RequestInit): Promise<Response>;
+};
+
 export type NativeWebStackOptions = {
+  /** Expose the owned Kernel and Auth for fixture writes during production Web startup. */
+  onServicesReady?(services: NativeWebServices): void;
   /** Register the requesting application on the isolated Auth issuer, with no standing personal grants. */
   externalConsentClient?: { clientId: string; displayName: string; scopes: string[] };
   /** Observe actual Access results for the frozen personal boundary contract. */
@@ -294,14 +301,14 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-async function startWeb(
+function startWeb(
   origin: string,
   kernelOrigin: string,
   publicOrigin: string,
   authEnvironment: NodeJS.ProcessEnv,
   stateDirectory: string,
   onOwnedGroup: (child: ChildProcess, stateDirectory: string) => void,
-): Promise<WebProcess> {
+): WebProcess & { waitUntilReady(): Promise<void> } {
   const env: NodeJS.ProcessEnv = {
     ...nativeViteEnvironment(process.env),
     ...authEnvironment,
@@ -350,41 +357,32 @@ async function startWeb(
   // Vite configuration, Paraglide and the Cloudflare plugin's Worker graph load run before the port listens.
   // On a loaded check host that took more than four minutes, so this probe allows 720 seconds; it still
   // requires the real Worker's 404 for an unknown subject.
-  const deadline = Date.now() + 720_000;
-  try {
-    while (Date.now() < deadline) {
-      failIfExited();
-      try {
-        const response = await fetchNativeWebsite(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(5000),
-        });
-        await response.arrayBuffer();
+  return {
+    child,
+    identity,
+    stateDirectory,
+    exited,
+    output: () => output,
+    async waitUntilReady() {
+      const deadline = Date.now() + 720_000;
+      while (Date.now() < deadline) {
         failIfExited();
-        if (response.status === 404)
-          return {
-            child,
-            identity,
-            stateDirectory,
-            exited,
-            output: () => output,
-          };
-      } catch {
-        if (spawnError || ended || child.exitCode !== null || child.signalCode !== null) failIfExited();
+        try {
+          const response = await fetchNativeWebsite(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(5000),
+          });
+          await response.arrayBuffer();
+          failIfExited();
+          if (response.status === 404) return;
+        } catch {
+          failIfExited();
+        }
+        await Bun.sleep(250);
       }
-      await Bun.sleep(250);
-    }
-    throw new Error(`web Worker startup timed out: ${output}`);
-  } catch (error) {
-    await stopWeb({
-      child,
-      identity,
-      stateDirectory,
-      exited,
-      output: () => output,
-    }).catch(() => {});
-    throw error;
-  }
+      throw new Error(`web Worker startup timed out: ${output}`);
+    },
+  };
 }
 
 async function stopWeb(web: WebProcess | undefined): Promise<void> {
@@ -714,6 +712,7 @@ async function adoptOwnedKernelAnalysisCache(
 
 async function startStack(): Promise<
   Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
+    websiteReady: Promise<void>;
     routeAuthPages(origin?: string): Promise<string>;
   }
 > {
@@ -1478,7 +1477,7 @@ async function startStack(): Promise<
       NATIVE_MEDIA_STORAGE_TOKEN: nativeMediaStorageToken,
     };
     const webCookies = new Map<string, Promise<string | undefined>>();
-    let webStateDirectory: string | undefined;
+    const webStateDirectory = await mkdtemp(join(tmpdir(), 'native-web-state-'));
     const responseCookie = (response: Response, name: string) => {
       const value = response.headers
         .getSetCookie()
@@ -1513,8 +1512,7 @@ async function startStack(): Promise<
     let publicOrigin = 'https://rezics.example.test';
     let authPageOrigin: string | undefined;
     const launch = async () => {
-      webStateDirectory ??= await mkdtemp(join(tmpdir(), 'native-web-state-'));
-      return startWeb(
+      const worker = startWeb(
         webOrigin,
         kernelOrigin,
         publicOrigin,
@@ -1526,14 +1524,25 @@ async function startStack(): Promise<
         webStateDirectory,
         (child, stateDirectory) => reportOwnedProcessGroup('web Worker', child, stateDirectory),
       );
+      // Own and sample the process as soon as it spawns, including while the first document compiles.
+      webProcess = worker;
+      await worker.waitUntilReady();
     };
     reportStackProgress('Native web stack startup: starting production web Worker');
-    webProcess = await launch();
-    markBookReady('web-worker-ready');
-    reportStackProgress('Native web stack startup: production web Worker ready');
-    sampleMemory('web-worker-ready');
+    const websiteReady = launch().then(() => {
+      markBookReady('web-worker-ready');
+      reportStackProgress('Native web stack startup: production web Worker ready');
+      sampleMemory('web-worker-ready');
+    });
+    if (process.env.NATIVE_WEB_STARTUP_READINESS === 'services') {
+      // The supervisor joins this same probe through IPC. Retain an early rejection for that join.
+      void websiteReady.catch(() => {});
+    } else {
+      await websiteReady;
+    }
 
     return {
+      websiteReady,
       databaseUrl: driver.fixtures.runtime.databaseUrl,
       ...(searchConfig && { searchWorker: { prefix: searchConfig.prefix, executorId } }),
       authDatabaseUrl: auth.database.options.connectionString!,
@@ -1705,7 +1714,12 @@ async function startStack(): Promise<
         webCookies.clear();
         publicOrigin = options.publicOrigin;
         authPageOrigin = options.authIssuer;
-        webProcess = await launch();
+        try {
+          await launch();
+        } catch (error) {
+          await stopWeb(webProcess);
+          throw error;
+        }
       },
       stop,
     };
@@ -1754,6 +1768,7 @@ type HostCall = {
     | 'createAutomatedActor'
     | 'routeAuthPages'
     | 'advanceAuthClock'
+    | 'waitForWebsite'
     | 'restartWeb'
     | 'injectKernelFailureOnce'
     | 'injectCreatedSubjectReadFailureOnce'
@@ -1859,6 +1874,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_WEB_STARTUP_READINESS: options.onServicesReady ? 'services' : 'website',
     NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     NATIVE_WEB_OBSERVE_BOOK_LIBRARY_STATE: options.observeBookLibraryState ? '1' : undefined,
@@ -2292,9 +2308,19 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       close: () => api.stop(),
       force: terminate,
     });
+    if (options.onServicesReady) {
+      options.onServicesReady({ kernelOrigin, kernel: api.kernel, authPersona: api.authPersona });
+      await call('waitForWebsite');
+      lifecycle.assertOpen('finish native website startup');
+    }
     return api;
   } catch (error) {
-    await terminate();
+    try {
+      if (nativeStack) await nativeStack.stop();
+      else await terminate();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], 'Native web stack startup and cleanup failed', { cause: error });
+    }
     throw error;
   }
 }
@@ -2345,6 +2371,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         else if (method === 'injectCreatedSubjectReadFailureOnce')
           stack.injectCreatedSubjectReadFailureOnce(JSON.parse(argument!) as { status: number; body: string });
         else if (method === 'observe') await stack.syncKernelRequests();
+        else if (method === 'waitForWebsite') await stack.websiteReady;
         else if (method === 'restartWeb') await stack.restartWeb(options!);
         else if (method === 'workerLogs') value = await stack.workerLogs();
         else if (method === 'stop') await stack.stop();
