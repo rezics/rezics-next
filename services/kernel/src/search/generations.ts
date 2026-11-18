@@ -2997,6 +2997,7 @@ async function advanceDiscoveryTurn(
     if (observations.length < PARTITIONS) return;
   } else if (!caughtUp) return;
   if (observations.length !== PARTITIONS) throw new Error('Discovery population partitions are incomplete');
+  let reopenedCuts = false;
   for (let offset = 0; offset < observations.length; offset += DISCOVERY_CUT_BATCH_SIZE) {
     const chunk = observations.slice(offset, offset + DISCOVERY_CUT_BATCH_SIZE);
     trace?.step('native-cuts', offset);
@@ -3011,8 +3012,12 @@ async function advanceDiscoveryTurn(
       trace,
       maintenance?.candidates,
     );
-    if (result.state !== 'current' || maintenance?.deferred.size) return;
+    if (result.state === 'retiring' || result.state === 'waiting-for-replay' || maintenance?.deferred.size) return;
+    // Later homes can expose independent changes on this same bounded inventory.
+    // A changed batch prevents publication until every reopened frontier is certified again.
+    if (result.state === 'changed') reopenedCuts = true;
   }
+  if (reopenedCuts) return;
   trace?.step('physical-target', observations.length);
   if (!(await discoveryPhysicalTargetMatches(search, target))) {
     await retireDiscoveryCapability(pool, target);

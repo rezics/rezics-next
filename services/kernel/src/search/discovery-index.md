@@ -90,6 +90,8 @@ index reopens its native population. After repair, publication reads replay fres
 inventory of all 4096 homes. Each block of up to 100 homes can share one bounded read per metadata owner.
 An unavailable shared read returns the block to the ordinary owner waves. If Content observes a change between its two empty-key Review snapshots, Search
 requests one fresh pair under the same maintenance deadline. A second refusal leaves publication pending.
+The inventory check can reopen changes in several independent blocks during the same turn. Publication waits
+for the resulting frontiers and a fresh full inventory.
 
 The finalizer can advance five existing certificates together after all native readers observe the new head
 and the Account epoch, Account revision and claim revision still match. One batch checks at most 64 positions
