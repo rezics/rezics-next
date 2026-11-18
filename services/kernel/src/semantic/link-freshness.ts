@@ -154,6 +154,13 @@ export async function linksCaughtUp(
           }
           if (behind) {
             lastObservation = checkpointWaitReason(behind, subject);
+            if (observeMissing && lastObservation === 'foreign-checkpoint-position') {
+              const events = await client.query(
+                'SELECT position::text, type, event_count FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position > $3 AND position <= $4 ORDER BY position, event_seq LIMIT 20',
+                [behind.partition_no, behind.epoch, behind.checkpoint_position, behind.position],
+              );
+              console.error('Reviewed checkpoint trace ' + JSON.stringify([behind.partition_no, String(behind.checkpoint_position), String(behind.position), events.rows]));
+            }
             return false;
           }
           lastObservation = 'merge-deadline';

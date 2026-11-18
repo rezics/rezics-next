@@ -1958,6 +1958,7 @@ export async function runWalk(
                 /^Relay semantic_links (?:failed on partition \d+\b|stopped at partition \d+ position \d+: (?:gap|epoch|unknown_type|invalid_data)\b)/gm,
               )
               ?.at(-1);
+            for (const line of new Set(tail.split('\n').filter(line => line.startsWith('Reviewed checkpoint trace ')))) console.error(line);
             if (wait) console.error(wait);
             if (relay) console.error(relay);
           }
