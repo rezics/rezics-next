@@ -18,7 +18,7 @@ export const CANONICAL_GENERATION_PAGE_SIZE = 200;
 const CANONICAL_GENERATION_SOURCE_BATCH_SIZE = 8;
 const contextDirectoryChanged = 'com.rezics.semantic.context-directory.changed.v1';
 export type CanonicalGenerationDelivery = Readonly<{ partition: number; generation: string }>;
-export type CanonicalGenerationPageRequest = Readonly<{ after: number | null; limit: number }>;
+export type CanonicalGenerationPageRequest = Readonly<{ after: number | null; limit: number; unannouncedOnly?: true }>;
 export type CanonicalGenerationReceiver = (
   tx: CommandTransaction,
   generation: CanonicalGenerationDelivery,
@@ -44,7 +44,7 @@ function copyPage(input: CanonicalGenerationPageRequest): CanonicalGenerationPag
     !Number.isInteger(limit) || limit < 1 || limit > CANONICAL_GENERATION_PAGE_SIZE
   )
     throw new TypeError('Invalid canonical generation delivery page');
-  return { after, limit };
+  return { after, limit, ...(input.unannouncedOnly === true && { unannouncedOnly: true as const }) };
 }
 
 function nativeHome(event: CloudEvent): number {
@@ -70,7 +70,7 @@ export async function readCanonicalGenerationDeliveryPage(
   input: CanonicalGenerationPageRequest,
   { deadline }: Readonly<{ deadline: number }>,
 ): Promise<Readonly<{ homes: readonly CanonicalGenerationDelivery[]; after: number | null }>> {
-  const { after, limit } = copyPage(input);
+  const { after, limit, unannouncedOnly } = copyPage(input);
   requireAccessDeadline(deadline);
   const result = await withBoundedReadConnection(
     pool,
@@ -79,6 +79,7 @@ export async function readCanonicalGenerationDeliveryPage(
       `SELECT partition_no AS partition,canonical_generation::text AS generation
        FROM semantic.partition_subjects
        WHERE partition_no>$1 AND canonical_delivered_generation<canonical_generation
+         ${unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
        ORDER BY partition_no LIMIT $2`,
       [after ?? -1, limit],
     ),
@@ -107,7 +108,7 @@ export async function readCanonicalGenerationDeliveryPage(
  * The source emits at most eight native homes per turn before handing off the next page.
  * This bounds how many relay homes a single recovery wake can place ahead of ordinary traffic.
  * Literal page cost: one <=8-row inventory seek, <=8 single-home commands (one keyed
- * counter read each), and at most one continuation command. No Subject or Rating rows are read.
+ * conditional counter update each), and at most one continuation command. No Subject or Rating rows are read.
  */
 export async function resumeCanonicalGenerationDelivery(
   pool: Pool,
@@ -116,18 +117,22 @@ export async function resumeCanonicalGenerationDelivery(
   const request = copyPage(input);
   const page = await readCanonicalGenerationDeliveryPage(
     pool,
-    { after: request.after, limit: Math.min(request.limit, CANONICAL_GENERATION_SOURCE_BATCH_SIZE) },
+    { ...request, limit: Math.min(request.limit, CANONICAL_GENERATION_SOURCE_BATCH_SIZE) },
     { deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
   );
   for (const home of page.homes) {
     await runCommand(pool, { partition: home.partition }, async (tx) => {
-      const row = (await tx.query<{ generation: string; delivered: string }>(
-        `SELECT canonical_generation::text AS generation,canonical_delivered_generation::text AS delivered
-         FROM semantic.partition_subjects WHERE partition_no=$1 FOR SHARE`,
+      // Commit the notification marker and its native event together. Startup recovery
+      // redelivers every outstanding generation, including an exhausted receiver workflow.
+      const announced = await tx.query<{ generation: string }>(
+        `UPDATE semantic.partition_subjects SET canonical_announced_generation=canonical_generation
+         WHERE partition_no=$1 AND canonical_delivered_generation<canonical_generation
+           ${request.unannouncedOnly ? 'AND canonical_announced_generation<canonical_generation' : ''}
+         RETURNING canonical_generation::text AS generation`,
         [home.partition],
-      )).rows[0];
-      if (!row || !validGeneration(row.generation)) throw new Error('Canonical generation home is unavailable');
-      if (BigInt(row.delivered) >= BigInt(row.generation)) return noEffect(null);
+      );
+      const row = announced.rows[0];
+      if (!row) return noEffect(null);
       return {
         value: null,
         events: [{
@@ -141,7 +146,7 @@ export async function resumeCanonicalGenerationDelivery(
     // A crash before this commit replays the original wake; a crash after it replays this page.
     await runCommand(pool, { partition: page.after }, async () => ({
       value: null,
-      events: [{ type: CANONICAL_GENERATION_CONTINUATION, data: { after: page.after, limit: request.limit } }],
+      events: [{ type: CANONICAL_GENERATION_CONTINUATION, data: { ...request, after: page.after } }],
     }));
   }
 }
@@ -225,7 +230,7 @@ export function createCanonicalGenerationWakeEffect(pool: Pool): Effect {
         await resumeCanonicalGenerationDelivery(pool, event.data as CanonicalGenerationPageRequest);
       } else {
         if (!types.includes(event.type)) throw new TypeError('Unexpected canonical generation wake');
-        await resumeCanonicalGenerationDelivery(pool);
+        await resumeCanonicalGenerationDelivery(pool, { after: null, limit: CANONICAL_GENERATION_PAGE_SIZE, unannouncedOnly: true });
       }
     },
   };

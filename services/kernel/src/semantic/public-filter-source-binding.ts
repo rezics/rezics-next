@@ -2688,7 +2688,6 @@ export function createNativePublicFilterSourceBinding(
             registration: string;
             registration_partition: number;
             current_position: string;
-            current_creation: string;
             current_revision: string;
             current_claim: string;
           }
@@ -2704,7 +2703,7 @@ export function createNativePublicFilterSourceBinding(
              SELECT e.partition_no AS home,e.registration,e.registration_partition,e.owner_epoch AS epoch,
                e.receipt,e.source_position::text,e.native_enqueue_revision::text AS enqueue,
                e.native_revision::text AS revision,e.native_claim_revision::text AS claim_revision,
-               h.position::text AS current_position,p.position::text AS current_creation,
+               h.position::text AS current_position,
                a.revision::text AS current_revision,a.claim_revision::text AS current_claim,
                e.complete,p.epoch,p.write_state,h.owner_epoch AS source_epoch,
                c.consumer,c.position::text AS checkpoint_position,c.epoch AS checkpoint_epoch,
@@ -2779,6 +2778,8 @@ export function createNativePublicFilterSourceBinding(
         if (count < 1) throw new BindingError('owner_unavailable');
       }
       const range = windows.slice(0, count);
+      // Both reads require the live log to cover the captured window. A later
+      // unrelated command may advance its tail while Search verifies settlement.
       const current = await authority(range);
       const changed = range.findIndex((_, index) => !isDeepStrictEqual(before[index], current[index]));
       const after = changed === -1 ? current : current.slice(0, changed);

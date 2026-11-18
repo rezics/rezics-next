@@ -92,7 +92,7 @@ export async function readPublicationJobs(connection: Pick<Pool, 'query'>, prefi
 }
 
 /** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
-async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
+export async function inspectPublication(pool: Pick<Pool, 'query'>, prefix: string): Promise<Record<string, unknown>> {
   const nativeJobs = await readPublicationJobs(pool, prefix);
   const jobs = nativeJobs.map(({ consumer: _consumer, ...job }) => job);
   const locators = (

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { runCommand } from '../../src/command/command.ts';
-import type { Effect } from '../../src/events/effects.ts';
+import type { Effect, NativeEffect } from '../../src/events/effects.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { rebuildRealmRankCanonicalOrder } from '../../src/rating/realm-rank-convergence.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -48,6 +48,30 @@ test('canonical delivery recovery yields after eight native homes even with a re
   }
 });
 
+test('overlapping canonical wakes announce a home once and startup can recover an undelivered generation', async () => {
+  const f = await fixture();
+  try {
+    const home = 4095;
+    const request = { after: home - 1, limit: 1 };
+    const pool = f.db.openPool({ max: 2 });
+    const wake = () => resumeCanonicalGenerationDelivery(pool, { ...request, unannouncedOnly: true });
+    const notices = async () => (await f.db.admin.query(
+      'SELECT data FROM core.outbox WHERE partition_no=$1 AND type=$2 ORDER BY position,event_seq',
+      [home, CANONICAL_GENERATION_COMMITTED],
+    )).rows.map(({ data }) => data);
+    const pending = await readCanonicalGenerationDeliveryPage(pool, request, readContext());
+    expect(pending.homes).toHaveLength(1);
+    await Promise.all([wake(), wake()]);
+    await wake();
+    expect(await notices()).toEqual(pending.homes);
+    expect((await readCanonicalGenerationDeliveryPage(pool, request, readContext())).homes).toEqual(pending.homes);
+    await resumeCanonicalGenerationDelivery(pool, request);
+    expect(await notices()).toEqual([...pending.homes, ...pending.homes]);
+  } finally {
+    await f.close();
+  }
+});
+
 test('default Content dispatch requires a complete native rebuild before acknowledging a canonical generation', async () => {
   const f = await fixture();
   try {
@@ -55,7 +79,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     const route = routeOf(subject)!;
     const partition = partitionOf(route);
     const pool = f.db.openPool({ max: 1 });
-    const effects: Effect[] = [];
+    const effects: (Effect | NativeEffect)[] = [];
     const client = await createWorkClient(f.db.url, pool);
     try {
       await KERNEL_WORK_MODULES.find(({ name }) => name === 'content')!.register({
@@ -66,6 +90,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
         env: workerTestEnv(),
         getAuthorization: () => ({ access: f.config.access, readConsent: async () => null }),
         addEffects: (registered) => effects.push(...registered),
+        addNativeEffects: (registered) => effects.push(...registered),
         addService: () => {},
       });
     } finally {
@@ -74,7 +99,8 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     const consumers = effects.filter(({ types }) => types.includes(CANONICAL_GENERATION_COMMITTED));
     expect(consumers.map(({ name }) => name)).toEqual(['content_canonical_work']);
     const [receiver] = consumers;
-    expect(receiver!.types).toContain(CANONICAL_GENERATION_REBUILD_CONTINUED);
+    if (!receiver || receiver.delivery === 'native') throw new Error('Expected the canonical generation workflow');
+    expect(receiver.types).toContain(CANONICAL_GENERATION_REBUILD_CONTINUED);
 
     const request = (home: number) => ({ after: home === 0 ? null : home - 1, limit: 1 });
     const counter = async (home: number) =>
@@ -177,7 +203,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     } finally {
       admin.release();
     }
-    await expect(receiver!.run(first)).rejects.toThrow('Realm rank canonical Subject is unavailable');
+    await expect(receiver.run(first)).rejects.toThrow('Realm rank canonical Subject is unavailable');
     expect(await counter(partition)).toEqual(initial);
     expect(await coverage(partition)).toBeUndefined();
     await f.db.admin.query('UPDATE rating.realm_rank SET subject_id=$2 WHERE partition_no=$1 AND subject_id=$3', [
@@ -186,7 +212,7 @@ test('default Content dispatch requires a complete native rebuild before acknowl
       orphan,
     ]);
 
-    await receiver!.run(first);
+    await receiver.run(first);
     expect(await counter(partition)).toEqual(initial);
     expect(await coverage(partition)).toEqual({ complete: null });
     const continued = (await notifications(partition)).find((e) => e.type === CANONICAL_GENERATION_REBUILD_CONTINUED)!;
@@ -213,21 +239,21 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     });
     const later = await counter(partition);
     expect(BigInt(later.generation)).toBeGreaterThan(BigInt(initial.generation));
-    await receiver!.run(continued);
+    await receiver.run(continued);
     expect(await counter(partition)).toEqual(later);
     const resumed = (await notifications(partition)).find((e) => e.type === CANONICAL_GENERATION_REBUILD_CONTINUED)!;
     expect(resumed.data).toEqual(first);
-    await receiver!.run(resumed);
+    await receiver.run(resumed);
     expect(await coverage(partition)).toEqual({ complete: later.generation });
-    await receiver!.run(resumed);
-    await receiver!.run(first);
+    await receiver.run(resumed);
+    await receiver.run(first);
     expect((await counter(partition)).delivered).toBe(initial.generation);
     expect((await notifications(partition)).filter((e) => e.type === CANONICAL_GENERATION_DELIVERED)).toHaveLength(1);
     expect((await pending(partition)).homes[0]).toEqual({ partition, generation: later.generation });
     await resumeCanonicalGenerationDelivery(pool, request(partition));
     const newer = committed(await notifications(partition));
     expect(newer.data).toEqual({ partition, generation: later.generation });
-    await receiver!.run(newer);
+    await receiver.run(newer);
     expect((await counter(partition)).delivered).toBe(later.generation);
 
     // The migrated inventory includes empty homes with an outstanding generation.
@@ -250,8 +276,8 @@ test('default Content dispatch requires a complete native rebuild before acknowl
     const recovered = committed(await notifications(emptyHome));
     expect(recovered.id).not.toBe(lost.id);
     expect(recovered.data).toEqual(lost.data);
-    await receiver!.run(recovered);
-    await receiver!.run(lost);
+    await receiver.run(recovered);
+    await receiver.run(lost);
     const empty = await counter(emptyHome);
     expect(empty.delivered).toBe(empty.generation);
     expect(await coverage(emptyHome)).toEqual({ complete: empty.generation });
