@@ -55,11 +55,14 @@ import type { TextNode } from './text.ts';
 import {
   installPublicFilterCoveragePage,
   openPublicFilterCoveragePage,
+  type PublicFilterCaptureWitness,
   type PublicFilterCoveragePage,
 } from './public-filter-coverage-page.ts';
 
 export type DiscoveryServingObservation = Readonly<{
   generation: number | null;
+  captureRole?: 'enrollment' | 'serving';
+  witness?: PublicFilterCaptureWitness | undefined;
   stage: 'allocation' | 'capture' | 'query' | 'repair' | 'capability' | 'final';
   result:
     | 'no_active_generation'
@@ -358,8 +361,15 @@ export function createDefaultDiscoverySearch(
           })());
         return {
           async capture(plan, snapshot) {
-            const result = await (await open()).capture(plan, snapshot);
-            observe('capture', 'reason' in result ? result.reason : result.status);
+            const native = await open();
+            const result = await native.capture(plan, snapshot);
+            config.observeServing?.({
+              generation,
+              stage: 'capture',
+              result: 'reason' in result ? result.reason : result.status,
+              captureRole: enrollmentOnly ? 'enrollment' : 'serving',
+              witness: native.captureWitness?.(),
+            });
             return result;
           },
           query: async (queried, refill) => (await open(queried)).query(queried, refill),

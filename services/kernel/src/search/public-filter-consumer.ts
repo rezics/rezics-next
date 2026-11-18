@@ -18,7 +18,11 @@ import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
 import { isDeepStrictEqual } from 'node:util';
-import { installPublicFilterCoveragePage, withPublicFilterCoverageStart } from './public-filter-coverage-page.ts';
+import {
+  installPublicFilterCoveragePage,
+  withPublicFilterCoverageStart,
+  type PublicFilterCaptureWitness,
+} from './public-filter-coverage-page.ts';
 import { admitFilter, parseFilter, walkFilter } from '@rezics/filter';
 import { routeOf } from '../route/route.ts';
 import type {
@@ -1156,6 +1160,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   }
   type Page = {
     context: PublicFilterConsumerContext;
+    captureWitness?: PublicFilterCaptureWitness;
     m: Meter;
     id: string | null;
     queried: PublicFilterQueriedObservation | null;
@@ -2297,11 +2302,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       validatePublicSuggestionInput(plan);
       canonical = freeze(structuredClone(plan));
     } else canonical = compilePublicFilterConsumerCapture(plan, meaning).capture;
+    const mixedPage = 'representation' in canonical ? page : undefined;
     try {
       m.check();
       const resolved = m.take(await binding.resolve({ source: config.source, meaning, capture: canonical }, context));
-      if (resolved.status !== 'resolved')
+      if (resolved.status !== 'resolved') {
+        if (mixedPage) mixedPage.captureWitness = { stage: 'definition', reason: resolved.reason };
         return m.unavailable(resolved.reason === 'deadline' ? 'deadline' : 'source_pending');
+      }
+      if (mixedPage) mixedPage.captureWitness = { stage: 'definition' };
       if (
         !isDeepStrictEqual(resolved.definition.capture, canonical) ||
         !isDeepStrictEqual(resolved.definition.meaning, meaning)
@@ -2309,6 +2318,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return m.unavailable('registration_missing');
       if ('representation' in canonical && !config.registry) return m.unavailable('dependency_unavailable');
       if ('representation' in canonical) await mixedGeneration(m);
+      if (mixedPage) mixedPage.captureWitness = { stage: 'registration' };
       const registered = m.take(
         await custody.register(
           {
@@ -2332,6 +2342,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       ).rows[0];
       if (old?.consumer_work) {
         const retained = decodeState<ConsumerWork>(old.consumer_work);
+        if (mixedPage)
+          mixedPage.captureWitness = {
+            stage: retained.bootstrap.coveragePublication ? 'published-coverage' : 'retained-population-bootstrap',
+          };
         // The worker owns the original mixed enrollment through adoption and repair.
         if (page && config.discoveryTarget && !retained.bootstrap.coveragePublication)
           return {
@@ -2350,7 +2364,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
              AND state='open' AND expires_at>$3 LIMIT 1`,
           [registration.partition, registration.id, Date.now()],
         );
-        if (parent.rowCount) return m.unavailable('source_pending');
+        if (parent.rowCount) {
+          if (mixedPage) mixedPage.captureWitness = { stage: 'open-registration-observation' };
+          return m.unavailable('source_pending');
+        }
       }
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
@@ -2360,6 +2377,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         consumer: registered.consumer,
         snapshot,
       };
+      if (mixedPage) mixedPage.captureWitness = { stage: 'begin' };
       const native = await advanceNativePublicFilterPreparation(
         binding,
         {
@@ -2374,7 +2392,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         context,
       );
       const begun = m.takePreparation(native ?? (await binding.begin(preparation, context)));
-      if (begun.status === 'repairing')
+      if (begun.status === 'repairing') {
+        if (mixedPage) mixedPage.captureWitness = { stage: 'population-repair' };
         return {
           status: 'preparing',
           repair: {
@@ -2383,7 +2402,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           cost: m.cost,
         };
-      if (begun.status !== 'begun' && begun.status !== 'preparing') return m.unavailable('source_pending');
+      }
+      if (begun.status !== 'begun' && begun.status !== 'preparing') {
+        if (mixedPage) mixedPage.captureWitness = { stage: 'begin', reason: begun.reason };
+        return m.unavailable('source_pending');
+      }
+      if (mixedPage)
+        mixedPage.captureWitness = {
+          stage: begun.bootstrap.coveragePublication ? 'published-coverage' : 'population-bootstrap',
+        };
       if (
         !isDeepStrictEqual(begun.bootstrap.definition, resolved.definition) ||
         !isDeepStrictEqual(begun.bootstrap.consumer, registered.consumer) ||
@@ -3412,6 +3439,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     return {
       failure: (error: unknown) => failure(error, page.m),
+      captureWitness: () => page.captureWitness,
       capture: (plan: PublicCanonicalCaptureInput, snapshot: 'pit' | 'prepared') =>
         run(async () => {
           if (page.id !== null || page.queried !== null) throw new ConsumerFailure('observation_lost');
