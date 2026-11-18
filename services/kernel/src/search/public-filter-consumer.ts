@@ -226,6 +226,8 @@ export function compilePublicFilterConsumerCapture(
     sort: copied.sort,
     size: copied.size,
     ...(copied.pageSize === undefined ? {} : { pageSize: copied.pageSize }),
+    ...(copied.bookTypeList === true ? { bookTypeList: true } : {}),
+    ...(copied.catalogueNameSort === true ? { catalogueNameSort: true } : {}),
     ...(copied.catalogueCoverage === true ? { catalogueCoverage: true } : {}),
     // Engine DSL is optional equality evidence. Retained capture is the admitted tree;
     // attaching derived query/filter/boost makes the binder recompile and reject any

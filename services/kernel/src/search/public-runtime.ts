@@ -395,7 +395,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           {
             source,
             meaning: { digest: current.digest, release: current.release },
-            capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 1, catalogueCoverage: true },
+            capture: {
+              filterDocument: undefined,
+              text: undefined,
+              sort: 'id',
+              size: 1,
+              catalogueCoverage: true,
+              catalogueNameSort: true,
+            },
           },
           context,
         );

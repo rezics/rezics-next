@@ -192,10 +192,16 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
   context.addEffects([
     {
       name: 'account_discovery_redrive',
-      types: ['com.rezics.access.account-updated.v1', 'com.rezics.access.account-tombstoned.v1'],
+      types: [
+        'com.rezics.access.account-updated.v1',
+        'com.rezics.access.account-tombstoned.v1',
+        'com.rezics.subject.visibility_changed.v1',
+      ],
       async run(event) {
-        const data = event.data as { accountId?: string };
-        const route = data.accountId ? routeOf(data.accountId) : null;
+        const data = event.data as { accountId?: string; id?: string; visibility?: string };
+        if (data.visibility === 'visible') return;
+        const id = event.type === 'com.rezics.subject.visibility_changed.v1' ? data.id : data.accountId;
+        const route = id ? routeOf(id) : null;
         if (route !== null) {
           wakeups.add(partitionOf(route));
           wake();

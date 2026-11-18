@@ -104,7 +104,13 @@ import { readRealmRatingOrder } from './realm-rating-order.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
 import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence } from './match-evidence.ts';
 import { completeSuggestionWorkContext, type SuggestionWorkContextReader } from './suggestion-context.ts';
-import { containsRealmPredicate, invalid, unsupported, type SearchRequestPlanner } from './request.ts';
+import {
+  containsRealmPredicate,
+  hasPublicBookSearchShape,
+  invalid,
+  unsupported,
+  type SearchRequestPlanner,
+} from './request.ts';
 import type {
   GroupedReleaseSearchRequest,
   PublicSearchReadContext,
@@ -1509,6 +1515,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       const context = { deadline };
       const capturePlan = {
         ...plan,
+        ...(!readContext?.savedCollection &&
+        !preparedScope &&
+        !text &&
+        sort === 'name' &&
+        hasPublicBookSearchShape(request)
+          ? { bookTypeList: true as const }
+          : {}),
         generation,
         filterDocument: preparedScope ? undefined : (admitted as FilterDocument | undefined),
         text,

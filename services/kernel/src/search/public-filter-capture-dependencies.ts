@@ -1,10 +1,11 @@
+import { hasPublicBookSearchShape } from './request.ts';
 import type { PublicFilterDependencyKey } from '../semantic/index.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
 import type { compileFilter } from './filter.ts';
 
 /** One dependency closure for the canonical compiler and the native Source binding. */
 export function publicFilterCaptureDependencies(
-  capture: Pick<PublicFilterConsumerCaptureInput, 'sort' | 'text' | 'overflowProperties'>,
+  capture: Pick<PublicFilterConsumerCaptureInput, 'sort' | 'text' | 'overflowProperties' | 'catalogueNameSort'>,
   leaves: ReturnType<typeof compileFilter>['leaves'],
 ): PublicFilterDependencyKey[] {
   const properties = new Set(
@@ -23,6 +24,7 @@ export function publicFilterCaptureDependencies(
   if (capture.sort === 'collections' || capture.sort === 'rating') orders.add('name');
   return [
     { kind: 'type' },
+    ...(capture.catalogueNameSort ? [{ kind: 'field' as const, field: 'name_sort' as const }] : []),
     ...[...properties].map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
     ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
   ];
@@ -30,6 +32,18 @@ export function publicFilterCaptureDependencies(
 
 /** Only an unfiltered ID population can enroll the complete native catalogue. */
 export function validateCatalogueCoverage(input: PublicFilterConsumerCaptureInput): void {
+  if (input.catalogueNameSort !== undefined && (input.catalogueNameSort !== true || input.catalogueCoverage !== true))
+    throw new TypeError('Name-sort enrollment requires the catalogue publication');
+  if (
+    input.bookTypeList !== undefined &&
+    (input.bookTypeList !== true ||
+      input.sort !== 'name' ||
+      input.text !== undefined ||
+      input.overflowProperties !== undefined ||
+      input.rating !== undefined ||
+      !hasPublicBookSearchShape({ filter: input.filterDocument }))
+  )
+    throw new TypeError('Book TypeList coverage requires the public type predicate and name order');
   if (
     input.catalogueCoverage !== undefined &&
     (input.catalogueCoverage !== true ||
