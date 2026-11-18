@@ -159,6 +159,9 @@ test('graph delivery keeps sealed order and skips acknowledged proposal pages on
     }));
     graph.remember(drafts);
     const keys = graph.planned().map(graphEdgeCommandKey);
+    const expectedPages = Array.from({ length: Math.ceil(keys.length / 8) }, (_, page) =>
+      keys.slice(page * 8, (page + 1) * 8),
+    );
     const pages: string[][] = [];
     let interrupted = true;
     const deadline = new Error('fixture transport interrupted');
@@ -183,10 +186,10 @@ test('graph delivery keeps sealed order and skips acknowledged proposal pages on
     await expect(deliver()).rejects.toBe(deadline);
     expect(seedBatchRemainingRequest(deadline)).toMatchObject({ transition: 'batch-send', reason: 'request-failed' });
     expect(seedBatchRemainingRequest(deadline)?.externalId).toBeUndefined();
-    expect(pages).toEqual([keys.slice(0, 32), keys.slice(32, 64)]);
+    expect(pages).toEqual(expectedPages.slice(0, 2));
     interrupted = false;
     await deliver();
-    expect(pages.slice(2)).toEqual([keys.slice(32, 64), keys.slice(64)]);
+    expect(pages.slice(2)).toEqual(expectedPages.slice(1));
     expect(graph.planned()).toEqual([]);
   } finally {
     db.close();

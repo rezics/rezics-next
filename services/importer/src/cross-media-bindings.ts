@@ -18,8 +18,8 @@ import type { Claim } from './record-bindings.ts';
 import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import type { VndbWorkRelationEvidence } from './showcase-vndb-relations.ts';
 
-// The public batch maximum is a schema bound, not a deadline budget for graph proposals.
-const GRAPH_PROPOSAL_PAGE = 32;
+// A batch shares one native request deadline. Keep proposal transactions in smaller sequential pages.
+const GRAPH_PROPOSAL_PAGE = 8;
 
 export type Provider = 'bangumi' | 'vndb';
 export type GraphMembership = 'family' | 'referenced';
