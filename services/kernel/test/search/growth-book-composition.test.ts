@@ -87,7 +87,6 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     repetitions: 1,
     grow: (_db, scale, previous) => world.grow(previous, scale),
     async warmup() {
-      await world.read('alice', true);
       await world.read('anonymous', true);
     },
     operation: measurePage,
