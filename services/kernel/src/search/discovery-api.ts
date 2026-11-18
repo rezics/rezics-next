@@ -53,6 +53,7 @@ export type AccountPage = AccountSnapshot & { next: AccountPageKey | null };
 export interface AccountDiscoverySource {
   read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
   count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
+  countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, { position: bigint; count: number }>>;
   page(
     partition: number,
     after: AccountPageKey | null,
@@ -335,7 +336,7 @@ export type DiscoveryMetadataProducer = Readonly<{
   /** Native first pages with no raw candidates. Omitted homes require the normal page reader. */
   readEmptyFirstPages?(
     partitions: readonly number[],
-  ): Promise<ReadonlyMap<number, { epoch: number; position: bigint }>>;
+  ): Promise<ReadonlyMap<number, { epoch?: number; position: bigint }>>;
 }>;
 export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
 

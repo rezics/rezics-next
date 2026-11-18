@@ -115,6 +115,7 @@ export interface SubjectSource {
   creditSearch?: CreditSearchSource;
   /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
   count(partition: number): Promise<{ position: bigint; count: number }>;
+  countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, { position: bigint; count: number }>>;
   /**
    * Match membership in full adopted Global relations, applying current source fences and moderation.
    * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;

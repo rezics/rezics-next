@@ -32,7 +32,16 @@ import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 test('64 certified mixed Discovery homes distinguish changed native cuts before activation', async () => {
   const pool = createPool(process.env.DATABASE_URL!);
-  const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+  const native = createOpenSearch(process.env.OPENSEARCH_URL!);
+  let wideEmptyProofs = 0;
+  const search: typeof native = {
+    ...native,
+    request(...args) {
+      const body = args[2] as { query?: { bool?: { should?: unknown[] } } } | undefined;
+      if (args[1].endsWith('/_search') && (body?.query?.bool?.should?.length ?? 0) > 8) wideEmptyProofs++;
+      return native.request(...args);
+    },
+  };
   const prefix = `home-cuts-${crypto.randomUUID().slice(0, 8)}-`;
   const homes = 64;
   const kinds = ['collection', 'review', 'space'];
@@ -100,6 +109,7 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
               ...resolved.metadataProducers,
               review: {
                 ...review,
+                readEmptyFirstPages: async () => new Map(),
                 page: (partition, ...args) => {
                   if (partition === 0) throw new DiscoveryReviewFrontierError();
                   return review.page(partition, ...args);
@@ -119,6 +129,7 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       } else await advanceDiscovery(options);
     }
     expect(heldReview).toBe(true);
+    expect(wideEmptyProofs).toBeGreaterThan(0);
     await expect(advanceDiscovery(options)).rejects.toThrow('Discovery population partitions are incomplete');
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
@@ -151,6 +162,8 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(current.native.collection).toBeUndefined();
     expect(current.native['review-batch']?.homes).toBe(homes);
     expect(current.native.review).toBeUndefined();
+    expect(current.native['space-batch']?.homes).toBe(homes);
+    expect(current.native.space).toBeUndefined();
     // Present stale certified observations to the identical native checker in the same 64-home cohort.
     const stale = cuts.map((row) => ({ ...row }));
     stale[0]!.claim_revision = String(BigInt(cuts[0]!.claim_revision) + 1n);
@@ -164,11 +177,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(typeof readEmptyStamps).toBe('function');
     const { readEmptyPositions, ...review } = resolved.metadataProducers.review!;
     expect(typeof readEmptyPositions).toBe('function');
-    const { checks, native } = await check(stale, { ...resolved.metadataProducers, collection, review });
+    const { readEmptyPositions: readSpacePositions, ...space } = resolved.metadataProducers.space!;
+    expect(typeof readSpacePositions).toBe('function');
+    const { checks, native } = await check(stale, { ...resolved.metadataProducers, collection, review, space });
     expect(checks).toEqual(batched.checks);
     expect(native.collection?.calls).toBe(homes);
     expect(native['review-batch']).toBeUndefined();
     expect(native.review?.calls).toBe(homes - 2);
+    expect(native['space-batch']).toBeUndefined();
+    expect(native.space?.calls).toBe(homes - 3);
     expect(checks.slice(0, 5)).toEqual([
       {
         state: 'native',

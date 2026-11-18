@@ -55,9 +55,9 @@ test('core certification rejects a concurrent native cut and fenced home without
     let moved = false;
     const subjects = {
       ...entry.subjects,
-      async count(partition: number) {
-        const census = await entry.subjects.count(partition);
-        if (partition === home && !moved) {
+      async countPartitions(partitions: readonly number[]) {
+        const census = await entry.subjects.countPartitions!(partitions);
+        if (partitions.includes(home!) && !moved) {
           moved = true;
           const client = await writer.connect();
           await client.query('BEGIN');

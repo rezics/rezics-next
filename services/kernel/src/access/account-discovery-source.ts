@@ -120,6 +120,29 @@ function indexed(row: AccountRow, found: Awaited<ReturnType<typeof claims>>) {
 
 /** Native source only; neither routing text keys nor caller policy belong in this factory. */
 export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
+  async function countPartitions(partitions: readonly number[]) {
+    if (partitions.length > 100) throw new RangeError('Account discovery counts at most 100 partitions');
+    for (const partition of partitions) partitionKey(partition);
+    return withReadTransaction(pool, async (client) => {
+      const { rows } = await client.query<{ partition: number; position: string; population: string | null }>(
+        `SELECT p.partition_no AS partition,p.position::text,a.population::text
+         FROM core.partition p LEFT JOIN access.account_discovery_population a USING (partition_no)
+         WHERE p.partition_no=ANY($1::integer[])`,
+        [partitions],
+      );
+      const byPartition = new Map(rows.map((row) => [row.partition, row]));
+      return new Map(
+        partitions.map((partition) => {
+          const row = byPartition.get(partition);
+          if (!row) throw new Error('Account discovery partition is unavailable');
+          if (row.population === null) throw new Error('Account discovery census is not installed');
+          const count = Number(row.population);
+          if (!Number.isSafeInteger(count)) throw new RangeError('Account discovery census exceeds safe integer range');
+          return [partition, { position: BigInt(row.position), count }] as const;
+        }),
+      );
+    });
+  }
   return {
     async read(partition: number, ids: readonly string[]) {
       partitionKey(partition);
@@ -139,19 +162,9 @@ export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
         };
       });
     },
+    countPartitions,
     async count(partition: number) {
-      partitionKey(partition);
-      return withReadTransaction(pool, async (client) => {
-        const at = await position(client, partition);
-        const result = await client.query<{ population: string }>(
-          'SELECT population::text FROM access.account_discovery_population WHERE partition_no = $1',
-          [partition],
-        );
-        if (!result.rows[0]) throw new Error('Account discovery census is not installed');
-        const count = Number(result.rows[0].population);
-        if (!Number.isSafeInteger(count)) throw new RangeError('Account discovery census exceeds safe integer range');
-        return { partition, position: at, count };
-      });
+      return { partition, ...(await countPartitions([partition])).get(partition)! };
     },
     async page(partition: number, after: { route: number; id: string } | null, limit: number) {
       partitionKey(partition);

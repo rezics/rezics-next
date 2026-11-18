@@ -70,6 +70,8 @@ export type SpaceDiscoveryAdapter = Readonly<{
     registerTupleProducer?(input: Readonly<{ generation: string; cut: string; complete: true }>): Promise<void>;
     publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
+    readEmptyPositions?: NonNullable<NativeSpaceDiscoverySource['readEmptyPositions']>;
+    readEmptyFirstPages?: NonNullable<NativeSpaceDiscoverySource['readEmptyFirstPages']>;
     count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
     page(partition: number, after: NativeSpaceDiscoveryKey | null, limit: number): Promise<SpaceDiscoveryPage>;
   }>;
@@ -293,10 +295,34 @@ export function createSpaceDiscoveryAdapter(
   native: NativeSpaceDiscoverySource,
   hydrateCurrent: SpaceDiscoveryHydration,
 ): SpaceDiscoveryAdapter {
+  const readEmptyPositions = native.readEmptyPositions?.bind(native);
+  const readEmptyFirstPages = native.readEmptyFirstPages?.bind(native);
+  async function observeHomes(
+    partitions: readonly number[],
+    read: NonNullable<NativeSpaceDiscoverySource['readEmptyPositions']>,
+    complete: boolean,
+  ) {
+    if (partitions.length > MAX_BATCH) throw new RangeError('Space discovery reads at most 100 partitions');
+    for (const partition of partitions) assertPartition(partition);
+    const requested = new Set(partitions);
+    const result = await read(partitions);
+    if (complete && result.size !== requested.size) throw new TypeError('Space discovery omitted a requested home');
+    for (const [partition, position] of result) {
+      if (!requested.has(partition)) throw new TypeError('Space discovery returned a foreign home');
+      assertPosition(position);
+    }
+    return result;
+  }
   const source = Object.freeze({
     dependencies() {
       return native.dependencies();
     },
+    ...(readEmptyPositions && {
+      readEmptyPositions: (partitions: readonly number[]) => observeHomes(partitions, readEmptyPositions, true),
+    }),
+    ...(readEmptyFirstPages && {
+      readEmptyFirstPages: (partitions: readonly number[]) => observeHomes(partitions, readEmptyFirstPages, false),
+    }),
     ...(native.tupleWitnesses
       ? {
           tupleWitnesses(partition: number, ids: readonly string[]) {

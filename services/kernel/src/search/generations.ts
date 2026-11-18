@@ -1030,40 +1030,43 @@ function populationPageProducers(
   producers: DiscoveryMetadataProducers,
   rows: readonly Population[],
 ): DiscoveryMetadataProducers {
-  const collection = producers.collection;
-  const readEmptyFirstPages = collection?.readEmptyFirstPages?.bind(collection);
-  if (!collection || !readEmptyFirstPages) return producers;
-  const homes = rows
-    .filter(
-      (row) =>
-        row.owner === 'collection' &&
-        !row.native_complete &&
-        row.after_route === null &&
-        row.after_id === null &&
-        row.continuation === null,
-    )
-    .slice(0, 100)
-    .map((row) => row.partition);
-  if (homes.length < 2) return producers;
-  let pages: ReturnType<typeof readEmptyFirstPages> | undefined;
-  return {
-    ...producers,
-    collection: {
-      ...collection,
+  const batched = { ...producers };
+  for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+    const producer = producers[kind];
+    const readEmptyFirstPages = producer?.readEmptyFirstPages?.bind(producer);
+    if (!producer || !readEmptyFirstPages) continue;
+    const homes = new Set(
+      rows
+        .filter(
+          (row) =>
+            row.owner === kind &&
+            !row.native_complete &&
+            row.after_id === null &&
+            row.after_route === null &&
+            row.continuation === null,
+        )
+        .slice(0, 100)
+        .map(({ partition }) => partition),
+    );
+    if (homes.size < 2) continue;
+    let pages: ReturnType<typeof readEmptyFirstPages> | undefined;
+    batched[kind] = {
+      ...producer,
       async page(partition, after, continuation, limit) {
-        if (after === null && continuation === null && homes.includes(partition)) {
+        if (after === null && continuation === null && homes.has(partition)) {
           // The first caller has checked the generation capability. The native snapshot ends before index I/O.
-          pages ??= searchTurnCall(() => readEmptyFirstPages(homes));
+          pages ??= searchTurnCall(() => readEmptyFirstPages([...homes]));
           const stamp = (await pages).get(partition);
           if (stamp) return { ...stamp, keys: [], records: [], next: null, continuation: null };
         }
-        return collection.page(partition, after, continuation, limit);
+        return producer.page(partition, after, continuation, limit);
       },
-    },
-  };
+    };
+  }
+  return batched;
 }
 
-function reviewCertificationBatch(
+function emptyPositionBatch(
   rows: readonly { partition: number }[],
   read: NonNullable<DiscoveryMetadataProducer['readEmptyPositions']>,
 ) {
@@ -1080,7 +1083,7 @@ function reviewCertificationBatch(
     async position(row: { partition: number }) {
       requested.add(row.partition);
       observed(row);
-      // Collection can short-circuit a row. Wait until the wave has identified every Review request.
+      // An earlier owner can short-circuit a row. Batch only the homes that reached this owner.
       positions ??= settled.promise.then(async () => {
         const partitions = rows.filter(({ partition }) => requested.has(partition)).map(({ partition }) => partition);
         const result = await read(partitions);
@@ -1088,7 +1091,7 @@ function reviewCertificationBatch(
           result.size !== partitions.length ||
           partitions.some((partition) => typeof result.get(partition) !== 'bigint')
         )
-          throw new SearchUnavailableError('Discovery Review positions are incomplete');
+          throw new SearchUnavailableError('Discovery native positions are incomplete');
         return result;
       });
       return (await positions).get(row.partition)!;
@@ -1695,8 +1698,27 @@ async function discoveryScopesEmpty(
   return hits.length === 0;
 }
 
-function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
+function guardedDiscoveryScopesEmpty(
+  pool: Pool,
+  search: OpenSearch,
+  target: DiscoveryTarget,
+  scopes: readonly ReturnType<typeof discoveryIndexTerms>[],
+) {
+  return withDiscoveryTarget(pool, search, target, async (_client, index) => {
+    const empty = await discoveryScopesEmpty(search, target, scopes);
+    if (empty) await requireDiscoveryIndexFormat(search, index);
+    return empty;
+  });
+}
+
+function coreReconciliationBatch(pool: Pool, registry: DiscoveryRegistry, rows: readonly Population[]) {
   if (rows.length < 2) return undefined;
+  const accounts = registry.get('account');
+  const subjects = registry.entries.find((entry) => entry.owner === 'semantic');
+  const sources = {
+    accounts: accounts.owner === 'accounts' ? accounts.source : undefined,
+    semantic: subjects?.source,
+  };
   function witnessBatch() {
     const requested = new Map<Population, () => Promise<{ position: bigint; count: number }>>();
     const reads = discoveryPageReadBatch(rows, () =>
@@ -1705,12 +1727,31 @@ function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
           // Native owners retain their own readers and guards on this pool's one live RR snapshot.
           // Settle every nested read before the snapshot can commit, roll back or release its client.
           const results = await Promise.allSettled(
-            [...requested].map(async ([row, count]) => [row, await count()] as const),
+            (['accounts', 'semantic'] as const).map(async (owner) => {
+              const members = [...requested].filter(([row]) => row.owner === owner);
+              if (!members.length) return [];
+              const source = sources[owner];
+              if (!source?.countPartitions) {
+                const counts = await Promise.allSettled(
+                  members.map(async ([row, count]) => [row, await count()] as const),
+                );
+                return counts.map((result) => {
+                  if (result.status === 'rejected') throw result.reason;
+                  return result.value;
+                });
+              }
+              const counts = await source.countPartitions(members.map(([row]) => row.partition));
+              return members.map(([row]) => {
+                const count = counts.get(row.partition);
+                if (!count) throw new SearchUnavailableError('Discovery native census is incomplete');
+                return [row, count] as const;
+              });
+            }),
           );
           const census = new Map<Population, { position: bigint; count: number }>();
           for (const result of results) {
             if (result.status === 'rejected') throw result.reason;
-            census.set(...result.value);
+            for (const [row, count] of result.value) census.set(row, count);
           }
           const partitions = [...new Set([...requested.keys()].map((row) => row.partition))];
           return { census, witnesses: await readAccountDiscoveryWitness(pool, partitions) };
@@ -1751,6 +1792,134 @@ function initialEmptyCandidate(row: Population) {
   );
 }
 
+/** Share physical custody across a bounded cohort of exact empty scopes. Every row still needs
+ * its own native evidence on both sides of the index read. Unproved rows take the ordinary path. */
+async function certifyEmptyDiscoveryFrontiers(
+  pool: Pool,
+  search: OpenSearch,
+  projection: DiscoveryProjection,
+  populations: readonly Population[],
+  checkCapability: () => Promise<void>,
+) {
+  const { registry, target, metadataProducers } = projection;
+  const homes = new Set<number>();
+  const candidates = populations.filter((row) => {
+    if (!initialEmptyCandidate(row)) return false;
+    if (homes.size === DISCOVERY_CUT_BATCH_SIZE && !homes.has(row.partition)) return false;
+    homes.add(row.partition);
+    return true;
+  });
+  if (candidates.length <= DISCOVERY_POPULATION_CONCURRENCY) return new Set<Population>();
+
+  const account = registry.get('account');
+  const subject = registry.entries.find((entry) => entry.owner === 'semantic');
+  const accountCounts = account.owner === 'accounts' && account.source.countPartitions?.bind(account.source);
+  const subjectCounts = subject?.source.countPartitions?.bind(subject.source);
+  const coreRows = candidates.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
+  async function readCore(rows: readonly Population[]) {
+    if (!rows.length) return [];
+    return withReadTransaction(pool, async () => {
+      const accounts = rows.filter((row) => row.owner === 'accounts').map((row) => row.partition);
+      const subjects = rows.filter((row) => row.owner === 'semantic').map((row) => row.partition);
+      const counts = {
+        accounts: accountCounts && accounts.length ? await accountCounts(accounts) : undefined,
+        semantic: subjectCounts && subjects.length ? await subjectCounts(subjects) : undefined,
+      };
+      const witnesses = await readAccountDiscoveryWitness(pool, [...new Set([...accounts, ...subjects])]);
+      return rows.flatMap((row) => {
+        if (row.owner !== 'accounts' && row.owner !== 'semantic') return [];
+        const count = counts[row.owner]?.get(row.partition);
+        const witness = witnesses.get(row.partition);
+        return count?.count === 0 && witness ? [{ row, position: count.position, witness }] : [];
+      });
+    });
+  }
+
+  const proved = await (async () => {
+    try {
+      await checkCapability();
+      const core = await readCore(coreRows);
+      const metadata: { row: Population; position: bigint; epoch?: number }[] = [];
+      for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+        const producer = metadataProducers[kind];
+        if (
+          !producer?.readEmptyFirstPages ||
+          !(kind === 'collection' ? producer.readEmptyStamps : producer.readEmptyPositions)
+        )
+          continue;
+        const rows = candidates.filter((row) => row.owner === kind);
+        if (!rows.length) continue;
+        const pages = await producer.readEmptyFirstPages(rows.map((row) => row.partition));
+        for (const row of rows) {
+          const page = pages.get(row.partition);
+          if (
+            page &&
+            page.position >= BigInt(row.position) &&
+            (kind === 'collection'
+              ? page.epoch !== undefined && (row.native_epoch === null || page.epoch === row.native_epoch)
+              : page.epoch === undefined && row.native_epoch === null)
+          )
+            metadata.push({ row, ...page });
+        }
+      }
+      const rows = [...core, ...metadata].map(({ row }) => row);
+      if (rows.length <= DISCOVERY_POPULATION_CONCURRENCY) return [];
+      const empty = await guardedDiscoveryScopesEmpty(
+        pool,
+        search,
+        target,
+        rows.map(({ partition, owner }) => {
+          if (owner === 'accounts' || owner === 'semantic') return discoveryIndexTerms(partition, owner);
+          return discoveryIndexTerms(partition, owner === 'collection' ? 'commerce' : 'content', owner);
+        }),
+      );
+      if (!empty) return [];
+      await checkCapability();
+      const currentCore = new Map((await readCore(core.map(({ row }) => row))).map((value) => [value.row, value]));
+      const stable = core
+        .filter(({ row, position, witness }) => {
+          const current = currentCore.get(row);
+          return current && current.position === position && isDeepStrictEqual(current.witness, witness);
+        })
+        .map((value) => ({ ...value, epoch: value.row.native_epoch }));
+      const stableMetadata: { row: Population; position: bigint; epoch: number | null }[] = [];
+      for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+        const entries = metadata.filter(({ row }) => row.owner === kind);
+        if (!entries.length) continue;
+        const homes = entries.map(({ row }) => row.partition);
+        const producer = metadataProducers[kind]!;
+        if (kind === 'collection') {
+          const stamps = await producer.readEmptyStamps!(homes);
+          for (const { row, position, epoch } of entries) {
+            const stamp = stamps.get(row.partition);
+            if (stamp?.position === position && stamp.epoch === epoch)
+              stableMetadata.push({ row, position, epoch: stamp.epoch });
+          }
+        } else {
+          const positions = await producer.readEmptyPositions!(homes);
+          for (const { row, position } of entries) {
+            if (positions.get(row.partition) === position) stableMetadata.push({ row, position, epoch: null });
+          }
+        }
+      }
+      return [...stable, ...stableMetadata];
+    } catch (error) {
+      if (error instanceof DiscoveryPhysicalTargetChangedError) throw error;
+      searchTurns.getStore()?.check();
+      return [];
+    }
+  })();
+  if (!proved.length) return new Set<Population>();
+  const rows = proved.map(({ row }) => row);
+  const certificates = initialEmptyCertificates(pool, target, rows);
+  await Promise.all(
+    proved.map((proof) =>
+      certificates.save(proof.row, proof.position, proof.epoch, 'witness' in proof ? proof.witness : undefined),
+    ),
+  );
+  return new Set(rows);
+}
+
 function reconciliationEmptyIndexProbe(
   pool: Pool,
   search: OpenSearch,
@@ -1764,11 +1933,7 @@ function reconciliationEmptyIndexProbe(
   const coreScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const metadataScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const guardedEmpty = (scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) =>
-    withDiscoveryTarget(pool, search, target, async (_client, index) => {
-      const empty = await discoveryScopesEmpty(search, target, scopes);
-      if (empty) await requireDiscoveryIndexFormat(search, index);
-      return empty;
-    });
+    guardedDiscoveryScopesEmpty(pool, search, target, scopes);
   async function optionalEmpty(scopes: readonly ReturnType<typeof discoveryIndexTerms>[]) {
     try {
       return await guardedEmpty(scopes);
@@ -2084,19 +2249,19 @@ async function checkMetadataCuts(
 ) {
   const collection = metadataProducers.collection;
   const readStamps = requiredKinds.includes('collection') ? collection?.readEmptyStamps?.bind(collection) : undefined;
-  const readReviewPositions = requiredKinds.includes('review')
-    ? metadataProducers.review?.readEmptyPositions
-    : undefined;
-  const reviewPositions =
-    trace && readReviewPositions
-      ? (homes: readonly number[]) =>
-          trace.read('review-batch', homes[0]!, homes.length, () => readReviewPositions(homes))
-      : readReviewPositions;
   return mapBounded(
     chunk,
     Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
     (batch) => {
-      const review = reviewPositions && reviewCertificationBatch(batch, reviewPositions);
+      const positions = new Map(
+        (['review', 'space'] as const).flatMap((kind) => {
+          const read = metadataProducers[kind]?.readEmptyPositions;
+          if (!requiredKinds.includes(kind) || !read) return [];
+          const observe = (homes: readonly number[]) =>
+            trace ? trace.read(`${kind}-batch`, homes[0]!, homes.length, () => read(homes)) : read(homes);
+          return [[kind, emptyPositionBatch(batch, observe)] as const];
+        }),
+      );
       const homes = batch.map((row) => row.partition);
       let stamps: ReturnType<NonNullable<DiscoveryMetadataProducer['readEmptyStamps']>> | undefined;
       const collectionStamp = async (partition: number) => {
@@ -2126,8 +2291,9 @@ async function checkMetadataCuts(
             if (!requiredKinds.includes(kind)) continue;
             let observation: { position: bigint; epoch?: number };
             try {
+              const positionBatch = kind === 'collection' ? undefined : positions.get(kind);
               if (kind === 'collection' && readStamps) observation = await collectionStamp(row.partition);
-              else if (kind === 'review' && review) observation = { position: await review.position(row) };
+              else if (positionBatch) observation = { position: await positionBatch.position(row) };
               else {
                 const read = () => metadataProducers[kind]!.read(row.partition, []);
                 observation = trace ? await trace.read(kind, row.partition, 1, read) : await read();
@@ -2148,7 +2314,9 @@ async function checkMetadataCuts(
             if (mismatch && (!candidate || observation.position.toString() !== row.head)) return mismatch;
           }
           return mismatch ?? { state: 'current' as const };
-        }).finally(() => review?.observed(row));
+        }).finally(() => {
+          for (const batch of positions.values()) batch.observed(row);
+        });
     },
   );
 }
@@ -2536,8 +2704,24 @@ async function advanceDiscoveryTurn(
       let retiring: Promise<void> | undefined;
       let deferredReview: DiscoveryProducerCoverageError | undefined;
       const checkCapability = discoveryPageCapabilityCheck(pool, target, metadataProducers);
+      let certified: ReadonlySet<Population> | undefined;
+      if (phase === 'reconciling') {
+        try {
+          certified = await certifyEmptyDiscoveryFrontiers(
+            pool,
+            search,
+            projection,
+            reviewInvalidationPending ? populations.filter(({ owner }) => owner !== 'review') : populations,
+            checkCapability,
+          );
+        } catch (error) {
+          if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
+          await retireDiscoveryCapability(pool, target);
+          return 'retiring';
+        }
+      }
       const results = await mapBounded(
-        populations,
+        certified ? populations.filter((row) => !certified.has(row)) : populations,
         Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         (batch) => {
           const reads = phase === 'populating' ? discoveryPageReadBatch(batch, checkCapability) : undefined;
@@ -2552,7 +2736,7 @@ async function advanceDiscoveryTurn(
           const coreRows = reads ? [] : batch.filter((row) => row.owner === 'accounts' || row.owner === 'semantic');
           const guardedEmptyProbe =
             phase === 'reconciling' ? reconciliationEmptyIndexProbe(pool, search, target, coreRows, batch) : undefined;
-          const coreReads = coreReconciliationBatch(pool, coreRows);
+          const coreReads = coreReconciliationBatch(pool, registry, coreRows);
           return async (population) => {
             try {
               if (population.owner === 'review' && reviewInvalidationPending) return false;

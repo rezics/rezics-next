@@ -1,16 +1,18 @@
 import { deadlineFor } from '../request/deadline.ts';
-import { exactRealmPresentationImage, readRealmPresentationImages } from './domain-ports.ts';
+import { exactRealmPresentationImage, readRealmPresentationImages, withReadTransaction } from './domain-ports.ts';
 import type { RealmPresentationImage } from '../content/realm-media.ts';
 import type { Access } from '../request/access.ts';
 import { prepareSpaceDiscovery, spaceDiscoveryRound, spaceDiscoverySnapshot } from './space-discovery-read.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { DEFAULT_REQUEST_DEADLINE_MS, runCommand } from '../command/command.ts';
+import { CommandUnavailableError } from '../access/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import { lookupEventType } from '../events/catalogue.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
+import type { WriteState } from '../partition/partition.ts';
 import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
 import type { CommunityAmbient } from './ambient.ts';
 import {
@@ -244,6 +246,8 @@ export interface SpaceDiscoverySource {
   /** Producer seam for an authoritative owner's exact current tuple witness. */
   publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
   read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
+  readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+  readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
   /** Internal generation census of retained native candidates, including ineligible identities. */
   count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
   /** At most limit candidates, without refill. next is the last examined native key. */
@@ -283,6 +287,41 @@ export function spaceDiscoverySource(
   context?: Readonly<{ deadline: number }>,
 ): SpaceDiscoveryTupleSource {
   const deadline = () => context?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS, deps.deadlineNow);
+  async function observeEmptyHomes(partitions: readonly number[], firstPage: boolean) {
+    if (partitions.length > SPACE_DISCOVERY_BATCH_SIZE)
+      throw new RangeError('Space discovery reads at most 100 partitions');
+    for (const partition of partitions) partitionKey(partition);
+    const homes = [...new Set(partitions)];
+    if (!homes.length) return new Map<number, bigint>();
+    return withReadTransaction(
+      deps.pool,
+      async (client) => {
+        const { rows } = await client.query<{
+          partition: number;
+          position: string;
+          write_state: WriteState;
+          moved_to: string | null;
+        }>(
+          `SELECT p.partition_no AS partition,p.position::text,p.write_state,p.moved_to
+         FROM core.partition p WHERE p.partition_no=ANY($1::integer[])
+           AND (NOT $2::boolean OR NOT EXISTS (
+             SELECT 1 FROM community.space s
+             WHERE s.route >= p.partition_no*16 AND s.route < (p.partition_no+1)*16
+           ))`,
+          [homes, firstPage],
+        );
+        const byHome = new Map(rows.map((row) => [row.partition, row]));
+        const positions = new Map<number, bigint>();
+        for (const home of homes) {
+          const row = byHome.get(home);
+          if (row?.write_state === 'active') positions.set(home, BigInt(row.position));
+          else if (!firstPage) throw new CommandUnavailableError(row?.write_state ?? 'contention', home, row?.moved_to);
+        }
+        return positions;
+      },
+      deadline(),
+    );
+  }
   return {
     dependencies: () => spaceDiscoveryDependencyReadiness(deps.pool),
     tupleWitnesses(partition, ids) {
@@ -299,9 +338,15 @@ export function spaceDiscoverySource(
     publishTupleWitness(input) {
       return publishSpaceDiscoveryTupleWitness(deps.pool, input);
     },
+    readEmptyPositions: (partitions) => observeEmptyHomes(partitions, false),
+    readEmptyFirstPages: (partitions) => observeEmptyHomes(partitions, true),
     async read(partition, ids) {
       partitionKey(partition);
       const requested = keys(ids, partition);
+      if (requested.length === 0) {
+        const positions = await observeEmptyHomes([partition], false);
+        return { partition, position: positions.get(partition)!, spaces: [] };
+      }
       const until = deadline();
       const decisions = await prepareSpaceDiscovery(deps, until);
       const result = await spaceDiscoveryRound(deps, decisions, partition, requested, until);
