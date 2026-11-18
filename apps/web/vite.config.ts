@@ -451,6 +451,18 @@ export default defineConfig((context) => {
     resolve: { alias: [...workerResolveAliases] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0, ...(previewRoot ? { sourcemap: false, reportCompressedSize: false } : {}) },
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              // Cloudflare redirects non-canonical asset paths, including chunks named after the @handle routes.
+              sanitizeFileName: (name) => name.replace(/[^a-zA-Z0-9._-]/g, '_'),
+            },
+          },
+        },
+      },
+    },
     optimizeDeps: {
       // Keep client optimization bounded: Vite's cold scanner follows generated route chunks and walks every reader,
       // swapping dependency hashes while the first page is loading. Known optimizer dependencies are explicit;
