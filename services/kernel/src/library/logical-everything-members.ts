@@ -76,11 +76,15 @@ export async function readLogicalEverythingMembers(
   const routeKey = deps.routeKey;
   if (!routeKey || collectionId !== builtinCollectionId(actor.accountId, { kind: 'everything' })) return null;
   let reported = false;
-  function reportUnready(stage: ReadinessStage, reason?: string) {
+  function reportUnready(
+    stage: ReadinessStage,
+    reason?: string,
+    timing?: { observationMs: number; remainingMs: number },
+  ) {
     // Concurrent Subject reads can encounter the same refusal. Log the first stage once per direct read.
     if (reported) return;
     reported = true;
-    console.warn(JSON.stringify({ event: 'library.logical-everything-unready', stage, reason }));
+    console.warn(JSON.stringify({ event: 'library.logical-everything-unready', stage, reason, ...timing }));
   }
   function unready(stage: ReadinessStage, reason?: string) {
     reportUnready(stage, reason);
@@ -218,6 +222,7 @@ export async function readLogicalEverythingMembers(
   const mappings = await mappingEpochs();
   const head = await meaningHead();
   async function observe(phase: ObservationPhase) {
+    const started = Date.now();
     const subjects = await readSubjectSummaryObservation(disclosure, ids);
     const at = await withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock));
     try {
@@ -243,7 +248,18 @@ export async function readLogicalEverythingMembers(
         if (typeof matches !== 'boolean') throw unready(`${phase}-point`, 'unknown-match');
         return { id, visible: true, matches, evidence: digest([evidence.basis, evidence.facts]) };
       });
-      if (!(await subjects.current())) throw unready(`${phase}-subject-currentness`);
+      let mismatch: string | undefined;
+      const current = await subjects.current((reason) => {
+        mismatch = reason;
+      });
+      if (!current) {
+        const now = Date.now();
+        reportUnready(`${phase}-subject-currentness`, mismatch, {
+          observationMs: now - started,
+          remainingMs: Math.max(0, deadline - now),
+        });
+        throw new ProblemError('semantic_not_ready');
+      }
       return {
         ids: rows.filter((row) => row.matches).map((row) => row.id),
         basis: digest([version, epoch, head, mappings, rows]),

@@ -4,6 +4,8 @@ import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef, ContentImportedFieldGroup } from './contract/domain-ports.ts';
 import type { SubjectComponent } from './contract/subject-values.ts';
+import type { SubjectSummaryObservation } from './contract/summaries.ts';
+export type { SubjectSummaryObservation } from './contract/summaries.ts';
 import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
 import type {
   SubjectReadingAuthorizationPort,
@@ -253,16 +255,6 @@ type ObserveSummaries = (
   covers: ReadonlyMap<string, SummaryCoverState>,
 ) => void;
 
-/** Internal composition, never a browser-supplied witness or a cached allow.
- * Each component is an independent native home position, as in Subject reads.
- */
-export type SubjectSummaryObservation = Readonly<{
-  summaries: ReadonlyMap<string, SubjectSummary | null>;
-  covers: ReadonlyMap<string, SummaryCoverState>;
-  components: SummarySources;
-  current: () => Promise<boolean>;
-}>;
-
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
 
@@ -372,7 +364,7 @@ async function readSubjectSummaryObservation(
     summaries,
     covers,
     components: sources,
-    async current() {
+    async current(onMismatch) {
       requireAccessDeadline(deps.deadline);
       // Reprepare native disclosure outside the source snapshot. The same
       // initial and representative batches preserve related-read eligibility.
@@ -393,7 +385,7 @@ async function readSubjectSummaryObservation(
           );
         }
       }
-      return withReadTransaction(
+      const mismatch = await withReadTransaction(
         deps.pool,
         async (client) => {
           await partitionReadClients(
@@ -410,13 +402,17 @@ async function readSubjectSummaryObservation(
           );
           for (const source of sources) {
             const found = current.get(source.partition);
-            if (!found || found.epoch !== source.epoch || found.position !== source.position) return false;
+            if (!found) return 'source-missing' as const;
+            if (found.epoch !== source.epoch) return 'source-epoch' as const;
+            if (found.position !== source.position) return 'source-position' as const;
           }
-          for (const check of checks) if (!(await check(client))) return false;
-          return true;
+          for (const check of checks) if (!(await check(client))) return 'subject-access' as const;
+          return null;
         },
         deps.deadline,
       );
+      if (mismatch !== null) onMismatch?.(mismatch);
+      return mismatch === null;
     },
   };
 }
