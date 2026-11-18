@@ -1,13 +1,14 @@
-import { seedPublicationSubjects } from './web-publication-subjects';
+import { preparePublicationWriters, seedPublicationSubjects } from './web-publication-subjects';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
-import { fromPlainText } from '@rezics/document';
+import publicationData from '../../../../specs/fixtures/web-publication.json';
 import { readFile } from 'node:fs/promises';
 import { startNativeWebStack } from './stack';
 import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
 import { provisionCommunityPublication } from './publication-community-fixture.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
+const traversalViews = ['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const;
 const defaultPublicOrigin = 'https://rezics.example.test';
 const typeByKey: Record<string, string> = {
   book: 'schema:Book',
@@ -26,11 +27,6 @@ const fixtureTypeByKey: Record<string, string> = {
   person: 'Person',
   organization: 'Organization',
   automated: 'released automated agent profile',
-};
-const titleOf = (value: unknown): string => {
-  if (!value || typeof value !== 'object' || !('title' in value) || typeof value.title !== 'string')
-    return String(value);
-  return value.title;
 };
 const subjectPath = (id: string, label: string, locale = 'en') =>
   `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label)}`;
@@ -130,7 +126,8 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
   const types = bundledRelease.types as Record<string, unknown>;
   const properties = bundledRelease.properties as Record<string, unknown>;
   for (const [key, type] of Object.entries(typeByKey)) {
-    if (!types[type]) throw new Error(`Missing released definition for fixture subject ${key}: ${type}`);
+    if (!Object.hasOwn(data.subjects, key) || !types[type])
+      throw new Error(`Missing released definition for fixture subject ${key}: ${type}`);
   }
   for (const [key, subject] of Object.entries(data.subjects)) {
     const type = typeByKey[key];
@@ -140,6 +137,9 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
     if (definition?.schemaOrgType !== `https://schema.org/${subject.schemaOrgType}`)
       throw new Error(`Missing released Schema.org definition for fixture subject ${key}: ${subject.schemaOrgType}`);
   }
+  const views = new Set(data.traversal.views);
+  if (data.traversal.views.length !== traversalViews.length || traversalViews.some((view) => !views.has(view)))
+    throw new Error(`Unexpected publication traversal views: ${data.traversal.views.join(', ')}`);
   for (const property of [
     data.definitions.wordCount,
     'wdt:P7937',
@@ -156,6 +156,7 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
 
 export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Promise<WebPublicationDriver> {
   const factoryStarted = performance.now();
+  assertReleasedDefinitions(publicationData);
   const existingChildren = new Set(await childPids(process.pid));
   const lifecycle = new NativeTestLifecycle('native web publication driver', currentNativeLifecycle());
   const stack = await lifecycle.run(
@@ -175,6 +176,15 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   let closed: Promise<void> | undefined;
   const interruptionRestores = new Set<() => Promise<void>>();
   const directCredentials = new Map<Persona, Awaited<ReturnType<typeof stack.credentials>>>();
+  const setupActors = new Map<string, ReturnType<typeof stack.authPersona>>();
+  const setupActor = (persona: string) => {
+    let actor = setupActors.get(persona);
+    if (!actor) {
+      actor = stack.authPersona(persona);
+      setupActors.set(persona, actor);
+    }
+    return actor;
+  };
   let ownerReadInterrupted = false;
   let competingDate: (() => Promise<void>) | undefined;
   let provisioned:
@@ -188,9 +198,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   // Only native setup/control requests retry. Served documents must retain their
   // original HTTP response, including retryable failures and manual redirects.
   const kernel: typeof stack.kernel = async (path, init, persona) => {
+    // Fixture authors write to Kernel with their issued bearer. Website sessions belong to served reads.
+    const headers = new Headers(init?.headers);
+    if (persona && persona !== 'anonymous') headers.set('authorization', (await setupActor(persona)).authorization);
     for (let attempt = 0; ; attempt++) {
       const started = performance.now();
-      const response = await stack.kernel(path, init, persona);
+      const response = await stack.kernel(path, { ...init, headers });
       const measurements = feedMeasurements.get(new URL(path, stack.kernelOrigin).pathname);
       measurements?.times.push(performance.now() - started);
       if (response.ok) return response;
@@ -249,7 +262,30 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `Native stack released definition mismatch: expected ${bundledDigest}, received ${activeBody.digest}`,
       );
 
-    const seeded = await seedPublicationSubjects(kernel, stack.credentials, data);
+    const writers = await preparePublicationWriters(kernel, setupActor);
+    const setup = new AbortController();
+    const prepare: typeof kernel = (path, init, persona) => {
+      setup.signal.throwIfAborted();
+      return kernel(path, { ...init, signal: setup.signal }, persona);
+    };
+    // These inventories share only the prepared owner. Drain both before returning a setup failure.
+    const inventories = [
+      seedPublicationSubjects(prepare, writers, data),
+      provisionCommunityPublication({
+        kernel: (path, init, persona = writers.baseWriter) => prepare(path, init, persona),
+        actor: setupActor,
+        publicOrigin,
+        locales: data.locales,
+        eligiblePerKind: data.discovery.eligiblePerKind,
+        verifiedHandle: data.routing.verifiedHandle,
+        subjectPath,
+      }),
+    ] as const;
+    const [seeded, community] = await Promise.all(inventories).catch(async (error: unknown) => {
+      setup.abort(error);
+      await Promise.allSettled(inventories);
+      throw error;
+    });
     const { created } = seeded;
     competingDate = seeded.proposeCompetingDate;
 
@@ -262,7 +298,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       [...created.keys()].map((key) => [key, urlFor(key)]),
     ) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
-      (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => {
+      traversalViews.map((name) => {
         const source =
           name === 'inverse'
             ? 'person'
@@ -286,16 +322,6 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       'automated',
       ...Array.from({ length: 16 }, (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`),
     ];
-    const community = await provisionCommunityPublication({
-      kernel,
-      credentials: (persona) => stack.credentials(persona),
-      accountIdFromAuthorization,
-      publicOrigin,
-      locales: data.locales,
-      eligiblePerKind: data.discovery.eligiblePerKind,
-      verifiedHandle: data.routing.verifiedHandle,
-      subjectPath,
-    });
     const sitemap = {
       subject: {
         eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),

@@ -28,34 +28,18 @@ async function readJson<T>(response: Response, operation: string): Promise<T> {
   return (body ? JSON.parse(body) : undefined) as T;
 }
 
-async function writeJson<T>(
-  kernel: Kernel,
-  path: string,
-  persona: string,
-  body: unknown,
-  extraHeaders?: HeadersInit,
-): Promise<T> {
-  const headers = jsonHeaders(extraHeaders);
-  if (!headers.has('idempotency-key')) headers.set('idempotency-key', JSON.stringify(crypto.randomUUID()));
+async function writeJson<T>(kernel: Kernel, path: string, body: unknown, persona?: string): Promise<T> {
+  const headers = jsonHeaders({ 'idempotency-key': JSON.stringify(crypto.randomUUID()) });
   return readJson<T>(
     await kernel(path, { method: 'POST', headers, body: JSON.stringify(body) }, persona),
     `POST ${path}`,
   );
 }
 
-async function putJson<T>(
-  kernel: Kernel,
-  path: string,
-  persona: string,
-  body: unknown,
-  extraHeaders?: HeadersInit,
-): Promise<T> {
+async function putJson<T>(kernel: Kernel, path: string, body: unknown, extraHeaders?: HeadersInit): Promise<T> {
   const headers = jsonHeaders(extraHeaders);
   headers.set('idempotency-key', JSON.stringify(crypto.randomUUID()));
-  return readJson<T>(
-    await kernel(path, { method: 'PUT', headers, body: JSON.stringify(body) }, persona),
-    `PUT ${path}`,
-  );
+  return readJson<T>(await kernel(path, { method: 'PUT', headers, body: JSON.stringify(body) }), `PUT ${path}`);
 }
 
 function localeUrls(origin: string, path: string, locales: Locales): Inventory['eligible'] {
@@ -73,12 +57,6 @@ function numbered(kind: string, index: number): string {
   return `${kind}${String(index).padStart(2, '0')}`;
 }
 
-function routeOf(id: string): number {
-  const route = Number.parseInt(id.slice(24, 28), 16);
-  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isInteger(route)) throw new Error(`Invalid native route id: ${id}`);
-  return route;
-}
-
 async function openExposure(kernel: Kernel, family: string): Promise<void> {
   const response = await kernel(
     `/v1/platform/exposure/${family}:open`,
@@ -91,12 +69,10 @@ async function openExposure(kernel: Kernel, family: string): Promise<void> {
 }
 
 async function createSpace(kernel: Kernel, title: string): Promise<{ spaceId: string; headRevisionId: string }> {
-  const created = await writeJson<{ space: { spaceId: string; headRevisionId: string } }>(
-    kernel,
-    '/v1/spaces',
-    'governor',
-    { title, summary: `${title} host.` },
-  );
+  const created = await writeJson<{ space: { spaceId: string; headRevisionId: string } }>(kernel, '/v1/spaces', {
+    title,
+    summary: `${title} host.`,
+  });
   if (!created.space?.spaceId || !created.space.headRevisionId)
     throw new Error(`Space create omitted identity for ${title}`);
   return created.space;
@@ -110,7 +86,6 @@ async function claimAddress(
   const claimed = await putJson<{ space: { spaceId: string; headRevisionId: string } }>(
     kernel,
     `/v1/spaces/${space.spaceId}/address`,
-    'governor',
     { address },
     { 'if-match': JSON.stringify(space.headRevisionId) },
   );
@@ -124,12 +99,13 @@ async function createRealm(
   title: string,
   visibility: 'public' | 'protected',
 ): Promise<{ realmId: string; headRevisionId: string }> {
-  const created = await writeJson<{ realm: { realmId: string; headRevisionId: string } }>(
-    kernel,
-    '/v1/realms',
-    'governor',
-    { spaceId, title, summary: `${title} discussion.`, visibility, contextId: globalContext },
-  );
+  const created = await writeJson<{ realm: { realmId: string; headRevisionId: string } }>(kernel, '/v1/realms', {
+    spaceId,
+    title,
+    summary: `${title} discussion.`,
+    visibility,
+    contextId: globalContext,
+  });
   if (!created.realm?.realmId || !created.realm.headRevisionId)
     throw new Error(`Realm create omitted identity for ${title}`);
   return created.realm;
@@ -143,7 +119,6 @@ async function setBoardScheme(
   const updated = await putJson<{ realm?: { headRevisionId?: string } }>(
     kernel,
     `/v1/realms/${realm.realmId}/boardScheme`,
-    'governor',
     { schemeId },
     { 'if-match': JSON.stringify(realm.headRevisionId) },
   );
@@ -157,7 +132,7 @@ async function createBoard(
   title: string,
   visibility: 'published' | 'protected',
 ): Promise<string> {
-  const created = await writeJson<{ board: { id: string } }>(kernel, `/v1/realms/${realmId}/boards`, 'governor', {
+  const created = await writeJson<{ board: { id: string } }>(kernel, `/v1/realms/${realmId}/boards`, {
     conceptId,
     title,
     visibility,
@@ -172,66 +147,37 @@ async function createThread(
   title: string,
   visibility: 'published' | 'draft' | 'protected',
 ): Promise<{ id: string; title: string | null }> {
-  const created = await writeJson<{ thread: { id: string; title?: string | null } }>(
-    kernel,
-    '/v1/threads',
-    'governor',
-    {
-      boardId,
-      title,
-      body: fromPlainText(`${title} opening post`),
-      licence: 'MIT',
-      subjectIds: [],
-      visibility,
-    },
-  );
+  const created = await writeJson<{ thread: { id: string; title?: string | null } }>(kernel, '/v1/threads', {
+    boardId,
+    title,
+    body: fromPlainText(`${title} opening post`),
+    licence: 'MIT',
+    subjectIds: [],
+    visibility,
+  });
   if (!created.thread?.id) throw new Error(`Thread create omitted identity for ${title}`);
   return { id: created.thread.id, title: created.thread.title ?? title };
 }
 
 async function removeContainer(kernel: Kernel, kind: 'space' | 'realm', id: string, headRevisionId: string) {
   const lifecycle = await readJson<{ container: { version: string; headRevisionId: string } }>(
-    await kernel(`/v1/${kind}s/${id}/lifecycle`, undefined, 'governor'),
+    await kernel(`/v1/${kind}s/${id}/lifecycle`),
     `GET /v1/${kind}s/${id}/lifecycle`,
   );
-  const response = await kernel(
-    `/v1/${kind}s/${id}/removal`,
-    {
-      method: 'POST',
-      headers: jsonHeaders({
-        'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        'if-match': JSON.stringify(headRevisionId || lifecycle.container.headRevisionId),
-      }),
-      body: JSON.stringify({ expectedVersion: lifecycle.container.version, reason: 'Publication fixture exclusion' }),
-    },
-    'governor',
-  );
+  const response = await kernel(`/v1/${kind}s/${id}/removal`, {
+    method: 'POST',
+    headers: jsonHeaders({
+      'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      'if-match': JSON.stringify(headRevisionId || lifecycle.container.headRevisionId),
+    }),
+    body: JSON.stringify({ expectedVersion: lifecycle.container.version, reason: 'Publication fixture exclusion' }),
+  });
   if (!response.ok) throw new Error(`Could not remove ${kind} ${id}: ${response.status} ${await response.text()}`);
   await response.body?.cancel();
 }
 
 async function takeDown(kernel: Kernel, kind: 'board' | 'thread', id: string) {
-  await writeJson(kernel, `/v1/${kind}s/${id}:takeDown`, 'governor', { reason: 'Publication fixture exclusion' });
-}
-
-async function grantThreadCreate(kernel: Kernel, boardId: string, accountId: string) {
-  const response = await kernel(
-    '/v1/grants',
-    {
-      method: 'POST',
-      headers: jsonHeaders({ 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
-      body: JSON.stringify({
-        resource: { route: routeOf(boardId), id: boardId },
-        subject: { kind: 'account', id: accountId },
-        actions: ['thread:create'],
-        valid: '(,)',
-      }),
-    },
-    'governor',
-  );
-  if (!response.ok && response.status !== 409)
-    throw new Error(`Could not grant thread:create on ${boardId}: ${response.status} ${await response.text()}`);
-  await response.body?.cancel();
+  await writeJson(kernel, `/v1/${kind}s/${id}:takeDown`, { reason: 'Publication fixture exclusion' }, 'governor');
 }
 
 async function createCollection(
@@ -239,26 +185,20 @@ async function createCollection(
   title: string,
   visibility: 'public' | 'unlisted' | 'private',
 ): Promise<{ id: string; revision: number }> {
-  const created = await writeJson<{ collection: { id: string; revision: number } }>(
-    kernel,
-    '/v1/collections',
-    'governor',
-    { title, visibility },
-  );
+  const created = await writeJson<{ collection: { id: string; revision: number } }>(kernel, '/v1/collections', {
+    title,
+    visibility,
+  });
   if (!created.collection?.id || !created.collection.revision)
     throw new Error(`Collection create omitted identity for ${title}`);
   return created.collection;
 }
 
 async function deleteCollection(kernel: Kernel, collection: { id: string; revision: number }) {
-  const response = await kernel(
-    `/v1/collections/${collection.id}?revision=${collection.revision}`,
-    {
-      method: 'DELETE',
-      headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
-    },
-    'governor',
-  );
+  const response = await kernel(`/v1/collections/${collection.id}?revision=${collection.revision}`, {
+    method: 'DELETE',
+    headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+  });
   if (!response.ok && response.status !== 204)
     throw new Error(`Could not delete collection ${collection.id}: ${response.status} ${await response.text()}`);
   await response.body?.cancel();
@@ -266,15 +206,13 @@ async function deleteCollection(kernel: Kernel, collection: { id: string; revisi
 
 async function bindVerifiedHandle(
   kernel: Kernel,
-  credentials: (persona: string) => Promise<{ authorization: string }>,
-  accountIdFromAuthorization: (authorization: string) => string,
+  actor: (persona: string) => Promise<{ accountId: string }>,
   origin: string,
   handleHint: string,
   subjectPath: (id: string, label: string, locale?: string) => string,
 ): Promise<{ subjectUrl: string; profileUrl: string }> {
   const persona = handleHint;
-  const credentialsFor = await credentials(persona);
-  const accountId = accountIdFromAuthorization(credentialsFor.authorization);
+  const { accountId } = await actor(persona);
   const grant = await kernel(
     '/v1/grants',
     {
@@ -292,28 +230,33 @@ async function bindVerifiedHandle(
   if (!grant.ok && grant.status !== 409)
     throw new Error(`Could not grant subject:create to ${accountId}: ${grant.status} ${await grant.text()}`);
   await grant.body?.cancel();
-  const created = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', persona, {
-    type: 'schema:Person',
-    labels: { en: 'Lantern Verified' },
-    descriptions: { en: 'Verified catalogue person for publication.' },
-  });
+  const created = await writeJson<{ subject: { id: string } }>(
+    kernel,
+    '/v1/subjects',
+    {
+      type: 'schema:Person',
+      labels: { en: 'Lantern Verified' },
+      descriptions: { en: 'Verified catalogue person for publication.' },
+    },
+    persona,
+  );
   if (!created.subject?.id) throw new Error('Verified person subject create omitted its identity');
   const requested = await writeJson<{ verificationRequest: { id: string } }>(
     kernel,
     `/v1/accounts/${accountId}:requestVerification`,
-    persona,
     {
       subject: created.subject.id,
       statement: 'This catalogue identity belongs to this agent.',
       links: [{ label: 'Evidence', url: 'https://example.test/lantern-verified' }],
     },
+    persona,
   );
-  await writeJson(kernel, `/v1/verification-requests/${requested.verificationRequest.id}:approve`, 'governor', {});
+  await writeJson(kernel, `/v1/verification-requests/${requested.verificationRequest.id}:approve`, {}, 'governor');
   const deadline = Date.now() + 30_000;
   let handle: string | null = null;
   while (Date.now() < deadline) {
     const listed = await readJson<{ accounts: { id: string; handle: string | null; verified?: boolean }[] }>(
-      await kernel(`/v1/accounts?ids=${encodeURIComponent(accountId)}`),
+      await kernel(`/v1/accounts?agent=${encodeURIComponent(created.subject.id)}`, undefined, 'anonymous'),
       'GET /v1/accounts',
     );
     const account = listed.accounts.find((entry) => entry.id === accountId);
@@ -332,8 +275,7 @@ async function bindVerifiedHandle(
 
 export async function provisionCommunityPublication(input: {
   kernel: Kernel;
-  credentials: (persona: string) => Promise<{ authorization: string }>;
-  accountIdFromAuthorization: (authorization: string) => string;
+  actor: (persona: string) => Promise<{ accountId: string }>;
   publicOrigin: string;
   locales: Locales;
   eligiblePerKind: number;
@@ -341,15 +283,13 @@ export async function provisionCommunityPublication(input: {
   subjectPath: (id: string, label: string, locale?: string) => string;
 }): Promise<CommunityPublicationInventory> {
   const { kernel, publicOrigin, locales, eligiblePerKind } = input;
-  const governorId = input.accountIdFromAuthorization((await input.credentials('governor')).authorization);
-  await openExposure(kernel, 'collections');
   await openExposure(kernel, 'agent_verification');
 
-  const scheme = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', 'governor', {
+  const scheme = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
     type: 'skos:ConceptScheme',
     labels: { en: 'Publication board scheme' },
   });
-  const concept = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', 'governor', {
+  const concept = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
     type: 'skos:Concept',
     labels: { en: 'Publication discussion' },
     statements: {
@@ -433,7 +373,6 @@ export async function provisionCommunityPublication(input: {
       `Public lantern board ${index}`,
       'published',
     );
-    await grantThreadCreate(kernel, boardId, governorId);
     const thread = await createThread(kernel, boardId, `Public lantern thread ${index}`, 'published');
     boardIds.push(boardId);
     threadIds.push(thread.id);
@@ -447,7 +386,6 @@ export async function provisionCommunityPublication(input: {
     'Protected lantern board',
     'protected',
   );
-  await grantThreadCreate(kernel, protectedBoardId, governorId);
   const protectedThread = await createThread(kernel, protectedBoardId, 'Protected lantern thread', 'published');
   const draftThread = await createThread(kernel, boardIds[0]!, 'Draft lantern thread', 'draft');
   const takenBoardId = await createBoard(
@@ -457,7 +395,6 @@ export async function provisionCommunityPublication(input: {
     'Taken-down lantern board',
     'published',
   );
-  await grantThreadCreate(kernel, takenBoardId, governorId);
   await createThread(kernel, takenBoardId, 'Thread on taken-down board', 'published');
   const takenThread = await createThread(kernel, boardIds[0]!, 'Taken-down lantern thread', 'published');
   const boardExcluded = [
@@ -472,14 +409,7 @@ export async function provisionCommunityPublication(input: {
   await takeDown(kernel, 'board', takenBoardId);
   await takeDown(kernel, 'thread', takenThread.id);
 
-  const verified = await bindVerifiedHandle(
-    kernel,
-    input.credentials,
-    input.accountIdFromAuthorization,
-    publicOrigin,
-    input.verifiedHandle,
-    input.subjectPath,
-  );
+  const verified = await bindVerifiedHandle(kernel, input.actor, publicOrigin, input.verifiedHandle, input.subjectPath);
 
   return {
     sitemap: {
