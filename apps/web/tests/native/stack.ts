@@ -77,6 +77,8 @@ export type NativeKernelRequest = {
   /** Observed at the installed production Access methods, never inferred from HTTP success. */
   access?: { actorId: string | null; authenticated: boolean; authorized: boolean };
 };
+type KernelRequestChange = [index: number, request: NativeKernelRequest];
+
 export type NativeKernelFailureInjection = {
   method: string;
   path: string;
@@ -711,9 +713,10 @@ async function adoptOwnedKernelAnalysisCache(
 }
 
 async function startStack(): Promise<
-  Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
+  Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages' | 'kernelRequests'> & {
     websiteReady: Promise<void>;
     routeAuthPages(origin?: string): Promise<string>;
+    takeKernelRequestChanges(): KernelRequestChange[];
   }
 > {
   let kernelServer: ReturnType<typeof Bun.serve> | undefined;
@@ -771,7 +774,8 @@ async function startStack(): Promise<
   const memorySampler = setInterval(sampleMemory, 250);
   const accounts = new Map<string, Promise<{ accountId: string; bearer: string }>>();
   let governorScopes: readonly string[] | undefined;
-  const requests: NativeKernelRequest[] = [];
+  const kernelRequestChanges = new Map<number, NativeKernelRequest>();
+  let nextKernelRequestIndex = 0;
   const accountOperationActors: NativeAccountOperationActor[] = [];
   const getAccount = (persona: string): Promise<{ accountId: string; bearer: string }> => {
     let account = accounts.get(persona);
@@ -1338,7 +1342,8 @@ async function startStack(): Promise<
             .catch(() => null)) as { subjectId?: unknown } | null;
           if (typeof command?.subjectId === 'string') observed.hostedReadingSubjectId = command.subjectId;
         }
-        requests.push(observed);
+        const requestIndex = nextKernelRequestIndex++;
+        kernelRequestChanges.set(requestIndex, observed);
         const createdReadFailure = request.method === 'GET' ? createdSubjectReadFailures.get(url.pathname) : undefined;
         if (createdReadFailure) {
           createdSubjectReadFailures.delete(url.pathname);
@@ -1432,6 +1437,8 @@ async function startStack(): Promise<
           return await handling;
         } finally {
           activeKernelRequests.delete(handling);
+          // An earlier IPC reply may have copied the request before Access and response evidence was available.
+          kernelRequestChanges.set(requestIndex, observed);
         }
       },
     });
@@ -1666,8 +1673,10 @@ async function startStack(): Promise<
           ...(session ? { cookie: session } : {}),
         };
       },
-      kernelRequests() {
-        return requests.slice();
+      takeKernelRequestChanges() {
+        const changes = [...kernelRequestChanges];
+        kernelRequestChanges.clear();
+        return changes;
       },
       async syncKernelRequests() {
         await Promise.allSettled(activeKernelRequests);
@@ -1736,11 +1745,11 @@ async function startStack(): Promise<
 // Give every stack its own process so stop can close Auth as well as the kernel,
 // and a second (or failed) stack never reuses an earlier stack's database or sessions.
 type Observation = {
-  requests: NativeKernelRequest[];
   peakMemory: number;
   memory: NativeMemoryObservation | null;
   webOutput: string;
 };
+type HostObservation = Observation & { kernelRequestChanges: KernelRequestChange[] };
 type HostReady = Pick<
   NativeWebStack,
   'kernelOrigin' | 'authIssuer' | 'issuerOrigin' | 'web' | 'databaseUrl' | 'authDatabaseUrl' | 'searchWorker'
@@ -1748,9 +1757,9 @@ type HostReady = Pick<
 type HostReply =
   | {
       ready: HostReady;
-      observation: Observation;
+      observation: HostObservation;
     }
-  | { id: number; value?: unknown; error?: string; observation: Observation }
+  | { id: number; value?: unknown; error?: string; observation: HostObservation }
   | { startupError: string }
   | { progress: string }
   | { ownedGroup: { label: string; pid: number; stateDirectory?: string } }
@@ -2030,7 +2039,8 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     force: terminate,
   });
   let serial = 0;
-  let observation: Observation = { requests: [], peakMemory: 0, memory: null, webOutput: '' };
+  const requests: NativeKernelRequest[] = [];
+  let observation: Observation = { peakMemory: 0, memory: null, webOutput: '' };
   let closed: Promise<void> | undefined;
   let pageBridgeRelease: (() => void) | undefined;
   let dead: Error | undefined;
@@ -2084,10 +2094,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       return;
     }
     if ('startupError' in reply) return fail(new Error(reply.startupError));
-    observation.requests.push(...reply.observation.requests);
-    observation.peakMemory = reply.observation.peakMemory;
-    observation.memory = reply.observation.memory;
-    observation.webOutput = reply.observation.webOutput;
+    const { kernelRequestChanges, ...summary } = reply.observation;
+    for (const [index, request] of kernelRequestChanges) requests[index] = request;
+    observation = summary;
     if ('ready' in reply) return ready(reply.ready);
     const call = pending.get(reply.id);
     pending.delete(reply.id);
@@ -2205,7 +2214,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         }
         return (await call('routeAuthPages', pageBridge?.url.origin)) as string;
       },
-      kernelRequests: () => observation.requests.slice(),
+      kernelRequests: () => requests.slice(),
       async syncKernelRequests() {
         await call('observe');
       },
@@ -2335,18 +2344,12 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
   };
   try {
     const stack = await startStack();
-    let observedRequests = 0;
-    const observation = (): Observation => {
-      const requests = stack.kernelRequests();
-      const next = {
-        requests: requests.slice(observedRequests),
-        peakMemory: stack.peakMemoryBytes(),
-        memory: stack.memoryObservation?.() ?? null,
-        webOutput: stack.webOutput(),
-      };
-      observedRequests = requests.length;
-      return next;
-    };
+    const observation = (): HostObservation => ({
+      peakMemory: stack.peakMemoryBytes(),
+      memory: stack.memoryObservation?.() ?? null,
+      webOutput: stack.webOutput(),
+      kernelRequestChanges: stack.takeKernelRequestChanges(),
+    });
     process.on('message', async ({ id, method, argument, options }: HostCall) => {
       try {
         let value: unknown;
