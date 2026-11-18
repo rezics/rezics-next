@@ -218,6 +218,7 @@ export async function startAuthStack(
     REZICS_AUTH_PREPARED_MESSAGES: options.preparedMessages ? '1' : undefined,
     REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
     AUTH_ORIGIN: stack.authIssuer,
+    REZICS_AUTH_TEST_PAGE_ORIGIN: nativeIssuer.origin === stack.authIssuer ? undefined : nativeIssuer.origin,
     TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
     TURNSTILE_SCRIPT_URL: turnstileScriptUrl ?? `${turnstile.url.origin}/api.js`,
   });

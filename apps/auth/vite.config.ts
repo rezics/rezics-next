@@ -51,6 +51,7 @@ export default defineConfig(async (context) => {
     define: {
       'import.meta.env.PUBLIC_ORIGIN': JSON.stringify(process.env.PUBLIC_ORIGIN ?? 'https://rezics.com'),
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
+      __AUTH_TEST_PAGE_ORIGIN__: JSON.stringify(testServe ? (process.env.REZICS_AUTH_TEST_PAGE_ORIGIN ?? '') : ''),
     },
     plugins: [
       // The native harness owns the generated catalogue before this Worker is launched.
