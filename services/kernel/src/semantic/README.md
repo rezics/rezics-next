@@ -1854,6 +1854,24 @@ one live native home and release it before any foreign history read. Set metadat
 Semantic all-role erasure inventory and minimizer; only the immutable technical keys needed to resolve
 ownership survive, with no account attribution or copied content body in the native set stores.
 
+## Private Everything Subject disclosure
+
+`observePrivateSubjectDisclosure` takes the owner’s authenticated request, its original work ledger, a live read
+time and up to 100 ordered original/terminal pairs. Library supplies the complete admitted canonical Source,
+including aliases, rejected candidates and lookahead. It keeps responsibility for Source membership, current
+identity publication, release meaning and cursor ordering. [Native batch](private-subject-disclosure.ts)
+
+Initial disclosure and final reauthorization each use one checkout and one of the ordinary page’s 12 statements.
+The mounted public `subject:read` policy, a direct bearer, current
+active account, complete empty membership inverse and exact resource denials qualify this plan. Hidden, taken-down
+or denied endpoints with a proven directed mapping yield `withheld`. Missing evidence, unsupported authority or
+a changed redirect yields `unknown` for the whole vector. A completed empty vector proves only the viewer check.
+
+Register `privateSubjectDisclosureFootprint` with any enclosing SQL observer. Keep the observation through projection
+and call `revalidate(freshTime)` after the last foreign read, outside any held checkout. This repeats every decision
+on the original ledger and compares account, authority-home, Subject, revision and redirect versions and erasure keys.
+An unknown batch, failed comparison or exhausted allowance supplies no partial page or cursor.
+
 ## Cost
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.

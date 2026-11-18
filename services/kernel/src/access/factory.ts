@@ -138,6 +138,17 @@ function atTimeClient(client: AccessClient, at: string): AccessClient {
   return bounded;
 }
 
+type PrivateSubjectBearer = Readonly<{ deadline: number; accountVersion: string; floor: string }>;
+type SubjectBearerReader = (actor: AccountActor, pool: AccessContext['pool']) => PrivateSubjectBearer | null;
+function subjectBearerReaders() {
+  return memoizedValue(subjectBearerReaders, () => new WeakMap<Access, SubjectBearerReader>());
+}
+
+/** Only the Access instance that authenticated this bearer can bind its current account point. */
+export function privateSubjectBearer(access: Access, actor: AccountActor, pool: AccessContext['pool']) {
+  return subjectBearerReaders().get(access)?.(actor, pool) ?? null;
+}
+
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
  * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),
@@ -935,6 +946,27 @@ export function createAccess(config: AccessConfig): Access {
     );
   });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
+  subjectBearerReaders().set(access, (actor, pool) => {
+    const identity = authentication.identity(actor);
+    if (
+      !identity ||
+      identity.pool !== pool ||
+      identity.expiryClock !== 'wall' ||
+      identity.durableTime ||
+      actor.requestedBy !== null ||
+      identity.account.operatorAccountId !== null ||
+      identity.account.state !== 'active' ||
+      identity.account.fenced
+    )
+      return null;
+    const deadline = Math.min(identity.deadline, identity.expires, identity.observedAt + 180_000);
+    if (Date.now() >= deadline) return null;
+    return {
+      deadline,
+      accountVersion: identity.account.transactionId,
+      floor: String(identity.account.minimumAuthnEpoch),
+    };
+  });
   return access;
 }
 
