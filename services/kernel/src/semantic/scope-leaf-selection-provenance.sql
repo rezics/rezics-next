@@ -1,6 +1,8 @@
 -- One Source provenance authority, shared by public Source and native leaf reads.
 -- Point plans include the fallback for expanded compact candidates whose proposal
 -- has no source tuple. Payload guarding never treats withheld provenance as absent.
+-- A revision with no source may store JSON null. Normalize it before fallback
+-- and byte accounting, since the driver decodes both null representations alike.
 WITH input AS NOT MATERIALIZED (
   SELECT :max_bytes::integer AS max_bytes
 ), entries AS MATERIALIZED (
@@ -12,14 +14,14 @@ WITH input AS NOT MATERIALIZED (
          COALESCE(proposed.revision, recorded.revision) AS revision
   FROM entries e
   LEFT JOIN LATERAL (
-    SELECT r.source, r.revision FROM semantic.candidate c
+    SELECT NULLIF(r.source, 'null'::jsonb) AS source, r.revision FROM semantic.candidate c
     JOIN semantic.revision r
       ON r.route = c.route AND r.subject_id = c.subject_id AND r.revision = c.revision
     WHERE c.route = e.route AND c.subject_id = e.subject_id AND c.candidate_id = e.candidate_id
     LIMIT 1
   ) proposed ON true
   LEFT JOIN LATERAL (
-    SELECT r.source, r.revision FROM (
+    SELECT NULLIF(r.source, 'null'::jsonb) AS source, r.revision FROM (
       (SELECT route, subject_id, recorded_transaction_id FROM semantic.fact
        WHERE proposed.source IS NULL AND e.slot_id IS NOT NULL
          AND route = e.route AND subject_id = e.subject_id AND slot_id = e.slot_id
