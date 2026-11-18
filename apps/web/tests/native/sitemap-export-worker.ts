@@ -39,7 +39,20 @@ export default {
       });
       return new Response(null, { status: 204, headers });
     } catch (error) {
-      return new Response(error instanceof Error ? error.message : String(error), { status: 503, headers });
+      const message = error instanceof Error ? error.message : String(error);
+      const problem = error instanceof Error && 'problem' in error ? error.problem : undefined;
+      const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
+      const requestId =
+        problem && typeof problem === 'object' && 'request_id' in problem ? problem.request_id : undefined;
+      const detail = [
+        message,
+        problem instanceof Error && problem.message,
+        typeof code === 'string' && code,
+        typeof requestId === 'string' && requestId,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      return new Response(detail, { status: 503, headers });
     }
   },
 };

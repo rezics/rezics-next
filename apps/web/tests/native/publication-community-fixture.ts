@@ -9,10 +9,14 @@ type Locales = readonly string[];
 type SitemapKind = keyof PublicationFixture['sitemap'];
 type Inventory = PublicationFixture['sitemap'][SitemapKind];
 type VerifiedPublication = { subjectUrl: string; profileUrl: string };
+type Topic = { id: string; label: string };
+type ContentInventory = Omit<Inventory, 'eligible'> & { eligible: (Inventory['eligible'][number] & { id: string })[] };
 
 export type CommunityPublicationInventory = {
-  sitemap: Pick<PublicationFixture['sitemap'], 'collection' | 'realm' | 'space' | 'board' | 'thread'>;
+  sitemap: Pick<PublicationFixture['sitemap'], 'collection' | 'realm' | 'space'> &
+    Record<'board' | 'thread', ContentInventory>;
   nativeIds: Record<'collection' | 'realm' | 'space' | 'board' | 'thread', string[]>;
+  topics: Topic[];
   verified?: VerifiedPublication;
 };
 
@@ -131,11 +135,12 @@ async function createBoard(
   schemeId: string,
   title: string,
   visibility: 'published' | 'protected',
-): Promise<string> {
+): Promise<{ id: string; topic: Topic }> {
   // A Realm can host only one Board for a given Concept.
+  const label = `${title} topic`;
   const concept = await writeJson<{ subject: { id: string } }>(kernel, '/v1/subjects', {
     type: 'skos:Concept',
-    labels: { en: `${title} topic` },
+    labels: { en: label },
     statements: {
       'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
     },
@@ -147,7 +152,7 @@ async function createBoard(
     visibility,
   });
   if (!created.board?.id) throw new Error(`Board create omitted identity for ${title}`);
-  return created.board.id;
+  return { id: created.board.id, topic: { id: concept.subject.id, label } };
 }
 
 async function createThread(
@@ -363,10 +368,11 @@ export async function provisionCommunityPublication(input: {
 
   const boardIds: string[] = [];
   const threadIds: string[] = [];
-  const boardEligible: Inventory['eligible'] = [];
-  const threadEligible: Inventory['eligible'] = [];
+  const boardEligible: ContentInventory['eligible'] = [];
+  const threadEligible: ContentInventory['eligible'] = [];
+  const topics: Topic[] = [];
   for (let index = 1; index <= eligiblePerKind; index++) {
-    const boardId = await createBoard(
+    const { id: boardId, topic } = await createBoard(
       kernel,
       publicRealm.realmId,
       scheme.subject.id,
@@ -374,12 +380,23 @@ export async function provisionCommunityPublication(input: {
       'published',
     );
     const thread = await createThread(kernel, boardId, `Public lantern thread ${index}`, 'published');
+    topics.push(topic);
     boardIds.push(boardId);
     threadIds.push(thread.id);
-    boardEligible.push(...localeUrls(publicOrigin, `/boards/${encodeURIComponent(boardId)}`, locales));
-    threadEligible.push(...localeUrls(publicOrigin, threadHref({ id: thread.id, title: thread.title }), locales));
+    boardEligible.push(
+      ...localeUrls(publicOrigin, `/boards/${encodeURIComponent(boardId)}`, locales).map((entry) => ({
+        ...entry,
+        id: boardId,
+      })),
+    );
+    threadEligible.push(
+      ...localeUrls(publicOrigin, threadHref({ id: thread.id, title: thread.title }), locales).map((entry) => ({
+        ...entry,
+        id: thread.id,
+      })),
+    );
   }
-  const protectedBoardId = await createBoard(
+  const { id: protectedBoardId, topic: protectedTopic } = await createBoard(
     kernel,
     protectedRealm.realmId,
     scheme.subject.id,
@@ -388,7 +405,7 @@ export async function provisionCommunityPublication(input: {
   );
   const protectedThread = await createThread(kernel, protectedBoardId, 'Protected lantern thread', 'published');
   const draftThread = await createThread(kernel, boardIds[0]!, 'Draft lantern thread', 'draft');
-  const takenBoardId = await createBoard(
+  const { id: takenBoardId, topic: takenTopic } = await createBoard(
     kernel,
     publicRealm.realmId,
     scheme.subject.id,
@@ -409,10 +426,13 @@ export async function provisionCommunityPublication(input: {
   ];
   await takeDown(kernel, 'board', takenBoardId);
   await takeDown(kernel, 'thread', takenThread.id);
+  // Board privacy does not withdraw the independently published catalogue topic.
+  topics.push(protectedTopic, takenTopic);
 
   const verified = await input.provisionVerified?.();
 
   return {
+    topics,
     sitemap: {
       collection: { eligible: collectionEligible, excluded: collectionExcluded },
       realm: { eligible: realmEligible, excluded: realmExcluded },

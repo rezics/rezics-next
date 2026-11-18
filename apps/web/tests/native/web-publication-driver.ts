@@ -15,6 +15,7 @@ import {
   provisionCommunityPublication,
   provisionVerifiedPublication,
 } from './publication-community-fixture.ts';
+import { observePublicationSitemap } from './publication-sitemap-fixture.ts';
 import { publicationFixtureSelection, traversalSources } from './publication-fixture-selection.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
@@ -337,13 +338,28 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         return [name, `${urlFor(traversalSources[name])}/${view}`];
       }),
     ) as PublicationFixture['views'];
-    const localeUrls = (key: string) =>
-      data.locales.map((locale) => ({ url: urlFor(key, locale), lastmod: null as string | null }));
     const sitemapSubjects = [...Object.keys(publicationSubjectTypes), ...sitemapBookKeys];
-    const sitemapNativeIds = community && {
-      subject: sitemapSubjects.map((key) => created!.get(key)!.id),
-      ...community.nativeIds,
-    };
+    const subjectIds = community
+      ? [...sitemapSubjects.map((key) => created!.get(key)!.id), ...community.topics.map(({ id }) => id)]
+      : [];
+    const facts =
+      community &&
+      (await observePublicationSitemap(
+        services.databaseUrl,
+        origin,
+        data.locales,
+        subjectIds,
+        community.nativeIds.thread,
+      ));
+    const agents = facts?.agents;
+    if (agents && (agents.handles.length < data.discovery.eligibleAgents || agents.inventory.excluded.length === 0))
+      throw new Error('Publication fixture is missing eligible or excluded Agent handles');
+    const sitemapNativeIds = community &&
+      facts && {
+        agent: facts.agents.handles,
+        subject: subjectIds,
+        ...community.nativeIds,
+      };
     const fixture: PublicationFixture = {
       releaseDigest: activeBody.digest,
       publicOrigin: origin,
@@ -387,15 +403,39 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       },
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', origin).href,
       get sitemap() {
-        if (!community) throw new Error('Publication fixture is missing the sitemap inventory');
+        if (!community || !facts) throw new Error('Publication fixture is missing the sitemap inventory');
+        const withContentTimes = (kind: 'board' | 'thread', times: Map<string, string>) => ({
+          excluded: community.sitemap[kind].excluded,
+          eligible: community.sitemap[kind].eligible.map(({ url, id }) => {
+            const lastmod = times.get(id);
+            if (!lastmod) throw new Error(`Native sitemap fixture ${kind} ${id} has no publication time`);
+            return { url, lastmod };
+          }),
+        });
         return {
+          ...community.sitemap,
+          agent: facts.agents.inventory,
+          board: withContentTimes('board', facts.boardTimes),
+          thread: withContentTimes('thread', facts.threadTimes),
           subject: {
-            eligible: sitemapSubjects.flatMap((key) => localeUrls(key)),
+            eligible: [
+              ...sitemapSubjects.flatMap((key) =>
+                data.locales.map((locale) => ({
+                  url: urlFor(key, locale),
+                  lastmod: facts.subjectTimes.get(created!.get(key)!.id) ?? null,
+                })),
+              ),
+              ...community.topics.flatMap(({ id, label }) =>
+                data.locales.map((locale) => ({
+                  url: new URL(subjectPath(id, label, locale), origin).href,
+                  lastmod: facts.subjectTimes.get(id) ?? null,
+                })),
+              ),
+            ],
             excluded: ['excluded-withheld', 'excluded-private', 'excluded-taken-down'].flatMap((key) =>
               data.locales.map((locale) => urlFor(key, locale)),
             ),
           },
-          ...community.sitemap,
         };
       },
     };
@@ -414,6 +454,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     // The sitemap selection settles discovery; only the full fixture seeds search.
     if (!sitemapNativeIds) return;
     const routes = [
+      ['agent', '/v1/agent-pages'],
       ['collection', '/v1/sitemap/collections'],
       ['realm', '/v1/sitemap/realms'],
       ['space', '/v1/sitemap/spaces'],
@@ -447,13 +488,13 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
           try {
             do {
               if (performance.now() >= deadline) break;
-              const query = new URLSearchParams({ limit: '100' });
+              const query = new URLSearchParams({ limit: kind === 'agent' ? '1000' : '100' });
               if (cursor !== null) query.set('cursor', cursor);
               const response = await kernel(`${route}?${query}`);
               if (!response.ok) {
                 const body = await response.text();
                 const problem = responseProblem(body);
-                if (response.status === 503 && problem?.code === 'semantic_not_ready') {
+                if (kind !== 'agent' && response.status === 503 && problem?.code === 'semantic_not_ready') {
                   console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
                   break;
                 }
@@ -461,13 +502,18 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
               }
               const page = (await response.json()) as {
                 items?: { id: string }[];
+                agentPages?: { handle: string }[];
                 subjectPages?: { id: string }[];
                 next: unknown;
               };
-              const items = kind === 'subject' ? page.subjectPages : page.items;
+              const items = kind === 'agent' ? page.agentPages : kind === 'subject' ? page.subjectPages : page.items;
               if (!Array.isArray(items) || (page.next !== null && typeof page.next !== 'string'))
                 throw new Error(`Native sitemap feed ${route} omitted its items or continuation`);
-              for (const { id } of items) missing.delete(id);
+              for (const item of items) {
+                const id = 'handle' in item ? item.handle : item.id;
+                if (!missing.delete(id) && kind === 'agent')
+                  throw new Error(`Native sitemap feed ${route} returned unexpected or repeated handle ${id}`);
+              }
               pages++;
               if (items.length === 0) emptyPages++;
               cursor = page.next;

@@ -106,10 +106,12 @@
     "ownVote": "Alice Vote Sentinel"
   },
   "discovery": {
-    "kinds": ["subject", "collection", "realm", "space", "board", "thread"],
+    "kinds": ["agent", "subject", "collection", "realm", "space", "board", "thread"],
     "eligiblePerKind": 23,
+    "eligibleAgents": 6,
     "feedPageSize": 2,
     "controlsPerKind": {
+      "agent": ["suspended"],
       "subject": ["withheld", "private-context", "taken-down"],
       "collection": ["unlisted", "private", "taken-down"],
       "realm": ["protected", "taken-down"],

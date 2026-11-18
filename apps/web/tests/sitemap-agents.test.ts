@@ -18,7 +18,8 @@ const client = createKernelClient('https://kernel.example', {
   },
 });
 
-mock.module('../src/kernel/client.ts', () => ({ kernelClient: () => client }));
+const kernelModule = await import('../src/kernel/client.ts');
+mock.module('../src/kernel/client.ts', () => ({ ...kernelModule, kernelClient: () => client }));
 const { feed } = await import('../src/sitemap/feeds/agents.ts');
 const { sitemapFeeds } = await import('../src/sitemap/feeds.ts');
 const { exportSitemapFeed, exportSitemaps } = await import('../src/sitemap/export.ts');
@@ -206,5 +207,18 @@ test('invalid agent inventories fail replacement and invalid publication times a
   respond = () => {
     throw unavailable;
   };
-  await expect(feed.read(null)).rejects.toBe(unavailable);
+  // Eden represents a failed fetch as 503 and retains the transport cause.
+  await expect(feed.read(null)).rejects.toMatchObject({ status: 503, problem: unavailable });
+});
+
+test('native Access timestamps preserve public identity change time in the exported XML', async () => {
+  respond = () => ({
+    status: 200,
+    body: { agentPages: [{ ...agentPages[0], lastModified: '2026-10-29 12:34:56.123456+00' }], next: null },
+  });
+  const store = new MemoryStore();
+  const files = await exportSitemapFeed('native-agent-time', feed, options(store));
+  expect(files).toHaveLength(1);
+  const xml = new TextDecoder().decode(Bun.gunzipSync((await store.get(files[0]!.key))!));
+  expect(xml.match(/<lastmod>2026-10-29T12:34:56Z<\/lastmod>/gu)).toHaveLength(locales.length);
 });

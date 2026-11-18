@@ -377,7 +377,8 @@ describe('public-discovery-and-cache', () => {
     const expected = new Map<string, string | null>();
     for (const kind of data.discovery.kinds as SitemapKind[]) {
       const inventory = fixture.sitemap[kind];
-      expect(inventory.eligible.length).toBeGreaterThanOrEqual(data.discovery.eligiblePerKind * data.locales.length);
+      const minimum = kind === 'agent' ? data.discovery.eligibleAgents : data.discovery.eligiblePerKind;
+      expect(inventory.eligible.length).toBeGreaterThanOrEqual(minimum * data.locales.length);
       expect(inventory.excluded.length).toBeGreaterThanOrEqual(data.discovery.controlsPerKind[kind].length);
       for (const item of inventory.eligible) {
         expect(expected.has(item.url)).toBe(false);
