@@ -91,7 +91,7 @@ export async function startNativeAuthIssuerProxy(): Promise<NativeAuthIssuerProx
 
 export type NativeAuthSecurityFixture = {
   accountIds: { alice: string; bob: string };
-  book: { id: string; title: string; path: string };
+  book: { id: string; title: string; path: string; planned: { id: string; label: string } };
   libraryTarget: string;
 };
 
@@ -109,15 +109,38 @@ async function required(response: Response, operation: string): Promise<Response
   return response;
 }
 
-/** Create one public catalogue resource through the released API in this owned native stack. */
+/** Prepare one public Book and Alice's scoped admission to its private Library action. */
 export async function provisionNativeAuthSecurityFixture(stack: NativeWebStack): Promise<NativeAuthSecurityFixture> {
-  if (!bundledRelease.types['schema:Book']) throw new Error('Bundled release lacks schema:Book');
+  const bookType = 'schema:Book';
+  const profileId = bundledRelease.types[bookType]?.library?.profileId;
+  const planned = profileId
+    ? bundledRelease.libraryProfiles[profileId]?.entryStateSet?.states.find(({ role }) => role === 'planned')
+    : undefined;
+  const plannedLabel = planned?.labels.en;
+  if (!planned || !plannedLabel) throw new Error('Bundled Book Library profile lacks an English planned state');
   const active = (await required(await stack.kernel('/v1/definitions/active'), 'Read active definitions')) as Response;
   const activeDigest = ((await active.json()) as { digest?: unknown }).digest;
   if (activeDigest !== bundledDigest)
     throw new Error(`Native stack release mismatch: expected ${bundledDigest}, received ${String(activeDigest)}`);
 
   const [alice, bob] = await Promise.all([stack.authPersona('alice'), stack.authPersona('bob')]);
+  await required(
+    await stack.kernel(
+      '/v1/grants',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+        body: JSON.stringify({
+          resource: { route: 0, id: globalContext },
+          subject: { kind: 'account', id: alice.accountId },
+          actions: ['gate:personal_library'],
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    ),
+    'Admit Alice to the private Subject Library entry',
+  );
   const writerAuthorization = await stack.credentials('native-auth-security-writer');
   const writerId = accountIdFromAuthorization(writerAuthorization.authorization);
   const grantKey = crypto.randomUUID();
@@ -160,7 +183,7 @@ export async function provisionNativeAuthSecurityFixture(stack: NativeWebStack):
                 converter_revision: 'native-auth-security-fixture@1',
                 field_group: 'facts',
               },
-              subject: { type: 'schema:Book', labels: { en: title } },
+              subject: { type: bookType, labels: { en: title } },
             },
           ],
         }),
@@ -189,6 +212,7 @@ export async function provisionNativeAuthSecurityFixture(stack: NativeWebStack):
       id: subject.value.id,
       title,
       path: `/en/subjects/${encodeURIComponent(subject.value.id)}/${slug(title)}`,
+      planned: { id: planned.id, label: plannedLabel },
     },
     libraryTarget: '/en/library?from=served-auth&empty=',
   };
