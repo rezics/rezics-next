@@ -2797,7 +2797,11 @@ BEGIN
   PERFORM 1 FROM library.fact_source_head WHERE route=r AND account_id=a FOR UPDATE;
   IF f='entry' THEN
     SELECT EXISTS (SELECT 1 FROM library.entry WHERE route=r AND account_id=a AND subject_id=s
-      AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
+      AND COALESCE(library_profile_pin,'{}'::jsonb)=p) OR
+      (p='{}'::jsonb AND EXISTS (SELECT 1 FROM library.entry_personal_fact x WHERE x.route=r AND x.account_id=a
+        AND x.subject_id=s AND (x.note IS NOT NULL OR x.priority IS NOT NULL OR EXISTS (
+          SELECT 1 FROM library.entry_source_observation o WHERE o.route=x.route AND o.account_id=x.account_id
+            AND o.subject_id=x.subject_id)))) INTO live;
   ELSIF f='session' THEN
     SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE state <> 'retired' AND route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
@@ -5917,6 +5921,8 @@ CREATE TABLE library.owner_index_control (
     after_fact uuid,
     chronology_ready boolean DEFAULT false NOT NULL,
     activity_after_subject uuid,
+    personal_coverage_ready boolean DEFAULT false NOT NULL,
+    personal_coverage_after uuid,
     CONSTRAINT owner_index_control_check CHECK (((after_subject IS NULL) = (after_fact IS NULL))),
     CONSTRAINT owner_index_control_check1 CHECK (((phase <> 'ready'::text) OR (after_subject IS NULL))),
     CONSTRAINT owner_index_control_check2 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
