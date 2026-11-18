@@ -11,6 +11,20 @@ type Data = typeof import('../../../../specs/fixtures/web-publication.json');
 type Subject = { id: string; type: string; label: string; labels: Record<string, string> };
 type Snak = { property: { id: string }; value: { type: 'value'; content: unknown } };
 type Statement = Snak & { qualifiers?: Snak[]; references?: { parts: Snak[] }[] };
+export const publicationSubjectTypes: Record<string, string> & Record<PublishedSubject, string> = {
+  book: 'schema:Book',
+  recipe: 'schema:Recipe',
+  game: 'schema:VideoGame',
+  release: 'wd:Q20631656',
+  person: 'schema:Person',
+  organization: 'schema:Organization',
+  automated: 'schema:SoftwareApplication',
+};
+export const sitemapBookKeys = Array.from(
+  { length: 16 },
+  (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`,
+);
+
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const labelTypes = new Map([
   ['cast', 'wd:Q95074'],
@@ -50,6 +64,41 @@ const post = (kernel: NativeWebStack['kernel'], path: string, body: unknown, per
     },
     persona,
   );
+
+async function selectPrivateSitemapFact(kernel: NativeWebStack['kernel'], writer: string, subjectId: string) {
+  const { context } = await json<{ context: { id: string } }>(
+    await post(kernel, '/v1/contexts', { labels: { en: 'Lantern private selection' } }, writer),
+    201,
+    'Create sitemap exclusion Context',
+  );
+  const path = `/v1/subjects/${subjectId}`;
+  const { candidate } = await json<{ candidate: string }>(
+    await post(kernel, `${path}/candidates`, { statement: snak('schema:inLanguage', 'en') }, writer),
+    201,
+    'Propose private sitemap fact',
+  );
+  await json(
+    await post(kernel, `${path}/candidates/${candidate}:accept`, { context: context.id, expected_head: null }, writer),
+    200,
+    'Accept sitemap fact in the private Context',
+  );
+  await json(
+    await post(
+      kernel,
+      `${path}:adopt`,
+      {
+        context: context.id,
+        property: 'schema:inLanguage',
+        mode: 'replace',
+        selection: [{ candidate, rank: 'normal' }],
+        expected_head: null,
+      },
+      writer,
+    ),
+    200,
+    'Adopt sitemap fact in the private Context',
+  );
+}
 
 export async function preparePublicationWriters(
   kernel: NativeWebStack['kernel'],
@@ -95,7 +144,7 @@ export async function preparePublicationWriters(
     'context:create',
     'context:accept',
     'context:adopt',
-    ...(selection ? [] : ['space:create', 'realm:create']),
+    ...(!selection || selection.sitemap ? ['space:create', 'realm:create'] : []),
   ]);
   const batchWriter =
     !selection || (selection.view && labelTypes.has(selection.view))
@@ -160,6 +209,18 @@ export async function seedPublicationSubjects(
     created.set(key, subject);
     return subject;
   }
+
+  // The native feed requires a selected public fact. One scalar per page
+  // supplies that proof without authoring metadata-only related Subjects.
+  const sitemapFacts = (key: string) =>
+    selection?.sitemap ? [snak('schema:url', `https://example.test/lantern/${key}`)] : [];
+  if (selection?.sitemap) {
+    for (const key of Object.keys(data.subjects) as PublishedSubject[]) {
+      const { title, description } = data.subjects[key];
+      await create(key, publicationSubjectTypes[key], title, sitemapFacts(key), { descriptions: { en: description } });
+    }
+  }
+
   if (includes('person')) {
     await create('person', 'schema:Person', data.subjects.person.title, [], {
       descriptions: { en: data.subjects.person.description },
@@ -367,13 +428,40 @@ export async function seedPublicationSubjects(
       await create(`search-book-${index + 1}`, 'schema:Book', title, [], {
         labels: { en: title, [data.search.locale]: title },
       });
-    for (let index = 1; index <= 16; index++)
-      await create(`sitemap-book-${String(index).padStart(2, '0')}`, 'schema:Book', `Public lantern ${index}`, [], {
+  }
+  if (!selection || selection.sitemap) {
+    for (const [ordinal, key] of sitemapBookKeys.entries()) {
+      const index = ordinal + 1;
+      await create(key, 'schema:Book', `Public lantern ${index}`, sitemapFacts(key), {
         descriptions: { en: `A public catalogue page ${index}.` },
       });
-    await create('excluded-withheld', 'schema:Book', data.withheld[0]!);
-    await create('excluded-private', 'schema:Book', 'Private context lantern');
-    await create('excluded-taken-down', 'schema:Book', 'Taken-down lantern');
+    }
+    const withheld = await create('excluded-withheld', 'schema:Book', data.withheld[0]!, sitemapFacts('excluded-withheld'));
+    const privateOnly = await create('excluded-private', 'schema:Book', 'Private context lantern');
+    const takenDown = await create(
+      'excluded-taken-down',
+      'schema:Book',
+      'Taken-down lantern',
+      sitemapFacts('excluded-taken-down'),
+    );
+    if (selection?.sitemap) {
+      await selectPrivateSitemapFact(kernel, baseWriter, privateOnly.id);
+      await json(
+        await post(kernel, `/v1/subjects/${withheld.id}:hide`, { reason: 'Publication fixture exclusion' }, 'governor'),
+        200,
+        'Withhold sitemap Subject',
+      );
+      await json(
+        await post(
+          kernel,
+          `/v1/subjects/${takenDown.id}:takedown`,
+          { notice: { complaint: 'Publication fixture exclusion', received_at: new Date().toISOString() } },
+          'governor',
+        ),
+        200,
+        'Take down sitemap Subject',
+      );
+    }
   }
 
   const book = created.get('book');

@@ -6,6 +6,7 @@ export type PublicationFixtureSelection = {
   view?: RelationView;
   verifiedAgent?: true;
   verifiedReader?: boolean;
+  sitemap?: true;
 };
 
 const subjectsByScenario: Readonly<Record<string, PublishedSubject>> = {
@@ -53,8 +54,9 @@ export function publicationFixtureSelection(): PublicationFixtureSelection | und
   if (!pattern?.endsWith('$')) return;
   const name = pattern
     .slice(0, -1)
-    .replace(/^\^?(?:(?:published-vertical-metadata|subject-traversal)(?: >)? )?/u, '')
-    .replace(/^(?:published-vertical-metadata|subject-traversal): /u, '');
+    .replace(/^\^?(?:(?:published-vertical-metadata|subject-traversal|public-discovery-and-cache)(?: >)? )?/u, '')
+    .replace(/^(?:published-vertical-metadata|subject-traversal|public-discovery-and-cache): /u, '');
+  if (name === 'robots and every sitemap shard publish exactly eligible native feed URLs') return { sitemap: true };
   const subject = Object.hasOwn(subjectsByScenario, name) ? subjectsByScenario[name] : undefined;
   if (subject) return { subject };
   if (name === 'verified agent subject redirects to its handle page') return { verifiedAgent: true };

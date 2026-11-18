@@ -1,4 +1,9 @@
-import { preparePublicationWriters, seedPublicationSubjects } from './web-publication-subjects';
+import {
+  preparePublicationWriters,
+  publicationSubjectTypes,
+  seedPublicationSubjects,
+  sitemapBookKeys,
+} from './web-publication-subjects';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import publicationData from '../../../../specs/fixtures/web-publication.json';
@@ -15,15 +20,6 @@ import type { WebPublicationDriver, PublicationFixture, Persona } from '../../..
 
 const traversalViews = ['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const;
 const defaultPublicOrigin = 'https://rezics.example.test';
-const typeByKey: Record<string, string> = {
-  book: 'schema:Book',
-  recipe: 'schema:Recipe',
-  game: 'schema:VideoGame',
-  release: 'wd:Q20631656',
-  person: 'schema:Person',
-  organization: 'schema:Organization',
-  automated: 'schema:SoftwareApplication',
-};
 const fixtureTypeByKey: Record<string, string> = {
   book: 'Book',
   recipe: 'Recipe',
@@ -130,12 +126,12 @@ async function waitForProcessState(
 function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtures/web-publication.json')): void {
   const types = bundledRelease.types as Record<string, unknown>;
   const properties = bundledRelease.properties as Record<string, unknown>;
-  for (const [key, type] of Object.entries(typeByKey)) {
+  for (const [key, type] of Object.entries(publicationSubjectTypes)) {
     if (!Object.hasOwn(data.subjects, key) || !types[type])
       throw new Error(`Missing released definition for fixture subject ${key}: ${type}`);
   }
   for (const [key, subject] of Object.entries(data.subjects)) {
-    const type = typeByKey[key];
+    const type = publicationSubjectTypes[key];
     if (!type || fixtureTypeByKey[key] !== subject.type)
       throw new Error(`Missing released definition for fixture subject ${key}: ${subject.type}`);
     const definition = bundledRelease.types[type];
@@ -296,24 +292,21 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         `web-publication-driver-provision: native writers ready at ${Math.round(performance.now() - factoryStarted)}ms`,
       );
     }
-    // Full runs prepare the two inventories concurrently. Drain any active
-    // writes before returning a setup failure.
+    const provisionVerified = () =>
+      provisionVerifiedPublication(prepare, setupActor, origin, data.routing.verifiedHandle, subjectPath);
+    // Drain any active writes before returning a setup failure.
     const inventories = [
       writers && seedPublicationSubjects(prepare, writers, data, selection),
-      !selection && writers
+      (!selection || selection.sitemap) && writers
         ? provisionCommunityPublication({
             kernel: (path, init, persona = writers.baseWriter) => prepare(path, init, persona),
-            actor: setupActor,
             publicOrigin: origin,
             locales: data.locales,
             eligiblePerKind: data.discovery.eligiblePerKind,
-            verifiedHandle: data.routing.verifiedHandle,
-            subjectPath,
+            ...(!selection ? { provisionVerified } : {}),
           })
         : undefined,
-      selection?.verifiedAgent
-        ? provisionVerifiedPublication(prepare, setupActor, origin, data.routing.verifiedHandle, subjectPath)
-        : undefined,
+      selection?.verifiedAgent ? provisionVerified() : undefined,
       selection?.verifiedReader
         ? openPublicationVerification(prepare).then(() => setupActor('verified-agent'))
         : undefined,
@@ -345,16 +338,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     ) as PublicationFixture['views'];
     const localeUrls = (key: string) =>
       data.locales.map((locale) => ({ url: urlFor(key, locale), lastmod: null as string | null }));
-    const sitemapSubjects = [
-      'book',
-      'recipe',
-      'game',
-      'release',
-      'person',
-      'organization',
-      'automated',
-      ...Array.from({ length: 16 }, (_, index) => `sitemap-book-${String(index + 1).padStart(2, '0')}`),
-    ];
+    const sitemapSubjects = [...Object.keys(publicationSubjectTypes), ...sitemapBookKeys];
     const sitemapNativeIds = community && {
       subject: sitemapSubjects.map((key) => created!.get(key)!.id),
       ...community.nativeIds,
@@ -377,12 +361,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         return urlFor('book', 'zh-Hans');
       },
       get verifiedSubject() {
-        const url = verified?.subjectUrl ?? community?.verifiedSubjectUrl;
+        const url = verified?.subjectUrl ?? community?.verified?.subjectUrl;
         if (!url) throw new Error('Publication fixture is missing the verified Subject');
         return url;
       },
       get verifiedProfile() {
-        const url = verified?.profileUrl ?? community?.verifiedProfileUrl;
+        const url = verified?.profileUrl ?? community?.verified?.profileUrl;
         if (!url) throw new Error('Publication fixture is missing the verified profile');
         return url;
       },
@@ -425,8 +409,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const settle = async () => {
     if (!provisioned) throw new Error('settle requires a provisioned publication fixture');
     const { data, sitemapNativeIds } = provisioned;
-    // Scoped cases read the current Subject/page APIs or a verified account
-    // already observed by provision. Sitemap and search inventory are independent.
+    // The sitemap selection settles discovery; only the full fixture seeds search.
     if (!sitemapNativeIds) return;
     const routes = [
       ['collection', '/v1/sitemap/collections'],
@@ -441,7 +424,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     );
     const expected = new Map([...pending].map(([route, ids]) => [route, new Set(ids)]));
     let missingTitles = [...data.search.matchingBooks];
-    let searchPending = true;
+    let searchPending = !selection;
     const deadline = performance.now() + 180_000;
     let round = 0;
     const unmet = () => [
