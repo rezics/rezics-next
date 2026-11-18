@@ -480,8 +480,11 @@ nativeTest(
 );
 
 async function preferences(persona: 'alice' | 'bob') {
-  const { accountId } = await stack.authPersona(persona);
-  const current = decodePreferenceValues(await read(`/v1/accounts/${accountId}/preferences`, persona));
+  // Read stored values independently of the browser session that this journey signs out.
+  const { accountId, authorization } = await stack.authPersona(persona, ['account:read']);
+  const response = await stack.kernel(`/v1/accounts/${accountId}/preferences`, { headers: { authorization } });
+  expect(response.status, `Read stored preferences as ${persona}`).toBe(200);
+  const current = decodePreferenceValues(await response.json());
   if (!current) throw new Error(`Invalid native reading preferences for ${persona}`);
   return current;
 }
