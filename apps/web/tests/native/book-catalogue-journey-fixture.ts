@@ -708,7 +708,7 @@ export async function startBookCatalogueJourneyFixture(
     writeRateOverrides,
     observeBookSearchPreparation: !shelfOnly,
     observeBookLibraryState: !shelfOnly,
-    observePersonalAccess: shelfOnly,
+    observePersonalAccess: true,
   });
   let auth: NativeAuthStack | undefined;
   try {
