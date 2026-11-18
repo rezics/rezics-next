@@ -55,7 +55,9 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     routeKey: Uint8Array;
     clock?: () => Date;
     referenceKeys: KeyRing;
-    auth: () => AuthSessionPort & AuthCredentialPort & AuthRecoveryPort;
+    auth: () => AuthSessionPort &
+      AuthCredentialPort &
+      AuthRecoveryPort & { internal: { verifyWebsiteSessionInvalidation?(input: unknown): boolean } };
     proofs: NativeAccountBindingProofs;
   }>();
   expectTypeOf<NativeAccountBindings>().toEqualTypeOf<{

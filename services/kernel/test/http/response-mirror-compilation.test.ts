@@ -1,19 +1,22 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Elysia, setupTypebox, t } from 'elysia';
 import { createMirror } from 'exact-mirror';
+import type { StaticDecode } from 'typebox';
 
 const compiledMembers: unknown[] = [];
 setupTypebox({
-  exactMirror(schema, options) {
+  exactMirror(schema, options: Parameters<typeof createMirror>[1]) {
     if (!options?.Compile) return createMirror(schema, options);
     const compile = options.Compile;
     return createMirror(schema, {
       ...options,
-      Compile(...args) {
-        const validator = compile(...args);
-        compiledMembers.push(validator);
-        return validator;
-      },
+      Compile: new Proxy(compile, {
+        apply(target, _receiver, args) {
+          const validator = Reflect.apply(target, undefined, args);
+          compiledMembers.push(validator);
+          return validator;
+        },
+      }),
     });
   },
 });
@@ -28,30 +31,22 @@ const json = (path: string, body: unknown) =>
   });
 
 test('response mirrors preserve closed refs, formats and unknown-field normalization', async () => {
-  let result: unknown = {
+  const node = t.Union([
+    t.String(),
+    t.Number(),
+    t.Object({ label: t.Union([t.String(), t.Number()]) }),
+    t.Array(t.Ref('Node')),
+    t.Record(t.String(), t.Ref('Node')),
+  ]);
+  const response = t.Object({ id: t.String({ format: 'uuid' }), left: t.Ref('Node'), right: t.Ref('Node') });
+  type ResponseBody = StaticDecode<typeof response, { Node: typeof node }>;
+  let result: ResponseBody & { extra?: string } = {
     id: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
     left: { title: ['harbour', 7] },
     right: ['ferry'],
     extra: 'private',
   };
-  const app = new Elysia()
-    .model(
-      'Node',
-      t.Union([
-        t.String(),
-        t.Number(),
-        t.Object({ label: t.Union([t.String(), t.Number()]) }),
-        t.Array(t.Ref('Node')),
-        t.Record(t.String(), t.Ref('Node')),
-      ]),
-    )
-    .get(
-      '/refs',
-      {
-        response: t.Object({ id: t.String({ format: 'uuid' }), left: t.Ref('Node'), right: t.Ref('Node') }),
-      },
-      () => result,
-    );
+  const app = new Elysia().model('Node', node).get('/refs', { response }, () => result);
   compiledMembers.length = 0;
   app.compile();
   expect(compiledMembers.length).toBeGreaterThan(0);
@@ -63,7 +58,8 @@ test('response mirrors preserve closed refs, formats and unknown-field normaliza
   });
   result = { id: 'invalid', left: 'harbour', right: 7 };
   expect((await app.handle(request('/refs'))).status).toBe(500);
-  result = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000001', left: true, right: 7 };
+  // Supply an invalid node to exercise the mounted response validator.
+  result = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000001', left: true as unknown as ResponseBody['left'], right: 7 };
   expect((await app.handle(request('/refs'))).status).toBe(500);
 });
 
@@ -103,12 +99,12 @@ test('mirror members retain distinct refinements, codec functions and numeric co
 test('mounted snapshots and later separate reference graphs retain independent response checks', async () => {
   const choice = (expected: string) => t.Object({ value: t.Literal(expected) });
   const model = choice('A');
-  let first: unknown = { item: { value: 'A' } };
+  let first = { item: { value: 'A' } };
   const a = new Elysia()
     .model('Item', model)
     .get('/item', { response: t.Object({ item: t.Ref('Item') }) }, () => first);
   model.properties.value = t.Literal('B');
-  let second: unknown = { item: { value: 'B' } };
+  let second = { item: { value: 'B' } };
   const b = new Elysia()
     .model('Item', t.Object({ ...model.properties }))
     .get('/item', { response: t.Object({ item: t.Ref('Item') }) }, () => second);

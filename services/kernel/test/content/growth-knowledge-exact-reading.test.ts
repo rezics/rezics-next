@@ -242,7 +242,7 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
           const name = `Knowledge exact source and concealed revision / ${axis} / owner scales`;
           const readyPath = exactPath(solution);
           const hiddenPath = exactPath(hidden);
-          let baseline: Buffer | undefined;
+          let baseline: Buffer<ArrayBuffer> | undefined;
           let concealedBytes: number | undefined;
           const timings: { scale: number; elapsedMs: number; responseBytes: number }[] = [];
           let sampledPeakRssBytes = 0;
@@ -341,11 +341,11 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               const probes = records
                 .filter((r) => r.statement === exactSelectionQuery.text)
                 .map((r) => r.parameters.map(String));
-              expect(probes).toEqual(selectionBindings);
+              expect<typeof selectionBindings>(probes).toEqual(selectionBindings);
               const sourceBodies = records
                 .filter((r) => r.statement === publicReadQuery.text)
                 .map((r) => r.parameters.map(String));
-              expect(sourceBodies).toEqual([bodyBindings]);
+              expect<(typeof bodyBindings)[]>(sourceBodies).toEqual([bodyBindings]);
               return httpBodyBytes;
             },
           };
