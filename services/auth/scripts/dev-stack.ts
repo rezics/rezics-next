@@ -1959,6 +1959,14 @@ export async function runWalk(
               )
               ?.at(-1);
             for (const line of new Set(tail.split('\n').filter(line => line.startsWith('Reviewed checkpoint trace ')))) console.error(line);
+            const trace = (await recorded.slice(Math.max(0, end - 2_000_000), end).text())
+              .split('\n')
+              .filter(line => /^Reviewed (?:checkpoint trace|link relay|link scan) /.test(line));
+            if (trace.length) {
+              const directory = resolve(root, '.temp/imports-walk');
+              await mkdir(directory, { recursive: true, mode: 0o700 });
+              await writeFile(resolve(directory, 'links-relay-trace.log'), trace.join('\n') + '\n', { mode: 0o600 });
+            }
             if (wait) console.error(wait);
             if (relay) console.error(relay);
           }

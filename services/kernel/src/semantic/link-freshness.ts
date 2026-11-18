@@ -165,7 +165,16 @@ export async function linksCaughtUp(
                     ORDER BY position, event_seq LIMIT 20`,
                   [behind.partition_no, behind.epoch, behind.checkpoint_position, behind.position],
                 );
-                console.error('Reviewed checkpoint trace ' + JSON.stringify({ key, subjectHome: anchor?.partition, events: events.rows }));
+                const status = await client.query(
+                  `SELECT cp.updated_at, lag.observed_at, lag.oldest_pending_at
+                    FROM core.consumer_checkpoint cp
+                    LEFT JOIN core.consumer_lag lag ON lag.consumer = cp.consumer
+                    WHERE cp.partition_no = $1 AND cp.consumer = 'semantic_links'`,
+                  [behind.partition_no],
+                );
+                console.error('Reviewed checkpoint trace ' + JSON.stringify({
+                  now: Date.now(), key, subjectHome: anchor?.partition, events: events.rows, status: status.rows[0],
+                }));
               }
             }
             return false;

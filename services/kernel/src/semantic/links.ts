@@ -30,7 +30,7 @@ import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
 import { partitionReadClients, withConnection } from '../database/pool.ts';
-import { projectBatch, type Envelope } from '../events/log.ts';
+import { projectBatch, type Envelope, type ProjectionProgress } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { readPartition } from '../partition/partition.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -864,6 +864,8 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
 }
 
 export function linkProjection(pool: Pool): Relay {
+  const observe = process.env.REZICS_WALK_IMPORT_CATALOGUE === '1' && !!process.env.REZICS_WALK_STACK_SLOT;
+  let records = 0;
   return {
     consumer: LINKS_CONSUMER,
     run: (partition) =>
@@ -871,6 +873,15 @@ export function linkProjection(pool: Pool): Relay {
         consumer: LINKS_CONSUMER,
         partition,
         apply: (envelopes) => applyLinkBatch(pool, envelopes),
+        ...(observe && {
+          observe(progress: ProjectionProgress) {
+            if (++records > 2500) return;
+            const detail = progress.stage === 'released'
+              ? [progress.checkpoint, progress.readThrough, progress.validatedThrough, progress.first?.type, progress.reason]
+              : [];
+            console.error('Reviewed link relay ' + JSON.stringify([Date.now(), partition, progress.stage, ...detail]));
+          },
+        }),
       }),
   };
 }

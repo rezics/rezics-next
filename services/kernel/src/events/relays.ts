@@ -46,6 +46,8 @@ export function startRelays(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active = 0;
   let ticking = false;
+  const observeLinks = process.env.REZICS_WALK_IMPORT_CATALOGUE === '1' && !!process.env.REZICS_WALK_STACK_SLOT;
+  let linkScans = 0;
   const inFlight = new Set<string>();
   // Each consumer retains its oldest-first scan. A slow consumer can drain that scan
   // while another discovers positions committed since its own last scan.
@@ -115,6 +117,8 @@ export function startRelays(
         if (pending.has(relay)) continue;
         const partitions = await withConnection(pool, async (client) => {
           const rows = await scanPartitions.run(client, { consumer: relay.consumer });
+          if (observeLinks && relay.consumer === 'semantic_links' && rows.length && ++linkScans <= 300)
+            console.error('Reviewed link scan ' + JSON.stringify([Date.now(), rows.length, rows.slice(0, 5).map(row => row.partition_no)]));
           const oldestPendingAt = rows[0]?.oldest_pending_at;
           await upsertConsumerLag.run(client, {
             consumer: relay.consumer,
