@@ -29,37 +29,31 @@ import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
-import { runCommand } from '../../../src/command/command.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import { stepLibraryIdentityEpoch } from '../../../src/library/identity-epoch-participant.ts';
 import { accessCheck } from '../../../src/request/access-check.ts';
 import { type Access, type AccountActor } from '../../../src/request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { createSubjectIndex } from '../../../src/search/indices.ts';
+import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import {
-  identityEpochStore,
-  identityJobPartition,
-  IdentityEpochStoreError,
-} from '../../../src/semantic/identity-adapters/index.ts';
+import { identityEpochStore } from '../../../src/semantic/identity-adapters/index.ts';
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
-import {
-  resumeIdentityEpochJob,
-  waitIdentityEpochPublished,
-} from '../../../src/semantic/identity-epoch-coordinator.ts';
 import type { IdentityJobRef } from '../../../src/semantic/identity-epoch-contract.ts';
-import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
+import { withReadTransaction } from '../../../src/semantic/read.ts';
 import { subjectTarget } from '../../../src/semantic/subject.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
+import { testReceiptKeys, testReceiptKeysEnv } from '../../support/receipt-keys.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
+import { readLibraryMergeDispatch, startErasureWorker } from './erasure-worker.ts';
 import {
   createProfileHistoricalNativeFixture,
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
-import { testReceiptKeys, testReceiptKeysEnv } from '../../support/receipt-keys.ts';
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
 export const entryStates = { game: 'playing', recipe: 'cooking', record: 'listening' };
@@ -236,10 +230,11 @@ export async function createProfileEntryFixture(
 ) {
   const url = options.databaseUrl ?? process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = options.pool ?? createPool(url);
+  const databaseUrl = url;
+  const pool = options.pool ?? createPool(databaseUrl);
   if (options.singleConnection) pool.options.max = 1;
   // Assertions cannot observe an uncommitted writer connection or mutate the fixture.
-  const reader = new pg.Pool({ connectionString: url, max: 1, options: '-c default_transaction_read_only=on' });
+  const reader = new pg.Pool({ connectionString: databaseUrl, max: 1, options: '-c default_transaction_read_only=on' });
   try {
     const { access, kernel, tokens, routeKey, workerEnv } = await composeProfileEntryLibrary({
       pool,
@@ -258,6 +253,10 @@ export async function createProfileEntryFixture(
         let pending = false;
         for (const partition of partitions) {
           const result = await projection.run(partition);
+          if (result.status === 'stopped')
+            throw new Error(
+              `Semantic link projection stopped in partition ${partition} at ${result.position}: ${result.reason}`,
+            );
           pending ||= result.status === 'busy' || result.envelopes > 0;
         }
         if (!pending) return;
@@ -703,65 +702,51 @@ export async function createProfileEntryFixture(
       return active!;
     }
     async function drainIdentityJob(job: IdentityJobRef) {
-      const saved = (
-        await pool.query<{ state: string; epoch: string; partition_no: number }>(
-          `SELECT state, epoch::text AS epoch, partition_no
-             FROM semantic.identity_epoch_job WHERE job_id=$1::uuid ORDER BY epoch DESC LIMIT 1`,
-          [job.jobId],
-        )
-      ).rows[0];
-      const resolved: IdentityJobRef = saved ? { jobId: job.jobId, epoch: BigInt(saved.epoch) } : job;
-      if (!saved || saved.state === 'published' || saved.state === 'cancelled') return;
-      let admitted = saved.state === 'pending';
-      if (!admitted) {
-        for (let attempt = 0; attempt < 16; attempt++) {
-          const progress = await stepIdentityEpochAdmission(pool, resolved);
-          if (progress.state === 'pending' || progress.state === 'published') {
-            admitted = true;
-            break;
-          }
-          expect(progress.state).toBe('preparing');
-        }
-        expect(admitted).toBe(true);
-      }
-      let mapped = false;
-      for (let attempt = 0; attempt < 512; attempt++) {
-        const progress = await stepIdentityEpochMapping(pool, resolved);
-        if (progress.state === 'complete') {
-          mapped = true;
-          break;
-        }
-      }
-      if (!mapped) throw new Error('Native identity mapping did not finish');
-      const store = identityEpochStore();
-      const partition = identityJobPartition(resolved);
-      for (let attempt = 0; attempt < 32; attempt++) {
-        try {
-          if ((await stepLibraryIdentityEpoch(pool, resolved)).state === 'complete') break;
-        } catch (error) {
-          if (!(error instanceof IdentityEpochStoreError)) throw error;
-          break;
-        }
-      }
-      try {
-        await resumeIdentityEpochJob(pool, resolved);
-        await waitIdentityEpochPublished(pool, resolved);
+      if (job.epoch === 0n) return;
+      const readJob = () => withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, job));
+      const saved = await readJob();
+      if (!saved) throw new Error('Native identity job is unavailable');
+      if (saved.state === 'cancelled') return;
+      if (saved.state === 'published') {
+        await stepIdentityEpochAdmission(pool, job);
         return;
-      } catch (error) {
-        if (!(error instanceof IdentityEpochStoreError)) throw error;
       }
+
+      const searchUrl = workerEnv.OPENSEARCH_URL;
+      if (!searchUrl) throw new Error('Native identity publication requires OPENSEARCH_URL');
+      const searchPrefix = `library-identity-${entryKey().slice(0, 8)}-`;
+      await createSubjectIndex(createOpenSearch(searchUrl), searchPrefix, 1);
+      const client = await createWorkClient(databaseUrl);
+      let worker: Awaited<ReturnType<typeof startErasureWorker>> | undefined;
       try {
-        await runCommand(pool, { partition }, (tx) => store.publish(tx, resolved));
-      } catch (error) {
-        if (!(error instanceof IdentityEpochStoreError) || error.code !== 'identity_participants_incomplete')
-          throw error;
+        worker = await startErasureWorker(databaseUrl, client, { ...workerEnv, KERNEL_SEARCH_PREFIX: searchPrefix });
+        const deadline = Date.now() + 60_000;
+        do {
+          const current = await readJob();
+          if (current?.state === 'published') {
+            // Release the original admission holds before running the inline bootstrap again.
+            await stepIdentityEpochAdmission(pool, job);
+            return;
+          }
+          if (current?.state === 'cancelled') return;
+          await Bun.sleep(100);
+        } while (Date.now() < deadline);
+        const dispatch = await readLibraryMergeDispatch(pool, client, job.jobId, worker.effectsQueueWarning);
+        throw new Error(`Native identity publication did not finish: ${JSON.stringify(dispatch)}\n${worker.output}`);
+      } finally {
+        try {
+          await worker?.close();
+        } finally {
+          await client.close();
+        }
       }
     }
     async function drainIdentityMerge(jobId: string) {
       const found = (
         await pool.query<{ epoch: string }>(
-          'SELECT epoch::text AS epoch FROM semantic.identity_epoch_job WHERE job_id=$1::uuid ORDER BY epoch DESC LIMIT 1',
-          [jobId],
+          `SELECT epoch::text AS epoch FROM semantic.identity_epoch_job
+            WHERE partition_no=$1 AND job_id=$2::uuid ORDER BY epoch DESC LIMIT 1`,
+          [partitionOf(routeOf(jobId)!), jobId],
         )
       ).rows[0];
       if (!found) throw new Error('Native merge identity job was not retained');
@@ -804,10 +789,17 @@ export async function createProfileEntryFixture(
         { subjects: [canonical, selected] },
         { 'idempotency-key': JSON.stringify(entryKey()) },
       );
-      expect([200, 202]).toContain(response.status);
-      const body = (await response.json()) as { operation?: { id: string } };
-      if (body.operation?.id) await drainIdentityMerge(body.operation.id);
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as { operation: { id: string } };
+      const location = `/v1/subjectIdentityOperations/${body.operation.id}`;
+      expect(response.headers.get('location')).toBe(location);
+      await drainIdentityMerge(body.operation.id);
       for (const id of [canonical, selected]) await awaitCurrentIdentity(id);
+      const completed = await send(mergeBearer, 'GET', location);
+      expect(completed.status).toBe(200);
+      expect(await completed.json()).toMatchObject({
+        operation: { id: body.operation.id, done: true, result: { survivor: canonical, redirected: selected } },
+      });
     }
     async function createSubject(vertical: ProfileVertical, label: string = vertical) {
       const response = await send('owner', 'POST', '/v1/subjects', {

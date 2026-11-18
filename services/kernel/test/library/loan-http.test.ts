@@ -356,7 +356,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
 }, 120_000);
 
 test('current account authorization fences exact loan receipt replay', async () => {
-  const owner = await native.identity(scopes);
+  const owner = await native.identity(['subject:read', ...scopes]);
   const subjectId = await native.createSubject('game');
   const copyResponse = await native.send(owner.bearer, 'POST', '/v1/copies', {
     subjectId,

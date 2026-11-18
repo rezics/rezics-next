@@ -5,6 +5,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { testTokens } from '../support/test-kernel.ts';
 import { assertMemberPageCurrent, listMemberPage } from '../../src/library/member-viewer-currentness.ts';
 import { assertShelfPageCurrent } from '../../src/library/shelf-viewer-currentness.ts';
+import viewerEntries from '../../src/library/viewer-facts-entries.sql';
 import { createListPresentationFixture } from '../semantic/support/list-presentation-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof createListPresentationFixture>>;
@@ -19,47 +20,40 @@ afterAll(async () => {
   await fixture?.close();
 }, 180_000);
 
-function interleaveViewerEntries(mutate: () => Promise<unknown>) {
+function interleaveViewerEntries(mutate: () => Promise<{ rowCount: number | null }>) {
   const pool = fixture.pool;
-  const descriptor = Object.getOwnPropertyDescriptor(pool, 'connect');
-  const connect = pool.connect;
-  let interleaved = false;
-  Object.defineProperty(pool, 'connect', {
-    configurable: true,
-    value: async () => {
-      const client = (await Reflect.apply(connect, pool, [])) as PoolClient;
-      return new Proxy(client, {
-        get(target, property) {
-          if (property !== 'query') {
-            const value = Reflect.get(target, property, target);
-            return typeof value === 'function' ? value.bind(target) : value;
-          }
-          return async (...args: unknown[]) => {
-            const first = args[0];
-            const statement =
-              typeof first === 'string'
-                ? first
-                : typeof first === 'object' && first !== null && 'text' in first
-                  ? String(first.text)
-                  : '';
-            // The initial shelf query also selects incarnation_id. Wait for the viewer's batch lookup.
-            const viewerLookup =
-              statement.includes('incarnation_id AS "incarnationId"') && statement.includes('subject_id = ANY(');
-            if (!interleaved && viewerLookup) {
-              interleaved = true;
-              await mutate();
-            }
-            return Reflect.apply(Reflect.get(target, 'query', target), target, args);
-          };
-        },
-      });
-    },
-  });
+  const selected = viewerEntries['~standard'].query.text;
+  const wrapped = new Map<PoolClient, { original: PoolClient['query']; observer: PoolClient['query'] }>();
+  let active = true;
+  let mutation: Promise<{ rowCount: number | null }> | undefined;
+  const acquire = (client: PoolClient) => {
+    if (wrapped.has(client)) return;
+    const original = client.query;
+    // The native work observer wraps this same checkout. Capture the underlying method once.
+    const observer = new Proxy(original, {
+      apply(query, receiver, args) {
+        const input = args[0];
+        const text = typeof input === 'string' ? input : input?.text;
+        if (active && !mutation && (text === selected || text === viewerEntries.sql)) {
+          mutation = mutate();
+          return mutation.then(() => Reflect.apply(query, receiver, args));
+        }
+        return Reflect.apply(query, receiver, args);
+      },
+    });
+    wrapped.set(client, { original, observer });
+    client.query = observer;
+  };
+  pool.on('acquire', acquire);
   return {
-    interleaved: () => interleaved,
+    mutation: () => mutation,
     restore() {
-      if (descriptor) Object.defineProperty(pool, 'connect', descriptor);
-      else Reflect.deleteProperty(pool, 'connect');
+      active = false;
+      pool.off('acquire', acquire);
+      for (const [client, { original, observer }] of wrapped) {
+        if (client.query === observer) client.query = original;
+      }
+      wrapped.clear();
     },
   };
 }
@@ -171,7 +165,7 @@ test.serial(
     } finally {
       interleave.restore();
     }
-    expect(interleave.interleaved()).toBe(true);
+    expect(await interleave.mutation()).toMatchObject({ rowCount: 1 });
     expect(response.status).toBe(409);
     const problem = response.body;
     expect(problem).toMatchObject({ code: 'stale_cursor' });
@@ -227,7 +221,7 @@ test.serial('shelf route withholds a row whose native Entry changes during viewe
   } finally {
     interleave.restore();
   }
-  expect(interleave.interleaved()).toBe(true);
+  expect(await interleave.mutation()).toMatchObject({ rowCount: 1 });
   expect(response.status).toBe(503);
   const problem = response.body;
   expect(problem).toMatchObject({ code: 'semantic_not_ready' });
