@@ -12,18 +12,22 @@ import type {
 } from './public-filter-consumer-contract.ts';
 
 /** Fixed labels from the original capture. No consumer, key, observation or source payload is retained. */
-export type PublicFilterCaptureWitness = Readonly<{
-  stage:
-    | 'definition'
-    | 'registration'
-    | 'population-bootstrap'
-    | 'retained-population-bootstrap'
-    | 'published-coverage'
-    | 'open-registration-observation'
-    | 'begin'
-    | 'population-repair';
-  reason?: SourceBindingFailureReason;
-}>;
+export type PublicFilterCaptureWitness =
+  | Readonly<{
+      stage:
+        | 'definition'
+        | 'registration'
+        | 'population-bootstrap'
+        | 'retained-population-bootstrap'
+        | 'published-coverage'
+        | 'begin'
+        | 'population-repair';
+      reason?: SourceBindingFailureReason;
+    }>
+  | Readonly<{
+      stage: 'open-registration-observation';
+      reason: 'observation_has_consumer_work' | 'observation_without_consumer_work';
+    }>;
 
 /** Request-local access to the SAME native consumer. This object is never serialized
  * or accepted as permission: every transition resolves the original native rows.

@@ -2359,13 +2359,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return advanceCapture(retained, old.consumer_work, m, context, page, publication);
       }
       if (config.discoveryPreparation === 'enrollment') {
-        const parent = await m.sql(
-          `SELECT 1 FROM search.public_filter_observation WHERE (partition_no,registration)=($1,$2)
-             AND state='open' AND expires_at>$3 LIMIT 1`,
+        const parent = await m.sql<{ has_work: boolean }>(
+          `SELECT consumer_work IS NOT NULL AS has_work FROM search.public_filter_observation
+           WHERE (partition_no,registration)=($1,$2) AND state='open' AND expires_at>$3 LIMIT 1`,
           [registration.partition, registration.id, Date.now()],
         );
-        if (parent.rowCount) {
-          if (mixedPage) mixedPage.captureWitness = { stage: 'open-registration-observation' };
+        const observation = parent.rows[0];
+        if (observation) {
+          if (mixedPage)
+            mixedPage.captureWitness = {
+              stage: 'open-registration-observation',
+              reason: observation.has_work ? 'observation_has_consumer_work' : 'observation_without_consumer_work',
+            };
           return m.unavailable('source_pending');
         }
       }
