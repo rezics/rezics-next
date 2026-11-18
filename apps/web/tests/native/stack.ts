@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { sampleNativeMemory, type NativeMemoryObservation } from './native-memory.ts';
+import { readBundledWebStages } from '../../scripts/bundled-web-startup.ts';
 import { nativeViteEnvironment } from './vite-environment.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -369,6 +370,17 @@ function startWeb(
   const identity = child.pid ? inspectNativeProcess(child.pid) : undefined;
   if (!identity || identity.pgid !== identity.pid)
     throw new Error('Native web Worker did not start in an owned process group');
+  const bundled = env.NATIVE_WEB_BUNDLED_CLIENT === '1';
+  let stage = 'launch';
+  const reportStage = (next: string) => {
+    stage = next;
+    process.send?.({ bundledStage: stage } satisfies HostReply);
+  };
+  const readStages = readBundledWebStages(reportStage);
+  if (bundled) {
+    reportStage(stage);
+    child.stderr.on('data', readStages);
+  }
   let output = '';
   for (const stream of [child.stdout, child.stderr])
     stream?.on('data', (chunk: Buffer) => {
@@ -380,12 +392,21 @@ function startWeb(
   });
   let ended = false;
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()).once('error', () => resolve()));
+  const startupDetail = () =>
+    bundled ? `stage=${stage} exit=${child.exitCode ?? 'none'} signal=${child.signalCode ?? 'none'}` : output;
   const failIfExited = () => {
     if (spawnError)
-      throw new Error(`web Worker could not start: ${spawnError.message}\n${output}`, { cause: spawnError });
+      throw new Error(`web Worker could not start: ${spawnError.message}\n${startupDetail()}`, { cause: spawnError });
     if (ended || child.exitCode !== null || child.signalCode !== null)
-      throw new Error(`web Worker exited during startup: ${output}`);
+      throw new Error(`web Worker exited during startup: ${startupDetail()}`);
   };
+  child.once('exit', (code, signal) => {
+    if (bundled && stage !== 'http-ready') {
+      reportStackProgress(
+        `Native web production startup exit: stage=${stage} exit=${code ?? 'none'} signal=${signal ?? 'none'}`,
+      );
+    }
+  });
   child.once('close', () => {
     ended = true;
   });
@@ -403,6 +424,7 @@ function startWeb(
       const started = performance.now();
       // Publication writes overlap this probe. Report through the host before its parent deadline.
       const checkpoints = process.env.NATIVE_WEB_STARTUP_READINESS === 'services' ? [0, 15_000, 45_000, 90_000] : [];
+      let nextReport = bundled ? 0 : checkpoints.shift();
       let attempts = 0;
       let timeouts = 0;
       let lastStatus: number | undefined;
@@ -421,7 +443,13 @@ function startWeb(
           phase = 'body';
           await response.arrayBuffer();
           failIfExited();
-          if (response.status === 404) return;
+          if (response.status === 404) {
+            if (bundled) {
+              child.stderr.off('data', readStages);
+              reportStage('http-ready');
+            }
+            return;
+          }
         } catch (error) {
           failIfExited();
           if (signal.aborted) {
@@ -434,15 +462,15 @@ function startWeb(
           }
         }
         const elapsedMs = Math.round(performance.now() - started);
-        if (checkpoints[0] !== undefined && elapsedMs >= checkpoints[0]) {
-          checkpoints.shift();
+        if (nextReport !== undefined && elapsedMs >= nextReport) {
+          nextReport = bundled ? elapsedMs + 30_000 : checkpoints.shift();
           reportStackProgress(
-            `Native web Worker readiness: elapsedMs=${elapsedMs} stage=${workerStartupMilestone(output)} attempts=${attempts} timeouts=${timeouts} phase=${phase} outcome=${outcome} lastStatus=${lastStatus ?? 'none'}`,
+            `Native web Worker readiness: elapsedMs=${elapsedMs} stage=${bundled ? stage : workerStartupMilestone(output)} attempts=${attempts} timeouts=${timeouts} phase=${phase} outcome=${outcome} lastStatus=${lastStatus ?? 'none'}`,
           );
         }
         await Bun.sleep(250);
       }
-      throw new Error(`web Worker startup timed out: ${output}`);
+      throw new Error(`web Worker startup timed out: ${startupDetail()}`);
     },
   };
 }
@@ -1841,6 +1869,7 @@ type HostReply =
   | { id: number; value?: unknown; error?: string; observation: HostObservation }
   | { startupError: string }
   | { progress: string }
+  | { bundledStage: string }
   | { ownedGroup: { label: string; pid: number; stateDirectory?: string } }
   | { postgresContainer: string }
   | { postgresSocketDirectory: string }
@@ -2144,6 +2173,19 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     for (const call of pending.values()) call.reject(error);
     pending.clear();
   };
+  let bundledStage: { name: string; since: number } | undefined;
+  const recordBundledStage = (next: string) => {
+    const now = performance.now();
+    const previous = bundledStage
+      ? ` previous=${bundledStage.name} previousMs=${Math.round(now - bundledStage.since)}`
+      : '';
+    console.info(`Native web production startup: stage=${next}${previous}`);
+    bundledStage = { name: next, since: now };
+  };
+  const reportInterruptedStage = () => {
+    if (bundledStage) recordBundledStage('interrupted');
+  };
+  if (options.bundledClient) lifecycle.signal.addEventListener('abort', reportInterruptedStage, { once: true });
   host.on('message', (reply: HostReply) => {
     if ('ownedGroup' in reply) {
       const { label, pid } = reply.ownedGroup;
@@ -2170,6 +2212,11 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     }
     if ('postgresSocketDirectory' in reply) {
       postgresSocketDirectory = reply.postgresSocketDirectory;
+      return;
+    }
+    if ('bundledStage' in reply) {
+      recordBundledStage(reply.bundledStage);
+      if (reply.bundledStage === 'http-ready') bundledStage = undefined;
       return;
     }
     if ('progress' in reply) {

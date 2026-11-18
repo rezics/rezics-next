@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
+import { bundledWebStage } from './bundled-web-startup.ts';
 import { ensureMessagesReady, prepareLiveMessages } from './messages-ready.ts';
 import { ownBunProcess } from '../tests/support/server-custody.ts';
 import {
@@ -124,6 +125,7 @@ export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.Proces
 async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signal: AbortSignal, traceId: string) {
   // Cloudflare places Build Output under the Vite root. Give each launch its own output and keep
   // the real source and packages at their original paths for the Worker and client builds.
+  bundledWebStage('prepare-build');
   const parent = env.WEB_TEST_STATE_INSTANCE_DIR ?? resolve(repoRoot, '.temp');
   await mkdir(parent, { recursive: true });
   const root = await mkdtemp(resolve(parent, 'compiled-web-'));
@@ -137,8 +139,13 @@ async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signa
       signal,
       traceId,
     };
+    bundledWebStage('build');
     const built = await runWebStartupChild('vite', ['build', '--config', 'vite.config.ts'], plan.cwd, options);
-    if (built !== 0) return built;
+    if (built !== 0) {
+      bundledWebStage('build-failed');
+      return built;
+    }
+    bundledWebStage('preview');
     return await runWebStartupChild('vite', ['preview', ...plan.args], plan.cwd, options);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -169,6 +176,7 @@ if (import.meta.main) {
     let generated = 0;
     if (webServeNeedsGeneratedMessages(plan.kind)) {
       const startedAt = performance.now();
+      if (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1') bundledWebStage('prepare-messages');
       webStartupLog('messages-preparation-start', {}, startupEnv);
       generated =
         plan.kind === 'app'
