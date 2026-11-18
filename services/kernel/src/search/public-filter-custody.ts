@@ -7,7 +7,7 @@ import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } fro
 import { withNativePublicFilterRepairReadBatch } from './native-bindings.ts';
 import repairTransaction from './public-filter-custody-repair-transaction.sql';
 import repairFinish from './public-filter-custody-repair-finish.sql';
-import repairWriter from './public-filter-custody-repair-writer.sql';
+import repairWriters from './public-filter-custody-repair-writers.sql';
 import repairGate from './public-filter-custody-repair-gate.sql';
 import repairOwner from './public-filter-custody-repair-owner.sql';
 import repairTarget from './public-filter-custody-repair-target.sql';
@@ -896,48 +896,61 @@ export async function readPublicFilterRepairSettlement(
         (a, b) => subjectPartition(a) - subjectPartition(b) || a.localeCompare(b),
       );
       const homes = [...new Set(subjects.map(subjectPartition))].sort((a, b) => a - b);
-      const gates = [];
-      for (const partition_no of homes) {
-        const gate = await repairGate.run(db, {
-          partition_no,
-          physical_target: q.consumer.physicalTarget,
-        });
+      const physical_target = q.consumer.physicalTarget;
+      const readFences = async <Key, Row>(
+        keys: readonly Key[],
+        points: number,
+        parameters: number,
+        read: (batch: Key[]) => Promise<Row[]>,
+      ) => {
+        const rows: Row[] = [];
+        for (let offset = 0; offset < keys.length; offset += 32) {
+          const batch = keys.slice(offset, offset + 32);
+          // Charge each native point even though the read shares its SQL parameters.
+          meter.inputKeys += batch.length * points - parameters;
+          admit();
+          rows.push(...(await read(batch)));
+        }
+        return rows;
+      };
+      const gateRows = await readFences(homes, 2, 2, (homes) => repairGate.run(db, { homes, physical_target }));
+      const gateByHome = new Map(gateRows.map((gate) => [gate.partition_no, gate]));
+      const gates = homes.map((partition_no) => {
+        const gate = gateByHome.get(partition_no);
         if (
           gate &&
           (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias || gate.closed_token)
         )
           throw new Failure('identity_pending');
-        gates.push({ partition_no, gate });
-      }
-      const owners = [];
-      for (const partition_no of [...new Set([...homes, home, retained.definition.source.partition])].sort(
-        (a, b) => a - b,
-      )) {
-        const owner = await repairOwner.run(db, { partition_no });
+        return { partition_no, gate };
+      });
+      const ownerHomes = [...new Set([...homes, home, retained.definition.source.partition])].sort((a, b) => a - b);
+      const ownerRows = await readFences(ownerHomes, 1, 1, (homes) => repairOwner.run(db, { homes }));
+      const ownerByHome = new Map(ownerRows.map((owner) => [owner.partition_no, owner]));
+      const owners = ownerHomes.map((partition_no) => {
+        const owner = ownerByHome.get(partition_no);
         if (
           owner?.write_state !== 'active' ||
           (partition_no === retained.definition.source.partition && owner.epoch !== retained.definition.source.epoch)
         )
           throw new Failure('owner_unavailable');
-        owners.push({
-          partition_no,
-          epoch: owner.epoch,
-          write_state: owner.write_state,
-        });
-      }
-      const writers = [];
-      for (const original_id of subjects) {
-        meter.inputKeys++;
-        meter.candidates++;
-        admit();
+        return owner;
+      });
+      meter.inputKeys += subjects.length;
+      meter.candidates += subjects.length;
+      admit();
+      const writerRows = await readFences(subjects, 3, 2, (batch) =>
+        repairWriters.run(db, {
+          subjects: batch.map((original_id) => ({ original_id, partition_no: subjectPartition(original_id) })),
+          physical_target,
+        }),
+      );
+      const writerById = new Map(writerRows.map((writer) => [writer.original_id, writer]));
+      const writers = subjects.map((original_id) => {
         const partition_no = subjectPartition(original_id);
-        const writer = await repairWriter.run(db, {
-          partition_no,
-          physical_target: q.consumer.physicalTarget,
-          original_id,
-        });
-        const owner = owners.find((row) => row.partition_no === partition_no)!;
-        const gate = gates.find((row) => row.partition_no === partition_no)!.gate;
+        const writer = writerById.get(original_id);
+        const owner = ownerByHome.get(partition_no)!;
+        const gate = gateByHome.get(partition_no);
         if (
           (gate && gate.owner_epoch !== owner.epoch) ||
           (writer &&
@@ -948,8 +961,8 @@ export async function readPublicFilterRepairSettlement(
               writer.owner_epoch !== owner.epoch))
         )
           throw new Failure('identity_pending');
-        writers.push({ original_id, writer });
-      }
+        return { original_id, writer };
+      });
       return {
         state,
         retained,
