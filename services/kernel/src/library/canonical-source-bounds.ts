@@ -171,6 +171,10 @@ const statement = (
 export const CANONICAL_SOURCE_SQL = Object.freeze({
   scope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`,
+  headGeneration: `SELECT g.generation::text,g.basis,g.source_exhausted,g.state,
+        g.query_capture_id::text,g.query_capture_revision::text
+      FROM library.canonical_source_head h JOIN library.canonical_source_generation g USING (route,collection_id,generation)
+      WHERE h.route=$1 AND h.collection_id=$2`,
   predecessorScope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence<>$3 ORDER BY source_fence LIMIT 1`,
   head: 'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2',
@@ -245,6 +249,14 @@ export function CANONICAL_SOURCE_STATEMENTS() {
         maxScopeRow,
         1,
         point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
+      ),
+      headGeneration: statement(
+        'canonical-source-published-generation',
+        CANONICAL_SOURCE_SQL.headGeneration,
+        maxPointValues,
+        maxGenerationRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.headGeneration, maxPointValues, maxGenerationRow, 1, 8, 2),
       ),
       predecessorScope: statement(
         'canonical-source-predecessor-scope',
@@ -622,9 +634,7 @@ function publish() {
   );
 }
 function readback() {
-  return memoizedValue(readback, () =>
-    sumBounds(observation(), CANONICAL_SOURCE_STATEMENTS().head.bound, CANONICAL_SOURCE_STATEMENTS().generation.bound),
-  );
+  return memoizedValue(readback, () => sumBounds(observation(), CANONICAL_SOURCE_STATEMENTS().headGeneration.bound));
 }
 function executionAttempt() {
   return memoizedValue(executionAttempt, () =>

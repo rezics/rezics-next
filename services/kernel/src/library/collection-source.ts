@@ -165,14 +165,10 @@ function isCurrentLogicalBuiltin(metadata: NativeCollectionMetadata, actor: Acto
   }
   return builtinCollectionId(actor.accountId, key) === metadata.collectionId;
 }
-function canonicalAllowance(
-  a: WorkAllowance,
-  rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT,
-  fixed = false,
-): CanonicalAllowance {
+function canonicalAllowance(a: WorkAllowance, rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT): CanonicalAllowance {
   return {
     reservationId: a.reservationId,
-    rawKeys: fixed ? rawLimit : Math.min(rawLimit, a.remaining.candidateKeys),
+    rawKeys: Math.min(rawLimit, a.remaining.candidateKeys),
     nativeRows: a.remaining.nativeRows,
     nativePoints: a.remaining.nativePoints,
     emptySeeks: a.remaining.emptySeeks,
@@ -318,7 +314,7 @@ function createCollectionSourceRuntime(
         collectionId: metadata.collectionId,
         deadline: input.deadline,
         semanticObservations: semanticObservations(),
-        allowance: canonicalAllowance(l.allowance(), 100, fixedPageWork),
+        allowance: canonicalAllowance(l.allowance()),
       }),
     );
     if (result.state !== 'ready') throw new ProblemError('dependency_unavailable');
@@ -438,7 +434,7 @@ function createCollectionSourceRuntime(
               collectionId: obs.collectionId,
               deadline: input.deadline,
               semanticObservations: semanticObservations(),
-              allowance: canonicalAllowance(l.allowance(), raw, fixedPageWork),
+              allowance: canonicalAllowance(l.allowance(), raw),
               basis: saved.basis,
               progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },
             }),
@@ -633,10 +629,11 @@ function createCollectionSourceRuntime(
           groups = 0;
         if (fixedPageWork && input.candidateLimit === undefined)
           throw new RangeError('Ordinary Collection page candidate limit required');
-        const selectedLimit = fixedPageWork ? input.candidateLimit! : input.work ? input.candidateLimit! : 100;
+        const selectedLimit = input.candidateLimit ?? Infinity;
         while (
-          (input.work || fixedPageWork ? groups < selectedLimit : l.allowance().remaining.candidateKeys > 0) &&
-          candidates.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT
+          groups < selectedLimit &&
+          candidates.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT &&
+          (input.work || fixedPageWork || l.allowance().remaining.candidateKeys > 0)
         ) {
           const seek =
             input.work && current
@@ -651,7 +648,7 @@ function createCollectionSourceRuntime(
                     generation: saved.generation,
                     afterSubjectId: coveredThrough,
                     deadline: input.deadline,
-                    allowance: canonicalAllowance(l.allowance(), 1, fixedPageWork),
+                    allowance: canonicalAllowance(l.allowance(), 1),
                   }),
                 );
           if (!('subjectId' in seek)) throw new ProblemError('dependency_unavailable');
@@ -668,7 +665,7 @@ function createCollectionSourceRuntime(
           coveredThrough = seek.subjectId;
           if (result.result) candidates.push({ subjectId: result.subjectId, evidence: result.positiveEvidence });
         }
-        if (!exhausted && candidates.length === 0) throw new ProblemError('dependency_unavailable');
+        if (!exhausted && coveredThrough === input.afterSubjectId) throw new ProblemError('dependency_unavailable');
         await revalidate(input, l, current);
         return {
           kind: 'canonical_subject_prefix',

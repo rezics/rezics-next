@@ -17,6 +17,7 @@ import type { SearchPreparationCapability } from './contract/index.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {
   CollectionWorkLedger,
+  WORK_AXES,
   zeroWorkDimensions,
   ordinaryCollectionPagePlan,
   ordinaryPageWorkDimensions,
@@ -50,6 +51,13 @@ class OwnerQueryWorkLedger {
 
   remaining() {
     return this.ledger.remaining();
+  }
+
+  sourceAllowance(): WorkAllowance {
+    const spent = this.receipt();
+    const remaining = { ...ordinaryPageWorkDimensions(this.plan.sourceBound) };
+    for (const axis of WORK_AXES) remaining[axis] = Math.max(0, remaining[axis] - spent.used[axis]);
+    return { reservationId: spent.reservationId, remaining };
   }
 
   receipt() {
@@ -116,7 +124,7 @@ function canonicalAllowance(allowance: WorkAllowance) {
   const remaining = allowance.remaining;
   return {
     reservationId: allowance.reservationId,
-    rawKeys: 100,
+    rawKeys: Math.min(100, remaining.candidateKeys),
     nativeRows: remaining.nativeRows,
     nativePoints: remaining.nativePoints,
     emptySeeks: remaining.emptySeeks,
@@ -181,10 +189,8 @@ export async function openOwnerQuery(
   const planned = input.work instanceof OwnerQueryWorkLedger ? input.work.plan : undefined;
   const native = planned ? createOrdinaryCollectionPageSource(deps) : createCollectionSource(deps);
   const context = { actor: input.actor, at, deadline: input.deadline };
-  const sourceAllowance = (): WorkAllowance => ({
-    reservationId: input.work.receipt().reservationId,
-    remaining: planned ? ordinaryPageWorkDimensions(planned.sourceBound) : input.work.remaining().remaining,
-  });
+  const sourceAllowance = () =>
+    input.work instanceof OwnerQueryWorkLedger ? input.work.sourceAllowance() : input.work.remaining();
   try {
     let prepared;
     try {
@@ -261,15 +267,19 @@ export async function openOwnerQuery(
           throw new ProblemError('dependency_unavailable', {
             detail: 'The registered Search service is not configured.',
           });
-        const identity = await readNativeCollectionScopeIdentity(deps.pool, {
-          route: source.observation.route,
-          collectionId: input.collectionId,
-          deadline: input.deadline,
-          allowance: sourceAllowance(),
-        });
-        input.work.native(identity.work);
-        if (!identity.identity || identity.identity.incarnation !== source.observation.incarnation)
-          throw new ProblemError('semantic_not_ready');
+        let identity = source.observation.sourceIdentity;
+        if (!source.queryCapture) {
+          const current = await readNativeCollectionScopeIdentity(deps.pool, {
+            route: source.observation.route,
+            collectionId: input.collectionId,
+            deadline: input.deadline,
+            allowance: sourceAllowance(),
+          });
+          input.work.native(current.work);
+          if (!current.identity || current.identity.incarnation !== source.observation.incarnation)
+            throw new ProblemError('semantic_not_ready');
+          identity = current.identity;
+        }
         const preparedScope = await searchPreparationOf(deps).prepareScope({
           search: deps.search,
           access: deps.access,
@@ -279,7 +289,7 @@ export async function openOwnerQuery(
           deadline: input.deadline,
           filter,
           releaseDigest,
-          identity: identity.identity,
+          identity,
           allowance: sourceAllowance(),
         });
         input.work.native(preparedScope.work);

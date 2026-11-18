@@ -424,6 +424,15 @@ async function scope(
     captureId: row.capture,
     committedRevision: BigInt(row.revision),
   };
+  return revalidateCapture(pool, expected, l, observations);
+}
+
+async function revalidateCapture(
+  pool: Pool,
+  expected: LibrarySemanticScopeObservation,
+  l: CollectionSourceLedger,
+  observations: LibrarySemanticObservationCapability,
+) {
   const result = await observations.canonical.revalidateScope(pool, {
     key: expected.key,
     expected,
@@ -433,6 +442,7 @@ async function scope(
   if (
     result.status !== 'current' ||
     !result.observation ||
+    !isDeepStrictEqual(result.observation.key, expected.key) ||
     result.observation.captureId !== expected.captureId ||
     result.observation.committedRevision !== expected.committedRevision
   )
@@ -448,13 +458,21 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
   if (metadata.authority === 'activated_output') return null;
   const observation = await scope(pool, metadata, l, semanticObservations(input));
   if (!observation) return null;
+  return { metadata, basis: observedBasis(metadata, observation), capture: observation };
+}
+
+function observedBasis(
+  metadata: NativeCollectionMetadata,
+  observation: LibrarySemanticScopeObservation,
+): CanonicalBasis {
   const authority: CanonicalAuthority =
     metadata.authority === 'curated'
       ? { kind: 'curated' }
       : metadata.curatorAccountId
         ? { kind: 'private_builtin', curatorAccountId: metadata.curatorAccountId }
         : { kind: 'curated' };
-  if (metadata.authority === 'private_builtin' && !metadata.curatorAccountId) return null;
+  if (metadata.authority === 'private_builtin' && !metadata.curatorAccountId)
+    throw new ProblemError('dependency_unavailable');
   const identity = { digest: hash([observation.captureId, observation.committedRevision.toString()]) };
   const components = {
     incarnation: metadata.incarnation,
@@ -476,8 +494,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
     // Older generations cannot establish that complete original population.
     ...(metadata.authority === 'private_builtin' ? { originalCoverage: 'owner-facts-v2' as const } : {}),
   };
-  const basis: CanonicalBasis = { ...components, digest: hash(components) };
-  return { metadata, basis, capture: observation };
+  return { ...components, digest: hash(components) };
 }
 function same(a: CanonicalBasis, b: CanonicalBasis) {
   return a.digest === b.digest && isDeepStrictEqual(a, b);
@@ -570,12 +587,16 @@ export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall)
   try {
     const observed = await observe(pool, input, l);
     if (!observed) return notReady(l, 'identity');
-    const [head] = await withBoundedReadConnection(pool, l.deadline, (client) =>
-      query<{ generation: string }>(client, l, CANONICAL_SOURCE_STATEMENTS().head, [input.route, input.collectionId]),
+    const [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
+      query<
+        Pick<
+          Generation,
+          'generation' | 'basis' | 'state' | 'source_exhausted' | 'query_capture_id' | 'query_capture_revision'
+        >
+      >(client, l, CANONICAL_SOURCE_STATEMENTS().headGeneration, [input.route, input.collectionId]),
     );
-    if (!head) return notReady(l, 'unbuilt');
-    const row = await readGeneration(pool, input, head.generation, l);
-    if (!row || row.state !== 'complete' || !row.source_exhausted || !same(row.basis, observed.basis))
+    if (!row) return notReady(l, 'unbuilt');
+    if (row.state !== 'complete' || !row.source_exhausted || !same(row.basis, observed.basis))
       return notReady(l, 'stale');
     let queryCapture;
     if (observed.metadata.createdAt === null) {
@@ -968,6 +989,30 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       );
     }
     if (!row || !isDeepStrictEqual(row.identity, nativeSourceIdentity(metadata))) return notReady(l, 'source');
+    if (
+      row.capture &&
+      row.revision !== null &&
+      row.frontier?.driver === 'done' &&
+      row.frontier.captureId === row.capture
+    ) {
+      const capture = await revalidateCapture(
+        pool,
+        {
+          key: scopeKey(row.identity),
+          captureId: row.capture,
+          committedRevision: BigInt(row.revision),
+        },
+        l,
+        semanticObservations(input),
+      );
+      if (capture)
+        return {
+          state: 'admitted',
+          basis: observedBasis(metadata, capture),
+          observation: metadata.stamp,
+          work: work(l),
+        };
+    }
     const custody = createNativeLibrarySourceCustody({ pool });
     if (!row.frontier || row.frontier.driver !== 'done') {
       if (l.allowance().remaining.candidateKeys < 1) return notReady(l, 'allowance');

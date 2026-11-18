@@ -1093,7 +1093,10 @@ account and the current fact generation. A stored Collection at that ID takes pr
 and registers native dependencies, maps the bounded original windows and commits the exact identity capture ID
 and revision with the exhausted id-ordered generation. Search can use that published population for a read-only
 id-order filter. It still binds the viewer, expanded predicate, release and required public evidence to the query.
-The mounted mixed-population member walk and its ordinary-page work bounds require independent receiving.
+The worker reuses a current committed registration when advancing the canonical generation. The reader spends
+the remaining page allowance across refills and compares the full query basis, including native bigint positions.
+A mounted positive still requires an original-and-terminal disclosure batch that fits the 12-statement page.
+The current single-original Source check reserves 128 statements before calling Subject resolution.
 
 The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
 and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.
