@@ -14,7 +14,7 @@ export async function prepareLibraryDirectory(stack: NativeWebStack, accountId: 
     query_timeout: 5_000,
   });
   const deadline = Date.now() + 60_000;
-  // The same installed owner-index work used by the periodic sweep and released discovery fixture.
+  // Use the same registered owner-index work as the periodic sweep and released-discovery fixture.
   const workflowName = 'library.ownerIndex';
   try {
     const work = await createWorkClient(stack.databaseUrl);
@@ -38,8 +38,10 @@ export async function prepareLibraryDirectory(stack: NativeWebStack, accountId: 
 
         // A racing sweep can advance the observed frontier. The worker fences the exact owner and frontier.
         const stage = metadata ? 'accepted profile metadata' : `owner index ${frontier?.phase ?? 'start'}`;
+        // This setup waits for each page. Dispatch it on the worker's general queue so scheduled
+        // partition sweeps on maintenance cannot hold its turn. The owner workflow still enqueues its own successors.
         const handle = await work.enqueue(
-          { workflowName, queueName: 'maintenance', workflowID: `${workflowName}:native-web:${crypto.randomUUID()}` },
+          { workflowName, queueName: 'workflows', workflowID: `${workflowName}:native-web:${crypto.randomUUID()}` },
           { accounts: [accountId], frontier, metadata },
         );
         const completed = await settledWithin(handle.getResult().then(() => true), Math.max(0, deadline - Date.now()));
