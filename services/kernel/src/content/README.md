@@ -800,6 +800,9 @@ Library merge.
 Decision: Following and Space snapshots carry one request deadline through checkout, repeatable-read transaction and
 cleanup; late checkouts send no SQL, and expiry or unresolved database work discards the connection so the next
 authorized read observes current sources.
+Decision: mixed Home runs independent owner admissions under the same deadline and reports denials in their
+original order. Discovery carries the authenticated actor and retained execution through current selection and
+final disclosure. Viewer actions use only rows that survive final admission.
 Decision: mixed Home construction and read orchestration run through the Content feed application over
 consumer-owned continuation, public-summary and presentation ports. Library owns Continue page vocabulary and
 the native Continue adapter; Semantic owns disclosed Subject summary vocabulary and the native public-summary
