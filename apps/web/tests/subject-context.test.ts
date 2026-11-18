@@ -4,13 +4,11 @@ import { createElement } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectPageData } from '../src/features/pages/subject';
-import { canonicalRedirect } from '../src/subject/subject-href';
+import { canonicalRedirect, keepSearch, subjectHref } from '../src/subject/subject-href';
 import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
 import recording from '../src/kernel/recorded/subject-page.json';
 import realmRecording from '../src/kernel/recorded/realm.json';
 import { m } from '../src/paraglide/messages.js';
-import { setLocale } from '../src/paraglide/runtime.js';
-import { subjectHref } from '../src/subject/subject-href';
 
 // Render and cache-key cases supply only the unused Worker environment boundary; SDK transport remains explicit.
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -68,89 +66,88 @@ test('Make selected Realm and Global fallback recovery usable on phones', async 
     { name: 'IndependentContinuation', title: realmRecording.realm.title, view: 'editions' },
     { name: 'FallbackContinuation', fallback: true, view: 'editions' },
   ] as const;
-  try {
-    for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
-      setLocale(locale, { reload: false });
-      const o = { locale };
-      for (const state of cases) {
-        const page = structuredClone(recording) as unknown as SubjectPageData;
-        page.context =
-          'title' in state
-            ? { ...selected, population: { ...selected.population, title: state.title } }
-            : { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'global' } };
-        if (!('global' in state)) page.requestedRealm = realm;
-        for (const read of Object.values(page.reads)) {
-          const body = read.body as { subject?: { context: string } };
-          if (body.subject) body.subject.context = page.context.id;
-        }
-        const label = subjectPageTitle(page, locale);
-        const address = subjectHref({ id: recording.subject, label }, locale).href;
-        const href = `${address}${'view' in state ? `/${state.view}` : ''}`;
-        const search = new URLSearchParams();
-        if (page.requestedRealm) search.set('realm', page.requestedRealm);
-        if ('view' in state) {
-          const document: CompositionDocument = {
-            root: { props: {} },
-            content: [
-              {
-                type: 'SubjectList',
-                props: { id: 'editions', title: 'Editions', property: 'schema:exampleOfWork', limit: 12, paged: true },
-              },
-            ],
-          };
-          page.document = document;
-          page.continuation = { node: 'editions', cursor: 'native+opaque-cursor' };
-          const plan = planReads(platformRegistry, document, pageContext(page));
-          page.reads = { [plan.nodes.editions!]: { status: 200, body: { links: [], next: 'next-native-cursor' } } };
-          search.set('node', page.continuation.node);
-          search.set('cursor', page.continuation.cursor);
-        }
-        const html = await renderSubject(
-          createElement(SubjectPage, {
-            page,
-            locale,
-            messages,
-            subjectLabel: label,
-            ...('view' in state ? { view: state.view } : {}),
-          }),
-          search.size ? `${href}?${search}` : href,
-        );
-        const nav = html.match(/<nav\b[^>]*data-slot="page-context"[\s\S]*?<\/nav>/)?.[0];
-        if ('global' in state) {
-          expect(html).toContain(label);
-          expect(nav).toBeUndefined();
-          continue;
-        }
-        expect(nav).toContain(`aria-label="${m.subject_context_navigation({}, o)}"`);
-        const links = Array.from(nav!.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g), (match) => ({
-          href: match[1]!.replaceAll('&amp;', '&'),
-          text: match[2],
-        }));
-        if ('title' in state) {
-          expect(nav).toContain(m.subject_context_selected({ title: state.title }, o));
-          expect(links).toEqual([
-            { href: `/${locale}/realms/${realm}`, text: m.subject_context_return({ title: state.title }, o) },
-            { href, text: m.subject_context_switch_global({}, o) },
-          ]);
-        } else {
-          expect(nav).toContain(m.subject_context_global({}, o));
-          expect(nav).toContain(m.subject_context_fallback({}, o));
-          expect(nav).not.toContain(realmRecording.realm.title);
-          expect(nav).not.toContain(`/realms/${realm}`);
-          expect(links).toEqual([
-            { href, text: m.subject_context_switch_global({}, o) },
-            { href: `${href}?realm=${realm}`, text: m.subject_context_retry({}, o) },
-          ]);
-        }
-        for (const link of links) {
-          const url = new URL(link.href, 'https://rezics.invalid');
-          expect([...url.searchParams.keys()]).toEqual(link.href.includes('?realm=') ? ['realm'] : []);
-          expect(url.hash).toBe('');
-        }
+  for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
+    const o = { locale };
+    for (const state of cases) {
+      const page = structuredClone(recording) as unknown as SubjectPageData;
+      page.context =
+        'title' in state
+          ? { ...selected, population: { ...selected.population, title: state.title } }
+          : { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'global' } };
+      if (!('global' in state)) page.requestedRealm = realm;
+      for (const read of Object.values(page.reads)) {
+        const body = read.body as { subject?: { context: string } };
+        if (body.subject) body.subject.context = page.context.id;
+      }
+      const label = subjectPageTitle(page, locale);
+      const address = subjectHref({ id: recording.subject, label }, locale).href;
+      const href = `${address}${'view' in state ? `/${state.view}` : ''}`;
+      const search = new URLSearchParams();
+      if (page.requestedRealm) search.set('realm', page.requestedRealm);
+      if ('view' in state) {
+        const document: CompositionDocument = {
+          root: { props: {} },
+          content: [
+            {
+              type: 'SubjectList',
+              props: { id: 'editions', title: 'Editions', property: 'schema:exampleOfWork', limit: 12, paged: true },
+            },
+          ],
+        };
+        page.document = document;
+        page.continuation = { node: 'editions', cursor: 'native+opaque-cursor' };
+        const plan = planReads(platformRegistry, document, pageContext(page));
+        page.reads = { [plan.nodes.editions!]: { status: 200, body: { links: [], next: 'next-native-cursor' } } };
+        search.set('node', page.continuation.node);
+        search.set('cursor', page.continuation.cursor);
+      }
+      const visitHref = search.size ? `${href}?${search}` : href;
+      const resetHref = keepSearch(href);
+      const html = await renderSubject(
+        createElement(SubjectPage, {
+          page,
+          locale,
+          messages,
+          subjectLabel: label,
+          currentHref: visitHref,
+          ...('view' in state ? { view: state.view } : {}),
+        }),
+        visitHref,
+      );
+      const nav = html.match(/<nav\b[^>]*data-slot="page-context"[\s\S]*?<\/nav>/)?.[0];
+      if ('global' in state) {
+        expect(html).toContain(label);
+        expect(nav).toBeUndefined();
+        continue;
+      }
+      expect(nav, `${locale}/${state.name}`).toBeDefined();
+      expect(nav).toContain(`aria-label="${m.subject_context_navigation({}, o)}"`);
+      const links = Array.from(nav!.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g), (match) => ({
+        href: match[1]!.replaceAll('&amp;', '&'),
+        text: match[2],
+      }));
+      if ('title' in state) {
+        expect(nav).toContain(m.subject_context_selected({ title: state.title }, o));
+        expect(links).toEqual([
+          { href: `/${locale}/realms/${realm}`, text: m.subject_context_return({ title: state.title }, o) },
+          { href: resetHref, text: m.subject_context_switch_global({}, o) },
+        ]);
+      } else {
+        expect(nav).toContain(m.subject_context_global({}, o));
+        expect(nav).toContain(m.subject_context_fallback({}, o));
+        expect(nav).not.toContain(realmRecording.realm.title);
+        expect(nav).not.toContain(`/realms/${realm}`);
+        expect(links).toEqual([
+          { href: resetHref, text: m.subject_context_switch_global({}, o) },
+          { href: `${resetHref}?realm=${realm}`, text: m.subject_context_retry({}, o) },
+        ]);
+      }
+      for (const link of links) {
+        const url = new URL(link.href, 'https://rezics.invalid');
+        expect([...url.searchParams.keys()]).toEqual(link.href.includes('?realm=') ? ['realm'] : []);
+        expect(url.hash).toBe('');
       }
     }
-  } finally {
-    setLocale('en', { reload: false });
   }
 });
 
