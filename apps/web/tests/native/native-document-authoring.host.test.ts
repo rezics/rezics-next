@@ -91,29 +91,29 @@ async function expectKeyboardReachable(page: Page, target: ReturnType<Page['loca
 }
 
 async function createGrowthThreads(fixture: NativeDocumentAuthoringFixture, from: number, to: number): Promise<void> {
+  const writers = await Promise.all(
+    fixture.growthWriters.map(({ persona }) => fixture.stack.authPersona(persona, ['thread:create', 'board:read'])),
+  );
   for (let index = from; index < to; index++) {
-    const writer = fixture.growthWriters[index % fixture.growthWriters.length]!;
+    const writer = writers[index % writers.length]!;
     await json<{ thread: { id: string } }>(
-      await fixture.stack.kernel(
-        '/v1/threads',
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(crypto.randomUUID()),
-          },
-          body: JSON.stringify({
-            title: `Unrelated growth fixture ${index + 1}`,
-            body: fromPlainText(`Unrelated growth fixture ${index + 1}`, 'blocks'),
-            licence: 'MIT',
-            subjectIds: [],
-            boardId: fixture.boardId,
-            visibility: 'published',
-          }),
+      await fixture.stack.kernel('/v1/threads', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: writer.authorization,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
         },
-        writer.persona,
-      ),
-      'POST /v1/threads growth fixture',
+        body: JSON.stringify({
+          title: `Unrelated growth fixture ${index + 1}`,
+          body: fromPlainText(`Unrelated growth fixture ${index + 1}`, 'blocks'),
+          licence: 'MIT',
+          subjectIds: [],
+          boardId: fixture.boardId,
+          visibility: 'published',
+        }),
+      }),
+      `POST /v1/threads growth fixture ${index + 1}`,
     );
   }
 }
