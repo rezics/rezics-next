@@ -1,5 +1,5 @@
 import type { PublishedSubject, RelationView } from '../../../../specs/web-publication-driver';
-import { readWebTestSelectionContext } from '../../scripts/selection';
+import { readWebTestSelectionContext, webTestNamePatterns } from '../../scripts/selection';
 
 export type PublicationFixtureSelection = {
   subject?: PublishedSubject;
@@ -40,14 +40,7 @@ export function publicationFixtureSelection(): PublicationFixtureSelection | und
   )
     return;
 
-  const patterns: string[] = [];
-  const args = selection.normalizedArgv;
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]!;
-    if (arg === '--') break;
-    const option = /^(?:-t|--test-name-pattern)(?:=(.*))?$/su.exec(arg);
-    if (option) patterns.push(option[1] ?? args[++index] ?? '');
-  }
+  const patterns = webTestNamePatterns(selection.normalizedArgv);
   // A literal scenario suffix can narrow setup. General filters and the full
   // suite retain the full inventory, including the exact sitemap population.
   const pattern = patterns.length === 1 ? patterns[0] : undefined;

@@ -137,6 +137,7 @@ export const SEMANTIC_EVENTS = {
     {
       after: Type.Integer({ minimum: 0, maximum: 4095 }),
       limit: Type.Integer({ minimum: 1, maximum: 200 }),
+      unannouncedOnly: Type.Optional(Type.Literal(true)),
     },
     { additionalProperties: false },
   ),

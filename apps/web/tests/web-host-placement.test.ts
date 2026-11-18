@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { main, runHostTests, runWebHostTests } from '../scripts/check.ts';
-import { readWebTestSelectionContext } from '../scripts/selection.ts';
+import { readWebTestSelectionContext, webTestNamePatterns } from '../scripts/selection.ts';
 import { testCommand } from '../../../scripts/test-lanes.ts';
 
 const app = resolve(import.meta.dir, '..');
@@ -347,4 +347,10 @@ test(${JSON.stringify(name)}, () => {
   } finally {
     rmSync(selectionDirectory, { recursive: true, force: true });
   }
+});
+
+test('focused Web fixtures recognize both forms of the exact name selector', () => {
+  const name = '^a focused private return$';
+  expect(webTestNamePatterns(['--host', 'path.test.ts', '--test-name-pattern', name])).toEqual([name]);
+  expect(webTestNamePatterns([`--test-name-pattern=${name}`, '--', '-t', 'unrelated'])).toEqual([name]);
 });

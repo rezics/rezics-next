@@ -1,4 +1,4 @@
-import { queryOptions, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
@@ -28,13 +28,71 @@ export const sessionQuery = queryOptions({
   ...personalRead,
   queryKey: sessionQueryKey,
   queryFn: () => readSession(),
-  // Document sign-in/out starts a fresh client that reads the new session state.
+  // The document owner checks the live session when this tab resumes or another Web document opens.
   staleTime: Infinity,
   gcTime: Infinity,
   retry: false,
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,
 });
+
+/** Reconcile the document's installed identity without retiring private work on an unchanged focus read. */
+export function watchDocumentSession(client: QueryClient): () => void {
+  let pending: AbortController | undefined;
+  async function check() {
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
+    // Let the ordinary route or retry read finish before comparing its cache entry.
+    const query = client.getQueryCache().find({ queryKey: sessionQueryKey, exact: true });
+    if (query?.state.fetchStatus === 'fetching') await query.promise?.catch(() => {});
+    if (controller.signal.aborted) return;
+    const before = client.getQueryState(sessionQueryKey);
+    const session = await readSession({ signal: controller.signal }).catch(() => ({
+      state: 'unavailable' as const,
+      subject: null,
+      csrfToken: null,
+    }));
+    if (controller.signal.aborted) return;
+    const current = client.getQueryState(sessionQueryKey);
+    if (current !== before) {
+      // Another session read settled or started during this request. Compare against a fresh read.
+      void check();
+      return;
+    }
+    const previous = normalizeSessionObservation(current?.data);
+    if (
+      current?.status !== 'success' ||
+      previous.state !== session.state ||
+      previous.subject !== session.subject ||
+      previous.csrfToken !== session.csrfToken
+    ) {
+      client.setQueryData(sessionQueryKey, session);
+    }
+  }
+
+  const visible = () => {
+    if (document.visibilityState === 'visible') void check();
+  };
+  const restored = (event: PageTransitionEvent) => {
+    if (event.persisted) void check();
+  };
+  // A new document can complete an OAuth replacement while other tabs stay visible.
+  // Send only a wake-up. Each recipient reads its own same-origin session.
+  const peers = window.BroadcastChannel ? new window.BroadcastChannel('rezics-session') : undefined;
+  peers?.addEventListener('message', check);
+  peers?.postMessage('check');
+  window.addEventListener('focus', check);
+  document.addEventListener('visibilitychange', visible);
+  window.addEventListener('pageshow', restored);
+  return () => {
+    pending?.abort();
+    peers?.close();
+    window.removeEventListener('focus', check);
+    document.removeEventListener('visibilitychange', visible);
+    window.removeEventListener('pageshow', restored);
+  };
+}
 
 // Exposure is a separate bounded read so a session result never grants a gate implicitly.
 const readViewerExposure = createServerFn({ method: 'GET' }).handler(async () => {

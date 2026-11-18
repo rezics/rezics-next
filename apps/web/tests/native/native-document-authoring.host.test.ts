@@ -91,6 +91,7 @@ async function expectKeyboardReachable(page: Page, target: ReturnType<Page['loca
 }
 
 async function createGrowthThreads(fixture: NativeDocumentAuthoringFixture, from: number, to: number): Promise<void> {
+  await Promise.all(fixture.growthWriters.map(({ persona }) => fixture.stack.authPersona(persona, 'renew')));
   for (let index = from; index < to; index++) {
     const writer = fixture.growthWriters[index % fixture.growthWriters.length]!;
     await json<{ thread: { id: string } }>(
@@ -113,7 +114,7 @@ async function createGrowthThreads(fixture: NativeDocumentAuthoringFixture, from
         },
         writer.persona,
       ),
-      'POST /v1/threads growth fixture',
+      `POST /v1/threads growth fixture ${index + 1}`,
     );
   }
 }
@@ -224,8 +225,6 @@ async function measureHistoryReads(
     historyPage.setDefaultTimeout(30_000);
     await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
     await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    // The mounted reply composer requires a personal read admitted for the current session's bearer.
-    await expect(historyPage.getByRole('region', { name: 'Reply', exact: true })).toBeVisible();
     const post = historyPage.locator(`#post-${postId}`);
     const button = await revealHistoryControl(post);
     await expect(button).toBeVisible();

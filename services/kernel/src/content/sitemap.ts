@@ -1,4 +1,4 @@
-import { accessEvidenceDeadline } from '../access/evidence-deadline.ts';
+import { accessEvidenceDeadline } from '../access/index.ts';
 import { withReadConnection } from './read-connection.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';

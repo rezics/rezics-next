@@ -231,6 +231,11 @@ export async function writeBangumiStaffVocabularyCommands(input: {
 }): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
   const pending: BatchCommand[] = [];
+  async function requireCurrentCreate(id: string, type: string) {
+    const current = await input.read(id);
+    if (current?.subject.id !== id || current.subject.type !== type)
+      throw new TypeError('Bangumi staff vocabulary create ACK is not current');
+  }
   for (const command of input.commands) {
     const prior = input.journal.acknowledgedCommand(command.key);
     if (!prior) {
@@ -242,10 +247,7 @@ export async function writeBangumiStaffVocabularyCommands(input: {
     if (command.op === 'create') {
       const id = prior.subjectId;
       if (!id || !uuid.test(id)) throw new TypeError('Bangumi staff vocabulary create ACK has no UUID');
-      const current = await input.read(id);
-      const subject = current?.subject as { id?: unknown; type?: unknown } | undefined;
-      if (subject?.id !== id || subject.type !== command.subject.type)
-        throw new TypeError('Bangumi staff vocabulary create ACK is not current');
+      await requireCurrentCreate(id, command.subject.type);
       ids.set(command.key, id);
     }
   }
@@ -271,6 +273,9 @@ export async function writeBangumiStaffVocabularyCommands(input: {
         ids.set(command.key, ack.value.id);
       }
     }
+  }
+  for (const command of pending) {
+    if (command.op === 'create') await requireCurrentCreate(ids.get(command.key)!, command.subject.type);
   }
   return ids;
 }
@@ -504,6 +509,7 @@ export async function prepareBangumiCreatorCreditBindings(
   if (!roles.length)
     return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
 
+  const readCreated = (id: string) => input.publicClient.readSubject(id, undefined, 'after-create');
   const acknowledgements = input.journal.acknowledgedCommands();
   const schemeSource = schemeEnvelope(roles);
   const schemeRequirement = requirementsFor(roles, schemeSource)[0]!;
@@ -556,14 +562,10 @@ export async function prepareBangumiCreatorCreditBindings(
       port,
       journal: input.journal,
       commands: [create],
-      read,
+      read: readCreated,
     });
     const schemeId = written.get(create.key);
     if (!schemeId) throw new TypeError('Bangumi staff scheme create was not acknowledged');
-    const createdScheme = await read(schemeId);
-    const createdSchemeSubject = createdScheme?.subject as { id?: unknown; type?: unknown } | undefined;
-    if (createdSchemeSubject?.id !== schemeId || createdSchemeSubject.type !== 'skos:ConceptScheme')
-      throw new TypeError('Bangumi staff scheme create ACK is not current');
     const candidates = [
       proposeCommand({
         source: schemeSource,
@@ -693,17 +695,13 @@ export async function prepareBangumiCreatorCreditBindings(
       port,
       journal: input.journal,
       commands: missingCommands,
-      read,
+      read: readCreated,
     });
     const candidates: BatchCommand[] = [];
     for (const [index, role] of missing.entries()) {
       const requirement = newRequirements[index]!;
       const conceptId = createdIds.get(missingCommands[index]!.key);
       if (!conceptId) throw new TypeError('Bangumi staff role create was not acknowledged');
-      const createdConcept = await read(conceptId);
-      const createdConceptSubject = createdConcept?.subject as { id?: unknown; type?: unknown } | undefined;
-      if (createdConceptSubject?.id !== conceptId || createdConceptSubject.type !== 'skos:Concept')
-        throw new TypeError('Bangumi staff role create ACK is not current');
       for (const [property, value] of [
         ['schema:url', requirement.sourceUri],
         ['schema:sameAs', role.uri],

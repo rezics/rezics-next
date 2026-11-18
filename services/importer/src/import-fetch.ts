@@ -435,6 +435,7 @@ type PublicGetPolicy = {
   protocols: readonly string[];
   redirect: RequestRedirect;
   cache?: RequestCache;
+  retryProjectionOnly?: boolean;
 };
 
 function createBoundedGet(
@@ -517,6 +518,7 @@ function createBoundedGet(
           });
         } catch (error) {
           signal.throwIfAborted();
+          if (policy.retryProjectionOnly) throw error;
           const delay = backoff(attempt);
           if (attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) throw error;
           scheduledWait += delay;
@@ -528,6 +530,7 @@ function createBoundedGet(
         const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
         let buffered = false;
         let overload = response.status === 429;
+        let projectionPreparing = false;
         if (response.status === 503 && hint !== undefined) {
           response = await boundedResponse(response, maxResponseBytes, signal);
           buffered = true;
@@ -537,8 +540,10 @@ function createBoundedGet(
               .json()
               .catch(() => null),
           );
-          overload =
-            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+          if (typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true) {
+            overload = true;
+            projectionPreparing = 'type' in problem && problem.type === SUBJECT_NOT_READY_TYPE;
+          }
         }
         const notBefore = overload ? hint : undefined;
         const delay =
@@ -550,6 +555,7 @@ function createBoundedGet(
           (notBefore !== undefined && now() + delay >= deadline);
         if (
           attempt === maxAttempts ||
+          (policy.retryProjectionOnly && !projectionPreparing) ||
           !(response.status === 429 || (response.status >= 500 && response.status <= 599)) ||
           stopped()
         )
@@ -571,11 +577,14 @@ export function createBoundedPublicGet(options: PublicGetOptions) {
   return createBoundedGet(options, { protocols: ['https:'], redirect: 'error' });
 }
 
-/** The independent Kernel reader observes an individual response, including native 308 and 503. */
-export function createBoundedPublicSubjectGet(options: Pick<PublicGetOptions, 'origin' | 'fetch'>) {
+/** Public reads observe one response. An acknowledged create may wait for its projection under the same GET budget. */
+export function createBoundedPublicSubjectGet(
+  options: Pick<PublicGetOptions, 'origin' | 'fetch'>,
+  afterCreate = false,
+) {
   return createBoundedGet(
-    { ...options, pathPrefix: '/v1/subjects/', maxAttempts: 1 },
-    { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store' },
+    { ...options, pathPrefix: '/v1/subjects/', maxAttempts: afterCreate ? MAX_IMPORT_ATTEMPTS : 1 },
+    { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store', retryProjectionOnly: afterCreate },
   );
 }
 

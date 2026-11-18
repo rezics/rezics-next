@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { Page, Response } from 'playwright';
 import { expect as browserExpect } from 'playwright/test';
 import { PROBLEMS } from '../../../../services/kernel/src/http/problem-error.ts';
-import { readWebTestSelectionContext } from '../../scripts/selection.ts';
+import { readWebTestSelectionContext, webTestNamePatterns } from '../../scripts/selection.ts';
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import {
   assertShelfPage,
@@ -24,10 +24,12 @@ const evidence = resolve(import.meta.dir, '../../../../.temp/book-shelf-boundary
 const shelfPath = '/en/library';
 const shelfReturnTest = 'Bob signs in from the typed Book shelf and sees only his own saved Book';
 const selection = readWebTestSelectionContext();
+const patterns = webTestNamePatterns(selection?.normalizedArgv ?? []);
 const shelfReturnOnly =
   selection?.selectedFiles.length === 1 &&
   selection.selectedFiles[0] === 'tests/native/book-shelf-boundary.host.test.ts' &&
-  selection.normalizedArgv.includes(`--test-name-pattern=^${shelfReturnTest}$`);
+  patterns.length === 1 &&
+  patterns[0] === `^${shelfReturnTest}$`;
 
 nativeBeforeAll(lifecycle, 600_000, async () => {
   fixture = await startBookCatalogueJourneyFixture(shelfReturnOnly ? 'shelf-return' : 'shelf-boundary');

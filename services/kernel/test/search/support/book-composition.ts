@@ -23,7 +23,7 @@ import {
   requireStatus,
   type TypeListRead,
 } from '../../performance/support/composed-discovery-fixtures.ts';
-import { readPublicationJobs } from './outcome-worker.ts';
+import { inspectPublication, readPublicationJobs } from './outcome-worker.ts';
 import { observeComposedWarmup } from './composed-page-cost.ts';
 
 const route = '/book-catalogue-cost';
@@ -37,8 +37,9 @@ type Anchor = { id: string; type: string };
 type Original = Anchor & { label: string };
 type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
+const editorCredentialWindowMs = 30_000;
 
-export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
+export async function publishBookOriginals(setupDeadline: number, cleanupMs: number) {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
@@ -90,16 +91,16 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
         try {
           const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
           const { active, generations } = await subjectGenerations(engine, prefix, undefined, signal);
-          const [physical, jobs] = await Promise.all([
+          const [physical, publication] = await Promise.all([
             Promise.all(
               generations.map(async (generation) => ({
                 generation,
                 matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
               })),
             ),
-            publicationJobs(deadline).then((jobs) => jobs.map(({ consumer: _consumer, ...job }) => job), String),
+            withBoundedReadConnection(pool, deadline, (client) => inspectPublication(client, prefix)).catch(String),
           ]);
-          return { active, physical, jobs };
+          return { active, physical, publication };
         } catch (error) {
           return { inventoryError: String(error) };
         }
@@ -177,7 +178,6 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       );
     }
     const originals: Original[] = [];
-    const editorCredentialWindowMs = 30_000;
     async function createSubject(type: string, name: string) {
       // A publication wait or a long growth scale can outlast the editor's bearer.
       await fixture.renewCredential('editor', editorCredentialWindowMs);
@@ -209,6 +209,29 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       originals,
     );
 
+    return {
+      fixture,
+      database,
+      originals,
+      published,
+      waitForPublication,
+      createAnchor,
+      createSubject,
+    };
+  } catch (error) {
+    try {
+      await owner?.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Book publication and cleanup failed', { cause: error });
+    }
+    throw error;
+  }
+}
+
+export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
+  const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
+    await publishBookOriginals(setupDeadline, cleanupMs);
+  try {
     const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
       anchors.push({ id: originals[grain]!.id, type });
@@ -324,7 +347,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     };
   } catch (error) {
     try {
-      await owner?.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
+      await fixture.close(Math.min(Date.now(), setupDeadline) + cleanupMs);
     } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], 'Book catalogue setup and cleanup failed', { cause: error });
     }

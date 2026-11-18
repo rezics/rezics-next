@@ -7,6 +7,7 @@ import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
   discardConnection,
+  isPostgresTransactionAbort,
   withBoundedCommandConnection,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
@@ -18,7 +19,6 @@ import {
   requireAccessDeadline,
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
-import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -255,7 +255,10 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
     // enumeration or a newly captured replacement for the original Source page.
     for (const partition of homes) {
       requireAccessDeadline(deadline);
-      const head = await nativeSourceQuery(client, readReplayHead, { build_id: page.frontier.build, partition_no: partition });
+      const head = await nativeSourceQuery(client, readReplayHead, {
+        build_id: page.frontier.build,
+        partition_no: partition,
+      });
       if (
         !head ||
         head.write_state !== 'active' ||
@@ -332,9 +335,15 @@ const unavailable = (
 ): PublicFilterProjectionPage => ({ status: 'unavailable', reason, cost });
 
 function validRetainedMeaning(meaning: unknown): boolean {
-  return typeof meaning === 'object' && meaning !== null && !Array.isArray(meaning)
-    && Reflect.ownKeys(meaning).length === 1 && 'digest' in meaning
-    && typeof meaning.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(meaning.digest);
+  return (
+    typeof meaning === 'object' &&
+    meaning !== null &&
+    !Array.isArray(meaning) &&
+    Reflect.ownKeys(meaning).length === 1 &&
+    'digest' in meaning &&
+    typeof meaning.digest === 'string' &&
+    /^sha256:[0-9a-f]{64}$/.test(meaning.digest)
+  );
 }
 
 function validMeaning(meaning: PublicFilterProjectionMeaning): boolean {
@@ -1012,13 +1021,18 @@ export async function readPublicFilterProjectionPage(
         if (owner.writeState !== 'active') return unready('owner_pending', cost);
 
         const sourceRows = rows(
-          await nativeSourceQuery(client, readSubjects, { partition_no: partition, routes: [route], subject_ids: [request.subject] }),
+          await nativeSourceQuery(client, readSubjects, {
+            partition_no: partition,
+            routes: [route],
+            subject_ids: [request.subject],
+          }),
         ) as SubjectRow[];
         const subject = sourceRows[0];
         if (!subject) return unavailable('missing_owner', cost);
-        const rootTime = supportRoot && subject.visibility === 'visible'
-          ? await mintReadTime(client, config.clock, config.pool)
-          : null;
+        const rootTime =
+          supportRoot && subject.visibility === 'visible'
+            ? await mintReadTime(client, config.clock, config.pool)
+            : null;
         await supportRoot?.check(client, owner, subject.visibility, rootTime);
         if (!subject.selection_ready) return unready('owner_pending', cost);
         if (!subject.current_revision || !subject.currentRelease) return unready('metadata_missing', cost);
@@ -1607,7 +1621,11 @@ export async function readOriginalPublicFilterProjectionPage(
   const page = addCost(produced, { inputKeys: 1, frontierWrites: 1 });
   const pageData = encodeReplayValue(page);
   const inserted = await withConnection(config.pool, (client) =>
-    nativeSourceQuery(client, writeOriginalPage, { ...values, page_data: pageData, page_digest: replayDigest(pageData) }),
+    nativeSourceQuery(client, writeOriginalPage, {
+      ...values,
+      page_data: pageData,
+      page_digest: replayDigest(pageData),
+    }),
   );
   if (inserted) return page;
 

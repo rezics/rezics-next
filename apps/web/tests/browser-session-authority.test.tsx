@@ -67,7 +67,8 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { sessionQuery, useSession, AnonymousSessionContext, sessionCsrfToken } = await import('../src/session/query');
+const { sessionQuery, useSession, AnonymousSessionContext, sessionCsrfToken, watchDocumentSession } =
+  await import('../src/session/query');
 const { uploadAvatar } = await import('../src/threads/upload');
 
 function SessionProbe({ name }: { name: string }) {
@@ -182,6 +183,43 @@ async function withUi(run: (ui: Awaited<ReturnType<typeof createUi>>) => Promise
     await ui.close();
   }
 }
+
+test('refocusing a document keeps unchanged work and retires replaced or unavailable credentials', async () => {
+  await withUi(async (ui) => {
+    const client = ui.client();
+    client.setQueryData(sessionQuery.queryKey, viewer());
+    await ui.render(client, createElement(SessionProbe, { name: 'old-tab' }));
+    const original = client.getQueryState(sessionQuery.queryKey);
+    const release = watchDocumentSession(client);
+    const focus = () => window.dispatchEvent(new window.Event('focus'));
+    try {
+      sessionReader = async () => viewer();
+      focus();
+      await ui.flush();
+      expect(client.getQueryState(sessionQuery.queryKey)).toBe(original);
+
+      const late = deferred<SessionResult>();
+      sessionReader = () => late.promise;
+      focus();
+      sessionReader = async () => viewer('bob', 'bob-token');
+      focus();
+      await ui.flush();
+      late.resolve(viewer());
+      await ui.flush();
+      expect(ui.session('old-tab')).toEqual(viewer('bob', 'bob-token'));
+
+      sessionReader = async () => {
+        throw new Error('offline');
+      };
+      focus();
+      await ui.flush();
+      expect(ui.session('old-tab').state).toBe('unavailable');
+      expect(sessionCsrfToken()).toBeNull();
+    } finally {
+      release();
+    }
+  });
+});
 
 test('session hydration stays private on the server and guard-seeded data becomes current only after browser hydration', async () => {
   await withUi(async (ui) => {
@@ -611,7 +649,9 @@ test('mounted phone, following and Subject readers publish query changes after s
     default: '/font.woff2',
   }));
   const { AppShell } = await import('../src/shell/app-shell');
-  const { SubjectPage } = await import('../src/features/pages/subject');
+  const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+  const { withPageVisitHost } = await import('./helpers/subject-render');
+  const SubjectPage = withPageVisitHost(SubjectPageContent);
   const { default: recorded } = await import('../src/kernel/recorded/subject-page.json');
   const { browserObservation } = await import('../src/session/observation');
   const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
@@ -634,6 +674,7 @@ test('mounted phone, following and Subject readers publish query changes after s
     basis: 'current-visible-unread',
     witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
   });
+  const { performanceAmbientTree } = await import('./performance-ambient');
   const errors = spyOn(console, 'error');
   try {
     await withUi(async (ui) => {
@@ -657,10 +698,12 @@ test('mounted phone, following and Subject readers publish query changes after s
         ui.render(
           client,
           <RouterContextProvider router={router}>
-            <AppShell search={<input aria-label="Search" />}>
-              <QueryEvent />
-              <SubjectPage page={page} locale="en" messages={messages} />
-            </AppShell>
+            {performanceAmbientTree(
+              <AppShell search={<input aria-label="Search" />}>
+                <QueryEvent />
+                <SubjectPage page={page} locale="en" messages={messages} />
+              </AppShell>,
+            )}
           </RouterContextProvider>,
           true,
         );

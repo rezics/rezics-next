@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
-import { createImportTransport } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
 import {
   currentSourceRead,
   publicHasCitation,
@@ -12,6 +12,8 @@ import {
   safeCandidatePage,
   type CandidateRead,
 } from '../src/showcase-current-reads.ts';
+import { MAX_IMPORT_ATTEMPTS } from '../src/import-fetch.ts';
+import { remainingRequestFromTransport } from '../src/seed-remaining-request.ts';
 import { ShowcaseJournal } from '../src/showcase-journal.ts';
 import {
   admitSelectedSynopsisSupport,
@@ -338,6 +340,40 @@ test('review and independent public publication reads bypass caches through curr
     expect(request.redirect).toBe('manual');
     expect(request.headers.get('authorization')).toBe(index < 2 ? 'Bearer review-token' : null);
     expect(new URL(request.url).searchParams.get('context')).toBe(index < 2 ? null : GLOBAL_CONTEXT);
+  }
+});
+
+test('after-create reads retain the failed GET and retry only while the native projection is preparing', async () => {
+  for (const [code, attempts] of [
+    ['semantic_not_ready', MAX_IMPORT_ATTEMPTS],
+    ['overloaded', 1],
+  ] as const) {
+    let requests = 0;
+    const client = createPublicBulkClient({
+      origin: 'https://api.importer.test',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        expect(request.method).toBe('GET');
+        expect(request.headers.has('authorization')).toBe(false);
+        requests++;
+        return Response.json(
+          { type: `https://rezics.com/problems/${code}`, code, retryable: true },
+          { status: 503, headers: { 'retry-after': '0', 'x-request-id': 'scheme-read' } },
+        );
+      }) as typeof fetch,
+    });
+    const error = await client.readSubject(original, undefined, 'after-create').catch((error: unknown) => error);
+    expect(requests).toBe(attempts);
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect(remainingRequestFromTransport(error as ImportTransportError)).toMatchObject({
+      method: 'GET',
+      origin: 'https://api.importer.test',
+      path: `/v1/subjects/${original}`,
+      failurePhase: 'http',
+      status: 503,
+      code,
+      correlationId: 'scheme-read',
+    });
   }
 });
 

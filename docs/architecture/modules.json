@@ -1930,6 +1930,8 @@
         "apps/web/src/paraglide/messages.d.ts",
         "apps/web/src/paraglide/runtime.js",
         "apps/web/src/paraglide/runtime.d.ts",
+        "apps/web/src/paraglide/server.js",
+        "apps/web/src/paraglide/server.d.ts",
         "apps/web/src/kernel/query.ts",
         "apps/web/src/kernel/platform-closed.ts",
         "apps/web/src/session/query.ts",

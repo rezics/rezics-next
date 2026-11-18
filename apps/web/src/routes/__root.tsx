@@ -19,6 +19,7 @@ import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
 import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
 import { prepareExposure } from '../kernel/exposure';
+import { watchDocumentSession } from '../session/query';
 import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
@@ -197,6 +198,8 @@ export function ApplicationShell({ children }: { children: ReactNode }) {
 export function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
   useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
+  const { queryClient } = router.options.context;
+  useEffect(() => watchDocumentSession(queryClient), [queryClient]);
   const nonce = router.options.ssr?.nonce;
   const href = useRouterState({ select: (state) => state.location.publicHref });
   const locale = getLocale();

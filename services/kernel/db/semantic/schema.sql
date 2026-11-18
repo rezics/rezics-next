@@ -8593,6 +8593,8 @@ CREATE TABLE semantic.partition_subjects (
     canonical_count bigint DEFAULT 0 NOT NULL,
     canonical_generation bigint DEFAULT 1 NOT NULL,
     canonical_delivered_generation bigint DEFAULT 0 NOT NULL,
+    canonical_announced_generation bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT partition_subjects_canonical_announcement_check CHECK (((canonical_announced_generation >= 0) AND (canonical_announced_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
     CONSTRAINT partition_subjects_canonical_delivery_check CHECK (((canonical_delivered_generation >= 0) AND (canonical_delivered_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_generation_check CHECK ((canonical_generation > 0)),
@@ -13247,6 +13249,13 @@ CREATE INDEX partition_subjects_canonical_delivery ON semantic.partition_subject
 --
 
 CREATE INDEX partition_subjects_canonical_frontier ON semantic.partition_subjects USING btree (partition_no) INCLUDE (canonical_generation) WHERE (canonical_count > 0);
+
+
+--
+-- Name: partition_subjects_canonical_unannounced; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX partition_subjects_canonical_unannounced ON semantic.partition_subjects USING btree (partition_no) WHERE ((canonical_delivered_generation < canonical_generation) AND (canonical_announced_generation < canonical_generation));
 
 
 --

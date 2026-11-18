@@ -319,6 +319,17 @@ export function selectedWebTestFiles(
   return testSelectorArgumentIndices(command, commandKind).map((index) => command[index]!);
 }
 
+export function webTestNamePatterns(args: readonly string[]): string[] {
+  const patterns: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === '--') break;
+    const option = /^(?:-t|--test-name-pattern)(?:=(.*))?$/su.exec(arg);
+    if (option) patterns.push(option[1] ?? args[++index] ?? '');
+  }
+  return patterns;
+}
+
 /** Preserve Bun options and operands when one selected file moves to another owning execution lane. */
 export function testCommandOptions(command: string[]): string[] {
   if (!isBunTest(command)) return [];

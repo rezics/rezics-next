@@ -1,4 +1,4 @@
-import type { ReviewedSubjectRead } from './import-client.ts';
+import { httpFailure, type ReviewedSubjectRead } from './import-client.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createBoundedPublicSubjectGet, MAX_IMPORT_DEADLINE_MS, SUBJECT_NOT_READY_TYPE } from './import-fetch.ts';
 
@@ -35,7 +35,7 @@ export class PublicSubjectGetUnavailable extends Error {
 }
 
 export type PublicBulkClient = Readonly<{
-  readSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead>;
+  readSubject(id: string, signal?: AbortSignal, mode?: 'after-create'): Promise<ReviewedSubjectRead>;
   readSelectedSynopsis(id: string, query: string, signal?: AbortSignal): Promise<ReviewedSubjectRead>;
 }>;
 
@@ -255,6 +255,7 @@ async function readCurrentSubject(
   id: string,
   signal: AbortSignal | undefined,
   selectedSynopsis?: string,
+  mode?: 'after-create',
 ): Promise<ReviewedSubjectRead> {
   if (!subjectId.test(id)) throw new TypeError('Invalid public subject identity');
   if (
@@ -288,6 +289,12 @@ async function readCurrentSubject(
         continue;
       }
       if (!response.ok) {
+        if (mode === 'after-create') {
+          throw httpFailure(
+            { status: response.status, response, error: await response.json().catch(() => null), data: null },
+            { method: 'GET', origin: url.origin, path: url.pathname },
+          );
+        }
         // A non-JSON 503 from a proxy carries no problem type and stays an ordinary failure.
         const problem =
           response.status === 503 ? ((await response.json().catch(() => null)) as { type?: unknown } | null) : null;
@@ -309,10 +316,11 @@ async function readCurrentSubject(
 export function createPublicBulkClient(options: { origin: string; fetch?: typeof fetch }): PublicBulkClient {
   const origin = new URL(options.origin);
   const read = createBoundedPublicSubjectGet(options);
+  const readCreated = createBoundedPublicSubjectGet(options, true);
 
   return {
-    async readSubject(id, signal) {
-      return readCurrentSubject(read, origin, id, signal);
+    async readSubject(id, signal, mode) {
+      return readCurrentSubject(mode === 'after-create' ? readCreated : read, origin, id, signal, undefined, mode);
     },
     async readSelectedSynopsis(id, query, signal) {
       return readCurrentSubject(read, origin, id, signal, query);

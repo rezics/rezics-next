@@ -823,7 +823,8 @@ custody through its staged native owner reads. Source `settle` uses the independ
 terminal chain and its indexed closed-home windows, rather than clean serving population eligibility.
 Each funded settlement step replays that exact original window before and after the genuine Search
 settlement, checking native owner, retained pin, baseline receipt and current original Source/Account
-heads around the staged foreign work. A changed owner, security witness, tuple or incomplete seal remains
+heads around the staged foreign work. Each read checks that the home log still covers the captured through-position.
+Unrelated commands can append beyond that position during settlement. A changed owner, security witness, tuple or incomplete seal remains
 unavailable. No native connection remains held across the foreign phases.
 
 Decision: new retained steps batch up to `min(input_limit,128)` contiguous empty Semantic homes, Account-key homes,
