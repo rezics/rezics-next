@@ -223,7 +223,7 @@ export async function readLogicalEverythingMembers(
   const head = await meaningHead();
   async function observe(phase: ObservationPhase) {
     const started = Date.now();
-    const subjects = await readSubjectSummaryObservation(disclosure, ids);
+    const subjects = await readSubjectSummaryObservation(disclosure, ids, { exactSubjectCurrentness: true });
     const at = await withCollectionReadConnection(deps.pool, deadline, (client) => mintReadTime(client, clock));
     try {
       const rows = await mapPresentationBounded(ids, async (id) => {

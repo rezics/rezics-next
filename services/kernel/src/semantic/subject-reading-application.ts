@@ -1,10 +1,12 @@
+import { isDeepStrictEqual } from 'node:util';
+import { readSummaryWitness, summaryPositionRegion } from './summary-currentness.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef, ContentImportedFieldGroup } from './contract/domain-ports.ts';
 import type { SubjectComponent } from './contract/subject-values.ts';
-import type { SubjectSummaryObservation } from './contract/summaries.ts';
+import type { SubjectSummaryObservation, SummaryMismatch } from './contract/summaries.ts';
 export type { SubjectSummaryObservation } from './contract/summaries.ts';
 import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
 import type {
@@ -248,12 +250,20 @@ export type SubjectSummaryBatchAuthorizer = (
 ) => Promise<ReadonlyMap<string, boolean>>;
 type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
 export type SummaryCoverState = 'available' | 'absent' | 'concealed';
+export type SummaryObservationOptions = {
+  languages?: readonly string[];
+  displayFallback?: boolean;
+  /** Reproject all originals and compare exact native witnesses if their home positions advance. */
+  exactSubjectCurrentness?: boolean;
+};
 type ObserveSummaries = (
   sources: SummarySources,
   batches: Batches,
   disclosed: ReadonlySet<string>,
   covers: ReadonlyMap<string, SummaryCoverState>,
-) => void;
+  client: Pick<PoolClient, 'query'>,
+  onlyOriginals: boolean,
+) => Promise<void>;
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
@@ -340,32 +350,91 @@ async function readSubjectSummaryObservation(
   ports: SubjectReadingPorts,
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  { languages = [], displayFallback = false }: { languages?: readonly string[]; displayFallback?: boolean } = {},
+  { languages = [], displayFallback = false, exactSubjectCurrentness = false }: SummaryObservationOptions = {},
 ): Promise<SubjectSummaryObservation> {
-  let sources: SummarySources = [];
-  let batches: Batches = [];
-  let disclosed: ReadonlySet<string> = new Set();
-  let covers: ReadonlyMap<string, SummaryCoverState> = new Map();
-  const summaries = await readSummaryBatch(
-    ports,
-    deps,
-    ids,
-    languages,
-    (observed, selected, visible, states) => {
-      sources = observed;
-      batches = selected;
-      disclosed = visible;
-      covers = states;
-    },
-    boundedLabelLanguages(languages),
-    displayFallback,
-  );
+  const originals = [...ids];
+  const selectedLanguages = [...languages];
+  const labels = boundedLabelLanguages(selectedLanguages);
+  async function read(previous?: { sources: SummarySources; at: string | undefined }) {
+    let sources: SummarySources = [];
+    let batches: Batches = [];
+    let disclosed: ReadonlySet<string> = new Set();
+    let covers: ReadonlyMap<string, SummaryCoverState> = new Map();
+    const exact: {
+      witness: Awaited<ReturnType<typeof readSummaryWitness>>;
+      region: Awaited<ReturnType<typeof summaryPositionRegion>>;
+    } = { witness: { status: 'dependent-source' }, region: null };
+    const summaries = await readSummaryBatch(
+      ports,
+      deps,
+      originals,
+      selectedLanguages,
+      async (observed, selected, visible, states, client, onlyOriginals) => {
+        sources = observed;
+        batches = selected;
+        disclosed = visible;
+        covers = states;
+        if (!exactSubjectCurrentness) return;
+        if (previous) exact.region = await summaryPositionRegion(client, previous.sources, sources, originals);
+        if (onlyOriginals && batches[0]!.every((id) => disclosed.has(id))) {
+          exact.witness = await readSummaryWitness(client, deps, batches[0]!, previous?.at);
+        }
+      },
+      labels,
+      displayFallback,
+    );
+    return { sources, batches, disclosed, covers, summaries, ...exact };
+  }
+  const initial = await read();
+  const { sources, batches, disclosed, covers, summaries } = initial;
   return {
     summaries,
     covers,
     components: sources,
     async current(onMismatch) {
       requireAccessDeadline(deps.deadline);
+      if (exactSubjectCurrentness) {
+        const first = initial.witness;
+        const fresh = await read({ sources, at: first.status === 'complete' ? first.at : undefined });
+        const compare = (): SummaryMismatch | undefined => {
+          const homes = new Map(fresh.sources.map((home) => [home.partition, home]));
+          if (homes.size !== sources.length) return 'source-missing';
+          let advanced = false;
+          for (const source of sources) {
+            const home = homes.get(source.partition);
+            if (!home) return 'source-missing';
+            if (home.epoch !== source.epoch) return 'source-epoch';
+            if (home.position < source.position) return 'source-position';
+            if (home.position > source.position) advanced = true;
+          }
+          if (!isDeepStrictEqual(disclosed, fresh.disclosed) || !isDeepStrictEqual(batches, fresh.batches))
+            return 'subject-access';
+          if (!isDeepStrictEqual(summaries, fresh.summaries) || !isDeepStrictEqual(covers, fresh.covers))
+            return 'subject-projection';
+          const last = fresh.witness;
+          if (first.status !== 'complete' || last.status !== 'complete') {
+            if (first.status !== last.status || last.status === 'disclosure-changed') return 'subject-witness';
+            return advanced ? 'source-position' : undefined;
+          }
+          if (first.subjects !== last.subjects) return 'subject-witness';
+          if (first.head !== last.head || first.digest !== last.digest) return 'release-head';
+          return undefined;
+        };
+        const mismatch = compare();
+        if (fresh.region)
+          console.info(
+            JSON.stringify({
+              event: 'semantic.summary-position-revalidation',
+              ...fresh.region,
+              initialWitness: first.status,
+              currentWitness: fresh.witness.status,
+              result: mismatch ?? 'current',
+            }),
+          );
+        requireAccessDeadline(deps.deadline);
+        if (mismatch) onMismatch?.(mismatch);
+        return mismatch === undefined;
+      }
       // Reprepare native disclosure outside the source snapshot. The same
       // initial and representative batches preserve related-read eligibility.
       const checks: AccessCheck[] = [];
@@ -705,7 +774,7 @@ async function projectSummaries(
   for (const id of ids) if (covers.has(id) && coverStates.get(id) !== 'available') coverStates.set(id, 'concealed');
   if (observe) {
     const sourceHomes = [...new Set([...partitions, ...homes.keys()])];
-    observe(
+    await observe(
       (await readPartitions(deps.client, sourceHomes)).map((home) => ({
         partition: home.partitionNo,
         epoch: home.epoch,
@@ -714,6 +783,8 @@ async function projectSummaries(
       [[...results.keys()], [...new Set(representatives.values())].filter((id) => !subjects.has(id))],
       new Set([...subjects.keys(), ...editions.keys()]),
       coverStates,
+      deps.client,
+      representatives.size === 0 && covers.size === 0,
     );
   }
   return results;
@@ -1399,7 +1470,7 @@ export type SubjectReadingApplication = Readonly<{
   readSubjectSummaryObservation: (
     deps: SummaryReaderDependencies,
     ids: readonly string[],
-    options?: { languages?: readonly string[]; displayFallback?: boolean },
+    options?: SummaryObservationOptions,
   ) => Promise<SubjectSummaryObservation>;
   readSubjectCorrectionActions(input: SubjectCorrectionActionsInput): Promise<SubjectCorrectionActions>;
   readRelated(db: Pool | PoolClient, ids: readonly string[]): ReturnType<typeof readRelatedNative>;
