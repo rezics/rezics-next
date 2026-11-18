@@ -29,20 +29,20 @@ WITH published AS MATERIALIZED (
 SELECT p.generation, r.terminal, r.original, r.driver, r.fact_id,
   CASE r.driver
     WHEN 1 THEN EXISTS (SELECT 1 FROM library.entry e WHERE
-      (e.route,e.account_id,e.subject_id) = ($1,$2,r.original) AND e.subject_id=r.fact_id AND e.state IS NOT NULL)
+      (e.route,e.account_id,e.subject_id) = (p.route,p.account_id,r.original) AND e.subject_id=r.fact_id AND e.state IS NOT NULL)
       OR EXISTS (SELECT 1 FROM library.entry_personal_fact e WHERE
-        (e.route,e.account_id,e.subject_id) = ($1,$2,r.original) AND e.fact_id=r.fact_id AND
+        (e.route,e.account_id,e.subject_id) = (p.route,p.account_id,r.original) AND e.fact_id=r.fact_id AND
         (e.note IS NOT NULL OR e.priority IS NOT NULL OR EXISTS (
           SELECT 1 FROM library.entry_source_observation o WHERE
           (o.route,o.account_id,o.subject_id) = (e.route,e.account_id,e.subject_id))))
     WHEN 2 THEN EXISTS (SELECT 1 FROM library.label_assignment a
       JOIN library.personal_label l USING (route,account_id,label_id)
-      WHERE (a.route,a.account_id,a.subject_id,a.assignment_id) = ($1,$2,r.original,r.fact_id)
+      WHERE (a.route,a.account_id,a.subject_id,a.assignment_id) = (p.route,p.account_id,r.original,r.fact_id)
         AND a.slot_no IS NOT NULL AND a.deleted_at IS NULL AND l.deleted_at IS NULL)
     WHEN 3 THEN EXISTS (SELECT 1 FROM library.progress_session s WHERE
-      (s.route,s.account_id,s.subject_id,s.session_id) = ($1,$2,r.original,r.fact_id) AND s.state <> 'retired')
+      (s.route,s.account_id,s.subject_id,s.session_id) = (p.route,p.account_id,r.original,r.fact_id) AND s.state <> 'retired')
     WHEN 4 THEN EXISTS (SELECT 1 FROM library.copy c WHERE
-      (c.route,c.account_id,c.subject_id,c.copy_id) = ($1,$2,r.original,r.fact_id) AND c.deletion_id IS NULL)
+      (c.route,c.account_id,c.subject_id,c.copy_id) = (p.route,p.account_id,r.original,r.fact_id) AND c.deletion_id IS NULL)
   END AS present
 FROM published p LEFT JOIN suffix r ON true
 ORDER BY r.terminal, r.original, r.driver, r.fact_id;

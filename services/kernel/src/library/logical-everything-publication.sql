@@ -2,7 +2,7 @@
 SELECT s.generation::text AS version,s.incarnation,g.generation,g.basis,c.identity,
        c.capture_id AS capture,c.committed_revision::text AS revision
 FROM library.logical_everything_source s
-JOIN core.partition p ON p.partition_no=($1::integer >> 4) AND p.write_state='active'
+JOIN core.partition p ON p.partition_no=(s.route >> 4) AND p.write_state='active'
   AND p.moved_to IS NULL AND p.epoch=$5
 JOIN library.canonical_source_head h ON (h.route,h.collection_id)=(s.route,s.collection_id)
 JOIN library.canonical_source_generation g

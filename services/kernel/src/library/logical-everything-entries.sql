@@ -1,8 +1,10 @@
 -- unbound: a complete small explicit-entry population on the current owner home, including its EOF probe.
-WITH owner AS MATERIALIZED (
+WITH input AS (SELECT $3::uuid AS collection_id),
+owner AS MATERIALIZED (
   SELECT h.route,h.account_id,h.generation::text AS version,p.epoch,p.position::text,counts.n::integer AS n,
          a.kind,a.state,a.authn_fenced AS fenced,a.minimum_authn_epoch::text AS floor
   FROM library.fact_source_head h
+  CROSS JOIN input i
   JOIN access.account a USING (route,account_id)
   JOIN core.partition p ON p.partition_no=$4 AND p.write_state='active' AND p.moved_to IS NULL
   JOIN library.owner_index_control idx USING (route,account_id)
@@ -13,17 +15,17 @@ WITH owner AS MATERIALIZED (
     AND shelf.initialized AND shelf.ready AND shelf.mode='open'
     AND counts.bucket='all' AND counts.type_id='00000000-0000-0000-0000-000000000000'
     AND counts.n BETWEEN 1 AND $5
-    AND NOT EXISTS (SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$3)
-    AND NOT EXISTS (SELECT 1 FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$3)
-    AND NOT EXISTS (SELECT 1 FROM library.owner_index_pin WHERE route=$1 AND account_id=$2 AND NOT meaning_ready)
-    AND NOT EXISTS (SELECT 1 FROM library.owner_index_label_repair WHERE route=$1 AND account_id=$2)
-    AND NOT EXISTS (SELECT 1 FROM library.entry_clear WHERE route=$1 AND account_id=$2)
-    AND NOT EXISTS (SELECT 1 FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2
+    AND NOT EXISTS (SELECT 1 FROM library.collection WHERE route=h.route AND collection_id=i.collection_id)
+    AND NOT EXISTS (SELECT 1 FROM library.builtin_collection_reference WHERE route=h.route AND collection_id=i.collection_id)
+    AND NOT EXISTS (SELECT 1 FROM library.owner_index_pin WHERE route=h.route AND account_id=h.account_id AND NOT meaning_ready)
+    AND NOT EXISTS (SELECT 1 FROM library.owner_index_label_repair WHERE route=h.route AND account_id=h.account_id)
+    AND NOT EXISTS (SELECT 1 FROM library.entry_clear WHERE route=h.route AND account_id=h.account_id)
+    AND NOT EXISTS (SELECT 1 FROM library.entry_personal_fact WHERE route=h.route AND account_id=h.account_id
        AND (note IS NOT NULL OR priority IS NOT NULL))
-    AND NOT EXISTS (SELECT 1 FROM library.entry_source_observation WHERE route=$1 AND account_id=$2)
-    AND NOT EXISTS (SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state<>'retired')
-    AND NOT EXISTS (SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND deletion_id IS NULL)
-    AND NOT EXISTS (SELECT 1 FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND deleted_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM library.entry_source_observation WHERE route=h.route AND account_id=h.account_id)
+    AND NOT EXISTS (SELECT 1 FROM library.progress_session WHERE route=h.route AND account_id=h.account_id AND state<>'retired')
+    AND NOT EXISTS (SELECT 1 FROM library.copy WHERE route=h.route AND account_id=h.account_id AND deletion_id IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM library.label_assignment WHERE route=h.route AND account_id=h.account_id AND deleted_at IS NULL)
 )
 SELECT o.version,o.epoch,o.position,o.n,o.kind,o.state,o.fenced,o.floor,e.id,e.explicit
 FROM owner o LEFT JOIN LATERAL (
