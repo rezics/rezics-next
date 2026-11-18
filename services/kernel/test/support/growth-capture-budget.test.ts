@@ -188,6 +188,18 @@ test('folded summaries replace temporary notice bytes and recycle notice envelop
   );
 });
 
+test('settled native transactions return their live telemetry capacity while history stays charged', () => {
+  const budget = new GrowthCaptureBudget(1, { entries: 3, bytes: 1_024 });
+  budget.retainFoldedSummary('background', 'transaction history', 1, 64);
+  for (let transaction = 0; transaction < 200; transaction++) {
+    const reservation = budget.retainLiveTransaction('background', 64);
+    expect(budget.entriesUsed).toBe(2);
+    reservation.release();
+  }
+  expect(budget.entriesUsed).toBe(1);
+  expect(budget.chargedBytes).toBe(64);
+});
+
 test('ordinary capture work leaves an explicitly charged entry and byte envelope for failure context', () => {
   const budget = new GrowthCaptureBudget(75, { entries: 2, bytes: 1_000 });
   budget.retainStatementText('foreground', 500);
