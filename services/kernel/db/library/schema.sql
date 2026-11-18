@@ -4444,7 +4444,7 @@ CREATE TABLE library.copy_loan (
     CONSTRAINT copy_loan_direction CHECK ((direction = ANY (ARRAY['lent'::text, 'borrowed'::text]))),
     CONSTRAINT copy_loan_due_after_start CHECK (((due_on IS NULL) OR (due_on >= started_on))),
     CONSTRAINT copy_loan_party_kind CHECK ((counterparty_kind = ANY (ARRAY['name'::text, 'person'::text]))),
-    CONSTRAINT copy_loan_party_person_route CHECK (((counterparty_person_id IS NULL) OR (route = ((get_byte(uuid_send(counterparty_person_id), 10) * 256) + get_byte(uuid_send(counterparty_person_id), 11))))),
+    CONSTRAINT copy_loan_party_person_partition CHECK (((counterparty_person_id IS NULL) OR ((route >> 4) = (((get_byte(uuid_send(counterparty_person_id), 10) * 256) + get_byte(uuid_send(counterparty_person_id), 11)) >> 4)))),
     CONSTRAINT copy_loan_party_shape CHECK ((((counterparty_kind = 'name'::text) AND (counterparty_name IS NOT NULL) AND (counterparty_person_id IS NULL) AND ((char_length(counterparty_name) >= 1) AND (char_length(counterparty_name) <= 300))) OR ((counterparty_kind = 'person'::text) AND (counterparty_name IS NULL) AND (counterparty_person_id IS NOT NULL)))),
     CONSTRAINT copy_loan_revision_positive CHECK (((revision >= 1) AND (revision <= 2147483647))),
     CONSTRAINT copy_loan_route_account CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
