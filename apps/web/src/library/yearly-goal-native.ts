@@ -47,8 +47,9 @@ export async function writeYearlyGoal(
   const { idempotencyKey, ...body } = command;
   let result;
   try {
+    const headers = { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) };
     result = await client.libraryYearlyCompletionGoal.put(body, {
-      headers: { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) },
+      headers,
       fetch: { cache: 'no-store', redirect: 'manual', signal },
     });
   } catch (error) {

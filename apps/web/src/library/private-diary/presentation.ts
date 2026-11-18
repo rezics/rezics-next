@@ -2,7 +2,7 @@ import type { ConsumptionSummary, ReportedYearSummary } from './native';
 
 import { formatJournalDate, type ProgressSessionJournalDate } from '@rezics/progress';
 import { m } from '../../paraglide/messages.js';
-import { getLocale } from '../../paraglide/runtime.js';
+import { getLocale, type Locale } from '../../paraglide/runtime.js';
 
 export function reportedDate(value: ProgressSessionJournalDate | null, unknownLabel = 'unknown'): string {
   return value === null ? unknownLabel : formatJournalDate(value);
@@ -26,7 +26,7 @@ type ReportCounts = Pick<
   Partial<Pick<ReportedYearSummary['monthUnallocated'], 'finishPrecision'>>;
 
 /** Shared localized meaning and exact display values for native diary summaries. */
-export function reportPresentation(summary: ReportSummary, counts: ReportCounts, locale: string) {
+export function reportPresentation(summary: ReportSummary, counts: ReportCounts, locale: Locale) {
   const ownerCoverage =
     'initializedSessions' in summary.coverage
       ? m.library_diary_year_coverage(
