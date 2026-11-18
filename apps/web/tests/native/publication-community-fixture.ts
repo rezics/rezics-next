@@ -8,12 +8,12 @@ type Kernel = (path: string, init?: RequestInit, persona?: string) => Promise<Re
 type Locales = readonly string[];
 type SitemapKind = keyof PublicationFixture['sitemap'];
 type Inventory = PublicationFixture['sitemap'][SitemapKind];
+type VerifiedPublication = { subjectUrl: string; profileUrl: string };
 
 export type CommunityPublicationInventory = {
   sitemap: Pick<PublicationFixture['sitemap'], 'collection' | 'realm' | 'space' | 'board' | 'thread'>;
   nativeIds: Record<'collection' | 'realm' | 'space' | 'board' | 'thread', string[]>;
-  verifiedSubjectUrl: string;
-  verifiedProfileUrl: string;
+  verified?: VerifiedPublication;
 };
 
 function jsonHeaders(extra?: HeadersInit): Headers {
@@ -219,7 +219,7 @@ export async function provisionVerifiedPublication(
   origin: string,
   handleHint: string,
   subjectPath: (id: string, label: string, locale?: string) => string,
-): Promise<{ subjectUrl: string; profileUrl: string }> {
+): Promise<VerifiedPublication> {
   await openPublicationVerification(kernel);
   const persona = handleHint;
   const { accountId } = await actor(persona);
@@ -285,12 +285,10 @@ export async function provisionVerifiedPublication(
 
 export async function provisionCommunityPublication(input: {
   kernel: Kernel;
-  actor: (persona: string) => Promise<{ accountId: string }>;
   publicOrigin: string;
   locales: Locales;
   eligiblePerKind: number;
-  verifiedHandle: string;
-  subjectPath: (id: string, label: string, locale?: string) => string;
+  provisionVerified?: () => Promise<VerifiedPublication>;
 }): Promise<CommunityPublicationInventory> {
   const { kernel, publicOrigin, locales, eligiblePerKind } = input;
 
@@ -412,13 +410,7 @@ export async function provisionCommunityPublication(input: {
   await takeDown(kernel, 'board', takenBoardId);
   await takeDown(kernel, 'thread', takenThread.id);
 
-  const verified = await provisionVerifiedPublication(
-    kernel,
-    input.actor,
-    publicOrigin,
-    input.verifiedHandle,
-    input.subjectPath,
-  );
+  const verified = await input.provisionVerified?.();
 
   return {
     sitemap: {
@@ -435,7 +427,6 @@ export async function provisionCommunityPublication(input: {
       board: boardIds,
       thread: threadIds,
     },
-    verifiedSubjectUrl: verified.subjectUrl,
-    verifiedProfileUrl: verified.profileUrl,
+    ...(verified ? { verified } : {}),
   };
 }
