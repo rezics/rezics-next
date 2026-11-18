@@ -60,6 +60,36 @@ test('429 waits for Retry-After and retries the exact idempotent request', async
   });
 });
 
+test('a reviewed Subject read backs off for projection work without changing its native session or attempt cap', async () => {
+  const waits: number[] = [];
+  let wallTime = 10_000;
+  let requests = 0;
+  const reader = createImportFetch({
+    origin,
+    token: async () => 'ordinary-actor-token',
+    now: () => wallTime,
+    sleep: async (ms) => {
+      waits.push(ms);
+      wallTime += ms;
+    },
+    fetch: (async (request: Request) => {
+      requests++;
+      expect(request.headers.get('rezics-session-token')).toBe('opaque-session');
+      if (wallTime >= 25_000) return Response.json({ subject: { revision: 1 } });
+      return Response.json(
+        { type: 'https://rezics.com/problems/semantic_not_ready', code: 'semantic_not_ready', retryable: true },
+        { status: 503, headers: { 'retry-after': '1' } },
+      );
+    }) as typeof fetch,
+  });
+  const response = await reader(
+    new Request(origin + '/v1/subjects/0199feed-0aa0-7b1c-8a4c-e911de7f6000', {
+      headers: { 'rezics-session-token': 'opaque-session' },
+    }),
+  );
+  expect([response.status, requests, waits]).toEqual([200, 5, [1000, 2000, 4000, 8000]]);
+});
+
 test('401 renews once while other denials are not retried and unsafe origins receive no credentials', async () => {
   const refreshCalls: boolean[] = [];
   const requests: { wire: unknown[]; authorization: string | null }[] = [];

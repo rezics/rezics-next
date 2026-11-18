@@ -746,12 +746,17 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
           }
         }
         // A full Subject read can return before the native links checkpoint catches up.
-        // Use the remaining shared attempt allowance without starting a new request series.
+        // Leave the relay time to drain late work within the existing attempt and wait limits.
         const attemptLimit =
           projectionPreparing && options.maxAttempts === undefined ? MAX_IMPORT_ATTEMPTS : maxAttempts;
         const notBefore = overload ? hint : undefined;
+        const backoffMs = backoff(attempt);
         const delay =
-          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+          notBefore === null
+            ? null
+            : notBefore === undefined
+              ? backoffMs
+              : Math.max(projectionPreparing ? backoffMs : 0, notBefore - now());
         const stopped = (): ImportRetryState['stopped'] =>
           delay === null
             ? 'unrepresentable-delay'
