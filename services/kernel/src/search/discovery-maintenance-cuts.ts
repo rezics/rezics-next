@@ -87,7 +87,10 @@ export async function advanceMaintenanceCuts(
                  AND delivery.source_position=CASE WHEN pg_input_is_valid(o.data->>'position','bigint')
                        THEN (o.data->>'position')::bigint END
                  AND delivery.source_position<=h.first
-                 AND o.data=jsonb_build_object('position',delivery.source_position::text)
+                 AND o.data IN (
+                   jsonb_build_object('position',delivery.source_position::text),
+                   jsonb_build_object('position',lpad(delivery.source_position::text,19,'0'))
+                 )
              ))
              OR (h.partition=0 AND o.type=$8 AND o.data='{}'::jsonb AND EXISTS (
                SELECT 1 FROM LATERAL (

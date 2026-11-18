@@ -5,6 +5,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { newId } from '../../src/route/route.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
@@ -29,8 +30,10 @@ import { discoveryIndexName } from '../../src/search/indices.ts';
 import { DiscoveryReviewFrontierError } from '../../src/search/operation-outcomes.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createDiscoveryRepairWriter, verifyDiscoveryRepairWriterReceipts } from '../../src/search/writer-guard.ts';
+import { createSemanticLocatorEffect, SEMANTIC_LOCATOR_ADVANCED } from '../../src/semantic/account-erasure.ts';
 import { resumeCanonicalGenerationDelivery } from '../../src/semantic/canonical-generation-delivery.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { CANONICAL_GENERATION_COMMITTED } from '../../src/semantic/events.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 test('64 certified mixed Discovery homes distinguish changed native cuts before activation', async () => {
@@ -276,6 +279,43 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     )!;
     expect(BigInt(noticeCut.position)).toBeGreaterThan(0n);
     expect((await check([noticeCut])).checks).toEqual([{ state: 'current' }]);
+
+    // An original queued locator consumes a Core envelope and preserves its
+    // zero-padded sequence in the terminal event.
+    const events: CloudEvent[] = [];
+    await readBatch(pool, {
+      consumer: 'test_discovery_locator_notice',
+      partition: noticeHome,
+      async apply(envelopes) {
+        events.push(...envelopes.flatMap((envelope) => envelope.events));
+      },
+    });
+    const original = events.find(({ type }) => type === CANONICAL_GENERATION_COMMITTED)!;
+    expect(original.sequence).toMatch(/^0\d{18}$/);
+    expect(BigInt(original.sequence)).toBeLessThanOrEqual(BigInt(noticeCut.position));
+    await createSemanticLocatorEffect(pool).run(original);
+    const completed = await pool.query<{ position: string; data: unknown }>(
+      'SELECT position::text,data FROM core.outbox WHERE partition_no=$1 AND type=$2',
+      [noticeHome, SEMANTIC_LOCATOR_ADVANCED],
+    );
+    expect(completed.rows).toEqual([
+      { position: String(BigInt(noticeCut.position) + 1n), data: { position: original.sequence } },
+    ]);
+    const locatorReads = indexedReads;
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(noticeCut.position);
+    expect(await replay.run(noticeHome)).toMatchObject({
+      status: 'read',
+      position: BigInt(completed.rows[0]!.position),
+    });
+    await advanceDiscovery(options);
+    expect(indexedReads).toBe(locatorReads);
+    expect(
+      (await readDiscoveryCuts(pool, prefix, generation)).find(({ partition }) => partition === noticeHome)?.position,
+    ).toBe(completed.rows[0]!.position);
 
     // Advance a certified empty home with a private Search event. Hold the real replay until after repair.
     const empty = await pool.query<{ partition_no: number }>(

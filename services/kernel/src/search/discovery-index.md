@@ -97,7 +97,8 @@ The finalizer can advance five existing certificates together after all native r
 and the Account epoch, Account revision and claim revision still match. One batch checks at most 64 positions
 in total, starting after the oldest certificate at each home. Each position must contain exactly one intact event
 in the original epoch. A Semantic locator completion needs its completed delivery and original source position at or
-before the oldest certificate. A Search writer notification needs a position recorded by the ordinary Subject
+before the oldest certificate. The receipt accepts the Core envelope's 19-digit sequence and the plain decimal
+position used by explicit locator scheduling. A Search writer notification needs a position recorded by the ordinary Subject
 publication gate on a different physical target. The gate records its consecutive fence, cursor and release
 positions in the same commands that move it. Copy drains, index writes and erasure jobs supply no such proof.
 Semantic canonical-generation announcements, handoffs and delivered notices also qualify when the event has
