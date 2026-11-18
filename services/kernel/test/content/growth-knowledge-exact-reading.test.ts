@@ -8,16 +8,22 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
   assertGrowthAccessPaths,
+  capture,
   checkGrowth,
-  measure,
+  costOf,
+  costOfPlan,
+  isControlStatement,
+  medianCounted,
   medianCost,
   openGrowthDatabase,
   settle,
+  type Capture,
   type Cost,
   type GrowthCheck,
   type GrowthDatabase,
   type RelationSize,
 } from '../support/growth.ts';
+import { explainPlanEntries } from '../support/growth-plan-walk.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -27,6 +33,7 @@ type Saved = { documentId: string; revisionId: string };
 const accessPaths = [
   'content.knowledge_document',
   'content.knowledge_notebook',
+  'content.knowledge_structure_revision',
   'content.knowledge_revision',
   'content.knowledge_publication_selection',
 ] as const;
@@ -73,7 +80,39 @@ function input(title: string, reference?: KnowledgeReference) {
   };
 }
 
-async function measureOwnerScales(db: GrowthDatabase, check: GrowthCheck, scales: readonly number[]) {
+// Every foreground query in this read has one top-level executor. Its output goes to
+// the caller and its buffers already include the SQL functions it invoked. Keep all
+// nested plans in costOf(raw) for examined rows and relation access-path evidence.
+function requestPlanWork(raw: Capture) {
+  let returnedRows = 0;
+  let inclusiveBlocks = 0;
+  const seen = new Set<number>();
+  for (const [index, document] of raw.plans.entries()) {
+    const owner = raw.planStatements?.[index];
+    if (owner === undefined || raw.statements[owner] === undefined) throw new Error('Unattributed request plan');
+    for (const { queryText, plan, location } of explainPlanEntries(document, `plans[${index}]`)) {
+      if (queryText !== raw.statements[owner]) continue;
+      if (seen.has(owner)) throw new Error(`Duplicate top-level plan for request statement ${owner}`);
+      seen.add(owner);
+      const rows = plan['Actual Rows'];
+      expect(plan['Actual Loops'], location).toBe(1);
+      if (typeof rows !== 'number' || !Number.isSafeInteger(rows) || rows < 0)
+        throw new Error(`Missing returned-row count at ${location}`);
+      returnedRows += rows;
+      inclusiveBlocks += costOfPlan(plan, location).blocks;
+    }
+  }
+  for (const [index, statement] of raw.statements.entries())
+    if (!isControlStatement(statement) && !seen.has(index))
+      throw new Error(`Missing top-level plan for request statement ${index}: ${statement}`);
+  return { returnedRows, inclusiveBlocks };
+}
+
+type ExactReadingCheck = Omit<GrowthCheck, 'operation'> & {
+  operation(db: GrowthDatabase, scale: number, repetition: number): Promise<number>;
+};
+
+async function measureOwnerScales(db: GrowthDatabase, check: ExactReadingCheck, scales: readonly number[]) {
   let previous = 0;
   let repetition = 0;
   const samples = [];
@@ -82,9 +121,12 @@ async function measureOwnerScales(db: GrowthDatabase, check: GrowthCheck, scales
     await settle(db, { analyze: true, relations: check.seededRelations! });
     await check.operation(db, scale, repetition++);
     const repetitions: Cost[] = [];
+    const requests = [];
     for (let run = 0; run < 5; run++) {
-      const { cost } = await measure(db, () => check.operation(db, scale, repetition++));
+      const { value: httpBodyBytes, capture: raw } = await capture(db, () => check.operation(db, scale, repetition++));
+      const cost = costOf(raw);
       repetitions.push(cost);
+      requests.push({ ...requestPlanWork(raw), httpBodyBytes, statements: cost.statements });
     }
     const footprint = await db.admin.query<RelationSize & { relation: string }>(
       `SELECT 'content.' || relname AS relation, relpages, reltuples
@@ -92,7 +134,7 @@ async function measureOwnerScales(db: GrowthDatabase, check: GrowthCheck, scales
       [accessPaths],
     );
     const relationSizes = Object.fromEntries(footprint.rows.map(({ relation, ...size }) => [relation, size]));
-    samples.push({ scale, cost: medianCost(repetitions), repetitions, relationSizes });
+    samples.push({ scale, cost: medianCost(repetitions), repetitions, relationSizes, requests });
     previous = scale;
   }
   return samples;
@@ -100,6 +142,10 @@ async function measureOwnerScales(db: GrowthDatabase, check: GrowthCheck, scales
 
 for (const axis of ['private attachments', 'theorem revision history'] as const) {
   const ownerScales = axis === 'private attachments' ? [1, 1_000, 100_000] : [1_000, 10_000, 100_000];
+  const seededRelations =
+    axis === 'private attachments'
+      ? ['content.knowledge_notebook', 'content.knowledge_structure_revision']
+      : ['content.knowledge_revision'];
   test(`native exact solution reads stay bounded as ${axis} grow`, () => exactReading());
   test(`native exact solution reads stay bounded at the 100,000-row scale for ${axis}`, () => exactReading(ownerScales));
 
@@ -198,7 +244,7 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
           const name = `Knowledge exact source and concealed revision / ${axis}${scales ? ' / owner scales' : ''}`;
           const readyPath = exactPath(solution);
           const hiddenPath = exactPath(hidden);
-          let baseline: string | undefined;
+          let baseline: Buffer | undefined;
           let concealedBytes: number | undefined;
           const timings: { scale: number; elapsedMs: number; responseBytes: number }[] = [];
           let sampledPeakRssBytes = 0;
@@ -251,16 +297,13 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               expect(inserted.rowCount).toBe(count);
             }
           }
-          const check: GrowthCheck = {
+          const check: ExactReadingCheck = {
             name,
             scales: [64, 512, 4096],
             rule: 'series',
             bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
             byteBounds: { responseBytes: 'constant' },
-            seededRelations:
-              axis === 'private attachments'
-                ? ['content.knowledge_notebook', 'content.knowledge_structure_revision']
-                : ['content.knowledge_revision'],
+            seededRelations,
             async grow(database, scale, previous) {
               // Each private attachment writes two rows. Keep each seed transaction within 500 rows.
               for (let offset = previous; offset < scale; offset += 250)
@@ -270,20 +313,22 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               const start = observer.records.length;
               const began = performance.now();
               const ready = await kernel.handle(new Request(`https://content.test${readyPath}`));
-              const body = await ready.text();
+              const readyBytes = Buffer.from(await ready.arrayBuffer());
+              const body = readyBytes.toString('utf8');
               const missing = await kernel.handle(new Request(`https://content.test${hiddenPath}`));
-              const concealed = await missing.text();
-              const hiddenResponseBytes = Buffer.byteLength(concealed);
+              const missingBytes = Buffer.from(await missing.arrayBuffer());
+              const concealed = missingBytes.toString('utf8');
+              const httpBodyBytes = readyBytes.length + missingBytes.length;
               timings.push({
                 scale,
                 elapsedMs: performance.now() - began,
-                responseBytes: Buffer.byteLength(body) + hiddenResponseBytes,
+                responseBytes: httpBodyBytes,
               });
               sampledPeakRssBytes = Math.max(sampledPeakRssBytes, process.memoryUsage().rss);
 
               expect(ready.status, body).toBe(200);
-              baseline ??= body;
-              expect(body).toBe(baseline);
+              baseline ??= readyBytes;
+              expect(readyBytes).toEqual(baseline);
               const { document } = JSON.parse(body);
               expect(document.revisionId).toBe(solution.revisionId);
               expect(document.references).toEqual([solutionReference]);
@@ -292,8 +337,8 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               ).toContain('Combine the bounds on prefix and tail.');
               expect(missing.status, concealed).toBe(404);
               expect(concealed).not.toContain('A private intermediate draft');
-              concealedBytes ??= hiddenResponseBytes;
-              expect(hiddenResponseBytes).toBe(concealedBytes);
+              concealedBytes ??= missingBytes.length;
+              expect(missingBytes.length).toBe(concealedBytes);
 
               // Source selection/recheck, two target authority probes, and one concealed point read.
               // Only the source loads bytes. Resolving the theorem never follows its definition.
@@ -308,32 +353,48 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
                 .filter((r) => r.statement === publicReadQuery.text)
                 .map((r) => r.parameters.map(String));
               expect(sourceBodies).toEqual([bodyBindings]);
+              return httpBodyBytes;
             },
           };
-          const samples = scales ? await measureOwnerScales(db, check, scales) : (await checkGrowth(db, check)).samples;
+          const ownerSamples = scales ? await measureOwnerScales(db, check, scales) : undefined;
+          const samples = ownerSamples ?? (await checkGrowth(db, check)).samples;
           console.info(
             JSON.stringify({
               name,
               timings,
               sampledPeakRssBytes,
+              ownerRequests: ownerSamples?.map(({ scale, requests }) => ({ scale, requests })),
               samples: samples.map(({ scale, cost, relationSizes }) => ({ scale, cost, relationSizes })),
             }),
           );
           assertGrowthAccessPaths(name, samples, accessPaths);
-          if (scales) {
-            const first = samples[0]!;
-            expect(first.cost.rows).toBeGreaterThan(0);
-            expect(first.cost.statements).toBeGreaterThan(0);
-            expect(first.cost.responseBytes ?? 0).toBeGreaterThan(0);
-            for (const { scale, cost } of samples) {
+          if (ownerSamples) {
+            const first = ownerSamples[0]!;
+            const firstRequest = first.requests[0]!;
+            expect(firstRequest.returnedRows).toBeGreaterThan(0);
+            expect(firstRequest.statements).toBeGreaterThan(0);
+            expect(firstRequest.httpBodyBytes).toBeGreaterThan(0);
+            const firstBlocks = medianCounted(first.requests).inclusiveBlocks!;
+            expect(firstBlocks).toBeGreaterThan(0);
+            for (const { scale, requests, repetitions } of ownerSamples) {
               const context = `${name} at ${scale} added rows`;
-              expect(cost.rows, context).toBeLessThanOrEqual(first.cost.rows);
-              expect(cost.statements, context).toBe(first.cost.statements);
-              expect(cost.responseBytes, context).toBe(first.cost.responseBytes!);
+              for (const request of requests) {
+                expect(request.returnedRows, context).toBe(firstRequest.returnedRows);
+                expect(request.statements, context).toBe(firstRequest.statements);
+                expect(request.httpBodyBytes, context).toBe(firstRequest.httpBodyBytes);
+              }
+              // Even a query returning one row can enumerate private inputs. Include
+              // every scan in the nested plans when bounding rows on the growing tables.
+              for (const cost of repetitions)
+                for (const relation of seededRelations) {
+                  expect(cost.relations[relation]?.rows ?? 0, `${context}: ${relation}`).toBeLessThanOrEqual(
+                    first.repetitions[0]!.relations[relation]?.rows ?? 0,
+                  );
+                }
               // Budget one extra B-tree page per tenfold increase for each of the
               // five authority probes and the source body read.
               const extraBlocks = 6 * Math.ceil(Math.log10(scale / first.scale));
-              expect(cost.blocks, context).toBeLessThanOrEqual(first.cost.blocks + extraBlocks);
+              expect(medianCounted(requests).inclusiveBlocks!, context).toBeLessThanOrEqual(firstBlocks + extraBlocks);
             }
           }
         } finally {
