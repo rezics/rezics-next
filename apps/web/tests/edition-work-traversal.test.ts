@@ -27,7 +27,10 @@ import {
 
 // Direct Bun runs have no Workers runtime; transport assertions below use the actual injected client.
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage, pageContext, pageRelationProperties } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent, pageContext, pageRelationProperties } =
+  await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { subjectPageMessages } = await import('../src/features/pages/route-support');
 const { subjectTabs } = await import('../src/features/pages/views');
 const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');

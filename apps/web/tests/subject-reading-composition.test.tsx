@@ -42,8 +42,8 @@ function subjectPageFetch<T extends object>(recording: T): typeof fetch {
 }
 
 const [
-  { loadSubjectPage, SubjectPage, subjectBody, pageContext },
-  { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage },
+  { loadSubjectPage, SubjectPage: SubjectPageContent, subjectBody, pageContext },
+  { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage: SubjectViewPageContent },
   { SubjectHeaderActions },
   { SubjectLibrarySlot },
   { ScreenProfileReader },
@@ -54,6 +54,9 @@ const [
   import('../src/library/subject-slot-view'),
   import('../src/features/catalogue/screen-profile-reader'),
 ]);
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
+const SubjectViewPage = withPageVisitHost(SubjectViewPageContent);
 
 test('screen overview uses its released reader label and description instead of a schema identifier or editorial prompt', async () => {
   const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');

@@ -6,9 +6,12 @@ import { agentAccount } from '../src/kernel/agent-fixtures.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { agentPath, loadAgentPage } from '../src/features/pages/agent.tsx';
-import { SubjectPage } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent } from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import type { View } from '@rezics/composition';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${n.toString(16).padStart(12, '0')}`;
 const messages = { unknown: '', none: '', unlabelled: 'Unlabelled', sources: 'Sources', aliases: '', search: '' };

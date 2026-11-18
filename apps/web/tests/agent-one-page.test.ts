@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import agentRecording from '../src/kernel/recorded/agent-page.json';
 import { agentPageHead, agentPagePaths } from '../src/features/pages/agent-page';
 import { readPageAuthors } from '../src/identity/read';
-import { SubjectPage } from '../src/features/pages/subject';
-import { loadSubjectPage } from '../src/features/pages/subject';
+import { loadSubjectPage, SubjectPage as SubjectPageContent } from '../src/features/pages/subject';
 import { accountOf } from '../src/features/pages/account-read';
 import { accountSchemaType } from '../src/features/pages/account';
 import { subjectAccountRedirect } from '../src/features/pages/subject';
@@ -16,6 +15,9 @@ import { readRelationsPage } from '../src/features/pages/relations-view';
 import { createKernelClient } from '@rezics/client';
 import { createRecordedKernelFetch } from '../src/kernel/fake';
 import { loadAgentPage } from '../src/features/pages/agent';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const redirectedClient = (data: unknown) =>
   ({

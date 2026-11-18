@@ -4,12 +4,15 @@ import { renderToString } from 'react-dom/server';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { RelationsView } from '../src/features/pages/relations-view.tsx';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import { PlainLink } from '../src/features/pages/shared.tsx';
 import type { RelationDefinition } from '../src/subject/relations.ts';
 import { defaultReader } from '../src/subject/reader.ts';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80';
 const properties = ['rezics:countedOrder', 'rezics:uncountedOrder', 'rezics:worldRelation'] as const;

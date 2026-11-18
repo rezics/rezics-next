@@ -8,8 +8,15 @@ import { readMemberList, type MemberListRequest } from '../src/features/pages/me
 import { memberContinuationDocument } from '../src/kernel/fake/composed-member-list';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadSubjectPage, SubjectPage, subjectPageTitle } from '../src/features/pages/subject.tsx';
+import {
+  loadSubjectPage,
+  SubjectPage as SubjectPageContent,
+  subjectPageTitle,
+} from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const soseki = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02';

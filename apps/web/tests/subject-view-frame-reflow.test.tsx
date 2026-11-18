@@ -16,6 +16,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectFrame, SubjectViewPage, subjectFrame } = await import('../src/features/pages/subject-frame');
 const { StreamHeading, PageStreamHeadingContext, ViewHeading } = await import('../src/features/pages/view-heading');
 const { SubjectPage } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
 const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
 const { SubjectLibraryLeaf } = await import('../src/features/pages/subject-library-leaf');
 const { subjectPageMessages, viewTabLabels } = await import('../src/features/pages/route-support');
@@ -127,7 +128,7 @@ async function mount({
   // A browser encodes multilingual paths before the router sees them; memory history does not.
   const location = new URL(contextHref(`${base}/credits`, realm), 'https://rezics.invalid');
   const router = createRouter({
-    routeTree: createRootRoute({ component: () => content }),
+    routeTree: createRootRoute({ component: withPageVisitHost(() => content) }),
     history: createMemoryHistory({ initialEntries: [location.pathname + location.search] }),
   });
   await router.load();

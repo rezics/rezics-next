@@ -6,7 +6,9 @@ import recording from '../src/kernel/recorded/agent-page-reader.json';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 test('account post rows select their disclosed posts in localized canonical threads, including untitled threads', () => {
   for (const locale of ['en', 'zh-Hant']) {

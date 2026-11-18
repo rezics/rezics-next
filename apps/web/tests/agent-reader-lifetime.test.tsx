@@ -266,6 +266,8 @@ test('public account readers retire old admissions across sign-out, replacement,
   ]);
 
   const page = fixtures.profilePage({ verified: true });
+  const { withPageVisitHost } = await import('./helpers/subject-render');
+  const SubjectPage = withPageVisitHost(subjectModule.SubjectPage);
   markCoversWithheld(page.reads);
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const serverClient = new QueryClient();
@@ -285,7 +287,7 @@ test('public account readers retire old admissions across sign-out, replacement,
             useAgentReaderScope: readerModule.useAgentReaderScope,
             useAgentReaderResult: readerModule.useAgentReaderResult,
             agentReaderQuery: queryModule.agentReaderQuery,
-            SubjectPage: subjectModule.SubjectPage,
+            SubjectPage,
             messages: routeSupport.subjectPageMessages,
           }),
         ),
@@ -324,7 +326,7 @@ test('public account readers retire old admissions across sign-out, replacement,
         useAgentReaderScope: readerModule.useAgentReaderScope,
         useAgentReaderResult: readerModule.useAgentReaderResult,
         agentReaderQuery: queryModule.agentReaderQuery,
-        SubjectPage: subjectModule.SubjectPage,
+        SubjectPage,
         messages: routeSupport.subjectPageMessages,
       }),
     );

@@ -11,7 +11,11 @@ import {
   withSubjectCommunity,
 } from '../src/features/pages/subject-community';
 import { SubjectCommunityRegion } from '../src/features/pages/subject-community-view';
-import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
+import {
+  loadSubjectPage,
+  SubjectPage as SubjectPageContent,
+  type SubjectPageData,
+} from '../src/features/pages/subject';
 import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 import { GLOBAL } from '../src/features/pages/subject-ratings';
@@ -28,6 +32,9 @@ import { ExistingReviewNotice } from '../src/threads/write-prompts';
 import type { SessionEnv } from '../src/session/client';
 import type { PageAuthors } from '../src/identity/read';
 import { m } from '../src/paraglide/messages.js';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 function fixture(answer?: (request: Request) => Response | undefined) {
   const requests: Request[] = [];

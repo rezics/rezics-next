@@ -3,12 +3,20 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fromMarkdown } from '@rezics/document';
-import { pageContext, SubjectPage, subjectPageJsonLd, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import {
+  pageContext,
+  SubjectPage as SubjectPageContent,
+  subjectPageJsonLd,
+  type SubjectPageData,
+} from '../src/features/pages/subject.tsx';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { ResultList } from '../src/search/results.tsx';
 import { pageHead } from '../src/shell/head.ts';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { subjectHead } from '../src/features/pages/subject-head.ts';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const messages = {
   unknown: 'Unknown',

@@ -266,7 +266,9 @@ test('authorized historical documents follow exact statement, identity, digest, 
   documents[statement.id]!.subjectId = read.public.subject.id;
   const render = (authorized: unknown = documents) =>
     renderToStaticMarkup(<OrganizationReader read={read} locale="en" documents={authorized} />);
-  const { SubjectPage } = await import('../src/features/pages/subject');
+  const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+  const { withPageVisitHost } = await import('./helpers/subject-render');
+  const SubjectPage = withPageVisitHost(SubjectPageContent);
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
   const { planReads, platformRegistry } = await import('@rezics/composition');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');

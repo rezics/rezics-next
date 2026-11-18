@@ -3,9 +3,12 @@ import { slug } from '@rezics/definitions/slug';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { relationDefinitions } from '../src/subject/relations.ts';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const context = '00000000-0000-8000-8000-000000000000';

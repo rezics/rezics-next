@@ -9,11 +9,19 @@ import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { readRelationsPage, RelationsView } from '../src/features/pages/relations-view.tsx';
 import { PlainLink } from '../src/features/pages/shared.tsx';
-import { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage } from '../src/features/pages/subject-frame.tsx';
+import {
+  loadViewPages,
+  SubjectFrame,
+  subjectFrame,
+  SubjectViewPage as SubjectViewPageContent,
+} from '../src/features/pages/subject-frame.tsx';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import { defaultReader } from '../src/subject/reader.ts';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectViewPage = withPageVisitHost(SubjectViewPageContent);
 
 const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const sent: string[] = [];

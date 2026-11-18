@@ -20,7 +20,9 @@ import { peopleOverviewFamily } from '../src/features/pages/showcase-people/prof
 import type { SubjectPageData } from '../src/features/pages/subject';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { subjectPageMessages } = await import('../src/features/pages/route-support');
 const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
 const { m } = await import('../src/paraglide/messages.js');

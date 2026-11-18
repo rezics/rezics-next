@@ -4,7 +4,14 @@ import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadSubjectPage, SubjectPage, type SubjectActionsInput } from '../src/features/pages/subject.tsx';
+import {
+  loadSubjectPage,
+  SubjectPage as SubjectPageContent,
+  type SubjectActionsInput,
+} from '../src/features/pages/subject.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const messages = {
   unknown: 'Unknown',

@@ -6,9 +6,12 @@ import { createNavigation, resolveNavigation, type NavigationContribution } from
 import { NavigationLinks, NavigationProvider } from '../src/shell/navigation-view';
 import { FeatureSlotsProvider } from '../src/shell/feature-slots';
 import { useSubjectPurchaseContext, type SubjectPurchaseContext } from '../src/features/pages/subject-slots';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { exposureQuery, sessionQuery } from '../src/session/query';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const context = { locale: 'ja' as const, pathname: '/ja/catalogue/items' };
 const leaf: NavigationContribution = {

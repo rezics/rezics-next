@@ -6,7 +6,10 @@ import { createRecordedKernelFetch, type KernelRecording } from '../src/kernel/f
 import page from '../src/kernel/recorded/subject-page.json';
 import missing from '../src/kernel/recorded/missing-subject-page.json';
 import subject from '../src/kernel/recorded/subject.json';
-import { loadSubjectPage, SubjectPage } from '../src/features/pages/subject.tsx';
+import { loadSubjectPage, SubjectPage as SubjectPageContent } from '../src/features/pages/subject.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const recordings: Record<string, KernelRecording> = {
   'subject-page': page as KernelRecording,

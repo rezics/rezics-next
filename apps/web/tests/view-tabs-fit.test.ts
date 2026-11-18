@@ -3,10 +3,17 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import type { PageMessages } from '../src/features/pages/data.tsx';
-import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import {
+  loadSubjectPage,
+  SubjectPage as SubjectPageContent,
+  type SubjectPageData,
+} from '../src/features/pages/subject.tsx';
 import type { RelationDefinition } from '../src/subject/relations.ts';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80';
 const relationProperty = 'rezics:sideStoryOf';

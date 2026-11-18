@@ -16,7 +16,9 @@ test('ordinary Person overview places the reader; admitted authored text and lab
   const fixture = personReaderExample();
   fixture.read.subject.labels.ja = '本来の名前';
   fixture.read.subject.aliases.ja = ['別名'];
-  const { SubjectPage } = await import('../src/features/pages/subject');
+  const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+  const { withPageVisitHost } = await import('./helpers/subject-render');
+  const SubjectPage = withPageVisitHost(SubjectPageContent);
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

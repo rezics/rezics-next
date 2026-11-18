@@ -14,7 +14,10 @@ import { relationDefinitions } from '../src/subject/relations';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
-const { SubjectPage, pageContext, pageRelationProperties } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent, pageContext, pageRelationProperties } =
+  await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');
 const { holderItems } = await import('../src/features/pages/overview');
 

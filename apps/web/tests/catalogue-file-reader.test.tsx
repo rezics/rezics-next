@@ -25,7 +25,9 @@ import {
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { CatalogueFileReader } = await import('../src/features/catalogue/catalogue-file-reader/reader');
 
 async function mounted(
