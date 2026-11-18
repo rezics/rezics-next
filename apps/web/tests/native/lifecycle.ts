@@ -6,8 +6,8 @@ import { processIdentity, reapExitedProcessGroupMembers } from '../support/serve
 
 type NativeResource = {
   label: string;
-  close?: () => void | Promise<void>;
-  force?: () => void | Promise<void>;
+  close?: (() => void | Promise<void>) | undefined;
+  force?: (() => void | Promise<void>) | undefined;
 };
 
 export type NativeProcessIdentity = {
@@ -57,7 +57,7 @@ export class NativeLifecycleTimeoutError extends Error {
 
 export class NativeTestLifecycle {
   readonly controller = new AbortController();
-  readonly parent?: NativeTestLifecycle;
+  readonly parent: NativeTestLifecycle | undefined;
   readonly label: string;
   readonly cleanupGraceMs: number;
   readonly forceGraceMs: number;
@@ -65,7 +65,7 @@ export class NativeTestLifecycle {
   #state: 'open' | 'closing' | 'closed' = 'open';
   #resources: NativeResource[] = [];
   #closing?: Promise<void>;
-  #releaseParent?: () => void;
+  #releaseParent: (() => void) | undefined;
 
   constructor(label: string, parent?: NativeTestLifecycle, options: NativeLifecycleOptions = {}) {
     this.label = label;
@@ -479,8 +479,11 @@ function processGroupIdentities(identity: NativeProcessIdentity): ProcessGroupOb
     timeout: 1_000,
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  if (result.error)
-    return { status: 'unavailable', detail: `${result.error.name}${result.error.code ? `:${result.error.code}` : ''}` };
+  if (result.error) {
+    const code = 'code' in result.error ? result.error.code : undefined;
+    const suffix = typeof code === 'string' && code ? `:${code}` : '';
+    return { status: 'unavailable', detail: `${result.error.name}${suffix}` };
+  }
   // ps exits 1 for an empty selection. Confirm the group is gone before reporting zero members.
   if (result.status === 1 && !processGroupExists(identity.pgid)) return { status: 'observed', identities: [] };
   if (result.status !== 0) return { status: 'unavailable', detail: `ps exited with status ${result.status}` };
