@@ -2316,14 +2316,15 @@ export function createNativePublicFilterSourceBinding(
     readers.set(resolved.definition.source.id, request.source);
     return run({ deadline }, async (cost, db) => {
       addCost(cost, resolved.cost);
-      // Validate the already registered physical consumer through its real owner, before making a cut.
+      // A new cut depends on the physical registration. Its earlier pages may have expired.
+      // Recovery below the binding resolves observations by their original bootstrap.
       const registration = await ports.search.readGenerationPublicationCustody(
         pool,
         consumer,
         0,
         { deadline },
         undefined,
-        'representation' in capture ? 'registration' : undefined,
+        'registration',
       );
       addCost(cost, registration.cost);
       if (!('definition' in registration)) return { ...registration, cost };

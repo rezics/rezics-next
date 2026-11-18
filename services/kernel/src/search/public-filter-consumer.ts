@@ -3197,16 +3197,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         }
       });
     },
-    close() {
+    close(disposal) {
       if (closing) return closing;
       closed = true;
+      const retirement = disposal && Object.freeze({ deadline: disposal.deadline });
       return (closing = (async () => {
         await Promise.allSettled([...pending]);
         const results = await Promise.allSettled(
           [...owned.values()].map(async ({ queried, context, m }) => {
-            // Disposal shares the last admitted operation's time and accounting.
-            // Expiry retains native custody for recovery; close cannot mint a budget.
-            const result = await custody.closeObservation(queried, config.search, context);
+            // An explicit factory retirement owns cleanup after the serving request ends.
+            // This deadline funds only exact native close, never a read or PIT renewal.
+            const result = await custody.closeObservation(queried, config.search, retirement ?? context);
             m.add(result.cost);
             if (result.status === 'closed') owned.delete(queried.snapshot.observation);
             return result;
@@ -3215,7 +3216,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         await custody.close();
         for (const result of results) {
           if (result.status === 'rejected') throw result.reason;
-          if (result.value.status !== 'closed') throw new ConsumerFailure('observation_lost');
+          if (result.value.status !== 'closed')
+            throw new Error(`Search observation close returned ${result.value.status} (${result.value.reason})`, {
+              cause: result.value,
+            });
         }
       })());
     },

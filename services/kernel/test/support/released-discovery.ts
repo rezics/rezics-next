@@ -226,7 +226,7 @@ export interface ReleasedDiscoveryFixture {
   grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;
   /** Grant ordinary action scopes to one of this fixture's authenticated owner accounts. */
   grantAccount(persona: DiscoveryAccountName, actions: string[], resourceId?: string): Promise<void>;
-  close(): Promise<void>;
+  close(deadline?: number): Promise<void>;
 }
 
 export const discoveryKey = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
@@ -262,6 +262,7 @@ export async function createReleasedDiscoveryFixture(
 ): Promise<ReleasedDiscoveryFixture> {
   if (options.version !== releasedDiscoveryVersion) throw new Error('Unsupported released discovery fixture version');
   let closed = false;
+  let closeDeadline: number | undefined;
   const requireOpen = () => {
     if (closed) throw new Error('Released discovery fixture is closed');
   };
@@ -357,7 +358,7 @@ export async function createReleasedDiscoveryFixture(
         for (const close of [
           () => ownerIndexWorker?.close(),
           () => ownerIndexWorkStart?.then((work) => work.close()),
-          () => native?.close(),
+          () => native?.close(closeDeadline),
         ]) {
           try {
             await close();
@@ -1211,7 +1212,8 @@ export async function createReleasedDiscoveryFixture(
         }
       },
       prepareOwnerIndex,
-      close: async () => {
+      close: async (deadline) => {
+        closeDeadline ??= deadline;
         closed = true;
         const errors: unknown[] = [];
         await Promise.allSettled([importedHarem, statementConsent, nativeStart, classification, diet, books, recipes]);
