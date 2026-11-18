@@ -65,9 +65,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Briefs
 
-- A brief states the outcome in user terms, owner links, what done means and the decisions already made. Size the work
-  by its outcome ([delivery](delivery.md)); keep the text under 12,000 characters.
-- Leave out history. Prohibitions must not outweigh instructions.
+- State the user outcome, owner links, edit boundary and observable completion. Include only the current evidence,
+  decisions and dependencies needed to act. For acceptance, name the smallest check and the decision it supports.
+  Link standing rules and omit history. Size work by [outcome](delivery.md) and keep briefs under 12,000 characters.
 - On a retry, rewrite the brief with the new fact; never append. After two attempts end on the same failure, change
   the approach or split the work; do not resend an equivalent brief.
 - Do not freeze a test that the brief's own behaviour change contradicts. Freeze files only for cross-Goal contract

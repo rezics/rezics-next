@@ -344,18 +344,20 @@ describe('architecture boundaries', () => {
   test('keeps selected rows complete and deterministic, with exact fit and overflow accounting', () => {
     const committed = loadManifest(process.cwd());
     const searchPaths = ['services/kernel/src/search/query.ts'];
-    const searchModules = modulesForBriefPaths(committed, searchPaths);
+    const searchModule = modulesForBriefPaths(committed, searchPaths).find(({ id }) => id === 'kernel-search')!;
     const selected = formatModuleMap(committed, searchPaths);
     const selectedRowIds = selected
       .split('\n')
       .slice(1, -1)
       .map((row) => row.split('|', 1)[0]!);
-    const expectedRowIds = searchModules.map(({ id }) => id.replace(/^kernel-/, 'k').replace(/^web-/, 'w'));
+    const dependencyIds = searchModule.allowedDependencies.map((id) => id.replace(/^kernel-/, 'k').replace(/^web-/, 'w'));
     const searchRow = selected.split('\n').find((row) => row.startsWith('ksearch|'))!;
     expect(searchRow).toMatch(/^ksearch\|d\|/);
     expect(searchRow).toContain('search:{');
     expect(searchRow).toContain('index.ts');
-    expect(selectedRowIds).toEqual(expectedRowIds);
+    expect(selectedRowIds).toEqual(['ksearch']);
+    expect(searchRow.split('|')[3]?.split(',').sort()).toEqual(dependencyIds.sort());
+    expect(selected.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
     expect(selected).toContain(MODULE_MAP_POINTER);
     expect(selected).not.toContain(MODULE_MAP_TRUNCATION);
     expect(selected).not.toMatch(/^wsearch\|/m);

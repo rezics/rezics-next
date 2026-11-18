@@ -275,9 +275,10 @@ export function formatModuleMap(manifest: ArchitectureManifest, paths?: readonly
   const selected = modulesForBriefPaths(manifest, paths);
   const { text } = renderModuleMap(selected, true);
   const complete = `${text}\n${MODULE_MAP_POINTER}`;
-  // The character target bounds unscoped maps. A path-scoped map is an import contract, so keep every
-  // selected row even when a large module boundary makes the complete representation exceed that target.
-  return complete;
+  if (complete.length <= MAX_MODULE_MAP_CHARACTERS) return complete;
+  // The owned rows already name every allowed dependency. Read those dependencies' entries on demand.
+  const owned = renderModuleMap(ownedModulesForBriefPaths(manifest, paths), true);
+  return `${owned.text}\n${MODULE_MAP_POINTER}`;
 }
 
 export function loadManifest(rootInput: string): ArchitectureManifest {

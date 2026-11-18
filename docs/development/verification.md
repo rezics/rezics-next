@@ -42,19 +42,20 @@ Dev's floor, in order: development continues, and dev runs, so problems can be d
 landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
 that broke it.
 
-The manager selects checks for the user behavior or invariant that needs evidence. Each selected command names
-what its result will decide. Use the smallest case that reaches that boundary; broader matrices belong to release
-qualification unless the changed contract requires them. A failed setup establishes unavailable evidence, not a
-failed product assertion. Do not expand coverage merely because a run failed to start.
+Start closeout with source, retained results and logs. Resolve questions those can answer by review. For missing
+required evidence or an observed defect, name the decision and use the smallest real check that reaches the owning
+boundary. Confirm the runner, selector and fixture contract before spending a host start.
 
-Match setup and restart to the behavior under test. Reuse a compatible live stack or prepared fixture for checks
-with isolated state. Exercise replay or recovery with the smallest real input and retain the original durable
-state. Restart the process whose lifetime is under test. Select cold startup, full preparation, or growth only
-for outcomes that depend on those conditions. Keep the original bound when proving readiness or scale.
+Verify backend behavior through its API or owning worker with the original authority and compatible data. Reserve
+browser runs for behavior the browser owns, such as a real login return, hydration or client interaction. Stop
+after the required observation. Prefer existing checks to a new harness.
 
-When a shared prerequisite fails, record its elapsed time and first failing boundary once. Mark dependent
-assertions that never ran as unreached and retain the observations already made. Reproduce the failed boundary
-with its owner before repeating the full journey.
+Reuse a compatible live stack or prepared fixture with isolated state. Restart only the process whose lifetime
+matters. Use full preparation, cold startup or growth when the outcome depends on it, preserving its original bound.
+
+At the first failed boundary, keep the elapsed time and observations already reached. Record dependent steps as
+unreached. Trace the owner failure from the response or logs and confirm the repair at that boundary before
+any wider rerun. A failed setup leaves product evidence unavailable.
 
 Reuse passing evidence when its tested source, dependencies, fixtures and relevant configuration are unchanged.
 Record its original revision and applicability; a new aggregate head alone does not require rerunning it. A relevant

@@ -281,8 +281,9 @@ landing's final candidate. It needs no database and runs in seconds. Workers run
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
 an alias edge or an allowance. Every worker prompt carries the compact module-map rows for the modules that own the
 brief's paths, plus those modules' allowed dependencies, and a one-line pointer to `docs/architecture/modules.json` for
-the rest. The shared formatter groups public entries by directory and enforces the 6,800-character bound on full and
-path-selected maps; an overflowing selected map keeps the owned module's public entries and allowed dependencies.
+the rest. The formatter groups public entries by directory. When a selected map exceeds 6,800 characters, keep
+the owned rows with their public entries and allowed dependency names. Read dependency entries from the manifest
+when needed.
 
 The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
 registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event

@@ -266,7 +266,7 @@ test('resident and worker roles apply operating discipline within their prompt b
   expect(standard.prompt).toContain('Let execution units choose their');
   expect(standard.prompt).toContain('efficiency.md#operating-discipline');
   expect(workerPrompt).toContain(
-    'Keep in-scope work. Send distinct ready gaps (outcome/source evidence/first edit/prerequisite) to manager for merge/dispatch/refill.',
+    'Send the manager independent gaps with the outcome, evidence, first edit and dependency.',
   );
   const rendered = renderSupermanagerOpening({
     ...input,
@@ -349,14 +349,14 @@ test('unit and Goal-author openings carry only the assigned brief and owner link
     }
     const unit = renderUnitOpening({ ...input, worktree: '/shared/unit' }).prompt;
     expect(unit).toContain('in /shared/unit');
-    expect(unit).toContain('native subagents and Grok CLI work in this same worktree');
-    expect(unit).toContain('resident allocates it');
+    expect(unit).toContain('Assign one integration writer and preserve peer edits.');
+    expect(unit).toContain('resident allocates follow-up and owns promotion.');
     const objective = 'Complete the existing Hosted Book and Knowledge journeys';
     const unlinked = renderUnitOpening({ goal: objective, brief: 'Use the assigned contract.', cwd: directory.path });
     expect(unlinked.prompt).not.toContain(`docs/goals/${objective}.md`);
     expect(unlinked.prompt).not.toContain('Owner contract:');
     expect(renderGoalAuthorOpening({ brief: 'Author a concrete Goal.', cwd: '/missing' }).prompt).toContain(
-      'resident adopts scope and acceptance',
+      'for the resident to adopt',
     );
     expect(() => renderUnitOpening({ brief: 'Missing Goal.', cwd: '/missing' })).toThrow('assigned Goal');
   } finally {

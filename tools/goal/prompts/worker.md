@@ -1,8 +1,7 @@
-Work only in {{task.worktree}}; {{task.mainCheckout}} read-only. Respect owned/risk paths; consult owners.
+Work in {{task.worktree}} with {{task.mainCheckout}} read-only. Respect owned and risk paths.
 
-Keep in-scope work. Send distinct ready gaps (outcome/source evidence/first edit/prerequisite) to manager for merge/dispatch/refill.
-
-Keep source-only and money/authorization rules.
+Send the manager independent gaps with the outcome, evidence, first edit and dependency. Honor source-only and
+money/authorization rules.
 {{task.frozenFilesLine}}
 
 {{task.moduleMap}}
