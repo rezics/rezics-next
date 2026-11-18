@@ -833,10 +833,9 @@ async function observeBoard(
 ): Promise<{ result: Anchored<BoardView | null>; recheck: () => Promise<boolean> }> {
   const observed = await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId));
   const row = observed.value;
-  const check = row
-    ? await prepare(dependencies, row, context, observed, false, false, undefined, false, accessContext)
-    : null;
-  const checked = async (client: AccessClient): Promise<Row | null> => {
+  const prepareCheck = () =>
+    row ? prepare(dependencies, row, context, observed, false, false, undefined, false, accessContext) : null;
+  const checked = async (client: AccessClient, check: AccessCheck | null): Promise<Row | null> => {
     const current = await point(client, 'board', boardId);
     if (
       !row ||
@@ -854,8 +853,9 @@ async function observeBoard(
       throw error;
     }
   };
+  const check = await prepareCheck();
   const result = await snapshot(dependencies, boardId, context, async (client): Promise<BoardView | null> => {
-    const current = await checked(client);
+    const current = await checked(client, check);
     if (!current) return null;
     return {
       id: current.id,
@@ -871,10 +871,16 @@ async function observeBoard(
   });
   return {
     result,
-    // Preserve the first row and its prepared Access check; never refresh the
-    // baseline after a privacy reduction or share a proof across items.
+    // Prepare fresh permission evidence against the original Board observation.
+    // The earlier proof can expire while other owners finish their reads.
     recheck: async () => {
-      const final = await snapshot(dependencies, boardId, context, async (client) => !!(await checked(client)));
+      const finalCheck = await prepareCheck();
+      const final = await snapshot(
+        dependencies,
+        boardId,
+        context,
+        async (client) => !!(await checked(client, finalCheck)),
+      );
       return final.anchor.epoch === observed.anchor.epoch && final.value;
     },
   };
@@ -1528,9 +1534,7 @@ async function disclose(
   const withheld = threadReference && !erased && !!initial?.posts[0] && isCommittedWithheldReference(initial.posts[0]);
   // Each selected Post benefit shares an owned native T with its Access checks.
   // Retained observations prepare a fresh round without replacing the original source baseline.
-  let ordinaryChecks: readonly AccessCheck[] | undefined;
   const withReadChecks = async <T>(read: (checks: readonly AccessCheck[]) => Promise<T>): Promise<T> => {
-    if (ordinaryChecks) return read(ordinaryChecks);
     const metered: RealmSubjectReadContext = context;
     const baseContext: AccessContext = {
       pool: dependencies.pool,
@@ -1575,7 +1579,6 @@ async function disclose(
           } else checks.push(check);
         }
       }
-      if (!time) ordinaryChecks = checks;
       return await read(checks);
     } finally {
       if (time) releaseOperationalTime(time);

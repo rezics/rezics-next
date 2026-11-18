@@ -5,8 +5,8 @@ import type { ItemView, PostEntry, RevisionView } from './reads.ts';
 
 type RevisionKey = Readonly<{ at: string; id: string }>;
 
-/** A native disclosure retains its original observations and prepared Access
- * checks. Revalidation must not adopt newly changed source rows as a baseline.
+/** A native disclosure retains its original observations. Revalidation prepares
+ * current Access evidence for those observations.
  */
 export type HistoryPostObservation = Readonly<{
   initial: Anchored<PostEntry | null>;
@@ -106,8 +106,7 @@ export async function readNativePostRevisionPage(
 
   const posts: ItemView[] = [];
   const entries: RevisionView[] = [];
-  // Reuse each exact disclosure's original prepared checks, rather than running
-  // a fresh exact read which could silently accept a changed source identity.
+  // Keep each exact disclosure's original selection for revalidation.
   for (const { key, observation } of observed) {
     const value = observation.initial.value;
     if (
@@ -147,8 +146,7 @@ export async function readNativePostRevisionPage(
       )
         return false;
     }
-    // Empty, removed and sparse pages retain the same source check. Reuse each
-    // disclosure's original prepared Access checks rather than adopting a new baseline.
+    // Empty, removed and sparse pages retain the same source observation.
     const currentSource = await source.current();
     anchors.push(currentSource.anchor);
     return (
