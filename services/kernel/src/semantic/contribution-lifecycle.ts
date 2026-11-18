@@ -175,7 +175,7 @@ async function changeContribution(
         after,
         contexts,
       );
-      if (links) events.push(links);
+      events.push(...links);
       await recordSubjectPageDiff(
         tx,
         input.subject,

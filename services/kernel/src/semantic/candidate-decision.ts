@@ -12,10 +12,10 @@ import { redirectOf } from './subject-redirect.ts';
 import { activeRelease, readRelease, layeredRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { termContext } from '@rezics/definitions/extension';
-import { LINKS_CHANGED, SUBJECT_REVISED } from './events.ts';
+import { SUBJECT_REVISED } from './events.ts';
 import { factDataTypes, SubjectInputError } from './item.ts';
 import { holderFacts } from './link-keys.ts';
-import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChangeEvents, linkChanges } from './link-changes.ts';
 import { contextSnapshot } from './context.ts';
 import registerRelationContext from './relation-context-register.sql';
 import readAdoptionSubject from './candidates-read-adoption-subject.sql';
@@ -196,17 +196,7 @@ export async function decideCandidate(
             options.context === GLOBAL_CONTEXT
               ? linkChanges(before, after, dataTypes, metadata)
               : contextLinkChanges(global, before, after, dataTypes, metadata, options.context);
-          if (changes.length)
-            linkEvents.push({
-              type: LINKS_CHANGED,
-              subject: options.subject,
-              data: {
-                subject: options.subject,
-                revision,
-                security_revision: Number(subject.security_revision),
-                changes,
-              },
-            });
+          linkEvents.push(...linkChangeEvents(options.subject, revision, Number(subject.security_revision), changes));
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
         const events = [

@@ -126,6 +126,7 @@ export type {
 export type { RecordHistoryPurgeResult, SharedHistoryResult } from './record-types.ts';
 export {
   COMMAND_HISTORY_KINDS,
+  MAX_HISTORY_PAYLOAD_BYTES,
   preferenceSubjectScope,
   recordHistorySourceKey,
   unionHistoryScope,

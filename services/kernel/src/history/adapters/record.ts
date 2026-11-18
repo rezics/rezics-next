@@ -22,6 +22,7 @@ import {
   type CommandHistoryKind,
   type CommandHistoryScopes,
   type HistoryScope,
+  MAX_HISTORY_PAYLOAD_BYTES,
   classifyEvent,
   decodeLocator,
   encodeLocator,
@@ -74,7 +75,6 @@ export const COMMAND_HISTORY_COVERAGE = Object.freeze({
   ]),
   complete: false,
 });
-export const MAX_HISTORY_PAYLOAD_BYTES = 65_536;
 type Declaration = CommandHistoryScopes & { kind: CommandHistoryKind; partition: number };
 const declarations = new WeakMap<CommandTransaction, Declaration>();
 

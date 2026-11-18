@@ -1,8 +1,10 @@
 import type { Release } from '@rezics/definitions';
+import { MAX_HISTORY_PAYLOAD_BYTES } from '../history/contract/index.ts';
+import { routeOf } from '../route/route.ts';
+import { LINKS_CHANGED } from './events.ts';
 import { holderKeys, positionKey } from './link-keys.ts';
 import type { FactRow } from './item.ts';
 import { relationSlotForStatement, statementSlotId } from './item.ts';
-import { routeOf } from '../route/route.ts';
 
 export type LinkChange = {
   context_id?: string;
@@ -22,6 +24,46 @@ export type LinkChange = {
   order_key?: string;
   filter_value?: string;
 };
+
+type LinkChangeEvent = {
+  type: typeof LINKS_CHANGED;
+  subject: string;
+  data: { subject: string; revision: number; security_revision: number; changes: LinkChange[] };
+};
+
+/** Keep every change at the original command position while bounding each retained event. */
+export function linkChangeEvents(
+  subject: string,
+  revision: number,
+  securityRevision: number,
+  changes: readonly LinkChange[],
+): LinkChangeEvent[] {
+  if (!changes.length) return [];
+  const event: LinkChangeEvent = {
+    type: LINKS_CHANGED,
+    subject,
+    data: { subject, revision, security_revision: securityRevision, changes: [] },
+  };
+  // Core adds a UUID before History measures the serialized event.
+  const baseBytes = Buffer.byteLength(JSON.stringify({ ...event, id: '00000000-0000-0000-0000-000000000000' }));
+  const events: LinkChangeEvent[] = [];
+  let batch: LinkChange[] = [];
+  let bytes = baseBytes;
+  for (const change of changes) {
+    const changeBytes = Buffer.byteLength(JSON.stringify(change));
+    if (baseBytes + changeBytes > MAX_HISTORY_PAYLOAD_BYTES)
+      throw new RangeError('A link change exceeds the History event limit');
+    if (bytes + 1 + changeBytes > MAX_HISTORY_PAYLOAD_BYTES && batch.length) {
+      events.push({ ...event, data: { ...event.data, changes: batch } });
+      batch = [];
+      bytes = baseBytes;
+    }
+    bytes += changeBytes + (batch.length ? 1 : 0);
+    batch.push(change);
+  }
+  events.push({ ...event, data: { ...event.data, changes: batch } });
+  return events;
+}
 
 type LinkFact = {
   kind: string;

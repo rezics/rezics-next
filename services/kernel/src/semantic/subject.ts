@@ -30,11 +30,11 @@ import { SubjectInputError } from './item.ts';
 import { rejectBulkContent, rejectContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
 import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
-import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
+import { LINK_KEYS_CHANGED } from './events.ts';
 import { holderFacts } from './link-keys.ts';
 import updateIdentity from './update-subject-identity.sql';
 import readIdentitySubject from './candidates-read-adoption-subject.sql';
-import { linkChanges } from './link-changes.ts';
+import { linkChangeEvents, linkChanges } from './link-changes.ts';
 import { expandSlot, slotId } from './slots.ts';
 import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
@@ -322,13 +322,7 @@ export async function writeSubject(
       type,
     },
   );
-  if (changes.length > 0) {
-    events.push({
-      type: LINKS_CHANGED,
-      subject: subjectId,
-      data: { subject: subjectId, revision: 1, security_revision: 0, changes },
-    });
-  }
+  events.push(...linkChangeEvents(subjectId, 1, 0, changes));
   if (options.source && 'source' in options.source && options.routeKey)
     await retainSubjectPageSource(tx, {
       subject: { route, id: subjectId },
