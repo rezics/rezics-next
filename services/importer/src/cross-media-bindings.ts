@@ -14,7 +14,7 @@ import {
   vndbProducerParentEnds,
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
-import type { Claim } from './record-bindings.ts';
+import type { Candidate, Claim } from './record-bindings.ts';
 import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import type { VndbWorkRelationEvidence } from './showcase-vndb-relations.ts';
 
@@ -372,9 +372,8 @@ export class CrossMediaGraph {
           cause,
         });
       }
-      return;
-    }
-    database.exec(`CREATE TABLE cross_media_graph (
+    } else
+      database.exec(`CREATE TABLE cross_media_graph (
       edge_key TEXT PRIMARY KEY,
       alias TEXT NOT NULL,
       table_name TEXT NOT NULL,
@@ -389,6 +388,23 @@ export class CrossMediaGraph {
       retraction_key TEXT,
       retraction_payload TEXT
     ) WITHOUT ROWID`);
+    database.exec(`CREATE INDEX IF NOT EXISTS cross_media_graph_command_key
+      ON cross_media_graph (command_key) WHERE command_key IS NOT NULL`);
+  }
+
+  /** A current native receipt belongs to this producer if its exact sealed request is in the graph journal. */
+  ownedCandidates(candidates: readonly Candidate[]): ReadonlySet<string> {
+    const byKey = new Map(candidates.map((candidate) => [candidate.key, candidate]));
+    const owned = new Set<string>();
+    const rows = this.database
+      .query<{ key: string; bytes: string }, [string]>(`SELECT command_key AS key,command_payload AS bytes
+        FROM cross_media_graph WHERE command_key IS NOT NULL AND command_key IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify([...byKey.keys()]));
+    for (const { key, bytes } of rows) {
+      const candidate = byKey.get(key);
+      if (candidate?.bytes === bytes) owned.add(candidate.candidate);
+    }
+    return owned;
   }
 
   remember(drafts: readonly GraphEdgeDraft[]): void {

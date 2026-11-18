@@ -2520,6 +2520,8 @@ export async function seedCrossMedia(
     ...(episodeBindings ? [showcaseEpisodeVocabularyAdmission(episodeBindings)] : []),
   );
   let importer!: ReturnType<typeof createImporter>;
+  let graphStore: CrossMediaGraph | undefined;
+  const openGraph = () => (graphStore ??= new CrossMediaGraph(importer.session.store.database));
   let genreAdapter: ReturnType<typeof createShowcaseBangumiGenreLookup> | undefined;
   let gameEnvironmentAdapter: ReturnType<typeof createShowcaseBangumiGameEnvironmentLookup> | undefined;
   let gameGenreAdapter: ReturnType<typeof createShowcaseBangumiGameGenreLookup> | undefined;
@@ -2565,6 +2567,7 @@ export async function seedCrossMedia(
     ...(destination ? { destination } : {}),
     ...(identifierLookup ? { identifierLookup } : {}),
     ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
+    separatelyOwnedCandidates: (candidates) => openGraph().ownedCandidates(candidates),
     ...(vndbCredits
       ? { recordConcurrency: 1 }
       : extras?.recordConcurrency === undefined
@@ -2917,7 +2920,7 @@ export async function seedCrossMedia(
     );
     let graph: CrossMediaGraph;
     try {
-      graph = new CrossMediaGraph(importer.session.store.database);
+      graph = openGraph();
       graph.remember(graphEdges);
     } catch (error) {
       throw recordSeedBatchFailure(error, 'graph-retain', 'local-failure');

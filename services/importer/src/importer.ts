@@ -202,6 +202,8 @@ export type ImporterOptions = {
   mediaDeadlineMs?: number;
   mediaResolver?: ImportMediaResolver;
   identifierLookup?: ImportIdentifierLookup;
+  /** A separately reconciled producer can retain candidates it has journaled itself. */
+  separatelyOwnedCandidates?(candidates: readonly Candidate[]): ReadonlySet<string>;
   /** Admitted classification facts and authentic Semantic association; public dump fields never populate this. */
   classificationAdmission?: {
     /** Source-side facts; a native subject is optional and never invents an association. */
@@ -1262,7 +1264,10 @@ export class Importer {
     let head: RetainedObservationHead | null = null;
     if (!read) return { head: null, figure: null, figureUnavailable: true };
     try {
-      const current = headFromInspection(subjectId, await write(() => read.call(this.options.transport, { subjectId }, signal)));
+      const current = headFromInspection(
+        subjectId,
+        await write(() => read.call(this.options.transport, { subjectId }, signal)),
+      );
       if (current.kind === 'unavailable') return { head: null, figure: null, figureUnavailable: true };
       head = current.kind === 'head' ? current.head : null;
     } catch {
@@ -2143,7 +2148,10 @@ export class Importer {
     ) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
-    const candidates = this.current(owner);
+    const owned = this.current(owner);
+    const separate =
+      row.state === 'present' && owned.length ? this.options.separatelyOwnedCandidates?.(owned) : undefined;
+    const candidates = separate?.size ? owned.filter(({ candidate }) => !separate.has(candidate)) : owned;
     let conversion: ImportConversion | null = null;
     let observedConversion: ImportConversion | undefined;
     let subject: string | null = null;

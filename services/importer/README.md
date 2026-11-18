@@ -327,6 +327,8 @@ A command refusal retains the source identity and native problem for the seed re
 and bodies, and dependent proposals require the current Subject ID and type.
 
 Decision: reconcile typed Bangumi and VNDB work relations against separate complete selected-source snapshots. A newly resolved endpoint cannot publish an absent edge without a sealed command; sealed proposal and retraction intent replays exactly through current endpoint and facts fences. Incomplete snapshots retire no additional candidates. VNDB relation snapshots retain at most 32 rows per selected owner and one ordered digest; they do not change provider identity or infer a cross-provider merge. Complete selected link snapshots retire only managed counterpart candidates, through current endpoint/facts fences and exact sealed replay.
+When an entity is refreshed, a current candidate with an exact sealed graph command remains under graph
+reconciliation. The record-level disappearance path still owns withdrawal of the vanished record's facts.
 
 ## Cost
 
