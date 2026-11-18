@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { planCrossMediaSeed, seedCrossMedia, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
+import { relationSlot } from '../../../importer/src/showcase-current-reads.ts';
 import { showcaseFranchiseSelection } from '../../../importer/src/showcase-franchise.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
@@ -94,9 +95,9 @@ test('selected franchise relations publish on exact native endpoints after separ
     });
     expect(grant.status).toBe(201);
 
-    async function candidates(subject: string, property: string) {
+    async function candidates(subject: string, property: string, slot?: ReturnType<typeof relationSlot>) {
       const response = await editor.http(
-        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
+        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100', ...slot })}`,
       );
       expect(response.status).toBe(200);
       return response.body as {
@@ -104,11 +105,11 @@ test('selected franchise relations publish on exact native endpoints after separ
         adoption: { head: number } | null;
       };
     }
-    // One independent review and adoption per (subject, property): adoption replaces only that property's selection.
-    async function acceptAdopt(subject: string, property: string) {
+    // Review and replace the exact addressed selection for each native relation slot.
+    async function acceptAdopt(subject: string, property: string, slot?: ReturnType<typeof relationSlot>) {
       const seen = new Set<string>();
       for (;;) {
-        const listing = await candidates(subject, property);
+        const listing = await candidates(subject, property, slot);
         const next = listing.candidates.find(
           (candidate) => candidate.source && !candidate.retracted && !seen.has(candidate.id),
         );
@@ -118,6 +119,7 @@ test('selected franchise relations publish on exact native endpoints after separ
           const adopted = await editor.http(`/v1/subjects/${subject}:adopt`, {
             context: globalContext,
             property,
+            ...slot,
             mode: 'replace',
             expected_head: listing.adoption?.head ?? null,
             selection: live.map((candidate) => ({ candidate: candidate.id, rank: 'normal' })),
@@ -189,7 +191,14 @@ test('selected franchise relations publish on exact native endpoints after separ
       if (row.status !== 'proposed' || command?.op !== 'propose') return [];
       const value = command.statement.value;
       if (value.type !== 'value') return [];
-      return [{ subject: command.subject, property: command.statement.property.id, target: String(value.content) }];
+      return [
+        {
+          subject: command.subject,
+          property: command.statement.property.id,
+          target: String(value.content),
+          slot: relationSlot(command.statement),
+        },
+      ];
     });
     const bangumiIds = new Set(['10380', '84148', '3154', '129807', '247445'].map((key) => native('bangumi', key)));
     expect(proposals).toHaveLength(4);
@@ -214,7 +223,7 @@ test('selected franchise relations publish on exact native endpoints after separ
     expect(vndb.every((row) => row.holderSubjectId === vndbHolder && row.targetSubjectId === vndbTarget)).toBe(true);
     // Selected counterpart evidence links providers; each retains its independent original identity.
     expect(vndbHolder).not.toBe(native('bangumi', '3154'));
-    await acceptAdopt(vndbHolder, 'rezics:crossMediaCounterpart');
+    await acceptAdopt(vndbHolder, 'rezics:crossMediaCounterpart', { target: native('bangumi', '3154') });
     const linked = await read(vndbHolder);
     expect(linked.subject.id).toBe(vndbHolder);
     expect(linked.subject.statements['wdt:P3180']?.map((row) => row.value.content)).toContain('v2002');
@@ -224,13 +233,16 @@ test('selected franchise relations publish on exact native endpoints after separ
 
     // Separate adoption, then independent current reads show the typed edges on their exact endpoint UUIDs.
     const adopted = new Map<string, { subject: string; property: string; targets: Set<string> }>();
-    for (const row of [...proposals, { subject: vndbHolder, property: 'wdt:P144', target: vndbTarget }]) {
+    for (const row of [
+      ...proposals,
+      { subject: vndbHolder, property: 'wdt:P144', target: vndbTarget, slot: { target: vndbTarget } },
+    ]) {
+      await acceptAdopt(row.subject, row.property, row.slot);
       const key = `${row.subject}\0${row.property}`;
       const entry = adopted.get(key) ?? { subject: row.subject, property: row.property, targets: new Set<string>() };
       entry.targets.add(row.target);
       adopted.set(key, entry);
     }
-    for (const entry of adopted.values()) await acceptAdopt(entry.subject, entry.property);
     for (const entry of adopted.values()) {
       const current = await read(entry.subject);
       const contents = current.subject.statements[entry.property]?.map((item) => item.value.content) ?? [];
