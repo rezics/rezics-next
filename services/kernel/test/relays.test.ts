@@ -1,8 +1,12 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
+import { walkProcessEnvironment } from '../../../scripts/walk-stack.ts';
 import { createPool } from '../src/database/pool.ts';
 import { projectBatch, readBatch, type Envelope } from '../src/events/log.ts';
 import { relayConcurrencyForPool, startRelays, type Relay } from '../src/events/relays.ts';
+import scanPartitions from '../src/events/scan-partitions.sql';
+import { readWorkerConfig } from '../src/worker.ts';
+import { workerTestEnv } from './support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -73,6 +77,43 @@ const projecting = (
 ): Relay => ({
   consumer,
   run: (partition) => projectBatch(pool, { consumer, partition, apply: (envelopes) => apply(partition, envelopes) }),
+});
+
+test('the catalogue worker initializes a scanned nonroot checkpoint during Search publication', async () => {
+  const env = walkProcessEnvironment('reviewed-catalogue', 1, {
+    REZICS_WALK_IMPORT_CATALOGUE: '1',
+    REZICS_WALK_DEFER_FRONTENDS: '0',
+  });
+  const config = readWorkerConfig({ ...workerTestEnv(), ...env, DATABASE_URL: databaseUrl });
+  const worker = createPool(config.databaseUrl);
+  worker.options.max = config.poolSize;
+  const partition = freshPartition();
+  const consumer = freshConsumer();
+  const head = await append(partition);
+  const held: pg.PoolClient[] = [];
+  try {
+    // DBOS's listener and background job already own two sessions at scan time.
+    held.push(await worker.connect());
+    held.push(await worker.connect());
+    const pending = await scanPartitions.run(worker, { consumer });
+    expect(pending.some((row) => row.partition_no === partition && BigInt(row.position) === head)).toBe(true);
+    held.push(await worker.connect()); // Publication keeps this session through its owner reads.
+    const applied: bigint[] = [];
+    const result = await projectBatch(worker, {
+      partition,
+      consumer,
+      apply: async (envelopes) => {
+        applied.push(...envelopes.map((envelope) => envelope.position));
+      },
+    });
+    expect(result.status).toBe('read');
+    expect(applied[0]).toBe(1n);
+    expect(applied.at(-1)).toBe(head);
+    expect(await checkpoint(consumer, partition)).toBe(String(head));
+  } finally {
+    for (const client of held) client.release();
+    await worker.end();
+  }
 });
 
 test('projectBatch applies with no connection held and advances only from the position it read', async () => {

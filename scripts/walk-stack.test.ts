@@ -59,7 +59,6 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
     KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '384m',
     KERNEL_DATABASE_BOUNDED: '1',
-    KERNEL_WORKER_POOL_SIZE: '3',
     REZICS_WALK_SMOL: '1',
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',
@@ -108,15 +107,24 @@ test('issuer JWKS URL keeps the public issuer origin and normalizes one trailing
 });
 
 test('full-effect walks retain their worker mode while slot identities remain scoped', () => {
-  const env = walkProcessEnvironment('content-mode', 2, {
+  const env = walkProcessEnvironment('catalogue-mode', 2, {
+    REZICS_WALK_IMPORT_CATALOGUE: '1',
     REZICS_WALK_DEFER_FRONTENDS: '0',
+    KERNEL_WORKER_POOL_SIZE: '3',
     KERNEL_CHECK_ON_REMOTE: '1',
     KERNEL_DATABASE_PORT: '5432',
   });
   expect(env.REZICS_WALK_DEFER_FRONTENDS).toBe('0');
+  expect(env.KERNEL_WORKER_POOL_SIZE).toBeUndefined();
   expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
   expect(env.KERNEL_DATABASE_PORT).toBe(String(walkStackPorts(2).database));
-  expect(walkProcessEnvironment('account-mode', 1, {}).REZICS_WALK_DEFER_FRONTENDS).toBe('1');
+  const book = walkProcessEnvironment('book-mode', 1, { REZICS_WALK_FIRST_PUBLIC_WEB: '1' });
+  expect(book.REZICS_WALK_DEFER_FRONTENDS).toBe('0');
+  expect(book.KERNEL_WORKER_POOL_SIZE).toBeUndefined();
+  expect(walkProcessEnvironment('account-mode', 1, {})).toMatchObject({
+    REZICS_WALK_DEFER_FRONTENDS: '1',
+    KERNEL_WORKER_POOL_SIZE: '3',
+  });
 });
 
 test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {

@@ -477,10 +477,8 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '384m',
     KERNEL_DATABASE_BOUNDED: '1',
-    // DBOS retains LISTEN and a background-job lock; jobs and native services need a third checkout.
-    KERNEL_WORKER_POOL_SIZE: '3',
     REZICS_WALK_SMOL: '1',
-    // Vite/workerd, Playwright and the worker stay down through persona/seed; the journey starts them for browsers.
+    // The lightweight host serves Kernel HTTP itself and starts frontends after seeding.
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',
   };
@@ -494,14 +492,21 @@ export function walkProcessEnvironment(
 ): Record<string, string> {
   const merged: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
-    if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE') merged[name] = value;
+    if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE' && name !== 'KERNEL_WORKER_POOL_SIZE')
+      merged[name] = value;
   }
   const scoped = walkStackEnvironment(task, index);
+  const deferFrontends =
+    env.REZICS_WALK_FIRST_PUBLIC_WEB === '1'
+      ? '0'
+      : (env.REZICS_WALK_DEFER_FRONTENDS ?? scoped.REZICS_WALK_DEFER_FRONTENDS!);
   return {
     ...merged,
     ...scoped,
-    // Full-effect journeys need the default worker and Search before seed. Keep Account walks deferred by default.
-    REZICS_WALK_DEFER_FRONTENDS: env.REZICS_WALK_DEFER_FRONTENDS ?? scoped.REZICS_WALK_DEFER_FRONTENDS!,
+    REZICS_WALK_DEFER_FRONTENDS: deferFrontends,
+    // Only the lightweight host can share DBOS's remaining checkout. Search publication holds a
+    // session lock across independent owner snapshots. Full-effect walks use the ordinary worker pool.
+    ...(deferFrontends === '1' ? { KERNEL_WORKER_POOL_SIZE: '3' } : {}),
   };
 }
 
