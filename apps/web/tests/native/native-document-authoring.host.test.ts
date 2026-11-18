@@ -115,7 +115,7 @@ async function createGrowthThreads(count: number): Promise<void> {
             licence: 'MIT',
             subjectIds: [],
             boardId: fixture.boardId,
-            visibility: 'public',
+            visibility: 'published',
           }),
         },
         writer.persona,
