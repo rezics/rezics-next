@@ -123,18 +123,27 @@ async function createGrowthThreads(count: number): Promise<void> {
   }
 }
 
-async function measureHistoryReads(pageUrl: string, context: BrowserContext): Promise<number> {
+async function revealHistoryControl(post: ReturnType<Page['locator']>) {
+  const details = post.locator('[data-slot="post-reading-inspection"] > details');
+  const summary = details.locator(':scope > summary').filter({ hasText: /^Post details$/ });
+  await expect(summary).toBeVisible();
+  if ((await details.getAttribute('open')) === null) await summary.click();
+  return post.getByRole('button', { name: 'Revision history', exact: true, expanded: false });
+}
+
+async function measureHistoryReads(pageUrl: string, context: BrowserContext, postId: string): Promise<number> {
   const historyPage = await context.newPage();
   historyPage.setDefaultTimeout(30_000);
   await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
   await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  const button = historyPage.getByRole('button', { name: 'Revision history', exact: true });
+  const post = historyPage.locator(`#post-${postId}`);
+  const button = await revealHistoryControl(post);
   await expect(button).toBeVisible();
   await historyPage.waitForTimeout(100);
   const before = fixture.stack.kernelRequests().length;
   await button.click();
-  const panel = historyPage.getByRole('region', { name: 'Revision history', exact: true });
-  await expect(panel.getByText('Version 2')).toBeVisible();
+  const panel = post.getByRole('region', { name: 'Revision history', exact: true });
+  await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
   const requests = fixture.stack.kernelRequests().slice(before);
   await historyPage.close();
   return requests.length;
@@ -512,34 +521,34 @@ describe('native document authoring', () => {
     await expect(revisedProse.locator('pre code')).toContainText('const  preserved  = true;');
     await expect(revisedProse).not.toContainText('Private account title sentinel');
 
-    const history = page.getByRole('button', {
-      name: 'Revision history',
-      exact: true,
-    });
+    const history = await revealHistoryControl(editedPost);
     await history.click();
-    const historyPanel = page.getByRole('region', {
-      name: 'Revision history',
-      exact: true,
-    });
-    const historyVersions = historyPanel.locator(':scope > ol > li');
+    const historyPanel = editedPost.getByRole('region', { name: 'Revision history', exact: true });
+    const historyVersions = historyPanel
+      .getByRole('list', { name: 'Revision history', exact: true })
+      .locator(':scope > li');
     await expect(historyVersions).toHaveCount(2);
-    await expect(historyVersions.nth(0).getByText('Version 1')).toBeVisible();
-    await expect(historyVersions.nth(0)).toContainText('A quotation stays a quotation.');
-    await expect(
-      historyVersions.nth(0).getByRole('link', {
-        name: `@${fixture.aliceHandle}`,
-        exact: true,
-      }),
-    ).toBeVisible();
-    await expect(historyVersions.nth(0)).not.toContainText('edited in the served editor');
-    await expect(historyVersions.nth(1).getByText('Version 2')).toBeVisible();
-    await expect(historyVersions.nth(1)).toContainText('edited in the served editor');
-    await expect(
-      historyVersions.nth(1).getByRole('link', {
-        name: `@${fixture.aliceHandle}`,
-        exact: true,
-      }),
-    ).toBeVisible();
+    for (const [index, revision] of revisionsRead.revisions.entries()) {
+      const row = historyVersions.nth(index);
+      const version = index + 1;
+      const versionLink = row.getByRole('link', { name: `Version ${version}`, exact: true });
+      await expect(versionLink).toBeVisible();
+      await expect(versionLink).toHaveAttribute('href', `/en/posts/${original.id}/revisions/${revision.revisionId}`);
+      await expect(row.getByRole('link').and(row.locator(`a[href="/en/@${fixture.aliceHandle}"]`))).toBeVisible();
+    }
+
+    const firstVersion = historyVersions.nth(0);
+    await firstVersion.getByRole('button', { name: 'Inspect version 1', exact: true }).click();
+    const firstBody = firstVersion.locator('[data-slot="document-body"]');
+    await expect(firstBody).toBeVisible();
+    await expect(firstBody).toContainText('A quotation stays a quotation.');
+    await expect(firstBody).not.toContainText('edited in the served editor');
+
+    const secondVersion = historyVersions.nth(1);
+    await secondVersion.getByRole('button', { name: 'Inspect version 2', exact: true }).click();
+    const secondBody = secondVersion.locator('[data-slot="document-body"]');
+    await expect(secondBody).toBeVisible();
+    await expect(secondBody).toContainText('edited in the served editor');
     await expect(historyPanel).toContainText('LicenseRef-rezics-terms');
     await page.screenshot({
       path: join(import.meta.dir, '../../../.temp/native-document-authoring/revision-history-desktop-dark.png'),
@@ -550,9 +559,14 @@ describe('native document authoring', () => {
     const bobPage = await bobJourney.context.newPage();
     await bobPage.goto(page.url(), { waitUntil: 'domcontentloaded' });
     await bobPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    await expect(bobPage.getByRole('button', { name: 'More actions' })).toBeVisible();
-    await bobPage.getByRole('button', { name: 'More actions' }).click();
-    await expect(bobPage.getByRole('menuitem', { name: 'Edit', exact: true })).toHaveCount(0);
+    await bobPage
+      .locator(`#post-${original.id}`)
+      .getByRole('button', { name: 'More actions', exact: true })
+      .and(bobPage.locator('[aria-haspopup="menu"]'))
+      .click();
+    const bobMenu = bobPage.getByRole('menu');
+    await expect(bobMenu.getByRole('menuitem', { name: 'Copy link', exact: true })).toBeVisible();
+    await expect(bobMenu.getByRole('menuitem', { name: 'Edit', exact: true })).toHaveCount(0);
 
     const forbidden = await fixture.stack.kernel(
       `/v1/posts/${original.id}/revisions`,
@@ -580,7 +594,7 @@ describe('native document authoring', () => {
     for (const target of [1, 8, 64]) {
       await createGrowthThreads(target - unrelated);
       unrelated = target;
-      const requests = await measureHistoryReads(page.url(), aliceJourney.context);
+      const requests = await measureHistoryReads(page.url(), aliceJourney.context, original.id);
       growthRequests.push({ unrelated, requests });
     }
     console.log(`native-document-authoring-growth ${JSON.stringify(growthRequests)}`);
