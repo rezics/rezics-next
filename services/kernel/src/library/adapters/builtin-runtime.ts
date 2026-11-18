@@ -301,16 +301,12 @@ export function createNativeBuiltinRuntime(
         throw new ProblemError('dependency_unavailable', {
           detail: 'Built-in members require current Access and cursor keys.',
         });
-      if (
-        options.source.builtinKind === 'everything' &&
-        options.source.revision === 0 &&
-        (!options.query || options.query.admission)
-      ) {
+      if (options.source.builtinKind === 'everything' && options.source.revision === 0 && options.query?.admission) {
         const direct = await readLogicalEverythingMembers(
           { ...config, access, tokens },
           actor,
           collectionId,
-          options.query?.admission,
+          options.query.admission,
           options,
           options.deadline,
         );

@@ -1,9 +1,11 @@
 import { notFound } from '@tanstack/react-router';
 
+export const SUBJECT_VIEW_CURSOR_LIMIT = 4096;
+
 /** Kernel's sealed relation cursors can carry a full position sort key within its 4096-character token limit. */
 export function validateViewCursor(cursor: unknown): string | undefined {
   if (cursor === undefined) return;
-  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > 4096) throw notFound();
+  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > SUBJECT_VIEW_CURSOR_LIMIT) throw notFound();
   return cursor;
 }
 

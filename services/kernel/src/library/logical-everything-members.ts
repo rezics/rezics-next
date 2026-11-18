@@ -85,7 +85,7 @@ export async function readLogicalEverythingMembers(
   const route = routeOf(actor.accountId)!;
   const limit = options.limit ?? 20;
   const clock = deps.clock ?? systemClock;
-  const binding = builtinMemberCursorBinding(
+  const standardBinding = builtinMemberCursorBinding(
     actor,
     collectionId,
     limit,
@@ -93,7 +93,10 @@ export async function readLogicalEverythingMembers(
       ? { filter: admission.filter, releaseDigest: admission.releaseDigest }
       : undefined,
   );
+  const binding = { ...standardBinding, query: { ...standardBinding.query, source: 'private_builtin_direct' } };
   const cursor = options.cursor == null ? null : await decodeListCursor(deps.tokens, binding, options.cursor, clock());
+  // A cursor from the existing prepared Source belongs to that reader.
+  if (cursor && !cursor.ok) return null;
   if (
     cursor &&
     (!cursor.ok ||
