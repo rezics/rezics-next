@@ -145,6 +145,7 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
   expect([...passed.keys()]).toEqual([live]);
   expect(passed.get(live)).toEqual({
     key: live.key as Extract<DiscoveryUnionKey, { owner: 'accounts' }>,
+    matchEvidence: { state: 'unsupported' },
     summary: { kind: 'account', value: summary },
   });
   await expect(disclose([hit(nativeId, '7', '13')], () => observed)).rejects.toBeInstanceOf(SearchUnavailableError);
