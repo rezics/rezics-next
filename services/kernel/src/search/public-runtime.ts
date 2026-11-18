@@ -5,13 +5,15 @@ import type { SearchHit } from './query.ts';
 import { advanceSearchRecovery } from './page-recovery.ts';
 import { collectRetainedUsefulPage, type RetainedUsefulPage } from './useful-page.ts';
 import type { Pool } from 'pg';
-import type { DiscoveryRegistry } from './discovery.ts';
-import { nativeDiscoveryRegistry } from './account-discovery.ts';
+import type { DiscoveryProducerEntry, DiscoveryRegistry } from './discovery.ts';
+import { discoveryKindDirectory } from './discovery-registry.ts';
+import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
+import { discoveryAliasMatches } from './generations.ts';
+import { nativeDiscoveryRegistry, type DiscoveryTarget } from './account-discovery.ts';
 import { discoveryIndexName } from './indices.ts';
 import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { withBoundedReadConnection } from '../database/pool.ts';
 import type { KernelClock } from '../clock.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -50,6 +52,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
   prefix: string;
   clock: KernelClock;
   creditSearch?: CreditSearchSource;
+  discoveryProducers?: DiscoveryProducerEntry;
   /** Composition-bound Access observation; omitted fixtures keep throwing through. */
   facetAccess?: FacetAccessObservationPort;
 }>;
@@ -61,6 +64,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
   /** Pins the active mixed physical allocation; retained roots must still address that allocation. */
   openDiscovery(
     registry: DiscoveryRegistry,
+    scope: DiscoveryTarget,
     digest: string,
     context: PublicFilterConsumerContext,
     queried?: PublicFilterQueriedObservation,
@@ -256,6 +260,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     meaning: Pick<ActiveRelease, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
     registry?: DiscoveryRegistry,
+    scope?: DiscoveryTarget,
   ): Promise<PublicDiscoveryConsumerOperations> {
     checkDeadline(context);
     const operations = await createPublicFilterConsumerOperations({
@@ -268,7 +273,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       context,
       physicalTarget,
       meaning: { digest: meaning.digest, release: meaning.release },
-      ...(registry === undefined ? {} : { registry }),
+      ...(registry === undefined ? {} : { registry, discoveryAccess: config.access }),
+      ...(scope && { discoveryTarget: scope }),
     });
     // Native factory close drains owned observations; shutdown and replacement use this wrapper.
     owned.add(operations);
@@ -333,42 +339,31 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     return current;
   }
   return {
-    openDiscovery(registry, digest, context, queried) {
+    openDiscovery(registry, scope, digest, context, queried) {
       return track(async () => {
         checkDeadline(context);
         const release = await requestMeaning(context);
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
-        const result = await withBoundedReadConnection(
-          config.pool,
-          context.deadline,
-          (client) =>
-            client.query<{ generation: number; uuid: string; incarnation: string }>({
-              text: `SELECT generation::float8 AS generation,index_uuid AS uuid,incarnation::text
-                FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state='active'`,
-              values: [config.prefix],
-            }),
-          {
-            deadlineError: () => new ProblemError('deadline_exceeded'),
-            isUncertainSettledQueryError: () => true,
-          },
-        );
-        checkDeadline(context);
-        if (result.rows.length !== 1) notReady();
-        const allocation = result.rows[0]!;
-        if (!allocation.uuid || !Number.isSafeInteger(allocation.generation)) notReady();
-        const target = discoveryIndexName(config.prefix, allocation.generation);
+        const target = discoveryIndexName(config.prefix, scope.generation);
+        if (
+          scope.prefix !== config.prefix ||
+          !scope.uuid ||
+          !(await discoveryAliasMatches(requestSearch(context), scope))
+        )
+          notReady();
         if (
           queried &&
           (queried.consumer.physicalTarget !== target ||
-            queried.consumer.incarnation !== allocation.uuid ||
+            queried.consumer.incarnation !== scope.uuid ||
             queried.consumer.meaningDigest !== digest)
         )
           throw new ProblemError('search_restart_required');
-        const key = JSON.stringify([target, allocation.uuid, allocation.incarnation, digest]);
+        const allocationKey = JSON.stringify([target, scope.uuid, scope.incarnation, digest]);
+        const key = allocationKey + ':' + JSON.stringify(discoveryKindDirectory(registry).map(({ kind }) => kind));
         let operations = mixed.get(key);
         if (!operations) {
-          operations = create(target, release, context, registry);
+          operations = create(target, release, context, registry, scope);
           mixed.set(key, operations);
           void operations.catch(() => {
             if (mixed.get(key) === operations) mixed.delete(key);
@@ -377,7 +372,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         checkDeadline(context);
         // A real generation/release switch invalidates old cursors. Drain their factories rather
         // than retaining one resource owner for every historical release in a long-lived process.
-        const retired = [...mixed].filter(([candidate]) => candidate !== key);
+        const retired = [...mixed].filter(([candidate]) => !candidate.startsWith(allocationKey + ':'));
         for (const [candidate, old] of retired) {
           mixed.delete(candidate);
           retire(old);
@@ -522,10 +517,28 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const release = digest === null ? null : (await requestMeaning(context, digest))?.release;
         if (!release || digest === null) notReady();
         // The job only locates producer state. Native repair resolves incarnation, definition and grant again.
-        const registry = job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)
-          ? await nativeDiscoveryRegistry(config.pool, config.routeKey, nativeSource, { release })
-          : undefined;
-        if (registry) {
+        if (job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)) {
+          const generation = Number(job.consumer.physicalTarget.slice(`${config.prefix}discovery-g`.length));
+          if (
+            !Number.isSafeInteger(generation) ||
+            generation < 1 ||
+            discoveryIndexName(config.prefix, generation) !== job.consumer.physicalTarget
+          )
+            notReady();
+          const scope = await readDiscoveryScope(config.pool, config.prefix, context.deadline, generation);
+          if (!scope || job.consumer.incarnation !== scope.uuid) notReady();
+          const producers = config.discoveryProducers;
+          const owners = producers && (await resolveDiscoveryOwnerAdapters(producers, scope.metadataKinds));
+          const registry = await nativeDiscoveryRegistry(
+            config.pool,
+            config.routeKey,
+            producers?.subjects ?? nativeSource,
+            {
+              release,
+              ...(owners && { ownerAdapters: owners.ownerAdapters, omittedKinds: owners.omittedKinds }),
+              ...(producers && { accounts: producers.accounts }),
+            },
+          );
           const operations = await create(job.consumer.physicalTarget, { digest, release }, context, registry);
           try {
             return await operations.repairStep(job, context);

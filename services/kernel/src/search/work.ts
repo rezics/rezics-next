@@ -421,6 +421,7 @@ export function createSearchWorkModule(
             }),
           );
           runtime = createDefaultPublicFilterRuntime({
+            discoveryProducers,
             pool: context.pool,
             routeKey,
             access,

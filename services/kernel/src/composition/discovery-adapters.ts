@@ -149,7 +149,7 @@ function spaceRecords(partition: number, position: bigint, spaces: readonly Inde
     return {
       key,
       revision: position,
-      sourceVersion: null,
+      sourceVersion: space.revision,
       names: [space.name],
       descriptions: [space.description],
       nameSort: space.name,

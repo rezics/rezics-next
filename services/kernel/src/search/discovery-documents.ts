@@ -441,8 +441,12 @@ function validateSecondScopeDiscoveryDocument(
     (key.kind === 'space' && (value.names.length !== 1 || value.descriptions.length !== 1))
   )
     throw new TypeError('Invalid public Collection or Space metadata');
-  if ((key.kind === 'review') !== (value.source_version !== null))
-    throw new TypeError('Review source version is missing or attached to another kind');
+  if (
+    (key.kind === 'review' && value.source_version === null) ||
+    (key.kind === 'collection' && value.source_version !== null) ||
+    (key.kind === 'space' && value.source_version !== null && routeOf(value.source_version) === null)
+  )
+    throw new TypeError('Invalid owner discovery source version');
   return value as unknown as SecondScopeIndexedDiscoveryDocument;
 }
 

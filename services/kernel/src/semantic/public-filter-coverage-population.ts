@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
+import { routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterCoverageKeys, PUBLIC_FILTER_CATALOGUE_TEXT_KEYS } from './public-filter-coverage-pending.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
@@ -191,7 +192,7 @@ function validBindings(
         const window = search.decodeState<NativeWindow>(child.consumer_window);
         const consumed = child.page_consumed;
         if (
-          !validWindow(execution, window, request.start) ||
+          !validWindow(execution, window, request.start, 'representation' in capture) ||
           execution.id !== child.id ||
           window.parent !== parent ||
           consumed < 0 ||
@@ -227,29 +228,13 @@ function validBindings(
     }
     if (row.execution === null || row.consumer_window === null) return false;
     const execution = search.decodeState<CustodyExecution>(row.execution);
-    const window = search.decodeState<{
-      raw: ({ id: string } | { key: { id: string; owner: string } })[];
-      rounds: number;
-    }>(row.consumer_window);
+    const window = search.decodeState<NativeWindow>(row.consumer_window);
     if (
       execution.id !== request.execution ||
-      !isDeepStrictEqual(execution.start, request.start) ||
-      !Array.isArray(execution.ownRows) ||
-      !Array.isArray(window.raw) ||
-      window.raw.length > 200 ||
+      !validWindow(execution, window, request.start, 'representation' in capture) ||
       !Number.isInteger(window.rounds) ||
       window.rounds < 1 ||
-      window.rounds > 3 ||
-      execution.ownRows.length !== window.raw.length ||
-      execution.ownRows.some((own, i) => {
-        const raw = window.raw[i]!;
-        return (
-          !uuid.test(own.original) ||
-          !uuid.test(own.terminal) ||
-          own.original !== ('key' in raw ? raw.key.id : raw.id) ||
-          ('key' in raw && raw.key.owner === 'accounts' && own.terminal !== own.original)
-        );
-      })
+      window.rounds > 3
     )
       return false;
   }
@@ -257,14 +242,17 @@ function validBindings(
 }
 
 type NativeWindow = {
-  raw: ({ id: string; sort: unknown } | { key: { id: string; owner: string }; sort: unknown })[];
+  raw: (
+    | { id: string; sort: unknown }
+    | { key: { id: string; owner: string; kind: string; route: number }; sort: unknown }
+  )[];
   parent: string | null;
   consumed: number;
   before: unknown;
   rounds: number;
   charged: number;
 };
-function validWindow(execution: CustodyExecution, window: NativeWindow, start: PrivacyReductionStart) {
+function validWindow(execution: CustodyExecution, window: NativeWindow, start: PrivacyReductionStart, mixed: boolean) {
   return (
     isDeepStrictEqual(execution.start, start) &&
     Array.isArray(window.raw) &&
@@ -273,11 +261,18 @@ function validWindow(execution: CustodyExecution, window: NativeWindow, start: P
     execution.ownRows.length === window.raw.length &&
     execution.ownRows.every((own, index) => {
       const raw = window.raw[index]!;
+      if (!uuid.test(own.original) || !uuid.test(own.terminal)) return false;
+      if (!('key' in raw)) return !mixed && !own.metadataKind && raw.id === own.original;
+      const key = raw.key;
+      if (!mixed || key.id !== own.original) return false;
+      if (key.owner === 'semantic') return own.metadataKind === undefined;
+      if (own.terminal !== own.original) return false;
+      if (key.owner === 'accounts') return key.kind === 'account' && own.metadataKind === undefined;
       return (
-        uuid.test(own.original) &&
-        uuid.test(own.terminal) &&
-        own.original === ('key' in raw ? raw.key.id : raw.id) &&
-        (!('key' in raw) || raw.key.owner !== 'accounts' || own.terminal === own.original)
+        own.metadataKind === key.kind &&
+        routeOf(key.id) === key.route &&
+        ((key.owner === 'commerce' && key.kind === 'collection') ||
+          (key.owner === 'content' && (key.kind === 'review' || key.kind === 'space')))
       );
     })
   );

@@ -9,6 +9,7 @@ import { createSpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { SubjectSource } from '../search/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Access } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { createKernelCreditSearchSource } from './runtime-defaults.ts';
@@ -33,7 +34,7 @@ export function createDiscoveryProducerEntry(input: {
     input.reviewSource === undefined && input.tokens
       ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, clock, deadlineNow }, () => ({
           actor: { kind: 'anonymous' },
-          deadline: Date.now() + 30_000,
+          deadline: deadlineFor(30_000, deadlineNow),
         }))
       : undefined;
   const reviewSource = input.reviewSource ?? nativeReviewSource;

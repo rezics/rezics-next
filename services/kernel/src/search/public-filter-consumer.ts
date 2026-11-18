@@ -647,12 +647,18 @@ import {
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
+import { readOwnerCandidates, type DiscoveryOwnerCandidate } from './disclosure/owner-current.ts';
 import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
-import { discoveryConsumer } from './generations.ts';
+import { discoveryAliasMatches, discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
+import type {
+  DiscoveryConsumerCaptureInput,
+  DiscoveryConsumerQuery,
+  DiscoveryEngineHit,
+  DiscoveryReadContext,
+} from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';
@@ -1157,6 +1163,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     tail: string | null;
     rounds: number;
     charged: number;
+    ownerFinals: (() => Promise<void>)[];
     failed: boolean;
     finished: boolean;
     disposed: boolean;
@@ -1174,6 +1181,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       tail: null,
       rounds: 0,
       charged: 0,
+      ownerFinals: [],
       failed: false,
       finished: false,
       disposed: false,
@@ -1418,6 +1426,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function physical(q: PublicFilterQueriedObservation, m: Meter, context: PublicFilterConsumerContext) {
     if (q.consumer.physicalTarget !== target || q.consumer.meaningDigest !== meaning.digest)
       throw new ConsumerFailure('incarnation_changed');
+    if (config.discoveryTarget) {
+      if (
+        target !== discoveryIndexName(config.discoveryTarget.prefix, config.discoveryTarget.generation) ||
+        q.consumer.incarnation !== config.discoveryTarget.uuid ||
+        !(await discoveryAliasMatches(m.native, config.discoveryTarget))
+      )
+        throw new ConsumerFailure('incarnation_changed');
+      m.check();
+      return;
+    }
     const response = await m.native.request<Record<string, { settings?: { index?: { uuid?: string } } }>>(
       'GET',
       `/${target}/_settings`,
@@ -1600,10 +1618,73 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     return { rows, accepted };
   }
+  async function proveMetadataRows(
+    hits: readonly DiscoveryEngineHit[],
+    m: Meter,
+    context: PublicFilterConsumerContext,
+  ) {
+    const candidates: DiscoveryOwnerCandidate[] = [];
+    const positions: number[] = [];
+    for (const [position, hit] of hits.entries()) {
+      if (hit.key.owner !== 'commerce' && hit.key.owner !== 'content') continue;
+      if (hit.index !== target) throw new ConsumerFailure('incarnation_changed');
+      candidates.push({
+        key: hit.key,
+        revision: hit.revision,
+        sourcePosition: hit.sourcePosition,
+        ...(hit.sourceVersion === undefined ? {} : { sourceVersion: hit.sourceVersion }),
+      });
+      positions.push(position);
+    }
+    const accepted = new Set<number>();
+    if (!candidates.length) return { accepted };
+    const registry = config.registry;
+    if (!registry?.ownerKey || !registry.getOwnerAdapter || !config.discoveryAccess)
+      throw new ConsumerFailure('dependency_unavailable');
+    const getOwnerAdapter = registry.getOwnerAdapter;
+    const ports = {
+      ownerKey: registry.ownerKey,
+      async readCurrent(
+        kind: DiscoveryOwnerCandidate['key']['kind'],
+        ids: readonly string[],
+        request: DiscoveryReadContext,
+      ) {
+        m.cost.inputKeys += ids.length;
+        m.cost.accessPoints += ids.length;
+        m.cost.dependencyPoints += ids.length;
+        m.check();
+        const summaries = await getOwnerAdapter(kind).readCurrent(ids, request);
+        m.cost.rows += summaries.size;
+        m.cost.bytes += Buffer.byteLength(encodeState([...summaries]));
+        m.check();
+        return summaries;
+      },
+    };
+    // Physical preparation and custody prove the public population. Request-specific disclosure
+    // (including Collection query operands) remains with the selected owner reader.
+    const request = {
+      actor: { kind: 'anonymous' as const },
+      access: config.discoveryAccess,
+      deadline: context.deadline,
+    };
+    const current = await readOwnerCandidates(ports, candidates, request);
+    current.forEach((entry, index) => {
+      if (entry) accepted.add(positions[index]!);
+    });
+    return {
+      accepted,
+      async finish() {
+        // Collection observations bind the complete native batch, including withheld positions.
+        const final = await readOwnerCandidates(ports, candidates, request);
+        if (!isDeepStrictEqual(current, final)) throw new MixedOwnerPending();
+      },
+    };
+  }
   async function ownMixedRows(hits: readonly DiscoveryEngineHit[], m: Meter, context: PublicFilterConsumerContext) {
-    const rows: { original: string; terminal: string }[] = [];
+    const rows: CustodyExecution['ownRows'][number][] = [];
     const accepted: number[] = [];
     const seen = new Set<string>();
+    const metadata = await proveMetadataRows(hits, m, context);
     for (const [position, item] of hits.entries()) {
       m.check();
       if (item.key.owner === 'accounts') {
@@ -1625,6 +1706,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         rows.push({ original: item.key.id, terminal: item.key.id });
         const identity = `accounts:${item.key.id}`;
         if (!seen.has(identity)) {
+          accepted.push(position);
+          seen.add(identity);
+        }
+        continue;
+      }
+      if (item.key.owner !== 'semantic') {
+        // Keep a positional row for every examined hit, including a native omission.
+        rows.push({ original: item.key.id, terminal: item.key.id, metadataKind: item.key.kind });
+        const identity = `${item.key.owner}:${item.key.kind}:${item.key.id}`;
+        if (metadata.accepted.has(position) && !seen.has(identity)) {
           accepted.push(position);
           seen.add(identity);
         }
@@ -1656,7 +1747,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     m.cost.rows += hits.length;
     m.cost.bytes += Buffer.byteLength(encodeState(hits));
-    return { rows, accepted };
+    return { rows, accepted, finish: metadata.finish };
   }
   async function nativeBatch(
     q: PublicFilterQueriedObservation,
@@ -2408,6 +2499,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           if (error instanceof MixedOwnerPending) return preparing();
           throw error;
         }
+        if (checked.finish && page) page.ownerFinals.push(checked.finish);
         rows = checked.rows;
         positions = checked.accepted;
       } else {
@@ -3288,6 +3380,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         run(async () => {
           if (!page.queried || !page.id || !page.start || !page.tail || page.rounds < 1)
             throw new ConsumerFailure('observation_lost');
+          for (const finish of page.ownerFinals) await finish();
           // Last physical/copy check belongs before the CURRENT Source role. No
           // dependent native/owner work is allowed after that role succeeds.
           await physical(page.queried, page.m, context);
