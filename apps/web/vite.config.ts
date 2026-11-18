@@ -391,6 +391,8 @@ export default defineConfig((context) => {
   }
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
+  const bundledNativeClient =
+    context.command === 'serve' && !context.isPreview && testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1';
   const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
   const walkCacheDir = process.env.REZICS_WALK_STACK_SLOT
     ? resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT)
@@ -415,7 +417,10 @@ export default defineConfig((context) => {
   });
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
+    // Start's bundled manifest serves the real hydration entry and route chunks from this Worker launch.
+    ...(bundledNativeClient ? { experimental: { bundledDev: true } } : {}),
     server: {
+      ...(bundledNativeClient ? { hmr: false as const } : {}),
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),

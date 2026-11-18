@@ -60,6 +60,7 @@ nativeBeforeAll(lifecycle, 600_000, async (signal) => {
   await prepareNativeAuthMessages();
   if (!japaneseHydrationOnly) await prepareNativeWebSearch('library-archive');
   stack = await startNativeWebStack({
+    bundledClient: true,
     observeBookSearchPreparation: !entryOnly && !japaneseHydrationOnly,
     observeArchiveEntry: true,
     observeArchiveProgress: true,
@@ -203,7 +204,11 @@ async function visitLocalizedArchive(
   page.on('pageerror', observePageError);
   let stage = 'navigation';
   try {
-    await page.goto(target.href, { waitUntil: 'domcontentloaded' });
+    const document = await page.goto(target.href, { waitUntil: 'domcontentloaded' });
+    if (waitForWorkspace) {
+      const html = await document?.text();
+      expect(html?.includes('src="/assets/index.js"'), 'Japanese Archive document names the bundled entry').toBe(true);
+    }
     stage = 'hydration';
     await hydrated(page);
     stage = 'localized-heading';
