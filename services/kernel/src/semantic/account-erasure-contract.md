@@ -87,6 +87,10 @@ commit together; foreign effect delivery records the account-home inbox and any 
 fence. The local payload commit precedes late resolution. Content's cleanup modules are not Semantic custody
 ports, and the shared-history encoders are not a shared minimizer or a receiving custody receipt.
 
+Canonical generation announcements and delivery scheduling continuations only change delivery counters
+and schedule the next receive. The locator effect registers the receiving events and the ordinary
+Semantic source mutations that can commit locators.
+
 Required participant native schedules, **NOT YET FROZEN** until actual Semantic producers and barriers bind:
 
 | Schedule                                                                                                                  | Native observations required                                                                                                                                                                    |
