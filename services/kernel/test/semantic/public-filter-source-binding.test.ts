@@ -811,10 +811,16 @@ test('native Source replays its original creation window after the same home adv
     expect(key).toBeLessThan(65536);
     const book = await f.create('schema:Book', {}, String(key));
     expect(partitionOf(routeOf(book)!)).toBe(openHome);
+    await runCommand(
+      f.db.pool,
+      { partition: openHome, deadline: readContext().deadline, clock: f.config.clock },
+      async () => ({ value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: null }] }),
+    );
 
     let frontier: string | null = page.frontier;
     let prefixPredecessor: string | null | undefined;
     let fallbackPredecessor: string | undefined;
+    let closedWithEvents = false;
     for (let turn = 0; turn < 80; turn++) {
       const nextRequest = { ...request, frontier };
       const next = await recovered.repairPage(nextRequest, readContext());
@@ -834,7 +840,9 @@ test('native Source replays its original creation window after the same home adv
         row &&
         decodePublicFilterNativeState<{
           windowBatch?: { from: number; examined: number; through?: string[] };
-          next: { bridge?: { partition: number } };
+          bridgeEvents?: { count: number };
+          input: { bridge?: { partition: number; position: bigint; through: bigint } };
+          next: { phase: string; partition: number; bridge?: { partition: number } };
         }>(row.state);
       if (window && window.windowBatch?.through && window.windowBatch.from + window.windowBatch.examined === openHome)
         prefixPredecessor = frontier;
@@ -856,6 +864,16 @@ test('native Source replays its original creation window after the same home adv
         });
       }
       const verified = await recovered.readRepairStep(stepRequest, readContext());
+      if (window && window.input.bridge?.partition === openHome && window.next.phase === 'window') {
+        expect(window.input.bridge.position).toBeLessThanOrEqual(window.input.bridge.through);
+        expect(window.bridgeEvents?.count).toBeGreaterThan(0);
+        expect(window.next.partition).toBe(openHome + 1);
+        expect(await recovered.repairPage(nextRequest, readContext())).toMatchObject({
+          status: 'progress',
+          frontier: next.frontier,
+        });
+        closedWithEvents = true;
+      }
       if (fallback) {
         const replay = await recovered.repairPage(nextRequest, readContext());
         expect([verified, replay]).toMatchObject([
@@ -872,6 +890,7 @@ test('native Source replays its original creation window after the same home adv
       if (next.status === 'complete') break;
     }
     if (!fallbackPredecessor) throw new Error('Missing ordinary window replay');
+    expect(closedWithEvents).toBe(true);
     expect(frontier).toBeNull();
     const closed = await f.db.pool.query<{ verified_home: number }>(
       `SELECT verified_home FROM semantic.public_filter_repair_step

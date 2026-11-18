@@ -1223,6 +1223,18 @@ export function createNativePublicFilterSourceBinding(
       projection: null,
     };
   }
+  function closedCreationBridge(record: RepairRecord) {
+    const { input, next, bridgeEvents } = record;
+    if (
+      input.phase !== 'bridge' ||
+      !input.bridge ||
+      next.phase !== 'window' ||
+      next.partition !== input.bridge.partition + 1 ||
+      (input.bridge.position <= input.bridge.through && !bridgeEvents)
+    )
+      return undefined;
+    return input.bridge;
+  }
   async function advanceCreationBridge(
     bootstrap: string,
     state: RepairState,
@@ -1291,11 +1303,18 @@ export function createNativePublicFilterSourceBinding(
       result = await readPublicFilterCreationEvent(db, input, context);
     }
     const event = result.event;
-    if (event === null) {
+    const action = event === null ? null : publicFilterCreationAction(event.type, accounts);
+    // A replay keeps its original successor, including earlier receipts that
+    // recorded the exhausted cursor as a separate step.
+    const closedByRange =
+      receipt &&
+      action === null &&
+      result.next.position > window.through &&
+      (!retained || retained.next.phase === 'window');
+    if (event === null || closedByRange) {
       const { bridge: _bridge, ...rest } = state;
-      return { next: { ...rest, partition: home + 1, epoch: null, phase: 'window' } };
+      return { next: { ...rest, partition: home + 1, epoch: null, phase: 'window' }, receipt };
     }
-    const action = publicFilterCreationAction(event.type, accounts);
     if (action === null) return { next: { ...state, partition: home, bridge: result.next }, receipt };
     const route = event.subject === null ? null : routeOf(event.subject);
     if (route === null || (action === 'semantic' && partitionOf(route) !== home))
@@ -2619,16 +2638,9 @@ export function createNativePublicFilterSourceBinding(
           }
         }
       } else if (original) {
-        if (
-          original.input.phase !== 'bridge' ||
-          !original.input.bridge ||
-          original.input.partition !== seal.home ||
-          original.input.bridge.position <= original.input.bridge.through ||
-          original.next.partition !== seal.home + 1 ||
-          original.next.phase !== 'window'
-        )
-          throw new BindingError('binding_mismatch');
-        windows.push(original.input.bridge);
+        const window = closedCreationBridge(original);
+        if (!window || window.partition !== seal.home) throw new BindingError('binding_mismatch');
+        windows.push(window);
       }
       const verify = async () => {
         if (original?.windowBatch) return; // The authority read checks every retained verified window.
@@ -3195,6 +3207,7 @@ export function createNativePublicFilterSourceBinding(
           !isDeepStrictEqual(current.definition, cut.definition)
         )
           throw new BindingError('configuration_changed');
+        const closedWindow = closedCreationBridge(record);
         await retainPublicFilterRepairVerification(
           db,
           chain,
@@ -3205,12 +3218,8 @@ export function createNativePublicFilterSourceBinding(
             complete: row.complete,
             inputLimit: row.input_limit,
             digests: row.repair_locator_digests!,
-            ...(record.input.phase === 'bridge' &&
-            record.input.bridge &&
-            record.input.bridge.position > record.input.bridge.through &&
-            record.next.phase === 'window' &&
-            record.next.partition === record.input.partition + 1
-              ? { closedHome: record.input.partition }
+            ...(closedWindow
+              ? { closedHome: closedWindow.partition }
               : record.input.phase === 'window' && record.windowBatch && record.windowBatch.count > 0
                 ? { closedHome: record.windowBatch.from }
                 : {}),
