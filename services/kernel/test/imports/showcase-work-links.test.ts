@@ -260,7 +260,8 @@ test('default seed publishes the cited VN work link on its own identity and refr
     });
     expect(taken.status).toBe(200);
     const commandOffset = commands.length;
-    const refreshedPlan = await planCrossMediaSeed(tables('https://bgm.tv/subject/101'), {
+    const replacementUrl = 'https://bgm.tv/subject/51';
+    const refreshedPlan = await planCrossMediaSeed(tables(replacementUrl), {
       selection: developmentShowcaseSelection,
     });
     expect(refreshedPlan.records.vndb.find((record) => record.key === sourceWork)?.revision).toBe('7');
@@ -283,7 +284,7 @@ test('default seed publishes the cited VN work link on its own identity and refr
     expect(counterparts.map((item) => item.value.content)).not.toContain(animeId);
     const urls = (afterFence.subject.statements['schema:url'] ?? []).map((item) => item.value.content);
     expect(urls).not.toContain(linkedUrl);
-    expect(urls).not.toContain('https://bgm.tv/subject/101');
+    expect(urls).not.toContain(replacementUrl);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
