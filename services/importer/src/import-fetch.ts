@@ -577,14 +577,11 @@ export function createBoundedPublicGet(options: PublicGetOptions) {
   return createBoundedGet(options, { protocols: ['https:'], redirect: 'error' });
 }
 
-/** Public reads observe one response. An acknowledged create may wait for its projection under the same GET budget. */
-export function createBoundedPublicSubjectGet(
-  options: Pick<PublicGetOptions, 'origin' | 'fetch'>,
-  afterCreate = false,
-) {
+/** Publication reads following a write may wait for its projection under the same GET budget. */
+export function createBoundedPublicSubjectGet(options: Pick<PublicGetOptions, 'origin' | 'fetch'>, afterWrite = false) {
   return createBoundedGet(
-    { ...options, pathPrefix: '/v1/subjects/', maxAttempts: afterCreate ? MAX_IMPORT_ATTEMPTS : 1 },
-    { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store', retryProjectionOnly: afterCreate },
+    { ...options, pathPrefix: '/v1/subjects/', maxAttempts: afterWrite ? MAX_IMPORT_ATTEMPTS : 1 },
+    { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store', retryProjectionOnly: afterWrite },
   );
 }
 

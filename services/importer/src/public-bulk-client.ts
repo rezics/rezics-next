@@ -34,8 +34,10 @@ export class PublicSubjectGetUnavailable extends Error {
   }
 }
 
+type PublicationReadMode = 'after-create' | 'after-adoption';
+
 export type PublicBulkClient = Readonly<{
-  readSubject(id: string, signal?: AbortSignal, mode?: 'after-create'): Promise<ReviewedSubjectRead>;
+  readSubject(id: string, signal?: AbortSignal, mode?: PublicationReadMode): Promise<ReviewedSubjectRead>;
   readSelectedSynopsis(id: string, query: string, signal?: AbortSignal): Promise<ReviewedSubjectRead>;
   readSubjectRelations?(
     id: string,
@@ -262,7 +264,7 @@ async function readCurrentSubject(
   id: string,
   signal: AbortSignal | undefined,
   selectedSynopsis?: string,
-  mode?: 'after-create',
+  mode?: PublicationReadMode,
 ): Promise<ReviewedSubjectRead> {
   if (!subjectId.test(id)) throw new TypeError('Invalid public subject identity');
   if (
@@ -296,7 +298,7 @@ async function readCurrentSubject(
         continue;
       }
       if (!response.ok) {
-        if (mode === 'after-create') {
+        if (mode !== undefined) {
           throw httpFailure(
             { status: response.status, response, error: await response.json().catch(() => null), data: null },
             { method: 'GET', origin: url.origin, path: url.pathname },
@@ -323,11 +325,11 @@ async function readCurrentSubject(
 export function createPublicBulkClient(options: { origin: string; fetch?: typeof fetch }): PublicBulkClient {
   const origin = new URL(options.origin);
   const read = createBoundedPublicSubjectGet(options);
-  const readCreated = createBoundedPublicSubjectGet(options, true);
+  const readAfterWrite = createBoundedPublicSubjectGet(options, true);
 
   return {
     async readSubject(id, signal, mode) {
-      return readCurrentSubject(mode === 'after-create' ? readCreated : read, origin, id, signal, undefined, mode);
+      return readCurrentSubject(mode ? readAfterWrite : read, origin, id, signal, undefined, mode);
     },
     async readSelectedSynopsis(id, query, signal) {
       return readCurrentSubject(read, origin, id, signal, query);

@@ -554,6 +554,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       },
     };
     let relationOutsidePreview = false;
+    const preparingSourceSubjects = new Set<string>();
     const relationReadCursors: (string | null)[] = [];
     const publicClient = createPublicBulkClient({
       origin: 'https://fixture.test',
@@ -572,6 +573,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           return Response.json({ relations: statements.map((statement) => ({ statement })), next: null });
         }
         const id = url.pathname.split('/').at(-1)!;
+        if (preparingSourceSubjects.delete(id))
+          return Response.json(
+            { type: 'https://rezics.com/problems/semantic_not_ready', retryable: true },
+            { status: 503, headers: { 'retry-after': '0' } },
+          );
         publicReadIds.add(id);
         const value = read(id);
         const rawRows = value.subject.statements['schema:abstract'] ?? [];
@@ -1580,6 +1586,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     };
     publicReadIds.clear();
     relationOutsidePreview = true;
+    preparingSourceSubjects.add(vndbSourceId);
+    preparingSourceSubjects.add(vndbTargetId);
     const resumed = await publishShowcase({
       plan,
       result,
@@ -1590,6 +1598,10 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     relationOutsidePreview = false;
+    expect(preparingSourceSubjects.size).toBe(0);
+    expect(
+      resumed.omissions.filter((item) => item.provider === 'vndb' && ['v1', 'r1'].includes(item.sourceKey)),
+    ).toEqual([]);
     expect(relationReadCursors).toEqual([null, 'public-page-two']);
     expect(resumed.omissions).toContainEqual({
       provider: 'vndb',

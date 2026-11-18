@@ -1965,7 +1965,11 @@ async function publishShowcasePhases(
     if (cached) return cached;
     const pending = (async () => {
       try {
-        return await input.publicClient.readSubject(id, undefined, vocabularyById.has(id) ? 'after-create' : undefined);
+        return await input.publicClient.readSubject(
+          id,
+          undefined,
+          vocabularyById.has(id) ? 'after-create' : 'after-adoption',
+        );
       } catch {
         return null;
       }
@@ -2801,11 +2805,15 @@ async function publishShowcasePhases(
         const identityProperty = group.property === sourceIdentityProperty(group.record);
         if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
           const sourceRead = await publicRead(id);
-          if (
-            !sourceRead ||
-            !currentSourceRead(sourceRead, group.record) ||
-            !publicHasSourceIdentity(sourceRead, group.record)
-          ) {
+          if (!sourceRead) {
+            groupOmissions.push({
+              provider: group.record.provider,
+              sourceKey: group.record.sourceKey,
+              code: 'public-view-unavailable',
+            });
+            return null;
+          }
+          if (!currentSourceRead(sourceRead, group.record) || !publicHasSourceIdentity(sourceRead, group.record)) {
             groupOmissions.push({
               provider: group.record.provider,
               sourceKey: group.record.sourceKey,
@@ -3071,6 +3079,15 @@ async function publishShowcasePhases(
         continue;
       const slot = relationSlot(assertion.statement);
       const adoption = adoptionSnapshots.get(groupKey(record.subjectId, assertion.property, slot));
+      // A stopped or unread slot has no selection evidence, even if its statement is visible.
+      if (adoption === undefined) {
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: 'adoption-current-read-unavailable',
+        });
+        continue;
+      }
       const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
       const rows = publicStatements(read, assertion.property);
       let readback = rows.find((row) =>
