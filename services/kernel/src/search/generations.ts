@@ -1404,6 +1404,11 @@ async function reconcileDiscoveryPage(
     });
     return false;
   }
+  if (guardedEmptyProbe && empty && initialEmptyCandidate(row)) {
+    // Both native censuses and witnesses agree across the guarded empty index read.
+    await guardedEmptyProbe.certify(row, census.position, row.native_epoch, witness);
+    return false;
+  }
   const last = keys.at(-1);
   await withSearchConnection(pool, async (client) => {
     await client.query(
@@ -1462,7 +1467,7 @@ async function reconcileMetadataDiscoveryPage(
     }
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
     const initialEmpty =
-      initialEmptyMetadataCandidate(row) &&
+      initialEmptyCandidate(row) &&
       page.position >= BigInt(row.position) &&
       (kind !== 'collection' || page.epoch !== undefined) &&
       page.next === null &&
@@ -1693,10 +1698,8 @@ function coreReconciliationBatch(pool: Pool, rows: readonly Population[]) {
   };
 }
 
-function initialEmptyMetadataCandidate(row: Population) {
+function initialEmptyCandidate(row: Population) {
   return (
-    row.owner !== 'accounts' &&
-    row.owner !== 'semantic' &&
     !row.native_complete &&
     row.after_route === null &&
     row.after_id === null &&
@@ -1714,7 +1717,8 @@ function reconciliationEmptyIndexProbe(
   coreRows: readonly Population[],
   batch: readonly Population[],
 ) {
-  const metadataRows = batch.filter(initialEmptyMetadataCandidate);
+  const candidates = batch.filter(initialEmptyCandidate);
+  const metadataRows = candidates.filter((row) => row.owner !== 'accounts' && row.owner !== 'semantic');
   if (coreRows.length < 2 && metadataRows.length === 0) return undefined;
   const coreScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
   const metadataScopes: ReturnType<typeof discoveryIndexTerms>[] = [];
@@ -1740,7 +1744,7 @@ function reconciliationEmptyIndexProbe(
     async () =>
       coreScopes.length >= 2 && metadataScopes.length > 0 && optionalEmpty([...coreScopes, ...metadataScopes]),
   );
-  const certificates = initialEmptyMetadataCertificates(pool, target, metadataRows);
+  const certificates = initialEmptyCertificates(pool, target, candidates);
   let coreEmpty: Promise<boolean> | undefined;
   let metadataEmpty: Promise<boolean> | undefined;
   return {
@@ -1770,7 +1774,7 @@ function reconciliationEmptyIndexProbe(
   };
 }
 
-function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, candidates: readonly Population[]) {
+function initialEmptyCertificates(pool: Pool, target: DiscoveryTarget, candidates: readonly Population[]) {
   const proofs: {
     partition: number;
     owner: string;
@@ -1778,6 +1782,10 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
     observed_position: string;
     prior_epoch: number | null;
     epoch: number | null;
+    prior_revision: string;
+    prior_claim_revision: string;
+    revision: string;
+    claim_revision: string;
   }[] = [];
   const batch = discoveryPageReadBatch(candidates, () =>
     withSearchConnection(pool, (client) =>
@@ -1788,15 +1796,19 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
              AND index_uuid=$3 AND incarnation=$4::uuid AND state='reconciling'
            FOR SHARE
          ), locked AS MATERIALIZED (
-           SELECT p.partition_no,p.owner,i.observed_position,i.epoch FROM bound,
-             jsonb_to_recordset($5::jsonb) AS i(partition integer,owner text,position bigint,observed_position bigint,prior_epoch integer,epoch integer)
+           SELECT p.partition_no,p.owner,i.observed_position,i.epoch,i.revision,i.claim_revision FROM bound,
+             jsonb_to_recordset($5::jsonb) AS i(partition integer,owner text,position bigint,observed_position bigint,
+               prior_epoch integer,epoch integer,prior_revision bigint,prior_claim_revision bigint,revision bigint,claim_revision bigint)
              JOIN search.discovery_population p ON p.partition_no=i.partition AND p.owner=i.owner
            WHERE p.prefix=$1 AND p.generation=$2 AND p.complete AND NOT p.native_complete AND NOT p.certified
              AND p.after_route IS NULL AND p.after_id IS NULL AND p.continuation IS NULL AND p.reconcile_position IS NULL
              AND p.indexed=0 AND p.census=0 AND p.position=i.position AND p.native_epoch IS NOT DISTINCT FROM i.prior_epoch
+             AND (p.revision,p.claim_revision)=(i.prior_revision,i.prior_claim_revision)
            ORDER BY p.partition_no,p.owner FOR UPDATE OF p
          )
-         UPDATE search.discovery_population p SET native_complete=true,certified=true,reconcile_position=l.observed_position,native_epoch=l.epoch
+         UPDATE search.discovery_population p SET native_complete=(l.owner NOT IN ('accounts','semantic')),
+           certified=true,reconcile_position=l.observed_position,native_epoch=l.epoch,
+           revision=l.revision,claim_revision=l.claim_revision
          FROM locked l WHERE p.prefix=$1 AND p.generation=$2 AND (p.partition_no,p.owner)=(l.partition_no,l.owner)`,
         [target.prefix, target.generation, target.uuid, target.incarnation, JSON.stringify(proofs)],
       ),
@@ -1804,7 +1816,12 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
   );
   return {
     observed: batch.observed,
-    async save(row: Population, position: bigint, epoch: number | null) {
+    async save(
+      row: Population,
+      position: bigint,
+      epoch: number | null,
+      witness?: { revision: bigint; claimRevision: bigint },
+    ) {
       proofs.push({
         partition: row.partition,
         owner: row.owner,
@@ -1812,6 +1829,10 @@ function initialEmptyMetadataCertificates(pool: Pool, target: DiscoveryTarget, c
         observed_position: position.toString(),
         prior_epoch: row.native_epoch,
         epoch,
+        prior_revision: row.revision,
+        prior_claim_revision: row.claim_revision,
+        revision: witness?.revision.toString() ?? row.revision,
+        claim_revision: witness?.claimRevision.toString() ?? row.claim_revision,
       });
       batch.observed(row);
       await batch.checkEmptyPage();
