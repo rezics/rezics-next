@@ -60,8 +60,8 @@ export const AdmittedPreview: Story = {
     const releases = await readZone(visualNovelZoneIds.preview, 'releases');
     expect(releases.status).toBe(200);
     const releasePage = await releases.json();
-    expect(releasePage.template).toEqual({ scope: 'route', key: 'releases' });
-    expect(releasePage.reads).toEqual({});
+    expect(releasePage).toHaveProperty('template', { scope: 'route', key: 'releases' });
+    expect(releasePage).toHaveProperty('reads', {});
 
     await userEvent.click(await view.findByRole('link', { name: /visual novels/i }));
     await view.findByRole('heading', { name: 'Visual novels' });
@@ -84,8 +84,8 @@ export const ReadyEmpty: Story = {
     const response = await readZone(visualNovelZoneIds.empty);
     expect(response.status).toBe(200);
     const page = await response.json();
-    expect(page.template).toEqual({ scope: 'route', key: '' });
-    expect(page.reads).toEqual({});
+    expect(page).toHaveProperty('template', { scope: 'route', key: '' });
+    expect(page).toHaveProperty('reads', {});
   },
 };
 
@@ -106,8 +106,8 @@ export const SparseHome: Story = {
     const response = await readZone(visualNovelZoneIds.sparse);
     expect(response.status).toBe(200);
     const page = await response.json();
-    expect(page.template).toEqual({ scope: 'route', key: '' });
-    expect(page.reads).toEqual({});
+    expect(page).toHaveProperty('template', { scope: 'route', key: '' });
+    expect(page).toHaveProperty('reads', {});
   },
 };
 
@@ -128,8 +128,8 @@ export const Releases: Story = {
     const response = await readZone(visualNovelZoneIds.preview, 'releases');
     expect(response.status).toBe(200);
     const page = await response.json();
-    expect(page.template).toEqual({ scope: 'route', key: 'releases' });
-    expect(page.reads).toEqual({});
+    expect(page).toHaveProperty('template', { scope: 'route', key: 'releases' });
+    expect(page).toHaveProperty('reads', {});
     await within(canvasElement).findByRole('link', { name: /visual novels/i });
   },
 };
@@ -157,7 +157,7 @@ export const SemanticUnavailable: Story = {
     await assertFailure(visualNovelZoneIds.unavailable, 503, 'semantic_not_ready', '1');
     const releases = await readZone(visualNovelZoneIds.unavailable, 'releases');
     expect(releases.status).toBe(200);
-    expect((await releases.json()).reads).toEqual({});
+    expect(await releases.json()).toHaveProperty('reads', {});
   },
 };
 

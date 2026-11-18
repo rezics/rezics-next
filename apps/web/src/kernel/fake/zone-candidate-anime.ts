@@ -191,11 +191,7 @@ function emptySubjectRead(read: PageRead, item: AnimeCandidateSubject, languages
   return { status: 204, body: null };
 }
 
-function subjectPageData(
-  item: AnimeCandidateSubject,
-  view: View = 'overview',
-  languages: string[] = [],
-): SubjectPageData | undefined {
+function subjectPageData(item: AnimeCandidateSubject, view: View = 'overview', languages: string[] = []) {
   const type = releaseTypes[item.type];
   if (!type) return;
   const target = { type: item.type, bases: type.bases };
@@ -226,7 +222,7 @@ function subjectPageData(
       directions: [],
     },
     reads,
-  };
+  } satisfies SubjectPageData;
 }
 
 function zoneSubjectPage(

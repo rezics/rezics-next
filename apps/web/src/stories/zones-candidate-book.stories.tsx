@@ -76,8 +76,10 @@ export const AdmittedFictionalPreview: Story = {
     await userEvent.click(winter);
     await within(canvasElement).findByRole('heading', { name: 'The Mapmaker’s Winter' });
     const subjectMain = within(canvasElement).getByRole('main');
-    const returnLink = (await within(subjectMain).findAllByRole('link')).find((link) =>
-      new URL(link.href, window.location.href).pathname.endsWith(`/zones/${BOOK_CANDIDATE_ZONE_IDS.admitted}`),
+    const returnLink = (await within(subjectMain).findAllByRole('link')).find(
+      (link) =>
+        link instanceof HTMLAnchorElement &&
+        new URL(link.href, window.location.href).pathname.endsWith(`/zones/${BOOK_CANDIDATE_ZONE_IDS.admitted}`),
     );
     if (!returnLink) throw new Error('The canonical Subject page lost its Books Zone visit context.');
     await userEvent.click(returnLink);

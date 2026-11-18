@@ -80,10 +80,11 @@ function emptySlot(name: (typeof slotNames)[number]) {
 }
 
 function homeDocument(state: CharacterCandidateHome): CompositionDocument {
+  const previewNote = characterCandidateCopy[state === 'ready-empty' ? 'readyEmpty' : state];
   const children: unknown[] = [
     { type: 'Heading', props: { id: 'title', text: 'Characters', level: 2 } },
     { type: 'Text', props: { id: 'intro', text: 'A starting page for fictional characters.' } },
-    { type: 'Text', props: { id: 'preview-note', text: characterCandidateCopy[state] } },
+    { type: 'Text', props: { id: 'preview-note', text: previewNote } },
   ];
 
   if (state !== 'sparse') {
@@ -205,11 +206,7 @@ function pageReads(document: CompositionDocument, subject: string | null, state:
 }
 
 /** A public-shaped Zone page fixture for the real reader; it carries no owner or mount metadata. */
-export function characterCandidatePage(
-  zoneId: string,
-  state: CharacterCandidateHome,
-  subjectId?: string,
-): ZonePageResponse {
+export function characterCandidatePage(zoneId: string, state: CharacterCandidateHome, subjectId?: string) {
   const character = characterCandidateCharacters.find(({ id }) => id === subjectId);
   const document = character ? characterCandidateSubjectDocument(character) : homeDocument(state);
   return {
@@ -219,5 +216,5 @@ export function characterCandidatePage(
     reads: pageReads(document, character?.id ?? null, state),
     zone: publicZone(zoneId),
     ...(character ? { subject: character.id } : {}),
-  };
+  } satisfies ZonePageResponse;
 }

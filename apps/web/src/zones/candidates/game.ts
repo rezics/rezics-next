@@ -73,9 +73,14 @@ const routeDocuments = Object.fromEntries(
   starter.pages.map(({ route, document }) => [route, withIntro(document, routeCopy[route] ?? routeCopy['']!)]),
 ) as Record<string, CompositionDocument>;
 
-const homePlan = planReads(platformRegistry, routeDocuments['']!, { subject: null });
-const homeReadKey = homePlan.nodes['works'];
-if (!homeReadKey) throw new Error('The Video games starter no longer plans its works list.');
+function homeWorksReadKey() {
+  const homePlan = planReads(platformRegistry, routeDocuments['']!, { subject: null });
+  const key = homePlan.nodes['works'];
+  if (!key) throw new Error('The Video games starter no longer plans its works list.');
+  return key;
+}
+
+const homeReadKey = homeWorksReadKey();
 
 export const videoGameCandidate = {
   profile,
