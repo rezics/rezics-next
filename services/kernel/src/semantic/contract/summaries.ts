@@ -68,6 +68,7 @@ export type RelatedSubjectSummary = SubjectSummary & { redirect?: string };
 
 export type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
 export type SummaryCoverState = 'available' | 'absent' | 'concealed';
+type SummaryMismatch = 'source-missing' | 'source-epoch' | 'source-position' | 'subject-access';
 /** Internal composition, never a browser-supplied witness or a cached allow.
  * Each component is an independent native home position, as in Subject reads.
  */
@@ -75,7 +76,7 @@ export type SubjectSummaryObservation = Readonly<{
   summaries: ReadonlyMap<string, SubjectSummary | null>;
   covers: ReadonlyMap<string, SummaryCoverState>;
   components: SummarySources;
-  current: () => Promise<boolean>;
+  current: (onMismatch?: (reason: SummaryMismatch) => void) => Promise<boolean>;
 }>;
 
 export type PublicSummaryQuery = Readonly<{
