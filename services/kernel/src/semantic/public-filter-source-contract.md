@@ -819,8 +819,9 @@ bigint position can precede a replacement projection. Projection completion and 
 privacy revalidation remain mandatory. A moved owner, changed Source or missing Account repair owner is
 unavailable. No whole rebuild or creation/change coverage is inferred from one page. Search's committed
 `readPublicFilterRepairSettlement` verifies actual repaired winners, dispatch, copies, writers and refresh
-custody through its staged native owner reads. Source `settle` uses the independently verified original
-terminal chain and its indexed closed-home windows, rather than clean serving population eligibility.
+custody through its staged native owner reads. Its reopened mixed settlement checks the retained receipts against
+the exact writer, gate and Core rows held by that transaction, then verifies current physical winners. Source `settle`
+uses the independently verified original terminal chain and its indexed closed-home windows.
 Each funded settlement step replays that exact original window before and after the genuine Search
 settlement, checking native owner, retained pin, baseline receipt and current original Source/Account
 heads around the staged foreign work. Each read checks that the home log still covers the captured through-position.

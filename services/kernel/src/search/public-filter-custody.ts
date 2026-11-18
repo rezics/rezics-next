@@ -23,7 +23,8 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import {
   verifyPublicFilterRepairWriterReceipt,
-  verifyDiscoveryRepairWriterReceipts,
+  assertRetainedRepairWriterFence,
+  verifyDiscoveryRepairWinners,
   readPublicFilterRepairPhysicalTarget,
   repairWriterPosition,
   validatePublicFilterRepairWriterEvidence,
@@ -934,7 +935,7 @@ export async function readPublicFilterRepairSettlement(
           (partition_no === retained.definition.source.partition && owner.epoch !== retained.definition.source.epoch)
         )
           throw new Failure('owner_unavailable');
-        return owner;
+        return { partition_no, epoch: owner.epoch, write_state: owner.write_state };
       });
       meter.inputKeys += subjects.length;
       meter.candidates += subjects.length;
@@ -967,6 +968,9 @@ export async function readPublicFilterRepairSettlement(
         state,
         retained,
         latest,
+        ownerByHome,
+        gateByHome,
+        writerById,
         // Compare data only; mutable accumulated cost and unrelated partition command positions are excluded.
         basis: {
           stateRow,
@@ -1050,15 +1054,32 @@ export async function readPublicFilterRepairSettlement(
             }
           }
         }
-        if (isDiscoveryRepairWriterReceipt(receipt)) mixedReceipts.push(receipt);
-        else await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+        if (isDiscoveryRepairWriterReceipt(receipt)) {
+          assertRetainedRepairWriterFence(
+            receipt,
+            final.gateByHome.get(receipt.partition),
+            final.writerById.get(receipt.subject),
+            final.ownerByHome.get(receipt.partition),
+          );
+          mixedReceipts.push(receipt);
+        } else await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
       }
       if (superseded) {
         const attempt = publicationRepair.getStore();
         if (attempt?.job === input.execution) attempt.writer = superseded;
         throw new Failure('identity_pending');
       }
-      await verifyDiscoveryRepairWriterReceipts(db, search, q.consumer.physicalTarget, mixedReceipts);
+      if (mixedReceipts.length) {
+        const { physical } = final.basis;
+        if (!('allocation' in physical) || typeof physical.allocation !== 'string')
+          throw new Failure('binding_mismatch');
+        const target = {
+          incarnation: physical.incarnation,
+          writeAlias: physical.writeAlias,
+          allocation: physical.allocation,
+        };
+        await verifyDiscoveryRepairWinners(db, search, q.consumer.physicalTarget, target, mixedReceipts);
+      }
       const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (
