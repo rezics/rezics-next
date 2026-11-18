@@ -898,6 +898,35 @@ export function websiteRoutes(input: {
               'set-cookie',
               cookie.replace('Path=/api/auth/oauth2/end-session/confirm', 'Path=/logout/confirm'),
             );
+          const location = headers.get('location');
+          if (
+            url.pathname === '/logout/confirm' &&
+            request.headers.get('sec-fetch-mode') === 'navigate' &&
+            response.status === 302 &&
+            location
+          ) {
+            const target = new URL(location, options.issuer);
+            if (target.origin !== options.issuer && (target.protocol === 'https:' || target.protocol === 'http:')) {
+              // Chromium applies the confirmation page's form-action policy through redirects.
+              // Start a new navigation only after the provider confirms logout and validates the return URI.
+              headers.delete('location');
+              headers.delete('content-length');
+              headers.set('content-type', 'text/html; charset=utf-8');
+              headers.set(
+                'content-security-policy',
+                "default-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+              );
+              headers.set('referrer-policy', 'no-referrer');
+              headers.set('x-content-type-options', 'nosniff');
+              const href = target.href.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
+              return new Response(
+                '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Signed out</title>' +
+                  `<meta http-equiv="refresh" content="0; url=${href}"></head>` +
+                  `<body><main><h1>Signed out</h1><a href="${href}">Continue to the website</a></main></body></html>`,
+                { headers },
+              );
+            }
+          }
           if (response.headers.get('content-type')?.startsWith('text/html')) {
             headers.delete('content-length');
             return new Response(

@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import type { Page } from 'playwright';
+import type { Page, Response as PlaywrightResponse } from 'playwright';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { prepareNativeAuthMessages, startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
@@ -420,8 +420,31 @@ async function signOutWebsiteAndAuth(page: Page): Promise<void> {
     waitUntil: 'domcontentloaded',
   });
   if (new URL(page.url()).origin === auth.origin) {
-    await page.getByRole('button', { name: 'Confirm logout', exact: true }).click();
-    await page.waitForURL(returnedToWebsite);
+    const route = (url: URL) => {
+      if (url.origin === webOrigin) return returnedToWebsite(url) ? 'website-home' : 'website-other';
+      if (url.origin !== auth.origin) return 'outside';
+      return ['/logout', '/logout/confirm'].includes(url.pathname) ? url.pathname : 'issuer-other';
+    };
+    const documents: { route: string; status: number }[] = [];
+    const recordDocument = (response: PlaywrightResponse) => {
+      const request = response.request();
+      if (documents.length < 8 && request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+        documents.push({ route: route(new URL(response.url())), status: response.status() });
+      }
+    };
+    page.on('response', recordDocument);
+    try {
+      await Promise.all([
+        page.waitForURL(returnedToWebsite, { waitUntil: 'commit' }),
+        page.getByRole('button', { name: 'Confirm logout', exact: true }).click(),
+      ]);
+    } catch (error) {
+      const outcome = error instanceof Error && error.name === 'TimeoutError' ? 'timed out' : 'failed';
+      const evidence = { currentRoute: route(new URL(page.url())), documents };
+      throw new Error(`Native Auth logout confirmation ${outcome}. ${JSON.stringify(evidence)}`);
+    } finally {
+      page.off('response', recordDocument);
+    }
   }
   expect(await exactCookie(page.context(), webOrigin, '__Host-rezics_session')).toBeUndefined();
   expect((await page.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
