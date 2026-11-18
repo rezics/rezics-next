@@ -417,8 +417,18 @@ export default defineConfig((context) => {
   });
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
-    // Start's bundled manifest serves the real hydration entry and route chunks from this Worker launch.
-    ...(bundledNativeClient ? { experimental: { bundledDev: true } } : {}),
+    ...(bundledNativeClient
+      ? {
+          experimental: { bundledDev: true },
+          environments: {
+            client: {
+              // The private HTTP bridge cannot register a Rolldown client over Vite's WebSocket.
+              // Emit the split route chunks up front so dynamic imports use ordinary HTTP assets.
+              build: { rolldownOptions: { experimental: { devMode: { lazy: false } } } },
+            },
+          },
+        }
+      : {}),
     server: {
       ...(bundledNativeClient ? { hmr: false as const } : {}),
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
@@ -450,6 +460,21 @@ export default defineConfig((context) => {
       },
     },
     plugins: traceWebVitePlugins([
+      bundledNativeClient && {
+        name: 'native-web-bundled-client-ready',
+        configureServer(server) {
+          const client = server.environments.client;
+          const bundle = client.bundledDev;
+          if (!bundle) throw new Error('Native Web requested a bundle without a bundled client environment');
+          const listen = client.listen.bind(client);
+          client.listen = async (server) => {
+            await listen(server);
+            // Start waits for this compiler in its own SSR middleware. Cloudflare dispatches SSR
+            // directly to workerd, so join the initial output before Vite opens the listener.
+            await bundle['devEngine'].ensureLatestBuildOutput();
+          };
+        },
+      } satisfies Plugin,
       ...(viteCacheDir
         ? [
             {
