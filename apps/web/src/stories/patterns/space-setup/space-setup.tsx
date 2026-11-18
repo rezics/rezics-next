@@ -724,8 +724,8 @@ function SpaceSetupFormVisit({
   }
   const choiceMissing = (step === 1 && !context) || (step === 2 && !scheme) || (step === 3 && !concept);
   const savedContextLabel = realm?.contextId
-    ? contextState.selected?.phase === 'ready' && contextState.selected.id === realm.contextId
-      ? contextState.selected.choice.label
+    ? context?.id === realm.contextId
+      ? context.label
       : contextState.current?.choice?.id === realm.contextId
         ? contextState.current.choice.label
         : m.space_setup_details_name_unavailable()
