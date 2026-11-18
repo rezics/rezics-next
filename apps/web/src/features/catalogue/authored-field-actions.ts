@@ -2,7 +2,6 @@ import { SUMMARY_VISIT_ADDRESS_BYTE_CAP } from '../pages/subject-summary-reading
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
-import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import { selectCandidate, type CandidateCommand, type CandidateResult } from '../../subject/candidates';
 import type { ProposalResult } from './statement-editor';

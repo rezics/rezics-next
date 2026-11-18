@@ -1,7 +1,6 @@
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
-import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../../kernel/client';
 import {
   readCandidates,
