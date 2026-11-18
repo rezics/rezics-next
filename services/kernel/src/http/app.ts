@@ -203,6 +203,7 @@ export function createApp({
         method: request.method,
         id: idFor(request),
         route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
+        observeWalkSubject: request.headers.get('x-rezics-walk-subject-read') === 'source-scheme',
         ...(action ? { action } : {}),
       });
       // Log hidden server failures, including unavailable native dependencies, never request content.

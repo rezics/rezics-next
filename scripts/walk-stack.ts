@@ -541,6 +541,14 @@ export function walkStackLogExcerpt(recorded: string, limit = 32_768): string {
   return recorded.replace(dbosDiagnosticBlock, '').slice(-limit);
 }
 
+/** Only fixed producer reason labels may leave a native response or the private stack log. */
+export function walkSubjectReadReason(value: string | null): string | undefined {
+  if (value === 'other-readiness') return value;
+  const known =
+    /^(?:subject|merged-member)\/(?:initial|revision-recheck)\/(?:deadline|checkpoint-deadline|merge-deadline|merge|(?:local|foreign)-checkpoint-(?:missing|uninitialized|zero-position|epoch|position))$/u;
+  return value && known.exec(value)?.[0] === value ? value : undefined;
+}
+
 /** Walks wait for Kernel and native Auth when frontends are deferred; otherwise Web, issuer and Kernel. */
 export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | undefined> = {}): string[] {
   if (env.REZICS_WALK_DEFER_FRONTENDS === '1')
