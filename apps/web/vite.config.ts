@@ -11,6 +11,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
+import { bundledWebStartupPlugin } from './scripts/bundled-web-startup.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
@@ -299,6 +300,7 @@ function workerDeniedDependencies(): Plugin {
   };
   return {
     name: 'worker-denied-dependencies',
+    apply: 'serve',
     enforce: 'pre',
     configResolved(resolved) {
       denied = new Set();
@@ -408,7 +410,7 @@ export default defineConfig((context) => {
         allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
         ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       },
-      plugins: [...workerPlugin, persistence.cleanupPlugin],
+      plugins: [bundledWebStartupPlugin(), ...workerPlugin, persistence.cleanupPlugin],
     };
   }
   const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
@@ -448,7 +450,7 @@ export default defineConfig((context) => {
     html: { cspNonce: viteNonceMarker },
     resolve: { alias: [...workerResolveAliases] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
-    build: { assetsInlineLimit: 0, ...(previewRoot ? { sourcemap: false } : {}) },
+    build: { assetsInlineLimit: 0, ...(previewRoot ? { sourcemap: false, reportCompressedSize: false } : {}) },
     optimizeDeps: {
       // Keep client optimization bounded: Vite's cold scanner follows generated route chunks and walks every reader,
       // swapping dependency hashes while the first page is loading. Known optimizer dependencies are explicit;
@@ -657,7 +659,7 @@ export default defineConfig((context) => {
       // Before the denied-dependency loader, which returns raw file contents for denied paths.
       clientModuleSelectorEsm(workerSelectorImport, workerSelectorShimPath),
       workerDeniedDependencies(),
-      webStartupEvidencePlugin(),
+      previewRoot ? bundledWebStartupPlugin() : webStartupEvidencePlugin(),
     ] as PluginOption[]),
   };
 });
