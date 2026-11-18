@@ -19,6 +19,7 @@ import {
   bookId,
   bookLong,
   bookRealm,
+  bookShowcaseDefinitions,
   bookSparse,
   bookSubjectMap,
   bookSubjects,
@@ -34,10 +35,10 @@ import { authoredReadingPage } from './thread-reading-page';
 import { GLOBAL, QUESTION, ratingsFixtures } from './ratings';
 import { recordedBookState } from './library-entry-states';
 import { storyViewerId } from './identities';
-import definitions from '../recorded/definitions-release.json';
 import collectionRecording from '../recorded/library-collection.json';
 
 const profile = profileJson as PresentationProfile;
+const { digest, release } = bookShowcaseDefinitions;
 export type BookScenario = 'rich' | 'sparse' | 'failure' | 'limited' | 'long';
 function createBookVisit(scenario: BookScenario) {
   const votes = new Map<string, { units: number; revision: number }>();
@@ -243,8 +244,7 @@ export function bookShowcasePage(
 ): SubjectPageData {
   const locale = options.locale ?? 'en';
   const item = bookSubjectMap.get(id)!;
-  const types = definitions.release.types as Record<string, { bases: string[] }>;
-  const target = { type: item.type, bases: types[item.type]!.bases };
+  const target = { type: item.type, bases: release.types[item.type]!.bases };
   const resolved = resolveView(profile, target, view)!;
   const context: SelectedContext = options.realm
     ? { id: bookContext, population: { kind: 'realm', id: options.realm, title: 'The Tide Archive reading group' } }
@@ -258,7 +258,6 @@ export function bookShowcasePage(
   const reads: SubjectPageData['reads'] = {};
   const catalogueDirections: NonNullable<NonNullable<SubjectPageData['catalogue']>['directions']> = [];
   const admittedDirections = new Set<string>();
-  const properties = definitions.release.properties as Record<string, { relation?: { inverse?: string | null } }>;
   for (const read of Object.values(plan.reads)) {
     if (read.kind !== 'links' && read.kind !== 'relations') continue;
     const direction: 'forward' | 'inverse' = read.kind === 'links' ? 'inverse' : 'forward';
@@ -269,10 +268,10 @@ export function bookShowcasePage(
       state: 'admitted',
       property: read.property,
       direction,
-      inverse: properties[read.property]?.relation?.inverse ?? null,
+      inverse: release.properties[read.property]?.relation?.inverse ?? null,
       sourceTypes: [],
       targetTypes: [],
-      release: definitions.digest,
+      release: digest,
       qualifiers: [],
     });
   }
@@ -319,7 +318,7 @@ export function bookShowcasePage(
       };
     } else if (read.kind === 'collections') {
       const rows = sparse ? [] : collections(id);
-      const page = windowOf(rows, read.limit, node, read.cursor, `${id}:${context.id}:${node}`);
+      const page = windowOf(rows, read.limit, node, undefined, `${id}:${context.id}:${node}`);
       reads[key] = {
         status: 200,
         body: { collections: page.rows, count: page.count, next: page.next },
@@ -336,8 +335,8 @@ export function bookShowcasePage(
     catalogue: {
       state: 'released',
       type: item.type,
-      digest: definitions.digest,
-      definitions: definitions.release,
+      digest,
+      definitions: release,
       directions: catalogueDirections,
     },
     reads,

@@ -8,7 +8,8 @@ const stack = {
   web: 'http://127.0.0.1:3000',
   kernel: 'http://127.0.0.1:4100',
 };
-const request = spyOn(globalThis, 'fetch');
+const fetchCalls: { fetch: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch> } = globalThis;
+const request = spyOn(fetchCalls, 'fetch');
 afterEach(() => request.mockReset());
 afterAll(() => request.mockRestore());
 

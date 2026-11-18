@@ -123,17 +123,18 @@ async function build(): Promise<void> {
   const startedAt = Date.now();
   const existing = outputMatches(identity);
   if (existing) {
+    const { publication: previousPublication, ...existingMetadata } = existing;
     if (
       existing.commit !== commit ||
       existing.storybookVersion !== version ||
-      existing.publication?.mode !== publication?.mode
+      previousPublication?.mode !== publication?.mode
     ) {
       writeBuildMetadata(output, {
-        ...existing,
+        ...existingMetadata,
         commit,
         storybookVersion: version,
         builtAt: new Date().toISOString(),
-        publication,
+        ...(publication === undefined ? {} : { publication }),
       });
     }
     const bytes = bytesIn(output);
@@ -207,7 +208,7 @@ async function build(): Promise<void> {
       builtAt: new Date().toISOString(),
       artifactIdentity: identity,
       artifactBytes: artifact.bytes,
-      publication,
+      ...(publication === undefined ? {} : { publication }),
     });
     await publishStorybookDirectory(publicationDirectory, output);
   } catch (error) {

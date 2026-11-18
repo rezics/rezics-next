@@ -963,7 +963,7 @@ async function walkPaths<Fixture extends CommunityFixture>(
         persona,
         elapsedMs: Math.round(performance.now() - started),
         source,
-        evidence: { error: message, url: ctx.page.url(), ...(observed && { observed }) },
+        evidence: { error: message, url: ctx.page.url(), ...(observed ? { observed } : {}) },
         firstWrong: message,
       });
     }
@@ -1012,7 +1012,11 @@ export async function run(args: readonly string[] = []): Promise<PathResult[]> {
     stack = origins;
     const call: KernelCall = (method, path, options) => kernel(origins, method, path, options);
     stage = `${scope === 'community' ? 'community' : 'catalogue'} fixture`;
-    seed = scope === 'community' ? await seedCommunityWeb(root, stack, call) : await seedCatalogue(stack, call);
+    const fixture =
+      scope === 'community'
+        ? ({ scope, seed: await seedCommunityWeb(root, stack, call) } as const)
+        : ({ scope, seed: await seedCatalogue(stack, call) } as const);
+    seed = fixture.seed;
 
     stage = 'frontend startup';
     frontends = await startSeededFrontends();
@@ -1028,8 +1032,9 @@ export async function run(args: readonly string[] = []): Promise<PathResult[]> {
     const page = await context.newPage();
     page.setDefaultTimeout(60_000);
     prerequisite = { status: 'PASS', elapsedMs: Math.round(performance.now() - setupStarted) };
-    if ('workId' in seed) await walkPaths(paths, walkers, { stack, seed, page, signIn }, results, source);
-    else await walkPaths(paths, communityWalkers, { stack, seed, page, signIn }, results, source);
+    if (fixture.scope === 'community')
+      await walkPaths(paths, communityWalkers, { stack, seed: fixture.seed, page, signIn }, results, source);
+    else await walkPaths(paths, walkers, { stack, seed: fixture.seed, page, signIn }, results, source);
   } catch (error) {
     const cause = error instanceof Error ? error.message : String(error);
     prerequisite = { status: 'FAIL', stage, cause, elapsedMs: Math.round(performance.now() - setupStarted) };

@@ -92,6 +92,7 @@ export const independentSourceStatistics = [
     mean: 7.26,
     count: 492,
     asOf: '2026-10-23',
+    licence: 'CC-BY-SA-3.0',
     attribution: 'Bangumi contributors',
   },
 ] satisfies SourceStatisticsResponse;

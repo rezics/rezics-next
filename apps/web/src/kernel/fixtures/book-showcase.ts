@@ -1,7 +1,7 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import synopsis from './book-synopsis.json';
-import definitions from '../recorded/definitions-release.json';
+import recordedDefinitions from '../recorded/definitions-release.json';
 
 /** Invented bibliography shared by the real-page showcase and its transport. */
 export const bookId = (n: number) => `0193b000-0000-7000-8000-${String(n).padStart(12, '0')}`;
@@ -28,7 +28,11 @@ type Statement = Subject['statements'][string][number];
 type Snak = Statement['qualifiers'][number];
 type Summary = NonNullable<SubjectRead['summary']>;
 type LabelledSummary = Summary & { label: NonNullable<Summary['label']> };
-const release = definitions.release as Release;
+export const bookShowcaseDefinitions = {
+  digest: recordedDefinitions.digest,
+  release: recordedDefinitions.release as Release,
+};
+const { digest, release } = bookShowcaseDefinitions;
 export const bookStoryLabels = {
   author: release.properties['schema:author']?.labels.en,
   bookType: release.types['schema:Book']?.labels.en,
@@ -49,7 +53,7 @@ export function bookStatement(property: string, content: unknown, qualifiers: Sn
     ...snak(property, content),
     qualifiers,
     references: [reference()],
-    rezics: { release: definitions.digest, revision: 1 },
+    rezics: { release: digest, revision: 1 },
   };
 }
 const date = (value: string, precision = 11) => ({
@@ -80,7 +84,7 @@ function subject(id: string, type: string, label: string, rows: Statement[] = []
     id,
     type,
     revision: 1,
-    release: definitions.digest,
+    release: digest,
     context: '00000000-0000-8000-8000-000000000000',
     resolution: {},
     relationCounts: {},
@@ -335,13 +339,12 @@ for (const item of bookSubjects) {
 export const isBookShowcase = (id: string | undefined) => id !== undefined && bookSubjectMap.has(id);
 export function bookSummary(id: string, locale = 'en'): LabelledSummary {
   const item = bookSubjectMap.get(id)!;
-  const types = release.types as Record<string, { bases: string[] }>;
   const language = item.labels[locale] ? locale : 'en';
   const creativeWork = ['schema:Book', 'schema:BookSeries', 'bf:Instance'].includes(item.type);
   return {
     id,
     type: item.type,
-    types: [item.type, ...(types[item.type]?.bases ?? [])],
+    types: [item.type, ...(release.types[item.type]?.bases ?? [])],
     label: { value: item.labels[language]!, language },
     creativeWork,
     cover:
@@ -359,6 +362,7 @@ export function bookSummary(id: string, locale = 'en'): LabelledSummary {
             credit: {
               rightsHolder: 'REZICS story illustration',
               license: 'CC0-1.0',
+              obligations: [],
               via: {
                 name: 'Book showcase cover artwork',
                 url: 'https://github.com/rezics/rezics-next/tree/main/apps/web/.storybook/media',
