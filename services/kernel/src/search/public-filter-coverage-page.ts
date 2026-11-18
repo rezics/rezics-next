@@ -1,4 +1,5 @@
 import type { DiscoveryConsumerQuery } from './discovery.ts';
+import type { SourceBindingFailureReason } from '../semantic/index.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerCapture,
@@ -10,11 +11,26 @@ import type {
   PublicFilterQueriedObservation,
 } from './public-filter-consumer-contract.ts';
 
+/** Fixed labels from the original capture. No consumer, key, observation or source payload is retained. */
+export type PublicFilterCaptureWitness = Readonly<{
+  stage:
+    | 'definition'
+    | 'registration'
+    | 'population-bootstrap'
+    | 'retained-population-bootstrap'
+    | 'published-coverage'
+    | 'open-registration-observation'
+    | 'begin'
+    | 'population-repair';
+  reason?: SourceBindingFailureReason;
+}>;
+
 /** Request-local access to the SAME native consumer. This object is never serialized
  * or accepted as permission: every transition resolves the original native rows.
  */
 export type PublicFilterCoveragePage = Readonly<{
   capture(plan: PublicCanonicalCaptureInput, snapshot: 'pit' | 'prepared'): Promise<PublicFilterConsumerCapture>;
+  captureWitness?(): PublicFilterCaptureWitness | undefined;
   query(
     queried: PublicFilterQueriedObservation,
     refill?: PublicFilterConsumerRefill,
