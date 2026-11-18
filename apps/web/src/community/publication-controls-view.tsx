@@ -13,8 +13,9 @@ import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from 
 import { Cover } from '@rezics/ui/cover';
 import { FeedCardImageCredit } from '../features/feed/card-attribution';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { ListRowControl } from '@rezics/ui/list-row';
+import { ListRowControl, listRowFrameClassName } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -487,7 +488,10 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               </div>
             )}
             {preparation ? (
-              <ContentItemFrame as="section" aria-label={m.realm_publication_scope()} className="min-w-0 space-y-2 py-3">
+              <section
+                aria-label={m.realm_publication_scope()}
+                className={cn(listRowFrameClassName, 'min-w-0 space-y-2 py-3')}
+              >
                 <p>
                   {m.realm_publication_prepared_realm({
                     realm:
@@ -539,7 +543,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                     </Button>
                   ))}
                 </ListRowControl>
-              </ContentItemFrame>
+              </section>
             ) : null}
           </fieldset>
           {preparation && preparation.subject.currentId !== preparation.subject.originalId ? (

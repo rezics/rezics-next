@@ -379,8 +379,8 @@ export function RealmRulesAuthoringPanel({
   const currentReadMatchesAttachment =
     prepared?.kind === 'ready' && sameReference(preparedReference, attachedReference);
   const attachedStatus = (() => {
-    if (state.read.kind === 'hidden') return m.community_management_denied();
-    if (state.read.kind === 'unavailable') return m.realm_appearance_unavailable();
+    if (state.read.kind !== 'ready')
+      return state.read.kind === 'hidden' ? m.community_management_denied() : m.realm_appearance_unavailable();
     if (!attachedReference) return m.realm_appearance_no_rules();
     if (prepared?.kind === 'ready') {
       if (!currentReadMatchesAttachment) return m.realm_appearance_unavailable();

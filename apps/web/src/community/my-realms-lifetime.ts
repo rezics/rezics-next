@@ -424,7 +424,7 @@ function sourceFor(client: QueryClient): MyRealmsSessionSource {
 
 export class MyRealmsCaller {
   readonly subscribe: MyRealmsSessionSource['subscribe'];
-  readonly getRevision: MyRealmsSessionSource['getRevision'];
+  readonly getRevision: MyRealmsSessionSource['getViewRevision'];
   private readonly session: SessionSnapshot | null;
   private readonly localSessionCacheRevision: SessionCacheRevision;
   private active = true;

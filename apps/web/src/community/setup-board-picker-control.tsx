@@ -149,7 +149,7 @@ export function SetupBoardPicker({
           }
         : null;
     keyboardPosition.current = pending;
-    if (pending) {
+    if (pending && ownerWindow) {
       ownerDocument.addEventListener('focusin', cancelKeyboardPosition, true);
       ownerDocument.addEventListener('pointerdown', cancelKeyboardPosition, true);
       ownerWindow.addEventListener('blur', cancelKeyboardPosition, true);
