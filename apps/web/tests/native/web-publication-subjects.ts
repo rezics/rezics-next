@@ -73,7 +73,12 @@ async function selectPrivateSitemapFact(kernel: NativeWebStack['kernel'], writer
   );
   const path = `/v1/subjects/${subjectId}`;
   const { candidate } = await json<{ candidate: string }>(
-    await post(kernel, `${path}/candidates`, { statement: snak('schema:inLanguage', 'en') }, writer),
+    await post(
+      kernel,
+      `${path}/candidates`,
+      { statement: { ...snak('schema:inLanguage', 'en'), references: reference('Lantern private selection') } },
+      writer,
+    ),
     201,
     'Propose private sitemap fact',
   );
