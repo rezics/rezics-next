@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { releaseDigest } from '@rezics/definitions';
+import { withQueryAccounting } from '../../src/database/pool.ts';
+import { lockProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -14,6 +16,53 @@ import {
   snak,
   statement,
 } from './support/public-filter-source.ts';
+
+test('concurrent first pages for one Book complete across a native serialization conflict', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const subject = await f.create('schema:Book');
+    const source = publicFilterSource(f.config);
+    const context = readContext();
+    const read = () =>
+      source.readPublicFilterProjectionPage({
+        context,
+        subject,
+        meaning: f.meaning,
+        inputLimit: 16,
+        frontier: null,
+      });
+    const snapshots = Promise.withResolvers<void>();
+    let attempts = 0;
+    let conflicts = 0;
+    const pages = await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(sql, _values, dispatch) {
+          if (sql === lockProjectionBuildForRetirementSql) {
+            if (++attempts === 2) snapshots.resolve();
+            await snapshots.promise;
+          }
+          try {
+            return await dispatch();
+          } catch (error) {
+            if (error instanceof Error && 'code' in error && error.code === '40001') conflicts++;
+            throw error;
+          }
+        },
+      },
+      () => Promise.all([read(), read()]),
+    );
+    expect(conflicts).toBe(1);
+    expect(attempts).toBe(3);
+    for (const page of pages) {
+      expect(page.status).toBe('complete');
+      if (page.status === 'complete') expect(page.source.subject).toBe(subject);
+    }
+  } finally {
+    await f.close();
+  }
+}, 60_000);
 
 test('native complete selected public facet projection retains bounded frontier exact statement associations and current dependencies', async () => {
   const { publicFilterSource } = await nativeProducer();

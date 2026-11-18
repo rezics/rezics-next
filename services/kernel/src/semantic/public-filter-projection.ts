@@ -7,6 +7,7 @@ import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
   discardConnection,
+  withBoundedCommandConnection,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
   withConnection,
@@ -17,6 +18,7 @@ import {
   requireAccessDeadline,
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
+import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -842,66 +844,47 @@ async function saveBuild(
   deadline: number,
 ): Promise<BuildRow | { retirement: PublicFilterProjectionRetirement } | null> {
   const route = routeOf(subject)!;
-  return withConnection(config.pool, async (client) => {
-    requireAccessDeadline(deadline);
+  async function attempt(client: PoolClient) {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    try {
-      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-      const owner = await readPartition(client, observation.partition);
-      const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: observation.partition });
-      const current = rows(
-        await nativeSourceQuery(client, readSubjects, {
-          partition_no: observation.partition,
-          routes: [route],
-          subject_ids: [subject],
-        }),
-      )[0] as SubjectRow | undefined;
-      if (
-        !owner ||
-        owner.writeState !== 'active' ||
-        owner.epoch !== observation.epoch ||
-        owner.position < observation.position ||
-        !privacy ||
-        BigInt(privacy.position) !== privacyPosition ||
-        !sameSource(expected, current)
-      ) {
-        await client.query('ROLLBACK');
-        return null;
+    await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+    const owner = await readPartition(client, observation.partition);
+    const privacy = await nativeSourceQuery(client, readPrivacyHead, { partition_no: observation.partition });
+    const current = rows(
+      await nativeSourceQuery(client, readSubjects, {
+        partition_no: observation.partition,
+        routes: [route],
+        subject_ids: [subject],
+      }),
+    )[0] as SubjectRow | undefined;
+    if (
+      !owner ||
+      owner.writeState !== 'active' ||
+      owner.epoch !== observation.epoch ||
+      owner.position < observation.position ||
+      !privacy ||
+      BigInt(privacy.position) !== privacyPosition ||
+      !sameSource(expected, current)
+    ) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    if (identitySourceSupportJob()) {
+      const retirement = await retireIdentityProjectionHead(client, observation.partition, subject);
+      if (retirement) {
+        await client.query('COMMIT');
+        return { retirement };
       }
-      if (identitySourceSupportJob()) {
-        const retirement = await retireIdentityProjectionHead(client, observation.partition, subject);
-        if (retirement) {
-          await client.query('COMMIT');
-          return { retirement };
-        }
-      } else {
-        await client.query(lockProjectionBuildForRetirementSql, [observation.partition, subject]);
-        await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
-      }
-      const created = rows(
-        await nativeSourceQuery(client, startBuild, {
-          partition_no: observation.partition,
-          route,
-          subject_id: subject,
-          meaning_digest: meaning.digest,
-          build_id: build,
-          owner_epoch: observation.epoch,
-          source_position: observation.position.toString(),
-          privacy_position: privacyPosition.toString(),
-          terminal_id: observation.terminal,
-          subject_revision: observation.revision,
-          security_revision: observation.securityRevision,
-          current_release: observation.currentRelease,
-        }),
-      )[0] as BuildRow | undefined;
-      if (!created) throw new Error('Native projection build was not retained');
-      if (!(await ensureBuildHeads(client, created, heads))) {
-        await client.query('ROLLBACK');
-        return null;
-      }
-      await client.query('COMMIT');
-      return {
-        ...created,
+    } else {
+      await client.query(lockProjectionBuildForRetirementSql, [observation.partition, subject]);
+      await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
+    }
+    const created = rows(
+      await nativeSourceQuery(client, startBuild, {
+        partition_no: observation.partition,
+        route,
+        subject_id: subject,
+        meaning_digest: meaning.digest,
+        build_id: build,
         owner_epoch: observation.epoch,
         source_position: observation.position.toString(),
         privacy_position: privacyPosition.toString(),
@@ -909,17 +892,38 @@ async function saveBuild(
         subject_revision: observation.revision,
         security_revision: observation.securityRevision,
         current_release: observation.currentRelease,
-      } as BuildRow;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      requireAccessDeadline(deadline);
-      throw error;
+      }),
+    )[0] as BuildRow | undefined;
+    if (!created) throw new Error('Native projection build was not retained');
+    if (!(await ensureBuildHeads(client, created, heads))) {
+      await client.query('ROLLBACK');
+      return null;
     }
-  });
+    await client.query('COMMIT');
+    return {
+      ...created,
+      owner_epoch: observation.epoch,
+      source_position: observation.position.toString(),
+      privacy_position: privacyPosition.toString(),
+      terminal_id: observation.terminal,
+      subject_revision: observation.revision,
+      security_revision: observation.securityRevision,
+      current_release: observation.currentRelease,
+    } as BuildRow;
+  }
+
+  // A competing build can invalidate the snapshot while we wait for its row lock.
+  // Recheck the original observation and privacy head in a fresh transaction.
+  for (;;) {
+    try {
+      return await withBoundedCommandConnection(config.pool, deadline, attempt, {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+      });
+    } catch (error) {
+      requireAccessDeadline(deadline);
+      if (!isPostgresTransactionAbort(error)) throw error;
+    }
+  }
 }
 
 function makeDependencies(
