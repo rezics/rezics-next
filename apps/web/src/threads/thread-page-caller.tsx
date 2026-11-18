@@ -955,6 +955,11 @@ export class ThreadPageCaller {
     return !this.retired && !this.connection.retired && (this.publicResult || this.connection.connected);
   }
 
+  awaitsFirstConnection() {
+    this.check();
+    return !this.retired && this.connection.owner === null && this.queryState?.status === 'success';
+  }
+
   isEffectCurrent(session = this.source.readSession(), ticket = this.connection.generation) {
     this.check();
     return (
