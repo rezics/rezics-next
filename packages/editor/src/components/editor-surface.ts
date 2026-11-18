@@ -8,7 +8,7 @@ import {
   type Extensions,
 } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
-import { IdentityUniqueID } from './editor-identity-replay.ts';
+import { IdentityUniqueID, isMovingEditorSlice } from './editor-identity-replay.ts';
 import type { DocumentProfile } from '@rezics/document';
 import { identifiableNodeNames, textNodeNames, blocksNodeNames } from '@rezics/document';
 import { Fragment, Slice } from '@tiptap/pm/model';
@@ -55,8 +55,8 @@ const EditorInput = Extension.create<Record<string, never>, EditorInputSettings>
     return [
       new Plugin({
         props: {
-          transformPasted(slice) {
-            if (editorInputSettings(editor).paste !== 'plain') return slice;
+          transformPasted(slice, view) {
+            if (editorInputSettings(editor).paste !== 'plain' || isMovingEditorSlice(view, slice)) return slice;
             const text = slice.content.textBetween(0, slice.content.size, '\n', (node) =>
               node.type.name === 'hardBreak'
                 ? '\n'
