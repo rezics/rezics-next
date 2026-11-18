@@ -323,6 +323,16 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+// Forward milestones and module counts from webStartupLog. Other Worker output can contain request data.
+function workerStartupMilestone(output: string): string {
+  const milestones = output.matchAll(
+    /^\[web-startup\] trace=[\w.-]+ pid=\d+ stage=(entry-start|(?:check-custody|messages-preparation)-(?:start|complete)|child-start|config-(?:selected|resolved)|server-initialization-(?:start|configured)|listen|module-graph)\b(?: environment=(ssr|client) modules=(\d{1,8})\b)?/gm,
+  );
+  const last = Array.from(milestones).at(-1);
+  if (!last) return 'unobserved';
+  return last[2] ? `${last[1]} ${last[2]}Modules=${last[3]}` : last[1]!;
+}
+
 function startWeb(
   origin: string,
   kernelOrigin: string,
@@ -387,18 +397,45 @@ function startWeb(
     output: () => output,
     async waitUntilReady() {
       const deadline = Date.now() + 720_000;
+      const started = performance.now();
+      // Publication writes overlap this probe. Report through the host before its parent deadline.
+      const checkpoints = process.env.NATIVE_WEB_STARTUP_READINESS === 'services' ? [0, 15_000, 45_000, 90_000] : [];
+      let attempts = 0;
+      let timeouts = 0;
+      let lastStatus: number | undefined;
       while (Date.now() < deadline) {
         failIfExited();
+        attempts++;
+        const signal = AbortSignal.timeout(5000);
+        let phase = 'headers';
+        let outcome = 'unexpected-status';
         try {
           const response = await fetchNativeWebsite(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
             redirect: 'manual',
-            signal: AbortSignal.timeout(5000),
+            signal,
           });
+          lastStatus = response.status;
+          phase = 'body';
           await response.arrayBuffer();
           failIfExited();
           if (response.status === 404) return;
-        } catch {
+        } catch (error) {
           failIfExited();
+          if (signal.aborted) {
+            timeouts++;
+            outcome = 'timeout';
+          } else {
+            const code = (error as NodeJS.ErrnoException | null)?.code;
+            outcome =
+              code === 'ECONNREFUSED' || code === 'ConnectionRefused' ? 'connection-refused' : 'transport-error';
+          }
+        }
+        const elapsedMs = Math.round(performance.now() - started);
+        if (checkpoints[0] !== undefined && elapsedMs >= checkpoints[0]) {
+          checkpoints.shift();
+          reportStackProgress(
+            `Native web Worker readiness: elapsedMs=${elapsedMs} stage=${workerStartupMilestone(output)} attempts=${attempts} timeouts=${timeouts} phase=${phase} outcome=${outcome} lastStatus=${lastStatus ?? 'none'}`,
+          );
         }
         await Bun.sleep(250);
       }
