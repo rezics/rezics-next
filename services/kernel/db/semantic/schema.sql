@@ -3394,6 +3394,22 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 
 --
+-- Name: public_filter_book_withdrawal_covers(search.public_filter_coverage_home, uuid, jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_book_withdrawal_covers(h search.public_filter_coverage_home, original uuid, withdrawals jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT h.baseline_bootstrap=original AND h.acknowledged_baseline=original
+    AND h.native_enqueue_revision=h.acknowledged_native_enqueue
+    AND h.native_revision IS NOT DISTINCT FROM h.acknowledged_native_revision
+    AND h.native_claim_revision IS NOT DISTINCT FROM h.acknowledged_native_claim_revision
+    AND withdrawals @> jsonb_build_array(jsonb_build_object(
+      'home',h.source_home,'epoch',h.source_epoch,'position',h.relevant_position::text))
+$$;
+
+
+--
 -- Name: public_filter_mixed_coverage(text, text, uuid, uuid, text); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -4108,7 +4124,8 @@ CREATE FUNCTION semantic.retain_public_filter_publication_coverage() RETURNS tri
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF NEW.coverage_publication IS DISTINCT FROM OLD.coverage_publication THEN
+  IF NEW.coverage_publication IS DISTINCT FROM OLD.coverage_publication
+    OR NEW.book_withdrawals IS DISTINCT FROM OLD.book_withdrawals THEN
     RAISE EXCEPTION 'Original publication coverage binding is immutable' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
@@ -8579,6 +8596,8 @@ CREATE TABLE semantic.public_filter_bootstrap (
     publication_observation text,
     publication_execution text,
     coverage_publication uuid,
+    book_withdrawals jsonb,
+    CONSTRAINT public_filter_book_withdrawals_check CHECK (((book_withdrawals IS NULL) OR ((coverage_publication IS NOT NULL) AND (snapshot_kind = 'pit'::text) AND (jsonb_typeof(book_withdrawals) = 'array'::text) AND ((jsonb_array_length(book_withdrawals) >= 1) AND (jsonb_array_length(book_withdrawals) <= 8))))),
     CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
     CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
     CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
@@ -13153,6 +13172,13 @@ CREATE UNIQUE INDEX provider_review_queue_key_erasure ON semantic.provider_revie
 --
 
 CREATE INDEX provider_review_queue_key_pending ON semantic.provider_review_queue_key USING btree (route, captured_position, erasure_key) WHERE (NOT published);
+
+
+--
+-- Name: public_filter_book_withdrawal_cut; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX public_filter_book_withdrawal_cut ON semantic.public_filter_bootstrap USING btree (coverage_publication, coverage_generation) WHERE (book_withdrawals IS NOT NULL);
 
 
 --

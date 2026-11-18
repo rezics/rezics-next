@@ -22,6 +22,7 @@ import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
 import lookupDefinition from './public-filter-source-binding-lookup.sql';
 import readDefinition from './public-filter-source-binding-definition.sql';
+import captureBookWithdrawals from './public-filter-book-withdrawals.sql';
 import beginBootstrap from './public-filter-source-binding-begin.sql';
 import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
@@ -2359,20 +2360,34 @@ export function createNativePublicFilterSourceBinding(
         const coverage = mixed
           ? 'semantic.public_filter_mixed_coverage($1,$2,$3,NULL,$10)'
           : 'semantic.public_filter_published_coverage($1,$2,$3,NULL,$4::text[])';
+        const bookList = !mixed && snapshot === 'pit' && 'bookTypeList' in capture && capture.bookTypeList === true;
+        const withdrawals = bookList
+          ? `(SELECT proof.book_withdrawals FROM (
+                SELECT cut.book_withdrawals FROM semantic.public_filter_bootstrap cut
+                WHERE cut.coverage_publication=parent.job AND cut.coverage_generation=parent.generation
+                  AND cut.book_withdrawals IS NOT NULL LIMIT 1
+              ) proof WHERE NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(proof.book_withdrawals) w
+                LEFT JOIN semantic.subject s ON (s.route,s.subject_id)=((w->>'route')::integer,(w->>'id')::uuid)
+                WHERE s.visibility IS DISTINCT FROM w->>'visibility'
+                  OR s.security_revision::text IS DISTINCT FROM w->>'revision'
+              ))`
+          : 'NULL::jsonb';
         const attached = await db.query<{ bootstrap: string }>(
-          `/* semantic.native-keyed:18:24:1 */
+          `/* semantic.native-keyed:${bookList ? '36:52' : '18:24'}:1 */
            WITH parent AS MATERIALIZED (
              SELECT * FROM ${coverage}
-           )
+           ), cut AS MATERIALIZED (SELECT parent.*, ${withdrawals} AS withdrawals FROM parent)
            INSERT INTO semantic.public_filter_bootstrap
              (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,
-              owner_epoch,source_position,state,coverage_generation,coverage_publication)
-           SELECT 0,$5,$3,$6::text||':'||parent.job::text,$7,$8,pg_current_snapshot(),
-                  p.epoch,p.position,'begun',parent.generation,parent.job
-           FROM parent JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=$9
+              owner_epoch,source_position,state,coverage_generation,coverage_publication,book_withdrawals)
+           SELECT 0,$5,$3,$6::text||':'||parent.job::text${bookList ? "||':'||parent.generation::text" : ''},$7,$8,pg_current_snapshot(),
+                  p.epoch,p.position,'begun',parent.generation,parent.job,parent.withdrawals
+           FROM cut parent JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=$9
            WHERE NOT EXISTS (
              SELECT 1 FROM search.public_filter_coverage_home h
              WHERE (h.partition_no,h.registration)=(0,parent.registration) AND h.behind
+               ${bookList ? 'AND semantic.public_filter_book_withdrawal_covers(h,parent.bootstrap,parent.withdrawals) IS NOT TRUE' : ''}
            ) AND NOT EXISTS (
              SELECT 1 FROM semantic.public_filter_privacy_pending k
              WHERE k.live AND k.input_key=ANY(parent.coverage_keys || $4::text[])
@@ -2397,6 +2412,26 @@ export function createNativePublicFilterSourceBinding(
         if (attached.rows[0]) {
           const cut = await loadBootstrap('0:' + attached.rows[0].bootstrap, db, resolved.definition);
           return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
+        }
+        if (bookList) {
+          // Reserve the bounded visibility proof and the final bootstrap lookup before dispatch.
+          if (inputLimit - cost.inputKeys < 192 + 2) throw new BindingError('owner_unavailable');
+          const result = await nativeSourceQuery(db, captureBookWithdrawals, {
+            target: consumer.physicalTarget,
+            incarnation: consumer.incarnation,
+            definition: resolved.definition.readDefinition,
+            text_keys: [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+            bootstrap: randomUUID(),
+            request_key: hash(encode({ consumer, snapshot })),
+            consumer: encode(consumer),
+            owner_epoch: resolved.definition.source.epoch,
+          });
+          const withdrawal = Array.isArray(result) ? result[0] : result;
+          if (withdrawal?.bootstrap) {
+            const cut = await loadBootstrap('0:' + withdrawal.bootstrap, db, resolved.definition);
+            return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
+          }
+          if (withdrawal?.awaiting) throw new BindingError('owner_unavailable');
         }
         if (mixed) {
           // A second read must not replace the baseline while its original repair

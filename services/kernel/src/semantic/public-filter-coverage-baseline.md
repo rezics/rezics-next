@@ -30,6 +30,14 @@ Later loss of the parent prevents the attached read from completing. The first a
 single preparation segment within the existing prepared-page allowance. An unfinished build uses the ordinary
 worker; recovery identifies the original observation by bootstrap and snapshot kind.
 
+New catalogue publications also enroll the physical `name_sort` field. A first-public name-ordered Book TypeList
+can attach after up to eight direct Subject withdrawals. Its predicate uses the original’s type and its order uses
+that original’s labels and ID. Source checks the entire outstanding privacy interval against the moderation commands
+and the ordinary writer’s refresh-visible settlements on the published incarnation. The PIT pins the withdrawn IDs
+and receiver generation. Start and final recheck their current owners and visibility, and refuse any withdrawn ID
+in the raw candidate window. A Subject born at an already advanced privacy position requires its original creation
+command. Other reductions keep ordinary preparation and the catalogue receiver keeps its outstanding obligations.
+
 ## Preparation cost
 
 Each home reserves 15 Access inputs, three committed-receipt inputs, nine coverage adoption inputs and seven

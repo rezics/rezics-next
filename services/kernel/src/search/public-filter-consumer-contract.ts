@@ -45,6 +45,10 @@ export type PublicFilterConsumerCaptureInput = Readonly<
     pageSize?: number;
     /** Full native catalogue publication includes the fixed text/order coverage scope. */
     catalogueCoverage?: true;
+    /** Enroll the physical name_sort field on new catalogue publications. */
+    catalogueNameSort?: true;
+    /** Exact public Book type/name page, without advanced Search projections. */
+    bookTypeList?: true;
   }
 >;
 

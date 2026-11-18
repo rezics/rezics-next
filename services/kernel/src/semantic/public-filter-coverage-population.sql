@@ -7,7 +7,7 @@ WITH input AS MATERIALIZED (
 binding AS MATERIALIZED (
   SELECT o.partition_no,o.observation,o.registration,o.queried,o.covered,
     r.consumer,r.definition,coalesce(attached.generation,r.coverage_generation) AS coverage_generation,
-    t.incarnation,b.bootstrap,b.read_definition,b.consumer AS bootstrap_consumer,
+    t.incarnation,b.bootstrap,b.book_withdrawals,b.read_definition,b.consumer AS bootstrap_consumer,
     b.snapshot_kind,b.coverage_generation AS covered_generation,coalesce(attached.coverage_root,b.coverage_root) AS coverage_root,
     coalesce(attached.bootstrap,b.bootstrap) AS coverage_bootstrap,
     coalesce(attached.registration,o.registration) AS coverage_registration,
@@ -53,6 +53,17 @@ binding AS MATERIALIZED (
     AND o.state='open' AND o.expires_at>(SELECT now FROM input) AND o.queried=$3::text
     AND r.state='active' AND r.consumer=$4::text AND r.physical_target=$6::text AND t.incarnation=$7::text
     AND b.state='adopted' AND b.queried=o.observation AND b.owner_epoch=p.epoch AND b.coverage_generation IS NOT NULL
+    -- A withdrawn ID can be completely absent from the PIT. Its original home
+    -- still participates in the independent start and final owner checks.
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_to_recordset(b.book_withdrawals) w(home integer,epoch integer,route integer,id uuid,visibility text,revision text)
+      LEFT JOIN core.partition owner ON owner.partition_no=w.home
+      LEFT JOIN semantic.public_filter_privacy_head n ON n.partition_no=w.home
+      LEFT JOIN semantic.subject s ON (s.route,s.subject_id)=(w.route,w.id)
+      WHERE owner.write_state IS DISTINCT FROM 'active' OR owner.epoch IS DISTINCT FROM w.epoch
+        OR n.owner_epoch IS DISTINCT FROM w.epoch OR n.population_fenced IS DISTINCT FROM false
+        OR s.visibility IS DISTINCT FROM w.visibility OR s.security_revision::text IS DISTINCT FROM w.revision
+    )
     AND c.after_home=4096 AND c.population_protocol=1
     AND (
       (b.coverage_publication IS NULL AND b.account_after=4096 AND b.coverage_sealed AND b.coverage_after=4096
@@ -101,6 +112,7 @@ binding AS MATERIALIZED (
   CROSS JOIN LATERAL (
     SELECT source_home,source_epoch FROM search.public_filter_coverage_home h
     WHERE (h.partition_no,h.registration)=(b.partition_no,b.coverage_registration) AND h.behind
+      AND semantic.public_filter_book_withdrawal_covers(h,b.coverage_bootstrap,b.book_withdrawals) IS NOT TRUE
     ORDER BY source_home LIMIT 1
   ) h WHERE NOT EXISTS(SELECT 1 FROM pending) AND NOT EXISTS(SELECT 1 FROM fenced)
 ), changed AS MATERIALIZED (
@@ -172,8 +184,8 @@ binding AS MATERIALIZED (
     AND (SELECT count(*) FROM decoded)=coalesce(page_rounds,1)
     AND NOT EXISTS (SELECT 1 FROM decoded WHERE page_id IS NOT NULL AND page_status IS DISTINCT FROM 'complete')
     AND NOT EXISTS (SELECT 1 FROM own_keys WHERE source_home IS NULL)
-    AND 64+cardinality(coverage_keys)+5*(SELECT count(*) FROM home_keys)
-      +2*(SELECT count(*) FROM own_keys WHERE NOT account)<=1000
+    AND 64+4*coalesce(jsonb_array_length(book_withdrawals),0)+cardinality(coverage_keys)+5*(SELECT count(*) FROM home_keys)
+      +(CASE WHEN book_withdrawals IS NULL THEN 2 ELSE 6 END)*(SELECT count(*) FROM own_keys WHERE NOT account)<=1000
 ), home_control AS MATERIALIZED (
   SELECT h.source_home,n.owner_epoch,n.population_fenced,base.source_epoch,
     base.native_revision,base.native_claim_revision,base.source_position
@@ -183,7 +195,8 @@ binding AS MATERIALIZED (
     (h.partition_no,h.registration,h.bootstrap,h.source_home)
   LEFT JOIN semantic.public_filter_privacy_head n ON n.partition_no=h.source_home
 ), subject_control AS MATERIALIZED (
-  SELECT k.id,v.position,v.owner_epoch AS subject_epoch,h.source_epoch,h.source_position
+  SELECT k.id,k.source_home,v.route,v.position,v.owner_epoch AS subject_epoch,h.source_epoch,h.source_position,
+    b.book_withdrawals @> jsonb_build_array(jsonb_build_object('id',k.id)) AS withdrawn
   FROM own_keys k CROSS JOIN budgeted b JOIN home_control h ON h.source_home=k.source_home
   LEFT JOIN semantic.public_filter_privacy_subject v ON
     (v.partition_no,v.subject_id)=(k.source_home,k.id::uuid)
@@ -196,8 +209,16 @@ binding AS MATERIALIZED (
       OR population_fenced OR source_epoch<>owner_epoch)
     AND NOT EXISTS(SELECT 1 FROM own_keys k JOIN home_control h ON h.source_home=k.source_home
       WHERE k.account AND (h.native_revision IS NULL OR h.native_claim_revision IS NULL))
-    AND NOT EXISTS(SELECT 1 FROM subject_control WHERE position IS NULL OR subject_epoch IS NULL
-      OR subject_epoch<>source_epoch OR position>source_position)
+    AND NOT EXISTS(SELECT 1 FROM subject_control WHERE withdrawn OR position IS NULL OR subject_epoch IS NULL
+      OR subject_epoch<>source_epoch OR (position>source_position AND NOT EXISTS (
+        -- Creation seeds the current home privacy position even for a new ID.
+        -- Only its original birth after the proven withdrawal can explain that position.
+        SELECT 1 FROM jsonb_to_recordset(b.book_withdrawals) w(home integer,epoch integer,"position" bigint,command bigint)
+        JOIN semantic.subject s ON (s.route,s.subject_id)=(subject_control.route,subject_control.id::uuid)
+        JOIN editorial.write_basis birth ON (birth.partition_no,birth.transaction_id)=(w.home,s.recorded_transaction_id)
+        WHERE (w.home,w.epoch,w.position)=(subject_control.source_home,subject_epoch,subject_control.position)
+          AND birth.epoch=w.epoch AND birth.position>w.command
+      )))
 ), inserted AS (
   INSERT INTO semantic.public_filter_population_start
     (partition_no,id,registration,observation,bootstrap,read_definition,consumer,
@@ -224,5 +245,6 @@ SELECT b.*, EXISTS(SELECT 1 FROM pending) AS pending,
   coalesce((SELECT jsonb_agg(to_jsonb(c) ORDER BY c.page_ordinal) FROM children c),'[]'::jsonb) AS page_children,
   coalesce((SELECT jsonb_agg(to_jsonb(h)) FROM heads h),'[]'::jsonb) AS heads,
   (SELECT count(*)::integer FROM home_control) AS own_homes,
-  (SELECT count(*)::integer FROM subject_control) AS own_subjects
+  (SELECT count(*)::integer FROM subject_control) AS own_subjects,
+  (SELECT count(*)::integer FROM subject_control WHERE b.book_withdrawals IS NOT NULL AND position>source_position) AS own_births
 FROM binding b;

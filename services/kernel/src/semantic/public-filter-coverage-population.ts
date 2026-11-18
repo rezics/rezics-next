@@ -56,6 +56,7 @@ type Row = {
   read_definition: string;
   bootstrap_consumer: string;
   snapshot_kind: string;
+  book_withdrawals: unknown;
   covered_generation: string;
   coverage_root: string;
   source_id: string;
@@ -101,6 +102,7 @@ type Row = {
   heads: Head[];
   own_homes: number;
   own_subjects: number;
+  own_births: number;
 };
 type PublicationPopulation = Readonly<{
   job: string;
@@ -144,6 +146,8 @@ function validBindings(
     !isDeepStrictEqual(expectedKeys, row.coverage_keys) ||
     !isDeepStrictEqual(search.decodeState(row.bootstrap_consumer), q.consumer) ||
     covered.observation !== `0:${row.bootstrap}` ||
+    (row.book_withdrawals !== null &&
+      (q.snapshot.kind !== 'pit' || !('bookTypeList' in capture) || capture.bookTypeList !== true)) ||
     row.snapshot_kind !== q.snapshot.kind ||
     row.queried !== search.encodeState(q) ||
     row.consumer !== search.encodeConsumer(q.consumer) ||
@@ -388,6 +392,10 @@ export async function readPublicFilterPopulation(
       requireDeadline(deadline);
       return unready();
     }
+    const withdrawals = Array.isArray(row.book_withdrawals) ? row.book_withdrawals.length : 0;
+    cost.inputKeys += 4 * withdrawals + 4 * row.own_births;
+    cost.dependencyPoints += 3 * withdrawals + 2 * row.own_births;
+    cost.rows += 3 * withdrawals + 2 * row.own_births;
     cost.inputKeys += row.coverage_keys.length + 5 * row.own_homes + 2 * row.own_subjects;
     cost.dependencyPoints += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
     cost.rows += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
