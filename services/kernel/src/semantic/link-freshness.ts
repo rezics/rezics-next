@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
+import { withBoundedCommandConnection } from '../database/pool.ts';
 import { lookupEventType } from '../events/catalogue.ts';
 import { BATCH_ENVELOPES } from '../events/log.ts';
 import { LINKS_PROJECTED, SUBJECT_PAGE_WORK_COMMITTED } from './events.ts';
@@ -11,6 +12,7 @@ import type { SessionComponent } from '../tokens/session.ts';
 import type { MissingCheckpointOwner, SubjectLinkWaitReason } from './contract/subject-errors.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
 import readPendingMember from './links-read-pending-member.sql';
+import prioritizeReads from './links-prioritize-reads.sql';
 import readProjectionPending from './merge-read-projection-pending.sql';
 import { withReadTransaction } from './read.ts';
 
@@ -121,6 +123,7 @@ export async function linksCaughtUp(
     positions: components.map((component) => component.position),
   });
   const requirements = requirementsFor(anchor ? [...seen, anchor] : seen);
+  let requestedPriority = false;
   let lastObservation: SubjectLinkWaitReason = 'deadline';
   const unfinished = () => {
     observeWait?.(lastObservation);
@@ -166,7 +169,17 @@ export async function linksCaughtUp(
       const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members, deadline) : [];
       if (covered && pendingMembers.length === 0) return true;
       if (pendingMembers.length) lastObservation = 'merge';
-      if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
+      // Only the authorized full read supplies an anchor. The hint carries no
+      // subject or viewer identity and never establishes checkpoint coverage.
+      const remaining = deadline - Date.now();
+      if (remaining < FRESHNESS_POLL_MS) return unfinished();
+      if (anchor && !covered && lastObservation !== 'merge' && !requestedPriority) {
+        requestedPriority = true;
+        await withBoundedCommandConnection(pool, Math.min(deadline, Date.now() + FRESHNESS_POLL_MS), (client) =>
+          prioritizeReads.run(client, requirements),
+        ).catch(() => undefined); // The normal relay and the existing freshness wait remain available.
+        if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
+      }
       // The database connection is released before this wait; yield the request's admission permit too.
       await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
     }

@@ -65,6 +65,7 @@ import listOutboundKeyReemit from './list-outbound-key-reemit.sql';
 import listInboundKeyReemit from './list-inbound-key-reemit.sql';
 import readOutboundForTargetReemit from './read-outbound-for-target-reemit.sql';
 import listOutboundVisibility from './list-outbound-visibility.sql';
+import scanLinkReadDemand from './links-scan-read-demand.sql';
 
 export const LINKS_CONSUMER = 'semantic_links';
 const FRESHNESS_TARGET_SECONDS = 10;
@@ -866,6 +867,7 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
 export function linkProjection(pool: Pool): Relay {
   return {
     consumer: LINKS_CONSUMER,
+    scanPriority: (client) => scanLinkReadDemand.run(client, { consumer: LINKS_CONSUMER }),
     run: (partition) =>
       projectBatch(pool, {
         consumer: LINKS_CONSUMER,

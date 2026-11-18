@@ -4,6 +4,7 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { startRelays } from '../../src/events/relays.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -360,6 +361,78 @@ test('authorized subject redirects resolve before projection freshness', async (
     await observer.close();
   }
 }, 60_000);
+
+test('authorized Subject GET advances its causal homes while the native relay drains older work', async () => {
+  await createFixed(1001, 'schema:Person', 'Older partition one');
+  await createFixed(1002, 'schema:Person', 'Older partition two');
+  const foreign = await createFixed(1003, 'schema:Person', 'Causal partition');
+  const author = await createFixed(1004, 'schema:Person', 'Projected author');
+  const live = await createFixed(1004, 'schema:Book', 'Prioritized subject', {
+    'schema:author': [
+      {
+        property: { id: 'schema:author' },
+        value: { type: 'value', content: author.id },
+        qualifiers: [],
+        references: [],
+      },
+    ],
+  });
+  await realAccess.grant({ route: author.route, id: author.id }, 'reader', 'subject:read');
+  await realAccess.grant({ route: live.route, id: live.id }, 'reader', 'subject:read');
+  const nativePool = createPool(databaseUrl);
+  const relay = linkProjection(nativePool);
+  const firstRun = Promise.withResolvers<void>();
+  const releaseOldest = Promise.withResolvers<void>();
+  const demandFound = Promise.withResolvers<void>();
+  const dispatches: number[] = [];
+  const worker = startRelays(
+    nativePool,
+    [
+      {
+        ...relay,
+        async scanPriority(client) {
+          const homes = await relay.scanPriority!(client);
+          if (homes.some((home) => home.partition_no === 1003) && homes.some((home) => home.partition_no === 1004))
+            demandFound.resolve();
+          return homes;
+        },
+        async run(partition) {
+          dispatches.push(partition);
+          if (dispatches.length === 1) {
+            firstRun.resolve();
+            await releaseOldest.promise;
+          }
+          return relay.run(partition);
+        },
+      },
+    ],
+    { concurrency: 1 },
+  );
+  try {
+    await firstRun.promise;
+    const request = call('GET', `/v1/subjects/${live.id}`, {
+      token: 'reader',
+      session: encodeSession(tokens, `account:${accounts.reader}`, [foreign.component]),
+    });
+    await Promise.race([
+      demandFound.promise,
+      request.then(({ response }) => {
+        throw new Error(`Subject GET returned ${response.status} before relay demand`);
+      }),
+    ]);
+    releaseOldest.resolve();
+    const { response, body } = await request;
+    expect(response.status).toBe(200);
+    expect(body.subject.statements['schema:author'][0].value.content).toBe(author.id);
+    expect(dispatches[1]).toBe(1003);
+    expect(dispatches[2]).not.toBe(1004);
+    expect(dispatches[3]).toBe(1004);
+  } finally {
+    releaseOldest.resolve();
+    await worker.stop();
+    await nativePool.end();
+  }
+}, 10_000);
 
 test('Subject GET sees the applied relation while the link checkpoint trails its own completion events', async () => {
   const partition = freshPartition();

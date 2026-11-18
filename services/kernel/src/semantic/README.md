@@ -616,6 +616,11 @@ disclosure and retraction changes. The existing bounded wait keeps its request d
 If that proof remains unfinished, the read returns retryable HTTP 503 `semantic_not_ready` with `Retry-After: 1`.
 A successful response admits its bounded relation preview from a caught-up projection. Missing, concealed and denied
 subjects are resolved before the projection wait. Standalone relation and inverse windows expose eventual freshness explicitly.
+When an authorized full read finds a checkpoint behind, it can flag its pending causal homes and Subject home in
+one bounded statement. The unlogged buffer holds only partition numbers and two-second expirations, with one row
+per topology home. The native links relay discards expired hints and alternates one hinted batch with oldest-first
+work while both queues have work. Hints affect scheduling only. The normal event validation, checkpoint advancement,
+freshness checks and final authorization still determine the response.
 
 Semantic keeps its logical snapshot registry and child deadline narrowing; the shared Kernel bounded read-only lifetime
 owns physical checkout, guarded SQL, transaction cleanup and uncertain-connection discard.

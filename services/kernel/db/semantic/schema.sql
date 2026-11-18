@@ -8471,6 +8471,17 @@ CREATE TABLE semantic.kind_type_evidence_body (
 
 
 --
+-- Name: link_read_demand; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE UNLOGGED TABLE semantic.link_read_demand (
+    partition_no integer NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT link_read_demand_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: merge_member; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -11424,6 +11435,14 @@ ALTER TABLE ONLY semantic.kind_type_anchor_fence
 
 ALTER TABLE ONLY semantic.kind_type_evidence_body
     ADD CONSTRAINT kind_type_evidence_body_pkey PRIMARY KEY (route, owner_account_id, collection_id, preparation_id, evidence_id);
+
+
+--
+-- Name: link_read_demand link_read_demand_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.link_read_demand
+    ADD CONSTRAINT link_read_demand_pkey PRIMARY KEY (partition_no);
 
 
 --

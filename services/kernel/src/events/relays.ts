@@ -1,10 +1,15 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { NestedPoolCheckoutError, withConnection } from '../database/pool.ts';
 import scanPartitions from './scan-partitions.sql';
 import upsertConsumerLag from './upsert-consumer-lag.sql';
 import type { BatchResult } from './log.ts';
 
-export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
+type RelayHome = { partition_no: number; position: string | bigint };
+export type Relay = {
+  consumer: string;
+  run(partition: number): Promise<BatchResult>;
+  scanPriority?(client: PoolClient): Promise<readonly RelayHome[]>;
+};
 
 /** Default in-flight relay homes. A max-one pool shares its only connection; larger pools keep one slot free. */
 export function relayConcurrencyForPool(pool: Pool): number {
@@ -49,8 +54,9 @@ export function startRelays(
   const inFlight = new Set<string>();
   // Each consumer retains its oldest-first scan. A slow consumer can drain that scan
   // while another discovers positions committed since its own last scan.
-  type ScannedPartition = Awaited<ReturnType<typeof scanPartitions.run>>[number];
-  const pending = new Map<Relay, Iterator<ScannedPartition>>();
+  const pending = new Map<Relay, Iterator<RelayHome>>();
+  const priority = new Map<Relay, Iterator<RelayHome>>();
+  let preferPriority = true;
   const stopPositions = new Map<string, string>();
   const waiters: (() => void)[] = [];
   const key = (relay: Relay, partition: number) => `${relays.indexOf(relay)}:${partition}`;
@@ -60,7 +66,7 @@ export function startRelays(
   const idle = () =>
     active === 0 && !ticking ? Promise.resolve() : new Promise<void>((resolve) => waiters.push(resolve));
 
-  const run = async (relay: Relay, partition: number, through: bigint) => {
+  const run = async (relay: Relay, partition: number, through: bigint, singleBatch: boolean) => {
     const identity = key(relay, partition);
     inFlight.add(identity);
     active++;
@@ -79,7 +85,7 @@ export function startRelays(
         }
         // A busy writer can move the head during every apply. Release the slot once
         // this scan's work is covered so other partitions and consumers get their turn.
-        if (result.status === 'busy' || result.envelopes === 0 || result.position >= through) return;
+        if (singleBatch || result.status === 'busy' || result.envelopes === 0 || result.position >= through) return;
       }
     } catch (error) {
       if (!(max <= 1 && isPoolAcquireTimeout(error)))
@@ -92,16 +98,21 @@ export function startRelays(
   };
 
   const dispatch = () => {
-    while (!stopped && !paused && active < concurrency && pending.size) {
-      const [relay, partitions] = pending.entries().next().value!;
-      pending.delete(relay);
+    while (!stopped && !paused && active < concurrency && (pending.size || priority.size)) {
+      const urgent = priority.size > 0 && (preferPriority || !pending.size);
+      const queue = urgent ? priority : pending;
+      const [relay, partitions] = queue.entries().next().value!;
+      queue.delete(relay);
       const next = partitions.next();
       if (next.done) continue;
       // Give the next free slot to the next consumer with discovered work.
-      pending.set(relay, partitions);
+      queue.set(relay, partitions);
       const row = next.value;
-      if (!inFlight.has(key(relay, row.partition_no)))
-        void run(relay, row.partition_no, BigInt(row.position)).then(dispatch);
+      if (inFlight.has(key(relay, row.partition_no))) continue;
+      // A read can bring work forward by one batch. Oldest-first dispatch keeps
+      // moving even when every scan finds more reads waiting.
+      preferPriority = !urgent;
+      void run(relay, row.partition_no, BigInt(row.position), urgent).then(dispatch);
     }
   };
 
@@ -112,6 +123,18 @@ export function startRelays(
       if (maxOnePoolBusy(pool)) return;
       for (const relay of relays) {
         if (stopped || paused) break;
+        const scanPriority = relay.scanPriority?.bind(relay);
+        if (scanPriority) {
+          priority.delete(relay);
+          const homes = await withConnection(pool, scanPriority).catch((error: unknown) => {
+            if (!(max <= 1 && isPoolAcquireTimeout(error)))
+              console.error(`Relay ${relay.consumer} priority scan failed`, error);
+            return [];
+          });
+          if (stopped || paused) break;
+          if (homes.length) priority.set(relay, homes.values());
+          dispatch();
+        }
         if (pending.has(relay)) continue;
         const partitions = await withConnection(pool, async (client) => {
           const rows = await scanPartitions.run(client, { consumer: relay.consumer });
@@ -143,6 +166,7 @@ export function startRelays(
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       pending.clear();
+      priority.clear();
       await idle();
     },
     resume(): void {
@@ -155,6 +179,7 @@ export function startRelays(
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       pending.clear();
+      priority.clear();
       await idle();
     },
   };
