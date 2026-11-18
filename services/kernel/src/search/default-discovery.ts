@@ -61,6 +61,7 @@ import {
 
 export type DiscoveryServingObservation = Readonly<{
   generation: number | null;
+  generationState?: string;
   captureRole?: 'enrollment' | 'serving';
   witness?: PublicFilterCaptureWitness | undefined;
   stage: 'allocation' | 'capture' | 'query' | 'repair' | 'capability' | 'final';
@@ -365,6 +366,7 @@ export function createDefaultDiscoverySearch(
             const result = await native.capture(plan, snapshot);
             config.observeServing?.({
               generation,
+              generationState: activeGeneration.state,
               stage: 'capture',
               result: 'reason' in result ? result.reason : result.status,
               captureRole: enrollmentOnly ? 'enrollment' : 'serving',
