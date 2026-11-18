@@ -235,7 +235,9 @@ nativeTest(
         } else {
           await page.getByRole('button', { name: 'Decline', exact: true }).click();
           await browserExpect(
-            page.getByText('Access declined. This sends no approval.', { exact: true }),
+            page
+              .getByRole('region', { name: 'Latest review outcome' })
+              .getByText('Access declined. This sends no approval.', { exact: true }),
           ).toBeVisible();
         }
 
