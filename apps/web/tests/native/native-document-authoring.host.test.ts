@@ -208,22 +208,41 @@ async function observeMountedHistory(page: Page, postId: string, controlId: stri
 
 async function measureHistoryReads(pageUrl: string, context: BrowserContext, postId: string): Promise<number> {
   const historyPage = await context.newPage();
+  const functionResponses: number[] = [];
+  let functionFailures = 0;
+  historyPage.on('response', (response) => {
+    if (isHistoryFunctionRead(response.url(), postId)) functionResponses.push(response.status());
+  });
+  historyPage.on('requestfailed', (request) => {
+    if (isHistoryFunctionRead(request.url(), postId)) functionFailures++;
+  });
   try {
     historyPage.setDefaultTimeout(30_000);
     await historyPage.goto(pageUrl, { waitUntil: 'domcontentloaded' });
     await historyPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    // The mounted reply composer requires a personal read admitted for the current session's bearer.
+    await expect(historyPage.getByRole('region', { name: 'Reply', exact: true })).toBeVisible();
     const post = historyPage.locator(`#post-${postId}`);
     const button = await revealHistoryControl(post);
     await expect(button).toBeVisible();
-    await historyPage.waitForTimeout(100);
+    const controlId = await button.getAttribute('aria-controls');
     // Browser traffic only appears in the test process after sampling the stack host.
     const before = (await fixture.stack.sampleKernelRequests()).length;
     await button.click();
     const panel = post.getByRole('region', { name: 'Revision history', exact: true });
-    await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
+    try {
+      await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
+    } catch (error) {
+      const observation = await observeMountedHistory(historyPage, postId, controlId, before);
+      console.info(
+        `native-document-authoring-growth-history ${JSON.stringify({ functionResponses, functionFailures, ...observation })}`,
+      );
+      throw error;
+    }
     const requests = (await fixture.stack.sampleKernelRequests()).slice(before);
     const revisionReads = requests.filter((request) => isMountedRevisionRead(request, postId));
     expect(revisionReads.map(({ responseStatus }) => responseStatus)).toEqual([200]);
+    expect(revisionReads[0]?.authorization?.startsWith('Bearer ')).toBe(true);
     return requests.length;
   } finally {
     await historyPage.close();
