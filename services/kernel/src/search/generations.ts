@@ -1957,7 +1957,7 @@ async function completeDiscoveryActivation(
   });
 }
 
-type DiscoveryCut = {
+export type DiscoveryCut = {
   partition: number;
   position: string;
   revision: string;
@@ -2036,6 +2036,8 @@ async function checkMetadataCuts(
                 : trace
                   ? await trace.read(kind, row.partition, 1, () => metadataProducers[kind]!.read(row.partition, []))
                   : await metadataProducers[kind]!.read(row.partition, []);
+            trace?.observe(row, kind, observation.position);
+            if (kind === 'collection') trace?.observe(row, 'collectionEpoch', observation.epoch);
             if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
               return { state: 'retire' as const, partition: row.partition, kind };
             if (metadataPositions[kind] !== observation.position.toString())
@@ -2065,6 +2067,9 @@ export async function checkDiscoveryCutBatch(
     if (check.state === 'retire') return check;
     const row = chunk[index]!;
     const witness = witnesses.get(row.partition);
+    trace?.observe(row, 'witnessEpoch', witness?.epoch);
+    trace?.observe(row, 'revision', witness?.revision);
+    trace?.observe(row, 'claimRevision', witness?.claimRevision);
     const semanticWitnessChanged =
       witness?.revision !== BigInt(row.semantic_revision) ||
       witness.claimRevision !== BigInt(row.semantic_claim_revision);
@@ -2169,38 +2174,47 @@ async function recheckDiscoveryCutBatch(
   }
   if (stale.length) {
     trace?.step('restart-frontiers');
-    const initial = await reopenDiscoveryFrontiers(pool, target, stale);
-    // The first mismatch skips later metadata owners. Check only the skipped reads in the rejected homes.
-    // Persist each owner's proven mismatches before another owner can refuse its observation.
-    let additionalMetadataFrontiers = 0;
-    const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind));
-    for (const [index, kind] of kinds.entries()) {
-      const earlier = kinds.slice(0, index);
-      const remaining = chunk.filter((_, row) => {
-        const check = checks[row]!;
-        return check.state === 'metadata' && earlier.includes(check.kind);
+    const rejected = trace?.rejectedCuts(
+      pool,
+      chunk.filter((_, index) => checks[index]!.state === 'metadata'),
+    );
+    if (rejected) await rejected('before-reopen');
+    try {
+      const initial = await reopenDiscoveryFrontiers(pool, target, stale);
+      // The first mismatch skips later metadata owners. Check only the skipped reads in the rejected homes.
+      // Persist each owner's proven mismatches before another owner can refuse its observation.
+      let additionalMetadataFrontiers = 0;
+      const kinds = SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind));
+      for (const [index, kind] of kinds.entries()) {
+        const earlier = kinds.slice(0, index);
+        const remaining = chunk.filter((_, row) => {
+          const check = checks[row]!;
+          return check.state === 'metadata' && earlier.includes(check.kind);
+        });
+        if (!remaining.length) continue;
+        const siblings = await checkMetadataCuts(pool, remaining, metadataProducers, [kind], trace);
+        const changed = siblings.flatMap((check, index) =>
+          check.state === 'metadata' ? [staleFrontier(remaining[index]!, check.kind)] : [],
+        );
+        additionalMetadataFrontiers += await reopenDiscoveryFrontiers(pool, target, changed);
+        stale.push(...changed);
+      }
+      trace?.report({
+        outcome: 'cuts-changed',
+        first: { partition: stale[0]!.partition, owner: stale[0]!.owner },
+        frontiers: initial + additionalMetadataFrontiers,
+        additionalMetadataFrontiers,
       });
-      if (!remaining.length) continue;
-      const siblings = await checkMetadataCuts(pool, remaining, metadataProducers, [kind], trace);
-      const changed = siblings.flatMap((check, index) =>
-        check.state === 'metadata' ? [staleFrontier(remaining[index]!, check.kind)] : [],
-      );
-      additionalMetadataFrontiers += await reopenDiscoveryFrontiers(pool, target, changed);
-      stale.push(...changed);
+      return {
+        state: 'changed' as const,
+        repairPartitions:
+          initial + additionalMetadataFrontiers === stale.length && stale.length <= DISCOVERY_POPULATIONS_PER_ADVANCE
+            ? [...new Set(stale.map((row) => row.partition))]
+            : undefined,
+      };
+    } finally {
+      if (rejected) await rejected('after-reopen');
     }
-    trace?.report({
-      outcome: 'cuts-changed',
-      first: { partition: stale[0]!.partition, owner: stale[0]!.owner },
-      frontiers: initial + additionalMetadataFrontiers,
-      additionalMetadataFrontiers,
-    });
-    return {
-      state: 'changed' as const,
-      repairPartitions:
-        initial + additionalMetadataFrontiers === stale.length && stale.length <= DISCOVERY_POPULATIONS_PER_ADVANCE
-          ? [...new Set(stale.map((row) => row.partition))]
-          : undefined,
-    };
   }
   return { state: 'current' as const };
 }
