@@ -1058,7 +1058,7 @@ test('native Source replays its original creation window after the same home adv
     });
     const positions: bigint[] = [];
     const firstMixedHome = 4000;
-    const accountHome = firstMixedHome + 31;
+    const accountHome = firstMixedHome + 47;
     for (let home = firstMixedHome; home <= accountHome; home++) {
       const id = newId(home * 16);
       const committed = await runCommand(f.db.pool, { partition: home }, async () => ({
@@ -1082,6 +1082,15 @@ test('native Source replays its original creation window after the same home adv
       { inputKeys: 0, rows: 0, dependencyPoints: 0 },
     );
     expect(mixedWindows.map(({ window }) => [window.partition, window.through])).toEqual(
+      positions.slice(0, 32).map((position, offset) => [firstMixedHome + offset, position]),
+    );
+    const wider = await readPublicFilterCreationPrefix(
+      f.db.pool,
+      { bootstrap: request.bootstrap.slice(2), from: firstMixedHome, inputLimit: 192, accounts: true },
+      readContext(),
+      { inputKeys: 0, rows: 0, dependencyPoints: 0 },
+    );
+    expect(wider.map(({ window }) => [window.partition, window.through])).toEqual(
       positions.slice(0, -1).map((position, offset) => [firstMixedHome + offset, position]),
     );
   } finally {

@@ -24,6 +24,10 @@ type CreationHome = {
   receipt: string | null;
 };
 
+export function mixedCreationPrefixHomes(inputLimit: number) {
+  return Math.min(48, Math.max(1, Math.floor(inputLimit / 4)));
+}
+
 function completeWindow(events: readonly EventPoint[], window: PublicFilterCreationWindow): boolean {
   let { position, sequence, eventCount } = window;
   for (const row of events) {
@@ -132,7 +136,7 @@ export async function readPublicFilterCreationPrefix(
     };
   };
   if (input.accounts) {
-    const count = exact ?? Math.min(32, homes, Math.max(1, Math.floor(input.inputLimit / 4)));
+    const count = exact ?? Math.min(homes, mixedCreationPrefixHomes(input.inputLimit));
     const windows: PublicFilterCreationWindow[] = [];
     const ranges: { home: number; epoch: number; receipt: string; base: string; through: string; points: number }[] =
       [];

@@ -42,7 +42,7 @@ import {
   type PublicFilterCreationWindow,
 } from './public-filter-creation-window.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
-import { readPublicFilterCreationPrefix } from './public-filter-creation-prefix.ts';
+import { mixedCreationPrefixHomes, readPublicFilterCreationPrefix } from './public-filter-creation-prefix.ts';
 import {
   publicFilterRepairPageRoot,
   readPublicFilterRepairVerification,
@@ -1879,11 +1879,24 @@ export function createNativePublicFilterSourceBinding(
     // A pending Account home can seek three native keys. Keep both reads of
     // its original scan and the Search page writes inside the same allowance.
     const fundedHomes = scansHomes ? (request.homeLimit ?? request.inputLimit) : request.inputLimit;
+    const mixedCreation = mixed && scansHomes && state.phase === 'window' && request.homeLimit !== undefined;
+    // Two reads of a creation prefix can use 192 points each. This leaves the
+    // remainder of the existing 768-input repair reservation for native custody
+    // and the cheaper empty-window seek.
     const offeredLimit =
-      state.owner === 'accounts' ? Math.max(request.inputLimit, Math.min(fundedHomes, 96)) : fundedHomes;
+      state.owner === 'accounts'
+        ? Math.max(request.inputLimit, Math.min(fundedHomes, 96))
+        : mixedCreation
+          ? Math.min(192, fundedHomes + Math.floor(fundedHomes / 2))
+          : fundedHomes;
     // A lost reply or upgrade replays the exact original range and digest.
     const inputLimit = old?.input_limit ?? offeredLimit;
-    if (inputLimit !== offeredLimit && inputLimit !== request.inputLimit) throw new BindingError('owner_unavailable');
+    if (
+      inputLimit !== offeredLimit &&
+      inputLimit !== request.inputLimit &&
+      !(mixedCreation && inputLimit === fundedHomes)
+    )
+      throw new BindingError('owner_unavailable');
     let next = structuredClone(state);
     let repairs: PublicSourceRepair[] = [],
       output: RepairRecord['output'] = null,
@@ -1938,7 +1951,11 @@ export function createNativePublicFilterSourceBinding(
       const windows =
         prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
       const closed =
-        !replay && accounts && windows.next.phase === 'bridge'
+        !replay &&
+        accounts &&
+        (windows.next.phase === 'bridge' ||
+          (mixedCreation &&
+            (windows.batch?.count ?? 0) < Math.min(4096 - state.partition, mixedCreationPrefixHomes(inputLimit))))
           ? await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, true)
           : null;
       const scanned = closed && closed.next.partition > windows.next.partition ? closed : windows;
