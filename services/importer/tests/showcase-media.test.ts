@@ -17,7 +17,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import { bangumiAppearanceSource } from '../src/cross-media-bindings.ts';
-import { ImportTransportError } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
 import { failedCoverContinuation } from '../src/imports-public-journey.ts';
 import type { ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
@@ -212,6 +212,42 @@ test(
       expect(resumedPlan.coverSources).toEqual(firstPlan.coverSources);
       expect(sourceReads).toBe(1);
 
+      let now = Date.now();
+      let throttle = true;
+      let mediaRequests = 0;
+      const mediaPosts: { bytes: string; key: string | null; authorization: string | null }[] = [];
+      const mediaTransport = createImportTransport({
+        origin: 'https://fixture.test',
+        tokenProvider: async () => 'importer-account-token',
+        now: () => now,
+        fetch: Object.assign(
+          async (input: RequestInfo | URL) => {
+            const request = new Request(input);
+            expect([request.method, new URL(request.url).pathname]).toEqual(['POST', '/v1/media:importFromUrl']);
+            mediaPosts.push({
+              bytes: await request.text(),
+              key: request.headers.get('idempotency-key'),
+              authorization: request.headers.get('authorization'),
+            });
+            if (throttle)
+              return Response.json(
+                {
+                  status: 429,
+                  type: 'https://rezics.com/problems/rate_limited',
+                  code: 'rate_limited',
+                  retryable: true,
+                },
+                { status: 429, headers: { 'Retry-After': '86400' } },
+              );
+            reservations++;
+            return Response.json(
+              { media: { id: mediaId, containerId: subjectId, purpose: 'cover', state: 'reserved' } },
+              { status: 202 },
+            );
+          },
+          { preconnect: globalThis.fetch.preconnect },
+        ),
+      });
       const fake = {
         async batch(request: BatchWriteRequest) {
           return {
@@ -254,16 +290,13 @@ test(
             return { subject: { id, type: 'wd:Q95074', statements: { 'wdt:P6296': value('11546') } } };
           return { subject: { id, type: 'schema:TVSeries', statements: { 'wdt:P5732': value('101') } } };
         },
-        async requestMedia(bytes: string, key: string) {
+        async requestMedia(bytes: string, key: string, signal: AbortSignal) {
+          mediaRequests++;
           sealedBody = bytes;
           sealedKey = key;
           mediaRequest = JSON.parse(bytes) as MediaImportRequest;
           if (refusal) throw refusal;
-          reservations += 1;
-          return {
-            status: 202,
-            body: { media: { id: mediaId, containerId: subjectId, purpose: 'cover', state: 'reserved' } },
-          };
+          return mediaTransport.requestMedia(bytes, key, signal);
         },
         async mediaStatus(id: string) {
           statusReads += 1;
@@ -299,7 +332,7 @@ test(
         },
       } as unknown as CrossMediaPort;
       const port = captureShowcaseCommands(fake, journal);
-      const run = () =>
+      const run = (mediaDeadlineMs = 0) =>
         seedCrossMedia(
           firstPlan,
           statePath,
@@ -307,7 +340,7 @@ test(
           { origin: 'https://fixture.test' },
           {
             providers: ['bangumi'],
-            mediaDeadlineMs: 0,
+            mediaDeadlineMs,
           },
         );
       const unavailable = await run();
@@ -318,10 +351,18 @@ test(
       expect(statusReads).toBe(0);
       refusal = new ImportTransportError(403, undefined, 'forbidden');
       expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'refused' });
-      refusal = new ImportTransportError(429, undefined, 'rate_limited', true);
-      expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'pending' });
-      expect(reservations).toBe(0);
       refusal = undefined;
+      const beforeThrottle = mediaRequests;
+      const throttled = await run(1500);
+      expect(throttled.mediaOutcomes[0]).toMatchObject({ status: 'pending', code: 'media-intent-not-delivered' });
+      expect(mediaRequests - beforeThrottle).toBe(1);
+      expect((await run()).runs.bangumi?.runId).toBe(throttled.runs.bangumi?.runId);
+      expect(mediaPosts).toEqual([
+        { bytes: sealedBody, key: JSON.stringify(sealedKey), authorization: 'Bearer importer-account-token' },
+      ]);
+      expect(reservations).toBe(0);
+      throttle = false;
+      now += 86_400_000;
       firstPlan.characterAppearances = [
         {
           subjectId: '101',
@@ -482,6 +523,7 @@ test(
       );
       expect(reservations).toBe(1);
       expect(statusReads).toBe(6);
+      expect(mediaPosts).toEqual([mediaPosts[0]!, mediaPosts[0]!]);
       expect(sealedBody).toBe(JSON.stringify(mediaRequest));
       expect(sealedKey).toBeTruthy();
     } finally {

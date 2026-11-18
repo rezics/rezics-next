@@ -263,7 +263,7 @@ type CommandRefusal = Extract<BatchWriteResult['results'][number], { problem: un
 type CoverOutcome =
   | { outcome: 'resolved' }
   | { outcome: 'failed'; refusal?: CommandRefusal; request?: BatchWriteRequest; error?: unknown; stopped?: boolean }
-  | { outcome: 'pending'; mediaState?: 'reserved' | 'uploaded'; failure?: ImportTransportError };
+  | { outcome: 'pending'; mediaState?: 'reserved' | 'uploaded'; failure?: ImportTransportError; stopped?: boolean };
 type Write = (<T>(operation: () => Promise<T>) => Promise<T>) & {
   owner?: object;
   waitForDependency?: <T>(dependency: Promise<T>, owner: object | undefined) => Promise<T>;
@@ -2445,6 +2445,7 @@ export class Importer {
         this.progress(signal)?.onMedia?.('deferred');
         return {
           outcome: 'pending',
+          stopped: resolution.failure?.status === 429,
           ...(resolution.mediaState ? { mediaState: resolution.mediaState } : {}),
           ...(resolution.failure ? { failure: resolution.failure } : {}),
         };
@@ -2561,18 +2562,18 @@ export class Importer {
         for (let index = 0; index < outcomes.length; index++) {
           const outcome = outcomes[index]!;
           if (outcome.outcome === 'resolved') continue;
-          if (issue?.outcome === 'failed' && issue.stopped) continue;
-          if (!issue || (outcome.outcome === 'failed' && (outcome.stopped || issue.outcome === 'pending')))
+          if (issue?.stopped) continue;
+          if (!issue || outcome.stopped || (outcome.outcome === 'failed' && issue.outcome === 'pending'))
             issue = { ...outcome, key: page[index]!.row.recordKey };
         }
         if (page.length) after = page.at(-1)!.row.recordKey;
         this.options.observer?.onPageRetained?.('media', []);
-        if ((issue?.outcome === 'failed' && issue.stopped) || page.length < 100) break;
+        if (issue?.stopped || page.length < 100) break;
       }
       if (!issue) return true;
       const remaining = deadline - this.now();
       // Polling availability must not open a new budget for a failed write.
-      if (remaining <= 0 || (issue.outcome === 'failed' && issue.stopped)) {
+      if (remaining <= 0 || issue.stopped) {
         if (issue.outcome === 'pending')
           this.retainRunFailure(
             signal,

@@ -550,7 +550,7 @@ export function importCommandPages<T>(
   return pages;
 }
 
-/** Stateless public import operations. The generated client alone owns session propagation. */
+/** Public import operations for one destination and account. The generated client owns session propagation. */
 export function createImportTransport(options: ImportTransportOptions) {
   const pollAttempts = setting(options.pollAttempts, 5, 5, 1);
   const pollDelayMs = setting(options.pollDelayMs, 1000, 1000);
@@ -952,13 +952,25 @@ export function createImportTransport(options: ImportTransportOptions) {
       }
     }
   }
+  let mediaThrottle: { until: number; failure: ImportTransportError } | undefined;
   async function postMedia(body: MediaImportRequest, key: string, signal?: AbortSignal) {
     const header = idempotencyKey(key);
+    signal?.throwIfAborted();
+    if (mediaThrottle && now() < mediaThrottle.until) throw mediaThrottle.failure;
+    mediaThrottle = undefined;
     const reply = await exchange(
       () => client.media.$importFromUrl.post(body, { headers: { 'idempotency-key': header }, ...fetchOptions(signal) }),
       202,
       signal,
-    );
+    ).catch((error: unknown) => {
+      // The upload quota belongs to the account, and a new cover or continuation shares its window.
+      if (error instanceof ImportTransportError && error.status === 429 && error.code === 'rate_limited') {
+        const until = error.retry?.notBefore;
+        if (until !== undefined && until > Math.max(now(), mediaThrottle?.until ?? 0))
+          mediaThrottle = { until, failure: error };
+      }
+      throw error;
+    });
     ensure(Check(MediaImportAcceptedSchema, reply.body));
     const accepted = reply.body as MediaImportAccepted;
     ensure(accepted.media.containerId === body.containerId && accepted.media.purpose === 'cover');
