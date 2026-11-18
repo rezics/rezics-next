@@ -277,7 +277,7 @@ function costs() {
       // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
       // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
       for (const sql of [headerSQL(), fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
-      register(logicalBindingSQL(), fixed(64, 8, 4096));
+      register(logicalBindingSQL(), fixed(68, 9, 4096));
       // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
       register(scopeIdentitySQL, fixed(4, 1, 4608));
       register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
@@ -705,6 +705,8 @@ export function readNativeLogicalBuiltinBinding(
           partitionPosition: string | null;
           sourceVersion: string | null;
           ownerIndexPhase: string | null;
+          personalCoverageReady: boolean | null;
+          pendingLabelRepair: boolean;
           pendingOwnerPin: boolean;
           referenceAccountId: string | null;
           profileId: string | null;
@@ -753,7 +755,9 @@ export function readNativeLogicalBuiltinBinding(
       key = { kind: 'state', profileId: row.profileId, stateSetId: row.stateSetId, stateId: row.stateId };
     if (!key) return { binding: null };
 
-    const ownerIndexReady = row.ownerIndexPhase === 'ready' && !row.pendingOwnerPin;
+    const ownerIndexReady =
+      row.ownerIndexPhase === 'ready' &&
+      (key.kind === 'everything' ? row.personalCoverageReady === true && !row.pendingLabelRepair : !row.pendingOwnerPin);
     const stateSupported = key.kind !== 'state' || row.stateSupported;
     const sourceFence = row.sourceVersion;
     const sourceVersion = key.kind === 'liked' ? row.likedVersion : (sourceFence ?? 'absent');

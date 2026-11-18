@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { OpenSearch } from './opensearch.ts';
 import { createOrderedScopePreparation } from './scope-preparation-ordered.ts';
@@ -8,14 +10,14 @@ import {
   createIdentityScopedObservations,
   createNativeLibrarySourceCustody,
   createPublicIdentitySourceCapture,
+  publicFilterSource,
+  createPublicFilterSourceBinding,
   relationSource,
 } from './native-bindings.ts';
-import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityScopeRegistration, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import {
   createScopePreparationStore,
   scopePreparationDeadline,
-  withScopePreparationConnection,
   type ScopePreparationRecord,
 } from './scope-preparation-store.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -48,6 +50,24 @@ export function createScopePreparation(
   const library = createNativeLibrarySourceCustody({ pool: config.pool, clock: config.clock });
   const ordered = config.search ? createOrderedScopePreparation({ ...config, search: config.search }) : null;
   const population = createFacetPopulationSource(config);
+  const source = publicFilterSource(config);
+  const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
+  async function exactPublicDefinition(
+    retained: Extract<ScopePreparationRecord['definition'], { kind: 'public' }>['definition'],
+    deadline: number,
+    work: ScopeWork,
+  ) {
+    const resolved = await binding.readDefinition?.({ source, id: retained.readDefinition }, { deadline });
+    if (!resolved) throw new ProblemError('dependency_unavailable');
+    work.public(resolved.cost);
+    if (resolved.status !== 'resolved') throw new ProblemError('semantic_not_ready');
+    const { release: _release, ...meaning } = resolved.definition.meaning;
+    // JSONB omits explicit undefined compiler inputs. Only the Source owner's lossless definition
+    // can re-enter the compiler. Check every persisted selector against its JSON representation.
+    const projection = JSON.parse(JSON.stringify({ ...resolved.definition, meaning }));
+    if (!isDeepStrictEqual(retained, projection)) throw new ProblemError('semantic_not_ready');
+    return resolved.definition;
+  }
   async function orderedStep(
     record: ScopePreparationRecord,
     observation: IdentityScopeObservation,
@@ -62,12 +82,7 @@ export function createScopePreparation(
     work.identity(current.work);
     if (current.status !== 'current' || !sameScopeObservation(current.observation, observation))
       throw new ProblemError('semantic_not_ready');
-    work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
-    const release = await withScopePreparationConnection(config.pool, deadline, (client) =>
-      readRelease(client, definition.definition.meaning.digest),
-    );
-    if (!release) throw new ProblemError('semantic_not_ready');
-    const nativeDefinition = { ...definition.definition, meaning: { ...definition.definition.meaning, release } };
+    const nativeDefinition = await exactPublicDefinition(definition.definition, deadline, work);
     const native = ordered.native(nativeDefinition, record);
     const previous = await store.orderedState(record.scope_id, work, deadline);
     const capture = await native.capture(nativeDefinition.capture, previous, work, deadline);
@@ -115,7 +130,7 @@ export function createScopePreparation(
       deadline,
     );
   }
-  async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<void> {
+  async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<string | void> {
     if (record.definition.kind === 'concept') {
       const state: ConceptBrowseState = {
         version: 1,
@@ -168,7 +183,16 @@ export function createScopePreparation(
       delay: number,
     ) {
       work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 20000 });
-      return store.advance(record, frontier, observation, delay, deadline);
+      const revision = await store.advance(record, frontier, observation, delay, deadline);
+      // Only committed structural progress can spend another turn in this worker segment.
+      if (
+        revision &&
+        !observation &&
+        delay === 0 &&
+        frontier.kind === 'public' &&
+        Number(record.expires_at) > Date.now() &&
+        !isDeepStrictEqual(record.frontier, frontier)
+      ) return revision;
     }
     if (Number(record.expires_at) <= Date.now()) return advance(record.frontier, null, 0);
     if (record.definition.ordered && record.observation) {
@@ -218,21 +242,22 @@ export function createScopePreparation(
       };
     } else {
       if (record.frontier.kind !== 'public') throw new TypeError('Scope frontier kind changed');
-      work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
-      const release = await withScopePreparationConnection(config.pool, deadline, (client) =>
-        readRelease(client, definition.definition.meaning.digest),
-      );
-      if (!release) return advance(record.frontier, null, 1000);
-      const native = { ...definition.definition, meaning: { ...definition.definition.meaning, release } };
+      const native = await exactPublicDefinition(definition.definition, deadline, work);
+      // Older pending rows already name the native capture in their frontier. Persist a new locator
+      // before starting the first native transaction so a lost reply cannot orphan its progress.
+      const captureId = record.frontier.captureId ?? record.frontier.value?.split(':')[0];
+      if (!captureId) return advance({ kind: 'public', value: null, captureId: randomUUID() }, null, 0);
       const page = await publicCapture.capturePage({
         definition: native,
         frontier: record.frontier.value,
+        retainedCaptureId: captureId,
         inputLimit: record.definition.ordered ? Math.min(8, work.remaining().remaining.candidateKeys) : 100,
         context: { deadline },
       });
       work.public(page.cost);
-      if (page.status === 'progress') return advance({ kind: 'public', value: page.frontier }, null, 0);
+      if (page.status === 'progress') return advance({ kind: 'public', value: page.frontier, captureId }, null, 0);
       if (page.status !== 'complete') return advance(record.frontier, null, 1000);
+      capturedFrontier = { kind: 'public', captureId, value: record.frontier.value };
       registration = {
         key: { source: { kind: 'public', identity: native.source }, scopeId: record.scope_id },
         capture: { kind: 'public', capture: page.capture },
@@ -313,13 +338,15 @@ export function createScopePreparation(
         if (record) await step(record, deadline, work);
       });
     },
-    async run(scopeId: string, revision: string): Promise<void> {
+    async run(scopeId: string, revision: string): Promise<string | null> {
       const deadline = scopePreparationDeadline();
       return withRequestDeadline(deadline, async () => {
         const work = new ScopeWork(scopeAllowance(100, scopeId));
         work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 282624 });
         const record = await store.claim(scopeId, revision, deadline);
-        if (record) await step(record, deadline, work);
+        if (!record) return null;
+        const next = await step(record, deadline, work);
+        return typeof next === 'string' ? next : null;
       });
     },
   };

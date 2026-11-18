@@ -15,6 +15,11 @@ SELECT account.route AS "accountRoute",
        partition.position::text AS "partitionPosition",
        head.generation::text AS "sourceVersion",
        control.phase AS "ownerIndexPhase",
+       control.personal_coverage_ready AS "personalCoverageReady",
+       EXISTS (
+         SELECT 1 FROM library.owner_index_label_repair repair
+         WHERE repair.route = input.route AND repair.account_id = input.account_id
+       ) AS "pendingLabelRepair",
        EXISTS (
          SELECT 1 FROM library.owner_index_pin pin
          WHERE pin.route = input.route AND pin.account_id = input.account_id AND NOT pin.meaning_ready

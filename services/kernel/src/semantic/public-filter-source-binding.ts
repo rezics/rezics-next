@@ -20,6 +20,7 @@ import { CommandUnavailableError, requireAccessDeadline } from '../access/unavai
 import { withConnection, discardConnection, withQueryAccounting } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
+import lookupDefinition from './public-filter-source-binding-lookup.sql';
 import readDefinition from './public-filter-source-binding-definition.sql';
 import beginBootstrap from './public-filter-source-binding-begin.sql';
 import readBootstrap from './public-filter-source-binding-bootstrap.sql';
@@ -323,6 +324,7 @@ export type PublicFilterSourceBinding = Readonly<{
       source: PublicFilterSource;
       meaning: PublicFilterProjectionMeaning;
       capture: PublicFilterSourceCaptureInput;
+      readOnly?: boolean;
     }>,
     context: PublicFilterConsumerContext,
   ): Promise<
@@ -2236,6 +2238,7 @@ export function createNativePublicFilterSourceBinding(
       });
     },
     async resolve(request, context) {
+      const readOnly = request.readOnly === true;
       // Capture all caller data and constructor identity before the first suspension.
       let meaning: PublicFilterProjectionMeaning, capture: PublicSourceCaptureInput;
       if (!ownsSource(request.source)) return fail('source_missing');
@@ -2256,21 +2259,31 @@ export function createNativePublicFilterSourceBinding(
         const release = await readRelease(db, meaning.digest);
         if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
           throw new BindingError('definition_missing');
+        const definitionInput = {
+          route_digest: routeDigest,
+          release_digest: meaning.digest,
+          capture_digest: hash(encoded),
+          capture: encoded,
+          dependency_keys: [...keys],
+          coverage_keys: [
+            ...publicFilterCoverageKeys(keys, 'catalogueCoverage' in capture && capture.catalogueCoverage === true),
+            ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
+          ].sort(),
+        };
+        if (readOnly) {
+          const [row] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
+          if (!row) throw new BindingError('definition_missing');
+          const definition = await loadDefinition(row.read_definition, db);
+          freeze(definition);
+          return { status: 'resolved' as const, definition, cost };
+        }
         const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
         if (!source) throw new BindingError('owner_unavailable');
         const definition = (
           await nativeSourceQuery(db, defineSource, {
+            ...definitionInput,
             source_id: source.source_id,
             configuration: source.configuration,
-            route_digest: routeDigest,
-            release_digest: meaning.digest,
-            capture_digest: hash(encoded),
-            capture: encoded,
-            dependency_keys: [...keys],
-            coverage_keys: [
-              ...publicFilterCoverageKeys(keys, 'catalogueCoverage' in capture && capture.catalogueCoverage === true),
-              ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
-            ].sort(),
           })
         )[0];
         if (!definition) throw new BindingError('configuration_changed');

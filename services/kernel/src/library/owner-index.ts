@@ -85,6 +85,23 @@ export async function readOwnerFactPresence(client: Client, accountId: string) {
   return rows[0]!;
 }
 
+/** The physical assignment can outlive its parent. Only the settled directory can exclude every such label.
+ * All native family probes and the directory checks run on the caller's same owner snapshot.
+ */
+export async function isOwnerEverythingEmpty(client: Client, accountId: string) {
+  const presence = await readOwnerFactPresence(client, accountId);
+  if (presence.entry || presence.personal || presence.copy || presence.session) return false;
+  if (!presence.label) return true;
+  const { rows } = await client.query(
+    `SELECT 1 FROM library.owner_index_control c
+     WHERE c.route=$1 AND c.account_id=$2 AND c.phase='ready' AND c.personal_coverage_ready
+       AND NOT EXISTS (SELECT 1 FROM library.owner_index_label_repair WHERE route=$1 AND account_id=$2)
+       AND NOT EXISTS (SELECT 1 FROM library.owner_member_support WHERE route=$1 AND account_id=$2)`,
+    key(accountId),
+  );
+  return rows.length === 1;
+}
+
 /** Pure native reads: absent control is unbuilt, never an empty/ready owner. */
 export async function readOwnerIndexFrontier(client: Client, accountId: string): Promise<OwnerIndexFrontier | null> {
   const { rows } = await client.query<Control>(
@@ -95,8 +112,32 @@ export async function readOwnerIndexFrontier(client: Client, accountId: string):
   return rows[0] ?? null;
 }
 
+export type OwnerIndexWorkFrontier = Readonly<{
+  phase: OwnerIndexPhase | 'personal' | 'label-repair';
+  subject: string | null;
+  fact: string | null;
+}>;
+
+/** Older owner directories need one additional pass even if their family bootstrap already completed. */
+export async function readOwnerIndexWorkFrontier(client: Client, accountId: string): Promise<OwnerIndexWorkFrontier | null> {
+  const { rows } = await client.query<OwnerIndexWorkFrontier>(
+    `SELECT CASE WHEN repair.label_id IS NOT NULL THEN 'label-repair'
+            WHEN phase='ready' AND NOT personal_coverage_ready THEN 'personal' ELSE phase END AS phase,
+       CASE WHEN repair.label_id IS NOT NULL THEN repair.after_subject
+            WHEN phase='ready' THEN personal_coverage_after ELSE control.after_subject END AS subject,
+       CASE WHEN repair.label_id IS NOT NULL THEN repair.label_id
+            WHEN phase='ready' THEN personal_coverage_after ELSE after_fact END AS fact
+     FROM library.owner_index_control control LEFT JOIN LATERAL (
+       SELECT label_id,after_subject FROM library.owner_index_label_repair
+       WHERE route=control.route AND account_id=control.account_id ORDER BY label_id LIMIT 1
+     ) repair ON true WHERE control.route=$1 AND control.account_id=$2`,
+    key(accountId),
+  );
+  return rows[0] ?? null;
+}
+
 /** At most 100 examined native facts. The caller supplies the real fenced Core operational transaction. */
-export async function stepOwnerIndex(tx: OperationalTransaction, accountId: string): Promise<OwnerIndexFrontier> {
+export async function stepOwnerIndex(tx: OperationalTransaction, accountId: string): Promise<OwnerIndexWorkFrontier> {
   if (!hasLiveOperationalTransaction(tx)) throw new TypeError('Owner index needs a live operational transaction');
   const args = key(accountId);
   await tx.query(
@@ -106,20 +147,35 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   );
   await tx.query('SELECT 1 FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR UPDATE', args);
   await tx.query(
-    'INSERT INTO library.owner_index_control(route,account_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+    'INSERT INTO library.owner_index_control(route,account_id,personal_coverage_ready) VALUES($1,$2,true) ON CONFLICT DO NOTHING',
     args,
   );
-  const current = (await readOwnerIndexFrontier(tx, accountId))!;
+  const current = (await readOwnerIndexWorkFrontier(tx, accountId))!;
+  if (current.phase === 'personal') {
+    // The same locked fact head serializes this page with behind-frontier annotation and observation writes.
+    const { rows } = await tx.query<{ subject_id: string }>(
+      `SELECT subject_id FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2
+       AND subject_id>=COALESCE($3::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+       AND subject_id IS DISTINCT FROM $3::uuid ORDER BY subject_id LIMIT 100`,
+      [...args, current.subject],
+    );
+    for (const row of rows)
+      await tx.query("SELECT library.refresh_owner_member_scope($1,$2,$3,'entry','{}'::jsonb)", [...args, row.subject_id]);
+    const after = rows.length === 100 ? rows[99]!.subject_id : null;
+    await tx.query(
+      'UPDATE library.owner_index_control SET personal_coverage_ready=$3,personal_coverage_after=$4 WHERE route=$1 AND account_id=$2',
+      [...args, after === null, after],
+    );
+    return { phase: after === null ? 'ready' : 'personal', subject: after, fact: after };
+  }
   // Parent transitions invalidate the source head immediately. Indexed child repair catches up in raw100 steps.
-  const repair = (
-    await tx.query<{ label: string; after: string | null }>(
-      `SELECT label_id AS label,
-    after_subject AS after FROM library.owner_index_label_repair WHERE route=$1 AND account_id=$2
-    ORDER BY label_id LIMIT 1 FOR UPDATE`,
-      args,
-    )
-  ).rows[0];
-  if (repair) {
+  if (current.phase === 'label-repair') {
+    const { rows: [repair] } = await tx.query<{ label: string; after: string | null }>(
+      `SELECT label_id AS label,after_subject AS after FROM library.owner_index_label_repair
+       WHERE route=$1 AND account_id=$2 AND label_id=$3 FOR UPDATE`,
+      [...args, current.fact],
+    );
+    if (!repair) return (await readOwnerIndexWorkFrontier(tx, accountId))!;
     const children = (
       await tx.query<{ subject: string }>(
         `SELECT subject_id AS subject
@@ -145,7 +201,7 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
       WHERE route=$1 AND account_id=$2 AND label_id=$3`,
         [...args, repair.label],
       );
-    return current;
+    return (await readOwnerIndexWorkFrontier(tx, accountId))!;
   }
   if (current.phase === 'ready') {
     await stepOwnerChronology(tx, accountId);
@@ -206,7 +262,7 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
     WHERE route=$1 AND account_id=$2`,
     [...args, next.phase, next.subject, next.fact],
   );
-  return next;
+  return next.phase === 'ready' ? (await readOwnerIndexWorkFrontier(tx, accountId))! : next;
 }
 
 /** One structural ORIGINAL seek; this is not canonical membership, disclosure or a useful public page. */

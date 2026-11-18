@@ -48,6 +48,8 @@ export type PublicIdentitySourceCaptureProducer = Readonly<{
     request: Readonly<{
       definition: PublicFilterSourceDefinition;
       frontier: string | null;
+      /** A retained structural consumer resumes the committed head; registration reads the complete native key set. */
+      retainedCaptureId?: string;
       inputLimit: number;
       context: PublicFilterReadContext;
     }>,
@@ -119,10 +121,8 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
       let cost = zero();
       if (Date.now() >= request.context.deadline) return { status: 'unavailable', cost };
       // The registered compiler definition, including negative/population/order keys, is the authority.
-      const resolved = await binding.resolve(
-        { source, meaning: request.definition.meaning, capture: request.definition.capture },
-        request.context,
-      );
+      const resolved = await binding.readDefinition?.({ source, id: request.definition.readDefinition }, request.context);
+      if (!resolved) return { status: 'unavailable', cost };
       cost = add(cost, resolved.cost);
       if (resolved.status !== 'resolved') return { status: resolved.status, cost };
       const definition = resolved.definition;
@@ -130,12 +130,18 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
       const d = digest(definition);
       let id: string;
       let expected: string | null = null;
-      if (request.frontier === null) id = randomUUID();
+      if (
+        request.retainedCaptureId !== undefined &&
+        !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![\s\S])/.test(request.retainedCaptureId)
+      )
+        throw new TypeError('Invalid retained public capture ID');
+      if (request.frontier === null) id = request.retainedCaptureId ?? randomUUID();
       else {
         const match = /^([0-9a-f-]{36}):([1-9][0-9]*)$/.exec(request.frontier);
         if (!match) throw new TypeError('Invalid native public capture frontier');
         id = match[1]!;
         expected = match[2]!;
+        if (request.retainedCaptureId && request.retainedCaptureId !== id) return { status: 'changed', cost };
       }
       const partition = definition.source.partition;
       if (expected === null) {
@@ -143,7 +149,7 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
           await tx.query(
             `INSERT INTO semantic.identity_public_capture
             (partition_no,capture_id,source_id,source_epoch,configuration,read_definition,definition_digest)
-            VALUES($1,$2,$3,$4,$5,$6,$7)`,
+            VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (partition_no,capture_id) DO NOTHING`,
             [
               partition,
               id,
@@ -168,7 +174,12 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
             )
           ).rows[0],
       );
-      if (!head || head.definition_digest !== d || (expected !== null && head.version !== expected))
+      if (
+        !head ||
+        head.definition_digest !== d ||
+        (expected !== null && head.version !== expected &&
+          (!request.retainedCaptureId || BigInt(expected) > BigInt(head.version)))
+      )
         return { status: 'changed', cost };
       if (head.complete) {
         const capture = Object.freeze({}) as PublicIdentitySourceCapture;

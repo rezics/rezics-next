@@ -447,6 +447,7 @@ export function createSearchScopeSource({
     meaning: Parameters<typeof compilePublicFilterConsumerCapture>[1],
     input: {
       filterDocument: FilterDocument;
+      readOnly?: boolean;
       sort: NonNullable<ScopePrepareOptions['nativeOrder']> | 'id';
       pageSize?: number;
       generation: number;
@@ -476,6 +477,7 @@ export function createSearchScopeSource({
         source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
         meaning: compiled.meaning,
         capture: compiled.capture,
+        ...(input.readOnly ? { readOnly: true } : {}),
       },
       { deadline: reader.deadline },
     );
@@ -1040,6 +1042,7 @@ export function createSearchScopeSource({
           meaning,
           {
             filterDocument: admitted,
+            ...(options?.readOnly ? { readOnly: true } : {}),
             sort: options?.nativeOrder ?? 'id',
             ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
             generation: indexed!.generation,
@@ -1094,6 +1097,7 @@ export function createSearchScopeSource({
           { digest: selected.digest, release: nativeRelease },
           {
             filterDocument: publicFilter,
+            ...(options?.readOnly ? { readOnly: true } : {}),
             sort: options?.nativeOrder ?? 'id',
             ...(options?.nativeOrder ? { pageSize: options.pageSize } : {}),
             generation: indexed.generation,
@@ -1123,13 +1127,15 @@ export function createSearchScopeSource({
           });
           if (!isDeepStrictEqual(structuredClone(current), workDefinition)) unavailable();
         }
-        work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
-        await store.retain(publicIdentity, publicDefinition, reader.deadline);
-        await createScopePreparation({ pool, prefix, routeKey: reader.routeKey, access: reader.access, clock }).prepare(
-          publicIdentity,
-          reader.deadline,
-          work,
-        );
+        if (!options?.readOnly) {
+          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
+          await store.retain(publicIdentity, publicDefinition, reader.deadline);
+          await createScopePreparation({ pool, prefix, routeKey: reader.routeKey, access: reader.access, clock }).prepare(
+            publicIdentity,
+            reader.deadline,
+            work,
+          );
+        }
         work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
         publicObservation = await readPreparedScopeObservation(pool, prefix, publicIdentity, reader.deadline);
         if (

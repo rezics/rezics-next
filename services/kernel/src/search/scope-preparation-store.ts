@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { CollectionAliasProgress } from '../library/collection-source.ts';
 import type { ScopeLeafResume } from './scope-execution.ts';
@@ -114,7 +115,7 @@ export type ScopeCaptureFrontier =
   | Readonly<{ kind: 'concept' }>
   | Readonly<{ kind: 'library'; value: NativeSourceFrontier | null }>
   | Readonly<{ kind: 'realm'; after: string | null; exhausted: boolean }>
-  | Readonly<{ kind: 'public'; value: string | null }>;
+  | Readonly<{ kind: 'public'; value: string | null; captureId?: string }>;
 export type RetainedScopeObservation = Omit<IdentityScopeObservation, 'committedRevision'> & {
   committedRevision: string;
 };
@@ -144,7 +145,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
           ? { kind: 'library', value: null }
           : definition.kind === 'realm'
             ? { kind: 'realm', after: null, exhausted: false }
-            : { kind: 'public', value: null };
+            : { kind: 'public', value: null, captureId: randomUUID() };
       await query(
         deadline,
         `INSERT INTO search.scope_preparation
@@ -264,15 +265,15 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
       observation: IdentityScopeObservation | null,
       delay: number,
       deadline = scopePreparationDeadline(),
-    ): Promise<void> {
+    ): Promise<string | undefined> {
       const retained: RetainedScopeObservation | null = observation
         ? { ...observation, committedRevision: observation.committedRevision.toString() }
         : null;
-      await query(
+      const updated = await query<{ revision: string }>(
         deadline,
         `UPDATE search.scope_preparation SET frontier=$4,observation=$5,
         state=$6,revision=revision+1,lease_until=0,due_at=$7
-        WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND revision=$3`,
+        WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND revision=$3 RETURNING revision::text`,
         [
           prefix,
           record.scope_id,
@@ -283,6 +284,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
           Date.now() + delay,
         ],
       );
+      return updated.rows[0]?.revision;
     },
     async refreshObservation(
       record: ScopePreparationRecord,

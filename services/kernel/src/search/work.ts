@@ -359,13 +359,15 @@ export function createSearchWorkModule(
       const scopeStore = createScopePreparationStore(context.pool, searchConfig.prefix, context.client);
       const scopeStep = DBOS.registerStep(
         async (scopeId: string, revision: string) => {
-          await (await scopeGate.ready()).run(scopeId, revision);
+          return (await scopeGate.ready()).run(scopeId, revision);
         },
         { name: 'search.scopePreparationStep', ...COMMAND_STEP_RETRIES },
       );
       DBOS.registerWorkflow(
         async (input: { scopeId: string; revision: string }) => {
-          await scopeStep(input.scopeId, input.revision);
+          let revision: string | null = input.revision;
+          for (let page = 0; page < 16 && revision; page++)
+            revision = await scopeStep(input.scopeId, revision);
         },
         { name: SCOPE_PREPARATION_WORKFLOW },
       );

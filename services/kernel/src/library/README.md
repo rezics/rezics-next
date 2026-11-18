@@ -999,7 +999,17 @@ population. Each original must map to itself and the bounded Entry seeks must re
 The reader can apply one released statement range using Semantic's complete public selection and the shared Search
 matcher. The signed continuation binds the owner fact version, partition epoch and evidence for the complete
 population, including exclusions. FULL presentation and viewer overlays retain their final currentness checks.
-Other logical Source shapes and Content reaction groups retain their existing readiness boundary.
+The shared owner directory retains annotations and reviewed observations under the unpinned entry family after
+a state clear. Its worker repairs earlier personal rows and deleted-label child ranges in pages of 100 under the
+fact writer lock. When the only physical assignments belong to deleted parents, a completed directory with no
+pending parent repair and no support can establish an empty Everything in the same owner snapshot.
+
+A nonempty headerless Everything outside the direct plan still needs canonical ordering and complete original
+groups. The canonical sweep visits stored Collection headers, and the scope and generation foreign keys require
+that same parent. Settled owner input coverage alone supplies neither canonical identity nor a prepared members
+episode. The [reservation contract](members-preparation-contract.md#local-api-and-authority) requires an active
+curated header. A read-only Search preparation can look up an exact published scope. Its worker restores the
+lossless compiler definition from Semantic and resumes the retained capture across registration retries.
 
 For an admitted catalogue-plus-owner request, Search passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
 Library revalidates that execution and its privacy-reduction closure. Owner-only and mixed predicates use the
