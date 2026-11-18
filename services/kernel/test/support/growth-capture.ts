@@ -155,7 +155,10 @@ type ActiveCapture = {
   backgroundPlanDatabases: string[];
   backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
-  readonly transactions: Map<GrowthDatabase, Map<number, number>>;
+  readonly transactions: Map<
+    GrowthDatabase,
+    Map<number, { token: number; reservation: GrowthNativeNoticeReservation }>
+  >;
   readonly transactionHistory: Array<
     Readonly<{ database: string; backend: number; token: number; state: 'open' | 'closed' }>
   >;
@@ -744,24 +747,25 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
             captureTransactions = new Map();
             attribution.capture.transactions.set(database, captureTransactions);
           }
-          if (captureTransactions.get(backend) !== transaction.token) {
+          const previous = captureTransactions.get(backend);
+          if (previous?.token !== transaction.token) {
             try {
               const physical = databaseName(database);
-              attribution.capture.budget.retainFoldedSummary(
-                attribution.background ? 'background' : 'foreground',
-                'transaction state',
-                1,
-                Buffer.byteLength(physical, 'utf8') + 24,
-              );
-              captureTransactions.set(backend, transaction.token);
-              if (attribution.capture.transactionHistory.length < 128)
+              const side = attribution.background ? 'background' : 'foreground';
+              const bytes = Buffer.byteLength(physical, 'utf8') + 24;
+              previous?.reservation.release();
+              captureTransactions.delete(backend);
+              const reservation = attribution.capture.budget.retainLiveTransaction(side, bytes);
+              captureTransactions.set(backend, { token: transaction.token, reservation });
+              if (attribution.capture.transactionHistory.length < 128) {
+                attribution.capture.budget.retainFoldedSummary(side, 'transaction history', 1, bytes);
                 attribution.capture.transactionHistory.push({
                   database: physical,
                   backend,
                   token: transaction.token,
                   state: 'open',
                 });
-              else attribution.capture.omittedTransactions++;
+              } else attribution.capture.omittedTransactions++;
             } catch (error) {
               attribution.capture.omittedTransactions++;
               attribution.capture.error ??= captureFailureContext(error, `backend ${backend} transaction state`);
@@ -790,7 +794,11 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
             connectedDatabase(client) ?? databaseName(attribution.capture.database),
           );
           const captureTransactions = attribution.capture.transactions.get(database);
-          if (captureTransactions?.get(backend) === completedToken) captureTransactions.delete(backend);
+          const tracked = captureTransactions?.get(backend);
+          if (tracked?.token === completedToken) {
+            captureTransactions!.delete(backend);
+            tracked.reservation.release();
+          }
           const history = attribution.capture.transactionHistory.find(
             (entry) =>
               entry.database === databaseName(database) && entry.backend === backend && entry.token === completedToken,
@@ -1442,7 +1450,7 @@ function makeCaptureFailureDiagnostic(
   const transactions: Array<Readonly<{ database: string; backend: number; token: number }>> = [];
   let omittedTransactions = active.omittedTransactions;
   for (const [database, entries] of active.transactions) {
-    for (const [backend, token] of entries) {
+    for (const [backend, { token }] of entries) {
       if (transactions.length >= 128) {
         omittedTransactions++;
         continue;
@@ -1773,7 +1781,7 @@ async function captureInternal<T>(
     if (run)
       for (const [target, transactions] of active.transactions) {
         const runTransactions = run.backends.transactions.get(target) ?? new Map<number, number>();
-        for (const [backend, token] of transactions) runTransactions.set(backend, token);
+        for (const [backend, { token }] of transactions) runTransactions.set(backend, token);
         run.backends.transactions.set(target, runTransactions);
       }
     if (active.costFolder) {
