@@ -1,6 +1,7 @@
 // UNRUN: connected Subject route/context, real prepared-reader wire and mounted lifetime assertions.
 // Native signatures, browser layout, physical cost and private SSR require postintegration verification.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { dirname } from 'node:path';
 import { act, Suspense, type ComponentProps } from 'react';
 import { createKernelClient } from '@rezics/client';
@@ -207,21 +208,26 @@ const native = createKernelClient('https://kernel.test', {
     return Response.json({ code: 'not_found' }, { status: 404 });
   },
 });
-let bffRequest: Request;
+const bffRequests = new AsyncLocalStorage<Request>();
+let lastBffRequest: Request;
 function signalServerFn() {
   const chain = start.createServerFn();
   const handle = chain.handler.bind(chain);
   chain.handler = (handler) => {
     const invoke = handle(handler);
     return ((options: { signal?: AbortSignal }) => {
-      bffRequest = start.requestForStory(undefined, { signal: options?.signal });
-      return invoke(options as never);
+      const request = start.requestForStory(undefined, { signal: options?.signal });
+      lastBffRequest = request;
+      return bffRequests.run(request, () => invoke(options as never));
     }) as typeof handler;
   };
   return chain;
 }
 mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: signalServerFn }));
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => bffRequest }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => bffRequests.getStore() ?? start.getRequest(),
+}));
 mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
 const kernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
@@ -237,6 +243,12 @@ const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
+const { personalRead } = await import('../src/kernel/query');
+const originalSession = { ...(await import('../src/session/query')) };
+const { sessionQuery, useBrowserSession } = originalSession;
+const { browserSessionOwner } = await import('../src/session');
+// SSR fixtures can load the uncompiled server fallback before this browser suite.
+mock.module('../src/session/query', () => ({ ...originalSession, useSession: useBrowserSession }));
 const { SubjectOverview: SubjectOverviewContent } = await import('../src/routes/subjects/-overview');
 const { withPageVisitHost } = await import('./helpers/subject-render');
 const SubjectOverview = withPageVisitHost(SubjectOverviewContent);
@@ -246,7 +258,6 @@ const { readSubjectRatingPopulations, validatePopulationInput } =
 const { subjectFrameQuery, subjectRelationsQuery, subjectRatingQuery } =
   await import('../src/features/pages/subject-queries');
 const { pageRelationProperties, subjectPageType } = await import('../src/features/pages/subject');
-const { sessionQuery, useSession } = await import('../src/session/query');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { m } = await import('../src/paraglide/messages.js');
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -255,6 +266,7 @@ let root: ReturnType<typeof createRoot>;
 let cache: InstanceType<typeof QueryClient>;
 let extraCache: InstanceType<typeof QueryClient> | undefined;
 let mounted = false;
+const initialPersonalReadEnabled = personalRead.enabled;
 const session = (reader = preparedReader, csrfToken: string | null = 'story-csrf-token') => ({
   state: 'signed-in' as const,
   subject: reader,
@@ -292,17 +304,9 @@ function PopulationOwner({
   q?: typeof question;
   enabled?: boolean;
 }) {
-  const data = useSession();
+  const viewer = useBrowserSession();
   useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
-  return (
-    <SubjectRatingPopulations
-      subjectId={id}
-      question={q}
-      locale="en"
-      session={data ?? { state: 'unknown', csrfToken: null }}
-      enabled={enabled}
-    />
-  );
+  return <SubjectRatingPopulations subjectId={id} question={q} locale="en" session={viewer} enabled={enabled} />;
 }
 async function paint(id = subjectId, provider = cache, q = question, enabled = true) {
   await act(async () => {
@@ -352,6 +356,8 @@ async function ordinary(provider = cache) {
   mounted = true;
 }
 beforeEach(() => {
+  // The shared query defaults may have been initialized by an SSR fixture before this DOM was installed.
+  Object.assign(personalRead, { enabled: true });
   requests = [];
   preparations = 0;
   preparedReader = 'reader-one';
@@ -371,13 +377,18 @@ beforeEach(() => {
   mounted = true;
 });
 afterEach(async () => {
-  if (mounted) await act(async () => root.unmount());
-  cache.clear();
-  extraCache?.clear();
-  extraCache = undefined;
+  try {
+    if (mounted) await act(async () => root.unmount());
+    cache.clear();
+    extraCache?.clear();
+    extraCache = undefined;
+  } finally {
+    Object.assign(personalRead, { enabled: initialPersonalReadEnabled });
+  }
 });
 afterAll(async () => {
   mock.restore();
+  mock.module('../src/session/query', () => originalSession);
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
@@ -565,11 +576,13 @@ test('hydration waits for the browser observation before admitting its prepared 
 test('terminal empty ready population directory settles once without replacing its accepted observer', async () => {
   nativePopulations = [];
   cache.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+  const pendingSession = deferred<ReturnType<typeof session>>();
+  const sessionRead = cache.fetchQuery({ ...sessionQuery, queryFn: () => pendingSession.promise });
   await paint();
   expect(paths('/ratings/populations')).toHaveLength(0);
   await act(async () => {
-    cache.setQueryData(sessionQuery.queryKey, session());
-    await tick();
+    pendingSession.resolve(session());
+    await sessionRead;
   });
   await until(() => host.textContent!.includes(m.rating_population_empty_page()));
   const reads = paths('/ratings/populations').length;
@@ -619,7 +632,7 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   });
   const abandoned = paths('/ratings', true).at(-1)!;
   const siblings = requests.slice(requests.indexOf(abandoned) - 20, requests.indexOf(abandoned));
-  const abandonedRequest = bffRequest;
+  const abandonedRequest = lastBffRequest;
   expect(siblings).toHaveLength(20);
   const oldRemove = button(m.rating_population_remove({ name: names.get(ids[0]!)! }));
   await act(async () => {
@@ -980,6 +993,7 @@ test('independent QueryClients serialize private responses separately and requir
 test('a later session owner retires held comparisons across live QueryClients and cannot revive the earlier visit', async () => {
   await paint();
   await until(() => boxes().length === 20);
+  expect(browserSessionOwner.getSnapshot().client).toBe(cache);
   aggregateGate = deferred<Response>();
   const delayedAggregate = aggregateGate;
   await select(0);
@@ -1001,6 +1015,7 @@ test('a later session owner retires held comparisons across live QueryClients an
       await tick();
     });
     await until(() => otherHost.querySelectorAll('input[type="checkbox"]').length === 20);
+    expect(browserSessionOwner.getSnapshot().client).toBe(extraCache);
     expect(boxes()).toHaveLength(0);
     delayedAggregate.resolve(
       Response.json({
@@ -1017,6 +1032,7 @@ test('a later session owner retires held comparisons across live QueryClients an
   }
 
   await until(() => boxes().length === 20);
+  expect(browserSessionOwner.getSnapshot().client).toBe(cache);
   expect(boxes().every((box) => !box.checked)).toBe(true);
 });
 
