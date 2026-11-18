@@ -1,8 +1,8 @@
 import { expect } from 'bun:test';
-import type { Page } from 'playwright';
+import type { Page, Response as BrowserResponse } from 'playwright';
 import { expect as browserExpect } from 'playwright/test';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
-import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import { nativeAuthPassword } from './native-auth-security-fixture.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -14,6 +14,8 @@ const client = {
   scopes: ['account:read', 'account:update'],
 };
 const requested = ['account:read'] as const;
+const callerRequestMs = 30_000;
+const noStore = { 'cache-control': 'no-store' };
 type CallerRequest = { accountId: string; path: string; session: string };
 const callers = new Map<string, CallerRequest>();
 
@@ -37,14 +39,31 @@ async function serveCaller(request: Request): Promise<Response> {
        <a hidden href="${review.href.replaceAll('&', '&amp;')}">Review permissions</a></main>
        <script>
          const button = document.querySelector('button');
+         const review = document.querySelector('a');
+         const status = document.querySelector('[role=status]');
          button.onclick = async () => {
            button.disabled = true;
+           review.hidden = true;
+           status.textContent = 'Requesting access';
+           let message = 'Access unavailable';
            try {
-             const response = await fetch(location.href, { method: 'POST', redirect: 'error' });
-             document.querySelector('a').hidden = response.status !== 401;
-             document.querySelector('[role=status]').textContent =
-               response.ok ? 'Access granted' : response.status === 401 ? 'Permission required' : 'Access unavailable';
+             const response = await fetch(location.href, {
+               method: 'POST', redirect: 'error', signal: AbortSignal.timeout(${callerRequestMs}),
+             });
+             const result = await response.json();
+             if (response.status === 401 && result?.error === 'authentication_denied' &&
+                 Object.keys(result).length === 1) {
+               message = 'Permission required';
+               review.hidden = false;
+             } else if (response.status === 200 && typeof result?.account_id === 'string' &&
+                 result.client_id === ${JSON.stringify(client.clientId)} &&
+                 JSON.stringify(result.scope) === JSON.stringify(${JSON.stringify(requested)})) {
+               message = 'Access granted';
+             }
+           } catch {
+             // A failed or incomplete response cannot settle the caller's request.
            } finally {
+             status.textContent = message;
              button.disabled = false;
            }
          };
@@ -52,7 +71,7 @@ async function serveCaller(request: Request): Promise<Response> {
       {
         headers: {
           'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
+          ...noStore,
           'referrer-policy': 'same-origin',
         },
       },
@@ -60,11 +79,17 @@ async function serveCaller(request: Request): Promise<Response> {
   }
   if (request.method !== 'POST' || request.headers.get('origin') !== origin) return new Response(null, { status: 403 });
 
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(callerRequestMs)]);
+  return authorizeCaller(caller, signal).catch(() => new Response(null, { status: 502, headers: noStore }));
+}
+
+async function authorizeCaller(caller: CallerRequest, signal: AbortSignal): Promise<Response> {
   const headers = { 'content-type': 'application/json', origin: auth.origin };
   const signIn = await fetch(new URL('/signin', auth.origin), {
     method: 'POST',
     headers,
     redirect: 'error',
+    signal,
     body: JSON.stringify({
       account_id: caller.accountId,
       password: nativeAuthPassword,
@@ -72,10 +97,15 @@ async function serveCaller(request: Request): Promise<Response> {
       scope: requested,
     }),
   });
-  const noStore = { 'cache-control': 'no-store' };
   if (!signIn.ok) return Response.json(await signIn.json(), { status: signIn.status, headers: noStore });
 
   const proof = (await signIn.json()) as { account_id: string; client_id: string; scope: string[] };
+  if (
+    proof.account_id !== caller.accountId ||
+    proof.client_id !== client.clientId ||
+    JSON.stringify(proof.scope) !== JSON.stringify(requested)
+  )
+    return new Response(null, { status: 502, headers: noStore });
   const cookie = signIn.headers
     .getSetCookie()
     .map((value) => value.split(';')[0])
@@ -84,23 +114,44 @@ async function serveCaller(request: Request): Promise<Response> {
     method: 'POST',
     headers: { ...headers, cookie },
     redirect: 'error',
+    signal,
     body: '{}',
   });
   if (!issuance.ok) return Response.json(await issuance.json(), { status: issuance.status, headers: noStore });
   const result = (await issuance.json()) as { access_token?: unknown };
-  if (typeof result.access_token !== 'string' || !result.access_token) return new Response(null, { status: 502 });
+  if (typeof result.access_token !== 'string' || !result.access_token)
+    return new Response(null, { status: 502, headers: noStore });
   return Response.json(
     { account_id: proof.account_id, client_id: proof.client_id, scope: proof.scope },
     { headers: noStore },
   );
 }
 
-async function continueRequest(page: Page, callerUrl: string) {
+async function continueRequest(page: Page, callerUrl: string, phase: 'initial' | 'return', expectedStatus: 200 | 401) {
   const [response] = await Promise.all([
-    page.waitForResponse((reply) => reply.url() === callerUrl && reply.request().method() === 'POST'),
+    page.waitForResponse((reply) => reply.url() === callerUrl && reply.request().method() === 'POST', {
+      timeout: callerRequestMs,
+    }),
     page.getByRole('button', { name: 'Continue request', exact: true }).click(),
   ]);
-  return response;
+  expect(response.status(), `${phase} caller response`).toBe(expectedStatus);
+  // Require the caller document to settle from the body it received after this click.
+  await browserExpect(page.getByRole('status'), `${phase} caller received HTTP ${response.status()}`).toHaveText(
+    expectedStatus === 401 ? 'Permission required' : 'Access granted',
+    { timeout: callerRequestMs },
+  );
+}
+
+async function readConsentResponse(response: BrowserResponse, phase: 'review' | 'approval'): Promise<unknown> {
+  const result = await settledWithin(
+    response.json().then(
+      (body: unknown) => ({ body }),
+      () => null,
+    ),
+    callerRequestMs,
+  );
+  if (!result) throw new Error(`Native consent ${phase} HTTP ${response.status()} did not deliver readable JSON`);
+  return result.body;
 }
 
 nativeBeforeAll(lifecycle, 420_000, async () => {
@@ -137,11 +188,8 @@ nativeTest(
         await context.addCookies([
           { name: 'caller', value: caller.session, url: origin, httpOnly: true, sameSite: 'Lax' },
         ]);
-        expect((await page.goto(callerUrl))?.status()).toBe(200);
-        const initial = await continueRequest(page, callerUrl);
-        expect(initial.status()).toBe(401);
-        expect(await initial.json()).toEqual({ error: 'authentication_denied' });
-        await browserExpect(page.getByRole('status')).toHaveText('Permission required');
+        expect((await page.goto(callerUrl))?.status(), 'caller document response').toBe(200);
+        await continueRequest(page, callerUrl, 'initial', 401);
         const writes: unknown[] = [];
         page.on('request', (request) => {
           if (request.method() === 'POST' && request.url() === new URL('/consent', auth.origin).href) {
@@ -154,17 +202,17 @@ nativeTest(
           page.waitForResponse((response) => response.url() === projection.href),
           page.getByRole('link', { name: 'Review permissions', exact: true }).click(),
         ]);
-        expect(observed.status()).toBe(200);
-        expect(await observed.json()).toMatchObject({
+        expect(observed.status(), 'consent review response').toBe(200);
+        expect(page.url()).toBe(review.href);
+        await browserExpect(page.getByText(client.displayName, { exact: true })).toBeVisible();
+        await browserExpect(page.getByText(`You’re signed in as ${email}.`, { exact: true })).toBeVisible();
+        await browserExpect(page.getByText(requested[0], { exact: true }).and(page.locator('code'))).toBeVisible();
+        expect(await readConsentResponse(observed, 'review')).toMatchObject({
           client_id: client.clientId,
           acting_account: { account_id: accountId },
           requested,
           granted: [],
         });
-        expect(page.url()).toBe(review.href);
-        await browserExpect(page.getByText(client.displayName, { exact: true })).toBeVisible();
-        await browserExpect(page.getByText(`You’re signed in as ${email}.`, { exact: true })).toBeVisible();
-        await browserExpect(page.getByText(requested[0], { exact: true }).and(page.locator('code'))).toBeVisible();
 
         if (persona === 'alice') {
           const [decision] = await Promise.all([
@@ -174,16 +222,16 @@ nativeTest(
             ),
             page.getByRole('button', { name: 'Approve', exact: true }).click(),
           ]);
-          expect(decision.status()).toBe(200);
-          expect(await decision.json()).toEqual({
+          expect(decision.status(), 'consent approval response').toBe(200);
+          await browserExpect(
+            page.getByText('Access approved. You can return to the application.', { exact: true }),
+          ).toBeVisible();
+          expect(await readConsentResponse(decision, 'approval')).toEqual({
             account_id: accountId,
             client_id: client.clientId,
             requested,
             scope: requested,
           });
-          await browserExpect(
-            page.getByText('Access approved. You can return to the application.', { exact: true }),
-          ).toBeVisible();
         } else {
           await page.getByRole('button', { name: 'Decline', exact: true }).click();
           await browserExpect(
@@ -193,15 +241,8 @@ nativeTest(
 
         await page.goBack({ waitUntil: 'domcontentloaded' });
         expect(page.url()).toBe(callerUrl);
-        const returned = await continueRequest(page, callerUrl);
+        await continueRequest(page, callerUrl, 'return', persona === 'alice' ? 200 : 401);
         if (persona === 'alice') {
-          expect(returned.status()).toBe(200);
-          await browserExpect(page.getByRole('status')).toHaveText('Access granted');
-          expect(await returned.json()).toEqual({
-            account_id: accountId,
-            client_id: client.clientId,
-            scope: requested,
-          });
           expect(writes).toEqual([
             {
               client_id: client.clientId,
@@ -212,9 +253,6 @@ nativeTest(
             },
           ]);
         } else {
-          expect(returned.status()).toBe(401);
-          await browserExpect(page.getByRole('status')).toHaveText('Permission required');
-          expect(await returned.json()).toEqual({ error: 'authentication_denied' });
           expect(writes).toEqual([]);
         }
       } finally {
