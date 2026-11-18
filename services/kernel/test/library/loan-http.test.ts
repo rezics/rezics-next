@@ -1,46 +1,17 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { compileCatalogue } from '@rezics/definitions/compile';
-import { fixture, libraryProfile } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
-import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
-import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
-import { testRouteKey } from '../support/test-kernel.ts';
 
 const scopes = ['copy:create', 'copy:update', 'copy:delete', 'copy:list', 'copy:read'];
 let now = Date.parse('2026-10-26T12:00:00.000Z');
 let native: NativeProfileFixture;
-let loanProfileDigest: string;
-let mergeBearer: string;
 
 beforeAll(async () => {
   native = await createProfileEntryFixture({
     clock: () => new Date(now),
     ownerScopes: scopes,
   });
-  loanProfileDigest = await native.publish(await compileCatalogue(fixture(libraryProfile('fixture.loan-http'))));
-  await native.activate(loanProfileDigest);
-  const mergeClaims = { ...native.steward.actor, scopes: [...native.steward.actor.scopes, 'subject:merge'] };
-  const mergeActor = await authenticateAccount(
-    native.access,
-    { pool: native.pool, deadline: deadlineFor(30_000) },
-    mergeClaims,
-  );
-  await createGrantCommands({ pool: native.pool, access: native.access, managementAction: 'access:grant' }).create(
-    { pool: native.pool, actor: mergeActor, deadline: deadlineFor(30_000) },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: mergeActor.accountId },
-      actions: ['subject:merge'],
-      valid: '(,)',
-      key: entryKey(),
-    },
-  );
-  mergeBearer = await accountToken(mergeClaims);
-  expect((await native.send('steward', 'POST', '/v1/platform/exposure/subject_identity:open')).status).toBe(200);
 }, 120_000);
 
 afterAll(async () => {
@@ -82,7 +53,7 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   expect(await replay.json()).toEqual(original);
   await native.activate(native.replacementDigest);
   expect(await (await native.send('owner', 'POST', '/v1/copy-loans', input, createKey)).json()).toEqual(original);
-  await native.activate(loanProfileDigest);
+  await native.activate(native.originalDigest);
 
   const duplicate = await native.send('owner', 'POST', '/v1/copy-loans', input, entryKey());
   expect(duplicate.status).toBe(409);
@@ -109,35 +80,23 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   });
 
   const ownerId = native.owner.actor.accountId;
-  const ownerRoute = routeOf(ownerId)!;
-  const people = await Promise.all(
-    ['Original loan counterparty', 'Current loan counterparty'].map(async (label, n) => {
-      let key = '';
-      for (let index = 0; index < 100_000; index++) {
-        const candidate = `loan-person-${n}-${index}`;
-        if (
-          partitionOf(anchorRoute(testRouteKey(), `${ownerId}\nsubject.create\n${candidate}`)) ===
-          partitionOf(ownerRoute)
-        ) {
-          key = candidate;
-          break;
-        }
-      }
-      expect(key).not.toBe('');
-      const response = await native.send(
-        'owner',
-        'POST',
-        '/v1/subjects',
-        { type: 'schema:Person', labels: { en: label } },
-        key,
-      );
-      expect(response.status).toBe(201);
-      return { id: ((await response.json()) as { subject: { id: string } }).subject.id, label };
-    }),
-  );
-  const sortedPeople = [...people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const survivor = sortedPeople[0]!;
-  const redirected = sortedPeople[1]!;
+  const people: { id: string; label: string }[] = [];
+  for (const label of ['Original loan counterparty', 'Current loan counterparty']) {
+    const response = await native.send(
+      'owner',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:Person', labels: { en: label } },
+      native.homeKey(ownerId),
+    );
+    expect(response.status).toBe(201);
+    const { subject } = (await response.json()) as { subject: { id: string } };
+    await native.awaitCurrentIdentity(subject.id);
+    people.push({ id: subject.id, label });
+  }
+  people.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const survivor = people[0]!;
+  const redirected = people[1]!;
   const personCopyResponse = await native.send('owner', 'POST', '/v1/copies', {
     subjectId,
     kind: 'physical',
@@ -160,10 +119,7 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   };
   const beforeMerge = personPage.items.find(({ loan: item }) => item.id === personLoan.id)?.loan.counterparty;
   expect(beforeMerge).toMatchObject({ kind: 'person', personId: redirected.id, displayName: redirected.label });
-  const merge = await native.send(mergeBearer, 'POST', '/v1/subjects:merge', {
-    subjects: [survivor.id, redirected.id],
-  });
-  expect(merge.status).toBe(200);
+  await native.admitSubjectMerge(survivor.id, redirected.id);
   const afterMerge = await (await native.send('owner', 'GET', openPath)).json();
   expect(afterMerge).toMatchObject({
     items: [
@@ -173,6 +129,7 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
           counterparty: { kind: 'person', personId: redirected.id, displayName: survivor.label },
         },
       },
+      { loan: { id: loan.id, counterparty: input.counterparty } },
     ],
   });
   const personReturned = await native.send('owner', 'POST', `/v1/copy-loans/${personLoan.id}/return`, {
@@ -223,21 +180,28 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   const history = await native.send('owner', 'GET', '/v1/copy-loans?filter=history&limit=20');
   expect(history.status).toBe(200);
   expect(await history.json()).toMatchObject({
-    items: [{ loan: { id: loan.id, counterparty: input.counterparty, state: 'returned' }, copy: { state: 'deleted' } }],
+    items: [
+      { loan: { id: loan.id, counterparty: input.counterparty, state: 'returned' }, copy: { state: 'deleted' } },
+      { loan: { id: personLoan.id, state: 'returned' }, copy: { state: 'available' } },
+    ],
   });
-});
+}, 120_000);
 
 test('maximum mounted open page retains its sentinel and rejects continuation after a generation change', async () => {
+  // Keep an interrupted receipt journey's open loans out of this owner's ordered page.
+  const owner = await native.identity(['subject:read', ...scopes]);
+  const accountId = owner.actor.accountId;
+  const send = (method: string, path: string, body?: unknown) => native.send(owner.bearer, method, path, body);
   const subjectId = await native.createSubject('game', 'Loan page fixture');
   const maximumName = '\u{1f9ed}'.repeat(300);
-  const createdCopy = await native.send('owner', 'POST', '/v1/copies', {
+  const createdCopy = await send('POST', '/v1/copies', {
     subjectId,
     kind: 'physical',
     status: 'owned',
   });
   expect(createdCopy.status).toBe(201);
   const { copy } = (await createdCopy.json()) as { copy: { id: string; revision: number } };
-  const createdLoan = await native.send('owner', 'POST', '/v1/copy-loans', {
+  const createdLoan = await send('POST', '/v1/copy-loans', {
     copyId: copy.id,
     copyRevision: copy.revision,
     direction: 'borrowed',
@@ -284,7 +248,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
     nextCursor: string | null;
     generation: number;
   };
-  const firstResponse = await native.send('owner', 'GET', '/v1/copy-loans?filter=open&limit=100');
+  const firstResponse = await send('GET', '/v1/copy-loans?filter=open&limit=100');
   expect(firstResponse.status).toBe(200);
   const first = (await firstResponse.json()) as Page;
   expect(first.items).toHaveLength(100);
@@ -295,7 +259,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
   expect(first.items.map((item) => item.loan.id)).toEqual([loan.id, ...loans.slice(1)].sort());
   expect(first.nextCursor).toBeString();
   const nextPath = `/v1/copy-loans?filter=open&limit=100&cursor=${encodeURIComponent(first.nextCursor!)}`;
-  const nextResponse = await native.send('owner', 'GET', nextPath);
+  const nextResponse = await send('GET', nextPath);
   expect(nextResponse.status).toBe(200);
   expect(await nextResponse.json()).toMatchObject({
     items: [{ loan: { id: loans[0], dueOn: null } }],
@@ -306,7 +270,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
     {
       operation: 'copy-loan.list',
       parameters: {
-        accountId: native.owner.actor.accountId,
+        accountId,
         filter: 'open',
         order: 'dueOn-asc-loanId-asc',
         lifetime: 'generation-15m-v1',
@@ -314,8 +278,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
     },
     { epoch: first.generation, after: ['9999-12-31', first.items.at(-1)!.loan.id] },
   );
-  const legacyResponse = await native.send(
-    'owner',
+  const legacyResponse = await send(
     'GET',
     `/v1/copy-loans?filter=open&limit=100&cursor=${encodeURIComponent(legacyCursor)}`,
   );
@@ -325,21 +288,21 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
     nextCursor: null,
   });
 
-  const extended = await native.send('owner', 'PATCH', `/v1/copy-loans/${loans[0]}`, {
+  const extended = await send('PATCH', `/v1/copy-loans/${loans[0]}`, {
     revision: 1,
     dueOn: '2026-10-29',
   });
   expect(extended.status).toBe(200);
-  const stale = await native.send('owner', 'GET', nextPath);
+  const stale = await send('GET', nextPath);
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: 'stale_cursor' });
 
   await native.pool.query(
     `UPDATE library.copy_loan SET returned_on='2026-10-30', revision=revision+1
       WHERE route=$1 AND account_id=$2 AND loan_id=ANY($3::uuid[])`,
-    [route, native.owner.actor.accountId, loans.slice(0, 51)],
+    [route, accountId, loans.slice(0, 51)],
   );
-  const historyResponse = await native.send('owner', 'GET', '/v1/copy-loans?filter=history&limit=100');
+  const historyResponse = await send('GET', '/v1/copy-loans?filter=history&limit=100');
   expect(historyResponse.status).toBe(200);
   const historyFirst = (await historyResponse.json()) as Page;
   expect(historyFirst.items).toHaveLength(50);
@@ -348,8 +311,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
     true,
   );
   expect(historyFirst.nextCursor).toBeString();
-  const historyNext = await native.send(
-    'owner',
+  const historyNext = await send(
     'GET',
     `/v1/copy-loans?filter=history&limit=100&cursor=${encodeURIComponent(historyFirst.nextCursor!)}`,
   );
@@ -362,9 +324,9 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
   await native.pool.query(
     `UPDATE library.copy_loan SET returned_on='2026-10-30', revision=revision+1
       WHERE route=$1 AND account_id=$2 AND loan_id=ANY($3::uuid[])`,
-    [route, native.owner.actor.accountId, [...loans.slice(51), loan.id]],
+    [route, accountId, [...loans.slice(51), loan.id]],
   );
-  const empty = await native.send('owner', 'GET', '/v1/copy-loans?filter=open&limit=100');
+  const empty = await send('GET', '/v1/copy-loans?filter=open&limit=100');
   expect(empty.status).toBe(200);
   expect(await empty.json()).toMatchObject({ items: [], nextCursor: null });
 }, 120_000);
