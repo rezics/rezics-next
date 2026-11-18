@@ -30,6 +30,9 @@ const accessPaths = [
   'content.knowledge_revision',
   'content.knowledge_publication_selection',
 ] as const;
+// Reylo's Standard Query exposes the PostgreSQL text, including its dispatch comment, and binding order.
+const exactSelectionQuery = exactSelection['~standard'].query;
+const publicReadQuery = publicRead['~standard'].query;
 
 function input(title: string, reference?: KnowledgeReference) {
   return {
@@ -157,7 +160,7 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
       const oldPublication = await select(theorem, null);
       const solutionReference = await citation('solution-uses-theorem', theorem);
       const solution = await create('Combine the bounds on prefix and tail.', solutionReference);
-      await select(solution, null);
+      const { publicationId: solutionPublicationId } = await select(solution, null);
       const revise = async (saved: Saved, title: string) =>
         (await f.command(
           `${documentPath(saved)}/revisions:revise`,
@@ -172,6 +175,14 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
       await select(head, oldPublication.publicationId);
       const route = routeOf(theorem.documentId)!;
       expect(routeOf(notebook.notebookId)).toBe(route);
+      const selectionBindings = [solution, theorem, theorem, solution, hidden].map(({ documentId, revisionId }) =>
+        exactSelectionQuery.encode({ route, document_id: documentId, revision_id: revisionId }),
+      );
+      const bodyBindings = publicReadQuery.encode({
+        route,
+        document_id: solution.documentId,
+        publication_id: solutionPublicationId,
+      });
 
       const db = await openGrowthDatabase(f.pool.options.connectionString);
       try {
@@ -287,22 +298,16 @@ for (const axis of ['private attachments', 'theorem revision history'] as const)
               // Source selection/recheck, two target authority probes, and one concealed point read.
               // Only the source loads bytes. Resolving the theorem never follows its definition.
               const records = observer.records.slice(start);
+              expect(records.length, 'Native SQL observer captured no request queries').toBeGreaterThan(0);
+              // pg receives these scalar keys before converting them to PostgreSQL text parameters.
               const probes = records
-                .filter((r) => r.statement === exactSelection.sql)
-                .map((r) => [
-                  r.parameters[exactSelection.params.indexOf('document_id')],
-                  r.parameters[exactSelection.params.indexOf('revision_id')],
-                ]);
-              expect(probes).toEqual([
-                [solution.documentId, solution.revisionId],
-                [theorem.documentId, theorem.revisionId],
-                [theorem.documentId, theorem.revisionId],
-                [solution.documentId, solution.revisionId],
-                [theorem.documentId, hidden.revisionId],
-              ]);
-              const sourceBodies = records.filter((r) => r.statement === publicRead.sql);
-              expect(sourceBodies).toHaveLength(1);
-              expect(sourceBodies[0]!.parameters[publicRead.params.indexOf('document_id')]).toBe(solution.documentId);
+                .filter((r) => r.statement === exactSelectionQuery.text)
+                .map((r) => r.parameters.map(String));
+              expect(probes).toEqual(selectionBindings);
+              const sourceBodies = records
+                .filter((r) => r.statement === publicReadQuery.text)
+                .map((r) => r.parameters.map(String));
+              expect(sourceBodies).toEqual([bodyBindings]);
             },
           };
           const samples = scales ? await measureOwnerScales(db, check, scales) : (await checkGrowth(db, check)).samples;
