@@ -1,3 +1,4 @@
+import { accessEvidenceDeadline } from '../access/evidence-deadline.ts';
 import { withReadConnection } from './read-connection.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
@@ -112,12 +113,14 @@ async function listSitemap(
   if (!Number.isInteger(limit) || limit < 1 || limit > SITEMAP_MAX_LIMIT)
     throw new RangeError(`Page limit must be 1 to ${SITEMAP_MAX_LIMIT}`);
   let position = await decodePosition(dependencies, feed, input.cursor);
+  // Reserve the second half of the evidence window for the final in-flight probe and its response.
+  const yieldAt = (Date.now() + accessEvidenceDeadline(deadline)) / 2;
   const reader: ReadContext = { actor: { kind: 'anonymous' }, deadline };
   const decisions = await prepareBoardPageDecisions(dependencies, reader);
   const items: (SitemapBoard | SitemapThread)[] = [];
   let budget = limit * CANDIDATES_PER_ITEM;
   let finished = false;
-  while (budget > 0 && items.length < limit) {
+  do {
     if (!position?.scanning) {
       // Read only the board we will process. Charging a prefetched board without advancing to it could lose it
       // when the page runs out of budget; advancing past it could lose its threads.
@@ -131,57 +134,56 @@ async function listSitemap(
       }
       budget--;
       position = { boardId: rows[0]!.board_id, scanning: true, thread: null };
+      if (budget === 0) break;
     }
     const boardId: string = position.boardId;
-    while (budget > 0 && items.length < limit && position.scanning) {
-      const want = feed === 'boards' ? 1 : Math.min(budget, limit - items.length, MAX_DISCLOSURE);
-      const after: Position['thread'] = position.thread;
-      const parameters: { route: number; board_id: string; created_at: string; thread_id: string; limit: number } = {
-        route: routeOf(boardId)!,
-        board_id: boardId,
-        created_at: after?.createdAt ?? (feed === 'boards' ? 'infinity' : '-infinity'),
-        thread_id: after?.id ?? (feed === 'boards' ? MAX_ID : ZERO_ID),
-        limit: want,
-      };
-      const scanned = await readBoardPageCandidateSnapshot(dependencies, boardId, reader, decisions, async (client) => {
-        const statement = feed === 'boards' ? newestThreads : pageThreads;
-        const result = await client.query<(typeof pageThreads)['~reylo']['element']>(
-          statement.sql,
-          statement.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        return result.rows;
-      });
-      if (!scanned) {
-        position = { boardId, scanning: false, thread: null };
-        continue;
-      }
-      const rows = scanned.candidate;
-      budget -= rows.length;
-      const disclosed = await withBoardDisclosure(
-        boardId,
-        scanned.board,
-        () =>
-          discloseThreads(
-            dependencies,
-            rows.map((row) => row.thread_id),
-            reader,
-          ),
-        decisions,
+    const want = feed === 'boards' ? 1 : Math.min(budget, limit - items.length, MAX_DISCLOSURE);
+    const after: Position['thread'] = position.thread;
+    const parameters: { route: number; board_id: string; created_at: string; thread_id: string; limit: number } = {
+      route: routeOf(boardId)!,
+      board_id: boardId,
+      created_at: after?.createdAt ?? (feed === 'boards' ? 'infinity' : '-infinity'),
+      thread_id: after?.id ?? (feed === 'boards' ? MAX_ID : ZERO_ID),
+      limit: want,
+    };
+    const scanned = await readBoardPageCandidateSnapshot(dependencies, boardId, reader, decisions, async (client) => {
+      const statement = feed === 'boards' ? newestThreads : pageThreads;
+      const result = await client.query<(typeof pageThreads)['~reylo']['element']>(
+        statement.sql,
+        statement.params.map((name) => parameters[name as keyof typeof parameters]),
       );
-      for (const [index, row] of rows.entries()) {
-        position = { boardId, scanning: true, thread: { createdAt: row.created_at!, id: row.thread_id } };
-        const thread = disclosed[index]!.value;
-        if (!isListedThread(thread, boardId)) continue;
-        if (feed === 'boards') {
-          items.push({ id: boardId, lastModified: instant(row.created_at!) });
-          position = { boardId, scanning: false, thread: null };
-          break;
-        }
-        items.push({ id: thread.id, title: thread.title, lastModified: instant(row.last_activity_at!) });
-      }
-      if (rows.length < want) position = { boardId, scanning: false, thread: null };
+      return result.rows;
+    });
+    if (!scanned) {
+      position = { boardId, scanning: false, thread: null };
+      continue;
     }
-  }
+    const rows = scanned.candidate;
+    budget -= rows.length;
+    const disclosed = await withBoardDisclosure(
+      boardId,
+      scanned.board,
+      () =>
+        discloseThreads(
+          dependencies,
+          rows.map((row) => row.thread_id),
+          reader,
+        ),
+      decisions,
+    );
+    for (const [index, row] of rows.entries()) {
+      position = { boardId, scanning: true, thread: { createdAt: row.created_at!, id: row.thread_id } };
+      const thread = disclosed[index]!.value;
+      if (!isListedThread(thread, boardId)) continue;
+      if (feed === 'boards') {
+        items.push({ id: boardId, lastModified: instant(row.created_at!) });
+        position = { boardId, scanning: false, thread: null };
+        break;
+      }
+      items.push({ id: thread.id, title: thread.title, lastModified: instant(row.last_activity_at!) });
+    }
+    if (rows.length < want) position = { boardId, scanning: false, thread: null };
+  } while (budget > 0 && items.length < limit && Date.now() < yieldAt);
   return {
     items,
     next:

@@ -2595,8 +2595,10 @@ Board items come in strictly increasing `(route, id)` order. Thread items are bo
 order, then each board's threads follow `(created_at, thread_id)` order. Thread items do not carry either key, so a
 client cannot verify their order from the response alone.
 
-A page examines at most 4 × `limit` candidate rows. When it reaches that cap it returns what it found with a non-null
-`next`, possibly with no items; clients follow `next` until it is `null`.
+A page examines at most 4 × `limit` candidate rows. After the first probe, the page starts another only during the
+first half of the Access evidence window, leaving time for the probe to finish. A page that reaches either bound
+returns what it found with a non-null `next`, possibly with no items. The next request resumes after the last
+examined candidate and prepares fresh evidence. Clients follow `next` until it is `null`.
 
 `lastModified` is the last significant change of what the page shows, from columns the write paths already maintain:
 for a thread `board_thread.last_activity_at`; for a board its newest listed thread's `created_at` (or its own
