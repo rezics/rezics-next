@@ -448,11 +448,30 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     return fixture;
   };
 
+  const publishSitemap = async (deadline: number) => {
+    if (!sitemapExportToken) return;
+    const stack = await websiteReady;
+    const response = await fetch(new URL('/_native/sitemap-export', stack.web), {
+      method: 'POST',
+      headers: { 'x-native-sitemap-export-key': sitemapExportToken },
+      redirect: 'manual',
+      signal: AbortSignal.any([lifecycle.signal, AbortSignal.timeout(Math.max(1, deadline - performance.now()))]),
+    });
+    if (response.status !== 204)
+      throw new Error(`Native sitemap export returned ${response.status}: ${await response.text()}`);
+    console.info(`web-publication-driver-sitemap: published at ${Math.round(performance.now() - factoryStarted)}ms`);
+  };
+
   const settle = async () => {
     if (!provisioned) throw new Error('settle requires a provisioned publication fixture');
     const { data, sitemapNativeIds } = provisioned;
-    // The sitemap selection settles discovery; only the full fixture seeds search.
     if (!sitemapNativeIds) return;
+    const deadline = performance.now() + 180_000;
+    if (selection?.sitemap) {
+      // The installed exporter exhausts every native feed. The scenario checks its exact output.
+      await publishSitemap(deadline);
+      return;
+    }
     const routes = [
       ['agent', '/v1/agent-pages'],
       ['collection', '/v1/sitemap/collections'],
@@ -468,7 +487,6 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     const expected = new Map([...pending].map(([route, ids]) => [route, new Set(ids)]));
     let missingTitles = [...data.search.matchingBooks];
     let searchPending = !selection;
-    const deadline = performance.now() + 180_000;
     let round = 0;
     const unmet = () => [
       ...[...pending].map(([route, ids]) => `${route} missing IDs=${JSON.stringify([...ids])}`),
@@ -567,20 +585,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       await Bun.sleep(Math.min(1000 * 2 ** Math.min(round - 1, 3), remaining));
     }
 
-    // Native feed readiness and Web startup can overlap. Publish to the owned
-    // R2 bucket only after both are ready, before the first public sitemap read.
-    if (sitemapExportToken) {
-      const stack = await websiteReady;
-      const response = await fetch(new URL('/_native/sitemap-export', stack.web), {
-        method: 'POST',
-        headers: { 'x-native-sitemap-export-key': sitemapExportToken },
-        redirect: 'manual',
-        signal: AbortSignal.any([lifecycle.signal, AbortSignal.timeout(Math.max(1, deadline - performance.now()))]),
-      });
-      if (response.status !== 204)
-        throw new Error(`Native sitemap export returned ${response.status}: ${await response.text()}`);
-      console.info(`web-publication-driver-sitemap: published at ${Math.round(performance.now() - factoryStarted)}ms`);
-    }
+    await publishSitemap(deadline);
   };
 
   return {
