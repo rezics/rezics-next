@@ -9,7 +9,6 @@ import {
   type PageRead,
   type PresentationProfile,
   type SelectedContext,
-  type View,
 } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import profileJson from '@rezics/composition/profiles/platform.json';
@@ -258,16 +257,16 @@ function emptyPageRead(read: PageRead, subject: CandidateSubject, languages: rea
 
 function subjectPage(
   subject: CandidateSubject,
-  requestedView?: unknown,
+  requestedView: unknown = 'overview',
   languages: readonly string[] = [],
 ): SubjectPageData | undefined {
   const typeDefinition = releasedTypes[subject.type];
   if (!typeDefinition) return undefined;
   const target = { type: subject.type, bases: typeDefinition.bases };
   const views = definedViews(profile, target);
-  const view = requestedView === undefined ? 'overview' : requestedView;
-  if (typeof view !== 'string' || !views.includes(view)) return undefined;
-  const resolved = resolveView(profile, target, view as View);
+  const view = views.find((candidate) => candidate === requestedView);
+  if (!view) return undefined;
+  const resolved = resolveView(profile, target, view);
   if (!resolved) return undefined;
   const context: SelectedContext = {
     id: PAGE_GLOBAL_CONTEXT,
