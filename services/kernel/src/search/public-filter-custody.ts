@@ -1157,13 +1157,18 @@ export function createPublicFilterCustody(
   ) {
     if ((await lockCopyAdmission(client, meter, input.consumer.physicalTarget)).rowCount)
       throw new Failure('binding_mismatch');
+    // Copy enrollment increments this target's revision in the same transaction.
+    // Lock it for that update before locking the registration, as register() does.
     const active = await sql(
       client,
       meter,
-      `SELECT r.consumer,t.incarnation FROM search.public_filter_registration r
-       JOIN search.public_filter_target t USING(partition_no,physical_target)
-       WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND r.physical_target=$3
-       FOR SHARE OF r,t`,
+      `WITH target AS MATERIALIZED (
+         SELECT partition_no,physical_target,incarnation FROM search.public_filter_target
+         WHERE (partition_no,physical_target)=($1,$3) FOR NO KEY UPDATE
+       )
+       SELECT r.consumer,t.incarnation FROM target t
+       JOIN search.public_filter_registration r USING(partition_no,physical_target)
+       WHERE r.id=$2 AND r.state='active' FOR SHARE OF r`,
       [input.registration.partition, input.registration.id, input.consumer.physicalTarget],
     );
     if (

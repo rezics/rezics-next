@@ -111,6 +111,33 @@ async function append(
   return execution;
 }
 
+test('concurrent copies on one target enroll every retained observation', async () => {
+  const { registration, physical, queried } = await setup();
+  const copyRevision = async () =>
+    Number(
+      (
+        await pool.query(
+          'SELECT copy_revision FROM search.public_filter_target WHERE partition_no=$1 AND physical_target=$2',
+          [registration.partition, physical.index],
+        )
+      ).rows[0].copy_revision,
+    );
+  const revision = await copyRevision();
+  const copies = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      registry.openPit({ registration, covered: cut(), keepAliveMs: 300_000 }, search, context()),
+    ),
+  );
+  try {
+    expect(copies.map((copy) => copy.status)).toEqual(Array(4).fill('retained'));
+    expect(await copyRevision()).toBe(revision + copies.length);
+  } finally {
+    for (const copy of copies)
+      if (copy.status === 'retained') await registry.closeObservation(copy.queried, search, context());
+    await registry.closeObservation(queried, search, context());
+  }
+});
+
 test('native interrupted prepared builds replay one fixed segment and read exact deep output windows with linear byte growth', async () => {
   const resumed = createPublicFilterCustody(pool);
   const samples: { count: number; bytes: number; rows: number }[] = [];
