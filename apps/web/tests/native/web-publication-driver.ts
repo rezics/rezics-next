@@ -257,9 +257,16 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     } else {
       response = await stack.request(url, persona, headers);
     }
-    console.info(
-      `web-publication-driver-document: path=${new URL(url, publicOrigin).pathname} kernel-requests=${stack.kernelRequests().length - before}`,
-    );
+    const address = new URL(url, publicOrigin);
+    const kernelRequests = stack.kernelRequests().length - before;
+    console.info(`web-publication-driver-document: path=${address.pathname} kernel-requests=${kernelRequests}`);
+    if (response.status === 404 && kernelRequests === 0 && address.search && address.pathname.endsWith('/credits')) {
+      const parameters = Array.from(address.searchParams, ([name, value]) => ({
+        name: /^(?:amp;)?(?:node|cursor|realm|board|streamProperty|streamDirection|via)$/.test(name) ? name : 'other',
+        length: value.length,
+      }));
+      console.info(`web-publication-driver-continuation: stage=before-kernel parameters=${JSON.stringify(parameters)}`);
+    }
     return response;
   };
   const provision = async (data: typeof import('../../../../specs/fixtures/web-publication.json')) => {

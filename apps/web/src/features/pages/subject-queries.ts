@@ -339,15 +339,14 @@ const readSubjectLinks = createServerFn({ method: 'GET', strict: false })
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
       value.locale.length > 35 ||
-      (value.property !== undefined && (typeof value.property !== 'string' || value.property.length > 128)) ||
-      (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 2048))
+      (value.property !== undefined && (typeof value.property !== 'string' || value.property.length > 128))
     )
       throw notFound();
     return {
       id: value.id,
       locale: value.locale,
       property: value.property as string | undefined,
-      cursor: value.cursor as string | undefined,
+      cursor: validateViewCursor(value.cursor),
     };
   })
   .handler(async ({ data }) => {

@@ -1,9 +1,9 @@
 import { notFound } from '@tanstack/react-router';
 
-/** A subject view cursor stays opaque and at most 2048 characters before it reaches a server read. */
+/** Kernel's sealed relation cursors can carry a full position sort key within its 4096-character token limit. */
 export function validateViewCursor(cursor: unknown): string | undefined {
   if (cursor === undefined) return;
-  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > 2048) throw notFound();
+  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > 4096) throw notFound();
   return cursor;
 }
 
