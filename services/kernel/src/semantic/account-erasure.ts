@@ -13,12 +13,13 @@ import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure
 import { minimizeAccountErasureZone } from '../zones/account-erasure-zone.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 import { SEMANTIC_EVENTS } from './events.ts';
+import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 import type { Effect } from '../events/effects.ts';
 import { recordSemanticSourceDisposition } from './erasure-producer.ts';
 
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
-export const SEMANTIC_LOCATOR_ADVANCED = 'com.rezics.semantic.erasure.locator-advanced.v1';
+export { SEMANTIC_LOCATOR_ADVANCED };
 export const SEMANTIC_ERASURE_PROGRESS = 'com.rezics.semantic.erasure.progress.v1';
 const platform = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',

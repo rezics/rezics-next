@@ -1,4 +1,5 @@
 import { Type } from 'typebox';
+import { SEMANTIC_LOCATOR_ADVANCED } from './erasure-locator-receipt.ts';
 
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const revision = Type.Integer({ minimum: 1 });
@@ -215,7 +216,7 @@ export const SEMANTIC_EVENTS = {
     { position: Type.String({ pattern: '^[0-9]+$' }) },
     { additionalProperties: false },
   ),
-  'com.rezics.semantic.erasure.locator-advanced.v1': Type.Object(
+  [SEMANTIC_LOCATOR_ADVANCED]: Type.Object(
     { position: Type.String({ pattern: '^[0-9]+$' }) },
     { additionalProperties: false },
   ),
