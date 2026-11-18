@@ -233,6 +233,7 @@ export async function bulkWriteCommandProblem(
     throw new TypeError('bulk write problem payload');
   const problem: BulkWriteProblemBody = {
     ...(payload as BulkWriteProblemBody),
+    ...(error instanceof CommandCommitUncertainError ? { effect_status: 'unknown' } : {}),
     ...bulkWriteDiagnostics(error, action),
     ...(response.status === 500
       ? {

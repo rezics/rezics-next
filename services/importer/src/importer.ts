@@ -148,9 +148,13 @@ type RunFailure = Readonly<{
   keyDigest?: string;
   status?: number;
   problem?: string;
-  batch?: Pick<ReviewedCatalogueProblem, 'request_id' | 'command_index' | 'failure_stage' | 'phase'> & {
-    op?: BatchCommand['op'];
-    fieldGroup?: FieldGroup;
+  batch?: ReviewedCatalogueProblem & {
+    op: BatchCommand['op'];
+    fieldGroup: FieldGroup;
+    source: string;
+    externalId: string;
+    converter: string;
+    nativeType?: string;
   };
   mediaState?: 'reserved' | 'uploaded';
 }>;
@@ -1163,27 +1167,25 @@ export class Importer {
     refusal: CommandRefusal,
     request: BatchWriteRequest,
   ): void {
-    const {
-      code,
-      request_id,
-      command_index,
-      failure_stage,
-      phase: dominantPhase,
-    } = reviewedCatalogueProblem(refusal.problem);
-    const command = request.commands.find(({ key }) => key === refusal.key);
+    const problem = reviewedCatalogueProblem(refusal.problem);
+    // send() validated each response key against this envelope. The server index is local to its HTTP batch.
+    const command = request.commands.find(({ key }) => key === refusal.key)!;
     this.retainRunFailure(
       signal,
       {
         phase,
         reason: 'command-refused',
         status: refusal.status,
-        ...(code ? { problem: code } : {}),
+        ...(problem.code ? { problem: problem.code } : {}),
         batch: {
-          ...(command ? { op: command.op, fieldGroup: command.source.field_group } : {}),
-          ...(request_id === undefined ? {} : { request_id }),
-          ...(command_index === undefined ? {} : { command_index }),
-          ...(failure_stage === undefined ? {} : { failure_stage }),
-          ...(dominantPhase === undefined ? {} : { phase: dominantPhase }),
+          ...problem,
+          ...(refusal.problem.type === 'about:blank' ? { type: 'about:blank' } : {}),
+          op: command.op,
+          fieldGroup: command.source.field_group,
+          source: command.source.source,
+          externalId: command.source.external_id,
+          converter: command.source.converter_revision,
+          ...(command.op === 'create' ? { nativeType: command.subject.type } : {}),
         },
       },
       refusal.key,
