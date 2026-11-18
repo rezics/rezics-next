@@ -87,6 +87,13 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
       metadataProducers: resolved.metadataProducers,
     };
     await advanceDiscovery(options);
+    const consumer = discoveryConsumer(prefix, generation);
+    const replayHome = homes - 1;
+    const replayId = newId(replayHome * 16);
+    const later = await runCommand(pool, { partition: replayHome }, async () => ({
+      value: null,
+      events: [{ type: 'com.rezics.search.recent-changed.v1', subject: replayId, data: { accountId: replayId } }],
+    }));
 
     // Omitted homes have no rows and cannot pass the full generation's inventory check.
     await pool.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND partition_no >= $2', [prefix, homes]);
@@ -130,6 +137,15 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     }
     expect(heldReview).toBe(true);
     expect(wideEmptyProofs).toBeGreaterThan(0);
+    await advanceDiscovery(options);
+    const reconciling = (await discoveryGenerations(pool, prefix))[0]!;
+    expect(reconciling.state).toBe('reconciling');
+    const replay = createDiscoveryIndexer(
+      pool,
+      createDiscoveryProjection({ ...options, target: reconciling }),
+      consumer,
+    );
+    expect(await replay.run(replayHome)).toMatchObject({ status: 'read', position: later.position });
     await expect(advanceDiscovery(options)).rejects.toThrow('Discovery population partitions are incomplete');
     expect((await discoveryGenerations(pool, prefix))[0]?.state).toBe('reconciling');
     const cuts = await readDiscoveryCuts(pool, prefix, generation);
@@ -224,7 +240,6 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     const route = home * 16;
     const id = newId(route);
     const target = (await discoveryGenerations(pool, prefix))[0]!;
-    const consumer = discoveryConsumer(prefix, generation);
     const relay = createDiscoveryIndexer(pool, createDiscoveryProjection({ ...options, target }), consumer);
     const checkpoint = async () =>
       (

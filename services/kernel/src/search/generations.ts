@@ -2889,7 +2889,8 @@ async function advanceDiscoveryTurn(
   };
   const caughtUp = await replayCurrent();
   if (target.state === 'replaying') {
-    if (!caughtUp) return;
+    // Reconciliation observes every owner again and leaves the alias unpublished.
+    // Let it run while the relay catches up. Publication still requires fresh replay.
     await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='replaying'",
