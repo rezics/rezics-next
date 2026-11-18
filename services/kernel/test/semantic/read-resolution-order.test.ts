@@ -29,6 +29,12 @@ import readSubjectStatement from '../../src/semantic/read-subject.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 
+const checkpointSql = readLinkCheckpoint['~standard'].query.text;
+const pendingMemberSql = readPendingMember['~standard'].query.text;
+const identitySql = readSubjectIdentity['~standard'].query.text;
+const subjectSql = readSubjectStatement['~standard'].query.text;
+const permissionTimeSql = readPermissionTime['~standard'].query.text;
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -207,9 +213,7 @@ function projectionWaitReads(observer: SqlObserver, from = 0) {
 
 function assertEarlyAnswerRead(observer: SqlObserver, id: string, from: number) {
   const records = observer.records.slice(from);
-  expect(
-    records.some(({ statement, parameters }) => statement === readSubjectIdentity.sql && parameters.includes(id)),
-  ).toBe(true);
+  expect(records.some(({ statement, parameters }) => statement === identitySql && parameters.includes(id))).toBe(true);
   expect(projectionWaitReads(observer, from)).toHaveLength(0);
 }
 
@@ -219,13 +223,18 @@ async function readDuringStaleProjection(
   component: { partition: number; epoch: number; position: bigint },
   whileWaiting: () => Promise<void>,
 ) {
-  const barrier = observer.hold({ statement: readLinkCheckpoint.sql }, 'after');
+  const barrier = observer.hold({ statement: checkpointSql }, 'after');
   const request = call('GET', `/v1/subjects/${id}`, {
     token: 'reader',
     session: encodeSession(tokens, `account:${accounts.reader}`, [component]),
   });
   try {
-    await barrier.entered;
+    await Promise.race([
+      barrier.entered,
+      request.then(({ response }) => {
+        throw new Error(`Subject GET returned ${response.status} before reaching the projection checkpoint`);
+      }),
+    ]);
     await whileWaiting();
   } finally {
     barrier.release();
@@ -239,7 +248,7 @@ async function readFullViewDuringStaleProjection(
   reader: AccountActor,
   whileWaiting: () => Promise<void>,
 ) {
-  const barrier = observer.hold({ statement: readLinkCheckpoint.sql }, 'after');
+  const barrier = observer.hold({ statement: checkpointSql }, 'after');
   const request = withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
     fullView({ routeKey: routeKey, pool, access: libraryAccess, tokens }, reader, 'FULL', {
       entries: [{ subjectId: id }],
@@ -265,9 +274,7 @@ async function readFullViewDuringStaleProjection(
 }
 
 async function waitPastPreparedAccessEvidence(observer: SqlObserver, from: number): Promise<void> {
-  const preparedAt = observer.records
-    .slice(from)
-    .find(({ statement }) => statement === readPermissionTime.sql)?.executedAt;
+  const preparedAt = observer.records.slice(from).find(({ statement }) => statement === permissionTimeSql)?.executedAt;
   expect(preparedAt).toBeDefined();
   const expiresAt = Date.parse(preparedAt!) + 1_100;
   while (Date.now() < expiresAt) await Bun.sleep(Math.min(20, expiresAt - Date.now()));
@@ -498,11 +505,11 @@ test('live subject construction preserves projection freshness and final authori
       await catchUpLinks(partition);
     });
     expect(liveRequest.response.status).toBe(200);
-    expect(liveRequest.body.subject.relationCounts['schema:author']).toBe(1);
     expect(liveRequest.body.subject.statements['schema:author']).toHaveLength(1);
+    expect(liveRequest.body.subject.statements['schema:author'][0].value.content).toBe(target.id);
     const liveWaits = projectionWaitReads(observer);
-    expect(liveWaits.some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(true);
-    expect(liveWaits.some(({ statement }) => statement === readPendingMember.sql)).toBe(true);
+    expect(liveWaits.some(({ statement }) => statement === checkpointSql)).toBe(true);
+    expect(liveWaits.some(({ statement }) => statement === pendingMemberSql)).toBe(true);
     expect(observer.records.some(({ statement }) => statement.includes('semantic.outbound_link'))).toBe(true);
 
     const deniedPartition = freshPartition();
@@ -527,9 +534,7 @@ test('live subject construction preserves projection freshness and final authori
         },
       );
       expect(denied.response.status).toBe(404);
-      expect(projectionWaitReads(revokeObserver).some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(
-        true,
-      );
+      expect(projectionWaitReads(revokeObserver).some(({ statement }) => statement === checkpointSql)).toBe(true);
     } finally {
       await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denialTransaction]);
       await revokeObserver.close();
@@ -551,9 +556,7 @@ test('live subject construction preserves projection freshness and final authori
         },
       );
       expect(hidden.response.status).toBe(404);
-      expect(projectionWaitReads(hideObserver).some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(
-        true,
-      );
+      expect(projectionWaitReads(hideObserver).some(({ statement }) => statement === checkpointSql)).toBe(true);
     } finally {
       await hideObserver.close();
     }
@@ -586,9 +589,7 @@ test('live subject construction preserves projection freshness and final authori
       );
       expect(redirected.response.status).toBe(308);
       expect(redirected.response.headers.get('location')).toBe(`/v1/subjects/${survivor}`);
-      expect(projectionWaitReads(redirectObserver).some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(
-        true,
-      );
+      expect(projectionWaitReads(redirectObserver).some(({ statement }) => statement === checkpointSql)).toBe(true);
     } finally {
       await redirectObserver.close();
     }
@@ -662,11 +663,9 @@ test('live subject authorization is freshly prepared after an actual projection 
     expect(current.response.status).toBe(200);
     expect(current.body.subject.relationCounts['schema:author']).toBe(1);
     expect(current.body.subject.statements['schema:author']).toHaveLength(1);
-    const preparations = observer.records.slice(before).filter(({ statement }) => statement === readPermissionTime.sql);
+    const preparations = observer.records.slice(before).filter(({ statement }) => statement === permissionTimeSql);
     expect(preparations.length).toBeGreaterThan(3);
-    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(
-      true,
-    );
+    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === checkpointSql)).toBe(true);
   } finally {
     await observer.close();
   }
@@ -701,11 +700,9 @@ test('FULL subject display refreshes its Access proof after an actual projection
       id: live.id,
       label: { value: 'FULL evidence lifetime read', language: 'en' },
     });
-    const preparations = observer.records.slice(before).filter(({ statement }) => statement === readPermissionTime.sql);
+    const preparations = observer.records.slice(before).filter(({ statement }) => statement === permissionTimeSql);
     expect(preparations.length).toBeGreaterThan(2);
-    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === readLinkCheckpoint.sql)).toBe(
-      true,
-    );
+    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === checkpointSql)).toBe(true);
   } finally {
     await observer.close();
   }
@@ -740,10 +737,10 @@ test('FULL display classifies one late Access preparation SQL point per live sub
     const statements = captured.capture.statements;
     const indices = (statement: string) =>
       statements.flatMap((candidate, index) => (candidate === statement ? [index] : []));
-    const identityReads = indices(readSubjectIdentity.sql);
-    const subjectReads = indices(readSubjectStatement.sql);
-    const checkpoints = indices(readLinkCheckpoint.sql);
-    const permissionPreparations = indices(readPermissionTime.sql);
+    const identityReads = indices(identitySql);
+    const subjectReads = indices(subjectSql);
+    const checkpoints = indices(checkpointSql);
+    const permissionPreparations = indices(permissionTimeSql);
 
     expect(captured.capture.statementBackends).toHaveLength(statements.length);
     expect(identityReads).toHaveLength(subjects.length);
