@@ -12,10 +12,13 @@ const repositoryRoot = resolve(import.meta.dir, '../../../..');
 
 export const nativeAuthPassword = 'semantic outcome registration password with enough entropy';
 
+type SignupReceipt = { email: string; handle: string; accountId: string };
+
 export type NativeAuthIssuerProxy = {
   origin: string;
   webTls: { certificate: string; key: string };
   setUpstream(origin: string): void;
+  signupAccountId(email: string, handle: string): Promise<string>;
   stop(): Promise<void>;
 };
 
@@ -48,6 +51,7 @@ export async function startNativeAuthIssuerProxy(): Promise<NativeAuthIssuerProx
     throw new Error(`Could not create native Auth TLS certificate: ${generated.stderr.toString()}`);
   }
   let upstreamOrigin: string | undefined;
+  const signupReceipts: Promise<SignupReceipt | undefined>[] = [];
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -58,7 +62,28 @@ export async function startNativeAuthIssuerProxy(): Promise<NativeAuthIssuerProx
       const target = new URL(incoming.pathname + incoming.search, upstreamOrigin);
       const forwarded = new Request(target, request);
       forwarded.headers.delete('host');
-      return fetch(forwarded, { redirect: 'manual' });
+      if (request.method !== 'POST' || incoming.pathname !== '/signup') return fetch(forwarded, { redirect: 'manual' });
+
+      const identity = forwarded.clone().json().then(
+        (body: { email?: unknown; handle?: unknown } | null) => ({ email: body?.email, handle: body?.handle }),
+        () => undefined,
+      );
+      const response = await fetch(forwarded, { redirect: 'manual' });
+      if (response.status === 201) {
+        // The browser can navigate as soon as it receives this receipt. Read a copy at the issuer boundary.
+        const receipt = response.clone().json().then(
+          (body: { accountId?: unknown } | null) => body?.accountId,
+          () => undefined,
+        );
+        signupReceipts.push(
+          Promise.all([identity, receipt]).then(([submitted, accountId]) => {
+            const { email, handle } = submitted ?? {};
+            if (typeof email === 'string' && typeof handle === 'string' && typeof accountId === 'string' && accountId)
+              return { email, handle, accountId };
+          }),
+        );
+      }
+      return response;
     },
   });
   const origin = `https://${nativeAuthHost}:${server.port}`;
@@ -79,6 +104,12 @@ export async function startNativeAuthIssuerProxy(): Promise<NativeAuthIssuerProx
       )
         throw new Error('Native Auth issuer proxy requires an owned loopback HTTP upstream');
       upstreamOrigin = target.origin;
+    },
+    async signupAccountId(email, handle) {
+      const receipts = await Promise.all(signupReceipts);
+      const submitted = receipts.find((receipt) => receipt?.email === email && receipt.handle === handle);
+      if (!submitted) throw new Error('Native Auth did not return a valid signup receipt for the submitted account');
+      return submitted.accountId;
     },
     stop() {
       return (stopped ??= (async () => {
