@@ -238,7 +238,7 @@ function looksLikeCjs(id: string, code: string): boolean {
 }
 
 function workerCjsShim(code: string): string {
-  return `const module = { exports: {} }; const exports = module.exports;\n${code}\nexport default module.exports;\n`;
+  return `const module = { exports: {} }; let exports = module.exports;\n${code}\nexport default module.exports;\n`;
 }
 
 function pinWorkerSsrOptimizeDeps(environment?: { optimizeDeps?: Record<string, unknown> }): void {
