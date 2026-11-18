@@ -420,7 +420,7 @@ async function bindOwner(
     builtin: string | null;
     visibility: string;
     ruleReady: boolean;
-  }>(sourceQuery(), values);
+  }>(sourceQuery(), { ...values, retained });
   if (
     !source ||
     source.accountId !== identity.accountId ||

@@ -165,14 +165,10 @@ function isCurrentLogicalBuiltin(metadata: NativeCollectionMetadata, actor: Acto
   }
   return builtinCollectionId(actor.accountId, key) === metadata.collectionId;
 }
-function canonicalAllowance(
-  a: WorkAllowance,
-  rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT,
-  fixed = false,
-): CanonicalAllowance {
+function canonicalAllowance(a: WorkAllowance, rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT): CanonicalAllowance {
   return {
     reservationId: a.reservationId,
-    rawKeys: fixed ? rawLimit : Math.min(rawLimit, a.remaining.candidateKeys),
+    rawKeys: Math.min(rawLimit, a.remaining.candidateKeys),
     nativeRows: a.remaining.nativeRows,
     nativePoints: a.remaining.nativePoints,
     emptySeeks: a.remaining.emptySeeks,
@@ -318,7 +314,7 @@ function createCollectionSourceRuntime(
         collectionId: metadata.collectionId,
         deadline: input.deadline,
         semanticObservations: semanticObservations(),
-        allowance: canonicalAllowance(l.allowance(), 100, fixedPageWork),
+        allowance: canonicalAllowance(l.allowance()),
       }),
     );
     if (result.state !== 'ready') throw new ProblemError('dependency_unavailable');
@@ -348,7 +344,8 @@ function createCollectionSourceRuntime(
       const currentBinding = await logicalBinding(input, l);
       if (!isDeepStrictEqual(currentBinding, saved.logicalBinding)) throw new ProblemError('stale_cursor');
     }
-    await authorize(input, saved.metadata, l);
+    // The logical binding already performed this owner admission at the caller's native read time.
+    if (!saved.logicalBinding || saved.metadata.createdAt !== null) await authorize(input, saved.metadata, l);
     const state = await ready(input, saved.metadata, l);
     if (state.basis.digest !== saved.basis.digest || state.generation !== saved.generation)
       throw new ProblemError('stale_cursor');
@@ -437,7 +434,7 @@ function createCollectionSourceRuntime(
               collectionId: obs.collectionId,
               deadline: input.deadline,
               semanticObservations: semanticObservations(),
-              allowance: canonicalAllowance(l.allowance(), raw, fixedPageWork),
+              allowance: canonicalAllowance(l.allowance(), raw),
               basis: saved.basis,
               progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },
             }),
@@ -574,7 +571,7 @@ function createCollectionSourceRuntime(
             });
           throw new ProblemError('not_found');
         }
-        if (!input.work) await authorize(input, metadata, l);
+        if (!input.work && (!logical || metadata.createdAt !== null)) await authorize(input, metadata, l);
         if (input.logical && (!logical || !('actor' in input) || !isCurrentLogicalBuiltin(metadata, input.actor)))
           throw new ProblemError('dependency_unavailable', {
             detail: 'The current native Collection Source does not bind this owner logical identity.',
@@ -593,6 +590,7 @@ function createCollectionSourceRuntime(
         const state = current ?? (await ready(input, metadata, l));
         const source: PreparedCollectionSource = {
           [preparedSource]: true,
+          ...('queryCapture' in state && state.queryCapture ? { queryCapture: state.queryCapture } : {}),
           observation: current?.observation ?? observation(metadata, state.basis),
         };
         prepared.set(source, {
@@ -631,10 +629,11 @@ function createCollectionSourceRuntime(
           groups = 0;
         if (fixedPageWork && input.candidateLimit === undefined)
           throw new RangeError('Ordinary Collection page candidate limit required');
-        const selectedLimit = fixedPageWork ? input.candidateLimit! : input.work ? input.candidateLimit! : 100;
+        const selectedLimit = input.candidateLimit ?? Infinity;
         while (
-          (input.work || fixedPageWork ? groups < selectedLimit : l.allowance().remaining.candidateKeys > 0) &&
-          candidates.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT
+          groups < selectedLimit &&
+          candidates.length < COLLECTION_SOURCE_WORK_GROUP_LIMIT &&
+          (input.work || fixedPageWork || l.allowance().remaining.candidateKeys > 0)
         ) {
           const seek =
             input.work && current
@@ -649,7 +648,7 @@ function createCollectionSourceRuntime(
                     generation: saved.generation,
                     afterSubjectId: coveredThrough,
                     deadline: input.deadline,
-                    allowance: canonicalAllowance(l.allowance(), 1, fixedPageWork),
+                    allowance: canonicalAllowance(l.allowance(), 1),
                   }),
                 );
           if (!('subjectId' in seek)) throw new ProblemError('dependency_unavailable');
@@ -666,7 +665,7 @@ function createCollectionSourceRuntime(
           coveredThrough = seek.subjectId;
           if (result.result) candidates.push({ subjectId: result.subjectId, evidence: result.positiveEvidence });
         }
-        if (!exhausted && candidates.length === 0) throw new ProblemError('dependency_unavailable');
+        if (!exhausted && coveredThrough === input.afterSubjectId) throw new ProblemError('dependency_unavailable');
         await revalidate(input, l, current);
         return {
           kind: 'canonical_subject_prefix',

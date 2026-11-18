@@ -132,6 +132,7 @@ export function createSearchScopeOrderApplication(
       const admitted = await currentWork(order);
       const result = await native.prepare({ ...context(), collectionId: identity.collectionId, allowance });
       if (
+        (result.source.queryCapture && !isDeepStrictEqual(result.source.observation.sourceIdentity, identity)) ||
         result.source.observation.collectionId !== identity.collectionId ||
         result.source.observation.incarnation !== identity.incarnation ||
         result.source.observation.route !== identity.route

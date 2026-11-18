@@ -120,6 +120,8 @@ export interface CollectionSourceObservation {
 export const preparedSource: unique symbol = Symbol('prepared Collection Source');
 /** Not an allow capability. Ordinary operations reauthorize actor/source/required subject anchors. */
 export interface PreparedCollectionSource {
+  /** Structural id-order population for a private logical Everything. Published by its owner worker. */
+  readonly queryCapture?: Readonly<{ id: string; revision: string }>;
   readonly [preparedSource]: true;
   readonly observation: CollectionSourceObservation;
 }

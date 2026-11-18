@@ -189,6 +189,7 @@ export const IDENTITY_BASIS_BINDINGS: Readonly<Record<string, unknown>> = Object
   publication_position: boundDecimal,
   incarnation: boundText.repeat(128),
   generation: boundDecimal,
+  retained: false,
   scope: 'active_explicit_output',
   receiving_epoch: boundDecimal,
   effect_key: boundText.repeat(256),
@@ -341,7 +342,11 @@ export function createIdentityNativeBounds(catalog: IdentityNativeCatalog) {
       if (!equal(sql, statement)) continue;
       return repeatedRows(sql, values, 0, rows, points, metadata, output);
     }
-    if (equal(sql, sqlOf(catalog.facts)) || equal(sql, sqlOf(catalog.labels))) return ranged(sql, values, 5, 256, true);
+    if (equal(sql, sqlOf(catalog.facts))) {
+      const page = ranged(sql, values, 5, 256, true, 100, bound({ candidateKeys: 1, nativeRows: 32, nativePoints: 2 }));
+      return page && sumBounds(page, bound({ nativeRows: 48, nativePoints: 8, emptySeeks: 8 }));
+    }
+    if (equal(sql, sqlOf(catalog.labels))) return ranged(sql, values, 5, 256, true);
     for (const declaration of Object.values(catalog.sqlWork)) {
       if (!equal(sql, declaration.sql)) continue;
       if (declaration.rangeLimitParameter !== undefined)

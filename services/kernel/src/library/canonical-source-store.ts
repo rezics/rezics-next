@@ -92,6 +92,7 @@ export interface CanonicalSourceRef {
   readonly collectionId: string;
 }
 export interface CanonicalCall extends CanonicalSourceRef {
+  readonly ownerAccountId?: string;
   readonly deadline: number;
   readonly allowance: CanonicalAllowance;
   /** The same installed Semantic owner capability is carried through nested reads. */
@@ -145,6 +146,7 @@ export type CanonicalReadyRead =
   | CanonicalNotReady
   | {
       readonly state: 'ready';
+      readonly queryCapture?: Readonly<{ id: string; revision: string }>;
       readonly basis: CanonicalBasis;
       readonly generation: string;
       readonly work: CanonicalWork;
@@ -240,6 +242,8 @@ type Generation = {
   source_exhausted: boolean;
   state: 'working' | 'complete' | 'abandoned';
   version: string;
+  query_capture_id?: string | null;
+  query_capture_revision?: string | null;
 };
 type Client = Pick<PoolClient, 'query'>;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -288,6 +292,7 @@ export async function initializeCanonicalCollectionSource(
   });
   if (
     !metadata ||
+    metadata.createdAt === null ||
     !metadata.curatorAccountId ||
     metadata.state !== 'active' ||
     metadata.authority !== 'private_builtin' ||
@@ -412,12 +417,22 @@ async function scope(
       nativeSourceFence(metadata),
     ]),
   );
-  if (!row || !row.capture || row.revision === null) return null;
+  if (!row?.capture || row.revision === null || !isDeepStrictEqual(row.identity, nativeSourceIdentity(metadata)))
+    return null;
   const expected: LibrarySemanticScopeObservation = {
     key: scopeKey(row.identity),
     captureId: row.capture,
     committedRevision: BigInt(row.revision),
   };
+  return revalidateCapture(pool, expected, l, observations);
+}
+
+async function revalidateCapture(
+  pool: Pool,
+  expected: LibrarySemanticScopeObservation,
+  l: CollectionSourceLedger,
+  observations: LibrarySemanticObservationCapability,
+) {
   const result = await observations.canonical.revalidateScope(pool, {
     key: expected.key,
     expected,
@@ -427,6 +442,7 @@ async function scope(
   if (
     result.status !== 'current' ||
     !result.observation ||
+    !isDeepStrictEqual(result.observation.key, expected.key) ||
     result.observation.captureId !== expected.captureId ||
     result.observation.committedRevision !== expected.committedRevision
   )
@@ -442,13 +458,21 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
   if (metadata.authority === 'activated_output') return null;
   const observation = await scope(pool, metadata, l, semanticObservations(input));
   if (!observation) return null;
+  return { metadata, basis: observedBasis(metadata, observation), capture: observation };
+}
+
+function observedBasis(
+  metadata: NativeCollectionMetadata,
+  observation: LibrarySemanticScopeObservation,
+): CanonicalBasis {
   const authority: CanonicalAuthority =
     metadata.authority === 'curated'
       ? { kind: 'curated' }
       : metadata.curatorAccountId
         ? { kind: 'private_builtin', curatorAccountId: metadata.curatorAccountId }
         : { kind: 'curated' };
-  if (metadata.authority === 'private_builtin' && !metadata.curatorAccountId) return null;
+  if (metadata.authority === 'private_builtin' && !metadata.curatorAccountId)
+    throw new ProblemError('dependency_unavailable');
   const identity = { digest: hash([observation.captureId, observation.committedRevision.toString()]) };
   const components = {
     incarnation: metadata.incarnation,
@@ -470,8 +494,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
     // Older generations cannot establish that complete original population.
     ...(metadata.authority === 'private_builtin' ? { originalCoverage: 'owner-facts-v2' as const } : {}),
   };
-  const basis: CanonicalBasis = { ...components, digest: hash(components) };
-  return { metadata, basis };
+  return { ...components, digest: hash(components) };
 }
 function same(a: CanonicalBasis, b: CanonicalBasis) {
   return a.digest === b.digest && isDeepStrictEqual(a, b);
@@ -564,14 +587,33 @@ export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall)
   try {
     const observed = await observe(pool, input, l);
     if (!observed) return notReady(l, 'identity');
-    const [head] = await withBoundedReadConnection(pool, l.deadline, (client) =>
-      query<{ generation: string }>(client, l, CANONICAL_SOURCE_STATEMENTS().head, [input.route, input.collectionId]),
+    const [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
+      query<
+        Pick<
+          Generation,
+          'generation' | 'basis' | 'state' | 'source_exhausted' | 'query_capture_id' | 'query_capture_revision'
+        >
+      >(client, l, CANONICAL_SOURCE_STATEMENTS().headGeneration, [input.route, input.collectionId]),
     );
-    if (!head) return notReady(l, 'unbuilt');
-    const row = await readGeneration(pool, input, head.generation, l);
-    if (!row || row.state !== 'complete' || !row.source_exhausted || !same(row.basis, observed.basis))
+    if (!row) return notReady(l, 'unbuilt');
+    if (row.state !== 'complete' || !row.source_exhausted || !same(row.basis, observed.basis))
       return notReady(l, 'stale');
-    return { state: 'ready', basis: observed.basis, generation: row.generation, work: work(l) };
+    let queryCapture;
+    if (observed.metadata.createdAt === null) {
+      if (
+        row.query_capture_id !== observed.capture.captureId ||
+        row.query_capture_revision !== observed.capture.committedRevision.toString()
+      )
+        return notReady(l, 'stale');
+      queryCapture = { id: observed.capture.captureId, revision: observed.capture.committedRevision.toString() };
+    }
+    return {
+      state: 'ready',
+      ...(queryCapture ? { queryCapture } : {}),
+      basis: observed.basis,
+      generation: row.generation,
+      work: work(l),
+    };
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
     throw error;
@@ -700,6 +742,7 @@ export async function beginCanonicalSourceRepair(pool: Pool, input: CanonicalBou
         generation,
         JSON.stringify(input.basis),
         driver,
+        observed.metadata.createdAt === null ? observed.metadata.curatorAccountId : null,
       ]);
       await enqueueIntent(tx, {
         queue: 'maintenance',
@@ -770,7 +813,14 @@ export async function repairCanonicalSourceStep(
     );
     const mappings = mapped.value;
     // Mapping points supply identity for examined raw originals, never complete population evidence.
-    if (mappings.some((mapping) => mapping.state !== 'mapped')) return notReady(l, 'identity');
+    if (
+      mappings.length !== originals.length ||
+      mappings.some(
+        (mapping, index) =>
+          mapping.state !== 'mapped' || mapping.original !== originals[index] || routeOf(mapping.terminal) === null,
+      )
+    )
+      return notReady(l, 'identity');
     if (!(await current(pool, input, l)))
       return { state: 'basis_changed', repair: input.repair, examined: page.rows.map((r) => r.key), work: work(l) };
     const examined = page.rows.map((r) => r.key);
@@ -853,10 +903,16 @@ export async function publishCanonicalSourceRepair(
       ]);
       if (!row || !same(row.basis, input.basis)) return 'basis_changed' as const;
       if (!row.source_exhausted || row.state === 'abandoned') return 'incomplete' as const;
+      if (observed.metadata.createdAt === null) {
+        // The real Semantic summary stays locked through the query capture and ready-head publication.
+        await commitObservedScope(tx, l, observed.metadata, observed.capture, semanticObservations(input));
+      }
       await query(tx, l, CANONICAL_SOURCE_STATEMENTS().completeGeneration, [
         input.route,
         input.collectionId,
         row.generation,
+        observed.metadata.createdAt === null ? observed.capture.captureId : null,
+        observed.metadata.createdAt === null ? observed.capture.committedRevision.toString() : null,
       ]);
       await query(tx, l, CANONICAL_SOURCE_STATEMENTS().publishHead, [input.route, input.collectionId, row.generation]);
       return 'published' as const;
@@ -866,6 +922,28 @@ export async function publishCanonicalSourceRepair(
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
     throw error;
   }
+}
+
+async function commitObservedScope(
+  tx: OperationalTransaction,
+  l: CollectionSourceLedger,
+  metadata: NativeCollectionMetadata,
+  observation: LibrarySemanticScopeObservation,
+  observations: LibrarySemanticObservationCapability,
+) {
+  const commitInput = {
+    route: metadata.route,
+    collectionId: metadata.collectionId,
+    sourceFence: nativeSourceFence(metadata),
+    observation,
+  };
+  const declaration = observations.canonical.scopeCommitWork(commitInput);
+  const committed = await l.bounded(
+    semanticObservationBound(declaration),
+    () => observations.canonical.commitScopeCapture(tx, commitInput),
+    (result) => result.work,
+  );
+  if (committed.value !== undefined) throw new TypeError('Semantic capture commit returned an unexpected value');
 }
 
 /** Bounded native population capture precedes canonical mapping; source originals include rejects/order inputs. */
@@ -881,6 +959,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       !context ||
       !metadata ||
       !metadata.curatorAccountId ||
+      (input.ownerAccountId !== undefined && input.ownerAccountId !== metadata.curatorAccountId) ||
       metadata.state !== 'active' ||
       (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
     )
@@ -902,13 +981,38 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
           input.collectionId,
           fence,
           JSON.stringify(identity),
+          metadata.createdAt === null ? metadata.curatorAccountId : null,
         ]);
       });
       [row] = await withBoundedReadConnection(pool, l.deadline, (client) =>
         query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().scope, [input.route, input.collectionId, fence]),
       );
     }
-    if (!row) return notReady(l, 'source');
+    if (!row || !isDeepStrictEqual(row.identity, nativeSourceIdentity(metadata))) return notReady(l, 'source');
+    if (
+      row.capture &&
+      row.revision !== null &&
+      row.frontier?.driver === 'done' &&
+      row.frontier.captureId === row.capture
+    ) {
+      const capture = await revalidateCapture(
+        pool,
+        {
+          key: scopeKey(row.identity),
+          captureId: row.capture,
+          committedRevision: BigInt(row.revision),
+        },
+        l,
+        semanticObservations(input),
+      );
+      if (capture)
+        return {
+          state: 'admitted',
+          basis: observedBasis(metadata, capture),
+          observation: metadata.stamp,
+          work: work(l),
+        };
+    }
     const custody = createNativeLibrarySourceCustody({ pool });
     if (!row.frontier || row.frontier.driver !== 'done') {
       if (l.allowance().remaining.candidateKeys < 1) return notReady(l, 'allowance');
@@ -971,19 +1075,7 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
     const observation = registered.observation;
     if (!observation) return notReady(l, 'identity');
     await mutate(pool, input, l, metadata, async (tx) => {
-      const commitInput = {
-        route: input.route,
-        collectionId: input.collectionId,
-        sourceFence: fence,
-        observation,
-      };
-      const declaration = observations.canonical.scopeCommitWork(commitInput);
-      const committed = await l.bounded(
-        semanticObservationBound(declaration),
-        () => observations.canonical.commitScopeCapture(tx, commitInput),
-        (result) => result.work,
-      );
-      if (committed.value !== undefined) throw new TypeError('Semantic capture commit returned an unexpected value');
+      await commitObservedScope(tx, l, metadata, observation, observations);
     });
     const observed = await observe(pool, input, l);
     return observed

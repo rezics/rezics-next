@@ -572,7 +572,14 @@ async function advanceNativePlan(
           : 'raw';
     const driver =
       phase !== 'raw' || s.scope === 'curated' ? 'member' : s.scope === 'active_explicit_output' ? 'output' : 'entry';
-    await tx.query(libraryIdentitySQL.insertGeneration, [s.route, s.collectionId, generation, json(basis), driver]);
+    await tx.query(libraryIdentitySQL.insertGeneration, [
+      s.route,
+      s.collectionId,
+      generation,
+      json(basis),
+      driver,
+      native.createdAt === null ? s.accountId : null,
+    ]);
     const frontier = libraryIdentityPlanFrontier({
       capture_id: source.frontier.captureId,
       generation,

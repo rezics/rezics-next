@@ -1,3 +1,4 @@
+import { builtinCollectionId } from './builtin-identity.ts';
 import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -495,7 +496,64 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         }
       } else {
         if (!isOwnedQueryKind(kind)) throw new TypeError('Invalid graph namespace');
-        if (kind === 'bulk_target') {
+        if (kind === 'owner_index_control') {
+          const collection = builtinCollectionId(accountId, { kind: 'everything' });
+          const keys = [route, collection, accountId];
+          const generation = (
+            await tx.query<{ generation: string }>(
+              `SELECT generation FROM library.canonical_source_generation
+             WHERE route=$1 AND collection_id=$2 AND logical_owner_id=$3 ORDER BY generation LIMIT 1 FOR UPDATE`,
+              keys,
+            )
+          ).rows[0];
+          if (generation) {
+            const selected = [route, collection, generation.generation];
+            const held = await tx.query(
+              'SELECT 1 FROM library.identity_scope_plan WHERE route=$1 AND collection_id=$2 LIMIT 1',
+              [route, collection],
+            );
+            if (held.rowCount)
+              return noEffect({
+                kind,
+                removed: 0,
+                parent: null,
+                retain: true,
+                blocked: true,
+                pendingCollection: collection,
+              });
+            const rows = await tx.query(
+              `WITH keys AS MATERIALIZED (SELECT canonical_subject_id,stored_subject_id,driver,fact_id
+                 FROM library.canonical_source_reference WHERE route=$1 AND collection_id=$2 AND generation=$3
+                 ORDER BY canonical_subject_id,stored_subject_id,driver,fact_id LIMIT 100)
+               DELETE FROM library.canonical_source_reference r USING keys k
+               WHERE r.route=$1 AND r.collection_id=$2 AND r.generation=$3 AND
+                (r.canonical_subject_id,r.stored_subject_id,r.driver,r.fact_id)=
+                (k.canonical_subject_id,k.stored_subject_id,k.driver,k.fact_id)`,
+              selected,
+            );
+            removed = rows.rowCount ?? 0;
+            if (removed === 0) {
+              const head = await tx.query(
+                'DELETE FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2 AND generation=$3',
+                selected,
+              );
+              await tx.query(
+                'DELETE FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3',
+                selected,
+              );
+              removed = 1 + (head.rowCount ?? 0);
+            }
+            hasMore = true;
+          } else {
+            // At most the two retained Source fences, under the terminal owner lock.
+            const scopes = await tx.query(
+              'DELETE FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND logical_owner_id=$3',
+              keys,
+            );
+            const control = await ownedQueries().owner_index_control.run(tx, args);
+            removed = (scopes.rowCount ?? 0) + (Array.isArray(control) ? control.length : control == null ? 0 : 1);
+          }
+        } else if (kind === 'bulk_target') {
           const settled = await verifyCollectionBulkHistoryDispositions(tx, route, accountId, bulkHistoryDispositions);
           removed = (
             await bulkTarget.run(tx, {

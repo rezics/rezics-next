@@ -1,4 +1,5 @@
 import type { FilterDocument } from '@rezics/filter';
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './builtin-runtime-query.ts';
@@ -11,7 +12,6 @@ import { routeOf } from '../route/route.ts';
 import { decodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
-import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
 import { listMemberPage } from './member-viewer-currentness.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
@@ -89,19 +89,6 @@ export async function readCollectionSourceMembers(
   const pagePlan = ordinaryCollectionPagePlan(input.limit, input.view ?? 'BASIC');
   const ledger = ownerQueryWork(input.limit, input.view ?? 'BASIC');
   const pageDimensions = ordinaryPageWorkDimensions(pagePlan.sourceBound);
-  const reservationId = ledger.receipt().reservationId;
-  const work = {
-    allowance: (keys = pagePlan.candidateLimit) => {
-      return {
-        reservationId,
-        remaining: {
-          ...pageDimensions,
-          candidateKeys: Math.min(keys, pagePlan.candidateLimit),
-        },
-      };
-    },
-    settle: (receipt: WorkReceipt) => ledger.native(receipt),
-  };
   const version = await input.readSourceVersion();
   const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
   try {
@@ -142,16 +129,17 @@ export async function readCollectionSourceMembers(
       const prefix = filtered
         ? await filtered.scope.sourcePrefix(filtered.prepared, {
             afterSubjectId: after,
-            allowance: work.allowance(quota),
+            candidateLimit: quota,
+            allowance: ledger.sourceAllowance(),
           })
         : await source.prefix({
             ...context,
             source: prepared,
-            allowance: work.allowance(quota),
+            allowance: ledger.sourceAllowance(),
             afterSubjectId: after,
             candidateLimit: quota,
           });
-      work.settle(prefix.work);
+      ledger.native(prefix.work);
       if (prefix.candidates.length > quota) throw new ProblemError('dependency_unavailable');
       if (!sameSource(observed, prefix.observation)) throw new ProblemError('semantic_not_ready');
       for (const candidate of prefix.candidates) {
@@ -160,11 +148,11 @@ export async function readCollectionSourceMembers(
         const membership = await source.containsSubject({
           ...context,
           source: prepared,
-          allowance: work.allowance(),
+          allowance: ledger.sourceAllowance(),
           subjectId: candidate.subjectId,
           positiveEvidence: candidate.evidence,
         });
-        work.settle(membership.work);
+        ledger.native(membership.work);
         if (!sameSource(observed, membership.observation)) throw new ProblemError('semantic_not_ready');
         if (membership.result === 'not_proven') throw new ProblemError('dependency_unavailable');
         after = candidate.subjectId;
@@ -179,11 +167,12 @@ export async function readCollectionSourceMembers(
                 bytes: pageDimensions.bytes,
                 emptySeeks: pageDimensions.emptySeeks,
               },
-              allowance: work.allowance(),
+              allowance: ledger.sourceAllowance(),
             });
             ledger.native(filtered.scope.work(result));
-            if (result.values[0] === 'not_proven') throw new ProblemError('dependency_unavailable');
-            if (result.values[0] !== true) continue;
+            if (result.values.length !== 1 || typeof result.values[0] !== 'boolean')
+              throw new ProblemError('dependency_unavailable');
+            if (!result.values[0]) continue;
           }
           members.push({ kind: 'dynamic', subjectId: candidate.subjectId });
         }
@@ -213,11 +202,7 @@ export async function readCollectionSourceMembers(
         const finalFilter = input.query
           ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest)
           : null;
-        if (
-          filtered &&
-          finalFilter &&
-          JSON.stringify(filtered.prepared.basis) !== JSON.stringify(finalFilter.prepared.basis)
-        )
+        if (filtered && finalFilter && !isDeepStrictEqual(filtered.prepared.basis, finalFilter.prepared.basis))
           throw new ProblemError('semantic_not_ready');
         if (!sameSource(observed, current.observation)) throw new ProblemError('semantic_not_ready');
         for (const member of shown) {
@@ -225,10 +210,10 @@ export async function readCollectionSourceMembers(
             ...context,
             at: finalAt,
             source: current,
-            allowance: work.allowance(),
+            allowance: ledger.sourceAllowance(),
             subjectId: member.subjectId,
           });
-          work.settle(checked.work);
+          ledger.native(checked.work);
           if (!sameSource(observed, checked.observation) || checked.result !== true)
             throw new ProblemError('semantic_not_ready');
         }
@@ -245,7 +230,7 @@ export async function readCollectionSourceMembers(
                 bytes: pageDimensions.bytes,
                 emptySeeks: pageDimensions.emptySeeks,
               },
-              allowance: work.allowance(),
+              allowance: ledger.sourceAllowance(),
             },
           );
           ledger.native(finalFilter.scope.work(checked));

@@ -1087,6 +1087,17 @@ empty `200`; the native builtin identity and members reader expose its current r
 materializing a Collection header or changing Library state facts. First authorized
 materialization moves revision 0 to 1 atomically with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
 
+For nonmaterialized Everything, the canonical Source sweep visits the owner's deterministic ID through
+`owner_index_control`. Its native Source requires complete personal coverage, settled label repair, an active
+account and the current fact generation. A stored Collection at that ID takes precedence. The worker captures
+and registers native dependencies, maps the bounded original windows and commits the exact identity capture ID
+and revision with the exhausted id-ordered generation. Search can use that published population for a read-only
+id-order filter. It still binds the viewer, expanded predicate, release and required public evidence to the query.
+The worker reuses a current committed registration when advancing the canonical generation. The reader spends
+the remaining page allowance across refills and compares the full query basis, including native bigint positions.
+A mounted positive still requires an original-and-terminal disclosure batch that fits the 12-statement page.
+The current single-original Source check reserves 128 statements before calling Subject resolution.
+
 The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
 and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.
 Continue fixtures open `personal_library` and `reading_progress` through the ordinary platform gates. Empty eligible

@@ -34,7 +34,7 @@ const maxUuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const maxRoutedUuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const maxRoute = 65535;
 const maxInt = 2147483647;
-const maxSafe = Number.MAX_SAFE_INTEGER;
+const maxBigintText = '9223372036854775807';
 const identityJsonCeiling = 4096;
 
 export type CanonicalSourceSqlBound = Bound & Readonly<{ engineRequests: 0 }>;
@@ -83,12 +83,14 @@ const maxScopeRow = jsonBytes([
       version: maxInt,
     },
     capture: maxUuid,
-    revision: String(maxSafe),
+    revision: maxBigintText,
   },
 ]);
 const maxGenerationRow = jsonBytes([
   {
     generation: maxUuid,
+    query_capture_id: maxUuid,
+    query_capture_revision: '9'.repeat(19),
     basis: {
       digest: 'f'.repeat(64),
       incarnation: `${maxUuid}:${'9'.repeat(20)}`,
@@ -103,7 +105,7 @@ const maxGenerationRow = jsonBytes([
     after_fact: maxUuid,
     source_exhausted: true,
     state: 'abandoned',
-    version: String(maxSafe),
+    version: maxBigintText,
   },
 ]);
 const maxHeadRow = jsonBytes([{ generation: maxUuid }]);
@@ -130,13 +132,20 @@ const maxOwnerFactValues = {
   limit: CANONICAL_SOURCE_RAW_KEY_LIMIT,
 };
 
-const point = (sql: string, values: unknown, resultBytes: number, rows = 1, nativeRows = 4): CanonicalSourceSqlBound =>
+const point = (
+  sql: string,
+  values: unknown,
+  resultBytes: number,
+  rows = 1,
+  nativeRows = 4,
+  nativePoints = 1,
+): CanonicalSourceSqlBound =>
   sqlBound({
     candidateKeys: 0,
     nativeRows,
     identityMetadataRows: 0,
-    emptySeeks: 1,
-    nativePoints: 1,
+    emptySeeks: nativePoints,
+    nativePoints,
     witnessKeys: 0,
     statements: 1,
     bytes: bytesOf(sql, values, resultBytes),
@@ -162,20 +171,29 @@ const statement = (
 export const CANONICAL_SOURCE_SQL = Object.freeze({
   scope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`,
+  headGeneration: `SELECT g.generation::text,g.basis,g.source_exhausted,g.state,
+        g.query_capture_id::text,g.query_capture_revision::text
+      FROM library.canonical_source_head h JOIN library.canonical_source_generation g USING (route,collection_id,generation)
+      WHERE h.route=$1 AND h.collection_id=$2`,
   predecessorScope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence<>$3 ORDER BY source_fence LIMIT 1`,
   head: 'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2',
-  generation: `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
+  generation: `SELECT query_capture_id::text,query_capture_revision::text,generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
   FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3`,
   workingGeneration: `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
   FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND state='working' FOR UPDATE`,
   generationLock: `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
   FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3 FOR UPDATE`,
-  sourceLock: `SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3 AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE`,
+  sourceLock: `WITH stored AS MATERIALIZED (SELECT source_generation::text AS generation FROM library.collection
+      WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3
+        AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE),
+    logical AS MATERIALIZED (SELECT generation::text FROM library.logical_everything_source
+      WHERE route=$1 AND collection_id=$2 AND account_id=$3 AND incarnation=$4 FOR UPDATE)
+    SELECT * FROM stored UNION ALL SELECT * FROM logical`,
   factLock: 'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE',
   abandon: `UPDATE library.canonical_source_generation SET state='abandoned' WHERE route=$1 AND collection_id=$2 AND generation=$3`,
   retainedGenerations: `SELECT generation FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 ORDER BY generation LIMIT 2`,
-  insertGeneration: `INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver) VALUES($1,$2,$3,$4::jsonb,$5)`,
+  insertGeneration: `INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver,logical_owner_id) VALUES($1,$2,$3,$4::jsonb,$5,$6)`,
   seek: `SELECT canonical_subject_id::text AS subject FROM library.canonical_source_reference
      WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id>COALESCE($4::uuid,'00000000-0000-0000-0000-000000000000')
      ORDER BY canonical_subject_id,stored_subject_id,driver,fact_id LIMIT 1`,
@@ -187,11 +205,11 @@ export const CANONICAL_SOURCE_SQL = Object.freeze({
         VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
   updateFrontier: `UPDATE library.canonical_source_generation SET driver=$4,after_subject=$5,after_fact=$6,source_exhausted=$7,version=version+1
       WHERE route=$1 AND collection_id=$2 AND generation=$3`,
-  completeGeneration: `UPDATE library.canonical_source_generation SET state='complete' WHERE route=$1 AND collection_id=$2 AND generation=$3`,
+  completeGeneration: `UPDATE library.canonical_source_generation SET state='complete',query_capture_id=$4,query_capture_revision=$5 WHERE route=$1 AND collection_id=$2 AND generation=$3`,
   publishHead: `INSERT INTO library.canonical_source_head(route,collection_id,generation) VALUES($1,$2,$3)
       ON CONFLICT(route,collection_id) DO UPDATE SET generation=EXCLUDED.generation`,
   retainedScopes: `SELECT source_fence FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 ORDER BY source_fence LIMIT 2`,
-  insertScope: `INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`,
+  insertScope: `INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity,logical_owner_id) VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING`,
   updateScopeFrontier: `UPDATE library.canonical_source_scope SET frontier=$4::jsonb
         WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id`,
 });
@@ -215,10 +233,11 @@ const maxFrontierString = JSON.stringify({
   scanned: '9'.repeat(20),
   version: maxInt,
 });
-const insertGenerationValues = [maxRoute, maxUuid, maxUuid, maxBasisJson, 'member'];
+const completeGenerationValues = [...maxGenerationValues, maxUuid, maxBigintText];
+const insertGenerationValues = [maxRoute, maxUuid, maxUuid, maxBasisJson, 'member', maxUuid];
 const updateFrontierValues = [maxRoute, maxUuid, maxUuid, 'session', maxUuid, maxUuid, true];
 const updateScopeFrontierValues = [maxRoute, maxUuid, 'f'.repeat(64), maxFrontierString, maxFrontierString];
-const insertScopeValues = [maxRoute, maxUuid, 'f'.repeat(64), 'a'.repeat(identityJsonCeiling)];
+const insertScopeValues = [maxRoute, maxUuid, 'f'.repeat(64), 'a'.repeat(identityJsonCeiling), maxUuid];
 
 export function CANONICAL_SOURCE_STATEMENTS() {
   return memoizedValue(CANONICAL_SOURCE_STATEMENTS, () =>
@@ -230,6 +249,14 @@ export function CANONICAL_SOURCE_STATEMENTS() {
         maxScopeRow,
         1,
         point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
+      ),
+      headGeneration: statement(
+        'canonical-source-published-generation',
+        CANONICAL_SOURCE_SQL.headGeneration,
+        maxPointValues,
+        maxGenerationRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.headGeneration, maxPointValues, maxGenerationRow, 1, 8, 2),
       ),
       predecessorScope: statement(
         'canonical-source-predecessor-scope',
@@ -277,7 +304,7 @@ export function CANONICAL_SOURCE_STATEMENTS() {
         maxSourceLockValues,
         maxLockRow,
         1,
-        point(CANONICAL_SOURCE_SQL.sourceLock, maxSourceLockValues, maxLockRow),
+        point(CANONICAL_SOURCE_SQL.sourceLock, maxSourceLockValues, maxLockRow, 1, 48, 6),
       ),
       factLock: statement(
         'canonical-source-fact-lock',
@@ -354,10 +381,10 @@ export function CANONICAL_SOURCE_STATEMENTS() {
       completeGeneration: statement(
         'canonical-source-complete-generation',
         CANONICAL_SOURCE_SQL.completeGeneration,
-        maxGenerationValues,
+        completeGenerationValues,
         0,
         0,
-        point(CANONICAL_SOURCE_SQL.completeGeneration, maxGenerationValues, 0),
+        point(CANONICAL_SOURCE_SQL.completeGeneration, completeGenerationValues, 0),
       ),
       publishHead: statement(
         'canonical-source-publish-head',
@@ -497,10 +524,10 @@ export function canonicalSourceOwnerFactBound(limit: number): CanonicalSourceSql
   const resultBytes = maxOwnerFactRow * limit;
   return sqlBound({
     candidateKeys: limit,
-    nativeRows: 16 * limit + 16,
+    nativeRows: 32 * limit + 48,
     identityMetadataRows: 0,
-    emptySeeks: 1,
-    nativePoints: 1,
+    emptySeeks: 2 * limit + 8,
+    nativePoints: 2 * limit + 8,
     witnessKeys: 0,
     statements: 1,
     bytes: requestBytes + resultBytes,
@@ -511,10 +538,10 @@ export function canonicalSourceRawWindowBound(limit: number): CanonicalSourceSql
   const owner = canonicalSourceOwnerFactBound(limit);
   const collection = sqlBound({
     candidateKeys: limit,
-    nativeRows: 16 * limit + 16,
+    nativeRows: 32 * limit + 48,
     identityMetadataRows: 0,
-    emptySeeks: 1,
-    nativePoints: 1,
+    emptySeeks: 2 * limit + 8,
+    nativePoints: 2 * limit + 8,
     witnessKeys: 0,
     statements: 1,
     bytes: Math.max(owner.bytes, ownerFactsCeiling()),
@@ -545,7 +572,21 @@ export function CANONICAL_SOURCE_RECEIVING_COST() {
 
 function observation() {
   return memoizedValue(observation, () =>
-    sumBounds(metadataBound(), CANONICAL_SOURCE_STATEMENTS().scope.bound, identitySweepBound()),
+    sumBounds(
+      metadataBound(),
+      sqlBound({
+        candidateKeys: 0,
+        nativeRows: 40,
+        nativePoints: 8,
+        emptySeeks: 8,
+        statements: 3,
+        identityMetadataRows: 0,
+        witnessKeys: 0,
+        bytes: 8192,
+      }),
+      CANONICAL_SOURCE_STATEMENTS().scope.bound,
+      identitySweepBound(),
+    ),
   );
 }
 function begin() {
@@ -576,15 +617,24 @@ function publish() {
       CANONICAL_SOURCE_STATEMENTS().sourceLock.bound,
       CANONICAL_SOURCE_STATEMENTS().factLock.bound,
       CANONICAL_SOURCE_STATEMENTS().generationLock.bound,
+      // One same-client locked Semantic scope commit (exact summary and scope keys).
+      sqlBound({
+        candidateKeys: 0,
+        nativeRows: 16,
+        identityMetadataRows: 0,
+        emptySeeks: 2,
+        nativePoints: 2,
+        witnessKeys: 0,
+        statements: 1,
+        bytes: 8192,
+      }),
       CANONICAL_SOURCE_STATEMENTS().completeGeneration.bound,
       CANONICAL_SOURCE_STATEMENTS().publishHead.bound,
     ),
   );
 }
 function readback() {
-  return memoizedValue(readback, () =>
-    sumBounds(observation(), CANONICAL_SOURCE_STATEMENTS().head.bound, CANONICAL_SOURCE_STATEMENTS().generation.bound),
-  );
+  return memoizedValue(readback, () => sumBounds(observation(), CANONICAL_SOURCE_STATEMENTS().headGeneration.bound));
 }
 function executionAttempt() {
   return memoizedValue(executionAttempt, () =>

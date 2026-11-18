@@ -130,11 +130,11 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         current: Object.freeze({
           sql: selected.current.sql,
           values: selected.current.values,
-          rows: 7,
-          points: 7,
+          rows: 36,
+          points: 12,
           metadata: 1,
           output: 64,
-          seeks: 1,
+          seeks: 6,
         }),
         job: Object.freeze({
           sql: selected.job.sql,
@@ -195,10 +195,10 @@ export function createIdentityNativeCatalog(): IdentityNativeCatalog {
         },
         {
           sql: sourceQuery.sql,
-          nativeRows: 16,
-          nativePoints: 1,
+          nativeRows: 48,
+          nativePoints: 6,
           identityMetadataRows: 0,
-          emptySeeks: 1,
+          emptySeeks: 6,
           resultBytes: Buffer.byteLength(
             JSON.stringify({
               accountId: boundId,

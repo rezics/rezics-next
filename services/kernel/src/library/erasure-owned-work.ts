@@ -54,6 +54,7 @@ export async function runOwnedGraphSegment(
     });
     stats.pages++;
     stats.removed += result.removed;
+    if (kind === 'owner_index_control' && result.blocked) cursor.blockedCollection ??= result.pendingCollection ?? null;
     if (kind === 'native_source_capture') {
       if (result.blocked) cursor.blockedCollection ??= result.pendingCollection ?? null;
       if (result.parent === null) {

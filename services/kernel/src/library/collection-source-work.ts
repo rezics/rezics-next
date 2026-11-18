@@ -89,6 +89,7 @@ async function advanceSourceStep(context: WorkContext, input: SourceLocator, dea
   const call = {
     route,
     collectionId: input.collectionId,
+    ownerAccountId: input.accounts[0],
     deadline,
     semanticObservations,
     allowance: sourceStepAllowance(semanticObservations),
@@ -268,13 +269,20 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
         client.query<{ route: number; collection: string; owner: string | null; builtin: string | null }>(
           `SELECT c.route,c.collection_id::text AS collection,a.account_id::text AS owner,c.builtin_kind AS builtin
        FROM (
-         SELECT route,collection_id,curator_account_id,builtin_kind
-         FROM library.collection
-         WHERE (route,collection_id)>($1,COALESCE($2::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-         ORDER BY route,collection_id LIMIT 1
+         (SELECT route,collection_id,curator_account_id,builtin_kind,0 AS priority FROM library.collection
+          WHERE (route,collection_id)>($1,COALESCE($2::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+          ORDER BY route,collection_id LIMIT 1)
+         UNION ALL
+         (SELECT route,everything_id,account_id,'logical_everything',1 FROM library.owner_index_control
+          WHERE (route,everything_id)>($1,COALESCE($2::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+          ORDER BY route,everything_id LIMIT 1)
+         ORDER BY route,collection_id,priority LIMIT 1
        ) c
        LEFT JOIN access.account a ON (a.route,a.account_id)=(c.route,c.curator_account_id)
-         AND a.state='active' AND NOT a.authn_fenced`,
+         AND a.state='active' AND NOT a.authn_fenced
+         AND (c.builtin_kind IS DISTINCT FROM 'logical_everything' OR EXISTS (
+           SELECT 1 FROM library.owner_member_support support
+           WHERE support.route=c.route AND support.account_id=c.curator_account_id))`,
           [afterRoute, input.collection],
         ),
       );
