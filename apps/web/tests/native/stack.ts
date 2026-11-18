@@ -120,6 +120,8 @@ export type NativeWebStackOptions = {
   bundledClient?: boolean;
   /** Expose the owned Kernel and Auth for fixture writes during production Web startup. */
   onServicesReady?(services: NativeWebServices): void;
+  /** Admit an explicit offline sitemap export in this isolated Worker. */
+  sitemapExportToken?: string;
   /** Register the requesting application on the isolated Auth issuer, with no standing personal grants. */
   externalConsentClient?: { clientId: string; displayName: string; scopes: string[] };
   /** Observe actual Access results for the frozen personal boundary contract. */
@@ -1966,6 +1968,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_WEB_BUNDLED_CLIENT: options.bundledClient ? '1' : undefined,
     NATIVE_WEB_STARTUP_READINESS: options.onServicesReady ? 'services' : 'website',
+    NATIVE_WEB_SITEMAP_EXPORT_TOKEN: options.sitemapExportToken,
     NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
     NATIVE_WEB_OBSERVE_BOOK_LIBRARY_STATE: options.observeBookLibraryState ? '1' : undefined,
