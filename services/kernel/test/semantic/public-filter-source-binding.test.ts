@@ -365,20 +365,23 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       if (steps === 0) {
         const sharedDeadline = readContext();
         const root = { ...original, predecessor: null };
+        expect(
+          await withNativePublicFilterRepairReadBatch(binding, original, sharedDeadline, () =>
+            binding.readRepairStep(root, sharedDeadline),
+          ),
+        ).toMatchObject({ reason: 'owner_unavailable' });
+        const scan = await binding.readRepairStep(root, readContext());
+        expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
+        if (scan.status !== 'verified') throw new Error(scan.reason);
         await withNativePublicFilterRepairReadBatch(binding, original, sharedDeadline, async () => {
           const first = await binding.readRepairStep(root, sharedDeadline);
           const second = await binding.readRepairStep(root, sharedDeadline);
           expect(first.status).toBe('verified');
           expect(second).toMatchObject({ status: 'verified', step: page.frontier, receipts: [] });
           expect(second.cost.inputKeys).toBeLessThan(first.cost.inputKeys);
+          expect(second.cost.frontierWrites).toBe(0);
           expect(second.cost.inputKeys).toBeGreaterThan(0);
         });
-        const scan = await binding.readRepairStep(
-          { bootstrap: original.bootstrap, queried: retained.queried, execution, predecessor: null },
-          readContext(),
-        );
-        expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
-        if (scan.status !== 'verified') throw new Error(scan.reason);
         expect(nativePublicFilterRepairEvidence(binding, scan)).toEqual({ repairs: [], account: null });
         expect(nativePublicFilterRepairEvidence(binding, structuredClone(scan))).toBeUndefined();
         const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
@@ -392,15 +395,8 @@ test('native Source repair receipts revalidate original steps, replay, and curre
         continue;
       }
       found = true;
-      const step = await binding.readRepairStep(
-        {
-          bootstrap: original.bootstrap,
-          queried: retained.queried,
-          execution,
-          predecessor: frontier,
-        },
-        readContext(),
-      );
+      const stepInput = { ...original, predecessor: frontier };
+      const step = await binding.readRepairStep(stepInput, readContext());
       expect(step).toMatchObject({
         status: 'verified',
         step: page.frontier,
@@ -442,8 +438,17 @@ test('native Source repair receipts revalidate original steps, replay, and curre
         )
       ).rows[0]!;
       try {
-        await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch + 1);
-        expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+        const settlementDeadline = readContext();
+        await withNativePublicFilterRepairReadBatch(recovered, original, settlementDeadline, async () => {
+          expect(await recovered.readRepairStep(stepInput, settlementDeadline)).toMatchObject({
+            status: 'verified',
+            step: step.step,
+            receipts: step.receipts,
+          });
+          await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch + 1);
+          expect((await recovered.readRepairStep(stepInput, settlementDeadline)).status).not.toBe('verified');
+          expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+        });
       } finally {
         await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch);
       }
