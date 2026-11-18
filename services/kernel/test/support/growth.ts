@@ -31,7 +31,7 @@ import {
   enrichGrowthFailureEvidence,
   growthFailureProfileRecord,
 } from './growth-failure-evidence.ts';
-import { captureFoldedWarmup, captureWithFoldedCost } from './growth-composed-capture.ts';
+import { captureWithFoldedCost } from './growth-composed-capture.ts';
 import {
   catalogStatementBound,
   costOf,
@@ -1287,19 +1287,12 @@ async function runGrowthCheck(
       failureContext.scale = scale;
       failureContext.repetition = repetition;
       failureContext.native = undefined;
-      const warmupRun = await captureMeasuredRun(async () => {
-        const result =
-          check.captureMode === 'cost-folded'
-            ? await captureFoldedWarmup(db, async () => {
-                if (check.warmup) await check.warmup(db, scale, repetition);
-                else await check.operation(db, scale, repetition);
-              })
-            : await captureWarmup(db, async () => {
-                if (check.warmup) await check.warmup(db, scale, repetition);
-                else await check.operation(db, scale, repetition);
-              });
-        return result;
-      });
+      const warmupRun = await captureMeasuredRun(() =>
+        captureWarmup(db, async () => {
+          if (check.warmup) await check.warmup(db, scale, repetition);
+          else await check.operation(db, scale, repetition);
+        }),
+      );
       failureContext.native = captureRunFailureEvidence(warmupRun, warmupRun.value.capture);
       absorbUnmeasured(warmupRun);
       failureContext.phase = 'transaction-closure';
@@ -1325,11 +1318,7 @@ async function runGrowthCheck(
           failureContext.scale = scale;
           failureContext.repetition = repetition;
           failureContext.native = undefined;
-          const preparedRun = await captureMeasuredRun(async () =>
-            check.captureMode === 'cost-folded'
-              ? captureFoldedWarmup(db, () => prepare(db, scale, repetition))
-              : captureWarmup(db, () => prepare(db, scale, repetition)),
-          );
+          const preparedRun = await captureMeasuredRun(() => captureWarmup(db, () => prepare(db, scale, repetition)));
           failureContext.native = captureRunFailureEvidence(preparedRun, preparedRun.value.capture);
           absorbUnmeasured(preparedRun);
           await settlePending();

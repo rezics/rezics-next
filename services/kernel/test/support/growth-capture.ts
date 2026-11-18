@@ -1284,9 +1284,8 @@ export function captureCostFoldedInternal<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
   options: GrowthCaptureOptions = {},
-  explicitWarmup = false,
 ): Promise<{ value: T; capture: CostFoldedCapture }> {
-  return trackCaptureTask(captureInternal(database, operation, options, explicitWarmup, 'cost-folded'));
+  return trackCaptureTask(captureInternal(database, operation, options, false, 'cost-folded'));
 }
 
 function foldedInputFor(active: ActiveCapture, elapsedMs: number) {
@@ -1873,9 +1872,9 @@ function retainRunFailedCapture(
   }
 }
 
-/** Runs an explicitly owned unmeasured capture; nested captures inherit that custody. Used for warm-up and prepare. */
+/** Warm-up and prepare retain costs and settle evidence while releasing each parsed notice. */
 export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
-  return trackCaptureTask(captureInternal(database, operation, { includeBackends: true }, true, 'raw'));
+  return trackCaptureTask(captureInternal(database, operation, { includeBackends: true }, true, 'cost-folded'));
 }
 
 function databaseName(database: GrowthDatabase): string {
