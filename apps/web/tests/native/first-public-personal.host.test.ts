@@ -8,7 +8,7 @@ import { prepareNativeAuthMessages, startAuthStack, type NativeAuthStack } from 
 import { prepareLibraryDirectory } from './library-directory-readiness.ts';
 import { createLibraryEntry, prepareLibraryEntryCreator } from './library-navigation-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
-import { observePersonalWebReturn } from './personal-web-return-observation.ts';
+import { observePersonalWebReturn, sampleLibraryKernelReturn } from './personal-web-return-observation.ts';
 import { prepareNativeWebSearch } from './search-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
@@ -21,7 +21,7 @@ let auth: NativeAuthStack;
 nativeBeforeAll(lifecycle, 600_000, async () => {
   await prepareNativeAuthMessages();
   await prepareNativeWebSearch('first-public-personal');
-  stack = await startNativeWebStack();
+  stack = await startNativeWebStack({ observePersonalAccess: true });
   auth = await startAuthStack(stack, { preparedMessages: true, useHeadlessShell: true });
 });
 nativeAfterAll(lifecycle, 180_000);
@@ -38,11 +38,14 @@ async function accountPage(persona: 'alice' | 'bob', path: string) {
 async function signInForPersonalPage(persona: 'alice' | 'bob', context: BrowserContext, path: string) {
   const target = new URL(path, stack.web);
   const observation = observePersonalWebReturn(context, target);
+  const kernelStart = target.pathname === library ? stack.kernelRequests().length : undefined;
   try {
     return (await auth.signIn(persona, { context, returnTo: path })).continueOnPage();
   } catch (cause) {
+    const browser = observation.snapshot();
+    const kernel = kernelStart === undefined ? null : await sampleLibraryKernelReturn(stack, kernelStart);
     throw new Error(
-      `Native personal Web return to ${target.pathname}: ${JSON.stringify(observation.snapshot())}`,
+      `Native personal Web return to ${target.pathname} as ${persona}: ${JSON.stringify({ browser, kernel })}`,
       { cause },
     );
   } finally {
@@ -150,6 +153,7 @@ nativeTest(
   240_000,
   async () => {
     await openFeature('personal_library');
+    // The FULL label shelf requires progress admission even when the label has no assignments.
     await openFeature('reading_progress');
     const alice = await accountPage('alice', library);
     await alice.locator('[data-shelf-filters]').getByRole('link', { name: 'Labels', exact: true }).click();

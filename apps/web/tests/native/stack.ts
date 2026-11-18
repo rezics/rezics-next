@@ -219,6 +219,8 @@ export type NativeWebStack = {
   /** Flushes kernel requests made by the production Worker into this observer. */
   refreshKernelRequests(): Promise<void>;
   kernelRequests(): readonly NativeKernelRequest[];
+  /** Read the current observations, including pending requests, without draining the Kernel. */
+  sampleKernelRequests(): Promise<readonly NativeKernelRequest[]>;
   /** Flush requests made by a browser page into the parent test process. */
   syncKernelRequests(): Promise<void>;
   /** Inject a single native HTTP failure at the owned Worker-to-kernel boundary. */
@@ -713,7 +715,7 @@ async function adoptOwnedKernelAnalysisCache(
 }
 
 async function startStack(): Promise<
-  Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages' | 'kernelRequests'> & {
+  Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages' | 'kernelRequests' | 'sampleKernelRequests'> & {
     websiteReady: Promise<void>;
     routeAuthPages(origin?: string): Promise<string>;
     takeKernelRequestChanges(): KernelRequestChange[];
@@ -1782,6 +1784,7 @@ type HostCall = {
     | 'injectKernelFailureOnce'
     | 'injectCreatedSubjectReadFailureOnce'
     | 'observe'
+    | 'sampleKernelRequests'
     | 'workerLogs'
     | 'stop';
   argument?: string;
@@ -2215,6 +2218,10 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         return (await call('routeAuthPages', pageBridge?.url.origin)) as string;
       },
       kernelRequests: () => requests.slice(),
+      async sampleKernelRequests() {
+        await call('sampleKernelRequests');
+        return requests.slice();
+      },
       async syncKernelRequests() {
         await call('observe');
       },
@@ -2352,6 +2359,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
     });
     process.on('message', async ({ id, method, argument, options }: HostCall) => {
       try {
+        if (method === 'sampleKernelRequests') return send({ id, observation: observation() });
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
