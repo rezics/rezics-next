@@ -4,6 +4,8 @@ import {
   seedPublicationSubjects,
   sitemapBookKeys,
 } from './web-publication-subjects';
+import { definedViews, pickText, type PresentationProfile } from '@rezics/composition';
+import platformProfile from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import publicationData from '../../../../specs/fixtures/web-publication.json';
@@ -332,7 +334,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
     const urlFor = (key: string, locale = 'en') => {
       const subject = created?.get(key);
       if (!subject) throw new Error(`Fixture subject ${key} was not created`);
-      return new URL(subjectPath(subject.id, subject.labels[locale] ?? subject.label, locale), origin).href;
+      return new URL(subjectPath(subject.id, pickText(subject.labels, locale).text, locale), origin).href;
     };
     const subjects = Object.fromEntries(
       [...(created?.keys() ?? [])].map((key) => [key, urlFor(key)]),
@@ -417,6 +419,22 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
             return { url, lastmod };
           }),
         });
+        // The native fixture installs the platform profile. Derive the expected views from it
+        // and the authored type, independently of the Subject feed and its Web projection.
+        const subjectEntries = ({ id, type, labels }: { id: string; type: string; labels: Record<string, string> }) => {
+          const views = definedViews(platformProfile as PresentationProfile, {
+            type,
+            bases: bundledRelease.types[type]?.bases ?? [],
+          });
+          const lastmod = facts.subjectTimes.get(id) ?? null;
+          return data.locales.flatMap((locale) => {
+            const path = subjectPath(id, pickText(labels, locale).text, locale);
+            return views.map((view) => ({
+              url: new URL(view === 'overview' ? path : `${path}/${view}`, origin).href,
+              lastmod,
+            }));
+          });
+        };
         return {
           ...community.sitemap,
           agent: facts.agents.inventory,
@@ -424,17 +442,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
           thread: withContentTimes('thread', facts.threadTimes),
           subject: {
             eligible: [
-              ...sitemapSubjects.flatMap((key) =>
-                data.locales.map((locale) => ({
-                  url: urlFor(key, locale),
-                  lastmod: facts.subjectTimes.get(created!.get(key)!.id) ?? null,
-                })),
-              ),
+              ...sitemapSubjects.flatMap((key) => subjectEntries(created!.get(key)!)),
               ...community.topics.flatMap(({ id, label }) =>
-                data.locales.map((locale) => ({
-                  url: new URL(subjectPath(id, label, locale), origin).href,
-                  lastmod: facts.subjectTimes.get(id) ?? null,
-                })),
+                subjectEntries({ id, type: 'skos:Concept', labels: { en: label } }),
               ),
             ],
             excluded: ['excluded-withheld', 'excluded-private', 'excluded-taken-down'].flatMap((key) =>

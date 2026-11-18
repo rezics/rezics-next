@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { documentText, fromPlainText } from '@rezics/document';
+import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
+import * as contentAccess from '../../src/content/access-port.ts';
 import * as revisionPages from '../../src/content/revision-pages.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
@@ -126,6 +128,33 @@ test('a changed source withholds all selected bodies and same-cursor retry retai
   const retry = await page(nextPath);
   expect(retry.revisions[0].revisionId).toBe(secondId);
   expect(documentText(retry.revisions[0].body)).toBe('Second revision');
+});
+
+test('authenticated history rechecks the original revisions after Access evidence expires during enrichment', async () => {
+  const { post, path } = await fixture();
+  const secondId = (await driver.edit(post, 'Second revision')).id;
+  const readSummaries = contentAccess.readAccountDiscoverySummaries;
+  const enrichment = spyOn(contentAccess, 'readAccountDiscoverySummaries').mockImplementationOnce(async (...args) => {
+    await Bun.sleep(ACCESS_EVIDENCE_TTL_MS + 25);
+    return readSummaries(...args);
+  });
+  try {
+    const response = await read(path, 'author');
+    const body = await response.text();
+    expect(enrichment).toHaveBeenCalled();
+    expect(response.status, body).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get(SESSION_HEADER)).toBeTruthy();
+    const history = JSON.parse(body);
+    expect(history.revisions.map((value: { revisionId: string }) => value.revisionId)).toEqual([
+      post.revision.id,
+      secondId,
+    ]);
+    expect(history.page.head.revisionId).toBe(secondId);
+    expect(history.next).toBeNull();
+  } finally {
+    enrichment.mockRestore();
+  }
 });
 
 test('current takedown during hydration withholds the page, including an empty selection', async () => {

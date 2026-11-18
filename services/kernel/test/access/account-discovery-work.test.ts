@@ -29,6 +29,7 @@ function fixture() {
     },
   };
   const homes: number[] = [];
+  const subjectHomes: number[] = [];
   const firstStatements: string[] = [];
   let statements = 0,
     held = 0,
@@ -50,6 +51,8 @@ function fixture() {
           statements++;
           if (firstStatements.length < 8) firstStatements.push(sql);
           if (sql.includes('account_discovery_claim_intent')) homes.push(args[0]! / 16);
+          if (sql.includes('AND input_key=$2') && String(args[1]) === '["scope","subject"]')
+            subjectHomes.push(args[0]!);
           await beforeQuery?.();
           const rows = sql.includes('SELECT epoch,write_state')
             ? [{ epoch: 1, write_state: 'active' }]
@@ -82,6 +85,7 @@ function fixture() {
   return {
     pool,
     homes,
+    subjectHomes,
     firstStatements,
     start: () => start(),
     stats: () => ({ statements, held, peak, attempts }),
@@ -141,9 +145,9 @@ test('empty full pass idles, source events wake one home, and bounded recovery r
   expect(f.homes.length).toBe(4097);
   await Promise.all([f.admitVisibility(42, 'hidden'), f.admitVisibility(42, 'hidden')]);
   await f.advance(0);
-  expect(f.homes.slice(-1)).toEqual([42]);
+  expect(f.subjectHomes).toEqual([42]);
   await f.advance(STEP);
-  expect(f.homes.slice(-2)).toEqual([42, 0]);
+  expect(f.homes.at(-1)).toBe(0);
   await service.stop();
   expect(f.next()).toBe(Infinity);
 });
@@ -159,6 +163,11 @@ test('pool pressure yields without checkout and events share one serial connecti
   await f.wake();
   await f.advance(RETRY);
   expect(f.stats().attempts).toBe(0);
+  // The public reads waiting for Subject coverage cannot release their own barrier.
+  await f.admitVisibility(42, 'hidden');
+  await f.advance(RETRY);
+  expect(f.subjectHomes).toEqual([42]);
+  expect(f.homes).toEqual([]);
   f.pool.waitingCount = 0;
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {

@@ -174,7 +174,7 @@ repair any source, grant or membership history.
 
 ### Late Board revocation for point and page reads
 
-Thread and post heads retain their original source fingerprint and prepared Access checks across reaction enrichment.
+Thread and post heads retain their original source fingerprint across reaction enrichment.
 The final check validates that exact source, including its current Board and Realm authority; a different head cannot
 validate bytes selected earlier. Thread post pages retain each selected post and the containing opening in the same
 way. A changed reply is omitted without refilling or moving the bounded selection frontier. Counts and their oldest
@@ -398,9 +398,10 @@ The existing signed cursor still binds the post, thread, viewer, epoch and ascen
 `(recorded_at, revision_id)` frontier. `history-page.ts` orchestrates one selection through
 `pageRevisionCandidates`; it is not a store or a second disclosure authority. Selection examines
 at most `limit + 1` native revision keys. Each key uses the original native post, ancestry, board,
-Realm and Access disclosure, and retains that disclosure's original observations and prepared
-checks for final revalidation. A later head or container must not become a new baseline. Each
-revalidation clears cached Realm evidence. Initial, selected and final partition epochs must agree.
+Realm and Access disclosure, and retains that disclosure's original observations for final
+revalidation. Each revalidation prepares fresh Access evidence for the retained Post, ancestry
+and Board and clears cached Realm evidence. A later head or container must not become a new
+baseline. Initial, selected and final partition epochs must agree.
 Exact keys must belong to the selected post and thread. Bodies are never obtained from a head in
 place of a selected revision. A current erased post returns empty history under its native authority.
 Empty and sparse selections still revalidate the source; denied or changed sources withhold all
@@ -491,7 +492,8 @@ Kernel workspace typing only.
   disclosure with retained Content, Board, Realm, Access and session/partition observations; and
   two current conversation/board reads around hydration. Each full native observation retains its
   existing Content/Access terms (`3d+33` Content statements and `2d+5` prepared Access evaluations
-  for `d<=33` ancestry posts); the raw selection adds four statements including controls. Enrichment
+  for `d<=33` ancestry posts). Each retained evaluation prepares current Access evidence within
+  the original request deadline. The raw selection adds four statements including controls. Enrichment
   adds up to `A=ceil(I/100)<=3` Account discovery batches for `I<=202` identities, with each
   Account owner call retaining its two account snapshots, exact handle-claim checks and deduplicated
   avatar/agent lookups; at most four keys use one Semantic Subject summary observation; `M<=3200`

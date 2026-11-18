@@ -174,7 +174,10 @@ test('subject feed hrefs reach XML and reciprocal page links with exactly one lo
   const item = entry({ fr: 'Le livre', 'zh-Hant': '書' });
   const family = feed.family(projected(item))!;
   const result = familyXml(origin, family.paths);
-  expect(result.urls).toEqual(locales.map((locale) => `${origin}${family.paths[locale]}`));
+  expect(result.urls).toEqual(sitemapLocales.map((locale) => new URL(family.paths[locale], origin).href));
+  const chinese = `${origin}/zh-Hans/subjects/${item.id}/%E6%9B%B8`;
+  expect(result.xml).toContain(`<loc>${chinese}</loc>`);
+  expect(result.xml).toContain(`hreflang="zh-Hans" href="${chinese}"`);
   expect(result.xml.match(/<url>/g)).toHaveLength(8);
   expect(result.xml.match(/<xhtml:link /g)).toHaveLength(64);
   expect(result.xml).not.toContain('<lastmod>');

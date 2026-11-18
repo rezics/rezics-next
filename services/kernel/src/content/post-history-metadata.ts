@@ -76,7 +76,7 @@ function header(value: NativePostMetadata, recordedAt: string): PostRevisionHead
 
 /** One raw key page, with the same native exact authority as a body read. A
  * hidden/erased key consumes its slot; selection never refills to find visible rows.
- * Retained callbacks re-evaluate the original observations and prepared checks.
+ * Retained callbacks re-evaluate the original observations with fresh Access evidence.
  */
 export async function readNativePostRevisionHeaders(
   dependencies: Dependencies,
