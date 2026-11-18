@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { NestedPoolCheckoutError, withConnection } from '../database/pool.ts';
 import scanPartitions from './scan-partitions.sql';
 import upsertConsumerLag from './upsert-consumer-lag.sql';
-import { projectionBatchCaughtUp, type BatchResult } from './log.ts';
+import type { BatchResult } from './log.ts';
 
 export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
 
@@ -57,7 +57,7 @@ export function startRelays(
   const idle = () =>
     active === 0 && !ticking ? Promise.resolve() : new Promise<void>((resolve) => waiters.push(resolve));
 
-  const run = async (relay: Relay, partition: number) => {
+  const run = async (relay: Relay, partition: number, through: bigint) => {
     const identity = key(relay, partition);
     inFlight.add(identity);
     active++;
@@ -74,7 +74,9 @@ export function startRelays(
           }
           return;
         }
-        if (result.status === 'busy' || result.envelopes === 0 || projectionBatchCaughtUp(result)) return;
+        // A busy writer can move the head during every apply. Release the slot once
+        // this scan's work is covered so other partitions and consumers get their turn.
+        if (result.status === 'busy' || result.envelopes === 0 || result.position >= through) return;
       }
     } catch (error) {
       if (!(max <= 1 && isPoolAcquireTimeout(error)))
@@ -108,7 +110,7 @@ export function startRelays(
           if (stopped || paused) break;
           const partition = row.partition_no;
           if (inFlight.has(key(relay, partition))) continue;
-          const task = run(relay, partition);
+          const task = run(relay, partition, BigInt(row.position));
           running.add(task);
           void task.then(
             () => running.delete(task),

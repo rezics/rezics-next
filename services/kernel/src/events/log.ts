@@ -31,13 +31,6 @@ export type BatchResult =
   | { status: 'read'; envelopes: number; position: bigint }
   | { status: 'stopped'; reason: StopReason; envelopes: number; position: bigint };
 
-const caughtUpProjectionBatches = new WeakSet<BatchResult>();
-
-/** A successful native checkpoint CAS also observed the current event head. */
-export function projectionBatchCaughtUp(result: BatchResult): boolean {
-  return caughtUpProjectionBatches.has(result);
-}
-
 type LogRow = {
   head_epoch: number | null;
   position: bigint | null;
@@ -286,7 +279,6 @@ export async function projectBatch(
   }
   const { checkpoint, envelopes, reason, rows } = snapshot;
   const position = envelopes.at(-1)?.position ?? checkpoint.position;
-  let caughtUp = false;
   if (rows && options.observe) {
     const first = rows[0];
     const blocked = reason && rows.find((row) => row.position !== null && BigInt(row.position) > position);
@@ -317,10 +309,7 @@ export async function projectBatch(
     );
     options.observe?.({ stage: advanced.length === 0 ? 'checkpoint_busy' : 'checkpoint_advanced' });
     if (advanced.length === 0) return { status: 'busy' };
-    caughtUp = advanced[0]?.caughtUp === true;
   }
   if (reason) return stop(reason, envelopes.length, position);
-  const result: BatchResult = { status: 'read', envelopes: envelopes.length, position };
-  if (caughtUp) caughtUpProjectionBatches.add(result);
-  return result;
+  return { status: 'read', envelopes: envelopes.length, position };
 }

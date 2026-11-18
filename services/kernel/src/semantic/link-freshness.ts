@@ -15,16 +15,6 @@ const LINKS_CONSUMER = 'semantic_links';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type YieldAdmission = <T>(wait: () => Promise<T>) => Promise<T>;
 
-function covers(
-  row: { epoch: number | null; position: string | number | bigint } | null,
-  component: SessionComponent,
-): boolean {
-  if (!row || row.epoch === null) return false;
-  const epoch = typeof row.epoch === 'number' ? row.epoch : Number(row.epoch);
-  const position = typeof row.position === 'bigint' ? row.position : BigInt(row.position);
-  return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
-}
-
 export async function pendingMergeSources(
   pool: Pool,
   members: readonly string[],
@@ -59,39 +49,47 @@ export async function linksCaughtUp(
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
 ): Promise<boolean> {
+  const requirements = {
+    consumer: LINKS_CONSUMER,
+    partitions: seen.map((component) => component.partition),
+    epochs: seen.map((component) => component.epoch),
+    positions: seen.map((component) => component.position),
+  };
+  const trace = process.env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+  let lastObservation = 'deadline';
+  const unfinished = () => {
+    if (trace) console.warn(`Semantic links wait home=${partitionOf(routeOf(subject)!)} ${lastObservation}`);
+    return false;
+  };
   try {
     while (Date.now() < deadline) {
       const covered = await withReadTransaction(
         pool,
         async (client) => {
-          let caughtUp = true;
-          for (const component of seen) {
-            const row = await readLinkCheckpoint.run(client, {
-              partition_no: component.partition,
-              consumer: LINKS_CONSUMER,
-            });
-            if (!covers(row, component)) {
-              caughtUp = false;
-              break;
-            }
+          const behind = seen.length ? await readLinkCheckpoint.run(client, requirements) : null;
+          if (behind) {
+            if (trace)
+              lastObservation =
+                `partition=${behind.partition_no} required=${behind.epoch}/${behind.position} ` +
+                `checkpoint=${behind.checkpoint_epoch ?? 'none'}/${behind.checkpoint_position ?? 'none'}`;
+            return false;
           }
-          if (caughtUp) {
-            const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-            caughtUp = pending === null;
-          }
-          return caughtUp;
+          const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
+          if (trace) lastObservation = pending === null ? 'deadline' : 'merge';
+          return pending === null;
         },
         deadline,
       );
       const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members, deadline) : [];
       if (covered && pendingMembers.length === 0) return true;
-      if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
+      if (pendingMembers.length && trace) lastObservation = 'merge';
+      if (deadline - Date.now() < FRESHNESS_POLL_MS) return unfinished();
       // The database connection is released before this wait; yield the request's admission permit too.
       await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
     }
-    return false;
+    return unfinished();
   } catch (error) {
-    if (error instanceof AccessUnavailableError && error.reason === 'deadline') return false;
+    if (error instanceof AccessUnavailableError && error.reason === 'deadline') return unfinished();
     throw error;
   }
 }
