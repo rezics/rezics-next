@@ -13,6 +13,7 @@ import type {
   PublicFilterSourceBinding,
   PublicFilterSource,
 } from '../semantic/index.ts';
+import { readPageControls, type ControlRow, type PageControl } from './book-page-controls.ts';
 import { readBookIdentities, type BookIdentityRead } from './composed-book-identities.ts';
 import { withPublicFilterCoverageStarts } from './public-filter-coverage-page.ts';
 
@@ -32,16 +33,66 @@ type Capture = {
   admit: AdmissionYield;
   answer: PromiseWithResolvers<NativePublicFilterPreparation | null>;
 };
-type Child = {
-  capture: PromiseWithResolvers<Capture | undefined>;
-  requestedCapture?: boolean;
-  page?: string;
-  closed: boolean;
-  planned: PromiseWithResolvers<Waiting | undefined>;
-  identities: PromiseWithResolvers<BookIdentityRead | undefined>;
-  requestedIdentities?: boolean;
-  sealed: PromiseWithResolvers<Waiting | undefined>;
+// A child can skip a phase (for example, a retained window needs no engine).
+// Park at the next role it actually requests. Only the first window joins
+// control batches; later rounds follow the original single-page path.
+function phase<T>(run: (waiting: T[], check: () => void) => Promise<Map<T, () => void>>) {
+  const waiting = new WeakMap<Child, T>();
+  return {
+    offer(child: Child, request: T) {
+      waiting.set(child, request);
+      child.next.resolve();
+    },
+    async settle(children: Child[], check: () => void) {
+      const requests = children.map((child) => waiting.get(child)!);
+      const replies = await run(requests, check);
+      return (index: number) => replies.get(requests[index]!)!();
+    },
+  };
+}
+
+const controls = {
+  load: phase(readPageControls),
+  saveReservation: phase(readPageControls),
+  saveWindow: phase(readPageControls),
+  plan: phase(readPageControls),
+  reserve: phase(readPageControls),
+  dispatch: phase(readPageControls),
+  complete: phase(readPageControls),
+  consume: phase(readPageControls),
+  seal: phase(readPageControls),
 };
+const cuts = phase(beginCuts);
+const starts = phase(readRole);
+const identities = phase(readBookIdentities);
+const finals = phase(readRole);
+const phases = [
+  cuts,
+  controls.load,
+  controls.plan,
+  starts,
+  controls.reserve,
+  controls.saveReservation,
+  controls.dispatch,
+  identities,
+  controls.complete,
+  controls.saveWindow,
+  controls.consume,
+  controls.seal,
+  finals,
+];
+
+type Child = {
+  next: PromiseWithResolvers<void>;
+  position: number;
+  page?: string;
+};
+function enter(child: Child, stage: (typeof phases)[number]) {
+  const position = phases.indexOf(stage);
+  if (position <= child.position) return false;
+  child.position = position;
+  return true;
+}
 const active = new AsyncLocalStorage<Child>();
 const catalogue = new AsyncLocalStorage<{ child: Child; yieldPermit: AdmissionYield; admit: AdmissionYield }>();
 
@@ -62,7 +113,8 @@ export function restoreComposedBookCut(
   context: PublicFilterConsumerContext,
 ) {
   const command = catalogue.getStore();
-  if (!command || command.child.closed || command.child.page || queried.snapshot.kind !== 'pit') return;
+  if (!command || command.child.position >= phases.length || command.child.page || queried.snapshot.kind !== 'pit')
+    return;
   return advanceNativePublicFilterPreparation(binding, { pageObservation: queried }, context);
 }
 
@@ -73,12 +125,10 @@ export function composedBookCapture(
   charge: (cut: NativePublicFilterPreparation) => void,
 ) {
   const command = catalogue.getStore();
-  if (!command || !native(input.source) || command.child.closed || command.child.requestedCapture || command.child.page)
-    return;
-  command.child.requestedCapture = true;
+  if (!command || !native(input.source) || command.child.page || !enter(command.child, cuts)) return;
   return command.yieldPermit(async () => {
     const answer = Promise.withResolvers<NativePublicFilterPreparation | null>();
-    command.child.capture.resolve({ binding, input, context, answer, admit: command.admit });
+    cuts.offer(command.child, { binding, input, context, answer, admit: command.admit });
     const cut = await answer.promise;
     if (cut) charge(cut);
     return cut;
@@ -136,19 +186,13 @@ export function composedBookObservation(
   charge: (observation: PrivacyReductionObservation) => void,
 ): Promise<PrivacyReductionObservation> | undefined {
   const command = catalogue.getStore();
-  if (!command || command.child.closed || !population || !native(source)) return;
-  if (request.start === null) {
-    if (command.child.page !== undefined) return;
-    command.child.capture.resolve(undefined);
-    command.child.page = page;
-  } else {
-    if (command.child.page !== page) return;
-    command.child.identities.resolve(undefined);
-  }
+  if (!command || !population || !native(source)) return;
+  const stage = request.start === null ? starts : finals;
+  if ((command.child.page !== undefined && command.child.page !== page) || !enter(command.child, stage)) return;
+  command.child.page = page;
   return command.yieldPermit(async () => {
     const answer = Promise.withResolvers<PrivacyReductionObservation>();
-    const stage = request.start === null ? command.child.planned : command.child.sealed;
-    stage.resolve({ source, population, page, request, answer, admit: command.admit });
+    stage.offer(command.child, { source, population, page, request, answer, admit: command.admit });
     // Account the actual role even if reacquiring the HTTP permit fails.
     const observation = await answer.promise;
     charge(observation);
@@ -162,17 +206,27 @@ export function composedBookIdentities(
   charge: BookIdentityRead['charge'],
 ) {
   const command = catalogue.getStore();
-  if (
-    !command?.child.page ||
-    command.child.closed ||
-    command.child.requestedIdentities ||
-    !source.readPublicFilterSubjectIdentities
-  )
-    return;
-  command.child.requestedIdentities = true;
+  if (!command?.child.page || !source.readPublicFilterSubjectIdentities || !enter(command.child, identities)) return;
   return command.yieldPermit(() => {
     const answer = Promise.withResolvers<Awaited<BookIdentityRead['answer']['promise']>>();
-    command.child.identities.resolve({ source, request, charge, answer, admit: command.admit });
+    identities.offer(command.child, { source, request, charge, answer, admit: command.admit });
+    return answer.promise;
+  });
+}
+
+export function composedBookControl(input: PageControl) {
+  const command = catalogue.getStore();
+  const stage = controls[input.phase];
+  if (
+    !command ||
+    (command.child.page !== undefined && command.child.page !== input.page) ||
+    !enter(command.child, stage)
+  )
+    return;
+  if (input.page !== null) command.child.page = input.page;
+  return command.yieldPermit(() => {
+    const answer = Promise.withResolvers<ControlRow | undefined>();
+    stage.offer(command.child, { ...input, admit: command.admit, answer });
     return answer.promise;
   });
 }
@@ -232,74 +286,31 @@ export async function runComposedPageReads<T>(
   execute: (read: T, index: number) => Promise<void>,
   check: () => void,
 ): Promise<void> {
-  const children: Child[] = reads.map(() => ({
-    closed: false,
-    capture: Promise.withResolvers<Capture | undefined>(),
-    planned: Promise.withResolvers<Waiting | undefined>(),
-    identities: Promise.withResolvers<BookIdentityRead | undefined>(),
-    sealed: Promise.withResolvers<Waiting | undefined>(),
-  }));
-  const done: Promise<void>[] = [];
+  const children: Child[] = reads.map(() => ({ next: Promise.withResolvers<void>(), position: -1 }));
   const failures: { error: unknown }[] = [];
   await bounded(children, async (child, index) => {
-    done[index] = active.run(child, async () => {
+    void active.run(child, async () => {
       try {
         check();
         await execute(reads[index]!, index);
       } catch (error) {
         failures[index] = { error };
       } finally {
-        child.closed = true;
-        child.capture.resolve(undefined);
-        child.planned.resolve(undefined);
-        child.identities.resolve(undefined);
-        child.sealed.resolve(undefined);
+        child.position = phases.length;
+        child.next.resolve();
       }
     });
-    await child.capture.promise;
+    await child.next.promise;
   });
-  const captures = await Promise.all(children.map((child) => child.capture.promise));
-  const cuts = await beginCuts(
-    captures.filter((c) => c !== undefined),
-    check,
-  );
-  await bounded(children, async (child, index) => {
-    const capture = captures[index];
-    if (capture) cuts.get(capture)!();
-    await child.planned.promise;
-  });
-
-  const plans = await Promise.all(children.map((child) => child.planned.promise));
-  const start = await readRole(
-    plans.filter((plan) => plan !== undefined),
-    check,
-  );
-  await bounded(children, async (child, index) => {
-    const plan = plans[index];
-    if (plan) start.get(plan)!();
-    await child.identities.promise;
-  });
-  const identities = await Promise.all(children.map((child) => child.identities.promise));
-  const results = await readBookIdentities(
-    identities.filter((read) => read !== undefined),
-    check,
-  );
-  await bounded(children, async (child, index) => {
-    const read = identities[index];
-    if (read) results.get(read)!();
-    await child.sealed.promise;
-  });
-
-  const tails = await Promise.all(children.map((child) => child.sealed.promise));
-  const final = await readRole(
-    tails.filter((tail) => tail !== undefined),
-    check,
-  );
-  await bounded(children, async (_, index) => {
-    const tail = tails[index];
-    if (tail) final.get(tail)!();
-    await done[index];
-  });
+  for (const [position, stage] of phases.entries()) {
+    const waiting = children.filter((child) => child.position === position);
+    const resume = await stage.settle(waiting, check);
+    await bounded(waiting, async (child, index) => {
+      child.next = Promise.withResolvers<void>();
+      resume(index);
+      await child.next.promise;
+    });
+  }
   check();
   const failure = failures.find((entry) => entry !== undefined);
   if (failure) throw failure.error;

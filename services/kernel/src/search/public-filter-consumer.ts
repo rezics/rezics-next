@@ -17,8 +17,10 @@ import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
 import repairEffectSql from './public-filter-custody-repair-effect.sql';
 import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
+import { pageControls, type ControlPhase, type ControlRow } from './book-page-controls.ts';
 import type { BookIdentityRow } from './composed-book-identities.ts';
 import {
+  composedBookControl,
   composedBookCapture,
   composedBookIdentities,
   composedBookObservation,
@@ -874,11 +876,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         throw new ConsumerFailure('source_pending');
     };
-    const sql = async <T extends import('pg').QueryResultRow>(
-      query: string,
-      values: unknown[] | (() => unknown[]) = [],
-      countedRows = false,
-    ) => {
+    const fundSql = (query: string, values: unknown[] | (() => unknown[]) = []) => {
       check();
       cost.statements++;
       const baseBytes = cost.bytes + Buffer.byteLength(query);
@@ -897,6 +895,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         parameters = values();
       }
       check();
+      return parameters;
+    };
+    const sql = async <T extends import('pg').QueryResultRow>(
+      query: string,
+      values: unknown[] | (() => unknown[]) = [],
+      countedRows = false,
+    ) => {
+      const parameters = fundSql(query, values);
       const request: import('pg').QueryConfig & { query_timeout: number } = {
         text: query,
         values: parameters,
@@ -1147,6 +1153,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       cost,
       add,
       check,
+      fundSql,
+      async submitControls(text: string, values: unknown[], receive: (rows: ControlRow[]) => void) {
+        const client = await connect((db) => async (query, parameters) => {
+          const result = await db.query(query, parameters);
+          receive(result.rows);
+          return result;
+        });
+        try {
+          await client.query({ text, values });
+        } finally {
+          client.release();
+        }
+      },
       sql,
       unavailable,
       take,
@@ -1208,20 +1227,69 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   }
   // Native page metadata/control work uses the original consumer meter. Reserve
   // misses, locks, FK checks and attempted writes before submitting each statement.
+  function reservePageWork(page: Page, footprint: { points: number; keys: number; writes: number }) {
+    page.m.cost.dependencyPoints += footprint.points;
+    page.m.cost.inputKeys += footprint.keys;
+    page.m.cost.rows += footprint.points;
+    page.m.cost.frontierWrites += footprint.writes;
+    page.m.check();
+  }
   async function pageSql<T extends import('pg').QueryResultRow>(
     page: Page,
     footprint: { points: number; keys: number; writes: number },
     text: string,
     values: () => unknown[],
   ) {
-    page.m.cost.dependencyPoints += footprint.points;
-    page.m.cost.inputKeys += footprint.keys;
-    page.m.cost.rows += footprint.points;
-    page.m.cost.frontierWrites += footprint.writes;
-    page.m.check();
+    reservePageWork(page, footprint);
     // The returned row is the same keyed control already reserved above.
     // Keep this true even at the result-side budget check and on lost receipts.
     return page.m.sql<T>(text, values, true);
+  }
+  function groupControl(
+    page: Page,
+    phase: ControlPhase,
+    observation: string,
+    id: string,
+    footprint: { points: number; keys: number; writes: number } | null,
+    values: () => unknown[],
+  ) {
+    const meter = page.m;
+    return (
+      page.bookPopulation &&
+      composedBookControl({
+        phase,
+        observation,
+        id,
+        page: phase === 'plan' ? id : page.id,
+        pool: config.pool,
+        deadline: page.context.deadline,
+        fund(text) {
+          if (footprint) reservePageWork(page, footprint);
+          return meter.fundSql(text, values);
+        },
+        submit: meter.submitControls,
+        receive(rows) {
+          if (!footprint) meter.cost.rows += rows.length;
+          meter.cost.bytes += Buffer.byteLength(encodeState(rows));
+          meter.check();
+        },
+      })
+    );
+  }
+  async function pageControl(
+    page: Page,
+    phase: ControlPhase,
+    observation: string,
+    id: string,
+    footprint: { points: number; keys: number; writes: number },
+    values: () => unknown[],
+  ) {
+    const grouped = groupControl(page, phase, observation, id, footprint, values);
+    const row = grouped
+      ? await grouped
+      : (await pageSql<ControlRow>(page, footprint, pageControls[phase](1), values)).rows[0];
+    if (row?.id !== id) throw new ConsumerFailure('observation_lost');
+    return row;
   }
   async function beginPage(
     page: Page,
@@ -1243,45 +1311,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return;
     }
     const id = randomUUID();
-    const result = await pageSql(
-      page,
-      { points: 8, keys: 18, writes: 1 },
-      `WITH input AS (SELECT $1::integer AS home,$2::text AS observation,$3::uuid AS id,
-        $4::uuid AS token,$5::bigint AS now,$6::bigint AS deadline,$7::text AS parent,
-        $8::integer AS consumed,$9::text AS previous,$10::integer AS ceiling,$11::text AS work),
-      locked AS MATERIALIZED (
-        SELECT o.partition_no,o.observation,o.registration,r.definition,r.consumer,
-          i.id,i.deadline,i.parent,i.consumed,i.previous,i.ceiling,i.work
-        FROM input i JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(i.home,i.observation)
-        JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-        JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,i.token)
-        LEFT JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=(o.partition_no,o.observation,i.parent)
-        WHERE o.state='open' AND o.expires_at>i.now AND f.expires_at>i.now AND r.state='active'
-          AND (i.parent IS NULL OR (e.consumer_window=i.previous AND (e.page_id IS NULL OR e.page_status='complete')))
-          AND NOT EXISTS (SELECT 1 FROM search.public_filter_coverage_page p
-            WHERE (p.partition_no,p.observation)=(o.partition_no,o.observation)
-              AND (p.state IN ('planned','open','sealed') OR p.pending IS NOT NULL))
-        FOR UPDATE OF o FOR SHARE OF r,f)
-      INSERT INTO search.public_filter_coverage_page
-        (partition_no,id,observation,registration,definition,consumer,deadline,reference_token,boundary,boundary_consumed,boundary_window,ceiling,state,work)
-      SELECT l.partition_no,l.id,l.observation,l.registration,l.definition,l.consumer,l.deadline,i.token,
-        l.parent,l.consumed,l.previous,l.ceiling,'planned',l.work
-      FROM locked l CROSS JOIN input i RETURNING id`,
-      () => [
-        locatorHome(q.snapshot.observation),
-        q.snapshot.observation,
-        id,
-        use.token,
-        Date.now(),
-        page.context.deadline,
-        prefix?.execution ?? null,
-        prefix?.consumed ?? 0,
-        previous,
-        ceiling,
-        encodeState(page.m.cost),
-      ],
-    );
-    if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    await pageControl(page, 'plan', q.snapshot.observation, id, { points: 8, keys: 18, writes: 1 }, () => [
+      locatorHome(q.snapshot.observation),
+      q.snapshot.observation,
+      id,
+      use.token,
+      Date.now(),
+      page.context.deadline,
+      prefix?.execution ?? null,
+      prefix?.consumed ?? 0,
+      previous,
+      ceiling,
+      encodeState(page.m.cost),
+    ]);
     page.id = id;
     page.queried = q;
     page.use = use;
@@ -1296,28 +1338,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     prefix: PublicFilterConsumerRefill | undefined,
     size: number,
   ) {
-    const result = await pageSql<{ rounds: number; charged: number }>(
+    const reserved = await pageControl(
       page,
+      'reserve',
+      use.observation,
+      page.id!,
       { points: 8, keys: 20, writes: 2 },
-      `WITH input AS (SELECT $1::integer AS home,$2::uuid AS page,$3::text AS observation,$4::uuid AS token,
-        $5::bigint AS now,$6::text AS execution,$7::text AS parent,$8::integer AS consumed,$9::integer AS size,
-        $10::text AS payload,$11::text AS work), locked AS MATERIALIZED (
-        SELECT p.partition_no,p.id FROM input i JOIN search.public_filter_coverage_page p ON (p.partition_no,p.id)=(i.home,i.page)
-        JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(p.partition_no,p.observation)
-        JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,o.observation,i.token)
-        WHERE p.observation=i.observation AND p.state='open' AND p.pending IS NULL AND p.deadline>i.now
-          AND o.state='open' AND f.expires_at>i.now AND p.rounds<3 AND p.charged+i.size<=p.ceiling
-          AND coalesce(p.tail,p.boundary) IS NOT DISTINCT FROM i.parent
-          AND ((p.tail IS NOT NULL AND p.tail_consumed=i.consumed) OR (p.tail IS NULL AND p.boundary_consumed=i.consumed))
-        FOR UPDATE OF p FOR SHARE OF o,f), advanced AS (
-        UPDATE search.public_filter_coverage_page p SET pending=i.execution,rounds=p.rounds+1,charged=p.charged+i.size,
-          revision=p.revision+1,work=i.work FROM locked l,input i
-        WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.*), appended AS (
-        INSERT INTO search.public_filter_execution
-          (partition_no,observation,id,execution,page_id,page_ordinal,page_parent,page_consumed,page_size,page_status,page_engine_started)
-        SELECT p.partition_no,p.observation,i.execution,i.payload,p.id,p.rounds,i.parent,i.consumed,i.size,'dispatched',false
-        FROM advanced p,input i RETURNING id)
-      SELECT p.rounds,p.charged FROM advanced p JOIN appended a ON a.id=p.pending`,
       () => [
         locatorHome(use.observation),
         page.id,
@@ -1332,8 +1358,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         encodeState(page.m.cost),
       ],
     );
-    const reserved = result.rows[0];
-    if (!reserved || result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    if (reserved.rounds === undefined || reserved.charged === undefined) throw new ConsumerFailure('observation_lost');
     page.rounds = reserved.rounds;
     page.charged = reserved.charged;
   }
@@ -1342,28 +1367,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     // A lost receipt retains both, even if this process never sends the request.
     // Funding the root also acquires its lock. The native guard resolves the
     // root's immutable exact reference in this same statement.
-    const started = await pageSql(
-      page,
-      { points: 5, keys: 12, writes: 2 },
-      `WITH funded AS (
-         UPDATE search.public_filter_coverage_page p SET work=$7,revision=p.revision+1
-         WHERE (p.partition_no,p.id)=($1,$2::uuid) AND p.state='open' AND p.pending=$3
-           AND p.observation=$6 AND p.reference_token=$4::uuid AND p.deadline>$5
-         RETURNING p.partition_no,p.observation,p.id)
-       UPDATE search.public_filter_execution e SET page_engine_started=true FROM funded p
-       WHERE (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,$3)
-         AND e.page_id=p.id AND e.page_status='dispatched' AND e.page_engine_started IS FALSE RETURNING e.id`,
-      () => [
-        locatorHome(use.observation),
-        page.id,
-        execution,
-        use.token,
-        Date.now(),
-        use.observation,
-        encodeState(page.m.cost),
-      ],
-    );
-    if (started.rowCount !== 1) throw new ConsumerFailure('observation_lost');
+    await pageControl(page, 'dispatch', use.observation, page.id!, { points: 5, keys: 12, writes: 2 }, () => [
+      locatorHome(use.observation),
+      page.id,
+      execution,
+      use.token,
+      Date.now(),
+      use.observation,
+      encodeState(page.m.cost),
+    ]);
   }
   async function completePage(
     page: Page,
@@ -1372,20 +1384,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     window: RetainedWindow,
     reserved: number,
   ) {
-    const result = await pageSql(
+    await pageControl(
       page,
+      'complete',
+      page.queried!.snapshot.observation,
+      page.id!,
       { points: 4, keys: 8, writes: 2 },
-      `WITH input AS (SELECT $1::integer AS home,$2::uuid AS page,$3::text AS execution,$4::text AS payload,
-        $5::text AS window,$6::integer AS unused,$7::text AS work,$8::integer AS raw), locked AS MATERIALIZED (
-        SELECT p.partition_no,p.id,p.observation FROM input i JOIN search.public_filter_coverage_page p
-          ON (p.partition_no,p.id)=(i.home,i.page)
-        WHERE p.state='open' AND p.pending=i.execution FOR UPDATE OF p), completed AS (
-        UPDATE search.public_filter_execution e SET execution=i.payload,consumer_window=i.window,page_status='complete',page_raw=i.raw
-        FROM locked l,input i WHERE (e.partition_no,e.observation,e.id)=(l.partition_no,l.observation,i.execution)
-          AND e.page_id=l.id AND e.page_status='dispatched' AND e.consumer_window IS NULL RETURNING e.id)
-      UPDATE search.public_filter_coverage_page p SET tail=c.id,tail_consumed=NULL,pending=NULL,charged=p.charged-i.unused,
-        revision=p.revision+1,work=i.work FROM locked l,completed c,input i
-      WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.id`,
       () => [
         locatorHome(page.queried!.snapshot.observation),
         page.id,
@@ -1397,7 +1401,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         window.raw.length,
       ],
     );
-    if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
     page.tail = execution;
     page.charged -= reserved - window.raw.length;
   }
@@ -1469,6 +1472,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function load(
     job: PublicFilterConsumerJob,
     m: Meter,
+    page?: Page,
   ): Promise<{ work: ConsumerWork; encoded: string; registration: boolean }> {
     if (job.consumer.physicalTarget !== target) throw new ConsumerFailure('registration_missing');
     const home = locatorHome(job.job);
@@ -1491,34 +1495,52 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { work, encoded: row.consumer_work, registration: row.registration };
     }
     const registration = false;
-    const row = (
-      await m.sql<{ consumer_work: string | null }>(
-        "SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2) AND state='open'",
-        [home, job.job],
-      )
-    ).rows[0];
+    const grouped = page && groupControl(page, 'load', job.job, job.job, null, () => [home, job.job]);
+    const row = grouped
+      ? await grouped
+      : (
+          await m.sql<{ consumer_work: string | null }>(
+            "SELECT consumer_work FROM search.public_filter_observation WHERE (partition_no,observation)=($1,$2) AND state='open'",
+            [home, job.job],
+          )
+        ).rows[0];
     if (!row?.consumer_work) throw new ConsumerFailure('observation_lost');
     const work = decodeState<ConsumerWork>(row.consumer_work);
     if (!isDeepStrictEqual(work.bootstrap.consumer, job.consumer)) throw new ConsumerFailure('registration_missing');
     return { work, encoded: row.consumer_work, registration };
   }
-  async function save(work: ConsumerWork, old: string | null, registration: boolean, m: Meter) {
+  async function save(
+    work: ConsumerWork,
+    old: string | null,
+    registration: boolean,
+    m: Meter,
+    page?: Page,
+    phase?: 'saveReservation' | 'saveWindow',
+  ) {
     const encoded = encodeState(work);
     if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
     const q = work.queried ?? work.materializing;
-    const result = await m.sql(
-      registration
-        ? 'UPDATE search.public_filter_registration SET consumer_work=$3,consumer_bootstrap=$5 WHERE (partition_no,id)=($1,$2) AND consumer_work IS NOT DISTINCT FROM $4 RETURNING id'
-        : "UPDATE search.public_filter_observation SET consumer_work=$3,consumer_bootstrap=$5 WHERE (partition_no,observation)=($1,$2) AND consumer_work IS NOT DISTINCT FROM $4 AND state='open' RETURNING observation",
-      [
-        work.registration.partition,
-        registration ? work.registration.id : q!.snapshot.observation,
-        encoded,
-        old,
-        work.bootstrap.id,
-      ],
-    );
-    if (result.rowCount !== 1) throw new ConsumerFailure('source_pending');
+    const values = [
+      work.registration.partition,
+      registration ? work.registration.id : q!.snapshot.observation,
+      encoded,
+      old,
+      work.bootstrap.id,
+    ];
+    const observation = q?.snapshot.observation;
+    const grouped =
+      page && phase && observation && groupControl(page, phase, observation, observation, null, () => values);
+    if (grouped) {
+      if (!(await grouped)) throw new ConsumerFailure('source_pending');
+    } else {
+      const result = await m.sql(
+        registration
+          ? 'UPDATE search.public_filter_registration SET consumer_work=$3,consumer_bootstrap=$5 WHERE (partition_no,id)=($1,$2) AND consumer_work IS NOT DISTINCT FROM $4 RETURNING id'
+          : "UPDATE search.public_filter_observation SET consumer_work=$3,consumer_bootstrap=$5 WHERE (partition_no,observation)=($1,$2) AND consumer_work IS NOT DISTINCT FROM $4 AND state='open' RETURNING observation",
+        values,
+      );
+      if (result.rowCount !== 1) throw new ConsumerFailure('source_pending');
+    }
     m.cost.frontierWrites++;
     // The saved enrollment lets the next worker recover the open PIT even
     // when a later step on this delivery fails.
@@ -2653,7 +2675,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       if ('representation' in plan !== mixed || ('purpose' in plan && mixed))
         return m.unavailable('registration_missing');
-      const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m);
+      if (page && cut.bookPopulation) page.bookPopulation = cut.bookPopulation;
+      const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m, page);
       const { work } = loaded;
       if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, cut.covered))
         return m.unavailable('observation_lost');
@@ -2688,7 +2711,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       if ((page?.rounds ?? work.rounds) >= 3 || size > allowance - (page?.charged ?? work.charged)) return preparing();
       if (page) {
-        if (cut.bookPopulation) page.bookPopulation = cut.bookPopulation;
         await beginPage(page, q, use, prefix, previousEncoded, allowance);
       }
       const started = page ? { start: page.start! } : await observe(q, null, undefined, m, context);
@@ -2705,7 +2727,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         work.rounds++;
         work.charged += size;
       }
-      let encoded = await save(work, loaded.encoded, false, m);
+      let encoded = await save(work, loaded.encoded, false, m, page, 'saveReservation');
       let raw: RetainedWindow['raw'];
       let exhausted: boolean;
       let total: SearchResult['total'] | undefined;
@@ -2805,7 +2827,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.queried = q;
       work.execution = execution;
       work.frontier = null;
-      encoded = await save(work, encoded, false, m);
+      encoded = await save(work, encoded, false, m, page, 'saveWindow');
       // The native Book page's FINAL validates the retained children, input
       // boundary, current coverage and own rows before publishing the result.
       if (!page?.bookCut) {
@@ -3671,18 +3693,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             consumed > 200
           )
             throw new ConsumerFailure('observation_lost');
-          const result = await pageSql(
+          await pageControl(
             page,
+            'consume',
+            page.queried.snapshot.observation,
+            page.id,
             { points: 3, keys: 6, writes: 1 },
-            `WITH locked AS MATERIALIZED (
-            SELECT p.partition_no,p.id FROM search.public_filter_coverage_page p
-            JOIN search.public_filter_execution e ON (e.partition_no,e.observation,e.id)=(p.partition_no,p.observation,p.tail)
-            WHERE (p.partition_no,p.id)=($1,$2) AND p.state='open' AND p.pending IS NULL
-              AND p.tail=$3 AND p.tail_consumed IS NULL AND e.page_id=p.id AND e.page_status='complete'
-              AND $4::integer<=e.page_raw
-            FOR UPDATE OF p)
-          UPDATE search.public_filter_coverage_page p SET tail_consumed=$4,revision=p.revision+1,work=$5
-          FROM locked l WHERE (p.partition_no,p.id)=(l.partition_no,l.id) RETURNING p.id`,
             () => [
               locatorHome(page.queried!.snapshot.observation),
               page.id,
@@ -3691,7 +3707,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               encodeState(page.m.cost),
             ],
           );
-          if (result.rowCount !== 1) throw new ConsumerFailure('observation_lost');
         }),
       finish: () =>
         run(async () => {
@@ -3701,12 +3716,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           // Last physical/copy check belongs before the CURRENT Source role. No
           // dependent native/owner work is allowed after that role succeeds.
           await physical(page.queried, page.m, context);
-          const sealed = await pageSql(
+          await pageControl(
             page,
+            'seal',
+            page.queried.snapshot.observation,
+            page.id,
             { points: 1, keys: 2, writes: 1 },
-            `UPDATE search.public_filter_coverage_page SET state='sealed',revision=revision+1,work=$5
-           WHERE (partition_no,id)=($1,$2) AND state='open' AND pending IS NULL AND tail=$3 AND tail_consumed IS NOT NULL
-             AND deadline=$4 RETURNING id`,
             () => [
               locatorHome(page.queried!.snapshot.observation),
               page.id,
@@ -3715,7 +3730,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               encodeState(page.m.cost),
             ],
           );
-          if (sealed.rowCount !== 1) throw new ConsumerFailure('observation_lost');
           const final = await observe(page.queried, page.start, page.tail, page.m, context, page);
           if (!observationIsDisclosableFromUnknown(final)) throw new ConsumerFailure('source_pending');
           page.m.check();
