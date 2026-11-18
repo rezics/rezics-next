@@ -15,6 +15,7 @@ import {
   type CreditSearchWitness,
 } from '../search/credit-search.ts';
 import { canonicalCreators, type CreditCreatorSnapshot, type PublicCreator } from './credit-search-creators.ts';
+import { withReadTransaction } from './read.ts';
 import {
   digestOf,
   installedLimits,
@@ -166,6 +167,14 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
       if (input.observation !== null && input.observation !== observation)
         return { state: 'current', workId, observation, entries: [], next: null };
       const seek = await selectedCredits(pool, cut.work, plan.properties, after, limits.creditsPerPage + 1);
+      if (input.observation === null && after === null && seek.length === 0)
+        return {
+          state: 'current',
+          workId,
+          observation: observationOf(cut, 'empty-selection'),
+          entries: [],
+          next: null,
+        };
       const pageRows = seek.slice(0, limits.creditsPerPage);
       // The lookahead row only proves another page exists. The cursor is the last row returned, because the next
       // seek is strictly after it; a cursor on the lookahead row would skip that credit.
@@ -226,7 +235,26 @@ export function createCreditSearchSource(pool: Pool, routeKey?: Uint8Array): Cre
 
     async unchanged(workId, observation) {
       const cut = await workCut(pool, workId);
-      if (cut === 'moved' || cut === 'unavailable' || !currentObservation(cut, observation)) return false;
+      if (cut === 'moved' || cut === 'unavailable') return false;
+      if (observationOf(cut, 'empty-selection') === observation) {
+        // A truly empty native selection has no foreign creator dependencies.
+        // Recheck the exact work and one raw selected key on one fresh snapshot.
+        return withReadTransaction(pool, async () => {
+          const current = await workCut(pool, workId);
+          if (
+            current === 'moved' ||
+            current === 'unavailable' ||
+            !publicWorkCut(current) ||
+            observationOf(current, 'empty-selection') !== observation
+          )
+            return false;
+          const plan = await creditPlan(pool, current.work);
+          return (
+            plan !== 'unsupported' && (await selectedCredits(pool, current.work, plan.properties, null, 1)).length === 0
+          );
+        });
+      }
+      if (!currentObservation(cut, observation)) return false;
       const plan = await creditPlan(pool, cut.work);
       if (plan === 'unsupported') return false;
       const limits = installedLimits(CREDIT_SEARCH_LIMITS);

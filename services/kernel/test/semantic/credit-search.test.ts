@@ -161,10 +161,8 @@ test('installed adapter and Search receiver match VN aliases and anime homonyms'
     string,
     any
   >;
-  const role = (await ok('/v1/subjects', { type: 'skos:Concept', labels: { en: 'Lead voice' } }, 201)).subject as Record<
-    string,
-    any
-  >;
+  const role = (await ok('/v1/subjects', { type: 'skos:Concept', labels: { en: 'Lead voice' } }, 201))
+    .subject as Record<string, any>;
   const anime = (
     await ok(
       '/v1/subjects',
@@ -277,6 +275,41 @@ test('an unready native selection reports preparing, resumes and then returns co
   expect(complete.names.map((name) => name.name.value)).toEqual(
     expect.arrayContaining(['Resumed Author', 'Resume Pen Name']),
   );
+});
+
+test('an empty Book credit cut survives unrelated writes and expires when the Book gains a credit', async () => {
+  const work = (await ok('/v1/subjects', { type: 'schema:Book', labels: { en: 'Book without credits' } }, 201)).subject;
+  const initial = await receiveCreditSearch(adapter, work.id);
+  expect(initial).toMatchObject({ state: 'complete', names: [] });
+  if (initial.state !== 'complete') throw new Error('complete empty projection');
+
+  const author = await person('New Book Author');
+  expect(await adapter.unchanged(work.id, initial.observation)).toBe(true);
+
+  const { candidate } = await ok(
+    `/v1/subjects/${work.id}/candidates`,
+    {
+      statement: {
+        ...statement('schema:author', author.id),
+        references: [{ parts: [statement('schema:url', 'https://example.test/credit')] }],
+      },
+    },
+    201,
+  );
+  await ok(`/v1/subjects/${work.id}/candidates/${candidate}:accept`, { context: GLOBAL_CONTEXT, expected_head: null });
+  await ok(`/v1/subjects/${work.id}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'schema:author',
+    target: author.id,
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    expected_head: null,
+  });
+  expect(await adapter.unchanged(work.id, initial.observation)).toBe(false);
+  expect(await receiveCreditSearch(adapter, work.id)).toMatchObject({
+    state: 'complete',
+    names: [expect.objectContaining({ targetId: author.id })],
+  });
 });
 
 test('credit, name, concealment, merge and release changes invalidate the original observation', async () => {

@@ -963,6 +963,8 @@ existing pipeline publishes preparing, incomplete, changed or complete. Hidden o
 omitted, not counted as incomplete. Identity `absent` follows the public redirect chain; pending identity is
 preparing; any other unavailable identity (moved, bootstrap or missing owner) is unavailable, because a redirect
 chain never stands in for unknown identity.
+An empty raw credit selection carries the exact work and owner epoch. Revalidation checks the current work and
+one selected key in a single snapshot. Selections containing any raw credit retain the catalogue dependency cut.
 
 Decision: CreditSearchSource is a public Search contract; the native producer is a public Semantic entry composed
 by `createKernelCreditSearchSource`, not the Semantic barrel, `subjectSource` or `createRatedSubjectSource`, so it

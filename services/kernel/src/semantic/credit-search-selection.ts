@@ -87,7 +87,7 @@ export async function workCut(pool: Pool, workId: string): Promise<WorkCut | 'un
     })) as WorkHeader[];
     const work = rows[0];
     if (!work) return 'unavailable';
-    return { work, generation, ready: work.selection_ready && work.current_revision !== null };
+    return { work, epoch: home.epoch, generation, ready: work.selection_ready && work.current_revision !== null };
   });
 }
 

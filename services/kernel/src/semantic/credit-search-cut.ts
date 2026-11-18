@@ -31,6 +31,7 @@ export type WorkHeader = {
 
 export type WorkCut = Readonly<{
   work: WorkHeader;
+  epoch: number;
   generation: string;
   ready: boolean;
 }>;
@@ -60,7 +61,7 @@ export function digestOf(value: unknown): string {
 }
 
 /** Work header plus search canonical generation. Creator names live in nameRevision; paging stays stable. */
-export function observationOf(cut: WorkCut): string {
+export function observationOf(cut: WorkCut, scope: 'catalogue' | 'empty-selection' = 'catalogue'): string {
   return digestOf([
     cut.work.id,
     cut.work.type,
@@ -70,7 +71,7 @@ export function observationOf(cut: WorkCut): string {
     cut.work.currentRelease,
     cut.work.current_revision,
     cut.work.selection_ready,
-    cut.generation,
+    scope === 'empty-selection' ? ['empty-selection', cut.epoch] : cut.generation,
   ]);
 }
 
