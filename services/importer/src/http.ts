@@ -1,5 +1,7 @@
 import {
   BATCH_LIMIT,
+  BATCH_CONSTRAINT_NAME,
+  BATCH_SQLSTATE,
   BATCH_WRITE_FAILURE_STAGES,
   type BatchWriteFailureStage,
   type BatchWriteResult,
@@ -31,6 +33,8 @@ export type ReviewedCatalogueProblem = Readonly<{
   contention_retries?: number;
   command_index?: number;
   failure_stage?: BatchWriteFailureStage;
+  sqlstate?: string;
+  constraint_name?: string;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -68,6 +72,8 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
   const command_index =
     typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < BATCH_LIMIT ? index : undefined;
   const failure_stage = BATCH_WRITE_FAILURE_STAGES.find((stage) => stage === value.failure_stage);
+  const sqlstate = publicString(value.sqlstate, BATCH_SQLSTATE, 5);
+  const constraint_name = sqlstate && publicString(value.constraint_name, BATCH_CONSTRAINT_NAME, 63);
   return {
     ...(status === undefined ? {} : { status }),
     ...(type === undefined ? {} : { type }),
@@ -80,6 +86,8 @@ export function reviewedCatalogueProblem(value: unknown): ReviewedCatalogueProbl
     ...(contention_retries === undefined ? {} : { contention_retries }),
     ...(command_index === undefined ? {} : { command_index }),
     ...(failure_stage === undefined ? {} : { failure_stage }),
+    ...(sqlstate === undefined ? {} : { sqlstate }),
+    ...(constraint_name === undefined ? {} : { constraint_name }),
   };
 }
 

@@ -44,7 +44,7 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error('Bounded database read connection became uncertain');
 }
 
-function isPostgresServerError(error: unknown): error is { code: string; severity: 'ERROR' } {
+export function isPostgresServerError(error: unknown): error is { code: string; severity: 'ERROR' } {
   if (typeof error !== 'object' || error === null) return false;
   return (
     'code' in error &&
