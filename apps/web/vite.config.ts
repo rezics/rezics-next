@@ -189,19 +189,20 @@ function filePathOf(id: string): string {
 
 function urlpatternPolyfillReplacement(id: string): string | undefined {
   const path = filePathOf(id);
+  // Paraglide's dist/urlpattern-polyfill/index.js is a wrapper whose own module path must be preserved.
   if (
     id === 'urlpattern-polyfill' ||
     path === urlpatternPolyfillCjs.replace(/\\/g, '/') ||
     path === urlpatternPolyfillEsm.replace(/\\/g, '/') ||
-    path.endsWith('/urlpattern-polyfill/index.cjs') ||
-    path.endsWith('/urlpattern-polyfill/index.js')
+    path.endsWith('/node_modules/urlpattern-polyfill/index.cjs') ||
+    path.endsWith('/node_modules/urlpattern-polyfill/index.js')
   ) {
     return urlpatternPolyfillEsm;
   }
   if (
     id === 'urlpattern-polyfill/urlpattern' ||
-    path.endsWith('/urlpattern-polyfill/dist/urlpattern.cjs') ||
-    path.endsWith('/urlpattern-polyfill/dist/urlpattern.js')
+    path.endsWith('/node_modules/urlpattern-polyfill/dist/urlpattern.cjs') ||
+    path.endsWith('/node_modules/urlpattern-polyfill/dist/urlpattern.js')
   ) {
     return urlpatternPolyfillDistEsm;
   }
