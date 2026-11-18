@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
+import { FeedItemSchema } from '../../src/content/feed-contract.ts';
 import { feedDiscoveryItem } from '../../src/content/feed-discovery.ts';
 import type { DiscoveryUnionHit } from '../../src/search/discovery.ts';
 
@@ -139,4 +141,46 @@ test('mismatched public owner, kind, route or summary identity cannot become a f
     expect(() => feedDiscoveryItem(hit as DiscoveryUnionHit)).toThrow(
       expect.objectContaining({ code: 'dependency_unavailable' }),
     );
+});
+
+test('Search enrichment stays outside the closed Home response', () => {
+  const enriched: DiscoveryUnionHit[] = [
+    {
+      ...account,
+      summary: {
+        kind: 'account',
+        value: {
+          ...account.summary.value,
+          context: { biography: { state: 'absent' }, followTarget: { state: 'unavailable' } },
+        },
+      },
+    },
+    {
+      ...review,
+      summary: {
+        kind: 'review',
+        value: {
+          ...review.summary.value,
+          source: { openingRevisionId: reviewId, sourceVersion: '1' },
+          searchContext: { state: 'unavailable' },
+        },
+      },
+    },
+    {
+      ...space,
+      summary: {
+        kind: 'space',
+        value: {
+          ...space.summary.value,
+          presentation: { identity: { kind: 'space', id: spaceId, name: 'Quiet room' }, avatar: { state: 'none' } },
+        },
+      },
+    },
+  ];
+  for (const [index, hit] of enriched.entries()) {
+    const original = [account, review, space][index]!;
+    const item = feedDiscoveryItem(hit);
+    expect(item.summary).toEqual(original.summary.value);
+    expect(Value.Check(FeedItemSchema(), item)).toBe(true);
+  }
 });

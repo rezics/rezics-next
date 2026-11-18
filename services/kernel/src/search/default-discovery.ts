@@ -90,6 +90,7 @@ export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & {
 };
 export type DefaultDiscoverySearch = Readonly<{
   search: DiscoverySearch;
+  feed: DiscoverySearch;
   open: RetainedDiscoverySearch;
   close(): Promise<void>;
 }>;
@@ -491,6 +492,51 @@ export function createDefaultDiscoverySearch(
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
+  const revalidateAccounts = async (page: DiscoveryPage, context: DiscoveryReadContext) => {
+    const accounts = page.hits.filter((hit) => hit.summary.kind === 'account');
+    if (!accounts.length) return;
+    const current = await readAccountDiscoverySummaries(
+      { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
+      accounts.map((hit) => hit.key.id),
+      { languages: context.languages ?? ['en'], context: true },
+    );
+    if (accounts.some((hit) => !isDeepStrictEqual(hit.summary.value, current.get(hit.key.id))))
+      throw new ProblemError('search_restart_required');
+  };
+  const feed: DiscoverySearch = (principal, inputRequest, inputContext) => {
+    const request = ownDiscoveryRequest(inputRequest);
+    const context = {
+      ...inputContext,
+      actor: structuredClone(inputContext.actor),
+      languages: request.languages ?? ['en'],
+    };
+    const operation = (async () => {
+      const read = await open(principal, request, context);
+      return readAdmittedDiscoveryPage(read, async (page) => {
+        try {
+          // Content composes viewer data and uses the current Review witness for qualification.
+          const [reviews, accounts] = await Promise.allSettled([
+            prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context),
+            revalidateAccounts(page, context),
+          ]);
+          if (reviews.status === 'rejected') throw reviews.reason;
+          if (accounts.status === 'rejected') throw accounts.reason;
+          return { page: await reviews.value.finish(page), viewerCurrent: true };
+        } catch (error) {
+          if (
+            error instanceof ProblemError ||
+            error instanceof SearchOperationError ||
+            error instanceof CollectionDiscoveryReadinessError
+          )
+            throw error;
+          throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+        }
+      });
+    })();
+    pending.add(operation);
+    void operation.finally(() => pending.delete(operation)).catch(() => {});
+    return operation;
+  };
   const search: DiscoverySearch = (...args) => {
     const [principal, inputRequest, inputContext] = args;
     const ownedRequest = ownDiscoveryRequest(inputRequest);
@@ -570,16 +616,7 @@ export function createDefaultDiscoverySearch(
               ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'subject') }
               : follows;
           // Recheck public Account context after private preparation without changing eligibility/counts.
-          const accountHits = enriched.page.hits.filter((hit) => hit.summary.kind === 'account');
-          if (accountHits.length) {
-            const currentAccounts = await readAccountDiscoverySummaries(
-              { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
-              accountHits.map((hit) => hit.key.id),
-              { languages, context: true },
-            );
-            if (accountHits.some((hit) => !isDeepStrictEqual(hit.summary.value, currentAccounts.get(hit.key.id))))
-              throw new ProblemError('search_restart_required');
-          }
+          await revalidateAccounts(enriched.page, context);
           if (!(await spaces.finish())) throw new ProblemError('search_restart_required');
           const reviewedPage = await reviews.finish({ ...spaces.page, collectionFollows, accountFollows });
           const viewerCurrent =
@@ -608,6 +645,7 @@ export function createDefaultDiscoverySearch(
   };
   return {
     search,
+    feed,
     open,
     close() {
       closed = true;

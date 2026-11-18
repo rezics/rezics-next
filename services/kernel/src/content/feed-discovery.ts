@@ -36,6 +36,7 @@ export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { s
     case 'account': {
       if (key.owner !== 'accounts' || key.kind !== 'account' || key.id !== summary.value.id)
         throw new ProblemError('dependency_unavailable');
+      const { id, accountKind, handle, displayName, automated, operatorId, avatar, verifiedAgent } = summary.value;
       return {
         ...common,
         key: {
@@ -44,7 +45,7 @@ export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { s
           route: key.route,
           id: key.id,
         },
-        summary: summary.value,
+        summary: { id, accountKind, handle, displayName, automated, operatorId, avatar, verifiedAgent },
         destination: {
           kind: 'account',
           id: key.id,
@@ -65,25 +66,40 @@ export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { s
     case 'review': {
       if (key.owner !== 'content' || key.kind !== 'review' || key.id !== summary.value.id)
         throw new ProblemError('dependency_unavailable');
+      const { id, kind, title, author, excerpt, subject } = summary.value;
       return {
         ...common,
         key: { owner: 'content', kind: 'review', route: key.route, id: key.id },
-        summary: summary.value,
-        destination: { kind: 'thread', id: key.id, title: summary.value.title },
+        summary: {
+          id,
+          kind,
+          title,
+          ...(author === undefined ? {} : { author }),
+          ...(excerpt === undefined ? {} : { excerpt }),
+          ...(subject === undefined ? {} : { subject }),
+        },
+        destination: { kind: 'thread', id: key.id, title },
       };
     }
     case 'space': {
       if (key.owner !== 'community' || key.kind !== 'space' || key.id !== summary.value.id)
         throw new ProblemError('dependency_unavailable');
+      const { id, title, address, summary: description, realm } = summary.value;
       return {
         ...common,
         key: { owner: 'content', kind: 'space', route: key.route, id: key.id },
-        summary: summary.value,
+        summary: {
+          id,
+          title,
+          address,
+          ...(description === undefined ? {} : { summary: description }),
+          ...(realm === undefined ? {} : { realm }),
+        },
         destination: {
           kind: 'space',
           id: key.id,
-          title: summary.value.title,
-          address: summary.value.address,
+          title,
+          address,
         },
       };
     }

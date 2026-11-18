@@ -316,6 +316,10 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               if (!discovery) throw new Error('Discovery Access composition is incomplete');
               return discovery.search(principal, request, context);
             },
+            feedDiscovery: (principal, request, context) => {
+              if (!discovery) throw new Error('Discovery Access composition is incomplete');
+              return discovery.feed(principal, request, context);
+            },
             search,
           }),
       ...(commerce === null
