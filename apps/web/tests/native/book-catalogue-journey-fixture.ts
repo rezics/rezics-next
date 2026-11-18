@@ -219,7 +219,7 @@ async function createSubject(
   type: BookCatalogueType,
   label: string,
   text: string,
-  relations: Record<string, unknown[]> = {},
+  { relations = {}, authorization }: { relations?: Record<string, unknown[]>; authorization?: string } = {},
 ): Promise<BookCatalogueIdentity> {
   const hasSynopsis = authoredProperties(bundledRelease, type).includes('schema:abstract');
   if (hasSynopsis !== (type !== 'bf:Instance'))
@@ -240,10 +240,14 @@ async function createSubject(
     '/v1/subjects',
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': idempotencyKey(),
+        ...(authorization && { authorization }),
+      },
       body: JSON.stringify(input),
     },
-    'editor',
+    authorization ? undefined : 'editor',
   );
   const body = await responseJson<{ subject: { id: string; type: string } }>(
     response,
@@ -387,12 +391,15 @@ async function createLibraryEntry(
 
 export async function createBobBookEntry(stack: NativeWebStack, state: NativeState) {
   const marker = `bookshelf${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  // The editor bearer from catalogue setup can expire during the browser journey.
+  const { authorization } = await stack.authPersona('editor', ['subject:create']);
   const book = await createSubject(
     stack,
     marker,
     'schema:Book',
     `Native Book Shelf ${marker}: Harbor Almanac`,
     'A harbor keeper records the first winter at a new lighthouse.',
+    { authorization },
   );
   const entry = await createLibraryEntry(stack, book, state, 'bob');
   return { book, entry };
@@ -757,7 +764,9 @@ export async function startBookCatalogueJourneyFixture(
       `${prefix}: The Last Ferry`,
       'On the last ferry to Gull Lantern, Mara finds a map written in the margin of an ordinary atlas.',
       {
-        'wdt:P179': [relation('wdt:P179', series.id, `https://example.org/native-book-catalogue/${marker}/series`)],
+        relations: {
+          'wdt:P179': [relation('wdt:P179', series.id, `https://example.org/native-book-catalogue/${marker}/series`)],
+        },
       },
     );
     if (shelfOnly) {
@@ -777,9 +786,11 @@ export async function startBookCatalogueJourneyFixture(
       `${prefix}: The Last Ferry, first edition`,
       "A blue paper jacket preserves the author's first printed arrangement of The Last Ferry.",
       {
-        'schema:exampleOfWork': [
-          relation('schema:exampleOfWork', book.id, `https://example.org/native-book-catalogue/${marker}/work`),
-        ],
+        relations: {
+          'schema:exampleOfWork': [
+            relation('schema:exampleOfWork', book.id, `https://example.org/native-book-catalogue/${marker}/work`),
+          ],
+        },
       },
     );
     const expected = [series, book, edition];

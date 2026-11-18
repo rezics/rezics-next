@@ -216,11 +216,10 @@ export async function assertBookShelfSignInReturn(
     });
     expect(read.aliceEntry, 'the current native shelf excludes Alice’s exact Book entry').toBe(false);
   }
-  const otherEntry = await stack.kernel(
-    `/v1/libraryEntries/${encodeURIComponent(aliceBook.id)}?view=FULL`,
-    undefined,
-    'bob',
-  );
+  const { authorization } = await stack.authPersona('bob', ['library_entry:read']);
+  const otherEntry = await stack.kernel(`/v1/libraryEntries/${encodeURIComponent(aliceBook.id)}?view=FULL`, {
+    headers: { authorization },
+  });
   expect(otherEntry.status, 'Bob cannot read the Book entry owned by Alice').toBe(404);
   expect(problemCode(await otherEntry.text()), 'cross-viewer Library entry outcome').toBe('not_found');
   stage('other-person exact shelf', {
