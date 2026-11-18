@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
 import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { sampleNativeMemory, type NativeMemoryObservation } from './native-memory.ts';
-import { readBundledWebStages } from '../../scripts/bundled-web-startup.ts';
+import { readBundledWebStages, webReadinessPath } from '../../scripts/bundled-web-startup.ts';
 import { nativeViteEnvironment } from './vite-environment.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -437,7 +437,7 @@ function startWeb(
         let phase = 'headers';
         let outcome = 'unexpected-status';
         try {
-          const response = await fetchNativeWebsite(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
+          const response = await fetchNativeWebsite(`${origin}${webReadinessPath}`, {
             redirect: 'manual',
             signal,
           });
