@@ -46,7 +46,7 @@ nativeTest(
 
 async function manageAccountSecurity() {
   const webOrigin = new URL(stack.web).origin;
-  const newcomerContext = await auth.context('newcomer');
+  const newcomerContext = await auth.newContext('newcomer');
   const newcomerPage = await newcomerContext.newPage();
   newcomerPage.setDefaultTimeout(15_000);
   const newcomerUrls = navigationUrls(newcomerPage);
@@ -57,7 +57,9 @@ async function manageAccountSecurity() {
   const signup = newcomerPage.getByRole('link', { name: /create an account|sign up/i }).first();
   await signup.click();
   await newcomerPage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/signup');
-  expect(new URL(newcomerPage.url()).search).toBe(authorizationQuery);
+  expect(new URL(newcomerPage.url()).search === authorizationQuery, 'Signup preserves the authorization query').toBe(
+    true,
+  );
   await newcomerPage.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   const fields = newcomerPage.locator('#signup-form input');
   const newcomerHandle = `native-auth-${crypto.randomUUID().slice(0, 8)}`;
@@ -94,7 +96,9 @@ async function manageAccountSecurity() {
   expect(newcomerUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
   await newcomerPage.reload({ waitUntil: 'domcontentloaded' });
   await newcomerPage.locator('#account-menu-button').waitFor({ state: 'visible' });
-  expect((await exactCookie(newcomerContext, stack.web, '__Host-rezics_session'))?.value).toBe(newcomerCookie?.value);
+  const reloadedNewcomerCookie = await exactCookie(newcomerContext, stack.web, '__Host-rezics_session');
+  expect(reloadedNewcomerCookie?.value === newcomerCookie?.value, 'Reload preserves the signup session').toBe(true);
+  await newcomerContext.close();
 
   const aliceContext = await auth.context('alice');
   const alicePage = await aliceContext.newPage();
@@ -123,12 +127,14 @@ async function manageAccountSecurity() {
     fixture.libraryTarget,
   );
   expect(bobSignIn.status()).toBe(200);
+  const aliceCookie = await exactCookie(aliceContext, stack.web, '__Host-rezics_session');
+  const bobCookie = await exactCookie(bobContext, stack.web, '__Host-rezics_session');
+  expect(aliceCookie).toBeDefined();
+  expect(bobCookie).toBeDefined();
   expect(aliceContext).not.toBe(bobContext);
-  expect((await exactCookie(aliceContext, stack.web, '__Host-rezics_session'))?.value).not.toBe(
-    (await exactCookie(bobContext, stack.web, '__Host-rezics_session'))?.value,
-  );
-  expect(auth.context('alice')).toBe(aliceContext);
-  expect(auth.context('bob')).toBe(bobContext);
+  expect(aliceCookie?.value !== bobCookie?.value, 'Alice and Bob have distinct Website sessions').toBe(true);
+  expect(await auth.context('alice')).toBe(aliceContext);
+  expect(await auth.context('bob')).toBe(bobContext);
 
   await alicePage.locator('#account-menu-button').click();
   await alicePage.locator('[data-account-security-settings]').click();
@@ -353,7 +359,6 @@ async function manageAccountSecurity() {
   await wrongRpContext.close();
   await aliceContext.close();
   await bobContext.close();
-  await newcomerContext.close();
 }
 
 async function signOutWebsiteAndAuth(page: Page): Promise<void> {
