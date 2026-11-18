@@ -16,19 +16,12 @@ import { expect } from 'playwright/test';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest, settledWithin } from './lifecycle.ts';
 import {
   createNativeDocumentAuthoringFixture,
+  seedDocumentHistory,
   type NativeDocumentAuthoringFixture,
 } from './native-document-authoring-fixture.ts';
 import type { NativeKernelRequest } from './stack.ts';
 
 const timeout = 600_000;
-const lifecycle = new NativeTestLifecycle('native document authoring');
-let fixture: NativeDocumentAuthoringFixture;
-
-nativeBeforeAll(lifecycle, timeout, async () => {
-  fixture = await createNativeDocumentAuthoringFixture();
-});
-
-nativeAfterAll(lifecycle, timeout);
 
 type Post = {
   id: string;
@@ -97,8 +90,8 @@ async function expectKeyboardReachable(page: Page, target: ReturnType<Page['loca
   throw new Error('Keyboard tab order did not reach the document link');
 }
 
-async function createGrowthThreads(count: number): Promise<void> {
-  for (let index = 0; index < count; index++) {
+async function createGrowthThreads(fixture: NativeDocumentAuthoringFixture, from: number, to: number): Promise<void> {
+  for (let index = from; index < to; index++) {
     const writer = fixture.growthWriters[index % fixture.growthWriters.length]!;
     await json<{ thread: { id: string } }>(
       await fixture.stack.kernel(
@@ -141,14 +134,20 @@ function isMountedRevisionRead(request: NativeKernelRequest, postId: string): bo
   );
 }
 
-function isHistoryFunctionRead(href: string, postId: string): boolean {
+function isHistoryFunctionRead(fixture: NativeDocumentAuthoringFixture, href: string, postId: string): boolean {
   const url = new URL(href);
   if (url.origin !== new URL(fixture.stack.web).origin || !url.pathname.startsWith('/_serverFn/')) return false;
   const payload = url.searchParams.get('payload');
   return payload?.includes('"post-history"') === true && payload.includes(`"${postId}"`);
 }
 
-async function observeMountedHistory(page: Page, postId: string, controlId: string | null, nativeFrom: number) {
+async function observeMountedHistory(
+  fixture: NativeDocumentAuthoringFixture,
+  page: Page,
+  postId: string,
+  controlId: string | null,
+  nativeFrom: number,
+) {
   const [mounted, native] = await Promise.all([
     settledWithin(
       page.evaluate(
@@ -206,15 +205,20 @@ async function observeMountedHistory(page: Page, postId: string, controlId: stri
   };
 }
 
-async function measureHistoryReads(pageUrl: string, context: BrowserContext, postId: string): Promise<number> {
+async function measureHistoryReads(
+  fixture: NativeDocumentAuthoringFixture,
+  pageUrl: string,
+  context: BrowserContext,
+  postId: string,
+): Promise<number> {
   const historyPage = await context.newPage();
   const functionResponses: number[] = [];
   let functionFailures = 0;
   historyPage.on('response', (response) => {
-    if (isHistoryFunctionRead(response.url(), postId)) functionResponses.push(response.status());
+    if (isHistoryFunctionRead(fixture, response.url(), postId)) functionResponses.push(response.status());
   });
   historyPage.on('requestfailed', (request) => {
-    if (isHistoryFunctionRead(request.url(), postId)) functionFailures++;
+    if (isHistoryFunctionRead(fixture, request.url(), postId)) functionFailures++;
   });
   try {
     historyPage.setDefaultTimeout(30_000);
@@ -233,7 +237,7 @@ async function measureHistoryReads(pageUrl: string, context: BrowserContext, pos
     try {
       await expect(panel.getByRole('link', { name: 'Version 2', exact: true })).toBeVisible();
     } catch (error) {
-      const observation = await observeMountedHistory(historyPage, postId, controlId, before);
+      const observation = await observeMountedHistory(fixture, historyPage, postId, controlId, before);
       console.info(
         `native-document-authoring-growth-history ${JSON.stringify({ functionResponses, functionFailures, ...observation })}`,
       );
@@ -250,6 +254,14 @@ async function measureHistoryReads(pageUrl: string, context: BrowserContext, pos
 }
 
 describe('native document authoring', () => {
+  const lifecycle = new NativeTestLifecycle('native document authoring');
+  let fixture: NativeDocumentAuthoringFixture;
+
+  nativeBeforeAll(lifecycle, timeout, async () => {
+    fixture = await createNativeDocumentAuthoringFixture();
+  });
+  nativeAfterAll(lifecycle, timeout);
+
   nativeTest(
     'the served composer preserves authored documents, revisions, and access through native reads',
     timeout,
@@ -632,12 +644,14 @@ describe('native document authoring', () => {
     try {
       await expect(historyVersions).toHaveCount(2);
     } catch (error) {
-      const observation = await observeMountedHistory(page, original.id, historyControlId, historyNativeFrom);
+      const observation = await observeMountedHistory(fixture, page, original.id, historyControlId, historyNativeFrom);
       const functionResponses = network
-        .filter(({ url }) => isHistoryFunctionRead(url, original.id))
+        .filter(({ url }) => isHistoryFunctionRead(fixture, url, original.id))
         .slice(0, 4)
         .map(({ status }) => status);
-      const functionFailures = requestFailures.filter(({ url }) => isHistoryFunctionRead(url, original.id)).length;
+      const functionFailures = requestFailures.filter(({ url }) =>
+        isHistoryFunctionRead(fixture, url, original.id),
+      ).length;
       const evidence = {
         documentStatus: reloadedThread?.status() ?? null,
         sameThreadPath: reloadedThread ? new URL(reloadedThread.url()).pathname === new URL(page.url()).pathname : null,
@@ -712,20 +726,28 @@ describe('native document authoring', () => {
     expect(forbidden.status).toBe(403);
     expect(pageErrors).toEqual([]);
     expect(network.some(({ url, status }) => url.includes('/v1/posts/') && status >= 400)).toBe(false);
-
-    const growthRequests: { unrelated: number; requests: number }[] = [];
-    let unrelated = 0;
-    for (const target of [1, 8, 64]) {
-      await createGrowthThreads(target - unrelated);
-      unrelated = target;
-      const requests = await measureHistoryReads(threadUrl, aliceJourney.context, original.id);
-      growthRequests.push({ unrelated, requests });
-    }
-    console.log(`native-document-authoring-growth ${JSON.stringify(growthRequests)}`);
-    expect(growthRequests.map(({ requests }) => requests)).toEqual([
-      growthRequests[0]!.requests,
-      growthRequests[0]!.requests,
-      growthRequests[0]!.requests,
-    ]);
   }
+});
+
+nativeTest('mounted revision history keeps its request bound as unrelated threads grow', timeout, async () => {
+  const fixture = await createNativeDocumentAuthoringFixture();
+  const { threadId, postId } = await seedDocumentHistory(fixture);
+  const threadUrl = `${fixture.stack.web}/en/threads/${threadId}`;
+  const alice = await fixture.auth.signIn('alice', { sessionOnly: true });
+  await alice.continueOnPage().close();
+
+  const growthRequests: { unrelated: number; requests: number }[] = [];
+  let unrelated = 0;
+  for (const target of [1, 8, 64]) {
+    await createGrowthThreads(fixture, unrelated, target);
+    unrelated = target;
+    const requests = await measureHistoryReads(fixture, threadUrl, alice.context, postId);
+    growthRequests.push({ unrelated, requests });
+  }
+  console.log(`native-document-authoring-growth ${JSON.stringify(growthRequests)}`);
+  expect(growthRequests.map(({ requests }) => requests)).toEqual([
+    growthRequests[0]!.requests,
+    growthRequests[0]!.requests,
+    growthRequests[0]!.requests,
+  ]);
 });
