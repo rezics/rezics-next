@@ -109,6 +109,7 @@ export async function createBookComposition(setupDeadline: number) {
         if (originals) {
           const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', {
             text: marker,
+            filter: { type: { in: BOOK_CATALOGUE_TYPES } },
             languages: ['en'],
           });
           if (Date.now() >= until) break;
