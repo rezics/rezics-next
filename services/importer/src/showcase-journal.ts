@@ -755,7 +755,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 export function captureShowcaseCommands<Port extends CrossMediaPort>(port: Port, journal: ShowcaseJournal): Port {
   return {
     ...port,
-    async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
+    async batch(request: BatchWriteRequest, signal?: AbortSignal, retry?: 'admission'): Promise<BatchWriteResult> {
       for (const command of request.commands) {
         if (command.op !== 'create' && command.op !== 'propose') continue;
         try {
@@ -764,7 +764,7 @@ export function captureShowcaseCommands<Port extends CrossMediaPort>(port: Port,
           throw recordSeedBatchFailure(error, 'showcase-prepare', 'local-failure', command);
         }
       }
-      const result = await port.batch(request);
+      const result = await port.batch(request, signal, retry);
       const byKey = new Map(result.results.map((row) => [row.key, row]));
       for (const command of request.commands) {
         if (command.op !== 'create' && command.op !== 'propose') continue;

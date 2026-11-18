@@ -15,6 +15,7 @@ const SUBJECT_PATH = /^\/v1\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 export type ImportRetryState = Readonly<{
   notBefore?: number;
   deadline: number;
+  batchAdmissionRefused?: true;
   stopped?: 'unrepresentable-delay' | 'wait-limit' | 'total-wait-limit' | 'deadline';
 }>;
 const retryStates = new WeakMap<Response, ImportRetryState>();
