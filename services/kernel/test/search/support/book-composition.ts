@@ -177,9 +177,16 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       );
     }
     const originals: Original[] = [];
+    const editorCredentialWindowMs = 30_000;
+    async function createSubject(type: string, name: string) {
+      // A publication wait or a long growth scale can outlast the editor's bearer.
+      await fixture.renewCredential('editor', editorCredentialWindowMs);
+      return fixture.createSubject(type, name);
+    }
+
     async function createAnchor(type: string, name: string, readBack: boolean) {
       assert(Date.now() < setupDeadline, 'Book catalogue setup expired before Subject creation');
-      const created = await fixture.createSubject(type, readBack ? `${name} ${marker}` : name);
+      const created = await createSubject(type, readBack ? `${name} ${marker}` : name);
       const anchor = { id: created.id, type };
       if (readBack) {
         const response = requireStatus(await fixture.read(created), 200, 'Read the original public Subject');
@@ -219,6 +226,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       published,
     );
     await fixture.grant('editor', ['moderation:hide'], GLOBAL_CONTEXT);
+    await fixture.renewCredential('editor', editorCredentialWindowMs);
     const concealment = requireStatus(
       await fixture.request(
         'editor',
@@ -232,6 +240,7 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     );
     assert.equal(concealment.body.subject, hidden.id);
     assert.equal(concealment.body.visibility, 'hidden');
+    await fixture.renewCredential('steward');
     await publishTypeLists(fixture, [{ route, document }]);
     assert(Date.now() < setupDeadline, 'Book catalogue setup expired while publishing TypeLists');
     const request = (who: 'alice' | 'anonymous' | 'suspended') =>
@@ -301,10 +310,8 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       },
       async grow(from: number, to: number) {
         assert.equal(population.size, from);
-        // Each scale can start after the previous scale's publication wait.
-        await fixture.renewCredential('editor');
         for (let ordinal = from; ordinal < to; ordinal++) {
-          const subject = await fixture.createSubject(
+          const subject = await createSubject(
             BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!,
             `ZZZ catalogue ${ordinal}`,
           );

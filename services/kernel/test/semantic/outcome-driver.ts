@@ -253,7 +253,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
     verifiedAutomated(name: string, operator: Account): Promise<Account>;
     signIn(account: Account): Promise<HttpResponse>;
-    renewCredential(account: Account): Promise<void>;
+    renewCredential(account: Account, minimumLifetimeMs?: number): Promise<void>;
     authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
@@ -412,10 +412,11 @@ async function startDriver(
     const serviceHandler = service.handler.bind(service);
     let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
+    const requestDeadlineMs = 30_000;
     const app = compose({
       receiptKeys,
       pool: runtimePool,
-      requestDeadlineMs: 30_000,
+      requestDeadlineMs,
       ...(options.clock ? { clock: options.clock } : {}),
       routeKey,
       tokens: sessionKeys,
@@ -586,6 +587,22 @@ async function startDriver(
     }
 
     const credentials = new WeakMap<Account, { login: Login; scopes: readonly string[] }>();
+    function bearerClaims(bearer: string): { scope?: unknown; exp?: unknown } {
+      const payload = bearer.split('.')[1];
+      return payload ? JSON.parse(Buffer.from(payload, 'base64url').toString()) : {};
+    }
+
+    async function renewCredential(account: Account, minimumLifetimeMs?: number): Promise<void> {
+      if (completion) throw new Error('Semantic outcome fixture is closed');
+      const original = credentials.get(account);
+      if (!original) throw new Error('Renewal requires an existing native fixture account');
+      if (minimumLifetimeMs !== undefined) {
+        const { exp } = bearerClaims(account.bearer);
+        if (typeof exp === 'number' && exp * 1000 > Date.now() + minimumLifetimeMs) return;
+      }
+      account.bearer = await issue(original.login, original.scopes);
+    }
+
     async function signIn(account: Account): Promise<HttpResponse> {
       if (completion) throw new Error('Semantic outcome fixture is closed');
       const original = credentials.get(account);
@@ -765,13 +782,6 @@ async function startDriver(
         `Collection exposure setup failed: ${collectionExposure.status}: ${JSON.stringify(collectionExposure.body)}`,
       );
 
-    function bearerScopes(bearer: string): string[] {
-      const payload = bearer.split('.')[1];
-      if (!payload) return [];
-      const claim = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { scope?: unknown };
-      return typeof claim.scope === 'string' ? claim.scope.split(' ').filter(Boolean) : [];
-    }
-
     async function grantAccount(
       account: Account,
       actions: string[],
@@ -783,12 +793,14 @@ async function startDriver(
           ? PLATFORM_RESOURCE
           : { route: routeOf(resourceId), id: resourceId };
       if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
-      const held = bearerScopes(grantor.bearer);
+      const { scope } = bearerClaims(grantor.bearer);
+      const held = typeof scope === 'string' ? scope.split(' ').filter(Boolean) : [];
       const holds = (action: string) =>
         held.includes(action) || (action.startsWith('gate:') && action !== 'gate:any' && held.includes('gate:any'));
       const missing = ['access:grant', ...actions].filter((action) => !holds(action));
       if (missing.length)
         throw new Error(`Grant administration failed: 403: governor token missing scopes ${missing.join(', ')}`);
+      await renewCredential(grantor, requestDeadlineMs);
       const response = await send(
         grantor,
         'POST',
@@ -961,12 +973,7 @@ async function startDriver(
         person,
         verifiedAutomated,
         signIn,
-        async renewCredential(account) {
-          if (completion) throw new Error('Semantic outcome fixture is closed');
-          const original = credentials.get(account);
-          if (!original) throw new Error('Renewal requires an existing native fixture account');
-          account.bearer = await issue(original.login, original.scopes);
-        },
+        renewCredential,
         scopeVariant,
         async openFeatures(groups) {
           if (completion) throw new Error('Semantic outcome fixture is closed');
