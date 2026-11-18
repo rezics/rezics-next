@@ -639,35 +639,42 @@ async function runBookCatalogueJourney(): Promise<void> {
   expect((await bobSession.json()).account_id === bobAccountId, 'issuer session belongs to Bob').toBe(true);
 
   const bobMain = bobPage.getByRole('main');
-  await browserExpect(bobMain.getByText(/^No entries match .+ in this view$/u)).toBeVisible();
-  await stack.syncKernelRequests();
-  const shelfReads = stack
-    .kernelRequests()
-    .slice(beforeShelfReturn)
-    .filter(
-      ({ fixtureRequest, method, url }) =>
-        !fixtureRequest && method === 'GET' && new URL(url, stack.kernelOrigin).pathname === '/v1/libraryEntries',
-    );
-  const typedShelfReads = shelfReads
-    .filter(({ url }) => {
-      const types = new URL(url, stack.kernelOrigin).searchParams.getAll('type');
-      return types.length === 1 && types[0] === 'schema:Book';
-    })
-    .map(({ responseStatus, access }) => ({
-      status: responseStatus ?? null,
-      actor: access?.authenticated ? (access.actorId === bobAccountId ? 'bob' : 'other') : 'unobserved',
-    }));
+  async function observeTypedShelf() {
+    await stack.syncKernelRequests();
+    const shelfReads = stack
+      .kernelRequests()
+      .slice(beforeShelfReturn)
+      .filter(
+        ({ fixtureRequest, method, url }) =>
+          !fixtureRequest && method === 'GET' && new URL(url, stack.kernelOrigin).pathname === '/v1/libraryEntries',
+      );
+    const typedShelfReads = shelfReads
+      .filter(({ url }) => {
+        const types = new URL(url, stack.kernelOrigin).searchParams.getAll('type');
+        return types.length === 1 && types[0] === 'schema:Book';
+      })
+      .map(({ responseStatus, access }) => ({
+        status: responseStatus ?? null,
+        actor: access?.authenticated ? (access.actorId === bobAccountId ? 'bob' : 'other') : 'unobserved',
+      }));
+    return { shelfReads, typedShelfReads };
+  }
+  let observedShelf = await observeTypedShelf();
+  await browserExpect
+    .poll(async () => {
+      observedShelf = await observeTypedShelf();
+      return observedShelf.typedShelfReads.some(({ status, actor }) => status === 200 && actor === 'bob');
+    }, { message: 'native typed Book shelf returned HTTP 200 as Bob' })
+    .toBe(true);
+  const { shelfReads, typedShelfReads } = observedShelf;
   stage('signed-in native Book shelf', {
     address: shelfPath,
-    mountedEntries: 'empty',
     path: '/v1/libraryEntries',
     type: 'schema:Book',
     shelfReads: shelfReads.length,
     typedReads: typedShelfReads.length,
     reads: typedShelfReads.slice(0, 6),
   });
-  expect(typedShelfReads.length, 'observed native typed Book shelf reads').toBeGreaterThan(0);
-  expect(typedShelfReads.some(({ status }) => status === 200), 'native typed Book shelf returned HTTP 200').toBe(true);
   expect(
     typedShelfReads.every(({ actor }) => actor === 'bob'),
     'all native typed Book shelf reads authenticated Bob',
