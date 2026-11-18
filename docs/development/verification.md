@@ -53,6 +53,8 @@ after the required observation. Prefer existing checks to a new harness.
 
 Reuse a compatible live stack or prepared fixture with isolated state. Restart only the process whose lifetime
 matters. Use full preparation, cold startup or growth when the outcome depends on it, preserving its original bound.
+When publication is a fixture prerequisite, wait on its authoritative ready state. Then verify the public request
+within its own deadline so setup traffic and setup failures do not distort the serving evidence.
 
 At the first failed boundary, keep the elapsed time and observations already reached. Record dependent steps as
 unreached. Trace the owner failure from the response or logs and confirm the repair at that boundary before
