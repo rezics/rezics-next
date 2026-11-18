@@ -127,7 +127,7 @@ export {
   joinNativePublicFilterRepair,
   readNativePublicFilterRepairStart,
   readNativePublicFilterPublicationCompletion,
-  nativeSubjectPublicationRepairEvidence,
+  nativePublicFilterRepairEvidence,
   readNativePublicFilterAccountRepair,
   advanceNativePublicFilterPreparation,
 } from './public-filter-source-binding.ts';

@@ -10,6 +10,7 @@ import {
   createPublicFilterSourceBinding,
   advanceNativePublicFilterPreparation,
   readNativePublicFilterPublicationCompletion,
+  nativePublicFilterRepairEvidence,
   type NativeSourceRepairLocator,
   type NativeSourceRepairStepVerification,
 } from '../../src/semantic/public-filter-source-binding.ts';
@@ -366,7 +367,11 @@ test('native Source repair receipts revalidate original steps, replay, and curre
           readContext(),
         );
         expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
+        if (scan.status !== 'verified') throw new Error(scan.reason);
+        expect(nativePublicFilterRepairEvidence(binding, scan)).toEqual([]);
+        expect(nativePublicFilterRepairEvidence(binding, structuredClone(scan))).toBeUndefined();
         const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+        expect(nativePublicFilterRepairEvidence(restarted, scan)).toBeUndefined();
         const replay = await restarted.repairPage(request, readContext());
         expect(replay).toMatchObject({ status: 'progress', frontier: page.frontier, repairs: [] });
       }

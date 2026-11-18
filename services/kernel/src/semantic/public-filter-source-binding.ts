@@ -620,18 +620,19 @@ const nativeAccountRepairs = new WeakMap<
     }>
   >
 >();
-// One verified reply may carry the exact Subject bodies already read by that
-// invocation. A copied reply or another binding cannot recover this evidence.
-const subjectPublicationRepairEvidence = new WeakMap<
+// A verified response may carry the exact Subject bodies and absence of an
+// Account obligation from that invocation. A copied response or another
+// binding cannot recover this evidence.
+const publicFilterRepairEvidence = new WeakMap<
   Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
   Readonly<{ binding: PublicFilterSourceBinding; repairs: readonly PublicSourceRepair[] }>
 >();
 
-export function nativeSubjectPublicationRepairEvidence(
+export function nativePublicFilterRepairEvidence(
   binding: PublicFilterSourceBinding,
   step: Extract<NativeSourceRepairStepVerification, { status: 'verified' }>,
 ): readonly PublicSourceRepair[] | undefined {
-  const evidence = subjectPublicationRepairEvidence.get(step);
+  const evidence = publicFilterRepairEvidence.get(step);
   return evidence?.binding === binding ? evidence.repairs : undefined;
 }
 
@@ -3237,8 +3238,8 @@ export function createNativePublicFilterSourceBinding(
           })),
           cost,
         };
-        if (subjectPublication && repairs.length === receiptDigests.length)
-          subjectPublicationRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
+        if (record.account === undefined && repairs.length === receiptDigests.length)
+          publicFilterRepairEvidence.set(result, { binding: bootstrapBinding, repairs });
         return result;
       });
       if (!observer) return pending;

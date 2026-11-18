@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
-import { nativeSubjectPublicationRepairEvidence, readNativePublicFilterAccountRepair } from './native-bindings.ts';
+import { nativePublicFilterRepairEvidence, readNativePublicFilterAccountRepair } from './native-bindings.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type {
@@ -60,7 +60,6 @@ export async function verifyPublicFilterRepairSourcePage(
   }>,
   context: PublicFilterConsumerContext,
   charge: (cost?: PublicFilterCost) => void,
-  subjectPublication = false,
 ): Promise<RetainedRepairPage> {
   if (typeof binding.readRepairStep !== 'function' || typeof binding.readRepairReceipt !== 'function')
     throw new PublicFilterRepairSourceError('owner_unavailable');
@@ -96,7 +95,7 @@ export async function verifyPublicFilterRepairSourcePage(
     )
   )
     throw new PublicFilterRepairSourceError('binding_mismatch');
-  const nativeRepairs = subjectPublication ? nativeSubjectPublicationRepairEvidence?.(binding, step) : undefined;
+  const nativeRepairs = nativePublicFilterRepairEvidence?.(binding, step);
   if (nativeRepairs && nativeRepairs.length !== repairs.length)
     throw new PublicFilterRepairSourceError('binding_mismatch');
   for (const [item, receipt] of receipts.entries()) {
