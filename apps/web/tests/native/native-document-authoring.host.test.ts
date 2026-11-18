@@ -429,8 +429,13 @@ describe('native document authoring', () => {
     for (let index = 0; index < 7; index++) await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
     await page.keyboard.type(' edited in the served editor');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await expect(page.locator('[data-slot="document-body"]')).toContainText('edited in the served editor');
+    const editedPost = page.locator(`#post-${original.id}`);
+    const saveChanges = editedPost.getByRole('button', { name: 'Save changes', exact: true });
+    await saveChanges.click();
+    // The pending editor also renders the submitted document in its recovery panel.
+    // Wait for the acknowledged edit to replace the editor before reading durable history.
+    await saveChanges.waitFor({ state: 'detached' });
+    await expect(editedPost.locator('[data-slot="document-body"]')).toContainText('edited in the served editor');
 
     const postPath = `/v1/posts/${original.id}`;
     const historyResponse = await fixture.stack.kernel(`${postPath}/revisions?limit=20`, undefined, 'alice');
