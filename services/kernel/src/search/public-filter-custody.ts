@@ -987,7 +987,8 @@ export async function readPublicFilterRepairSettlement(
           ),
         );
     };
-    await (withNativePublicFilterRepairReadBatch?.(binding, sourceExecution, context, verifySources) ??
+    const ids = staged.basis.pages.flatMap(({ page }) => (page.account ? [page.account.id] : []));
+    await (withNativePublicFilterRepairReadBatch?.(binding, sourceExecution, context, verifySources, { ids, charge }) ??
       verifySources());
     return await local(async (db, raw) => {
       const final = await load(db, raw);

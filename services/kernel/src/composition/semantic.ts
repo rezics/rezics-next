@@ -13,7 +13,10 @@ import {
 import { createSearchIdentityWriterPreparation } from '../search/identity-search-writer-preparation.ts';
 import { createSearchSourceBindingAdapter } from '../search/composition.ts';
 import { readSearchConfig } from '../search/config.ts';
-import { readAccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import {
+  readAccountDiscoveryRepairObservation,
+  readAccountDiscoveryRepairObservations,
+} from '../access/account-discovery-source.ts';
 import { accessCheck, classifyUnavailability, enrollAccountDiscoveryHome } from '../access/adapters/index.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
@@ -126,6 +129,7 @@ export function composeSemanticAdapters(): void {
 
 function sourceBindingAccessPort(): PublicFilterAccessBindingPort {
   return Object.freeze({
+    readAccountRepairs: readAccountDiscoveryRepairObservations,
     readAccountRepair: readAccountDiscoveryRepairObservation,
     enrollAccountHome: enrollAccountDiscoveryHome,
     classifyUnavailability,

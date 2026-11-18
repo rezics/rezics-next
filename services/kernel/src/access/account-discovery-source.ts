@@ -97,7 +97,7 @@ async function claims(client: Pick<PoolClient, 'query'>, rows: readonly AccountR
   );
   return new Map(found.rows.map((row) => [row.handle, row]));
 }
-function exactHandle(row: AccountRow, found: Awaited<ReturnType<typeof claims>>) {
+function exactHandle(row: AccountRow, found: ReadonlyMap<string, ClaimRow>) {
   return row.handle !== null && found.get(row.handle)?.id === row.id ? row.handle : null;
 }
 async function position(client: Pick<PoolClient, 'query'>, partition: number) {
@@ -245,46 +245,54 @@ export async function readAccountDiscoveryBindings(
   const read = async (client: PoolClient) => {
     const rows = await accounts(client, requested);
     const found = await claims(client, rows);
-    const dependencies = rows.flatMap((row) => {
-      const claim = row.handle === null ? undefined : found.get(row.handle);
-      return claim?.id === row.id ? [{ route: row.route, id: row.id, partition: partitionOf(claim.route) }] : [];
-    });
-    const cursors = dependencies.length
-      ? (
-          await client.query<{ id: string; partition: number; revision: string }>(
-            `SELECT account_id::text AS id, claim_partition AS partition, revision::text
-       FROM access.account_discovery_claim_cursor
-       WHERE (route, account_id, claim_partition) IN (SELECT * FROM unnest($1::integer[], $2::uuid[], $3::integer[]))`,
-            [
-              dependencies.map(({ route }) => route),
-              dependencies.map(({ id }) => id),
-              dependencies.map(({ partition }) => partition),
-            ],
-          )
-        ).rows
-      : [];
-    return new Map(
-      rows.map((row) => {
-        const claim = row.handle === null ? undefined : found.get(row.handle);
-        const exact = claim?.id === row.id ? claim : undefined;
-        const consumed = exact
-          ? cursors.find((cursor) => cursor.id === row.id && cursor.partition === partitionOf(exact.route))
-          : undefined;
-        return [
-          row.id,
-          {
-            revision: BigInt(row.revision),
-            handle: exactHandle(row, found),
-            // Native reciprocal-link facts only, not publication or Subject eligibility.
-            agent: row.agent && row.agentReceipt ? { subjectId: row.agent, receiptId: row.agentReceipt } : null,
-            claim: exact ? { route: exact.route, revision: BigInt(exact.revision) } : null,
-            consumedClaimRevision: BigInt(consumed?.revision ?? '0'),
-          },
-        ];
-      }),
-    );
+    return readAccountBindings(client, rows, found);
   };
   return snapshotClient ? read(snapshotClient) : withReadTransaction(pool, read);
+}
+
+async function readAccountBindings(
+  client: PoolClient,
+  rows: readonly AccountRow[],
+  found: ReadonlyMap<string, ClaimRow>,
+) {
+  const dependencies = rows.flatMap((row) => {
+    const claim = row.handle === null ? undefined : found.get(row.handle);
+    return claim?.id === row.id ? [{ route: row.route, id: row.id, partition: partitionOf(claim.route) }] : [];
+  });
+  const cursors = dependencies.length
+    ? (
+        await client.query<{ id: string; partition: number; revision: string }>(
+          `SELECT account_id::text AS id, claim_partition AS partition, revision::text
+     FROM access.account_discovery_claim_cursor
+     WHERE (route, account_id, claim_partition) IN (SELECT * FROM unnest($1::integer[], $2::uuid[], $3::integer[]))`,
+          [
+            dependencies.map(({ route }) => route),
+            dependencies.map(({ id }) => id),
+            dependencies.map(({ partition }) => partition),
+          ],
+        )
+      ).rows
+    : [];
+  return new Map(
+    rows.map((row) => {
+      const claim = row.handle === null ? undefined : found.get(row.handle);
+      const exact = claim?.id === row.id ? claim : undefined;
+      const consumed = exact
+        ? cursors.find((cursor) => cursor.id === row.id && cursor.partition === partitionOf(exact.route))
+        : undefined;
+      return [
+        row.id,
+        {
+          revision: BigInt(row.revision),
+          handle: exactHandle(row, found),
+          // Native reciprocal-link facts only, not publication or Subject eligibility.
+          agent: row.agent && row.agentReceipt ? { subjectId: row.agent, receiptId: row.agentReceipt } : null,
+          claim: exact ? { route: exact.route, revision: BigInt(exact.revision) } : null,
+          consumedClaimRevision: BigInt(consumed?.revision ?? '0'),
+        },
+      ];
+    }),
+  );
 }
 
 /** Original Account repair input. The core snapshot position is a writer floor;
@@ -300,52 +308,82 @@ export type AccountDiscoveryRepairObservation = Readonly<{
   binding: Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer B> ? B | null : never;
 }>;
 
-/** Release every owner read before the next phase and revalidate both the local
- * native head and the exact current-handle/claim cursor after foreign reads.
- * Missing/fenced rows are retained as keyed deletion inputs, never Subjects.
- */
+/** Compare two native Account/claim snapshots under the same caller deadline. */
+export async function readAccountDiscoveryRepairObservations(
+  pool: Pool,
+  ids: readonly string[],
+  context: Readonly<{ deadline: number }>,
+): Promise<ReadonlyMap<string, AccountDiscoveryRepairObservation>> {
+  const requested = keys(ids);
+  if (requested.length === 0 || requested.length > 50)
+    throw new RangeError('Account repair requires 1 to 50 native keys');
+  requireAccessDeadline(context.deadline);
+  const observe = () =>
+    withReadTransaction(
+      pool,
+      async (client) => {
+        const rows = await accounts(client, requested);
+        const found = await claims(client, rows);
+        const bindings = await readAccountBindings(client, rows, found);
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        const partitions = [
+          ...new Set([
+            ...requested.map(({ route }) => partitionOf(route)),
+            ...rows.flatMap(({ handle }) => (handle === null ? [] : [partitionOf(claimRoute(handle))])),
+          ]),
+        ];
+        const native = await readAccountDiscoveryReductionBinding(pool, partitions, context);
+        const heads = new Map(native.heads.map((head) => [head.partition, head]));
+        const positions = new Map(
+          (await readPartitions(client, partitions)).map(({ partitionNo, position }) => [partitionNo, position]),
+        );
+        const result = new Map<string, AccountDiscoveryRepairObservation>();
+        for (const { id, route } of requested) {
+          const partition = partitionOf(route);
+          const row = byId.get(id);
+          const account = row ? indexed(row, found) : null;
+          const binding = bindings.get(id) ?? null;
+          const head = heads.get(partition);
+          const position = positions.get(partition);
+          const claimHead = binding?.claim ? heads.get(partitionOf(binding.claim.route)) : null;
+          if (
+            !head ||
+            position === undefined ||
+            claimHead === undefined ||
+            (account === null
+              ? binding !== null
+              : binding === null ||
+                binding.revision !== account.revision ||
+                binding.handle !== account.handle ||
+                (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision))
+          )
+            throw new CommandUnavailableError('contention', partition);
+          result.set(id, Object.freeze({ id, head, claimHead, position, account, binding }));
+        }
+        return { result, heads };
+      },
+      context.deadline,
+    );
+  return withRequestDeadline(context.deadline, async () => {
+    const before = await observe();
+    const after = await observe();
+    const sameHeads = isDeepStrictEqual(before.heads, after.heads);
+    for (const [id, original] of before.result) {
+      if (!sameHeads || !isDeepStrictEqual({ ...after.result.get(id), position: original.position }, original))
+        throw new CommandUnavailableError('contention', original.head.partition);
+    }
+    requireAccessDeadline(context.deadline);
+    return before.result;
+  });
+}
+
+/** Keep the same native proof for ordinary single-key repair. */
 export async function readAccountDiscoveryRepairObservation(
   pool: Pool,
   id: string,
   context: Readonly<{ deadline: number }>,
 ): Promise<AccountDiscoveryRepairObservation> {
-  const route = routeOf(id);
-  if (route === null) throw new TypeError('Account repair requires a native Account key');
-  const partition = partitionOf(route);
-  requireAccessDeadline(context.deadline);
-  return withRequestDeadline(context.deadline, async () => {
-    const before = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
-    const snapshot = await accountDiscoverySource(pool).read(partition, [id]);
-    const binding = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
-    // The handle is routed independently. Its native epoch cannot be inferred
-    // from the Account home or from the consumed claim revision alone.
-    const claimPartition = binding?.claim ? partitionOf(binding.claim.route) : null;
-    const claimBefore =
-      claimPartition === null
-        ? null
-        : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
-    const current = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id) ?? null;
-    const claimAfter =
-      claimPartition === null
-        ? null
-        : (await readAccountDiscoveryReductionBinding(pool, [claimPartition], context)).heads[0]!;
-    const after = (await readAccountDiscoveryReductionBinding(pool, [partition], context)).heads[0]!;
-    const account = snapshot.accounts[0] ?? null;
-    requireAccessDeadline(context.deadline);
-    if (
-      !isDeepStrictEqual(before, after) ||
-      !isDeepStrictEqual(binding, current) ||
-      !isDeepStrictEqual(claimBefore, claimAfter) ||
-      (account === null
-        ? binding !== null
-        : binding === null ||
-          binding.revision !== account.revision ||
-          binding.handle !== account.handle ||
-          (binding.claim !== null && binding.consumedClaimRevision < binding.claim.revision))
-    )
-      throw new CommandUnavailableError('contention', partition);
-    return Object.freeze({ id, head: before, claimHead: claimBefore, position: snapshot.position, account, binding });
-  });
+  return (await readAccountDiscoveryRepairObservations(pool, [id], context)).get(id)!;
 }
 
 function summary(

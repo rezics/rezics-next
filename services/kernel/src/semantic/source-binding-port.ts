@@ -158,6 +158,11 @@ export type PublicFilterSearchBindingPort = Readonly<{
 
 /** Access supplies current Account repair inputs, authorization and deadline classification. */
 export type PublicFilterAccessBindingPort = Readonly<{
+  readAccountRepairs(
+    pool: Pool,
+    ids: readonly string[],
+    context: PublicFilterConsumerContext,
+  ): Promise<ReadonlyMap<string, AccountDiscoveryRepairObservation>>;
   readAccountRepair(
     pool: Pool,
     id: string,

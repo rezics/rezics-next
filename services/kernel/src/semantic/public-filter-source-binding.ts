@@ -655,10 +655,15 @@ const nativeRepairStarts = new WeakMap<
   ) => Promise<Readonly<{ start: PrivacyReductionStart; cost: PublicFilterCost }>>
 >();
 const nativeRepairJoins = new WeakMap<PublicFilterSourceBinding, PublicFilterSourceBinding['join']>();
+type RepairAccountReadPlan = Readonly<{
+  ids: readonly string[];
+  charge(cost?: PublicFilterCost): void;
+}>;
 type RepairReadBatch = <T>(
   input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
   context: PublicFilterConsumerContext,
   read: () => Promise<T>,
+  accounts?: RepairAccountReadPlan,
 ) => Promise<T>;
 const nativeRepairReadBatches = new WeakMap<PublicFilterSourceBinding, RepairReadBatch>();
 
@@ -670,8 +675,9 @@ export function withNativePublicFilterRepairReadBatch<T>(
   input: Omit<NativeSourceRepairStepRead, 'predecessor'>,
   context: PublicFilterConsumerContext,
   read: () => Promise<T>,
+  accounts?: RepairAccountReadPlan,
 ): Promise<T> {
-  return nativeRepairReadBatches.get(binding)?.(input, context, read) ?? read();
+  return nativeRepairReadBatches.get(binding)?.(input, context, read, accounts) ?? read();
 }
 
 export async function joinNativePublicFilterRepair(
@@ -2887,11 +2893,13 @@ export function createNativePublicFilterSourceBinding(
     );
   }
 
-  const repairReadBatch = new AsyncLocalStorage<{
+  type RepairReadScope = {
     input: Omit<NativeSourceRepairStepRead, 'predecessor'>;
     deadline: number;
     joined?: Extract<Awaited<ReturnType<typeof joinNativeCut>>, { status: 'joined' }>;
-  }>();
+    accounts?: { ids: readonly string[]; observations?: ReadonlyMap<string, AccountDiscoveryRepairObservation> };
+  };
+  const repairReadBatch = new AsyncLocalStorage<RepairReadScope>();
   const bootstrapBinding: PublicFilterSourceBootstrapBinding = {
     ...binding,
     async readRepairStep(request, context) {
@@ -3099,8 +3107,14 @@ export function createNativePublicFilterSourceBinding(
             receiptDigests.length !== 0
           )
             throw new BindingError('binding_mismatch');
-          const current = await ports.access.readAccountRepair(db, record.account.id, { deadline });
+          let current: AccountDiscoveryRepairObservation | undefined;
+          if (scope?.accounts?.ids.includes(record.account.id)) {
+            const batch = scope.accounts;
+            batch.observations ??= await ports.access.readAccountRepairs(db, batch.ids, { deadline });
+            current = batch.observations.get(record.account.id);
+          } else current = await ports.access.readAccountRepair(db, record.account.id, { deadline });
           if (
+            !current ||
             !isDeepStrictEqual({ ...current, position: record.account.position }, record.account) ||
             record.account.head.partition !== record.input.partition ||
             record.account.head.epoch !== record.input.epoch
@@ -3592,9 +3606,33 @@ export function createNativePublicFilterSourceBinding(
     },
   };
   nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
-  nativeRepairReadBatches.set(bootstrapBinding, (input, context, read) =>
-    repairReadBatch.run({ input: structuredClone(input), deadline: context.deadline }, read),
-  );
+  nativeRepairReadBatches.set(bootstrapBinding, async (input, context, read, accounts) => {
+    const ids = accounts ? [...new Set(accounts.ids)] : [];
+    const scope: RepairReadScope = {
+      input: structuredClone(input),
+      deadline: context.deadline,
+      ...(ids.length > 0 && ids.length <= 50 && { accounts: { ids } }),
+    };
+    const result = await repairReadBatch.run(scope, read);
+    const original = scope.accounts?.observations;
+    if (accounts && original) {
+      // Keep the shared Account snapshot current through the full verified run.
+      // Core writer positions can advance without changing these Account facts.
+      accounts.charge();
+      const current = await run(context, async (cost, db) => ({
+        status: 'observed' as const,
+        observations: await ports.access.readAccountRepairs(db, ids, context),
+        cost,
+      }));
+      accounts.charge(current.cost);
+      if (current.status !== 'observed') throw new BindingError(current.reason);
+      for (const [id, observation] of original) {
+        if (!isDeepStrictEqual({ ...current.observations.get(id), position: observation.position }, observation))
+          throw new BindingError('configuration_changed');
+      }
+    }
+    return result;
+  });
   nativeRepairStarts.set(bootstrapBinding, async (request, context) => {
     const result = await run(context, async (cost, db) => {
       const joined = await joinNative({ queried: request.queried }, context, true);

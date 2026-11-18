@@ -4,7 +4,12 @@ import {
   readAccountDiscoveryReductionBinding,
   type AccountDiscoveryReductionBinding,
 } from '../../src/access/account-discovery-reduction.ts';
-import { accountDiscoverySource, readAccountDiscoveryBindings } from '../../src/access/account-discovery-source.ts';
+import {
+  accountDiscoverySource,
+  readAccountDiscoveryBindings,
+  readAccountDiscoveryRepairObservation,
+  readAccountDiscoveryRepairObservations,
+} from '../../src/access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
@@ -27,6 +32,36 @@ async function seed(route: number, handle: string | null = null) {
   );
   return id;
 }
+
+test('native repair observes Account keys across homes and rechecks a fenced key', async () => {
+  const firstRoute = 61760;
+  const secondRoute = 61792;
+  const first = await seed(firstRoute);
+  const second = await seed(secondRoute);
+  const missing = newId(firstRoute);
+  const context = () => ({ deadline: Date.now() + 5000 });
+  try {
+    const original = await readAccountDiscoveryRepairObservations(pool, [first, second, missing], context());
+    expect(original.get(first)).toEqual(await readAccountDiscoveryRepairObservation(pool, first, context()));
+    expect(original.get(second)?.account?.id).toBe(second);
+    expect(original.get(missing)).toMatchObject({ id: missing, account: null, binding: null });
+    await pool.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+      firstRoute,
+      first,
+    ]);
+    const fenced = await readAccountDiscoveryRepairObservations(pool, [first, second, missing], context());
+    expect(fenced.get(first)).toMatchObject({ id: first, account: null, binding: null });
+    expect(fenced.get(first)!.head.revision).toBeGreaterThan(original.get(first)!.head.revision);
+    expect(fenced.get(second)).toEqual(original.get(second));
+  } finally {
+    await pool.query('DELETE FROM access.account WHERE (route,account_id) IN (($1,$2),($3,$4))', [
+      firstRoute,
+      first,
+      secondRoute,
+      second,
+    ]);
+  }
+});
 
 test('bounded native binding copies sorted full home coverage, including empty populations', async () => {
   const requested = Array.from({ length: 100 }, (_, index) => 3900 + index).reverse();
