@@ -2226,7 +2226,8 @@ exact physical UUID. Cold alias absence comes from the native generation invento
 or rollbacks require exact alias readback. Each fence check revalidates the original Source proof. Separate current
 checks bracket the switch. A lost fence response resumes the same producer/job, and only exact readback settles
 a lost alias response. A Source change during adoption recovers outstanding intent. Active metadata commits
-before fence release. Abort restores only the exact retained intent under that fence.
+before fence release. Release clears the live fence token and retains the completed pass on the active job.
+Restart invalidates that pass. Abort restores only the exact retained intent under that fence.
 Existing generation allocation, live-three-generation quota and activation expiry remain owned
 by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
 Discovery allocation obtains the historical high water with the primary key's descending full-key LIMIT 1 and the live set through `discovery_generation_live` with LIMIT 4; a fourth live row or unsafe integer exhaustion is unavailable before inserts.
@@ -2278,7 +2279,9 @@ Mixed discovery still checks its Account-owner witnesses. Durable progress dispa
 the next preparation step immediately. A step waiting for a dependency or in-flight writer backs off. Source
 enumeration runs only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
-engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical
+engine pass without reusing an old frontier. After a complete occupied Subject page, the job seeks the next
+visible home and records the intervening active owners in one statement snapshot. A missing owner or a
+regression in that fenced pass prevents the cursor from advancing. New native outcomes cover incomplete population/barrier refusal, physical
 recreation and lost alias response recovery; existing generation growth bounds remain applicable.
 
 Native consumer repair settlement is retained under the existing custody execution. The exact storage is:

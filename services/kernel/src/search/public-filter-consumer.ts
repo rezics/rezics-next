@@ -652,7 +652,7 @@ import { discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
-import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';
@@ -769,7 +769,7 @@ function locatorHome(locator: string): number {
 type NativeGenerationInput = Readonly<{
   job: string;
   consumer: PublicFilterConsumer;
-  capture: PublicFilterConsumerCaptureInput;
+  capture: PublicFilterConsumerCaptureInput | DiscoveryConsumerCaptureInput;
   observation?: string;
   inputLimit: number;
   enrollmentOnly: boolean;
