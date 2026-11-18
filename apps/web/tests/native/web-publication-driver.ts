@@ -158,6 +158,7 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
 export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Promise<WebPublicationDriver> {
   const factoryStarted = performance.now();
   const selection = publicationFixtureSelection();
+  const sitemapExportToken = !selection || selection.sitemap ? crypto.randomUUID() : undefined;
   assertReleasedDefinitions(publicationData);
   const existingChildren = new Set(await childPids(process.pid));
   const lifecycle = new NativeTestLifecycle('native web publication driver', currentNativeLifecycle());
@@ -168,7 +169,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const websiteReady = lifecycle.run(
     'start native web publication driver',
     startupTimeoutMs,
-    () => startNativeWebStack({ onServicesReady }),
+    () => startNativeWebStack({ onServicesReady, sitemapExportToken }),
     false,
   );
   const services = await Promise.race([servicesReady, websiteReady]);
@@ -398,8 +399,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
         };
       },
     };
-    const stack = await websiteReady;
     provisioned = { data: structuredClone(data), sitemapNativeIds };
+    if (selection?.sitemap) return fixture;
+    const stack = await websiteReady;
     console.info(
       `web-publication-driver-growth: setup=${Math.round(performance.now() - factoryStarted)}ms provision=${Math.round(performance.now() - started)}ms peak-memory=${stack.peakMemoryBytes()}bytes fixture-subjects=${created?.size ?? 0}`,
     );
@@ -440,7 +442,6 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
           let cursor: string | null = null;
           let pages = 0;
           let emptyPages = 0;
-          let unavailable = false;
           const measurements = { times: [] as number[], retries: 0 };
           feedMeasurements.set(route, measurements);
           try {
@@ -454,7 +455,6 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
                 const problem = responseProblem(body);
                 if (response.status === 503 && problem?.code === 'semantic_not_ready') {
                   console.info(`web-publication-driver-feed: route=${route} unavailable=semantic_not_ready`);
-                  unavailable = true;
                   break;
                 }
                 throw new Error(`Native sitemap feed ${route} returned ${response.status}: ${body}`);
@@ -484,7 +484,7 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
               `web-publication-driver-feed: route=${route} requests=${times.length} pages=${pages} empty-pages=${emptyPages} retries=${measurements.retries} median=${Math.round(median)}ms slowest=${Math.round(times.at(-1) ?? 0)}ms`,
             );
           }
-          if (unavailable || (pages > 0 && cursor === null && missing.size === 0)) pending.delete(route);
+          if (pages > 0 && cursor === null && missing.size === 0) pending.delete(route);
         }
         if (searchPending && performance.now() < deadline) {
           const response = await kernel('/v1/subjects:search', {
@@ -514,11 +514,26 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       } finally {
         console.info(`web-publication-driver-settle: round=${++round} unmet=${JSON.stringify(unmet())}`);
       }
-      if (pending.size === 0 && !searchPending) return;
+      if (pending.size === 0 && !searchPending) break;
       const remaining = deadline - performance.now();
       if (remaining <= 0)
         throw new Error(`Publication fixture did not settle within 180 seconds: ${unmet().join('; ')}`);
       await Bun.sleep(Math.min(1000 * 2 ** Math.min(round - 1, 3), remaining));
+    }
+
+    // Native feed readiness and Web startup can overlap. Publish to the owned
+    // R2 bucket only after both are ready, before the first public sitemap read.
+    if (sitemapExportToken) {
+      const stack = await websiteReady;
+      const response = await fetch(new URL('/_native/sitemap-export', stack.web), {
+        method: 'POST',
+        headers: { 'x-native-sitemap-export-key': sitemapExportToken },
+        redirect: 'manual',
+        signal: AbortSignal.any([lifecycle.signal, AbortSignal.timeout(Math.max(1, deadline - performance.now()))]),
+      });
+      if (response.status !== 204)
+        throw new Error(`Native sitemap export returned ${response.status}: ${await response.text()}`);
+      console.info(`web-publication-driver-sitemap: published at ${Math.round(performance.now() - factoryStarted)}ms`);
     }
   };
 

@@ -1,9 +1,14 @@
 import { websiteWorkerScopes } from './scripts/website-configuration.ts';
 
+const nativeSitemapExportToken =
+  process.env.REZICS_TEST_RUNTIME === '1' && process.env.WEB_TEST_STATE_INSTANCE_DIR
+    ? process.env.NATIVE_WEB_SITEMAP_EXPORT_TOKEN
+    : undefined;
+
 export default {
   worker: {
     name: 'rezics-web',
-    entrypoint: './src/server.ts',
+    entrypoint: nativeSitemapExportToken ? './tests/native/sitemap-export-worker.ts' : './src/server.ts',
     compatibilityDate: '2026-10-25',
     triggers: [{ type: 'scheduled', schedule: '0 3 * * *' }],
     // Declaring the class with SQLite storage provisions its initial migration.
@@ -13,6 +18,9 @@ export default {
       AUTH_ISSUER: { type: 'text', value: process.env.AUTH_ISSUER ?? '' },
       ...(process.env.AUTH_TEST_LOOPBACK_ORIGIN
         ? { AUTH_TEST_LOOPBACK_ORIGIN: { type: 'text', value: process.env.AUTH_TEST_LOOPBACK_ORIGIN } }
+        : {}),
+      ...(nativeSitemapExportToken
+        ? { NATIVE_WEB_SITEMAP_EXPORT_TOKEN: { type: 'text', value: nativeSitemapExportToken } }
         : {}),
       BUILD_ID: { type: 'text', value: process.env.BUILD_ID ?? process.env.GITHUB_SHA ?? 'development' },
       PUBLIC_ORIGIN: { type: 'text', value: process.env.PUBLIC_ORIGIN ?? '' },
