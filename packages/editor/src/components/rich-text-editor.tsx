@@ -11,7 +11,6 @@ import {
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
 import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
@@ -46,7 +45,6 @@ import { EditorCompositionKeymap } from './editor-composition-keymap.ts';
 import { setEditorCommandPreferences } from './editor-command-preferences.ts';
 import { recordTextReplayBatch, skipProvenTextReplay } from './editor-compact-transaction.ts';
 import { editorContentRejected } from './editor-compact-commands.ts';
-import { restoreMovedUnitIdentity } from './editor-drag-identity.ts';
 import type { EditorWorkbenchLabels } from './editor-workbench-labels.ts';
 import type {
   EditorPreferencesLabels,
@@ -174,33 +172,6 @@ const EditorHistory = Extension.create({
             transaction.getMeta(resetEditorHistory)
               ? state.init({}, newState)
               : state.apply(transaction, value, oldState, newState),
-        },
-      }),
-    ];
-  },
-});
-
-type PendingMovedUnit = { node: ProseMirrorNode };
-type PendingMovedUnitRef = { current: PendingMovedUnit | null };
-
-const RetainMovedUnitIdentity = Extension.create<{ pendingMove: PendingMovedUnitRef }>({
-  name: 'retainMovedUnitIdentity',
-  addOptions: () => ({ pendingMove: { current: null } }),
-  addProseMirrorPlugins() {
-    const pendingMove = this.options.pendingMove;
-
-    return [
-      new Plugin({
-        appendTransaction: (transactions, _oldState, newState) => {
-          if (!transactions.some((transaction) => transaction.getMeta('uiEvent') === 'drop')) return;
-
-          const movedUnit = pendingMove.current;
-          pendingMove.current = null;
-          if (!movedUnit || !(newState.selection instanceof NodeSelection)) return;
-
-          const { from, node } = newState.selection;
-          if (node.type !== movedUnit.node.type) return;
-          return restoreMovedUnitIdentity(newState, from, movedUnit.node);
         },
       }),
     ];
@@ -495,7 +466,6 @@ export function RichTextEditor({
   mentionEnabled.current = hasMention;
   const mentionHandles = useRef(new Map<string, string>());
   const mentionHandleUsage = useRef(new Map<string, number>());
-  const pendingMovedUnit = useRef<PendingMovedUnit | null>(null);
 
   const publish = useCallback(
     (editor: TiptapEditor, epoch: number) => {
@@ -578,7 +548,6 @@ export function RichTextEditor({
           mentionHandles,
           mentionHandleUsage,
         ),
-        RetainMovedUnitIdentity.configure({ pendingMove: pendingMovedUnit }),
         slashExtension(slashHandlers),
         mentionExtension(mentionHandlers, mentionEnabled),
       ],
@@ -634,22 +603,6 @@ export function RichTextEditor({
               if (selectedBlock) break;
               candidate = candidate.parentElement?.closest<HTMLElement>('[data-id]') ?? null;
             }
-
-            // UniqueID treats copyMove as a copied slice and regenerates unit
-            // IDs. Same-editor drags are moves; Ctrl-drag remains a copy.
-            drag.dataTransfer.effectAllowed = drag.ctrlKey ? 'copy' : 'move';
-            return false;
-          },
-          drop: (view) => {
-            const dragging = view.dragging;
-            const draggedNode = view.state.selection instanceof NodeSelection ? view.state.selection.node : null;
-            if (dragging?.move && draggedNode) {
-              if (typeof draggedNode.attrs.id === 'string') pendingMovedUnit.current = { node: draggedNode };
-            }
-            return false;
-          },
-          dragend: () => {
-            pendingMovedUnit.current = null;
             return false;
           },
         },
