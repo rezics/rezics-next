@@ -1087,14 +1087,13 @@ function emptyPositionBatch(
       positions ??= settled.promise.then(async () => {
         const partitions = rows.filter(({ partition }) => requested.has(partition)).map(({ partition }) => partition);
         const result = await read(partitions);
-        if (
-          result.size !== partitions.length ||
-          partitions.some((partition) => typeof result.get(partition) !== 'bigint')
-        )
-          throw new SearchUnavailableError('Discovery native positions are incomplete');
+        for (const [partition, position] of result) {
+          if (!requested.has(partition) || typeof position !== 'bigint')
+            throw new SearchUnavailableError('Invalid Discovery native position batch');
+        }
         return result;
       });
-      return (await positions).get(row.partition)!;
+      return (await positions).get(row.partition);
     },
   };
 }
@@ -2353,8 +2352,12 @@ async function checkMetadataCuts(
             try {
               const positionBatch = kind === 'collection' ? undefined : positions.get(kind);
               if (kind === 'collection' && readStamps) observation = await collectionStamp(row.partition);
-              else if (positionBatch) observation = { position: await positionBatch.position(row) };
-              else {
+              else if (positionBatch) {
+                const position = await positionBatch.position(row);
+                if (position === undefined)
+                  return mismatch ?? { state: 'metadata' as const, partition: row.partition, kind };
+                observation = { position };
+              } else {
                 const read = () => metadataProducers[kind]!.read(row.partition, []);
                 observation = trace ? await trace.read(kind, row.partition, 1, read) : await read();
               }

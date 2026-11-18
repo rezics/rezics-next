@@ -360,6 +360,35 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
   await invalidate(closed, 'com.rezics.subject.revised.v1');
 });
 
+test('a changed Review home leaves the other native empty positions usable', async () => {
+  const source = createReviewDiscoverySource(
+    { clock: () => new Date(), pool: fixture.pool, access: fixture.access, routeKey, tokens },
+    () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
+  );
+  const changing = 4093;
+  const stable = 4094;
+  const observer = observeSql(fixture.pool);
+  try {
+    const before = await source.readEmptyPositions([changing, stable]);
+    const read = observer.records.find(({ statement }) => statement.includes('p.partition_no=ANY($1::integer[])'))!;
+    const barrier = observer.hold({ statement: read.statement }, 'after');
+    const pending = source.readEmptyPositions([changing, stable], { omitChanged: true });
+    try {
+      await barrier.entered;
+      const id = newId(changing * 16);
+      await runCommand(fixture.reader, { partition: changing, deadline: Date.now() + 10_000 }, async () => ({
+        value: null,
+        events: [{ type: 'com.rezics.search.recent-changed.v1', subject: id, data: { accountId: id } }],
+      }));
+    } finally {
+      barrier.release();
+    }
+    expect(await pending).toEqual(new Map([[stable, before.get(stable)!]]));
+  } finally {
+    await observer.close();
+  }
+});
+
 test('durable cross-partition gate pages retain disappearance, fixed catch-up cuts and retryable dispatch', async () => {
   const subject = newId(0x6b36);
   await fixture.reader.query(

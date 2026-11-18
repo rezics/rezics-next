@@ -164,6 +164,20 @@ test('64 certified mixed Discovery homes distinguish changed native cuts before 
     expect(current.native.review).toBeUndefined();
     expect(current.native['space-batch']?.homes).toBe(homes);
     expect(current.native.space).toBeUndefined();
+    const reviewReader = resolved.metadataProducers.review!;
+    const partial = await check(cuts, {
+      ...resolved.metadataProducers,
+      review: {
+        ...reviewReader,
+        async readEmptyPositions(partitions) {
+          const observed = new Map(await reviewReader.readEmptyPositions!(partitions));
+          observed.delete(cuts[3]!.partition);
+          return observed;
+        },
+      },
+    });
+    expect(partial.checks[3]).toEqual({ state: 'metadata', partition: cuts[3]!.partition, kind: 'review' });
+    expect(partial.checks.filter((row) => row.state === 'current')).toHaveLength(homes - 1);
     // Present stale certified observations to the identical native checker in the same 64-home cohort.
     const stale = cuts.map((row) => ({ ...row }));
     stale[0]!.claim_revision = String(BigInt(cuts[0]!.claim_revision) + 1n);

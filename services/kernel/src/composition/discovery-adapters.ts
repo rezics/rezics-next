@@ -327,7 +327,8 @@ function createReviewPopulationProducer(
       return (await read(partition, [])).position;
     },
     ...(readEmptyPositions && {
-      readEmptyPositions: (partitions: readonly number[]) => observe(() => readEmptyPositions(partitions), true),
+      readEmptyPositions: (partitions: readonly number[]) =>
+        observe(() => readEmptyPositions(partitions, { omitChanged: true }), true),
     }),
   };
 }
