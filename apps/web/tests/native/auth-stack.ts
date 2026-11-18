@@ -4,7 +4,7 @@ import { type Browser, type BrowserContext, type Page, type Response as Playwrig
 import { SESSION_COOKIE } from '../../src/session/cookies.ts';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
-import { traceWebModuleFailure } from './web-module-failure.ts';
+import { traceWebModuleFailure, type WebModuleFailureTrace } from './web-module-failure.ts';
 import { createNativeAuthPageApp } from './auth-page-app.ts';
 import {
   currentNativeLifecycle,
@@ -56,6 +56,7 @@ type NativeSignInOptions = {
 type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
+  moduleFailureTrace?: WebModuleFailureTrace;
   origin: string;
   pageAppProcess(): NativeProcessIdentity | undefined;
   settlePageApp(): Promise<void>;
@@ -157,7 +158,12 @@ async function hydrate(page: Page): Promise<void> {
 
 export async function startAuthStack(
   stack: NativeWebStack,
-  options: { nativeFixtureKey?: string; preparedMessages?: boolean; useHeadlessShell?: boolean } = {},
+  options: {
+    nativeFixtureKey?: string;
+    preparedMessages?: boolean;
+    useHeadlessShell?: boolean;
+    traceModules?: boolean;
+  } = {},
 ): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
@@ -307,7 +313,7 @@ export async function startAuthStack(
     lifecycle.assertOpen('route Auth pages');
     origin = await routePages(true);
     const moduleFailureTrace =
-      process.env.WEB_TEST_MODULE_FAILURE_TRACE === '1'
+      options.traceModules || process.env.WEB_TEST_MODULE_FAILURE_TRACE === '1'
         ? traceWebModuleFailure(stack.web, stack.memoryObservation?.())
         : undefined;
     privateBrowser = await launchPrivateBrowser(
@@ -693,6 +699,7 @@ export async function startAuthStack(
     });
     return {
       origin,
+      ...(moduleFailureTrace && { moduleFailureTrace }),
       pageAppProcess: () => pageApp.process(),
       async settlePageApp() {
         // A new request can start a generation while the previous one retires.
