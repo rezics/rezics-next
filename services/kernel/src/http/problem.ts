@@ -132,6 +132,14 @@ export function logDeadlineExceeded(context: { method: string; id: string; route
     );
 }
 
+export function isImportCatalogueWalk(): boolean {
+  return (
+    process.env.REZICS_WALK_IMPORT_CATALOGUE === '1' &&
+    Boolean(process.env.REZICS_WALK_STACK_SLOT) &&
+    process.env.NODE_ENV !== 'production'
+  );
+}
+
 export function problemResponse(
   error: unknown,
   context: { method: string; id: string; action?: string; route?: string | undefined; observeWalkSubject?: boolean },
@@ -207,9 +215,7 @@ export function problemResponse(
     code === 'semantic_not_ready' &&
     context.method === 'GET' &&
     context.route === '/v1/subjects/:id' &&
-    process.env.REZICS_WALK_IMPORT_CATALOGUE === '1' &&
-    process.env.REZICS_WALK_STACK_SLOT &&
-    process.env.NODE_ENV !== 'production'
+    isImportCatalogueWalk()
   ) {
     const reason =
       error instanceof SubjectProjectionPreparingError

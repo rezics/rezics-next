@@ -546,7 +546,9 @@ export function walkSubjectReadReason(value: string | null): string | undefined 
   if (value === 'other-readiness') return value;
   const known =
     /^(?:subject|merged-member)\/(?:initial|revision-recheck)\/(?:deadline|checkpoint-deadline|merge-deadline|merge|(?:local|foreign)-checkpoint-(?:missing|uninitialized|zero-position|epoch|position))$/u;
-  return value && known.exec(value)?.[0] === value ? value : undefined;
+  const missing =
+    /^(?:subject|merged-member)\/(?:initial|revision-recheck)\/foreign-checkpoint-missing\/(?:global|nonroot)\/required-positive\/owner-(?:absent|inactive|epoch|empty|behind|covers)\/first-(?:present|absent)\/scan-(?:unseen|recorded|before-first|since-first)\/effects-(?:covers|behind|absent)$/u;
+  return value && (known.exec(value)?.[0] === value || missing.exec(value)?.[0] === value) ? value : undefined;
 }
 
 /** Walks wait for Kernel and native Auth when frontends are deferred; otherwise Web, issuer and Kernel. */

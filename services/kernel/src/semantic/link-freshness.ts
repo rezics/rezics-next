@@ -3,7 +3,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { SessionComponent } from '../tokens/session.ts';
-import type { SubjectLinkWaitReason } from './contract/subject-errors.ts';
+import type { MissingCheckpointOwner, SubjectLinkWaitReason } from './contract/subject-errors.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
 import readPendingMember from './links-read-pending-member.sql';
 import readProjectionPending from './merge-read-projection-pending.sql';
@@ -48,6 +48,21 @@ function checkpointWaitReason(
 ): SubjectLinkWaitReason {
   const home = row.partition_no === partitionOf(routeOf(subject)!) ? 'local' : 'foreign';
   if (row.checkpoint_epoch === null && String(row.position) === '0') return `${home}-checkpoint-zero-position`;
+  if (home === 'foreign' && row.first_present !== null && row.checkpoint_position === null) {
+    let owner: MissingCheckpointOwner;
+    if (row.owner_state === null) owner = 'absent';
+    else if (row.owner_state !== 'active') owner = 'inactive';
+    else if (row.owner_epoch !== row.epoch) owner = 'epoch';
+    else if (String(row.owner_position) === '0') owner = 'empty';
+    else owner = row.owner_behind ? 'behind' : 'covers';
+    const source = row.partition_no === 0 ? 'global' : 'nonroot';
+    const first = row.first_present ? 'present' : 'absent';
+    const scan = row.scan_since_first === null
+      ? (row.scan_recorded ? 'recorded' : 'unseen')
+      : (row.scan_since_first ? 'since-first' : 'before-first');
+    const effects = row.effects_covers ? 'covers' : row.effects_registered ? 'behind' : 'absent';
+    return `foreign-checkpoint-missing/${source}/required-positive/owner-${owner}/first-${first}/scan-${scan}/effects-${effects}`;
+  }
   if (row.checkpoint_position === null) return `${home}-checkpoint-missing`;
   if (row.checkpoint_epoch === null) return `${home}-checkpoint-uninitialized`;
   if (row.checkpoint_epoch !== row.epoch) return `${home}-checkpoint-epoch`;
@@ -62,9 +77,11 @@ export async function linksCaughtUp(
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
   observeWait?: (reason: SubjectLinkWaitReason) => void,
+  observeMissing = false,
 ): Promise<boolean> {
   const requirements = {
     consumer: LINKS_CONSUMER,
+    observe_missing: observeMissing,
     partitions: seen.map((component) => component.partition),
     epochs: seen.map((component) => component.epoch),
     positions: seen.map((component) => component.position),
@@ -114,9 +131,10 @@ export function waitForSubjectLinks(
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
   observeWait?: (reason: SubjectLinkWaitReason) => void,
+  observeMissing = false,
 ): Promise<boolean> {
   const started = Date.now();
   // Leave at least half of the remaining request budget for authorization and the read.
   const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission, observeWait);
+  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission, observeWait, observeMissing);
 }
