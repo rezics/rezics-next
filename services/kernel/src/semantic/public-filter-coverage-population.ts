@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
+import { MAX_PAGE_COST, MAX_PAGE_READS } from '@rezics/composition';
 import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
@@ -43,7 +44,9 @@ type Head = {
   position: string | null;
   population_fenced: boolean | null;
 };
+type PopulationRequest = Extract<PrivacyReductionObservationRequest, { kind: 'population' }>;
 type Row = {
+  slot: number;
   observation: string;
   registration: string;
   queried: string;
@@ -282,24 +285,8 @@ function validWindow(execution: CustodyExecution, window: NativeWindow, start: P
   );
 }
 
-/** One native statement snapshot covers binding, pending, independent native
- * Account/claim maintenance, immutable generations, and keyed own-row controls.
- * A start is retained only after all indexed barriers are empty. Repair/ACK never
- * changes this row or the original covered generation.
- */
-export async function readPublicFilterPopulation(
-  pool: Pool,
-  routeKey: Uint8Array,
-  request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
-  search: PublicFilterSearchBindingPort,
-  access: PublicFilterAccessBindingPort,
-  publication?: PublicationPopulation,
-): Promise<PrivacyReductionObservation> {
-  const final = request.start !== null;
-  // Reserve misses, controls and the attempted start write before submitting SQL.
-  // Two role reads use at most 64 fixed rows; summaries add exactly their native
-  // summary + current-head point. Keyed own controls have their separate page cost.
-  const cost: Cost = {
+function reservePopulationRole(final: boolean): Cost {
+  return {
     inputKeys: 64,
     candidates: 0,
     accessPoints: 0,
@@ -313,10 +300,84 @@ export async function readPublicFilterPopulation(
     rows: 32,
     bytes: 0,
   };
+}
+
+function populationResult(
+  row: Row,
+  request: PopulationRequest,
+  cost: Cost,
+  start: string | null,
+  pageId: string | null,
+  search: PublicFilterSearchBindingPort,
+  publication?: PublicationPopulation,
+): PrivacyReductionObservation {
+  // The single population CTE checks the common withdrawals and reads the head
+  // once. Births, keyed home controls and own Subjects are per retained window.
+  const withdrawals = row.slot === 0 && Array.isArray(row.book_withdrawals) ? row.book_withdrawals.length : 0;
+  const headsRead = row.slot === 0 ? row.heads.length : 0;
+  cost.inputKeys += 4 * withdrawals + 4 * row.own_births;
+  cost.dependencyPoints += 3 * withdrawals + 2 * row.own_births;
+  cost.rows += 3 * withdrawals + 2 * row.own_births;
+  cost.inputKeys += row.coverage_keys.length + 5 * row.own_homes + 2 * row.own_subjects;
+  cost.dependencyPoints += 2 * headsRead + 2 * row.own_homes + row.own_subjects;
+  cost.rows += 2 * headsRead + 2 * row.own_homes + row.own_subjects;
+  const final = request.start !== null;
+  if (
+    cost.inputKeys > 1000 ||
+    cost.bytes > 4 * 1024 * 1024 ||
+    !validBindings(row, request, search, publication) ||
+    row.pending ||
+    row.fenced ||
+    row.heads.some(
+      (head) =>
+        head.current_epoch === null ||
+        head.position === null ||
+        head.population_fenced ||
+        head.current_epoch !== head.source_epoch,
+    ) ||
+    (!final && row.heads.length > 0) ||
+    (row.heads.length === 0 &&
+      (!row.admitted || (!final && (row.inserted_start !== start || (pageId !== null && row.started_page !== pageId)))))
+  )
+    return { status: 'unready', reason: 'metadata_missing', cost };
+  const heads = row.heads.map((head) => ({
+    phase: head.phase,
+    head: { partition: head.source_home, epoch: head.current_epoch!, position: BigInt(head.position!) },
+  }));
+  return {
+    status: 'observed',
+    coverage: 'all_native_homes',
+    start: publication ? request.start! : { observation: `population:${start}` },
+    routingComplete: true,
+    unacknowledged: heads.filter((head) => head.phase === 'pending').map((head) => head.head),
+    changed: heads.filter((head) => head.phase === 'changed').map((head) => head.head),
+    blocking: heads.map((head) => ({ ...head, scope: 'filter_or_order' })),
+    cost,
+  };
+}
+
+/** One statement snapshot for one role. Each member names its own planned native
+ * page or sealed tail. Only the complete, equal population controls share probes.
+ * Child bindings, windows and own rows remain charged to each member.
+ */
+export async function readPublicFilterPagePopulations(
+  pool: Pool,
+  routeKey: Uint8Array,
+  requests: readonly PopulationRequest[],
+  search: PublicFilterSearchBindingPort,
+  access: PublicFilterAccessBindingPort,
+  publication?: PublicationPopulation,
+): Promise<PrivacyReductionObservation[]> {
+  if (!requests.length || requests.length > MAX_PAGE_READS) throw new RangeError('Invalid population page width');
+  const final = requests[0]!.start !== null;
+  const costs = requests.map((request) => reservePopulationRole(request.start !== null));
+  const unready = () =>
+    costs.map((cost) => ({ status: 'unready' as const, reason: 'metadata_missing' as const, cost }));
+  let dispatched = false;
   let accounted = false;
   let deadlineSelected = false;
-  const unready = (): PrivacyReductionObservation => ({ status: 'unready', reason: 'metadata_missing', cost });
-  const requireDeadline = (deadline: number) => {
+  const deadline = Math.min(...requests.map((request) => request.context.deadline));
+  const requireDeadline = () => {
     try {
       access.requireDeadline(deadline);
     } catch (error) {
@@ -325,126 +386,121 @@ export async function readPublicFilterPopulation(
     }
   };
   try {
-    const deadline = request.context.deadline;
-    requireDeadline(deadline);
-    if (!Number.isSafeInteger(deadline)) return unready();
-    // A malformed final role must never fall through SQL's NULL execution
-    // branch and attempt a new start without its write reservation.
+    requireDeadline();
+    const multiple = requests.length > 1;
+    if (publication && multiple) return unready();
+    const admitted = requests.map((request) => structuredClone(request));
+    const members = admitted.map((request, slot) => {
+      const q = request.queried;
+      if (
+        !Number.isSafeInteger(request.context.deadline) ||
+        (request.start !== null) !== final ||
+        (final ? typeof request.execution !== 'string' || !request.execution : request.execution !== undefined) ||
+        !q ||
+        !/^0:/.test(q.snapshot.observation)
+      )
+        throw new TypeError('Invalid native population role');
+      if (
+        publication &&
+        (request.start?.observation !== `0:${publication.bootstrap}` ||
+          q.snapshot.kind !== 'prepared' ||
+          q.snapshot.build !== request.start.observation ||
+          !uuid.test(publication.job) ||
+          !uuid.test(publication.bootstrap) ||
+          !uuid.test(publication.terminal.step) ||
+          !/^[0-9a-f]{64}$/.test(publication.terminal.root))
+      )
+        throw new TypeError('Invalid publication population');
+      const pageId = final ? null : search.coverageStart(requests[slot]!.context);
+      if (multiple && (q.snapshot.kind !== 'pit' || (!final && pageId === null)))
+        throw new TypeError('A composed population requires native pages');
+      const start = publication
+        ? null
+        : final
+          ? nativePopulationStartId(request.start!.observation)
+          : (pageId ?? randomUUID());
+      if (pageId !== null || final) costs[slot]!.resultWrites++;
+      return {
+        slot,
+        observation: q.snapshot.observation,
+        queried: search.encodeState(q),
+        consumer: search.encodeConsumer(q.consumer),
+        physical_target: q.consumer.physicalTarget,
+        incarnation: q.consumer.incarnation,
+        execution_id: request.execution ?? null,
+        start_id: start,
+        deadline: request.context.deadline,
+        page_id: pageId,
+        publication_job: publication?.job,
+        publication_bootstrap: publication?.bootstrap,
+        terminal_step: publication?.terminal.step,
+        terminal_root: publication?.terminal.root,
+      };
+    });
     if (
-      final ? typeof request.execution !== 'string' || request.execution.length === 0 : request.execution !== undefined
+      new Set(members.map((m) => m.observation)).size !== members.length ||
+      new Set(members.map((m) => m.start_id)).size !== members.length
     )
       return unready();
-    const q = request.queried;
-    if (!q || !/^0:/.test(q.snapshot.observation)) return unready();
-    if (
-      publication &&
-      (request.start?.observation !== `0:${publication.bootstrap}` ||
-        q.snapshot.kind !== 'prepared' ||
-        q.snapshot.build !== request.start.observation ||
-        !uuid.test(publication.job) ||
-        !uuid.test(publication.bootstrap) ||
-        !uuid.test(publication.terminal.step) ||
-        !/^[0-9a-f]{64}$/.test(publication.terminal.root))
-    )
-      return unready();
-    const pageId = final ? null : search.coverageStart(request.context);
-    const start = publication
-      ? null
-      : final
-        ? nativePopulationStartId(request.start!.observation)
-        : (pageId ?? randomUUID());
-    if (pageId !== null) cost.resultWrites++;
-    if (final) cost.resultWrites++; // attempted native root finish, including misses
     const sql = statement.replace('semantic.privacy-role', final ? 'semantic.privacy-final' : 'semantic.privacy-start');
     const values = [
-      0,
-      q.snapshot.observation,
-      search.encodeState(q),
-      search.encodeConsumer(q.consumer),
+      JSON.stringify(members),
       Date.now(),
-      q.consumer.physicalTarget,
-      q.consumer.incarnation,
       createHash('sha256').update(routeKey).digest('hex'),
-      final ? request.execution : null,
-      start,
-      deadline,
-      pageId,
-      publication?.job ?? null,
-      publication?.bootstrap ?? null,
-      publication?.terminal.step ?? null,
-      publication?.terminal.root ?? null,
       [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+      members.length,
+      MAX_PAGE_COST,
     ];
-    cost.statements++;
-    cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
-    const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+    // Each member pays for its binding and returned row. Charge the shared SQL,
+    // parameter encoding and result envelope once, retaining the original wire total.
+    const shared = costs[0]!;
+    shared.statements++;
+    shared.bytes = Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
+    for (const member of members.slice(1)) {
+      const bytes = Buffer.byteLength(JSON.stringify(member));
+      costs[member.slot]!.bytes += bytes;
+      shared.bytes -= bytes;
+    }
+    dispatched = true;
     const result = await withRequestDeadline(deadline, () =>
-      withBoundedReadConnection(pool, deadline, (client) => client.query<Row>(query), {
-        // A settled transport failure still cannot prove whether retention committed.
-        // The lifetime keeps settled PostgreSQL rejections distinct from this case.
-        isUncertainSettledQueryError: () => true,
-      }),
+      withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) => client.query<Row>({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) }),
+        { isUncertainSettledQueryError: () => true },
+      ),
     );
-    cost.bytes += Buffer.byteLength(search.encodeState(result.rows));
-    const row = result.rows[0];
-    if (!row || result.rows.length !== 1) {
-      accounted = true;
-      requireDeadline(deadline);
+    shared.bytes += Buffer.byteLength(search.encodeState(result.rows));
+    if (!result.rows.length) {
+      // A missing common scope can follow successful work on some siblings.
+      // Without their row counts retain the failed-call reservation for each.
+      accounted = !multiple;
+      requireDeadline();
+      if (multiple) throw new TypeError('Incomplete native population bindings');
       return unready();
     }
-    const withdrawals = Array.isArray(row.book_withdrawals) ? row.book_withdrawals.length : 0;
-    cost.inputKeys += 4 * withdrawals + 4 * row.own_births;
-    cost.dependencyPoints += 3 * withdrawals + 2 * row.own_births;
-    cost.rows += 3 * withdrawals + 2 * row.own_births;
-    cost.inputKeys += row.coverage_keys.length + 5 * row.own_homes + 2 * row.own_subjects;
-    cost.dependencyPoints += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
-    cost.rows += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
+    if (result.rows.length !== admitted.length || result.rows.some((row, i) => row.slot !== i))
+      throw new TypeError('Incomplete native population bindings');
+    for (const row of result.rows.slice(1)) {
+      const bytes = Buffer.byteLength(search.encodeState(row));
+      costs[row.slot]!.bytes += bytes;
+      shared.bytes -= bytes;
+    }
+    const observations = result.rows.map((row, slot) => {
+      const member = members[slot]!;
+      return populationResult(row, admitted[slot]!, costs[slot]!, member.start_id, member.page_id, search, publication);
+    });
     accounted = true;
-    requireDeadline(deadline);
-    if (
-      cost.inputKeys > 1000 ||
-      cost.bytes > 4 * 1024 * 1024 ||
-      !validBindings(row, request, search, publication) ||
-      row.pending ||
-      row.fenced ||
-      row.heads.some(
-        (head) =>
-          head.current_epoch === null ||
-          head.position === null ||
-          head.population_fenced ||
-          head.current_epoch !== head.source_epoch,
-      )
-    )
-      return unready();
-    if (
-      (!final && row.heads.length > 0) ||
-      (row.heads.length === 0 &&
-        (!row.admitted ||
-          (!final && (row.inserted_start !== start || (pageId !== null && row.started_page !== pageId)))))
-    )
-      return unready();
-    const heads = row.heads.map((head) => ({
-      phase: head.phase,
-      head: { partition: head.source_home, epoch: head.current_epoch!, position: BigInt(head.position!) },
-    }));
-    return {
-      status: 'observed',
-      coverage: 'all_native_homes',
-      start: publication ? request.start! : { observation: `population:${start}` },
-      routingComplete: true,
-      unacknowledged: heads.filter((head) => head.phase === 'pending').map((head) => head.head),
-      changed: heads.filter((head) => head.phase === 'changed').map((head) => head.head),
-      blocking: heads.map((head) => ({ ...head, scope: 'filter_or_order' })),
-      cost,
-    };
+    requireDeadline();
+    return observations;
   } catch (error) {
-    if (cost.statements > 0 && !accounted) {
-      // A lost/failed statement cannot refund unknown native work. Each
-      // dispatched own control needs at least two of the 936 remaining keys;
-      // keep that entire possible prefix, plus both changed/behind controls.
-      cost.inputKeys = 1000;
-      cost.dependencyPoints += 468 + 4;
-      cost.rows += 468 + 4;
+    if (dispatched && !accounted) {
+      // Unknown work on any submitted member keeps the full original reservation.
+      for (const cost of costs) {
+        cost.inputKeys = 1000;
+        cost.dependencyPoints = 32 + 468 + 4;
+        cost.rows = 32 + 468 + 4;
+      }
     }
     if (error instanceof TypeError || error instanceof RangeError || error instanceof SyntaxError) return unready();
     if (
@@ -452,11 +508,23 @@ export async function readPublicFilterPopulation(
       access.classifyUnavailability(error) !== undefined ||
       (error && typeof error === 'object' && 'code' in error)
     )
-      return {
+      return costs.map((cost) => ({
         status: 'unavailable',
         reason: deadlineSelected || error instanceof BoundedReadDeadlineError ? 'deadline' : 'dependency_unavailable',
         cost,
-      };
+      }));
     throw error;
   }
+}
+
+export async function readPublicFilterPopulation(
+  pool: Pool,
+  routeKey: Uint8Array,
+  request: PopulationRequest,
+  search: PublicFilterSearchBindingPort,
+  access: PublicFilterAccessBindingPort,
+  publication?: PublicationPopulation,
+): Promise<PrivacyReductionObservation> {
+  const [result] = await readPublicFilterPagePopulations(pool, routeKey, [request], search, access, publication);
+  return result!;
 }

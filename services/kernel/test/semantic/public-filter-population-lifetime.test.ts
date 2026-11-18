@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import type { Pool, PoolClient } from 'pg';
+import {
+  publicFilterCoverageStart,
+  withPublicFilterCoverageStarts,
+} from '../../src/search/public-filter-coverage-page.ts';
 import { publicFilterCoverageKeys } from '../../src/semantic/public-filter-coverage-pending.ts';
-import { readPublicFilterPopulation } from '../../src/semantic/public-filter-coverage-population.ts';
+import { readPublicFilterPagePopulations, readPublicFilterPopulation } from '../../src/semantic/public-filter-coverage-population.ts';
 import type {
   PrivacyReductionObservationRequest,
   PrivacyReductionStart,
@@ -56,6 +60,29 @@ function queryBytes(query: NativeQuery): number {
   return Buffer.byteLength(query.text) + Buffer.byteLength(encode(query.values));
 }
 
+test('one composed START releases only the native page contexts it enrolled', async () => {
+  const first = { context: { deadline: Date.now() + 1000 }, id: randomUUID() };
+  const second = { context: { deadline: first.context.deadline }, id: randomUUID() };
+  await withPublicFilterCoverageStarts([first], async () => {
+    await assert.rejects(
+      withPublicFilterCoverageStarts([second, first], async () => assert.fail('A partial cohort dispatched')),
+      /Concurrent native coverage starts/,
+    );
+    assert.equal(publicFilterCoverageStart(first.context), first.id);
+    assert.equal(publicFilterCoverageStart(second.context), null);
+  });
+  await assert.rejects(
+    withPublicFilterCoverageStarts([first, second], async () => {
+      assert.equal(publicFilterCoverageStart(first.context), first.id);
+      assert.equal(publicFilterCoverageStart(second.context), second.id);
+      throw new Error('Source unavailable');
+    }),
+    /Source unavailable/,
+  );
+  assert.equal(publicFilterCoverageStart(first.context), null);
+  assert.equal(publicFilterCoverageStart(second.context), null);
+});
+
 test('population start/final retention bounds native custody and replays the durable result at unchanged cost', async () => {
   const routeKey = Uint8Array.from([7, 11, 13]);
   const startId = randomUUID();
@@ -83,11 +110,14 @@ test('population start/final retention bounds native custody and replays the dur
   const definition = {
     readDefinition: 'definition',
     source: { id: 'source', partition: 0, epoch: 1, configuration: 'configuration' },
-    meaning: { digest: 'release', type: 'subject' },
+    meaning: { digest: 'release', release: { types: { subject: {} } } },
     capture,
     dependencyKeys: [],
   };
   const row = {
+    slot: 0,
+    book_withdrawals: null,
+    own_births: 0,
     observation: queried.snapshot.observation,
     registration: randomUUID(),
     queried: encode(queried),
@@ -210,9 +240,10 @@ test('population start/final retention bounds native custody and replays the dur
   assert.equal(stalled.reason, 'deadline');
   assert.ok(stalledQuery);
   assert.match(stalledQuery.text, /^\/\* semantic\.privacy-final \*\//);
-  assert.equal(stalledQuery.values[8], executionId);
-  assert.equal(stalledQuery.values[9], startId);
-  assert.equal(stalledQuery.values[11], null);
+  const [binding] = JSON.parse(String(stalledQuery.values[0]));
+  assert.equal(binding.execution_id, executionId);
+  assert.equal(binding.start_id, startId);
+  assert.equal(binding.page_id, null);
   assert.ok((await stalledReleased) instanceof Error);
   assert.deepEqual(stalled.cost, {
     ...fixedCost, inputKeys: 1000, dependencyPoints: 504,
@@ -239,12 +270,40 @@ test('population start/final retention bounds native custody and replays the dur
   assert.deepEqual(replay.blocking, []);
   assert.equal(replayReleases, 1);
   assert.ok(replayQuery);
-  assert.equal(replayQuery.values[8], stalledQuery.values[8]);
-  assert.equal(replayQuery.values[9], stalledQuery.values[9]);
+  const [replayed] = JSON.parse(String(replayQuery.values[0]));
+  assert.equal(replayed.execution_id, binding.execution_id);
+  assert.equal(replayed.start_id, binding.start_id);
   assert.deepEqual(replay.cost, {
     ...fixedCost, inputKeys: 64 + row.coverage_keys.length, dependencyPoints: 32,
     statements: 1, rows: 32, bytes: queryBytes(replayQuery) + Buffer.byteLength(encode([row])),
   });
+
+  // A matching population can't substitute the first page's finish for another
+  // execution. Exercise the response mapping after the single native dispatch.
+  const sibling: PopulationRequest = {
+    ...request(Date.now() + 1000), start: { observation: `population:${randomUUID()}` },
+    execution: randomUUID(),
+    queried: { ...queried, snapshot: { ...queried.snapshot, observation: `0:${randomUUID()}` } },
+  };
+  let dispatches = 0;
+  const crossedClient = client(async (query) => {
+    dispatches++;
+    assert.match(query.text, /^\/\* semantic\.privacy-final \*\//);
+    const submitted: { execution_id: string }[] = JSON.parse(String(query.values[0]));
+    assert.deepEqual(submitted.map((member) => member.execution_id), [executionId, sibling.execution]);
+    return { rows: [row, { ...row, slot: 1, queried: encode(sibling.queried) }] };
+  }, () => {});
+  const crossed = await readPublicFilterPagePopulations(
+    pool(async () => crossedClient), routeKey, [request(Date.now() + 1000), sibling], search, access,
+  );
+  assert.equal(dispatches, 1);
+  assert.deepEqual(crossed.map(member => member.status), ['observed', 'unready']);
+  assert.deepEqual(crossed.map(member => 'statements' in member.cost && member.cost.statements), [1, 0]);
+  const duplicate = await readPublicFilterPagePopulations(
+    noCheckout, routeKey, [sibling, sibling], search, access,
+  );
+  assert.deepEqual(duplicate.map(member => member.status), ['unready', 'unready']);
+  assert.equal(unexpectedCheckouts, 0);
 
   const serverError = Object.assign(new Error('settled PostgreSQL rejection'), { code: '23505', severity: 'ERROR' });
   let serverReleaseCount = 0;

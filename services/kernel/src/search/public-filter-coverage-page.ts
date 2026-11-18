@@ -86,21 +86,32 @@ export function openPublicFilterCoveragePage(
   return open(Object.freeze({ deadline: context.deadline }), capture);
 }
 
-/** Internal role binding only. The UUID must already name a closed native plan;
- * the Source statement checks its observation, definition, owner and deadline.
+/** Each ID names an already planned native page. The Source statement resolves
+ * every original binding and deadline before it retains a start for that page.
  */
-export async function withPublicFilterCoverageStart<T>(
+export async function withPublicFilterCoverageStarts<T>(
+  pages: readonly Readonly<{ context: PublicFilterConsumerContext; id: string }>[],
+  run: () => Promise<T>,
+): Promise<T> {
+  const installed: PublicFilterConsumerContext[] = [];
+  try {
+    for (const { context, id } of pages) {
+      if (starts.has(context)) throw new TypeError('Concurrent native coverage starts');
+      starts.set(context, id);
+      installed.push(context);
+    }
+    return await run();
+  } finally {
+    for (const context of installed) starts.delete(context);
+  }
+}
+
+export function withPublicFilterCoverageStart<T>(
   context: PublicFilterConsumerContext,
   id: string,
   run: () => Promise<T>,
 ): Promise<T> {
-  if (starts.has(context)) throw new TypeError('Concurrent native coverage starts');
-  starts.set(context, id);
-  try {
-    return await run();
-  } finally {
-    starts.delete(context);
-  }
+  return withPublicFilterCoverageStarts([{ context, id }], run);
 }
 
 export function publicFilterCoverageStart(context: PublicFilterConsumerContext): string | null {

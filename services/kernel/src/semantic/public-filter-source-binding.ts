@@ -264,6 +264,12 @@ export type JoinedPopulationRequest =
       execution: string;
     }>;
 
+/** Same native head reader, with one role snapshot for an admitted set of Book pages. */
+export type PagePopulationRequest = Readonly<{
+  kind: 'page';
+  members: readonly Extract<PrivacyReductionObservationRequest, { kind: 'population' }>[];
+}>;
+
 export interface PublicFilterNativeSource extends PublicFilterSource {
   resolvePublicFilterDefinition(
     request: Readonly<{
@@ -279,6 +285,7 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
       }>
     | PublicFilterConsumerUnavailable
   >;
+  readPrivacyReductionHeads(request: PagePopulationRequest): Promise<readonly PrivacyReductionObservation[]>;
   readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
   readPrivacyReductionHeads(
     request: JoinedPopulationRequest,
