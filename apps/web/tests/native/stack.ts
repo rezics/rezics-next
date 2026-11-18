@@ -1985,8 +1985,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   }
   const environment = { ...process.env };
   const originalDatabaseUrl = environment.DATABASE_URL;
+  const bundledClient = options.bundledClient ?? environment.NATIVE_WEB_BUNDLED_CLIENT === '1';
   // Production preview reads the compiled Worker and assets directly from Cloudflare Build Output.
-  const viteCache = options.bundledClient ? undefined : await prepareNativeWebCache(lifecycle, environment);
+  const viteCache = bundledClient ? undefined : await prepareNativeWebCache(lifecycle, environment);
   let analysisDatabase: string | undefined;
   let postgresContainer: string | undefined;
   let postgresSocketDirectory: string | undefined;
@@ -1996,7 +1997,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
-    NATIVE_WEB_BUNDLED_CLIENT: options.bundledClient ? '1' : undefined,
+    NATIVE_WEB_BUNDLED_CLIENT: bundledClient ? '1' : undefined,
     NATIVE_WEB_STARTUP_READINESS: options.onServicesReady ? 'services' : 'website',
     NATIVE_WEB_SITEMAP_EXPORT_TOKEN: options.sitemapExportToken,
     NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
@@ -2189,7 +2190,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const reportInterruptedStage = () => {
     if (bundledStage) recordBundledStage('interrupted');
   };
-  if (options.bundledClient) lifecycle.signal.addEventListener('abort', reportInterruptedStage, { once: true });
+  if (bundledClient) lifecycle.signal.addEventListener('abort', reportInterruptedStage, { once: true });
   host.on('message', (reply: HostReply) => {
     if ('ownedGroup' in reply) {
       const { label, pid } = reply.ownedGroup;
