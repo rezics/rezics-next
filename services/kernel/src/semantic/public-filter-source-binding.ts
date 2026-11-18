@@ -1322,14 +1322,13 @@ export function createNativePublicFilterSourceBinding(
       receipt,
     };
   }
-  async function scanIrrelevantCreationPrefix(
+  async function scanPublicationCreationPrefix(
     bootstrap: string,
     state: RepairState,
     inputLimit: number,
     db: Pool,
     context: PublicFilterConsumerContext,
     cost: BindingCost,
-    accounts: boolean,
     retained?: NonNullable<RepairRecord['windowBatch']>,
   ) {
     if (
@@ -1348,7 +1347,6 @@ export function createNativePublicFilterSourceBinding(
         bootstrap: nativeId(bootstrap),
         from: state.partition,
         inputLimit,
-        accounts,
         ...(retained?.through === undefined ? {} : { through: retained.through }),
       },
       context,
@@ -1865,10 +1863,9 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
-      const mixed = 'representation' in bootstrap.definition.capture;
-      const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined || mixed;
+      const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined;
       const prefix = scanPrefix
-        ? await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, mixed, replay?.windowBatch)
+        ? await scanPublicationCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, replay?.windowBatch)
         : null;
       const scanned =
         prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
@@ -3076,20 +3073,18 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
           if (record.input.phase === 'window' && record.windowBatch) {
-            const mixed = 'representation' in cut.definition.capture;
-            if (record.windowBatch.through !== undefined && !mixed && !boundSubjectPublication(cut, input))
+            if (record.windowBatch.through !== undefined && !boundSubjectPublication(cut, input))
               throw new BindingError('binding_mismatch');
             const scanned =
               record.windowBatch.through === undefined
                 ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
-                : await scanIrrelevantCreationPrefix(
+                : await scanPublicationCreationPrefix(
                     input.bootstrap,
                     record.input,
                     row.input_limit,
                     db,
                     { deadline },
                     cost,
-                    mixed,
                     record.windowBatch,
                   );
             if (!scanned) throw new BindingError('owner_unavailable');

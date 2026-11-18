@@ -36,8 +36,8 @@ test('creation prefix closes only complete unrelated event groups under the reta
     expect(cost.inputKeys).toBe(8 + invalid.length);
     expect(cost.rows).toBe(20 + invalid.length);
     expect(queries).toEqual([
-      [6, '3', '4', 6, []],
-      [7, '3', '5', 4, []],
+      [6, '3', '4', 6],
+      [7, '3', '5', 4],
     ]);
   }
 
@@ -45,7 +45,7 @@ test('creation prefix closes only complete unrelated event groups under the reta
   const pool = {
     async query(sql: string, values: unknown[]) {
       if (sql.includes('generate_series')) return { rows: [{ ...first, head: '5' }] };
-      expect(values).toEqual([6, '3', '4', 7, []]);
+      expect(values).toEqual([6, '3', '4', 7]);
       return { rows: [event, tail] };
     },
   } as unknown as Pool;
@@ -58,22 +58,6 @@ test('creation prefix closes only complete unrelated event groups under the reta
     { inputKeys: 0, rows: 0, dependencyPoints: 0 },
   );
   expect(replay[0]?.window.through).toBe(4n);
-
-  const mixedPool = {
-    async query(sql: string, values: unknown[]) {
-      if (sql.includes('generate_series')) return { rows: [first] };
-      expect(values[4]).toContain('com.rezics.access.account-discovery-changed.v1');
-      return { rows: [{ ...event, event_count: 1, repairs_subject: true }] };
-    },
-  } as unknown as Pool;
-  expect(
-    await readPublicFilterCreationPrefix(
-      mixedPool,
-      { bootstrap, from: 6, inputLimit: 12, accounts: true },
-      { deadline },
-      { inputKeys: 0, rows: 0, dependencyPoints: 0 },
-    ),
-  ).toEqual([]);
 });
 
 test('quiet windows use the full remaining metadata allowance across groups', async () => {
