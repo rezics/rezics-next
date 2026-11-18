@@ -4,6 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
+import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject.tsx');
@@ -90,13 +91,17 @@ test('Recipe pages render the page.read method body and omit withheld text from 
   expect(serialized).toBeDefined();
   expect(visible).toContain(method);
   expect(visible.toLowerCase()).not.toContain('unavailable');
-  expect(JSON.parse(serialized!)['@graph'][0].recipeInstructions).toEqual([
-    { '@type': 'HowToStep', text: method, inLanguage: 'en' },
-  ]);
+  const unavailable = m.candidate_value_unavailable({}, { locale: 'en' });
+  expect(visible).not.toContain(unavailable);
+  expect(JSON.parse(serialized!)['@graph'][0].recipeInstructions).toEqual({
+    '@type': 'HowToStep',
+    text: method,
+    inLanguage: 'en',
+  });
 
   const withheld = renderPage({});
   const withheldJson = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(withheld)?.[1];
-  expect(withheld.toLowerCase()).toContain('unavailable');
+  expect(withheld).toContain(unavailable);
   expect(withheld).not.toContain(method);
   expect(withheldJson).toBeDefined();
   expect(JSON.parse(withheldJson!)['@graph'][0]).not.toHaveProperty('recipeInstructions');

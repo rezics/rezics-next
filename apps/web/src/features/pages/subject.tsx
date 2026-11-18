@@ -815,9 +815,10 @@ export function SubjectPage({
   }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
   const releasedDefinitions = page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined;
   const publicationReader = reader ?? defaultReader;
-  const recipeReading = read
-    ? recipePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
-    : undefined;
+  const recipeReading =
+    read && page.catalogue?.type === read.subject.type
+      ? recipePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
+      : undefined;
   const releaseReading = read
     ? releasePublicationReading(read.subject, releasedDefinitions, locale, publicationReader)
     : undefined;

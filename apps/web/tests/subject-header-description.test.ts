@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { Window } from 'happy-dom';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { fromMarkdown } from '@rezics/document';
 import {
@@ -14,7 +15,7 @@ import { ResultList } from '../src/search/results.tsx';
 import { pageHead } from '../src/shell/head.ts';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { subjectHead } from '../src/features/pages/subject-head.ts';
-import { withPageVisitHost } from './helpers/subject-render';
+import { renderSubject, withPageVisitHost } from './helpers/subject-render';
 
 const SubjectPage = withPageVisitHost(SubjectPageContent);
 
@@ -41,6 +42,7 @@ type RecordedStatement = {
 type RecordedBody = {
   subject: { id: string; descriptions: Record<string, string>; statements: Record<string, RecordedStatement[]> };
   documents?: Record<string, unknown>;
+  summary?: typeof recordedPage.reads.r0.body.summary | null;
 };
 const bodyOf = (page: SubjectPageData) => page.reads.r0!.body as unknown as RecordedBody;
 const subjectOf = (page: SubjectPageData) =>
@@ -79,7 +81,12 @@ const render = (page: SubjectPageData, locale = 'en') =>
   renderToString(createElement(SubjectPage, { page, locale, messages, renderJsonLd: false }));
 const count = (html: string, text: string) => html.split(text).length - 1;
 const headerOf = (html: string) => html.match(/<header\b[\s\S]*?<\/header>/)?.[0] ?? '';
-const aboutOf = (html: string) => html.match(/<section data-slot="subject-summary"[\s\S]*?<\/section>/)?.[0] ?? '';
+const document = new Window().document;
+function aboutOf(html: string) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  return template.content.querySelector('section[data-slot="subject-summary"]')?.outerHTML ?? '';
+}
 
 test('the subject page header shows no description, and the recorded paraphrased summary appears once in About', () => {
   const html = render(loaded());
@@ -165,11 +172,18 @@ test('meta description, JSON-LD, search and card snippets keep the description u
   expect(results).not.toContain(summary);
 });
 
-test('head and JSON-LD match the rendered public summary and nested inverse lists', () => {
+test('head and JSON-LD match the rendered public summary and nested inverse lists', async () => {
   const page = loaded();
   const locale = 'zh-Hans';
+  // A generic work renders its configured inverse lists directly. Book has its own literary destinations.
+  subjectOf(page).type = 'schema:CreativeWork';
+  bodyOf(page).summary = null;
+  const rendered = (source: SubjectPageData) =>
+    renderSubject(
+      createElement(SubjectPageContent, { page: source, locale, messages, renderJsonLd: false }),
+      `/${locale}/subjects/${source.subject}/little-prince`,
+    );
   const summaryText = '灯火穿过海湾，留下可见的航线。';
-  const sourceId = '0192f3a0-6c1e-7b2a-9d4e-000000000901';
   const canonicalId = '0192f3a0-6c1e-7b2a-9d4e-000000000902';
   const hiddenId = '0192f3a0-6c1e-7b2a-9d4e-000000000903';
   const hiddenLabel = '仅剧透读者可见的对象';
@@ -224,7 +238,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
           : `0192f3a0-6c1e-7b2a-9d4e-${String(904 + index).padStart(12, '0')}`;
     const statement = `0192f3a0-6c1e-7b2a-9d4e-${String(950 + index).padStart(12, '0')}`;
     return {
-      subject: index === 0 ? sourceId : id,
+      subject: id,
       label: index === 1 ? hiddenLabel : name,
       type: 'schema:Book',
       summary: {
@@ -263,7 +277,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
     };
   }
 
-  const html = render(page, locale);
+  const html = await rendered(page);
   expect(html).toContain(summaryText);
   expect(html).not.toContain(hiddenLabel);
   expect(html).not.toContain(hiddenId);
@@ -293,7 +307,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
   const mismatchedBody = bodyOf(mismatched);
   const bound = mismatchedBody.documents![preferred.id] as Record<string, unknown>;
   bound.digest = 'b'.repeat(64);
-  const mismatchedHtml = render(mismatched, locale);
+  const mismatchedHtml = await rendered(mismatched);
   expect(mismatchedHtml).not.toContain(summaryText);
   expect(mismatchedHtml).toContain('data-slot="subject-summary"');
   const mismatchedHead = subjectHead(mismatched, {
@@ -309,7 +323,7 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
     ...unplannedDocument,
     content: unplannedDocument.content.filter((node) => node.type !== 'Summary'),
   } as unknown as SubjectPageData['document'];
-  expect(render(unplanned, locale)).not.toContain(summaryText);
+  expect(await rendered(unplanned)).not.toContain(summaryText);
   const unplannedHead = subjectHead(unplanned, {
     origin: 'https://rezics.com',
     locale,
@@ -331,5 +345,5 @@ test('head and JSON-LD match the rendered public summary and nested inverse list
     path: `/zh-Hans/subjects/${concealedPreferred.subject}/little-prince`,
   });
   expect(concealedHead.meta.some((item) => 'name' in item && item.name === 'description')).toBe(false);
-  expect(render(concealedPreferred, locale)).not.toContain(summaryText);
+  expect(await rendered(concealedPreferred)).not.toContain(summaryText);
 });

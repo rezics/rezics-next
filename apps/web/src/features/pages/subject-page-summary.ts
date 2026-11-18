@@ -4,10 +4,10 @@ import { originalLanguage } from '../../subject/language';
 import { keepSearch, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { contextHref } from './context-navigation';
-import { statementDocument } from './documents';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
 import { holderItems } from './overview-holder-items';
 import { pageContext, type SubjectPageData } from './page-model';
+import { recipePublicationReading } from './recipe-publication/model';
 import { subjectBody } from './subject-read';
 import { isRecord, pageText } from './shared';
 
@@ -67,6 +67,10 @@ export function subjectPageJsonLd(
     Object.keys(read.subject.statements),
     page.context?.id,
   );
+  const recipeOverlay =
+    !page.account && page.catalogue?.state === 'released' && page.catalogue.type === read.subject.type
+      ? recipePublicationReading(read.subject, page.catalogue.definitions, locale)
+      : undefined;
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
   const subjectLabel = subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject));
   const path = keepSearch(subjectHref({ id: read.subject.id, label: subjectLabel }, locale).href);
@@ -78,7 +82,7 @@ export function subjectPageJsonLd(
         Object.entries(read.subject.statements).filter(([property, statements]) => {
           if (!statements.some((statement) => statement.property.data_type === 'document')) return true;
           if (documents?.properties.includes(property)) return true;
-          return statements.some((statement) => statementDocument(read.subject.id, statement, read.documents));
+          return recipeOverlay?.fields.some((field) => field.property === property);
         }),
       ),
     },
