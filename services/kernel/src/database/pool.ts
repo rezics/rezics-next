@@ -86,9 +86,14 @@ export type QueryAccounting = Readonly<{
   query<T>(sql: string, operands: readonly unknown[], dispatch: () => Promise<T>): Promise<T>;
   connection<T>(dispatch: () => Promise<T>): Promise<T>;
 }>;
-const queryAccounting = new AsyncLocalStorage<QueryAccounting>();
+const queryAccounting = new AsyncLocalStorage<QueryAccounting | undefined>();
 export function withQueryAccounting<T>(accounting: QueryAccounting, run: () => Promise<T>): Promise<T> {
   return queryAccounting.run(accounting, run);
+}
+
+/** An owner with its own query meter returns its measured cost to the caller. */
+export function withoutQueryAccounting<T>(run: () => Promise<T>): Promise<T> {
+  return queryAccounting.run(undefined, run);
 }
 
 function accountQuery<T>(accounting: QueryAccounting, args: unknown[], dispatch: () => Promise<T>): Promise<T> {

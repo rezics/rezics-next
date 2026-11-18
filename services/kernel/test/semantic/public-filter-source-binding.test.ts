@@ -1,6 +1,7 @@
 import { runCommand } from '../../src/command/command.ts';
-import { withConnection } from '../../src/database/pool.ts';
+import { withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { readPublicFilterCreationPrefix } from '../../src/semantic/public-filter-creation-prefix.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { checkGrowth, seed } from '../support/growth.ts';
@@ -758,6 +759,20 @@ test('native Source replays its original creation window after the same home adv
     expect(
       (await binding.adopt({ bootstrap: begun.bootstrap.id, queried: retained.queried }, readContext())).status,
     ).toBe('adopted');
+    let callerQueries = 0;
+    const ownCustody = await withQueryAccounting(
+      {
+        query: (_statement, _operands, dispatch) => {
+          callerQueries++;
+          return dispatch();
+        },
+        connection: (dispatch) => dispatch(),
+      },
+      () => custody.read({ queried: retained.queried }, readContext()),
+    );
+    expect(ownCustody.status).toBe('found');
+    expect(ownCustody.cost.statements).toBeGreaterThan(0);
+    expect(callerQueries).toBe(0);
     const acquired = await custody.acquire(retained.queried, readContext());
     if (acquired.status !== 'acquired') throw new Error(acquired.reason);
     try {
@@ -944,6 +959,32 @@ test('native Source replays its original creation window after the same home adv
       status: 'unavailable',
       reason: 'owner_unavailable',
     });
+    const positions: bigint[] = [];
+    for (let home = 4000; home < 4004; home++) {
+      const id = newId(home * 16);
+      const committed = await runCommand(f.db.pool, { partition: home }, async () => ({
+        value: null,
+        events: [
+          home === 4003
+            ? { type: 'com.rezics.access.account-updated.v1', subject: id, data: { accountId: id } }
+            : {
+                type: 'com.rezics.semantic.canonical-generation.committed.v1',
+                subject: id,
+                data: { partition: home, generation: '1' },
+              },
+        ],
+      }));
+      positions.push(committed.position);
+    }
+    const mixedWindows = await readPublicFilterCreationPrefix(
+      f.db.pool,
+      { bootstrap: request.bootstrap.slice(2), from: 4000, inputLimit: 64, accounts: true },
+      readContext(),
+      { inputKeys: 0, rows: 0, dependencyPoints: 0 },
+    );
+    expect(mixedWindows.map(({ window }) => [window.partition, window.through])).toEqual(
+      positions.slice(0, 3).map((position, offset) => [4000 + offset, position]),
+    );
   } finally {
     await custody.close();
     if (created) await search.request('DELETE', `/${index}`);

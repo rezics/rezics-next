@@ -68,13 +68,13 @@ import { subjectPartition, type SubjectListingSource, type SubjectSource } from 
 import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
 import {
   readDiscoveryWriterPhysicalTarget,
-  readDiscoveryRepairWinner,
   validateDiscoveryRepairWinner,
   type DiscoveryProjection,
   type DiscoveryRepairEffect,
 } from './account-discovery.ts';
 import type { DiscoveryIndexAction } from './discovery.ts';
 import { discoveryIndexName } from './indices.ts';
+import { assertNativeGenerationActionsVisible } from './generations.ts';
 import { parseDiscoveryDocumentId } from './discovery-documents.ts';
 import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
@@ -497,17 +497,38 @@ export async function verifyPublicFilterRepairWriterReceipt(
   index: string,
   receipt: PublicFilterRepairWriterReceipt,
 ) {
+  if (isDiscoveryRepairWriterReceipt(receipt)) return verifyDiscoveryRepairWriterReceipts(db, search, index, [receipt]);
   validatePublicFilterRepairWriterEvidence(index, receipt);
-  if (!isDiscoveryRepairWriterReceipt(receipt)) return verifySearchRepairWriterReceipt(db, search, index, receipt);
-  await verifyRetainedRepairWriter(db, index, receipt);
+  return verifySearchRepairWriterReceipt(db, search, index, receipt);
+}
+
+export async function verifyDiscoveryRepairWriterReceipts(
+  db: Pick<Pool, 'query'>,
+  search: OpenSearch,
+  index: string,
+  receipts: readonly DiscoveryRepairWriterReceipt[],
+) {
+  if (!receipts.length) return;
   const target = await readDiscoveryWriterPhysicalTarget(db, search, index);
-  if (
-    target.incarnation !== receipt.incarnation ||
-    target.allocation !== receipt.allocation ||
-    target.writeAlias !== receipt.writeAlias
-  )
-    throw unavailable('Mixed repair allocation changed');
-  for (const effect of receipt.effects) await readDiscoveryRepairWinner(search, index, effect.action);
+  const actions = new Map<string, DiscoveryIndexAction>();
+  for (const receipt of receipts) {
+    validatePublicFilterRepairWriterEvidence(index, receipt);
+    await verifyRetainedRepairWriter(db, index, receipt);
+    if (
+      target.incarnation !== receipt.incarnation ||
+      target.allocation !== receipt.allocation ||
+      target.writeAlias !== receipt.writeAlias
+    )
+      throw unavailable('Mixed repair allocation changed');
+    for (const { action } of receipt.effects) {
+      const other = actions.get(action.id);
+      if (other && !isDeepStrictEqual(other, action)) throw unavailable('Mixed repair winners disagree');
+      actions.set(action.id, action);
+    }
+  }
+  const ordered = [...actions.values()];
+  for (let offset = 0; offset < ordered.length; offset += 100)
+    await assertNativeGenerationActionsVisible(search, index, ordered.slice(offset, offset + 100));
 }
 
 /** Uses the existing native writer enrollment, dispatch and settlement rows, with the actual

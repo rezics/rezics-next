@@ -23,11 +23,13 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import {
   verifyPublicFilterRepairWriterReceipt,
+  verifyDiscoveryRepairWriterReceipts,
   readPublicFilterRepairPhysicalTarget,
   repairWriterPosition,
   validatePublicFilterRepairWriterEvidence,
   isDiscoveryRepairWriterReceipt,
   type PublicFilterRepairWriterReceipt,
+  type DiscoveryRepairWriterReceipt,
   inspectSearchRepairWriter,
   type SupersededSearchRepair,
 } from './writer-guard.ts';
@@ -36,7 +38,7 @@ import { validateRefreshResponse } from './write-actions.ts';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection, withoutQueryAccounting } from '../database/pool.ts';
 import { withBoundedReadLifetime, type NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
@@ -208,23 +210,25 @@ function connection<T>(meter: Meter, work: (client: PoolClient) => Promise<T>, u
   let physical: PoolClient | undefined;
   return withBoundedReadLifetime(
     (bounded) =>
-      withConnection(pool, async (raw) => {
-        physical = raw;
-        const observed = Object.create(raw) as PoolClient;
-        observed.query = ((query: NativeReadQueryConfig) => {
-          const complete = queryCompletion.getStore();
-          // Observe the physical reply even when its caller has already expired.
-          return raw.query(query).then((result) => {
-            complete?.(result);
-            return result;
-          });
-        }) as PoolClient['query'];
-        try {
-          return await bounded(observed);
-        } finally {
-          if (unfinished?.()) discardConnection(raw, new Failure('owner_unavailable'));
-        }
-      }),
+      withoutQueryAccounting(() =>
+        withConnection(pool, async (raw) => {
+          physical = raw;
+          const observed = Object.create(raw) as PoolClient;
+          observed.query = ((query: NativeReadQueryConfig) => {
+            const complete = queryCompletion.getStore();
+            // Observe the physical reply even when its caller has already expired.
+            return raw.query(query).then((result) => {
+              complete?.(result);
+              return result;
+            });
+          }) as PoolClient['query'];
+          try {
+            return await bounded(observed);
+          } finally {
+            if (unfinished?.()) discardConnection(raw, new Failure('owner_unavailable'));
+          }
+        }),
+      ),
     (_client, error) => discardConnection(physical!, error),
     context.deadline,
     work,
@@ -990,6 +994,7 @@ export async function readPublicFilterRepairSettlement(
       if (!isDeepStrictEqual(final.basis, staged.basis)) throw new Failure('binding_mismatch');
       let publication: { phase: string; fence: string | null } | null | undefined;
       let superseded: SupersededSearchRepair | undefined;
+      const mixedReceipts: DiscoveryRepairWriterReceipt[] = [];
       for (const original of [...final.latest.values()].sort(
         (a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject),
       )) {
@@ -1031,13 +1036,15 @@ export async function readPublicFilterRepairSettlement(
             }
           }
         }
-        await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+        if (isDiscoveryRepairWriterReceipt(receipt)) mixedReceipts.push(receipt);
+        else await verifyPublicFilterRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
       }
       if (superseded) {
         const attempt = publicationRepair.getStore();
         if (attempt?.job === input.execution) attempt.writer = superseded;
         throw new Failure('identity_pending');
       }
+      await verifyDiscoveryRepairWriterReceipts(db, search, q.consumer.physicalTarget, mixedReceipts);
       const refreshed = await search.request('POST', `/${q.consumer.physicalTarget}/_refresh`);
       validateRefreshResponse(refreshed.status, refreshed.body);
       if (

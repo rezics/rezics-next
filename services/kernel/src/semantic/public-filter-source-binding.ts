@@ -1365,13 +1365,14 @@ export function createNativePublicFilterSourceBinding(
       receipt,
     };
   }
-  async function scanPublicationCreationPrefix(
+  async function scanIrrelevantCreationPrefix(
     bootstrap: string,
     state: RepairState,
     inputLimit: number,
     db: Pool,
     context: PublicFilterConsumerContext,
     cost: BindingCost,
+    accounts: boolean,
     retained?: NonNullable<RepairRecord['windowBatch']>,
   ) {
     if (
@@ -1390,6 +1391,7 @@ export function createNativePublicFilterSourceBinding(
         bootstrap: nativeId(bootstrap),
         from: state.partition,
         inputLimit,
+        ...(accounts && { accounts: true }),
         ...(retained?.through === undefined ? {} : { through: retained.through }),
       },
       context,
@@ -1906,12 +1908,26 @@ export function createNativePublicFilterSourceBinding(
         };
       }
     } else if (state.phase === 'window' && (!replay || replay.windowBatch)) {
+      const accounts = 'representation' in bootstrap.definition.capture;
       const scanPrefix = replay ? replay.windowBatch?.through !== undefined : request.homeLimit !== undefined;
       const prefix = scanPrefix
-        ? await scanPublicationCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, replay?.windowBatch)
+        ? await scanIrrelevantCreationPrefix(
+            bootstrap.id,
+            state,
+            inputLimit,
+            db,
+            context,
+            cost,
+            accounts,
+            replay?.windowBatch,
+          )
         : null;
-      const scanned =
+      const windows =
         prefix ?? (await scanCreationWindows(bootstrap.id, state, inputLimit, db, cost, replay ?? undefined));
+      const scanned =
+        !replay && accounts && windows.next.phase === 'bridge'
+          ? ((await scanIrrelevantCreationPrefix(bootstrap.id, state, inputLimit, db, context, cost, true)) ?? windows)
+          : windows;
       next = scanned.next;
       windowBatch = scanned.batch;
     } else if (state.phase === 'window' || state.phase === 'bridge') {
@@ -3106,18 +3122,20 @@ export function createNativePublicFilterSourceBinding(
           )
             throw new BindingError('binding_mismatch');
           if (record.input.phase === 'window' && record.windowBatch) {
-            if (record.windowBatch.through !== undefined && !boundSubjectPublication(cut, input))
+            const accounts = 'representation' in cut.definition.capture;
+            if (record.windowBatch.through !== undefined && !accounts && !boundSubjectPublication(cut, input))
               throw new BindingError('binding_mismatch');
             const scanned =
               record.windowBatch.through === undefined
                 ? await scanCreationWindows(input.bootstrap, record.input, row.input_limit, db, cost, record)
-                : await scanPublicationCreationPrefix(
+                : await scanIrrelevantCreationPrefix(
                     input.bootstrap,
                     record.input,
                     row.input_limit,
                     db,
                     { deadline },
                     cost,
+                    accounts,
                     record.windowBatch,
                   );
             if (!scanned) throw new BindingError('owner_unavailable');
