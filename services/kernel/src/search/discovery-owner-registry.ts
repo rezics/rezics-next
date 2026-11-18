@@ -1,3 +1,7 @@
+import type { Pool } from 'pg';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { DiscoveryGeneration } from './generations.ts';
 import { classifyDiscoveryMetadataProducers } from './discovery-readiness.ts';
 import type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 import type {
@@ -54,6 +58,35 @@ export type ResolvedDiscoveryOwnerAdapters = Readonly<{
   omittedKinds: readonly DiscoveryOmittedKind[];
   capabilityWitnesses: DiscoveryCapabilityWitnesses;
 }>;
+
+/** Allocation creates the same owner slots in every home in one transaction. Home zero is
+ * a bounded scope lookup on the generation that activation has already certified. */
+export function readDiscoveryScope(pool: Pool, prefix: string, deadline: number, generation?: number) {
+  const selection =
+    generation === undefined ? "g.state='active'" : "g.generation=$2 AND g.state IN ('ready','active','retiring')";
+  return withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const result = await client.query<
+        Omit<DiscoveryGeneration, 'state' | 'kinds'> & { metadataKinds: DiscoveryMetadataKind[] }
+      >(
+        `SELECT g.prefix,g.generation::float8 AS generation,g.index_uuid AS uuid,g.incarnation::text,
+              g.capability,
+              ARRAY(SELECT p.owner FROM search.discovery_population p
+                    WHERE (p.partition_no,p.prefix,p.generation)=(g.partition_no,g.prefix,g.generation)
+                      AND p.owner IN ('collection','review','space') ORDER BY p.owner) AS "metadataKinds"
+       FROM search.discovery_generation g WHERE g.partition_no=0 AND g.prefix=$1 AND ${selection}`,
+        generation === undefined ? [prefix] : [prefix, generation],
+      );
+      return result.rows.length === 1 ? result.rows[0] : undefined;
+    },
+    {
+      deadlineError: () => new ProblemError('deadline_exceeded'),
+      isUncertainSettledQueryError: () => true,
+    },
+  );
+}
 
 /** Resolve readiness for the current registry and bind candidates to the published kind set. */
 export async function resolveDiscoveryOwnerAdapters(

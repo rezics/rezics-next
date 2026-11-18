@@ -1,3 +1,4 @@
+import { deadlineFor } from '../request/deadline.ts';
 import { exactRealmPresentationImage, readRealmPresentationImages } from './domain-ports.ts';
 import type { RealmPresentationImage } from '../content/realm-media.ts';
 import type { Access } from '../request/access.ts';
@@ -281,7 +282,7 @@ export function spaceDiscoverySource(
   deps: SpaceDiscoveryDependencies,
   context?: Readonly<{ deadline: number }>,
 ): SpaceDiscoveryTupleSource {
-  const deadline = () => context?.deadline ?? deps.deadlineNow() + DEFAULT_REQUEST_DEADLINE_MS;
+  const deadline = () => context?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS, deps.deadlineNow);
   return {
     dependencies: () => spaceDiscoveryDependencyReadiness(deps.pool),
     tupleWitnesses(partition, ids) {

@@ -1896,7 +1896,7 @@ async function restartMetadataReconciliation(pool: Pool, target: DiscoveryTarget
   );
 }
 
-async function discoveryAliasMatches(search: OpenSearch, target: DiscoveryTarget): Promise<boolean> {
+export async function discoveryAliasMatches(search: OpenSearch, target: DiscoveryTarget): Promise<boolean> {
   let response: { status: number; body: unknown };
   try {
     response = await search.request('GET', `/_alias/${discoveryAlias(target.prefix)}`);

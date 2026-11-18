@@ -115,7 +115,8 @@ function validOwnerSummary(
     ) &&
     validText(value.title) &&
     validNullableText(value.summary) &&
-    decimal(value.revision) &&
+    typeof value.revision === 'string' &&
+    (routeOf(value.revision) !== null || decimal(value.revision)) &&
     validNullableText(value.address) &&
     (value.address === null || (value.address.length > 0 && [...value.address].length <= 256)) &&
     validNullableText(value.realmTitle) &&
@@ -198,7 +199,7 @@ export async function revalidateOwnerCurrentSummaries<Candidate>(
 }
 
 export async function readOwnerCandidates(
-  ports: OwnerDisclosurePorts,
+  ports: Pick<OwnerDisclosurePorts, 'ownerKey' | 'readCurrent'>,
   candidates: readonly DiscoveryOwnerCandidate[],
   context: DiscoveryReadContext,
 ) {
@@ -238,7 +239,15 @@ export async function readOwnerCandidates(
       if ((value as DiscoveryOwnerMetadataSummary<'collection'>).revision !== candidate.revision) return undefined;
     } else if (key.kind === 'space') {
       const space = value as DiscoveryOwnerMetadataSummary<'space'>;
-      if (space.revision !== candidate.revision || space.address === null) return undefined;
+      // Older physical documents carried only the partition position. Their exact native
+      // cut must still be current to attest the Space head.
+      const current =
+        candidate.sourceVersion != null
+          ? candidate.sourceVersion === space.revision
+          : decimal(space.revision)
+            ? candidate.revision === space.revision
+            : candidate.revision === candidate.sourcePosition && space.sourcePosition === candidate.sourcePosition;
+      if (!current || space.address === null) return undefined;
     } else {
       const review = value as DiscoveryOwnerMetadataSummary<'review'>;
       if (!candidate.sourceVersion || review.sourceVersion !== candidate.sourceVersion) return undefined;

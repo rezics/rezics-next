@@ -16,7 +16,9 @@ Subject, Account and the second-scope kinds retain distinct exact field allowlis
 identity, exact source-position and common public text fields. Subject dates retain their known components
 and derived interval bounds; complete creator projections publish exact credited-name witnesses, while an
 incomplete projection publishes no names. Second-scope owners carry their native revision and source-version
-fields without gaining Subject facts or Account profile data.
+fields without gaining Subject facts or Account profile data. A Space carries its native Space or hosted Realm head UUID
+in `source_version`. A legacy Space document with a null version binds current presentation only while its exact
+indexed partition position is still current.
 
 ## Second-scope identities and public fields
 

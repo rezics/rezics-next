@@ -48,7 +48,11 @@ export type CustodyRegistration = Readonly<{ partition: number; id: string }>;
 export type CustodyExecution = Readonly<{
   id: string;
   start: PrivacyReductionStart;
-  ownRows: readonly Readonly<{ original: string; terminal: string }>[];
+  ownRows: readonly Readonly<{
+    original: string;
+    terminal: string;
+    metadataKind?: 'collection' | 'review' | 'space';
+  }>[];
 }>;
 /** Durable bounded lease: the producer must release in finally, including failed native work. */
 export type CustodyUse = Readonly<{ observation: string; token: string }>;

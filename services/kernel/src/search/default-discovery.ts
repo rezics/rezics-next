@@ -24,8 +24,8 @@ import { readPublicFigureViews } from '../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { AccountActor } from '../request/access.ts';
 import { SearchUnavailableError } from './opensearch.ts';
-import { nativeDiscoveryRegistry, type DiscoveryTarget } from './account-discovery.ts';
-import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
+import { nativeDiscoveryRegistry } from './account-discovery.ts';
+import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type { DiscoveryPage, DiscoveryProducerEntry, DiscoveryReadContext, DiscoveryUnionHit } from './index.ts';
 import {
@@ -38,12 +38,7 @@ import { prepareConceptDiscoveryFilter } from './concept-discovery.ts';
 import { ownDiscoveryRequest } from './discovery-request.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
-import {
-  discoveryConsumer,
-  DiscoveryProducerCoverageError,
-  assertDiscoveryCapabilityBinding,
-  discoveryGenerations,
-} from './generations.ts';
+import { discoveryConsumer, DiscoveryProducerCoverageError, assertDiscoveryCapabilityBinding } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
 import { createSearchDisclosureApplication } from './disclosure-application.ts';
 import { analyzeInstalledMany } from './engine-analysis.ts';
@@ -65,11 +60,13 @@ import {
 
 export type DiscoveryServingObservation = Readonly<{
   generation: number | null;
-  stage: 'allocation' | 'capture' | 'query' | 'capability' | 'final';
+  stage: 'allocation' | 'capture' | 'query' | 'repair' | 'capability' | 'final';
   result:
     | 'no_active_generation'
     | 'active'
     | 'captured'
+    | 'progress'
+    | 'settled'
     | 'queried'
     | 'preparing'
     | 'capability_changed'
@@ -285,13 +282,18 @@ export function createDefaultDiscoverySearch(
         : Object.freeze({ kind: 'anonymous' as const });
     const execute = async () => {
       let operations: PublicDiscoveryConsumerOperations | undefined;
-      let disclosureTarget: DiscoveryTarget | undefined;
       const current = await activeRelease(config.pool);
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-      const activeGeneration = (await discoveryGenerations(config.pool, config.prefix)).find(
-        ({ state }) => state === 'active',
-      );
-      const ownerAdapters = await resolveDiscoveryOwnerAdapters(producers, activeGeneration?.kinds);
+      const activeGeneration = await readDiscoveryScope(config.pool, config.prefix, deadline);
+      if (!activeGeneration) {
+        config.observeServing?.({ generation: null, stage: 'allocation', result: 'no_active_generation' });
+        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      }
+      const generation = activeGeneration.generation;
+      const observe = (stage: DiscoveryServingObservation['stage'], result: DiscoveryServingObservation['result']) =>
+        config.observeServing?.({ generation, stage, result });
+      observe('allocation', 'active');
+      const ownerAdapters = await resolveDiscoveryOwnerAdapters(producers, activeGeneration.metadataKinds);
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages,
@@ -303,24 +305,13 @@ export function createDefaultDiscoverySearch(
         if (!operations) throw new Error('Discovery capture or retained resume must precede consumer work');
         return operations;
       };
-      let generation: number | null = null;
-      const observe = (stage: DiscoveryServingObservation['stage'], result: DiscoveryServingObservation['result']) =>
-        config.observeServing?.({ generation, stage, result });
-      const observeAllocation = (value: number | null) => {
-        generation = value;
-        observe('allocation', value === null ? 'no_active_generation' : 'active');
-      };
       const openOperations = (
-        nativeContext: Parameters<typeof runtime.openDiscovery>[2],
-        queried?: Parameters<typeof runtime.openDiscovery>[3],
-      ) =>
-        runtime.openDiscovery(
-          registry, current.digest, nativeContext, queried,
-          config.observeServing && observeAllocation,
-        );
-      const confirmCapability = async (target: DiscoveryTarget) => {
+        nativeContext: Parameters<typeof runtime.openDiscovery>[3],
+        queried?: Parameters<typeof runtime.openDiscovery>[4],
+      ) => runtime.openDiscovery(registry, activeGeneration, current.digest, nativeContext, queried);
+      const confirmCapability = async () => {
         try {
-          await assertDiscoveryCapabilityBinding(config.pool, target, ownerAdapters.metadataProducers);
+          await assertDiscoveryCapabilityBinding(config.pool, activeGeneration, ownerAdapters.metadataProducers);
         } catch (error) {
           if (error instanceof DiscoveryProducerCoverageError)
             observe(
@@ -344,7 +335,11 @@ export function createDefaultDiscoverySearch(
         },
         query: (queried, nativeContext, refill) => bound().query(queried, nativeContext, refill),
         readStatus: (input, nativeContext) => bound().readStatus(input, nativeContext),
-        repairStep: (job, nativeContext) => bound().repairStep(job, nativeContext),
+        async repairStep(job, nativeContext) {
+          const result = await bound().repairStep(job, nativeContext);
+          observe('repair', 'reason' in result ? result.reason : result.status);
+          return result;
+        },
         async closeObservation(queried, nativeContext) {
           // A rejected retained generation has not opened a factory in this request.
           if (operations) await operations.closeObservation(queried, nativeContext);
@@ -353,7 +348,7 @@ export function createDefaultDiscoverySearch(
       };
       installPublicFilterCoveragePage(consumer, (nativeContext) => {
         let page: Promise<PublicFilterCoveragePage> | undefined;
-        const open = (queried?: Parameters<typeof runtime.openDiscovery>[3]) =>
+        const open = (queried?: Parameters<typeof runtime.openDiscovery>[4]) =>
           (page ??= (async () => {
             operations ??= await openOperations(nativeContext, queried);
             return openPublicFilterCoveragePage(operations, nativeContext);
@@ -380,7 +375,7 @@ export function createDefaultDiscoverySearch(
               if (config.observeServing) observe('final', native.failure(error).reason);
               throw error;
             }
-            if (disclosureTarget) await confirmCapability(disclosureTarget);
+            await confirmCapability();
             observe('final', 'finished');
           },
           async dispose() {
@@ -421,24 +416,12 @@ export function createDefaultDiscoverySearch(
           );
         },
         async asOf(queried) {
-          const match = /discovery-g([1-9][0-9]*)$/.exec(queried.consumer.physicalTarget);
-          const generation = Number(match?.[1]);
           if (
-            !Number.isSafeInteger(generation) ||
-            discoveryIndexName(config.prefix, generation) !== queried.consumer.physicalTarget
+            queried.consumer.physicalTarget !== discoveryIndexName(config.prefix, generation) ||
+            queried.consumer.incarnation !== activeGeneration.uuid
           )
-            throw new Error('Discovery freshness requires the actual queried mixed generation');
-          const target = (await discoveryGenerations(config.pool, config.prefix)).find(
-            (row) => row.generation === generation,
-          );
-          if (!target || target.uuid !== queried.consumer.incarnation)
-            throw new DiscoveryProducerCoverageError({
-              missingKinds: ['space'],
-              unsupportedKinds: [],
-              duplicateKinds: [],
-            });
-          disclosureTarget = target;
-          await confirmCapability(target);
+            throw new ProblemError('search_restart_required');
+          await confirmCapability();
           let reader = freshness.get(generation);
           if (!reader) reader = createFreshness(config.pool, discoveryConsumer(config.prefix, generation));
           // Keep the live and retained generations coalesced while requests overlap an alias change.

@@ -92,6 +92,7 @@ import type {
   PublicFilterQueriedObservation,
   SourceBindingRetainedDefinition,
   SourceBindingCustodyDefinition,
+  SourceBindingCustodyExecution,
   SourceBindingRepairSettlement,
   SourceBindingFailureReason,
 } from './source-binding-port.ts';
@@ -344,11 +345,7 @@ export type PublicFilterSourceBinding = Readonly<{
         definition: PublicFilterSourceDefinition;
         queried: PublicFilterQueriedObservation;
         covered: PrivacyReductionStart;
-        execution: Readonly<{
-          id: string;
-          start: PrivacyReductionStart;
-          ownRows: readonly Readonly<{ original: string; terminal: string }>[];
-        }> | null;
+        execution: SourceBindingCustodyExecution | null;
         cost: PublicFilterCost;
       }>
     | PublicFilterBindingFailure

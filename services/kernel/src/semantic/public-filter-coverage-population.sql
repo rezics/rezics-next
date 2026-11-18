@@ -140,16 +140,23 @@ binding AS MATERIALIZED (
   -- remain in execution/raw accounting; a native control at this ONE snapshot is
   -- read once per exact key, rather than twice for every repeated original.
   SELECT k.id,b.coverage_bootstrap AS bootstrap,b.partition_no,b.coverage_registration AS registration,
-    coalesce((b.window_value->'raw'->(r.ordinality::integer-1)->'key'->>'owner')='accounts',false) AS account
+    coalesce(raw.key->>'owner'='accounts',false) AS account,
+    coalesce((raw.key->>'owner',raw.key->>'kind') IN
+      (('commerce','collection'),('content','review'),('content','space'))
+      AND raw.key->>'kind'=r.value->>'metadataKind'
+      AND raw.key->>'id'=r.value->>'original' AND r.value->>'original'=r.value->>'terminal',false) AS metadata
   FROM decoded b CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(b.execution_value->'ownRows')='array' THEN b.execution_value->'ownRows' ELSE '[]'::jsonb END
   ) WITH ORDINALITY r(value,ordinality)
+  CROSS JOIN LATERAL (VALUES (b.window_value->'raw'->(r.ordinality::integer-1)->'key')) raw(key)
   CROSS JOIN LATERAL (VALUES (r.value->>'original'),(r.value->>'terminal')) k(id)
 ), own_keys AS MATERIALIZED (
   SELECT DISTINCT id,account,bootstrap,partition_no,registration,
     CASE WHEN id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       THEN (('x'||substr(id,25,4))::bit(16)::integer >> 4) END AS source_home
-  FROM decoded_own
+  -- The retained mixed consumer rechecks metadata through the matching native owner at finish.
+  -- Only Subject and Account keys address the controls below.
+  FROM decoded_own WHERE NOT metadata
 ), home_keys AS MATERIALIZED (
   SELECT DISTINCT bootstrap,partition_no,registration,source_home FROM own_keys
 ), budgeted AS MATERIALIZED (

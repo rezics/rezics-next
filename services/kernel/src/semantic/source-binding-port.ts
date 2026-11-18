@@ -84,7 +84,11 @@ export type SourceBindingRetainedDefinition = Omit<
 export type SourceBindingCustodyExecution = Readonly<{
   id: string;
   start: PrivacyReductionStart;
-  ownRows: readonly Readonly<{ original: string; terminal: string }>[];
+  ownRows: readonly Readonly<{
+    original: string;
+    terminal: string;
+    metadataKind?: 'collection' | 'review' | 'space';
+  }>[];
 }>;
 
 export type SourceBindingCustodyResult =

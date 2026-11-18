@@ -5,7 +5,12 @@ import type {
   PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
 } from '../semantic/index.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryRegistry } from './discovery.ts';
+import type {
+  DiscoveryConsumerCaptureInput,
+  DiscoveryConsumerQuery,
+  DiscoveryOwnerRegistry,
+  DiscoveryRegistry,
+} from './discovery.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { TextNode } from './text.ts';
 import type { KernelClock } from '../clock.ts';
@@ -179,7 +184,9 @@ export type PublicFilterConsumerOperationsFactory = (
     source: PublicFilterSource;
     creditSearch?: CreditSearchSource;
     binding: PublicFilterSourceBinding;
-    registry?: DiscoveryRegistry;
+    registry?: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
+    discoveryAccess?: import('../request/access.ts').Access;
+    discoveryTarget?: import('./account-discovery.ts').DiscoveryTarget;
     search: OpenSearch;
     clock: KernelClock;
     context: PublicFilterConsumerContext;
