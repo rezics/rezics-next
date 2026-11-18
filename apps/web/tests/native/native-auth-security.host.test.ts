@@ -223,13 +223,18 @@ async function manageAccountSecurity() {
   await alicePage.getByRole('button', { name: 'Add a passkey', exact: true }).click();
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/step-up');
   expect(enrollmentPosts).toEqual([]);
+  const verifyIdentity = alicePage.getByRole('button', { name: 'Verify your identity', exact: true });
+  // The fields render before hydration, and pending Auth advice can clear the password.
+  await verifyIdentity.and(alicePage.locator(':enabled')).waitFor({ state: 'visible' });
   await alicePage.getByLabel('Email', { exact: true }).fill(aliceIdentity.email);
   await alicePage.locator('input[name="password"]').fill(nativeAuthPassword);
-  const stepUpResponse = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
-  );
-  await alicePage.getByRole('button', { name: 'Verify your identity', exact: true }).click();
-  expect((await stepUpResponse).status()).toBe(200);
+  const [stepUpResponse] = await Promise.all([
+    alicePage.waitForResponse(
+      (response) => response.url() === `${auth.origin}/signin` && response.request().method() === 'POST',
+    ),
+    verifyIdentity.click(),
+  ]);
+  expect(stepUpResponse.status()).toBe(200);
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
   const afterStepUp = await alicePage.evaluate(async () => {
     const response = await fetch('/session', { credentials: 'include' });
