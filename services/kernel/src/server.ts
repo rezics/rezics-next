@@ -40,7 +40,11 @@ import { readSearchConfig, type SearchConfig } from './search/work.ts';
 import type { AuthenticationConfig } from './access/authenticate.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from './search/public-runtime.ts';
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
-import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
+import {
+  createDefaultDiscoverySearch,
+  type DefaultDiscoverySearch,
+  type DiscoveryServingObservation,
+} from './search/default-discovery.ts';
 import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { composeLibraryDomain } from './composition/library.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
@@ -62,6 +66,7 @@ export type ServerConfig = {
   routeKey: Uint8Array;
   tokens: KeyRing;
   searchNativePorts?: SearchNativePorts;
+  observeDiscoveryServing?(observation: DiscoveryServingObservation): void;
   receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
   content: ContentRuntime & { shelfTitleInputs?: ReturnType<typeof composeNativeContentShelfTitleInputs> };
@@ -278,6 +283,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             {
               disclosure: defaults.searchDisclosure(openSearch),
               spaceEntryActions: viewerActions,
+              ...(config.observeDiscoveryServing ? { observeServing: config.observeDiscoveryServing } : {}),
               pool,
               routeKey: config.routeKey,
               access,
