@@ -47,7 +47,10 @@ export function startRelays(
   let active = 0;
   let ticking = false;
   const inFlight = new Set<string>();
-  const running = new Set<Promise<void>>();
+  // Each consumer retains its oldest-first scan. A slow consumer can drain that scan
+  // while another discovers positions committed since its own last scan.
+  type ScannedPartition = Awaited<ReturnType<typeof scanPartitions.run>>[number];
+  const pending = new Map<Relay, Iterator<ScannedPartition>>();
   const stopPositions = new Map<string, string>();
   const waiters: (() => void)[] = [];
   const key = (relay: Relay, partition: number) => `${relays.indexOf(relay)}:${partition}`;
@@ -88,12 +91,28 @@ export function startRelays(
     }
   };
 
+  const dispatch = () => {
+    while (!stopped && !paused && active < concurrency && pending.size) {
+      const [relay, partitions] = pending.entries().next().value!;
+      pending.delete(relay);
+      const next = partitions.next();
+      if (next.done) continue;
+      // Give the next free slot to the next consumer with discovered work.
+      pending.set(relay, partitions);
+      const row = next.value;
+      if (!inFlight.has(key(relay, row.partition_no)))
+        void run(relay, row.partition_no, BigInt(row.position)).then(dispatch);
+    }
+  };
+
   const tick = async () => {
     if (stopped || paused || ticking) return;
     ticking = true;
     try {
       if (maxOnePoolBusy(pool)) return;
       for (const relay of relays) {
+        if (stopped || paused) break;
+        if (pending.has(relay)) continue;
         const partitions = await withConnection(pool, async (client) => {
           const rows = await scanPartitions.run(client, { consumer: relay.consumer });
           const oldestPendingAt = rows[0]?.oldest_pending_at;
@@ -103,19 +122,9 @@ export function startRelays(
           });
           return rows;
         });
-        for (const row of partitions) {
-          // Refill a released slot from this scan instead of discarding its remaining partitions.
-          // The poll interval applies between scans, not between every four native homes.
-          while (!stopped && !paused && active >= concurrency) await Promise.race(running);
-          if (stopped || paused) break;
-          const partition = row.partition_no;
-          if (inFlight.has(key(relay, partition))) continue;
-          const task = run(relay, partition, BigInt(row.position));
-          running.add(task);
-          void task.then(
-            () => running.delete(task),
-            () => running.delete(task),
-          );
+        if (!paused && !stopped && partitions.length) {
+          pending.set(relay, partitions.values());
+          dispatch();
         }
       }
     } catch (error) {
@@ -133,6 +142,7 @@ export function startRelays(
       paused = true;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
+      pending.clear();
       await idle();
     },
     resume(): void {
@@ -144,6 +154,7 @@ export function startRelays(
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
+      pending.clear();
       await idle();
     },
   };
