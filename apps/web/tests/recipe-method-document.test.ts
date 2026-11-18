@@ -6,7 +6,9 @@ import { renderToString } from 'react-dom/server';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage } = await import('../src/features/pages/subject.tsx');
+const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject.tsx');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subjectId = '019a0000-0000-8000-8000-000000000001';
 const candidateId = '019a0000-0000-8000-8000-000000000003';

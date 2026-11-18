@@ -6,10 +6,13 @@ import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry } from '@rezics/composition';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadSubjectPage, SubjectPage } from '../src/features/pages/subject.tsx';
+import { loadSubjectPage, SubjectPage as SubjectPageContent } from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { OverviewContext, ReviewList, ThreadList } from '../src/features/pages/overview.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e06';
 const local = createFakeKernelFetch(fixtures as never);

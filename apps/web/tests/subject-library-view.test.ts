@@ -16,8 +16,10 @@ import type { useSession } from '../src/session/query';
 // Keep the actual frame, shared Library renderer, query keys and reader responses; only substitute the Worker boundary.
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadViewPages, subjectFrame, SubjectFrame, SubjectViewPage } =
+const { loadViewPages, subjectFrame, SubjectFrame, SubjectViewPage: SubjectViewPageContent } =
   await import('../src/features/pages/subject-frame');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectViewPage = withPageVisitHost(SubjectViewPageContent);
 const { SubjectLibraryLeaf, subjectLibraryLeafQuery } = await import('../src/features/pages/subject-library-leaf');
 const queries = await import('../src/features/pages/subject-queries');
 const { subjectLibraryQuery } = queries;

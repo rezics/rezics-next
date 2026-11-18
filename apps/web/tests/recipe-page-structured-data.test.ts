@@ -9,7 +9,9 @@ import { serializeJsonLd, subjectJsonLd } from '../src/features/pages/jsonld.ts'
 
 // The composed renderer imports Worker bindings; this suite supplies its public read directly.
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadSubjectPage, SubjectPage } = await import('../src/features/pages/subject.tsx');
+const { loadSubjectPage, SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject.tsx');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const diet = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02';

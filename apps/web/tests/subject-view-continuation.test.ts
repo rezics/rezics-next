@@ -13,7 +13,10 @@ import { validateViewCursor } from '../src/features/pages/view-cursor.ts';
 // The page modules reach server functions, so they load only after the workers runtime is stubbed.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { holderItems } = await import('../src/features/pages/overview.tsx');
-const { loadViewPages, SubjectViewPage } = await import('../src/features/pages/subject-frame.tsx');
+const { loadViewPages, SubjectViewPage: SubjectViewPageContent } =
+  await import('../src/features/pages/subject-frame.tsx');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectViewPage = withPageVisitHost(SubjectViewPageContent);
 const { pageContext } = await import('../src/features/pages/subject.tsx');
 
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';

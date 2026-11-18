@@ -16,7 +16,9 @@ import fixtures from '../src/kernel/fixtures.json';
 
 // Supply the Worker environment boundary; native read planning, SDK calls and rendering remain real.
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
-const { SubjectPage, pageContext } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent, pageContext } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { holderItems } = await import('../src/features/pages/overview');
 const { qualifiedNotes } = await import('../src/features/pages/qualified-relations');
 const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');

@@ -18,10 +18,17 @@ import platformJson from '@rezics/composition/profiles/platform.json';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
-import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import {
+  loadSubjectPage,
+  SubjectPage as SubjectPageContent,
+  type SubjectPageData,
+} from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import { loadViewPages } from '../src/features/pages/subject-frame.tsx';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const platform = platformJson as unknown as PresentationProfile;
 const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';

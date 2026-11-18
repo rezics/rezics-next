@@ -11,7 +11,9 @@ import { personReaderExample } from '../src/features/catalogue/person-reader/exa
 import type { SubjectPageData } from '../src/features/pages/subject';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent, subjectBody } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { subjectPageMessages } = await import('../src/features/pages/route-support');
 const { CharacterRelationshipsView } = await import('../src/features/catalogue/character-relationships/view');
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');

@@ -10,7 +10,10 @@ import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import recordedSubject from '../src/kernel/recorded/subject.json';
 import { platformRegistry, planReads, type CompositionDocument } from '@rezics/composition';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 // The slot's server functions read the Worker environment, which a unit test has none of.
 mock.module('../src/library/subject-slot-actions.ts', () => ({

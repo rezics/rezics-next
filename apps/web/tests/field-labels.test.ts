@@ -3,10 +3,13 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { planReads, platformRegistry } from '@rezics/composition';
 import { fieldLabel } from '../src/features/pages/shared.tsx';
-import { SubjectPage } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent } from '../src/features/pages/subject.tsx';
 import { RelationsView } from '../src/features/pages/relations-view.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { localizedLabel } from '../src/search/results.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const id = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const authorId = '01a1740d-7480-71e4-841f-66c04022d7d1';

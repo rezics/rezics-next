@@ -3,7 +3,10 @@ import { renderToString } from 'react-dom/server';
 import { createElement } from 'react';
 import { fromPlainText } from '@rezics/document';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { SubjectPage, pageContext, type SubjectPageData } from '../src/features/pages/subject';
+import { SubjectPage as SubjectPageContent, pageContext, type SubjectPageData } from '../src/features/pages/subject';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const subject = '00000000-0000-8000-8000-000000000010';
 const page: SubjectPageData = {
   subject,

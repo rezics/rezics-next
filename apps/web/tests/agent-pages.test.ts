@@ -11,9 +11,12 @@ import { createFakeKernelFetch, type FixtureAccount } from '../src/kernel/fake.t
 import fixtures from '../src/kernel/fixtures.json';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import { agentPath, continueAgentList, loadAgentPage } from '../src/features/pages/agent.tsx';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import type { ViewTabLabels } from '../src/features/pages/view-tabs.tsx';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${n.toString(16).padStart(12, '0')}`;
 const statement = (property: string, content: string) => ({

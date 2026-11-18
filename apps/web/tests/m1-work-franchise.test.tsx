@@ -12,7 +12,9 @@ import type { PageMessages } from '../src/features/pages/data';
 import type { RelationDefinition } from '../src/subject/relations';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { SubjectPage } = await import('../src/features/pages/subject');
+const { SubjectPage: SubjectPageContent } = await import('../src/features/pages/subject');
+const { withPageVisitHost } = await import('./helpers/subject-render');
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 const { WorkFranchiseReading } = await import('../src/features/pages/showcase-work');
 
 const property = 'wdt:P144';

@@ -11,11 +11,14 @@ import type { PageMessages } from '../src/features/pages/data.tsx';
 import { agentPath, loadAgentPage } from '../src/features/pages/agent.tsx';
 import { RelationsView } from '../src/features/pages/relations-view.tsx';
 import { PlainLink } from '../src/features/pages/shared.tsx';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { SubjectPage as SubjectPageContent, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import { subjectTabs } from '../src/features/pages/views.ts';
 import { SPOILER_PROPERTY } from '../src/features/pages/values.tsx';
 import { relationDefinitions } from '../src/subject/relations.ts';
 import { defaultReader } from '../src/subject/reader.ts';
+import { withPageVisitHost } from './helpers/subject-render';
+
+const SubjectPage = withPageVisitHost(SubjectPageContent);
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const characterId = '01a1740d-7480-71e4-841f-66c04022d7c0';
