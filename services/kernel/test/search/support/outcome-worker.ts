@@ -50,6 +50,7 @@ type PublicationJobRow = {
   after_id: string | null;
   fenced: boolean;
   native_incarnation: string;
+  meaning_digest: string;
   source_sealed: boolean;
   source_bootstrap: string | null;
   source_observation: string | null;
@@ -59,13 +60,14 @@ type PublicationJobRow = {
   source_ack_after: number | null;
 };
 
-/** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
-async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
-  const nativeJobs = (
-    await pool.query<PublicationJobRow & { consumer: unknown }>(
+/** Read the owner job and the terminal Source ACK bound to that exact publication. */
+export async function readPublicationJobs(connection: Pick<Pool, 'query'>, prefix: string) {
+  return (
+    await connection.query<PublicationJobRow & { consumer: unknown }>(
       `SELECT job::text, phase, home, pass::text, fenced_pass, family, physical_target,
               generation::text, revision::text, after_id::text,
               (fence IS NOT NULL) AS fenced, native_incarnation, j.consumer,
+              j.consumer->>'meaningDigest' AS meaning_digest,
               seal.source_repair_root IS NOT NULL AS source_sealed, seal.*
        FROM search.generation_publication j
        LEFT JOIN LATERAL (
@@ -87,6 +89,11 @@ async function inspectPublication(pool: Pool, prefix: string): Promise<Record<st
       [prefix],
     )
   ).rows;
+}
+
+/** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
+async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
+  const nativeJobs = await readPublicationJobs(pool, prefix);
   const jobs = nativeJobs.map(({ consumer: _consumer, ...job }) => job);
   const locators = (
     await pool.query<{

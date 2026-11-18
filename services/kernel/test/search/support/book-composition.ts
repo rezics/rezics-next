@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { planReads, platformRegistry } from '@rezics/composition';
-import { subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
+import { withBoundedReadConnection } from '../../../src/database/pool.ts';
+import { withRequestDeadline } from '../../../src/request/deadline.ts';
+import { readSubjectIndexUuid, subjectAlias, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import {
@@ -15,6 +17,7 @@ import {
   requireStatus,
   type TypeListRead,
 } from '../../performance/support/composed-discovery-fixtures.ts';
+import { readPublicationJobs } from './outcome-worker.ts';
 
 const route = '/book-catalogue-cost';
 const lists: TypeListRead[] = BOOK_CATALOGUE_TYPES.flatMap((type, i) =>
@@ -23,6 +26,7 @@ const lists: TypeListRead[] = BOOK_CATALOGUE_TYPES.flatMap((type, i) =>
 lists.push({ id: 'all-grains', types: BOOK_CATALOGUE_TYPES, limit: 8 });
 const document = composedLimitDocument(lists);
 const plan = planReads(platformRegistry, document, { subject: null });
+type Anchor = { id: string; type: string };
 
 export async function createBookComposition() {
   let database: GrowthDatabase | undefined;
@@ -53,10 +57,15 @@ export async function createBookComposition() {
     });
     owner = fixture;
     assert(database && fixture.search);
+    const { pool } = database;
     const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
     const prefix = fixture.search.indexPrefix;
     const index = subjectAlias(prefix);
-    async function indexed(ids: readonly string[]) {
+    let published: { generation: number; uuid: string } | undefined;
+    const publicationJobs = (deadline: number) =>
+      withBoundedReadConnection(pool, deadline, (connection) => readPublicationJobs(connection, prefix));
+
+    async function indexed(ids: readonly string[], coldBook?: Anchor) {
       async function count(target: string, signal?: AbortSignal) {
         const { body } = await engine.request<{ count: number; _shards: { failed: number } }>(
           'POST',
@@ -68,50 +77,105 @@ export async function createBookComposition() {
         return body.count;
       }
 
-      async function observeGenerations(signal: AbortSignal) {
+      async function observeGenerations(deadline: number) {
         try {
+          const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
           const { active, generations } = await subjectGenerations(engine, prefix, undefined, signal);
-          const physical = await Promise.all(
-            generations.map(async (generation) => ({
-              generation,
-              matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
-            })),
-          );
-          return { active, physical };
+          const [physical, jobs] = await Promise.all([
+            Promise.all(
+              generations.map(async (generation) => ({
+                generation,
+                matched: await count(subjectIndexName(prefix, generation), signal).catch(String),
+              })),
+            ),
+            publicationJobs(deadline).then(
+              (jobs) => jobs.map(({ consumer: _consumer, ...job }) => job),
+              String,
+            ),
+          ]);
+          return { active, physical, jobs };
         } catch (error) {
           return { inventoryError: String(error) };
         }
       }
 
       const until = Date.now() + 120_000;
+      const signal = AbortSignal.timeout(120_000);
+      let alias: number | 'HTTP 404' | undefined;
       let observed: Awaited<ReturnType<typeof observeGenerations>> | undefined;
-      for (;;) {
-        let alias: number | 'HTTP 404';
+      let lastPublicRead: { status: number; code: unknown } | undefined;
+      while (Date.now() < until) {
         try {
-          alias = await count(index);
-          if (alias === ids.length) return;
+          alias = await count(index, signal);
         } catch (error) {
+          if (signal.aborted) break;
           if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
           alias = 'HTTP 404';
         }
-        const remaining = until - Date.now();
-        if (remaining <= 0) {
-          throw new Error(
-            `Search did not index the ${ids.length} released originals in 120s ` +
-              `(alias: ${alias}, generation snapshot: ${JSON.stringify(observed ?? null)})`,
+        if (alias === ids.length) {
+          const { active } = await subjectGenerations(engine, prefix, undefined, signal);
+          assert(active === 1, 'The isolated Subject alias must resolve to its first native generation');
+          const uuid = await withRequestDeadline(until, () => readSubjectIndexUuid(engine, prefix, active));
+          if (Date.now() >= until) break;
+          if (published) {
+            assert.deepEqual({ generation: active, uuid }, published);
+            return;
+          }
+          assert(coldBook);
+          const target = subjectIndexName(prefix, active);
+          const settled = (await publicationJobs(until)).some(
+            (job) =>
+              job.family === 'subjects' &&
+              job.physical_target === target &&
+              job.native_incarnation === uuid &&
+              job.meaning_digest === fixture.release.digest &&
+              job.phase === 'active' &&
+              job.fenced_pass &&
+              !job.fenced &&
+              job.source_sealed &&
+              job.source_ack_after === 4096,
           );
+          if (settled) {
+            const response = await withRequestDeadline(until, () =>
+              fixture.request('anonymous', 'POST', '/v1/subjects:search', { text: 'AAA', languages: ['en'] }),
+            );
+            lastPublicRead = { status: response.status, code: response.body.code };
+            if (Date.now() >= until) break;
+            if (response.status === 200) {
+              const subjects = response.body.subjects;
+              assert(Array.isArray(subjects));
+              if (subjects.some(({ id, type }) => id === coldBook.id && type === coldBook.type)) {
+                published = { generation: active, uuid };
+                return;
+              }
+            } else {
+              assert(
+                response.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(response.body.code)),
+                JSON.stringify(lastPublicRead),
+              );
+            }
+          }
         }
+        const remaining = until - Date.now();
+        if (remaining <= 0) break;
         // Sample native publication and projection once, within the original alias wait.
-        if (remaining <= 5_000 && !observed)
-          observed = await observeGenerations(AbortSignal.timeout(Math.min(remaining, 2_000)));
-        await Bun.sleep(100);
+        if (remaining <= 5_000 && !observed) observed = await observeGenerations(Math.min(until, Date.now() + 2_000));
+        await Bun.sleep(Math.min(100, Math.max(0, until - Date.now())));
       }
+      throw new Error(
+        `Search did not serve the ${ids.length} released originals in 120s ` +
+          `(alias: ${alias ?? 'unobserved'}, public read: ${JSON.stringify(lastPublicRead ?? null)}, ` +
+          `generation snapshot: ${JSON.stringify(observed ?? null)})`,
+      );
     }
-    const anchors: { id: string; type: string }[] = [];
+    const anchors: Anchor[] = [];
     for (const [grain, type] of BOOK_CATALOGUE_TYPES.entries()) {
       for (let ordinal = 0; ordinal < 11; ordinal++) {
         const { id } = await fixture.createSubject(type, `AAA ${grain} ${String(ordinal).padStart(2, '0')}`);
-        anchors.push({ id, type });
+        const anchor = { id, type };
+        // Use the first Book to finish cold publication before the composed-cost population arrives.
+        if (anchors.length === 0) await indexed([id], anchor);
+        anchors.push(anchor);
       }
     }
     const hidden = await fixture.createSubject('schema:Book', 'AAA 0 00 concealed');
