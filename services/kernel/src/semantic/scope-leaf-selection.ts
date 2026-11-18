@@ -481,7 +481,10 @@ export type SourceStatementRow = {
   ordinal: number;
 };
 
-function valueText(body: unknown, definition: Release['properties'][string] | undefined): string | null {
+type StatementDefinition = Pick<Release['properties'][string], 'datatype'> &
+  Partial<Pick<Release['properties'][string], 'value' | 'qualifiers' | 'units'>>;
+
+function valueText(body: unknown, definition: StatementDefinition | undefined): string | null {
   if (!sourceObject(body) || !sourceObject(body.value)) return null;
   const value = body.value;
   if (value.type !== 'value' || !sourceObject(value.content)) {
@@ -508,7 +511,7 @@ export function indexedStatement(row: SourceStatementRow, release: Release): Ind
 export function normalizeSourceStatement(
   property: string,
   body: unknown,
-  properties: Release['properties'],
+  properties: Readonly<Record<string, StatementDefinition>>,
 ): IndexedStatement | null {
   if (!sourceObject(body)) return null;
   const definition = properties[property];
