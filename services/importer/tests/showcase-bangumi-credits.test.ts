@@ -26,7 +26,7 @@ import {
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
-import { creditSlot } from '../src/showcase-current-reads.ts';
+import { relationSlot } from '../src/showcase-current-reads.ts';
 import { seedBatchRemainingRequest } from '../src/seed-remaining-request.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -184,7 +184,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
               statement.property.id !== query.property
             )
               return false;
-            const slot = creditSlot(statement);
+            const slot = relationSlot(statement);
             return query.target === slot?.target && query.key === slot?.key;
           })
           .map((candidate) => ({

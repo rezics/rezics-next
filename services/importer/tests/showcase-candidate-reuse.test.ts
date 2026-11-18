@@ -48,7 +48,7 @@ test('a later reciprocal receipt cannot displace the current native candidate ci
       async reviewedCandidates(subject: string, query: { context: string; property: string }) {
         reads++;
         expect(subject).toBe(id(1));
-        expect(query).toMatchObject({ context: GLOBAL_CONTEXT, property: 'wdt:P749' });
+        expect(query).toMatchObject({ context: GLOBAL_CONTEXT, property: 'wdt:P749', target: id(2) });
         return {
           candidates: [{ id: id(3), source: original.source, statement: original.statement, rank: null }],
           next: null,

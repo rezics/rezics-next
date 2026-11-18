@@ -5,16 +5,18 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { ImportTransportError, type MediaVariantDecision, type ReviewedSubjectRead } from './import-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
-import { sameStatementProvenance } from './statement-provenance.ts';
+import { showcaseStatementMatches, sameStatementProvenance } from './statement-provenance.ts';
 import { showcaseDigest, showcaseLimits, type ShowcaseRecord, type ShowcaseReviewPort } from './showcase-contract.ts';
 import type { CandidateListingCheckpoint, ShowcaseJournal } from './showcase-journal.ts';
-import type { ShowcaseCreditSlot } from './showcase-publication-contract.ts';
+import type { ShowcaseRelationSlot } from './showcase-publication-contract.ts';
 
-/** Credit reviews and replacements address the same target and qualifier slot as the native proposal. */
-export function creditSlot(statement: BatchStatement): ShowcaseCreditSlot | undefined {
+/** Native relation reads and adoptions address the target and any declared qualifier key. */
+export function relationSlot(statement: BatchStatement): ShowcaseRelationSlot | undefined {
   const relation = bundledRelease.properties[statement.property.id]?.relation;
   const target = statement.value.type === 'value' ? statement.value.content : undefined;
-  if (relation?.group !== 'credit' || typeof target !== 'string') return;
+  // Classification uses the property slot except for the released Person occupation relation.
+  if (!relation || (relation.group === 'classification' && statement.property.id !== 'wdt:P106')) return;
+  if (typeof target !== 'string' || !nativeUuid.test(target)) return;
   const qualifier = statement.qualifiers?.find(({ property }) => property.id === relation.slotKey);
   const key = qualifier?.value.type === 'value' ? qualifier.value.content : undefined;
   return { target, ...(typeof key === 'string' ? { key } : {}) };
@@ -192,7 +194,7 @@ export async function readCurrentCandidatePages(
       'candidateListing' | 'saveCandidateListingPage' | 'saveCandidateListingRestart' | 'clearCandidateListing'
     >;
     intent?: string;
-    slot?: ShowcaseCreditSlot;
+    slot?: ShowcaseRelationSlot;
   } = {},
 ): Promise<CandidatePage> {
   const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
@@ -390,30 +392,14 @@ export function statementOnPublicRead(value: unknown, expected: BatchStatement):
 }
 
 export function selectedSynopsisOnPublicRead(value: unknown, expected: BatchStatement, candidateId: string): boolean {
-  if (expected.property.id !== 'schema:abstract' || expected.value.type !== 'value') return false;
-  const authored = expected.value.content;
-  if (!authored || typeof authored !== 'object' || Array.isArray(authored)) return false;
-  const language = (authored as { language?: unknown }).language;
-  if (typeof language !== 'string') return false;
-
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const row = value as Record<string, unknown>;
-  if (row.id !== candidateId || !row.property || typeof row.property !== 'object' || Array.isArray(row.property))
-    return false;
-  if ((row.property as { id?: unknown }).id !== 'schema:abstract') return false;
-  const content =
-    row.value && typeof row.value === 'object' && !Array.isArray(row.value)
-      ? (row.value as { content?: unknown }).content
-      : undefined;
-  if (content && typeof content === 'object' && !Array.isArray(content)) {
-    const currentLanguage = (content as { language?: unknown }).language;
-    if (typeof currentLanguage === 'string' && currentLanguage !== language) return false;
-  }
-
-  // A public document statement carries a current document locator; the authored proposal carries its snapshot.
-  // The selected-slot read below validates that locator. Here, compare all remaining statement attribution exactly.
-  const comparable = { type: 'value' as const, content: 'selected-synopsis-current' };
-  return sameStatementProvenance({ ...row, value: comparable }, { ...expected, value: comparable });
+  return (
+    expected.property.id === 'schema:abstract' &&
+    !!value &&
+    typeof value === 'object' &&
+    'id' in value &&
+    value.id === candidateId &&
+    showcaseStatementMatches(value, expected)
+  );
 }
 
 /** The served-variant fields of the cover summary a public Subject read carries; Content owns the full shape. */

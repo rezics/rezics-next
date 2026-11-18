@@ -54,7 +54,7 @@ import type {
 import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-journal.ts';
 import type {
   ShowcaseAdoptBody as AdoptBody,
-  ShowcaseCreditSlot,
+  ShowcaseRelationSlot,
   ShowcasePublicationResult,
 } from './showcase-publication-contract.ts';
 import {
@@ -67,7 +67,7 @@ import {
 } from './showcase-adoption.ts';
 import {
   adoptionSnapshot,
-  creditSlot,
+  relationSlot,
   currentSourceRead,
   publicHasCitation,
   publicHasValue,
@@ -97,7 +97,7 @@ export type { ShowcasePublicationResult } from './showcase-publication-contract.
 
 export type { ShowcaseReviewPort };
 
-function groupKey(subject: string, property: string, slot?: ShowcaseCreditSlot): string {
+function groupKey(subject: string, property: string, slot?: ShowcaseRelationSlot): string {
   return slot ? `${subject}\0${property}\0${slot.target}\0${slot.key ?? ''}` : `${subject}\0${property}`;
 }
 
@@ -229,6 +229,7 @@ function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean 
   if (/^https:\/\/rezics\.com\/schemes\/bangumi\/appearance-roles(?:\/[1-3])?$/u.test(record.sourceUri))
     return uri === record.sourceUri || uri === bangumiAppearanceRolesSource;
   if (
+    record.sourceUri === bangumiPersonCareersUri ||
     /^https:\/\/rezics\.com\/schemes\/bangumi\/careers\/(?:producer|mangaka|artist|seiyu|writer|illustrator|actor)$/u.test(
       record.sourceUri,
     )
@@ -416,6 +417,7 @@ function admittedTextRights(record: ShowcaseRecord, assertion: ShowcaseAssertion
   return (
     record.provider === 'bangumi' &&
     assertion.property === 'schema:abstract' &&
+    assertion.source.field_group === 'summary' &&
     rights?.license === 'CC-BY-SA-3.0' &&
     rights.obligations.includes('cc:Attribution') &&
     rights.obligations.includes('cc:ShareAlike') &&
@@ -520,7 +522,7 @@ function tagAssociationPath(
       if (part.property.id !== 'schema:url' || part.value.type !== 'value' || typeof part.value.content !== 'string')
         continue;
       const citation = part.value.content;
-      if (!sourceCitationMatchesRecord(record, citation)) continue;
+      if (!sourceCitationMatchesRecord(record, statement.property.id, citation)) continue;
       const match = /^#\/tags_vn\/(v[1-9][0-9]*)\/(g[1-9][0-9]{0,9})\/tag$/u.exec(new URL(citation).hash);
       if (!match || match[1] !== record.sourceKey) continue;
       return { sourceKey: `/tags_vn/${match[1]}/${match[2]}/tag`, tagId: match[2]! };
@@ -615,38 +617,63 @@ function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
   );
 }
 
-function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): boolean {
-  if (!record.sourceUri) return false;
-  if (citation === record.sourceUri) return true;
-  try {
-    const source = new URL(record.sourceUri);
-    const cited = new URL(citation);
-    if (
-      cited.protocol !== 'https:' ||
-      cited.origin !== source.origin ||
-      cited.pathname !== source.pathname ||
-      cited.search !== source.search
-    )
+/** Source vocabulary proposals cite the converted record and its exact field path. */
+export function sourceCitationMatchesRecord(
+  record: Pick<ShowcaseRecord, 'sourceUri' | 'sourceKey' | 'provider' | 'kind'>,
+  property: string,
+  citation: string,
+): boolean {
+  const { sourceUri, sourceKey, provider, kind } = record;
+  if (!sourceUri) return false;
+  if (citation === sourceUri) return true;
+  if (
+    provider === 'bangumi' &&
+    kind === 'person' &&
+    property === 'wdt:P106' &&
+    /^person:[1-9][0-9]*$/u.test(sourceKey)
+  ) {
+    const id = sourceKey.slice('person:'.length);
+    return citation === `https://api.bgm.tv/v0/persons/${id}#/career` || citation === `${sourceUri}#/career`;
+  }
+  if (!citation.startsWith(`${sourceUri}#/`)) return false;
+  const path = citation.slice(sourceUri.length + 1);
+  const [, table, owner, field, extra] = path.split('/');
+  if (provider === 'bangumi') {
+    if (kind === 'character' && property === 'schema:keywords' && sourceKey === `character:${owner}`)
+      return path === `/character/${owner}/type` || path === `/character/${owner}/role`;
+    if (kind === 'episode' && property === 'schema:keywords' && sourceKey === `episode:${owner}`)
+      return path === `/episode/${owner}/type`;
+    if (kind !== 'work') return false;
+    if (owner !== sourceKey) return false;
+    return (
+      (table === 'subject-persons' && /^\/subject-persons\/[1-9][0-9]*\/[1-9][0-9]*\/position$/u.test(path)) ||
+      (table === 'person-characters' && /^\/person-characters\/[1-9][0-9]*\/[1-9][0-9]*\/[1-9][0-9]*$/u.test(path))
+    );
+  }
+  if (kind === 'character' && property === 'wdt:P1853') return path === '/chars/bloodt';
+  if (kind === 'work' && property === 'schema:character') {
+    return field === sourceKey && /^\/chars_vns\/c[1-9][0-9]*\/v[1-9][0-9]*(?:\/r[1-9][0-9]*)?$/u.test(path);
+  }
+  if (owner !== sourceKey) return false;
+  if (kind === 'work' && table === 'tags_vn')
+    return path === `/tags_vn/${owner}/${field}/tag` && /^g[1-9][0-9]{0,9}$/u.test(field ?? '');
+  if (extra !== undefined) return false;
+  if (kind === 'work' && property === 'schema:keywords') return table === 'vn' && field === 'devstatus';
+  if (kind === 'character' && property === 'schema:keywords')
+    return table === 'chars_traits' && /^i[1-9][0-9]*$/u.test(field ?? '');
+  if (kind !== 'release') return false;
+  switch (property) {
+    case 'schema:keywords':
+    case 'schema:datePublished':
+      return table === 'releases' && field === 'released';
+    case 'schema:exampleOfWork':
+      return table === 'releases_vn' && /^v[1-9][0-9]*$/u.test(field ?? '');
+    case 'schema:gamePlatform':
+      return table === 'releases_platforms' && field === 'platform';
+    case 'wdt:P437':
+      return table === 'releases_media' && field === 'medium';
+    default:
       return false;
-    if (record.provider === 'bangumi' && record.kind === 'work') {
-      const staffPrefix = `#/subject-persons/${record.sourceKey}/`;
-      const voicePrefix = `#/person-characters/${record.sourceKey}/`;
-      return (
-        (cited.hash.startsWith(staffPrefix) && /^[1-9][0-9]*\/position$/u.test(cited.hash.slice(staffPrefix.length))) ||
-        (cited.hash.startsWith(voicePrefix) && /^[1-9][0-9]*\/[1-9][0-9]*$/u.test(cited.hash.slice(voicePrefix.length)))
-      );
-    }
-    if (record.provider === 'bangumi' && record.kind === 'person' && record.sourceKey.startsWith('person:')) {
-      const id = record.sourceKey.slice('person:'.length);
-      return cited.href === `https://api.bgm.tv/v0/persons/${id}#/career`;
-    }
-    if (record.provider === 'vndb' && record.kind === 'work') {
-      const prefix = `#/tags_vn/${record.sourceKey}/`;
-      return cited.hash.startsWith(prefix) && /^g[1-9][0-9]{0,9}\/tag$/u.test(cited.hash.slice(prefix.length));
-    }
-    return false;
-  } catch {
-    return false;
   }
 }
 
@@ -694,7 +721,7 @@ async function candidatePage(
     review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>;
     id: string;
     property: string;
-    slot?: ShowcaseCreditSlot | undefined;
+    slot?: ShowcaseRelationSlot | undefined;
     journal?: ShowcaseJournal;
   },
   cache: Map<string, CandidatePage>,
@@ -755,7 +782,7 @@ export async function replayMissingSelectedProposalCommands(input: {
         review: input.review,
         id: command.subject,
         property: command.statement.property.id,
-        slot: creditSlot(command.statement),
+        slot: relationSlot(command.statement),
         journal: input.journal,
       },
       pageCache,
@@ -800,7 +827,7 @@ export async function preferCurrentCandidateAcknowledgements(
             review,
             id: command.subject,
             property: command.statement.property.id,
-            slot: creditSlot(command.statement),
+            slot: relationSlot(command.statement),
             ...(journal ? { journal } : {}),
           },
           pageCache,
@@ -891,7 +918,7 @@ export async function resolveLegacyCandidates(input: {
       visited += 1;
       const property = command.statement.property.id;
       const page = await candidatePage(
-        { review: input.review, id, property, slot: creditSlot(command.statement) },
+        { review: input.review, id, property, slot: relationSlot(command.statement) },
         pageCache,
       );
       const exact = page.candidates.filter(
@@ -1258,7 +1285,7 @@ async function publishShowcasePhases(
   const validationGroups = new Map<string, { selected: Set<string>; completeRows?: Map<string, CandidateRead> }>();
   for (const { record, assertion } of assertions) {
     if (!record.subjectId) continue;
-    const key = groupKey(record.subjectId, assertion.property, creditSlot(assertion.statement));
+    const key = groupKey(record.subjectId, assertion.property, relationSlot(assertion.statement));
     let group = validationGroups.get(key);
     if (!group) {
       group = { selected: new Set() };
@@ -1588,7 +1615,7 @@ async function publishShowcasePhases(
                 !(
                   record.kind === 'person' &&
                   assertion.property === 'wdt:P106' &&
-                  sourceCitationMatchesRecord(record, uri)
+                  sourceCitationMatchesRecord(record, assertion.property, uri)
                 ) &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
@@ -1607,14 +1634,14 @@ async function publishShowcasePhases(
       record.kind !== 'source-vocabulary' &&
       assertion.source.digest === record.semanticDigest &&
       record.sourceUri &&
-      !assertion.citations.some((citation) => sourceCitationMatchesRecord(record, citation))
+      !assertion.citations.some((citation) => sourceCitationMatchesRecord(record, assertion.property, citation))
     ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'source-uri-not-current' });
       continue;
     }
     let candidate: CandidateRead | undefined;
     try {
-      const slot = creditSlot(assertion.statement);
+      const slot = relationSlot(assertion.statement);
       const group = validationGroups.get(groupKey(id, assertion.property, slot))!;
       candidate = group.completeRows?.get(assertion.candidateId);
       if (!candidate) {
@@ -1776,7 +1803,7 @@ async function publishShowcasePhases(
     refreshDependencies?: () => Promise<string | null>,
   ): Promise<string | null> => {
     const id = record.subjectId!;
-    const slot = creditSlot(assertion.statement);
+    const slot = relationSlot(assertion.statement);
     const listingKey = groupKey(id, assertion.property, slot);
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
     let candidate = validated.get(assertion.candidateId)!;
@@ -1890,7 +1917,7 @@ async function publishShowcasePhases(
   }
 
   progress.enter('tag-parent-publication');
-  type AdoptionGroup = { record: ShowcaseRecord; property: string; slot?: ShowcaseCreditSlot; ids: Set<string> };
+  type AdoptionGroup = { record: ShowcaseRecord; property: string; slot?: ShowcaseRelationSlot; ids: Set<string> };
   const grouped = new Map<string, AdoptionGroup>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
@@ -1902,7 +1929,7 @@ async function publishShowcasePhases(
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
-    const slot = creditSlot(assertion.statement);
+    const slot = relationSlot(assertion.statement);
     const key = groupKey(id, assertion.property, slot);
     const group = grouped.get(key) ?? {
       record,
@@ -2510,7 +2537,7 @@ async function publishShowcasePhases(
   const assertionsByGroup = new Map<string, typeof assertions>();
   for (const entry of assertions) {
     if (!entry.record.subjectId) continue;
-    const key = groupKey(entry.record.subjectId, entry.assertion.property, creditSlot(entry.assertion.statement));
+    const key = groupKey(entry.record.subjectId, entry.assertion.property, relationSlot(entry.assertion.statement));
     const entries = assertionsByGroup.get(key) ?? [];
     entries.push(entry);
     assertionsByGroup.set(key, entries);
@@ -3014,7 +3041,7 @@ async function publishShowcasePhases(
       }
       if (!readback) return false;
       const adoption = adoptionSnapshots.get(
-        groupKey(record.subjectId!, assertion.property, creditSlot(assertion.statement)),
+        groupKey(record.subjectId!, assertion.property, relationSlot(assertion.statement)),
       );
       const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
       if (!adoption || !selected) {

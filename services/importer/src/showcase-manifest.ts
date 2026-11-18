@@ -1,6 +1,6 @@
 import { showcaseFranchiseAssertions } from './showcase-franchise.ts';
 import type { GraphEdgeEvidence } from './cross-media-bindings.ts';
-import { sameStatementProvenance } from './statement-provenance.ts';
+import { showcaseStatementMatches } from './statement-provenance.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
@@ -43,6 +43,7 @@ import { validAvailableCover, type CrossMediaMediaOutcome } from './showcase-med
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
 
+export { showcaseStatementMatches };
 export {
   showcaseLimits,
   showcaseMediaLimit,
@@ -1116,8 +1117,4 @@ function kindFromType(type: string): ShowcaseKind {
   if (type === 'wd:Q95074') return 'character';
   if (type === 'wd:Q20631656') return 'release';
   return 'work';
-}
-
-export function showcaseStatementMatches(actual: BatchStatement | null, expected: BatchStatement): boolean {
-  return sameStatementProvenance(actual, expected);
 }

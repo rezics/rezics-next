@@ -17,6 +17,7 @@ import {
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import {
   buildShowcaseManifest,
+  showcaseStatementMatches,
   showcaseDigest,
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
@@ -32,6 +33,7 @@ import {
   sendDurableAdopt,
   servedCoverVariants,
   servedVariantDecisionCurrent,
+  sourceCitationMatchesRecord,
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
@@ -52,6 +54,35 @@ const nativeValueStatement = (
   rank,
   property: { id: property },
   value: { type: 'value', content },
+});
+
+test('selected vocabulary fields cite their own record, field and revision', () => {
+  for (const [provider, kind, sourceKey, sourceUri, property, path] of [
+    [
+      'bangumi',
+      'character',
+      'character:42511',
+      'https://bgm.tv/character/42511',
+      'schema:keywords',
+      '/character/42511/role',
+    ],
+    ['bangumi', 'episode', 'episode:84715', 'https://bgm.tv/ep/84715', 'schema:keywords', '/episode/84715/type'],
+    [
+      'vndb',
+      'release',
+      'r16263',
+      'https://vndb.org/r16263.unversioned',
+      'schema:datePublished',
+      '/releases/r16263/released',
+    ],
+    ['vndb', 'character', 'c6495', 'https://vndb.org/c6495.unversioned', 'wdt:P1853', '/chars/bloodt'],
+  ] as const) {
+    const record = { provider, kind, sourceKey, sourceUri };
+    expect(sourceCitationMatchesRecord(record, property, `${sourceUri}#${path}`)).toBe(true);
+    expect(sourceCitationMatchesRecord(record, property, `${sourceUri}?revision=other#${path}`)).toBe(false);
+    expect(sourceCitationMatchesRecord(record, 'schema:name', `${sourceUri}#${path}`)).toBe(false);
+    expect(sourceCitationMatchesRecord(record, property, `${sourceUri}#${path}/other`)).toBe(false);
+  }
 });
 
 test('selected dump candidates publish exact intent, resume retryable steps, and retain permanent refusals', async () => {
@@ -129,6 +160,14 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     { id: string; source: BatchCommand['source'] | null; statement: BatchStatement; head: number | null }
   >();
   const synopsisDocuments = new Map<string, { document: string; digest: string; language: string }>();
+  const storedSynopsis = (id: string, statement: BatchStatement) => {
+    const retained = synopsisDocuments.get(id);
+    if (retained) return retained;
+    const { document, language } = (statement.value as { content: { document: unknown; language: string } }).content;
+    const stored = { document: randomUUID(), digest: sourceDigest(document), language };
+    synopsisDocuments.set(id, stored);
+    return stored;
+  };
   const accepted = new Set<string>();
   const rejected = new Set<string>();
   type NativeRank = 'normal' | 'preferred' | 'deprecated';
@@ -449,6 +488,13 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
             )
             .map((candidate) => ({
               ...candidate,
+              statement:
+                candidate.source?.field_group === 'summary'
+                  ? {
+                      ...candidate.statement,
+                      value: { type: 'value', content: storedSynopsis(candidate.id, candidate.statement) },
+                    }
+                  : candidate.statement,
               decision: rejected.has(candidate.id) ? 'rejected' : accepted.has(candidate.id) ? 'accepted' : null,
               rank: rejected.has(candidate.id)
                 ? 'deprecated'
@@ -519,23 +565,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           const rowId = row && typeof row === 'object' ? (row as { id?: unknown }).id : undefined;
           const candidate = typeof rowId === 'string' ? candidates.get(rowId) : undefined;
           if (!candidate) return row;
-          const synopsis = (() => {
-            const retained = synopsisDocuments.get(candidate.id);
-            if (retained) return retained;
-            const value = candidate.statement.value;
-            if (candidate.statement.property.id !== 'schema:abstract' || value.type !== 'value')
-              throw new Error('Selected synopsis fixture must have a document value');
-            const content = value.content as { document?: unknown; language?: unknown };
-            if (typeof content.language !== 'string' || !content.document)
-              throw new Error('Selected synopsis fixture is missing its authored snapshot');
-            const current = {
-              document: randomUUID(),
-              digest: createHash('sha256').update(JSON.stringify(content.document)).digest('hex'),
-              language: content.language,
-            };
-            synopsisDocuments.set(candidate.id, current);
-            return current;
-          })();
+          const synopsis = storedSynopsis(candidate.id, candidate.statement);
           const refs = Array.isArray(candidate.statement.references)
             ? candidate.statement.references.map((reference, index) => ({
                 ...reference,
@@ -736,6 +766,21 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted).toEqual(seededAcceptedCandidates);
+    const synopsisProposal = acknowledged.find((entry) => entry.command.source.field_group === 'summary')!;
+    if (synopsisProposal.command.op !== 'propose') throw new Error('Expected a synopsis proposal');
+    const authored = synopsisProposal.command.statement;
+    const stored = synopsisDocuments.get(synopsisProposal.candidateId!)!;
+    const reviewed = { ...authored, value: { type: 'value' as const, content: stored } };
+    expect(showcaseStatementMatches(reviewed, authored)).toBe(true);
+    expect(showcaseStatementMatches({ ...reviewed, references: [] }, authored)).toBe(false);
+    for (const changed of [{ digest: '0'.repeat(64) }, { language: 'other' }, { document: 'invalid' }]) {
+      expect(
+        showcaseStatementMatches(
+          { ...reviewed, value: { type: 'value', content: { ...stored, ...changed } } },
+          authored,
+        ),
+      ).toBe(false);
+    }
     const graphReplacement = adoptionWrites.find(
       (write) => write.subjectId === tagConceptId && write.body.property === 'skos:broader',
     );

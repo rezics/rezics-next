@@ -9,7 +9,7 @@ import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
-import { creditSlot } from '../src/showcase-current-reads.ts';
+import { relationSlot } from '../src/showcase-current-reads.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -295,7 +295,7 @@ function reviewWorld(journal: ShowcaseJournal) {
       return {
         candidates: [...candidates.values()]
           .filter((candidate) => {
-            const slot = creditSlot(candidate.statement);
+            const slot = relationSlot(candidate.statement);
             return (
               candidate.subject === id &&
               candidate.statement.property.id === query.property &&
@@ -338,7 +338,7 @@ function reviewWorld(journal: ShowcaseJournal) {
         const selected = candidates.get(candidate)!;
         expect(selected.decision).toBe('accepted');
         expect(
-          slotKey(selected.subject, { property: selected.statement.property.id, ...creditSlot(selected.statement) }),
+          slotKey(selected.subject, { property: selected.statement.property.id, ...relationSlot(selected.statement) }),
         ).toBe(key);
       }
       const next = { head: (previous?.head ?? 0) + 1, selection };
