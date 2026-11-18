@@ -16,6 +16,7 @@ import {
 
 export const CANONICAL_GENERATION_PAGE_SIZE = 200;
 const CANONICAL_GENERATION_SOURCE_BATCH_SIZE = 8;
+const CANONICAL_GENERATION_SOURCE_CONCURRENCY = 4;
 const contextDirectoryChanged = 'com.rezics.semantic.context-directory.changed.v1';
 export type CanonicalGenerationDelivery = Readonly<{ partition: number; generation: string }>;
 export type CanonicalGenerationPageRequest = Readonly<{ after: number | null; limit: number; unannouncedOnly?: true }>;
@@ -108,7 +109,8 @@ export async function readCanonicalGenerationDeliveryPage(
  * The source emits at most eight native homes per turn before handing off the next page.
  * This bounds how many relay homes a single recovery wake can place ahead of ordinary traffic.
  * Literal page cost: one <=8-row inventory seek, <=8 single-home commands (one keyed
- * conditional counter update each), and at most one continuation command. No Subject or Rating rows are read.
+ * conditional counter update each), and at most one continuation command. Independent
+ * home commands run in groups of four, and the continuation waits for the entire page.
  */
 export async function resumeCanonicalGenerationDelivery(
   pool: Pool,
@@ -120,8 +122,8 @@ export async function resumeCanonicalGenerationDelivery(
     { ...request, limit: Math.min(request.limit, CANONICAL_GENERATION_SOURCE_BATCH_SIZE) },
     { deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
   );
-  for (const home of page.homes) {
-    await runCommand(pool, { partition: home.partition }, async (tx) => {
+  const announce = (home: CanonicalGenerationDelivery) =>
+    runCommand(pool, { partition: home.partition }, async (tx) => {
       // Commit the notification marker and its native event together. Startup recovery
       // redelivers every outstanding generation, including an exhausted receiver workflow.
       const announced = await tx.query<{ generation: string }>(
@@ -135,12 +137,18 @@ export async function resumeCanonicalGenerationDelivery(
       if (!row) return noEffect(null);
       return {
         value: null,
-        events: [{
-          type: CANONICAL_GENERATION_COMMITTED,
-          data: { partition: home.partition, generation: row.generation },
-        }],
+        events: [
+          {
+            type: CANONICAL_GENERATION_COMMITTED,
+            data: { partition: home.partition, generation: row.generation },
+          },
+        ],
       };
     });
+  const concurrency = Math.min(CANONICAL_GENERATION_SOURCE_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1));
+  for (let offset = 0; offset < page.homes.length; offset += concurrency) {
+    const attempted = await Promise.allSettled(page.homes.slice(offset, offset + concurrency).map(announce));
+    for (const result of attempted) if (result.status === 'rejected') throw result.reason;
   }
   if (page.after !== null) {
     // A crash before this commit replays the original wake; a crash after it replays this page.
