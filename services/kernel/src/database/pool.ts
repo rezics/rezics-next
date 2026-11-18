@@ -6,6 +6,7 @@ export { partitionReadClient, partitionReadClientObservation, partitionReadClien
 export { boundedReadWindow } from './bounded-read-window.ts';
 export {
   BoundedReadDeadlineError,
+  isPostgresTransactionAbort,
   RetiredReadClientError,
   type NativeReadQueryConfig,
 } from './bounded-read-lifetime.ts';

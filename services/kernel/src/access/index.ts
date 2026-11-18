@@ -56,6 +56,7 @@ export {
 } from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
+export { accessEvidenceDeadline } from './evidence-deadline.ts';
 export {
   createResourcePublicEligibility,
   createResourceAnonymousEligibility,
