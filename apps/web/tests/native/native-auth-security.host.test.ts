@@ -53,7 +53,10 @@ async function manageAccountSecurity() {
   const signupTarget = fixture.libraryTarget;
   await visitLibrarySignIn(newcomerPage, stack, signupTarget);
   const authorizationQuery = new URL(newcomerPage.url()).search;
-  expect(new URLSearchParams(authorizationQuery).get('client_id')).toBe('rezics-website');
+  const authorization = new URLSearchParams(authorizationQuery);
+  expect(authorization.get('client_id')).toBe('rezics-website');
+  const authorizationState = authorization.get('state');
+  expect(Boolean(authorizationState), 'Signup starts with a Website authorization state').toBe(true);
   const signup = newcomerPage.getByRole('link', { name: /create an account|sign up/i }).first();
   await signup.click();
   await newcomerPage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/signup');
@@ -70,23 +73,37 @@ async function manageAccountSecurity() {
   await fields.and(newcomerPage.getByLabel('Password', { exact: true })).fill(newcomerPassword);
   await fields.and(newcomerPage.getByLabel('Confirm password', { exact: true })).fill(newcomerPassword);
   await newcomerPage.getByText('Loading the security check…', { exact: true }).waitFor({ state: 'hidden' });
-  const signupResponse = newcomerPage.waitForResponse(
-    (response) => response.url() === `${auth.origin}/signup` && response.request().method() === 'POST',
-  );
-  const signupCallback = newcomerPage.waitForResponse(
-    (response) => {
-      const { origin, pathname } = new URL(response.url());
-      return origin === webOrigin && pathname === '/auth/callback';
-    },
-    { timeout: 30_000 },
-  );
-  await newcomerPage.getByRole('button', { name: 'Create an account', exact: true }).click();
-  const created = await signupResponse;
-  expect(created.status()).toBe(201);
-  const newcomerId = ((await created.json()) as { accountId?: unknown }).accountId;
-  expect(typeof newcomerId).toBe('string');
+  const [, callback] = await Promise.all([
+    newcomerPage
+      .waitForResponse(
+        (response) => response.url() === `${auth.origin}/signup` && response.request().method() === 'POST',
+      )
+      .then((response) => expect(response.status()).toBe(201)),
+    newcomerPage.waitForResponse(
+      (response) => {
+        const { origin, pathname } = new URL(response.url());
+        const request = response.request();
+        return (
+          origin === webOrigin &&
+          pathname === '/auth/callback' &&
+          request.isNavigationRequest() &&
+          request.frame() === newcomerPage.mainFrame()
+        );
+      },
+      { timeout: 30_000 },
+    ),
+    newcomerPage.getByRole('button', { name: 'Create an account', exact: true }).click(),
+  ]);
+  const newcomerId = await issuerProxy.signupAccountId(newcomerEmail, newcomerHandle);
   expect([fixture.accountIds.alice, fixture.accountIds.bob]).not.toContain(newcomerId);
-  expect((await signupCallback).status()).toBe(303);
+  const callbackQuery = new URL(callback.url()).searchParams;
+  expect(callbackQuery.get('state') === authorizationState, 'Callback matches the signup authorization state').toBe(true);
+  expect(
+    Boolean(callbackQuery.get('code')) && !callbackQuery.has('error'),
+    'Callback carries an authorization code',
+  ).toBe(true);
+  expect(callback.status()).toBe(303);
+  expect(callback.headers().location).toBe(signupTarget);
   await newcomerPage.waitForURL((url) => url.origin === webOrigin && `${url.pathname}${url.search}` === signupTarget, {
     timeout: 30_000,
   });
