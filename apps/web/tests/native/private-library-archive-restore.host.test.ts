@@ -83,6 +83,42 @@ async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
+function archiveModuleLabel(url: URL, webOrigin: string): string {
+  if (url.origin !== webOrigin) return 'outside-web';
+  const { pathname } = url;
+  switch (pathname) {
+    case '/src/routes/library/export.tsx':
+    case '/src/routes/library/recover-collections.tsx':
+    case '/src/routes/library/recover-archive.tsx':
+    case '/src/routes/library/recover-progress.tsx': {
+      const split = url.searchParams.get('tsr-split');
+      if (split === 'component' || split === 'loader') return `${pathname}?tsr-split=${split}`;
+      return pathname;
+    }
+    case '/src/client.tsx':
+    case '/src/router.tsx':
+    case '/src/routeTree.gen.ts':
+    case '/src/routes/__root.tsx':
+    case '/src/library/recovery-lifetime.tsx':
+    case '/@vite/client':
+      return pathname;
+    case '/@id/__x00__virtual:tanstack-start-dev-client-entry':
+      return 'start-dev-client-entry';
+  }
+  if (pathname.startsWith('/src/library/archive-entry-recovery/')) return 'archive-entry-recovery';
+  if (pathname.startsWith('/src/library/archive-collection-recovery/')) return 'archive-collection-recovery';
+  if (pathname.startsWith('/src/library/archive-progress-recovery/')) return 'archive-progress-recovery';
+  if (pathname.startsWith('/src/library/private-export/')) return 'archive-export';
+  if (pathname.startsWith('/src/paraglide/')) return 'paraglide';
+  if (pathname.startsWith('/src/session/')) return 'session';
+  if (pathname.startsWith('/@id/')) return 'vite-virtual';
+  if (pathname.includes('/deps/')) return 'vite-optimized-dependency';
+  if (pathname.includes('/node_modules/')) return 'dependency';
+  if (pathname.startsWith('/@fs/')) return 'vite-fs';
+  if (pathname.startsWith('/assets/')) return 'built-asset';
+  return 'other-web';
+}
+
 async function visitLocalizedArchive(
   page: Page,
   locale: (typeof locales)[number],
@@ -104,26 +140,51 @@ async function visitLocalizedArchive(
     if (browserErrors.size < 8) browserErrors.add(kind);
   };
   const documents: { status: number; path: string }[] = [];
+  const scriptStatuses = new WeakMap<Request, number | null>();
+  const failedScripts = new Map<Request, { module: string; status: number | null; error: string | null }>();
+  const failedImports = new Set<string>();
+  const observeRequest = (request: Request) => {
+    // Requests still settling from the previous visit do not belong to this document.
+    if (request.resourceType() === 'script' && documents.at(-1)?.path === 'expected')
+      scriptStatuses.set(request, null);
+  };
+  const recordScriptFailure = (request: Request, status: number | null, error: string | null) => {
+    if (!failedScripts.has(request) && failedScripts.size >= 8) return;
+    failedScripts.set(request, { module: archiveModuleLabel(new URL(request.url()), target.origin), status, error });
+  };
   const observeResponse = (response: Response) => {
     const request = response.request();
     if (request.isNavigationRequest() && response.frame() === page.mainFrame()) {
       if (documents.length === 4) documents.shift();
       documents.push({ status: response.status(), path: classifyPath(response.url()) });
-    } else if (request.resourceType() === 'script' && response.status() >= 400) {
-      recordError(`script-http-${response.status()}`);
+    } else if (scriptStatuses.has(request)) {
+      const status = response.status();
+      scriptStatuses.set(request, status);
+      if (status >= 400) {
+        recordError(`script-http-${status}`);
+        recordScriptFailure(request, status, null);
+      }
     }
   };
   const observeRequestFailure = (request: Request) => {
     const resource = request.resourceType();
-    if (resource !== 'document' && resource !== 'script') return;
+    const status = scriptStatuses.get(request);
+    if (resource !== 'document' && status === undefined) return;
     const reason = request.failure()?.errorText ?? '';
-    recordError(`${resource}-${/^net::ERR_[A-Z0-9_]{1,40}$/u.test(reason) ? reason : 'request-failed'}`);
+    const error = /^net::ERR_[A-Z0-9_]{1,40}$/u.test(reason) ? reason : 'request-failed';
+    recordError(`${resource}-${error}`);
+    if (status !== undefined) recordScriptFailure(request, status, error);
   };
   const observePageError = ({ name, message }: Error) => {
-    if (/dynamically imported module|module script failed/u.test(message)) recordError('module-load');
-    else if (/hydrat(?:e|ion)/iu.test(message)) recordError('hydration');
+    if (/dynamically imported module|module script failed/u.test(message)) {
+      recordError('module-load');
+      const href = /^Failed to fetch dynamically imported module: (https?:\/\/\S+)$/u.exec(message)?.[1];
+      if (href && URL.canParse(href) && failedImports.size < 8)
+        failedImports.add(archiveModuleLabel(new URL(href), target.origin));
+    } else if (/hydrat(?:e|ion)/iu.test(message)) recordError('hydration');
     else recordError(['TypeError', 'SyntaxError', 'ReferenceError', 'RangeError'].includes(name) ? name : 'page-error');
   };
+  page.on('request', observeRequest);
   page.on('response', observeResponse);
   page.on('requestfailed', observeRequestFailure);
   page.on('pageerror', observePageError);
@@ -162,6 +223,7 @@ async function visitLocalizedArchive(
         500,
       ).catch(() => undefined),
     ]);
+    page.off('request', observeRequest);
     page.off('response', observeResponse);
     page.off('requestfailed', observeRequestFailure);
     page.off('pageerror', observePageError);
@@ -177,6 +239,8 @@ async function visitLocalizedArchive(
         sessionCookie: sessionCookie ?? null,
         shell: shell ?? null,
         browserErrors: [...browserErrors],
+        failedScripts: [...failedScripts.values()],
+        failedImports: [...failedImports],
       }),
     );
   }
