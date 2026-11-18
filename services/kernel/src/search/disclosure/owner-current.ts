@@ -215,10 +215,18 @@ export async function readOwnerCandidates(
     idsByKind.set(key.kind, ids);
   }
   const current = new Map<string, DiscoveryOwnerMetadataSummary>();
-  for (const [kind, ids] of idsByKind) {
-    const summaries = await readOwnerBatches<DiscoveryOwnerMetadataSummary>([...new Set(ids)], (batch) =>
-      ports.readCurrent(kind, batch, context),
-    );
+  const groups = await Promise.allSettled(
+    [...idsByKind].map(async ([kind, ids]) => ({
+      kind,
+      ids,
+      summaries: await readOwnerBatches<DiscoveryOwnerMetadataSummary>([...new Set(ids)], (batch) =>
+        ports.readCurrent(kind, batch, context),
+      ),
+    })),
+  );
+  for (const group of groups) {
+    if (group.status === 'rejected') throw group.reason;
+    const { kind, ids, summaries } = group.value;
     if (!summaries || typeof summaries.get !== 'function' || typeof summaries[Symbol.iterator] !== 'function')
       throw new TypeError('Owner discovery adapter returned an invalid current summary set');
     const requested = new Set(ids);

@@ -1722,10 +1722,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const rows: CustodyExecution['ownRows'][number][] = [];
     const accepted: number[] = [];
     const seen = new Set<string>();
-    const metadata = await proveMetadataRows(hits, m, context);
     const accounts = hits.filter(({ key }) => key.owner === 'accounts');
     const accountRows = new Map<string, { position: bigint; revision: string }>();
-    if (accounts.length) {
+    const readAccounts = async () => {
+      if (!accounts.length) return;
       const entry = config.registry?.get('account');
       if (entry?.owner !== 'accounts' || accounts.some(({ key }) => key.kind !== entry.kind))
         throw new ConsumerFailure('dependency_unavailable');
@@ -1752,20 +1752,24 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           }
         },
       );
-    }
+    };
     const subjects = [...new Set(hits.filter(({ key }) => key.owner === 'semantic').map(({ key }) => key.id))];
     const nativeIdentities = config.source.readPublicFilterSubjectIdentities;
-    const anchors =
+    // Reserve the other owner points before offering the remainder to the
+    // independent Source read, including a possible second metadata chunk.
+    const anchorAllowance = m.inputLimit - m.cost.inputKeys - hits.length + subjects.length;
+    const [metadataRead, accountRead, anchorRead] = await Promise.allSettled([
+      proveMetadataRows(hits, m, context),
+      readAccounts(),
       identitiesOnly && nativeIdentities && subjects.length
-        ? m.take(
-            await nativeIdentities({
-              subjects,
-              meaning,
-              inputLimit: m.inputLimit - m.cost.inputKeys,
-              context,
-            }),
-          )
-        : null;
+        ? nativeIdentities({ subjects, meaning, inputLimit: anchorAllowance, context })
+        : null,
+    ]);
+    const anchors = anchorRead.status === 'fulfilled' && anchorRead.value ? m.take(anchorRead.value) : null;
+    if (metadataRead.status === 'rejected') throw metadataRead.reason;
+    if (accountRead.status === 'rejected') throw accountRead.reason;
+    if (anchorRead.status === 'rejected') throw anchorRead.reason;
+    const metadata = metadataRead.value;
     if (anchors && (anchors.status !== 'observed' || anchors.rows.length !== subjects.length))
       throw new MixedOwnerPending();
     const anchorsById = anchors && new Map(anchors.rows.map((row) => [row.subject, row]));
