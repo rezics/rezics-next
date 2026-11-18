@@ -191,6 +191,7 @@ test('revocation and RP-initiated logout end real Auth authority and redirect on
   const secondCookie = await signIn(second);
   const { authorize, issued } = await issue(firstCookie);
   const other = await issue(secondCookie);
+  const initialEpoch = accounts.get(first)!.authnEpoch;
 
   // RFC 7009 revocation runs the Access floor before success and ends the family.
   const revoke = await fetch(`${issuer}/revoke`, {
@@ -206,6 +207,8 @@ test('revocation and RP-initiated logout end real Auth authority and redirect on
   });
   expect(revoke.status).toBe(200);
   expect(invalidations).toEqual([first]);
+  const revokedEpoch = accounts.get(first)!.authnEpoch;
+  expect(revokedEpoch).toBe(initialEpoch + 1);
   expect((await token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token })).status).toBe(400);
   // The raised floor already denies the old session's authority.
   expect(await sessionStatus(firstCookie)).toBe(401);
@@ -249,7 +252,9 @@ test('revocation and RP-initiated logout end real Auth authority and redirect on
   expect(ended.status).toBe(302);
   expect(ended.headers.get('location')).toBe(`${issuer}/?state=done`);
   expect(ended.headers.getSetCookie().some((value) => /session_token=;.*Max-Age=0/.test(value))).toBe(true);
-  expect(invalidations).toEqual([first, first]);
+  // Revocation already retired this session's epoch. Logout deletes the native session at that floor.
+  expect(invalidations).toEqual([first]);
+  expect(accounts.get(first)!.authnEpoch).toBe(revokedEpoch);
   expect(await nativeSessions(first)).toBe(0);
   // The old issuer session cannot be silently reused for a new code.
   const again = await fetch(authorize, { headers: { cookie: firstCookie }, redirect: 'manual' });
