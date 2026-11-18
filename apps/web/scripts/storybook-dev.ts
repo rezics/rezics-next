@@ -114,7 +114,9 @@ export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.Proces
   const options = env.NODE_OPTIONS ?? '';
   // An explicit operator heap limit remains authoritative; other Node options are retained.
   if (/(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s)/.test(options)) return env;
-  return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=2048`.trim() };
+  // Bundled native checks compile the complete client graph in one V8 process.
+  const heapMiB = env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? 2560 : 2048;
+  return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=${heapMiB}`.trim() };
 }
 
 if (import.meta.main) {

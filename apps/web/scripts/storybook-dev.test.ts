@@ -59,6 +59,7 @@ test('ordinary Web bounds V8 while retaining caller Node options and explicit he
   );
   for (const options of ['--max-old-space-size=768', '--max_old_space_size 768'])
     expect(webServeEnvironment('app', { NODE_OPTIONS: options }).NODE_OPTIONS).toBe(options);
+  expect(webServeEnvironment('app', { NATIVE_WEB_BUNDLED_CLIENT: '1' }).NODE_OPTIONS).toBe('--max-old-space-size=2560');
   expect(webServeEnvironment('vite', {}).NODE_OPTIONS).toBeUndefined();
 });
 
