@@ -52,6 +52,9 @@ export type AccountPage = AccountSnapshot & { next: AccountPageKey | null };
 /** Accounts' native partition source. Its count is generation evidence, never query or kind-count evidence. */
 export interface AccountDiscoverySource {
   read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
+  readHomes?(
+    homes: readonly Readonly<{ partition: number; ids: readonly string[] }>[],
+  ): Promise<readonly AccountSnapshot[]>;
   count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
   countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, { position: bigint; count: number }>>;
   readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
@@ -356,6 +359,15 @@ export type DiscoverySearch = (
   request: MixedDiscoveryRequest,
   context: DiscoveryReadContext,
 ) => Promise<DiscoveryPage>;
+
+/** The native Home composition publishes the same retained execution after its owner reads. */
+export type DiscoveryFeedRead = Readonly<{
+  page: DiscoveryPage;
+  current(keys: readonly DiscoveryUnionHit['key'][]): Promise<readonly (DiscoveryUnionHit | undefined)[]>;
+  finish(): Promise<void>;
+  close(): Promise<void>;
+}>;
+export type DiscoveryFeedSearch = (...args: Parameters<DiscoverySearch>) => Promise<DiscoveryFeedRead>;
 
 /** Subject-scoped current public Knowledge, separate from the mixed catalogue representation. */
 export type { KnowledgeDiscoveryRequest, KnowledgeDiscoveryPage } from './knowledge-discovery.ts';

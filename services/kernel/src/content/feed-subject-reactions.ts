@@ -56,24 +56,34 @@ export async function prepareFeedSubjectReactions(
   const context = { pool: dependencies.pool, deadline };
   const checks = new Map<string, AccessCheck>();
   const groups = new Map<number, string[]>();
-  for (const id of selected.keys()) {
+  const ids = [...selected.keys()];
+  for (const id of ids) {
     const route = routeOf(id)!;
     const home = partitionOf(route);
     groups.set(home, [...(groups.get(home) ?? []), id]);
-    checks.set(
-      id,
-      await accessCheck(
-        dependencies.access,
-        actor,
-        'subject:read',
-        {
-          route,
-          id,
-          eligibility: subjectReadEligibility({ route, id }),
-        },
-        context,
-      ),
+  }
+  for (let offset = 0; offset < ids.length; offset += 4) {
+    const checked = await Promise.allSettled(
+      ids.slice(offset, offset + 4).map(async (id) => {
+        const route = routeOf(id)!;
+        const check = await accessCheck(
+          dependencies.access,
+          actor,
+          'subject:read',
+          {
+            route,
+            id,
+            eligibility: subjectReadEligibility({ route, id }),
+          },
+          context,
+        );
+        return { id, check };
+      }),
     );
+    for (const result of checked) {
+      if (result.status === 'rejected') throw result.reason;
+      checks.set(result.value.id, result.value.check);
+    }
   }
   // Advice uses the writer's Global Context operand, never a Subject-local grant.
   const advice =

@@ -9,6 +9,7 @@ import {
   type FeedItem,
   type FeedLane,
   type FeedLaneCandidate,
+  type FeedLaneLoad,
   type FeedPage,
   type FeedPosition,
   type FeedReadQuery,
@@ -133,6 +134,7 @@ export function createFeedApplication(
       if (question) next.ratingQuestionRevision = question.revision;
       let continueFingerprint = '';
       let discoveryAsOf: string | undefined;
+      let retainedDiscovery: FeedLaneLoad['retainedDiscovery'];
       const widths = feedLaneWidths({ stream, personal, limit });
       try {
         admitFeedCandidateReservation({
@@ -170,6 +172,7 @@ export function createFeedApplication(
               ...(space ? { spaceId: space.spaceId } : {}),
               ...(position.discovery ? { cursor: position.discovery } : {}),
             });
+            retainedDiscovery = page.retainedDiscovery;
             discoveryAsOf = page.asOf;
             lanes.discovery = [...page.candidates];
             next.discovery = page.next;
@@ -231,131 +234,179 @@ export function createFeedApplication(
         }
       };
 
-      await Promise.all(FEED_LANES.map(loadLane));
-      const qualifyQuestionLanes = async (selected: readonly FeedLane[]) => {
-        if (!question) return;
-        const candidates = selected.flatMap((lane) =>
-          lanes[lane].map((candidate, candidatePosition) => ({ lane, candidate, candidatePosition })),
-        );
-        const admissions = await question.qualify(candidates.map(({ candidate }) => candidate));
-        if (admissions.length !== candidates.length) throw new TypeError('Question admission lost feed positions');
-        const refused = new Set<FeedLane>();
-        for (const [index, { lane, candidate, candidatePosition }] of candidates.entries()) {
-          const result = admissions[index]!;
-          if (result === 'refused') refused.add(lane);
-          else if (result === 'absent') lanes[lane][candidatePosition] = { ...candidate, item: null };
-        }
-        for (const lane of refused) failLane(lane, new FeedRefusedError('dependency_unavailable'));
+      const loadLanes = async (selected: readonly FeedLane[]) => {
+        const outcomes = await Promise.allSettled(selected.map(loadLane));
+        for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
       };
-      await qualifyQuestionLanes(FEED_LANES);
-      const sourceWitnesses = new Map(
-        FEED_LANES.flatMap((lane) =>
-          lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
-        ),
-      );
-      const filtered = rejectFeedKindMismatches(lanes, query.kind);
-      lanes.continue = filtered.continue;
-      lanes.following = filtered.following;
-      lanes.discovery = filtered.discovery;
-      const merged = mergeFeedLanes({ lanes, turn: position.turn, limit });
-      let feedItems = merged.items;
-      Object.assign(
-        next,
-        advanceFeedFrontier({
-          position,
-          lanes,
-          offsets: merged.offsets,
-          turn: merged.turn,
-          continueFingerprint,
-        }),
-      );
-
-      const rewind = (affected: ReadonlySet<FeedLane>, error: unknown) => {
-        for (const lane of affected) failLane(lane, error);
-        feedItems = rewindFeedLanes(feedItems, affected);
-      };
-
-      const conversation = await ports.finish.beginConversation(feedItems, deadline);
-      if (conversation.rewind)
-        rewind(conversation.rewind, conversation.error ?? new FeedRefusedError('dependency_unavailable'));
-
-      const context = await ports.finish.contentContext(feedItems, actor, languages, deadline);
-      feedItems = context.items;
-      if (context.rewind) rewind(context.rewind, context.error ?? new FeedRefusedError('dependency_unavailable'));
-
-      const reactions = await ports.finish.reactions(feedItems, actor, deadline);
-      feedItems = reactions.items;
-      let reactionsAsOf = reactions.reactionsAsOf;
-      if (reactions.rewind) {
-        rewind(reactions.rewind, reactions.error ?? new FeedRefusedError('dependency_unavailable'));
-        reactionsAsOf = undefined;
-      }
-
-      const advice = await ports.finish.reactionAdvice(feedItems, actor, deadline, stream);
-      feedItems = advice.items;
-
-      const subject = await ports.finish.subjectReactions(feedItems, actor, deadline);
-      feedItems = subject.items;
-      if (subject.rewind) rewind(subject.rewind, subject.error ?? new FeedRefusedError('dependency_unavailable'));
-
-      await space?.finish();
-      await spacePopulation?.finish();
-
-      const follows = await ports.finish.followSupport(feedItems, actor, deadline);
-      feedItems = follows.items;
-      if (follows.rewind) rewind(follows.rewind, follows.error ?? new FeedRefusedError('dependency_unavailable'));
-
-      const confirmed = await ports.finish.confirmConversation(feedItems, deadline);
-      feedItems = confirmed.items;
-      if (confirmed.rewind) rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
-
-      const reopenSelected = async () => {
-        const retained = { ...next };
-        const selected = [...new Set(feedItems.map((item) => item.source))];
-        await space?.finish();
-        if (query.spaceId !== undefined)
-          space = await ports.space.open(actor, query.spaceId, deadline, now.toISOString());
-        for (const lane of selected) await loadLane(lane);
-        await qualifyQuestionLanes(selected);
-        Object.assign(next, retained);
-        const current = new Map(
-          selected.flatMap((lane) =>
+      try {
+        await loadLanes(FEED_LANES);
+        const qualifyQuestionLanes = async (selected: readonly FeedLane[]) => {
+          if (!question) return;
+          const candidates = selected.flatMap((lane) =>
+            lanes[lane].map((candidate, candidatePosition) => ({ lane, candidate, candidatePosition })),
+          );
+          const admissions = await question.qualify(candidates.map(({ candidate }) => candidate));
+          if (admissions.length !== candidates.length) throw new TypeError('Question admission lost feed positions');
+          const refused = new Set<FeedLane>();
+          for (const [index, { lane, candidate, candidatePosition }] of candidates.entries()) {
+            const result = admissions[index]!;
+            if (result === 'refused') refused.add(lane);
+            else if (result === 'absent') lanes[lane][candidatePosition] = { ...candidate, item: null };
+          }
+          for (const lane of refused) failLane(lane, new FeedRefusedError('dependency_unavailable'));
+        };
+        await qualifyQuestionLanes(FEED_LANES);
+        const sourceWitnesses = new Map(
+          FEED_LANES.flatMap((lane) =>
             lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
           ),
         );
-        feedItems = feedItems.filter((item) => {
-          if (current.get(item.id) === sourceWitnesses.get(item.id)) return true;
-          next[item.source] = position[item.source];
-          if (item.source === 'continue') next.resume = position.resume;
-          return false;
-        });
-        feedItems = await ports.finish.reopenSelected(feedItems, actor, bindingQuery, languages, deadline);
+        const filtered = rejectFeedKindMismatches(lanes, query.kind);
+        lanes.continue = filtered.continue;
+        lanes.following = filtered.following;
+        lanes.discovery = filtered.discovery;
+        const merged = mergeFeedLanes({ lanes, turn: position.turn, limit });
+        let feedItems = merged.items;
+        Object.assign(
+          next,
+          advanceFeedFrontier({
+            position,
+            loaded: next,
+            lanes,
+            offsets: merged.offsets,
+            turn: merged.turn,
+            continueFingerprint,
+          }),
+        );
+
+        const rewind = (affected: ReadonlySet<FeedLane>, error: unknown) => {
+          for (const lane of affected) failLane(lane, error);
+          feedItems = rewindFeedLanes(feedItems, affected);
+        };
+
+        const conversation = await ports.finish.beginConversation(feedItems, deadline);
+        if (conversation.rewind)
+          rewind(conversation.rewind, conversation.error ?? new FeedRefusedError('dependency_unavailable'));
+
+        const context = await ports.finish.contentContext(feedItems, actor, languages, deadline);
+        feedItems = context.items;
+        if (context.rewind) rewind(context.rewind, context.error ?? new FeedRefusedError('dependency_unavailable'));
+
+        const reactions = await ports.finish.reactions(feedItems, actor, deadline);
+        feedItems = reactions.items;
+        let reactionsAsOf = reactions.reactionsAsOf;
+        if (reactions.rewind) {
+          rewind(reactions.rewind, reactions.error ?? new FeedRefusedError('dependency_unavailable'));
+          reactionsAsOf = undefined;
+        }
+
+        const advice = await ports.finish.reactionAdvice(feedItems, actor, deadline, stream);
+        feedItems = advice.items;
+
+        const subject = await ports.finish.subjectReactions(feedItems, actor, deadline);
+        feedItems = subject.items;
+        if (subject.rewind) rewind(subject.rewind, subject.error ?? new FeedRefusedError('dependency_unavailable'));
+
         await space?.finish();
         await spacePopulation?.finish();
-        return feedItems;
-      };
 
-      let viewerPersonalActions: FeedPage['viewerPersonalActions'];
-      if (personal && stream === 'home') {
-        const personalPage = await ports.finish.personalActions(feedItems, actor, languages, deadline, reopenSelected);
-        feedItems = personalPage.items;
-        viewerPersonalActions = personalPage.viewerPersonalActions;
-      } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
-      if (advice.finish) feedItems = await advice.finish(feedItems);
-      await question?.finish();
-      const viewerFollows = account ? await ports.finish.viewerFollows?.(feedItems, account, deadline) : undefined;
+        const finishFollowing = async () => {
+          const follows = await ports.finish.followSupport(feedItems, actor, deadline);
+          if (follows.items.length < feedItems.length) next.following = position.following;
+          feedItems = follows.items;
+          if (follows.rewind) rewind(follows.rewind, follows.error ?? new FeedRefusedError('dependency_unavailable'));
+        };
+        await finishFollowing();
 
-      return {
-        feedItems,
-        ...(viewerPersonalActions === undefined ? {} : { viewerPersonalActions }),
-        ...(viewerFollows === undefined ? {} : { viewerFollows }),
-        sources,
-        asOf: personal ? position.boundary : (discoveryAsOf ?? position.boundary),
-        ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),
-        next: feedHasReadyFrontier(next, sources)
-          ? await ports.cursor.encode(actor, bindingQuery, languages, next, now)
-          : null,
-      };
+        const confirmed = await ports.finish.confirmConversation(feedItems, deadline);
+        feedItems = confirmed.items;
+        if (confirmed.rewind)
+          rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
+
+        const publishDiscovery = async () => {
+          if (!retainedDiscovery || sources.discovery !== 'ready') return;
+          try {
+            await retainedDiscovery.finish();
+          } catch (error) {
+            rewind(new Set<FeedLane>(['discovery']), error);
+          }
+        };
+        const reopenSelected = async (viewerReady?: Promise<unknown>) => {
+          const retained = { ...next };
+          const selected = [...new Set(feedItems.map((item) => item.source))];
+          let discoveryFailure: PromiseRejectedResult | undefined;
+          await space?.finish();
+          if (query.spaceId !== undefined)
+            space = await ports.space.open(actor, query.spaceId, deadline, now.toISOString());
+          const loadCurrentLanes = async (selectedLanes: readonly FeedLane[]) => {
+            // The native Following and Continue reads themselves authorize the
+            // selected private activity after the viewer read has settled.
+            await viewerReady;
+            await loadLanes(selectedLanes);
+          };
+          if (retainedDiscovery && selected.includes('discovery')) {
+            const discoveryIds = feedItems.filter((item) => item.source === 'discovery').map(({ id }) => id);
+            const current = await Promise.allSettled([
+              loadCurrentLanes(selected.filter((lane) => lane !== 'discovery')),
+              retainedDiscovery.current(discoveryIds),
+            ] as const);
+            if (current[0].status === 'rejected') throw current[0].reason;
+            if (current[1].status === 'rejected') discoveryFailure = current[1];
+            else lanes.discovery = [...current[1].value];
+          } else await loadCurrentLanes(selected);
+          if (discoveryFailure) lanes.discovery = [];
+          await qualifyQuestionLanes(selected);
+          Object.assign(next, retained);
+          if (discoveryFailure) rewind(new Set<FeedLane>(['discovery']), discoveryFailure.reason);
+          const current = new Map(
+            selected.flatMap((lane) =>
+              lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+            ),
+          );
+          feedItems = feedItems.filter((item) => {
+            if (current.get(item.id) === sourceWitnesses.get(item.id)) return true;
+            next[item.source] = position[item.source];
+            if (item.source === 'continue') next.resume = position.resume;
+            return false;
+          });
+          feedItems = await ports.finish.reopenSelected(feedItems, actor, bindingQuery, languages, deadline);
+          await space?.finish();
+          await spacePopulation?.finish();
+          await publishDiscovery();
+          return feedItems;
+        };
+
+        let viewerPersonalActions: FeedPage['viewerPersonalActions'];
+        if (personal && stream === 'home') {
+          const personalPage = await ports.finish.personalActions(
+            feedItems,
+            actor,
+            languages,
+            deadline,
+            reopenSelected,
+          );
+          feedItems = personalPage.items;
+          viewerPersonalActions = personalPage.viewerPersonalActions;
+        } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
+        if (advice.finish) feedItems = await advice.finish(feedItems);
+        await question?.finish();
+        await publishDiscovery();
+        const viewerFollows = account ? await ports.finish.viewerFollows?.(feedItems, account, deadline) : undefined;
+
+        return {
+          feedItems,
+          ...(viewerPersonalActions === undefined ? {} : { viewerPersonalActions }),
+          ...(viewerFollows === undefined ? {} : { viewerFollows }),
+          sources,
+          asOf: personal ? position.boundary : (discoveryAsOf ?? position.boundary),
+          ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),
+          next: feedHasReadyFrontier(next, sources)
+            ? await ports.cursor.encode(actor, bindingQuery, languages, next, now)
+            : null,
+        };
+      } finally {
+        await retainedDiscovery?.close();
+      }
     },
   };
 }

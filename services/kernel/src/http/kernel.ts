@@ -217,7 +217,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   loanHttpWork?: import('../library/loan-operation-bounds.ts').LoanHttpWorkOwner;
 
   discovery?: import('../search/discovery-service.ts').DiscoverySearch;
-  feedDiscovery?: import('../search/discovery-service.ts').DiscoverySearch;
+  feedDiscovery?: import('../search/index.ts').DiscoveryFeedSearch;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
   reports?: { anonymousVerifier?: TurnstileVerifier };
   /** Enqueue-only client. Tests close the instance they pass. */
@@ -687,7 +687,6 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   };
   const viewerPersonalActions: ViewerPersonalActionsReader = (actor, rows, questionId, deadline) =>
     readViewerPersonalActionsPage({ pool: dependencies.pool, viewerActionRuntime }, actor, rows, questionId, deadline);
-  const feedDiscovery = dependencies.feedDiscovery ?? dependencies.discovery;
   const feed = feedRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
@@ -697,7 +696,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     operations: operationCatalogue,
     workClient,
     ...(dependencies.search ? { search: dependencies.search } : {}),
-    ...(feedDiscovery ? { discovery: feedDiscovery } : {}),
+    ...(dependencies.feedDiscovery ? { feedDiscovery: dependencies.feedDiscovery } : {}),
+    ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
     contentAccess: () => realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(feed), realmRoleReader })),
     viewerPersonalActions,

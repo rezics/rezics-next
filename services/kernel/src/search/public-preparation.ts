@@ -13,6 +13,8 @@ import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { SearchUnavailableError } from './opensearch.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { DiscoveryTarget } from './account-discovery.ts';
 import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import {
@@ -234,6 +236,20 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
 
   return {
     enqueueRepair,
+    prepareDefaultHome(target: DiscoveryTarget, deadline: number) {
+      if (paused || stopped || deadline <= Date.now()) return Promise.resolve(false);
+      return track(deadline, async () => {
+        try {
+          const job = await options.runtime.prepareDefaultHome(target, { deadline });
+          if (!job || paused || stopped) return false;
+          await enqueueRepair(job, deadline);
+          return true;
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'deadline_exceeded') return false;
+          throw error;
+        }
+      });
+    },
     /** The actual ordinary writer checks the native publication gate inside its enrollment transaction. */
     writer(_generation: number): import('./indexer.ts').SubjectApplyGuard {
       return async (_partition, _envelopes, apply) => apply();

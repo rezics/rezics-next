@@ -144,6 +144,39 @@ export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
     });
   }
   return {
+    async readHomes(homes) {
+      if (!homes.length || homes.length > 16 || new Set(homes.map(({ partition }) => partition)).size !== homes.length)
+        throw new RangeError('Account discovery requires at most sixteen distinct native homes');
+      const groups = homes.map(({ partition, ids }) => {
+        partitionKey(partition);
+        if (!ids.length) throw new RangeError('Account discovery home requires an exact key');
+        return { partition, requested: keys(ids, partition) };
+      });
+      const requested = groups.flatMap(({ requested }) => requested);
+      if (requested.length > 100) throw new RangeError('Account discovery requires at most one hundred native keys');
+      return withReadTransaction(pool, async (client) => {
+        const positions = new Map(
+          (
+            await readPartitions(
+              client,
+              groups.map(({ partition }) => partition),
+            )
+          ).map(({ partitionNo, position }) => [partitionNo, position]),
+        );
+        const rows = await accounts(client, requested);
+        const found = await claims(client, rows);
+        const byId = new Map(rows.map((row) => [row.id, indexed(row, found)]));
+        return groups.map(({ partition, requested }) => {
+          const position = positions.get(partition);
+          if (position === undefined) throw new CommandUnavailableError('contention', partition);
+          return {
+            partition,
+            position,
+            accounts: requested.flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : [])),
+          };
+        });
+      });
+    },
     async read(partition: number, ids: readonly string[]) {
       partitionKey(partition);
       const requested = keys(ids, partition);
@@ -444,7 +477,7 @@ async function optionalSummaries<T>(deadline: number, read: () => Promise<Map<st
 export async function readAccountDiscoverySummaries(
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[]; context?: boolean; verifyAgent?: boolean } = {},
+  options: { languages?: readonly string[]; context?: boolean | 'verified-agent' } = {},
 ) {
   const requested = keys(ids);
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
@@ -452,9 +485,10 @@ export async function readAccountDiscoverySummaries(
   requireAccessDeadline(deps.deadline);
   const result = new Map<string, ReturnType<typeof summary> | null>(requested.map(({ id }) => [id, null]));
   if (!requested.length) return result;
+  const fullContext = options.context === true;
   const initial = await withReadTransaction(deps.pool, async (client) => {
     requireAccessDeadline(deps.deadline);
-    const rows = await accounts(client, requested, options.context);
+    const rows = await accounts(client, requested, fullContext);
     const found = await claims(client, rows);
     return rows.map((row) => ({
       row,
@@ -464,19 +498,21 @@ export async function readAccountDiscoverySummaries(
   });
   // No Account transaction/custody remains open during foreign owner reads.
   const mediaIds = [...new Set(initial.flatMap(({ row }) => (row.avatar ? [row.avatar] : [])))];
-  const needsBindings = options.context || options.verifyAgent;
-  const bindingRows = initial
-    .filter(({ row }) => options.context || (options.verifyAgent && row.agent))
-    .map(({ row, handle }) => ({ ...row, handle }));
-  const contextBindings = bindingRows.length
-    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, bindingRows))
-    : new Map<string, { id: string; source: string }>();
+  // Home needs the same reciprocal proof for a displayed verified agent.
+  // Ordinary Accounts need no biography or follow-target lookup for this card.
+  const bindingInputs = options.context
+    ? initial.flatMap(({ row, handle }) => (fullContext || row.agent ? [{ ...row, handle }] : []))
+    : [];
+  const readBindings = () =>
+    bindingInputs.length
+      ? optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, bindingInputs))
+      : Promise.resolve(new Map<string, { id: string; source: string }>());
+  const contextBindings = await readBindings();
   const subjectIds = [
     ...new Set(
       initial.flatMap(({ row }) => {
         const target = contextBindings.get(row.id);
-        const agent = row.agent && (!needsBindings || target?.id === row.agent) ? [row.agent] : [];
-        return options.context && target ? [...agent, target.id] : agent;
+        return [...(row.agent ? [row.agent] : []), ...(target ? [target.id] : [])];
       }),
     ),
   ];
@@ -492,17 +528,15 @@ export async function readAccountDiscoverySummaries(
   requireAccessDeadline(deps.deadline);
   const subjects = subjectIds.length
     ? await optionalSummaries(deps.deadline, () =>
-        readSubjectSummaries(needsBindings ? { ...deps, actor: { kind: 'anonymous' } } : deps, subjectIds, options),
+        readSubjectSummaries(options.context ? { ...deps, actor: { kind: 'anonymous' } } : deps, subjectIds, options),
       )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
-  const finalBindings = bindingRows.length
-    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, bindingRows))
-    : contextBindings;
+  const finalBindings = await readBindings();
   // Whole candidates, not just their handle, are withheld on a fence, rename or
   // profile revision during hydration. A bad claim alone leaves a handleless hit.
   await withReadTransaction(deps.pool, async (client) => {
-    const current = new Map((await accounts(client, requested, options.context)).map((row) => [row.id, row]));
+    const current = new Map((await accounts(client, requested, fullContext)).map((row) => [row.id, row]));
     const found = await claims(client, [...current.values()]);
     for (const before of initial) {
       const row = current.get(before.row.id);
@@ -515,7 +549,7 @@ export async function readAccountDiscoverySummaries(
         continue;
       const subject =
         row.agent &&
-        (!needsBindings ||
+        (!options.context ||
           (contextBindings.get(row.id)?.id === row.agent &&
             isDeepStrictEqual(contextBindings.get(row.id), finalBindings.get(row.id))))
           ? subjects.get(row.agent)
@@ -526,7 +560,7 @@ export async function readAccountDiscoverySummaries(
         row.avatar ? (avatars.get(row.avatar) ?? null) : null,
         subject?.label ? { id: subject.id, label: subject.label.value, type: subject.type } : null,
       );
-      if (options.context) {
+      if (fullContext) {
         const binding = contextBindings.get(row.id);
         const target =
           binding && isDeepStrictEqual(binding, finalBindings.get(row.id)) ? subjects.get(binding.id) : null;

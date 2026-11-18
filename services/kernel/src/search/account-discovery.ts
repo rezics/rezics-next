@@ -241,10 +241,10 @@ export async function nativeDiscoveryRegistry(
   options?: {
     release?: Release;
     languages?: readonly string[];
+    accountContext?: true | 'verified-agent';
     ownerAdapters?: DiscoveryOwnerAdapterSlots;
     accounts?: AccountDiscoverySource;
     omittedKinds?: readonly DiscoveryOmittedKind[];
-    includeAccountContext?: boolean;
   },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
@@ -254,7 +254,7 @@ export async function nativeDiscoveryRegistry(
     routeKey,
     release,
     languages: options?.languages ?? [],
-    includeAccountContext: options?.includeAccountContext !== false,
+    ...(options?.accountContext ? { accountContext: options.accountContext } : {}),
     semantic: {
       source: subjects,
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),

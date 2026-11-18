@@ -141,6 +141,7 @@ export function mergeFeedLanes(
 export function advanceFeedFrontier(
   input: Readonly<{
     position: FeedPosition;
+    loaded: FeedPosition;
     lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
     offsets: Record<FeedLane, number>;
     turn: number;
@@ -149,7 +150,7 @@ export function advanceFeedFrontier(
 ): FeedPosition {
   const next: {
     -readonly [K in keyof FeedPosition]: FeedPosition[K];
-  } = { ...input.position, resume: input.position.resume };
+  } = { ...input.loaded };
   for (const lane of FEED_LANES) {
     if (input.offsets[lane] === input.lanes[lane].length) continue;
     next[lane] = input.position[lane];

@@ -3,7 +3,7 @@ import type { Actor, Access } from '../../request/access.ts';
 import type { KernelClock } from '../../clock.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { WorkClient } from '../../work/client.ts';
-import type { AccountDiscoverySummary, DiscoverySearch } from '../../search/index.ts';
+import type { AccountDiscoverySummary, DiscoveryFeedSearch, DiscoverySearch } from '../../search/index.ts';
 import type { SearchService } from '../../search/service-scope.ts';
 import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
 import type { ViewerPersonalActionsPage } from '../../library/contract/index.ts';
@@ -36,6 +36,7 @@ export type FeedDependencies = {
   contentAccess: Access;
   workClient: () => Promise<WorkClient>;
   discovery?: DiscoverySearch;
+  feedDiscovery?: DiscoveryFeedSearch;
   search?: SearchService;
   viewerPersonalActions: ViewerPersonalActionsReader;
   viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
@@ -104,7 +105,7 @@ export type FeedViewerPersonalActionsComposer = (
   items: readonly FeedItem[],
   deadline: number,
   languages: readonly string[],
-  finalAdmission: () => Promise<readonly FeedItem[]>,
+  finalAdmission: (viewerReady?: Promise<unknown>) => Promise<readonly FeedItem[]>,
 ) => Promise<ViewerPersonalActionsPage>;
 
 /** Composition supplies one factory; a native reader retains its own producer instances. */

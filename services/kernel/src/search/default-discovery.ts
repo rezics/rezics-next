@@ -27,7 +27,14 @@ import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
-import type { DiscoveryPage, DiscoveryProducerEntry, DiscoveryReadContext, DiscoveryUnionHit } from './index.ts';
+import type {
+  DiscoveryFeedSearch,
+  DiscoveryPage,
+  DiscoveryProducerEntry,
+  DiscoveryReadContext,
+  DiscoveryUnionHit,
+  MixedDiscoveryRequest,
+} from './index.ts';
 import {
   createRetainedDiscoverySearch,
   type DiscoverySearch,
@@ -90,7 +97,7 @@ export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & {
 };
 export type DefaultDiscoverySearch = Readonly<{
   search: DiscoverySearch;
-  feed: DiscoverySearch;
+  feed: DiscoveryFeedSearch;
   open: RetainedDiscoverySearch;
   close(): Promise<void>;
 }>;
@@ -276,9 +283,9 @@ export function createDefaultDiscoverySearch(
   let closing: Promise<void> | undefined;
   const open = (
     principal: Parameters<RetainedDiscoverySearch>[0],
-    request: Parameters<RetainedDiscoverySearch>[1],
+    request: MixedDiscoveryRequest,
     context: DiscoveryReadContext,
-    includeAccountContext = true,
+    accountContext: true | 'verified-agent' = true,
   ): ReturnType<RetainedDiscoverySearch> => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
     request = ownDiscoveryRequest(request);
@@ -319,7 +326,7 @@ export function createDefaultDiscoverySearch(
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages,
-        includeAccountContext,
+        accountContext,
         ownerAdapters: ownerAdapters.ownerAdapters,
         accounts,
         omittedKinds: ownerAdapters.omittedKinds,
@@ -474,6 +481,7 @@ export function createDefaultDiscoverySearch(
       const wrapped: RetainedDiscoveryRead = Object.freeze({
         search: () => read.search(),
         currentPrimaryCandidates: (keys) => read.currentPrimaryCandidates(keys),
+        currentSelectedCandidates: (keys) => read.currentSelectedCandidates(keys),
         finish: () => read.finish(),
         async close() {
           try {
@@ -498,19 +506,19 @@ export function createDefaultDiscoverySearch(
   const revalidateAccounts = async (
     page: DiscoveryPage,
     context: DiscoveryReadContext,
-    includeAccountContext = true,
+    accountContext: true | 'verified-agent' = true,
   ) => {
     const accounts = page.hits.filter((hit) => hit.summary.kind === 'account');
     if (!accounts.length) return;
     const current = await readAccountDiscoverySummaries(
       { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
       accounts.map((hit) => hit.key.id),
-      { languages: context.languages ?? ['en'], context: includeAccountContext, verifyAgent: true },
+      { languages: context.languages ?? ['en'], context: accountContext },
     );
     if (accounts.some((hit) => !isDeepStrictEqual(hit.summary.value, current.get(hit.key.id))))
       throw new ProblemError('search_restart_required');
   };
-  const feed: DiscoverySearch = (principal, inputRequest, inputContext) => {
+  const feed: DiscoveryFeedSearch = (principal, inputRequest, inputContext) => {
     const request = ownDiscoveryRequest(inputRequest);
     const context = {
       ...inputContext,
@@ -518,27 +526,53 @@ export function createDefaultDiscoverySearch(
       languages: request.languages ?? ['en'],
     };
     const operation = (async () => {
-      const read = await open(principal, request, context, false);
-      return readAdmittedDiscoveryPage(read, async (page) => {
-        try {
-          // Content composes viewer data and uses the current Review witness for qualification.
-          const [reviews, accounts] = await Promise.allSettled([
-            prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context),
-            revalidateAccounts(page, context, false),
-          ]);
-          if (reviews.status === 'rejected') throw reviews.reason;
-          if (accounts.status === 'rejected') throw accounts.reason;
-          return { page: await reviews.value.finish(page), viewerCurrent: true };
-        } catch (error) {
-          if (
-            error instanceof ProblemError ||
-            error instanceof SearchOperationError ||
-            error instanceof CollectionDiscoveryReadinessError
-          )
-            throw error;
-          throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-        }
-      });
+      const read = await open(principal, request, context, 'verified-agent');
+      const reviewsFor = (page: DiscoveryPage) =>
+        prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context);
+      try {
+        const initial = await read.search();
+        // Content composes viewer data and uses the current Review witness for qualification.
+        const [reviews, accounts] = await Promise.allSettled([
+          reviewsFor(initial),
+          revalidateAccounts(initial, context, 'verified-agent'),
+        ]);
+        if (reviews.status === 'rejected') throw reviews.reason;
+        if (accounts.status === 'rejected') throw accounts.reason;
+        const page = await reviews.value.finish(initial);
+        let currentFailure: unknown;
+        return {
+          page,
+          async current(keys: Parameters<typeof read.currentSelectedCandidates>[0]) {
+            try {
+              const selected = await read.currentSelectedCandidates(keys);
+              const current = { ...initial, hits: selected.flatMap((hit) => (hit ? [hit] : [])) };
+              const confirmed = await (await reviewsFor(current)).finish(current);
+              let index = 0;
+              return selected.map((hit) => (hit ? confirmed.hits[index++] : undefined));
+            } catch (error) {
+              currentFailure = error;
+              throw error;
+            }
+          },
+          finish: () => read.finish(),
+          async close() {
+            try {
+              await read.close();
+            } catch (error) {
+              if (error !== currentFailure) throw error;
+            }
+          },
+        };
+      } catch (error) {
+        await read.close();
+        if (
+          error instanceof ProblemError ||
+          error instanceof SearchOperationError ||
+          error instanceof CollectionDiscoveryReadinessError
+        )
+          throw error;
+        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      }
     })();
     pending.add(operation);
     void operation.finally(() => pending.delete(operation)).catch(() => {});

@@ -15,6 +15,7 @@ import {
   type DiscoveryUnionHit,
   type DiscoveryRegistration,
   type AccountSnapshot,
+  type AccountDiscoverySource,
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { ownerDisclosurePorts, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
@@ -93,10 +94,61 @@ export async function readCandidateHomes<T extends { id: string }, Result>(
   return results;
 }
 
-/** A missing summary after positive current evidence is unavailable, not an excluded candidate. */
+export async function readCandidateAccounts(
+  source: AccountDiscoverySource,
+  keys: readonly { id: string }[],
+  invalidSnapshot: () => never = unavailable,
+  admit: AdmitHomeRead = (work) => work(),
+) {
+  const validate = (value: unknown, partition: number, ids: readonly string[]) => {
+    try {
+      return { ids, snapshot: validateAccountSnapshot(value, partition, ids, 0n) };
+    } catch {
+      return invalidSnapshot();
+    }
+  };
+  const readHome = async (partition: number, group: readonly { id: string }[]) => {
+    const snapshots = [];
+    const ids = [...new Set(group.map(({ id }) => id))];
+    for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+      const requested = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+      const snapshot = await source.read(partition, requested);
+      snapshots.push(validate(snapshot, partition, requested));
+    }
+    return snapshots;
+  };
+  if (!source.readHomes) return (await readCandidateHomes(keys, readHome, admit)).flat();
+  const readHomes = source.readHomes.bind(source);
+  const groups = [...partitioned(keys)].flatMap(([partition, group]) => {
+    const ids = [...new Set(group.map(({ id }) => id))];
+    return Array.from({ length: Math.ceil(ids.length / MAX_ACCOUNT_DISCOVERY_BATCH) }, (_, index) => ({
+      partition,
+      ids: ids.slice(index * MAX_ACCOUNT_DISCOVERY_BATCH, (index + 1) * MAX_ACCOUNT_DISCOVERY_BATCH),
+    }));
+  });
+  const snapshots = [];
+  for (let offset = 0; offset < groups.length;) {
+    const batch = [];
+    let count = 0;
+    while (offset < groups.length && batch.length < 16) {
+      const group = groups[offset]!;
+      if (count + group.ids.length > MAX_ACCOUNT_DISCOVERY_BATCH) break;
+      batch.push(group);
+      count += group.ids.length;
+      offset++;
+    }
+    const current = await admit(() => readHomes(batch));
+    if (!Array.isArray(current) || current.length !== batch.length) invalidSnapshot();
+    snapshots.push(...batch.map(({ partition, ids }, index) => validate(current[index], partition, ids)));
+  }
+  return snapshots;
+}
+
+/** Require a positional owner result for every key, including explicit native negatives. */
 async function completeSummaries<T>(
   ids: readonly string[],
-  hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, T>>,
+  hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, T | null>>,
+  nativeNegatives = false,
 ): Promise<Map<string, T>> {
   const unique = [...new Set(ids)];
   const current = new Map<string, T>();
@@ -106,7 +158,9 @@ async function completeSummaries<T>(
     const observed = await hydrate(chunk);
     if (!observed || typeof observed[Symbol.iterator] !== 'function') unavailable();
     for (const [id, summary] of observed) {
-      if (!requested.delete(id) || summary == null) unavailable();
+      if (!requested.delete(id)) unavailable();
+      if (summary === null && nativeNegatives) continue;
+      if (summary == null) unavailable();
       // Do not retain mutable owner objects across subsequent reads or final publication.
       current.set(id, structuredClone(summary));
     }
@@ -262,6 +316,16 @@ export async function currentDiscoveryPrimaryCandidates(
 /** Membership/summary checking only. Whole-query exclusion/order safety must bracket this operation
  * through the canonical native Source and consumer; returned candidates alone never certify a page.
  */
+type CurrentCandidateInput<Candidate extends DiscoveryCandidate | DiscoveryEngineHit> = Readonly<{
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
+  candidates: readonly Candidate[];
+  filter: DiscoveryFilterDocument | undefined;
+  release: FilterRelease;
+  context: DiscoveryReadContext & { conceptFilter?: ConceptFilterExecution };
+  disclosure: Pick<SearchDisclosureApplication, 'checkHits' | 'discloseOwnerHits'>;
+  admitHomeRead: AdmitHomeRead;
+}>;
+
 export async function currentDiscoveryCandidates<Candidate extends DiscoveryCandidate | DiscoveryEngineHit>(
   registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   candidates: readonly Candidate[],
@@ -271,7 +335,6 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   disclosure: Pick<SearchDisclosureApplication, 'checkHits' | 'discloseOwnerHits'> = { checkHits, discloseOwnerHits },
 ): Promise<Map<Candidate, DiscoveryUnionHit>> {
   if (candidates.length > 200) unavailable();
-  const languages = context.languages ?? ['en'];
   for (const candidate of candidates) {
     requireCurrentOwner(registry, candidate.key);
     if (
@@ -282,17 +345,6 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     )
       unavailable();
   }
-  // One Subject row-kind read per partition/chunk, shared across every configured catalogue kind.
-  // If the current text producer is absent, do not publish its indexed Subject candidates.
-  // Keep checking independent owners so a mixed public query can still return their current rows.
-  const semantic = candidates.filter(
-    (candidate) =>
-      candidate.key.owner === 'semantic' &&
-      (context.textQuery === undefined ||
-        context.textField === 'credited_creator' ||
-        context.currentTextMatches !== undefined),
-  );
-  const accounts = candidates.filter(({ key }) => key.owner === 'accounts');
   const activeHomes = new Set<Promise<void>>();
   const admitHomeRead: AdmitHomeRead = async (read) => {
     while (activeHomes.size >= HOME_READ_CONCURRENCY) await Promise.race(activeHomes);
@@ -308,344 +360,355 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       activeHomes.delete(settled);
     }
   };
-  const readSemantic = async () => {
-    const passed = new Map<Candidate, DiscoveryUnionHit>();
-    const snapshots = new Map<number, SubjectSnapshot>();
-    const source = registry.entries.find((entry) => entry.owner === 'semantic')?.source;
-    if (semantic.length && !source) unavailable();
-    // Credited text is verified per candidate against the producer; the engine's nominations are never proof.
-    const creditEvidence = new Map(
-      candidates.map((candidate) => [candidate.key.id, candidate.creditEvidence ?? []] as const),
+  const ownerResults = await Promise.allSettled(
+    [readCurrentSubjects, readCurrentAccounts, readCurrentMetadata].map(async (read) => {
+      const result = new Map<Candidate, DiscoveryUnionHit>();
+      await read({ registry, candidates, filter, release, context, disclosure, admitHomeRead }, result);
+      return result;
+    }),
+  );
+  const passed = new Map<Candidate, DiscoveryUnionHit>();
+  for (const result of ownerResults) {
+    if (result.status === 'rejected') throw result.reason;
+    for (const [candidate, hit] of result.value) passed.set(candidate, hit);
+  }
+  return passed;
+}
+
+async function readCurrentSubjects<Candidate extends DiscoveryCandidate | DiscoveryEngineHit>(
+  input: CurrentCandidateInput<Candidate>,
+  passed: Map<Candidate, DiscoveryUnionHit>,
+) {
+  const { registry, candidates, filter, release, context, disclosure } = input;
+  const languages = context.languages ?? ['en'];
+  // One Subject row-kind read per partition/chunk, shared across every configured catalogue kind.
+  // If the current text producer is absent, do not publish its indexed Subject candidates.
+  // Keep checking independent owners so a mixed public query can still return their current rows.
+  const semantic = candidates.filter(
+    (candidate) =>
+      candidate.key.owner === 'semantic' &&
+      (context.textQuery === undefined ||
+        context.textField === 'credited_creator' ||
+        context.currentTextMatches !== undefined),
+  );
+  const snapshots = new Map<number, SubjectSnapshot>();
+  const source = registry.entries.find((entry) => entry.owner === 'semantic')?.source;
+  if (semantic.length && !source) unavailable();
+  // Credited text is verified per candidate against the producer; the engine's nominations are never proof.
+  const creditEvidence = new Map(
+    candidates.map((candidate) => [candidate.key.id, candidate.creditEvidence ?? []] as const),
+  );
+  const creditWitnesses = new Map<string, CreditSearchWitness>();
+  let creditChanged = false;
+  const creditedText = async (subject: IndexedSubject): Promise<boolean> => {
+    const check = await verifyCreditedHit(source?.creditSearch, subject.id, creditEvidence.get(subject.id) ?? []);
+    if (check.state === 'changed') creditChanged = true;
+    if (check.state === 'unavailable') unavailable();
+    if (check.state !== 'current') return false;
+    creditWitnesses.set(subject.id, check.witness);
+    return true;
+  };
+  if (source) {
+    await readCandidateHomes(
+      semantic.map(({ key }) => key),
+      async (partition, group) => {
+        const subjects: IndexedSubject[] = [];
+        let position: bigint | undefined;
+        const ids = [...new Set(group.map(({ id }) => id))];
+        for (let offset = 0; offset < ids.length; offset += 256) {
+          const chunk = ids.slice(offset, offset + 256);
+          const snapshot = await source.read(partition, chunk);
+          subjects.push(...validateRequestSourceSnapshot(snapshot, partition, chunk).values());
+          if (position !== undefined && position !== snapshot.position) unavailable();
+          position = snapshot.position;
+        }
+        if (
+          semantic.some(
+            (candidate) =>
+              partitionOf(candidate.key.route) === partition &&
+              'sourcePosition' in candidate &&
+              BigInt(candidate.sourcePosition) > position!,
+          )
+        )
+          unavailable();
+        snapshots.set(partition, { partition, position: position!, subjects });
+      },
+      input.admitHomeRead,
     );
-    const creditWitnesses = new Map<string, CreditSearchWitness>();
-    let creditChanged = false;
-    const creditedText = async (subject: IndexedSubject): Promise<boolean> => {
-      const check = await verifyCreditedHit(source?.creditSearch, subject.id, creditEvidence.get(subject.id) ?? []);
-      if (check.state === 'changed') creditChanged = true;
-      if (check.state === 'unavailable') unavailable();
-      if (check.state !== 'current') return false;
-      creditWitnesses.set(subject.id, check.witness);
-      return true;
-    };
-    if (source) {
+    const initialSource = (): SubjectSource => ({
+      count: source.count.bind(source),
+      ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
+      ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
+      read: createCurrentSourceReader({
+        current: source.read.bind(source),
+        initial(partition, ids) {
+          const snapshot = snapshots.get(partition);
+          if (!snapshot) unavailable();
+          return { ...snapshot, subjects: snapshot.subjects.filter((subject) => ids.includes(subject.id)) };
+        },
+      }),
+    });
+    const selectedSemantic: Candidate[] = [];
+    const checkedSubjects = new Map<string, IndexedSubject>();
+    for (const entry of registry.entries) {
+      if (entry.owner !== 'semantic') continue;
+      const group = semantic.filter(({ key }) => key.kind === entry.kind);
+      if (!group.length) continue;
+      const currentFilter = filter ? currentDiscoveryFilter(filter, registry, entry.kind, release) : true;
+      if (currentFilter === false) continue;
+      const hits = group.map((candidate) => {
+        const revision =
+          'document' in candidate && candidate.document.owner === 'semantic'
+            ? candidate.document.security_revision
+            : 'revision' in candidate
+              ? Number(candidate.revision)
+              : NaN;
+        if (!Number.isSafeInteger(revision) || revision < 0) unavailable();
+        return {
+          id: candidate.key.id,
+          partition: partitionOf(candidate.key.route),
+          securityRevision: revision,
+          matched: [],
+        };
+      });
+      const checked = await disclosure.checkHits(initialSource(), hits, new Map(), {
+        ...(currentFilter === true ? {} : { filter: currentFilter }),
+        ...(context.textField === 'credited_creator'
+          ? { currentText: creditedText }
+          : context.textQuery === undefined
+            ? {}
+            : {
+                currentText: (subject: IndexedSubject) => context.currentTextMatches!(subject, context.textQuery!),
+              }),
+        relationProperties: Object.keys(release.properties).filter((property) =>
+          relationFacetProperty(release, property),
+        ),
+        ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
+        ...(context.observeRelationRelease === undefined
+          ? {}
+          : { observeRelationRelease: context.observeRelationRelease }),
+        ...(context.conceptFilter ? { conceptFilter: context.conceptFilter } : {}),
+      });
+      // A changed credit cut retires this window; unavailable proof removes its candidate, never a positive match.
+      if (creditChanged) throw new SearchOperationError('search_restart_required');
+      if (checked.relationRejected || checked.textRejected) throw new SearchOperationError('index_not_ready');
+      for (const { subject } of checked.passed)
+        if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
+      const accepted = new Set(checkedSubjects.keys());
+      selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
+    }
+    const semanticEntry = registry.entries.find((entry) => entry.owner === 'semantic');
+    if (selectedSemantic.length && semanticEntry) {
+      // All catalogue registrations share one native hydrator, independent of selected kind count.
+      const summaries = await completeSummaries(
+        selectedSemantic.map(({ key }) => key.id),
+        (ids) =>
+          semanticEntry.hydrateCurrent
+            ? semanticEntry.hydrateCurrent(ids, context)
+            : semanticEntry.hydrate(ids, context),
+        semanticEntry.hydrateCurrent !== undefined,
+      );
+      for (const candidate of selectedSemantic) {
+        const summary = summaries.get(candidate.key.id);
+        const subject = checkedSubjects.get(candidate.key.id);
+        if (!summary || !subject) continue;
+        const labels = Object.fromEntries(
+          Object.entries(
+            chooseTexts(
+              subject.labels,
+              languages,
+              subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value,
+            ),
+          ).sort(([first], [second]) => first.localeCompare(second)),
+        );
+        const aliases = publicAliases(subject);
+        const selectedLabel = Object.entries(labels)[0];
+        const contexts =
+          context.observeRelationRelease === undefined
+            ? null
+            : await projectCharacterPersonContexts(source, subject, filter, {
+                languages,
+                ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
+                observeRelationRelease: context.observeRelationRelease,
+              });
+        const descriptions = context.descriptions
+          ? projectHit(subject, { descriptions: true, languages }).descriptions
+          : undefined;
+        if (
+          context.observeRelationRelease !== undefined &&
+          (subject.type === 'schema:Person' || subject.type === 'schema:Character') &&
+          contexts === null
+        )
+          throw new SearchOperationError('search_restart_required');
+        const listPresentation = (
+          release.types[subject.type] as
+            | ((typeof release.types)[string] & {
+                listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: readonly string[] };
+              })
+            | undefined
+        )?.listPresentation;
+        const hit = {
+          key: candidate.key,
+          summary: {
+            kind: 'subject' as const,
+            value: {
+              ...summary,
+              label: selectedLabel ? { language: selectedLabel[0], value: selectedLabel[1] } : null,
+            },
+          },
+          labels,
+          ...(Object.keys(aliases).length ? { aliases } : {}),
+          ...(descriptions === undefined ? {} : { descriptions }),
+          ...(listPresentation
+            ? {
+                listPresentation: {
+                  imageAspect: listPresentation.imageAspect,
+                  keyFacts: [...listPresentation.keyFacts],
+                },
+              }
+            : {}),
+          ...(contexts === null ? {} : { contexts }),
+          matchEvidence: projectMatchEvidence(subject, candidate.engineEvidence, context.matchEvidencePlan),
+          ...(creditWitnesses.has(subject.id)
+            ? { creditMatch: creditMatchView(creditWitnesses.get(subject.id)!) }
+            : {}),
+        };
+        admitDiscoveryHit(hit);
+        passed.set(candidate, hit);
+      }
+      // Hydration and context disclosure can cross native I/O. Retire the whole semantic window
+      // if its candidate anchors changed after the first current-source snapshot.
       await readCandidateHomes(
-        semantic.map(({ key }) => key),
+        selectedSemantic.map(({ key }) => key),
         async (partition, group) => {
-          const subjects: IndexedSubject[] = [];
-          let position: bigint | undefined;
+          const baseline = snapshots.get(partition);
           const ids = [...new Set(group.map(({ id }) => id))];
           for (let offset = 0; offset < ids.length; offset += 256) {
             const chunk = ids.slice(offset, offset + 256);
-            const snapshot = await source.read(partition, chunk);
-            subjects.push(...validateRequestSourceSnapshot(snapshot, partition, chunk).values());
-            if (position !== undefined && position !== snapshot.position) unavailable();
-            position = snapshot.position;
-          }
-          if (
-            semantic.some(
-              (candidate) =>
-                partitionOf(candidate.key.route) === partition &&
-                'sourcePosition' in candidate &&
-                BigInt(candidate.sourcePosition) > position!,
-            )
-          )
-            unavailable();
-          snapshots.set(partition, { partition, position: position!, subjects });
-        },
-        admitHomeRead,
-      );
-      const initialSource = (): SubjectSource => ({
-        count: source.count.bind(source),
-        ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
-        ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
-        read: createCurrentSourceReader({
-          current: source.read.bind(source),
-          initial(partition, ids) {
-            const snapshot = snapshots.get(partition);
-            if (!snapshot) unavailable();
-            return { ...snapshot, subjects: snapshot.subjects.filter((subject) => ids.includes(subject.id)) };
-          },
-        }),
-      });
-      const selectedSemantic: Candidate[] = [];
-      const checkedSubjects = new Map<string, IndexedSubject>();
-      for (const entry of registry.entries) {
-        if (entry.owner !== 'semantic') continue;
-        const group = semantic.filter(({ key }) => key.kind === entry.kind);
-        if (!group.length) continue;
-        const currentFilter = filter ? currentDiscoveryFilter(filter, registry, entry.kind, release) : true;
-        if (currentFilter === false) continue;
-        const hits = group.map((candidate) => {
-          const revision =
-            'document' in candidate && candidate.document.owner === 'semantic'
-              ? candidate.document.security_revision
-              : 'revision' in candidate
-                ? Number(candidate.revision)
-                : NaN;
-          if (!Number.isSafeInteger(revision) || revision < 0) unavailable();
-          return {
-            id: candidate.key.id,
-            partition: partitionOf(candidate.key.route),
-            securityRevision: revision,
-            matched: [],
-          };
-        });
-        const checked = await disclosure.checkHits(initialSource(), hits, new Map(), {
-          ...(currentFilter === true ? {} : { filter: currentFilter }),
-          ...(context.textField === 'credited_creator'
-            ? { currentText: creditedText }
-            : context.textQuery === undefined
-              ? {}
-              : {
-                  currentText: (subject: IndexedSubject) => context.currentTextMatches!(subject, context.textQuery!),
-                }),
-          relationProperties: Object.keys(release.properties).filter((property) =>
-            relationFacetProperty(release, property),
-          ),
-          ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
-          ...(context.observeRelationRelease === undefined
-            ? {}
-            : { observeRelationRelease: context.observeRelationRelease }),
-          ...(context.conceptFilter ? { conceptFilter: context.conceptFilter } : {}),
-        });
-        // A changed credit cut retires this window; unavailable proof removes its candidate, never a positive match.
-        if (creditChanged) throw new SearchOperationError('search_restart_required');
-        if (checked.relationRejected || checked.textRejected) throw new SearchOperationError('index_not_ready');
-        for (const { subject } of checked.passed)
-          if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
-        const accepted = new Set(checkedSubjects.keys());
-        selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
-      }
-      const semanticEntry = registry.entries.find((entry) => entry.owner === 'semantic');
-      if (selectedSemantic.length && semanticEntry) {
-        // All catalogue registrations share one native hydrator, independent of selected kind count.
-        const summaries = await completeSummaries(
-          selectedSemantic.map(({ key }) => key.id),
-          (ids) => semanticEntry.hydrate(ids, context),
-        );
-        for (const candidate of selectedSemantic) {
-          const summary = summaries.get(candidate.key.id);
-          const subject = checkedSubjects.get(candidate.key.id);
-          if (!summary || !subject) continue;
-          const labels = Object.fromEntries(
-            Object.entries(
-              chooseTexts(
-                subject.labels,
-                languages,
-                subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value,
-              ),
-            ).sort(([first], [second]) => first.localeCompare(second)),
-          );
-          const aliases = publicAliases(subject);
-          const selectedLabel = Object.entries(labels)[0];
-          const contexts =
-            context.observeRelationRelease === undefined
-              ? null
-              : await projectCharacterPersonContexts(source, subject, filter, {
-                  languages,
-                  ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
-                  observeRelationRelease: context.observeRelationRelease,
-                });
-          const descriptions = context.descriptions
-            ? projectHit(subject, { descriptions: true, languages }).descriptions
-            : undefined;
-          if (
-            context.observeRelationRelease !== undefined &&
-            (subject.type === 'schema:Person' || subject.type === 'schema:Character') &&
-            contexts === null
-          )
-            throw new SearchOperationError('search_restart_required');
-          const listPresentation = (
-            release.types[subject.type] as
-              | ((typeof release.types)[string] & {
-                  listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: readonly string[] };
-                })
-              | undefined
-          )?.listPresentation;
-          const hit = {
-            key: candidate.key,
-            summary: {
-              kind: 'subject' as const,
-              value: {
-                ...summary,
-                label: selectedLabel ? { language: selectedLabel[0], value: selectedLabel[1] } : null,
-              },
-            },
-            labels,
-            ...(Object.keys(aliases).length ? { aliases } : {}),
-            ...(descriptions === undefined ? {} : { descriptions }),
-            ...(listPresentation
-              ? {
-                  listPresentation: {
-                    imageAspect: listPresentation.imageAspect,
-                    keyFacts: [...listPresentation.keyFacts],
-                  },
-                }
-              : {}),
-            ...(contexts === null ? {} : { contexts }),
-            matchEvidence: projectMatchEvidence(subject, candidate.engineEvidence, context.matchEvidencePlan),
-            ...(creditWitnesses.has(subject.id)
-              ? { creditMatch: creditMatchView(creditWitnesses.get(subject.id)!) }
-              : {}),
-          };
-          admitDiscoveryHit(hit);
-          passed.set(candidate, hit);
-        }
-        // Hydration and context disclosure can cross native I/O. Retire the whole semantic window
-        // if its candidate anchors changed after the first current-source snapshot.
-        await readCandidateHomes(
-          selectedSemantic.map(({ key }) => key),
-          async (partition, group) => {
-            const baseline = snapshots.get(partition);
-            const ids = [...new Set(group.map(({ id }) => id))];
-            for (let offset = 0; offset < ids.length; offset += 256) {
-              const chunk = ids.slice(offset, offset + 256);
-              const after = await source.read(partition, chunk);
-              const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
-              if (!baseline || after.position !== baseline.position)
-                throw new SearchOperationError('search_restart_required');
-              const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
-              for (const id of chunk) {
-                const previous = previousRows.get(id);
-                const current = currentRows.get(id);
-                if (
-                  !previous ||
-                  !current ||
-                  current.visibility !== 'visible' ||
-                  current.redirect !== null ||
-                  current.securityRevision !== previous.securityRevision ||
-                  current.type !== previous.type
-                )
-                  throw new SearchOperationError('search_restart_required');
-              }
-            }
-          },
-          admitHomeRead,
-        );
-      }
-    }
-    return passed;
-  };
-  const readAccounts = async () => {
-    const passed = new Map<Candidate, DiscoveryUnionHit>();
-    if (accounts.length) {
-      const entry = registry.get('account');
-      if (entry.owner !== 'accounts') unavailable();
-      if (!filter || currentDiscoveryFilter(filter, registry, entry.kind, release) === true) {
-        const selectedAccounts = new Map<Candidate, IndexedAccount>();
-        // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
-        const byHome = await readCandidateHomes(
-          accounts.map(({ key }) => key),
-          async (partition, group) => {
-            const ids = [...new Set(group.map(({ id }) => id))];
-            const current = new Map<string, IndexedAccount>();
-            for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-              const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-              const observed = await entry.source.read(partition, chunk);
-              let snapshot;
-              try {
-                snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-              } catch {
-                unavailable();
-              }
+            const after = await source.read(partition, chunk);
+            const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
+            if (!baseline || after.position !== baseline.position)
+              throw new SearchOperationError('search_restart_required');
+            const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
+            for (const id of chunk) {
+              const previous = previousRows.get(id);
+              const current = currentRows.get(id);
               if (
-                accounts.some(
-                  (candidate) =>
-                    chunk.includes(candidate.key.id) &&
-                    'sourcePosition' in candidate &&
-                    BigInt(candidate.sourcePosition) > snapshot.position,
-                )
+                !previous ||
+                !current ||
+                current.visibility !== 'visible' ||
+                current.redirect !== null ||
+                current.securityRevision !== previous.securityRevision ||
+                current.type !== previous.type
               )
-                unavailable();
-              for (const account of snapshot.accounts) current.set(account.id, account);
-            }
-            const selected = accounts.filter((candidate) => {
-              const row = current.get(candidate.key.id);
-              if (!row || partitionOf(candidate.key.route) !== partition) return false;
-              if ('revision' in candidate) return row.revision.toString() === candidate.revision;
-              const document = candidate.document;
-              return (
-                document.owner === 'accounts' &&
-                row.revision.toString() === document.revision &&
-                row.handle === document.handle &&
-                row.displayName === document.display_name &&
-                row.accountKind === document.account_kind
-              );
-            });
-            return selected.map((candidate) => [candidate, current.get(candidate.key.id)!] as const);
-          },
-          admitHomeRead,
-        );
-        for (const home of byHome) {
-          for (const [candidate, account] of home) selectedAccounts.set(candidate, account);
-        }
-        const selected = [...selectedAccounts.keys()];
-        const summaries = await completeSummaries(
-          selected.map(({ key }) => key.id),
-          (ids) => entry.hydrate(ids, context),
-        );
-        await readCandidateHomes(
-          selected.map(({ key }) => key),
-          async (partition, group) => {
-            const ids = [...new Set(group.map(({ id }) => id))];
-            for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-              const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-              const observed = await entry.source.read(partition, chunk);
-              let snapshot;
-              try {
-                snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-              } catch {
                 throw new SearchOperationError('search_restart_required');
-              }
-              const currentRows = new Map(snapshot.accounts.map((account) => [account.id, account]));
-              for (const id of chunk) {
-                const before = [...selectedAccounts.values()].find((row) => row.id === id);
-                const after = currentRows.get(id);
-                if (!before || !after) {
-                  for (const candidate of selected) if (candidate.key.id === id) selectedAccounts.delete(candidate);
-                  continue;
-                }
-                if (
-                  after.revision !== before.revision ||
-                  after.handle !== before.handle ||
-                  after.displayName !== before.displayName ||
-                  after.accountKind !== before.accountKind
-                )
-                  throw new SearchOperationError('search_restart_required');
-              }
             }
-          },
-          admitHomeRead,
-        );
-        for (const candidate of selected) {
-          const row = selectedAccounts.get(candidate);
-          if (!row) continue;
-          const summary = summaries.get(candidate.key.id);
-          const hit = {
-            key: candidate.key as DiscoveryKey,
-            summary: { kind: 'account' as const, value: summary },
-            matchEvidence: { state: 'unsupported' as const },
-          };
-          admitDiscoveryHit(hit);
-          if (
-            !summary ||
-            summary.handle !== row.handle ||
-            summary.displayName !== row.displayName ||
-            summary.accountKind !== row.accountKind
-          )
-            unavailable();
-          passed.set(candidate, hit);
+          }
+        },
+        input.admitHomeRead,
+      );
+    }
+  }
+}
+
+async function readCurrentAccounts<Candidate extends DiscoveryCandidate | DiscoveryEngineHit>(
+  input: CurrentCandidateInput<Candidate>,
+  passed: Map<Candidate, DiscoveryUnionHit>,
+) {
+  const { registry, candidates, filter, release, context } = input;
+  const accounts = candidates.filter(({ key }) => key.owner === 'accounts');
+  if (accounts.length) {
+    const entry = registry.get('account');
+    if (entry.owner !== 'accounts') unavailable();
+    if (!filter || currentDiscoveryFilter(filter, registry, entry.kind, release) === true) {
+      const selectedAccounts = new Map<Candidate, IndexedAccount>();
+      // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
+      const candidatesById = new Map<string, Candidate[]>();
+      for (const candidate of accounts) {
+        const { id } = candidate.key;
+        const group = candidatesById.get(id) ?? [];
+        if (!candidatesById.has(id)) candidatesById.set(id, group);
+        group.push(candidate);
+      }
+      for (const { ids, snapshot } of await readCandidateAccounts(
+        entry.source,
+        accounts.map(({ key }) => key),
+        unavailable,
+        input.admitHomeRead,
+      )) {
+        const current = new Map(snapshot.accounts.map((row) => [row.id, row]));
+        for (const id of ids) {
+          for (const candidate of candidatesById.get(id)!) {
+            if ('sourcePosition' in candidate && BigInt(candidate.sourcePosition) > snapshot.position) unavailable();
+            const row = current.get(id);
+            if (!row || partitionOf(candidate.key.route) !== snapshot.partition) continue;
+            const matches =
+              'revision' in candidate
+                ? row.revision.toString() === candidate.revision
+                : candidate.document.owner === 'accounts' &&
+                  row.revision.toString() === candidate.document.revision &&
+                  row.handle === candidate.document.handle &&
+                  row.displayName === candidate.document.display_name &&
+                  row.accountKind === candidate.document.account_kind;
+            if (matches) selectedAccounts.set(candidate, row);
+          }
         }
       }
+      const selected = [...selectedAccounts.keys()];
+      const summaries = await completeSummaries(
+        selected.map(({ key }) => key.id),
+        (ids) => entry.hydrate(ids, context),
+      );
+      const current = await readCandidateAccounts(
+        entry.source,
+        selected.map(({ key }) => key),
+        () => {
+          throw new SearchOperationError('search_restart_required');
+        },
+        input.admitHomeRead,
+      );
+      const finalRows = new Map(
+        current.flatMap(({ snapshot }) => snapshot.accounts.map((row) => [row.id, row] as const)),
+      );
+      for (const [candidate, before] of selectedAccounts) {
+        const after = finalRows.get(before.id);
+        if (!after) selectedAccounts.delete(candidate);
+        else if (
+          after.revision !== before.revision ||
+          after.handle !== before.handle ||
+          after.displayName !== before.displayName ||
+          after.accountKind !== before.accountKind
+        )
+          throw new SearchOperationError('search_restart_required');
+      }
+      for (const candidate of selected) {
+        const row = selectedAccounts.get(candidate);
+        if (!row) continue;
+        const summary = summaries.get(candidate.key.id);
+        const hit = {
+          key: candidate.key as DiscoveryKey,
+          summary: { kind: 'account' as const, value: summary },
+          matchEvidence: { state: 'unsupported' as const },
+        };
+        admitDiscoveryHit(hit);
+        if (
+          !summary ||
+          summary.handle !== row.handle ||
+          summary.displayName !== row.displayName ||
+          summary.accountKind !== row.accountKind
+        )
+          unavailable();
+        passed.set(candidate, hit);
+      }
     }
-    return passed;
-  };
+  }
+}
 
-  // The owners retain their own currentness checks. Neither must finish before the other can begin.
-  const [semanticHits, accountHits] = await Promise.allSettled([readSemantic(), readAccounts()]);
-  if (semanticHits.status === 'rejected') throw semanticHits.reason;
-  if (accountHits.status === 'rejected') throw accountHits.reason;
-  const passed = new Map([...semanticHits.value, ...accountHits.value]);
+async function readCurrentMetadata<Candidate extends DiscoveryCandidate | DiscoveryEngineHit>(
+  input: CurrentCandidateInput<Candidate>,
+  passed: Map<Candidate, DiscoveryUnionHit>,
+) {
+  const { registry, candidates, filter, release, context, disclosure } = input;
   const owners = candidates.filter(
     ({ key }) =>
       key.owner === 'commerce' || (key.owner === 'content' && (key.kind === 'review' || key.kind === 'space')),
@@ -692,5 +755,4 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       passed.set(ownerOriginals[index]!, hit);
     }
   }
-  return passed;
 }

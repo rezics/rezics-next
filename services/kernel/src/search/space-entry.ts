@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { FollowDiscovery, FollowDiscoveryTarget } from '../library/follow-discovery.ts';
 import { Compile } from 'typebox/compile';
-import type { Actor } from '../request/access.ts';
+import { snapshotReadActor, type Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import {
   SpaceEntryFollowSchema,
@@ -70,7 +70,7 @@ export async function observeSearchSpaceEntries(input: {
   const ids = hits.map((hit) => hit.key.id);
   if (!ids.length) return { page: input.page, finish: async () => true };
   if (ids.length > 100 || new Set(ids).size !== ids.length) throw new RangeError('Invalid Space entry page');
-  const actor = structuredClone(input.actor);
+  const actor = snapshotReadActor(input.actor);
   const initial = structuredClone(await input.read([...ids]));
   const checkPublic = () => {
     for (const hit of hits) {
@@ -97,7 +97,7 @@ export async function observeSearchSpaceEntries(input: {
   if (actor.kind === 'account' && input.follow) {
     try {
       const observation = await input.follow({
-        actor: structuredClone(actor),
+        actor,
         ids: [...ids],
         sources: new Map(ids.map((id) => [id, initial.get(id)!.binding])),
         deadline: input.deadline,

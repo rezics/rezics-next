@@ -23,15 +23,18 @@ export function createNativeDiscoveryRegistry(options: {
   ownerAdapters?: DiscoveryOwnerAdapterSlots;
   omittedKinds?: DiscoveryRegistryOptions['omittedKinds'];
   languages?: readonly string[];
-  includeAccountContext?: boolean;
+  accountContext?: true | 'verified-agent';
 }) {
   const { pool, routeKey, languages = [] } = options;
+  const hydrateSubjects = (ids: readonly string[], context: DiscoveryReadContext) =>
+    readSubjectSummaries({ pool, routeKey, ...context }, ids, { languages });
   return createDiscoveryRegistry({
     release: options.release,
     semantic: {
       ...options.semantic,
+      hydrateCurrent: hydrateSubjects,
       async hydrate(ids, context) {
-        const summaries = await readSubjectSummaries({ pool, routeKey, ...context }, ids, { languages });
+        const summaries = await hydrateSubjects(ids, context);
         return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },
     },
@@ -39,11 +42,9 @@ export function createNativeDiscoveryRegistry(options: {
       ...options.accounts,
       source: options.accounts.source ?? accountDiscoverySource(pool),
       async hydrate(ids, context) {
-        const includeAccountContext = options.includeAccountContext !== false;
         const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, {
           languages,
-          context: includeAccountContext,
-          verifyAgent: true,
+          context: options.accountContext ?? true,
         });
         return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },

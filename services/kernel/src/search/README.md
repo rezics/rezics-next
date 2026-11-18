@@ -2373,6 +2373,13 @@ cannot extend its lifetime. Expiry removes publication authority immediately but
 dispatched owner batch to settle before disposal. Finish checks the same deadline after that batch
 and after the native final and cleanup, so a late callback cannot restore publication authority.
 The existing public `search(principal, request, context)` composes open/search/finish/finally-close.
+Native Home retains the same search through Content composition. Its one positional owner batch
+rechecks only selected public keys from that page before the original final. The native final still
+covers all examined rows. Content closes the retained read on failure and withholds the Discovery
+lane when its final observation refuses.
+During cold startup, the mixed-generation worker admits the default unfiltered Home root through
+the same native enrollment and durable repair path. A page still requires active allocation, release,
+and current owner evidence.
 Factory shutdown drains those public calls and closes outstanding retained operations before its
 runtime and work client.
 

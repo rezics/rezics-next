@@ -31,6 +31,7 @@ const cost = {
 
 function fixture(withCandidate = false) {
   const calls: string[] = [];
+  const readActors: Array<DiscoveryReadContext['actor']> = [];
   const consumer = {
     physicalTarget: 'discovery-unit',
     incarnation: 'incarnation',
@@ -126,6 +127,7 @@ function fixture(withCandidate = false) {
       },
       async hydrate(ids, readContext) {
         calls.push('hydrate');
+        readActors.push(readContext.actor);
         if (readContext.textQuery !== undefined)
           calls.push(readContext.currentTextMatches ? 'text-check-bound' : 'text-check-missing');
         return new Map(
@@ -177,6 +179,7 @@ function fixture(withCandidate = false) {
   const request = { representation: 'discovery-v1' as const, sort: 'id' as const, limit: 1 };
   return {
     calls,
+    readActors,
     context,
     config,
     request,
@@ -192,6 +195,28 @@ function fixture(withCandidate = false) {
   };
 }
 
+test('retained Search passes the immutable authenticated actor through both owner stages', async () => {
+  const f = fixture(true);
+  const actor = Object.freeze({
+    kind: 'account' as const,
+    accountId: id,
+    clientId: 'home',
+    authnEpoch: 0,
+    requestedBy: null,
+    scopes: Object.freeze(['subject:search']),
+  });
+  const read = await createRetainedDiscoverySearch(f.config)(`account:${id}`, f.request, { ...f.context, actor });
+  try {
+    await read.search();
+    await read.currentSelectedCandidates([key]);
+    expect(f.readActors).toHaveLength(2);
+    expect(f.readActors.every((observed) => observed === actor)).toBe(true);
+    await read.finish();
+  } finally {
+    await read.close();
+  }
+});
+
 test('retained projection and positional primary batch precede the same native final and close', async () => {
   const f = fixture();
   const read = await createRetainedDiscoverySearch(f.config)('anonymous', f.request, f.context);
@@ -201,8 +226,11 @@ test('retained projection and positional primary batch precede the same native f
   page.kinds.values.length = 0;
   await expect(read.search()).rejects.toThrow('one search');
   expect(await read.currentPrimaryCandidates([key, { ...key, id: missing }, key])).toEqual([true, false, true]);
-  expect(f.calls.filter((value) => value === 'owner-start')).toHaveLength(1);
-  expect(f.calls.filter((value) => value === 'hydrate')).toHaveLength(1);
+  expect(f.calls.filter((value) => value === 'owner-start' || value === 'hydrate')).toEqual([
+    'owner-start',
+    'hydrate',
+    'owner-start',
+  ]);
   await read.finish();
   await read.close();
   expect(f.calls.slice(-3)).toEqual(['final', 'dispose', 'close-observation']);
@@ -228,6 +256,25 @@ test('finish waits for the in-flight original primary batch and forbids another 
   await final;
   await read.close();
   expect(f.calls.indexOf('final')).toBeGreaterThan(f.calls.indexOf('hydrate'));
+});
+
+test('retained Home rechecks only its original selected keys before the same final', async () => {
+  const f = fixture(true);
+  const read = await createRetainedDiscoverySearch(f.config)('anonymous', f.request, f.context);
+  try {
+    expect((await read.search()).hits.map((hit) => hit.key)).toEqual([key]);
+    const [original, foreign, repeated] = await read.currentSelectedCandidates([key, { ...key, id: missing }, key]);
+    expect(original?.key).toEqual(key);
+    expect(foreign).toBeUndefined();
+    expect(repeated).toEqual(original);
+    expect(f.calls.filter((call) => call === 'query')).toHaveLength(1);
+    expect(f.calls).not.toContain('final');
+    f.refuseFinal();
+    await expect(read.finish()).rejects.toThrow();
+  } finally {
+    await read.close();
+  }
+  expect(f.calls.slice(-3)).toEqual(['final', 'dispose', 'close-observation']);
 });
 
 test('abandonment disposes without a final or publication and close is idempotent', async () => {

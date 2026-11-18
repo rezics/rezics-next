@@ -116,6 +116,70 @@ test('missing continuation, discovery and following producers stay unavailable r
   expect(page.next).toBeNull();
 });
 
+test('a refused retained Home final removes Discovery before private viewer rows are admitted', async () => {
+  const selected = item('discovery', '00000000-0000-4000-8000-000000000001');
+  const following = item('following', '00000000-0000-4000-8000-000000000002');
+  const calls: string[] = [];
+  const selectionOpened = Promise.withResolvers<void>();
+  const viewerReady = Promise.withResolvers<void>();
+  const defaults = ports();
+  const app = createFeedApplication({
+    ...defaults,
+    discovery: {
+      async page() {
+        calls.push('search');
+        return {
+          candidates: [{ item: selected }],
+          next: 'discovery-next',
+          retainedDiscovery: {
+            async current(ids) {
+              expect(ids).toEqual([selected.id]);
+              calls.push('current');
+              selectionOpened.resolve();
+              return [{ item: selected }];
+            },
+            async finish() {
+              calls.push('final');
+              throw new FeedRefusedError('dependency_unavailable');
+            },
+            async close() {
+              calls.push('close');
+            },
+          },
+        };
+      },
+    },
+    continuation: { page: async () => ({ subjects: [], next: null }) },
+    following: { page: async () => ({ candidates: [{ item: following }], next: false }) },
+    finish: {
+      ...defaults.finish,
+      async personalActions(items, _actor, _languages, _deadline, finalAdmission) {
+        expect(items.map(({ id }) => id)).toContain(selected.id);
+        const publication = finalAdmission(viewerReady.promise);
+        await selectionOpened.promise;
+        expect(calls).toEqual(['search', 'current']);
+        viewerReady.resolve();
+        const current = await publication;
+        expect(current.map(({ id }) => id)).toEqual([following.id]);
+        return { items: current };
+      },
+    },
+  });
+  const page = await app.list(
+    {
+      kind: 'account',
+      accountId: '00000000-0000-4000-8000-000000000003',
+      scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
+    },
+    { stream: 'home', limit: 20 },
+    Date.now() + 2_000,
+    ['en'],
+  );
+  expect(calls).toEqual(['search', 'current', 'final', 'close']);
+  expect(page.sources.discovery).toBe('unavailable');
+  expect(page.feedItems).toEqual([following]);
+});
+
 test('current Collection cards and viewer actions keep their installed types and serialize through the FeedPage schema', async () => {
   const id = '00000000-0000-4000-8000-000000000001';
   const card: CollectionCard = {

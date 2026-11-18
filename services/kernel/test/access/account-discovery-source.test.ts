@@ -40,6 +40,7 @@ test('current exact claims supply handles while bad claims leave eligible displa
   const partition = partitionOf(route);
   const handle = `discovery_${newId(route).replaceAll('-', '')}`;
   const id = await seed(route, handle);
+  const other = await seed(route + 16);
   const claimRoute = createHash('sha256').update(handle).digest().readUInt16BE(0);
   try {
     expect((await source.read(partition, [id, id])).accounts).toMatchObject([
@@ -51,6 +52,13 @@ test('current exact claims supply handles while bad claims leave eligible displa
       [claimRoute, handle, id],
     );
     expect((await source.read(partition, [id])).accounts[0]?.handle).toBe(handle);
+    const homes = [
+      { partition: partition + 1, ids: [other] },
+      { partition, ids: [id, newId(route)] },
+    ];
+    expect(await source.readHomes!(homes)).toEqual(
+      await Promise.all(homes.map(({ partition, ids }) => source.read(partition, ids))),
+    );
     const binding = (await readAccountDiscoveryBindings(pool, partition, [id])).get(id)!;
     expect(binding.claim?.route).toBe(claimRoute);
     expect(binding.consumedClaimRevision).toBe(0n);
@@ -63,6 +71,7 @@ test('current exact claims supply handles while bad claims leave eligible displa
   } finally {
     await pool.query('DELETE FROM access.handle_claim WHERE route=$1 AND normalized_handle=$2', [claimRoute, handle]);
     await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, id]);
+    await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route + 16, other]);
   }
 });
 

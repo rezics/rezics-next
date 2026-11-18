@@ -269,38 +269,64 @@ export function createNativeFeedPorts(
   };
   const presentation: FeedPresentationPort = { present: producers.present };
 
-  const discovery: FeedDiscoveryPort | undefined = deps.discovery
-    ? {
-        async page(input) {
-          const actor = asPlatformActor(input.actor, liveActor());
-          const page = await deps.discovery!(
-            actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-            {
-              representation: 'discovery-v1',
+  const discovery: FeedDiscoveryPort | undefined =
+    deps.feedDiscovery || deps.discovery
+      ? {
+          async page(input) {
+            const actor = asPlatformActor(input.actor, liveActor());
+            const principal = actor.kind === 'account' ? (`account:${actor.accountId}` as const) : 'anonymous';
+            const request = {
+              representation: 'discovery-v1' as const,
               limit: input.limit,
               languages: [...input.languages],
               ...(input.kind === undefined ? {} : { filter: { kind: { in: [input.kind] } } }),
               ...(input.spaceId === undefined ? {} : { spaceId: input.spaceId }),
               ...(input.cursor ? { cursor: input.cursor } : {}),
-            },
-            {
+            };
+            const context = {
               access: deps.access,
               actor,
               deadline: input.deadline,
               ...(spacePopulation ? { spacePopulation } : {}),
-            },
-          );
-          return {
-            candidates: page.hits.map((hit) => ({
-              item: feedDiscoveryItem(hit) as FeedItem,
-              ...discoveryQuestionWitness(hit),
-            })),
-            next: page.next ?? false,
-            asOf: page.as_of,
-          };
-        },
-      }
-    : undefined;
+            };
+            const retained = deps.feedDiscovery ? await deps.feedDiscovery(principal, request, context) : undefined;
+            try {
+              const page = retained?.page ?? (await deps.discovery!(principal, request, context));
+              const candidate = (hit: (typeof page.hits)[number]) => ({
+                item: feedDiscoveryItem(hit),
+                ...discoveryQuestionWitness(hit),
+              });
+              const candidates = page.hits.map(candidate);
+              const keys = new Map(candidates.map(({ item }, index) => [item.id, page.hits[index]!.key]));
+              return {
+                candidates,
+                next: page.next ?? false,
+                asOf: page.as_of,
+                ...(retained
+                  ? {
+                      retainedDiscovery: {
+                        async current(ids: readonly string[]) {
+                          const requested = ids.map((id) => {
+                            const key = keys.get(id);
+                            if (!key) throw new TypeError('Home final must retain its original Discovery key');
+                            return key;
+                          });
+                          const current = await retained.current(requested);
+                          return current.flatMap((hit) => (hit ? [candidate(hit)] : []));
+                        },
+                        finish: () => retained.finish(),
+                        close: () => retained.close(),
+                      },
+                    }
+                  : {}),
+              };
+            } catch (error) {
+              await retained?.close();
+              throw error;
+            }
+          },
+        }
+      : undefined;
 
   return {
     continuation,
@@ -713,15 +739,16 @@ export function createNativeFeedPorts(
       async personalActions(items, actor, languages, deadline, reopen) {
         const live = asPlatformActor(actor, liveActor());
         if (live.kind !== 'account') return { items };
+        let admitted = items;
         const viewerPersonalActions = await capabilities.composeViewerPersonalActions(
           deps,
           live,
           items,
           deadline,
           languages,
-          reopen as never,
+          async (viewerReady) => (admitted = await reopen(viewerReady)),
         );
-        return { items, viewerPersonalActions };
+        return { items: admitted, viewerPersonalActions };
       },
       async reopenSelected(items, actor, _query, languages, deadline) {
         if (!contextReferences.length) return items;

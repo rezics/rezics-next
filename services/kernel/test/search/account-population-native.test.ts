@@ -289,8 +289,7 @@ test('native account context reads the exact published agent graph and withholds
       );
       const read = (context: boolean, verifyAgent = false) =>
         readAccountDiscoverySummaries({ pool, routeKey, access, actor, deadline: Date.now() + 30_000 }, [accountId], {
-          context,
-          verifyAgent,
+          context: verifyAgent ? 'verified-agent' : context,
         });
       const available = (await read(true)).get(accountId);
       expect(available?.verifiedAgent).toEqual({

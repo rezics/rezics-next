@@ -420,6 +420,7 @@ export function startDiscoveryIndexing(options: {
   requiredKinds?: readonly string[];
   producers?: DiscoveryProducerEntry;
   reviewSource?: ReviewDiscoverySource;
+  publicPreparation?: PublicPreparation;
 }) {
   const configuredConcurrency = options.concurrency ?? 2;
   if (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
@@ -433,6 +434,7 @@ export function startDiscoveryIndexing(options: {
     relay: ReturnType<typeof startRelays>;
   };
   let installation: Installation | undefined;
+  let preparedHome: string | undefined;
   let lastRetirement = 0;
   let stopped = false,
     paused = false,
@@ -603,6 +605,12 @@ export function startDiscoveryIndexing(options: {
         });
     }
     if (stopped || paused) return;
+    const cold = !generations.some(({ state }) => state === 'active') && relayTargets.at(-1);
+    if (cold && options.publicPreparation) {
+      const allocation = `${cold.generation}:${cold.uuid}:${cold.incarnation}`;
+      if (allocation !== preparedHome && (await options.publicPreparation.prepareDefaultHome(cold, turn.deadline)))
+        preparedHome = allocation;
+    }
     if (readiness) throw readiness;
   };
   let retirementFirst = false;

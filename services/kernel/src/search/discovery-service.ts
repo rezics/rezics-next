@@ -38,6 +38,7 @@ import type {
   DiscoveryOwnerRegistry,
   DiscoveryUnionHit,
   DiscoveryConsumerQuery,
+  DiscoveryEngineHit,
   DiscoveryKey,
 } from './discovery.ts';
 import type { DiscoverySearch } from './discovery-api.ts';
@@ -121,6 +122,9 @@ export type { DiscoverySearch } from './discovery-api.ts';
 export type RetainedDiscoveryRead = Readonly<{
   search(): Promise<DiscoveryPage>;
   currentPrimaryCandidates(keys: readonly DiscoveryKey[]): Promise<readonly boolean[]>;
+  currentSelectedCandidates(
+    keys: readonly DiscoveryUnionHit['key'][],
+  ): Promise<readonly (DiscoveryUnionHit | undefined)[]>;
   finish(): Promise<void>;
   close(): Promise<void>;
 }>;
@@ -161,6 +165,8 @@ type DiscoveryConfiguration = {
 };
 
 type RetainedPrimaryReader = (keys: readonly DiscoveryKey[]) => Promise<readonly boolean[]>;
+type RetainedSelectedReader = RetainedDiscoveryRead['currentSelectedCandidates'];
+type RetainedReaders = Readonly<{ primary: RetainedPrimaryReader; selected: RetainedSelectedReader }>;
 
 /** The public completed search and retained readers use the same native execution. The
  * rendezvous is after projection and cursor construction and BEFORE its terminal observation.
@@ -175,9 +181,9 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
       ...context,
       actor: snapshotReadActor(context.actor),
     });
-    let deliver!: (value: { page: DiscoveryPage; current: RetainedPrimaryReader }) => void;
+    let deliver!: (value: { page: DiscoveryPage; readers: RetainedReaders }) => void;
     let refuse!: (error: unknown) => void;
-    const projected = new Promise<{ page: DiscoveryPage; current: RetainedPrimaryReader }>((resolve, reject) => {
+    const projected = new Promise<{ page: DiscoveryPage; readers: RetainedReaders }>((resolve, reject) => {
       deliver = resolve;
       refuse = reject;
     });
@@ -190,8 +196,7 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
     // Closing can precede projection. Retain the refusal without an unhandled rejection.
     void publication.catch(() => {});
     let state: 'open' | 'finishing' | 'finished' | 'closing' | 'closed' = 'open';
-    let reading: Promise<readonly boolean[]> | undefined;
-    let primaryRead = false;
+    let reading: Promise<unknown> | undefined;
     let searched = false;
     let terminal: Promise<void> | undefined;
     let closing: Promise<void> | undefined;
@@ -208,8 +213,8 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
         );
       else abandon(ready());
     };
-    const execution = executeDiscoverySearch(config, async (page, current) => {
-      deliver({ page, current });
+    const execution = executeDiscoverySearch(config, async (page, readers) => {
+      deliver({ page, readers });
       await publication;
     })(principal, request, context);
     const expiry = setTimeout(expire, Math.max(0, context.deadline - Date.now()));
@@ -232,6 +237,25 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
         throw ready();
       }
     };
+    const readPositions = <Key extends DiscoveryUnionHit['key'], Value>(
+      keys: readonly Key[],
+      maximum: number,
+      reader: (saved: readonly Key[]) => Promise<Value>,
+    ) => {
+      requireOpen();
+      if (reading) throw new TypeError('Retained discovery permits one positional owner batch');
+      if (!Array.isArray(keys) || keys.length > maximum) throw new RangeError('Invalid positional owner batch');
+      const saved = keys.map((key) => Object.freeze({ ...key }));
+      const result = Promise.resolve()
+        .then(() => reader(saved))
+        .then((output) => {
+          if (expired || Date.now() >= context.deadline) throw ready();
+          return output;
+        });
+      reading = result;
+      void result.catch(() => {});
+      return result;
+    };
     return Object.freeze({
       async search() {
         requireOpen();
@@ -240,20 +264,10 @@ export function createRetainedDiscoverySearch(config: DiscoveryConfiguration): R
         return structuredClone(value.page);
       },
       currentPrimaryCandidates(keys) {
-        requireOpen();
-        if (primaryRead) throw new TypeError('Retained discovery permits one positional primary batch');
-        if (!Array.isArray(keys) || keys.length > 160) throw new RangeError('Invalid positional primary batch');
-        primaryRead = true;
-        // Snapshot full keys before an await; caller mutation cannot change the admitted batch.
-        const saved = keys.map((key) => Object.freeze({ ...key }));
-        reading = Promise.resolve()
-          .then(() => value.current(saved))
-          .then((result) => {
-            if (expired || Date.now() >= context.deadline) throw ready();
-            return result;
-          });
-        void reading.catch(() => {});
-        return reading;
+        return readPositions(keys, 160, value.readers.primary);
+      },
+      currentSelectedCandidates(keys) {
+        return readPositions(keys, 100, value.readers.selected);
       },
       finish() {
         if (terminal) return terminal;
@@ -331,7 +345,7 @@ export function createDiscoverySearch(config: DiscoveryConfiguration): Discovery
 
 function executeDiscoverySearch(
   config: DiscoveryConfiguration,
-  retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>,
+  retain: (page: DiscoveryPage, readers: RetainedReaders) => Promise<void>,
 ): DiscoverySearch {
   const disclosure = config.disclosure ?? { finishDiscoveryDisclosure, revalidateOwnerCurrentSummaries };
   const execute: DiscoverySearch = async (principal, request, context) => {
@@ -503,6 +517,9 @@ function executeDiscoverySearch(
         currentContext = { ...currentContext, currentTextMatches };
       }
       const hits: DiscoveryUnionHit[] = [];
+      const selectedRaw = new Map<string, DiscoveryEngineHit>();
+      const selectedIdentity = (key: DiscoveryUnionHit['key']) =>
+        JSON.stringify([key.owner, key.kind, key.route, key.id]);
       const seen = new Set<string>();
       const witnesses = new Map<string, number>();
       let last: Extract<DiscoveryConsumerQuery, { status: 'queried' }> | undefined;
@@ -661,6 +678,9 @@ function executeDiscoverySearch(
               seen,
             });
             hits.push(...selected.hits);
+            const selectedHits = new Set(selected.hits);
+            for (const [raw, hit] of current)
+              if (selectedHits.has(hit)) selectedRaw.set(selectedIdentity(hit.key), raw);
             for (const [kind, count] of kindWitnessCounts(selected.witnesses))
               witnesses.set(kind, (witnesses.get(kind) ?? 0) + count);
             consumed =
@@ -705,6 +725,7 @@ function executeDiscoverySearch(
               preparedTraversal = true;
               refill = undefined;
               hits.length = 0;
+              selectedRaw.clear();
               seen.clear();
               witnesses.clear();
               last = undefined;
@@ -922,9 +943,26 @@ function executeDiscoverySearch(
                   now,
                 );
           admitDiscoveryPage(projected);
-          await retain(projected, (keys) =>
-            currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, currentContext),
-          );
+          await retain(projected, {
+            primary: (keys) =>
+              currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, currentContext),
+            async selected(keys) {
+              const inputs = keys.map((key) => selectedRaw.get(selectedIdentity(key)));
+              const raw = [...new Set(inputs.flatMap((candidate) => (candidate ? [candidate] : [])))];
+              const current = await currentDiscoveryCandidates(
+                registry,
+                raw,
+                admitted.filter,
+                release,
+                currentContext,
+                config.disclosure,
+              );
+              return inputs.map((candidate, index) => {
+                const hit = candidate && current.get(candidate);
+                return hit && selectedIdentity(hit.key) === selectedIdentity(keys[index]!) ? hit : undefined;
+              });
+            },
+          });
           return projected;
         });
         retained = page.next !== null && !admitted.collectionDirectory;

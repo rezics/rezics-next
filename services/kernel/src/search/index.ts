@@ -14,6 +14,7 @@ export type {
   DiscoveryConsumerCaptureInput,
   DiscoveryContextList,
   DiscoveryContextSubject,
+  DiscoveryFeedSearch,
   DiscoveryHit,
   DiscoveryKey,
   DiscoveryKindMetadata,

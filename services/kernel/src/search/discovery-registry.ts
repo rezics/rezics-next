@@ -72,6 +72,7 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
         metadata: metadata(kind, type.labels, options.semantic.icons[kind]!),
         source: options.semantic.source,
         hydrate: options.semantic.hydrate,
+        ...(options.semantic.hydrateCurrent && { hydrateCurrent: options.semantic.hydrateCurrent }),
       }),
     );
   }

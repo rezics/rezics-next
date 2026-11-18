@@ -110,6 +110,11 @@ export type DiscoveryRegistration = RegistrationBase &
           ids: readonly string[],
           context: DiscoveryReadContext,
         ) => Promise<ReadonlyMap<string, SubjectSummary>>;
+        /** Native owner results account for every requested key, including withheld summaries. */
+        readonly hydrateCurrent?: (
+          ids: readonly string[],
+          context: DiscoveryReadContext,
+        ) => Promise<ReadonlyMap<string, SubjectSummary | null>>;
       }
     | {
         readonly owner: 'accounts';
@@ -127,6 +132,7 @@ export type DiscoveryRegistryOptions = {
   semantic: {
     source: SubjectSource;
     hydrate: Extract<DiscoveryRegistration, { owner: 'semantic' }>['hydrate'];
+    hydrateCurrent?: NonNullable<Extract<DiscoveryRegistration, { owner: 'semantic' }>['hydrateCurrent']>;
     /** Presentation metadata keyed by the actual released type ID. */
     icons: Readonly<Record<string, string>>;
   };

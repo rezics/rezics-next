@@ -368,6 +368,11 @@ export type FeedLaneLoad = Readonly<{
   next: string | null | false;
   asOf?: string;
   fingerprint?: string;
+  retainedDiscovery?: Readonly<{
+    current(ids: readonly string[]): Promise<readonly FeedLaneCandidate[]>;
+    finish(): Promise<void>;
+    close(): Promise<void>;
+  }>;
 }>;
 
 export type FeedSpaceSession = Readonly<{
@@ -496,7 +501,7 @@ export type FeedFinishPort = Readonly<{
     actor: FeedActor,
     languages: readonly string[],
     deadline: number,
-    reopen: () => Promise<FeedItem[]>,
+    reopen: (viewerReady?: Promise<unknown>) => Promise<FeedItem[]>,
   ): Promise<{ items: FeedItem[]; viewerPersonalActions?: ViewerPersonalActionsPage }>;
   reopenSelected(
     items: FeedItem[],

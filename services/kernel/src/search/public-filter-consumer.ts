@@ -655,9 +655,8 @@ import {
   createDiscoveryProjection,
   nativeDiscoveryRegistry,
   readDiscoveryWriterPhysicalTarget,
-  validateAccountSnapshot,
 } from './account-discovery.ts';
-import { readCandidateHomes } from './discovery-current.ts';
+import { readCandidateAccounts } from './discovery-current.ts';
 import { readOwnerCandidates, type DiscoveryOwnerCandidate } from './disclosure/owner-current.ts';
 import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
 import { discoveryAliasMatches, discoveryConsumer } from './generations.ts';
@@ -665,7 +664,6 @@ import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
 import {
-  MAX_ACCOUNT_DISCOVERY_BATCH,
   type DiscoveryConsumerCaptureInput,
   type DiscoveryConsumerQuery,
   type DiscoveryEngineHit,
@@ -1733,25 +1731,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       m.cost.accessPoints += accounts.length;
       m.cost.dependencyPoints += accounts.length;
       m.check();
-      await readCandidateHomes(
+      const current = await readCandidateAccounts(
+        entry.source,
         accounts.map(({ key }) => key),
-        async (partition, keys) => {
-          const ids = [...new Set(keys.map(({ id }) => id))];
-          for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-            m.check();
-            const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-            const observed = await entry.source.read(partition, chunk);
-            let snapshot;
-            try {
-              snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-            } catch {
-              throw new MixedOwnerPending();
-            }
-            for (const account of snapshot.accounts)
-              accountRows.set(account.id, { position: snapshot.position, revision: String(account.revision) });
-          }
+        () => {
+          throw new MixedOwnerPending();
         },
       );
+      for (const { snapshot } of current)
+        for (const account of snapshot.accounts)
+          accountRows.set(account.id, { position: snapshot.position, revision: String(account.revision) });
     };
     const subjects = [...new Set(hits.filter(({ key }) => key.owner === 'semantic').map(({ key }) => key.id))];
     const nativeIdentities = config.source.readPublicFilterSubjectIdentities;

@@ -3,12 +3,13 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { compileDiscoveryFilter, currentDiscoveryFilter } from '../../src/search/discovery-filter.ts';
 import { currentDiscoveryCandidates } from '../../src/search/discovery-current.ts';
 import { admitDiscoveryHit, admitDiscoveryPage } from '../../src/search/discovery-http.ts';
-import { discoveryKindDirectory } from '../../src/search/discovery-registry.ts';
+import { createDiscoveryRegistry, discoveryKindDirectory } from '../../src/search/discovery-registry.ts';
 import { compareDiscoveryTuple, type DiscoveryCandidate } from '../../src/search/discovery-query.ts';
 import { ownDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import { routeOf } from '../../src/route/route.ts';
 import type {
   DiscoveryKey,
+  DiscoveryEngineHit,
   DiscoveryOwnerRegistry,
   DiscoveryReadContext,
   DiscoveryRegistry,
@@ -24,6 +25,72 @@ const registry = {
   get: (kind: string) => entries.find((entry) => entry.kind === kind)!,
   key: (key: DiscoveryKey) => key,
 } as unknown as DiscoveryRegistry;
+
+test('native Subject withholding removes its exact signed-in key while missing owner positions refuse the batch', async () => {
+  const withheld = '018f0000-0000-7000-8000-00a000000002';
+  const type = 'schema:Book';
+  const candidates: DiscoveryEngineHit[] = [id, withheld].map((id) => ({
+    key: { owner: 'semantic', kind: type, route: 160, id },
+    index: 'mixed-fixture',
+    revision: '1',
+    sourcePosition: '3',
+    matched: [],
+    sort: [id],
+  }));
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Unexpected owner read');
+  };
+  const summary = { id, type, types: [type], label: null, creativeWork: true, cover: null };
+  const context = {
+    actor: { kind: 'account', accountId: id },
+    deadline: 1,
+  } as DiscoveryReadContext;
+  const disclose = (negative: [string, null][]) =>
+    currentDiscoveryCandidates(
+      createDiscoveryRegistry({
+        release: bundledRelease,
+        semantic: {
+          source: {
+            count: unavailable,
+            async read(partition, ids) {
+              return {
+                partition,
+                position: 3n,
+                subjects: ids.map((id) => ({
+                  id,
+                  type,
+                  visibility: 'visible',
+                  redirect: null,
+                  securityRevision: 1,
+                  labels: [],
+                  aliases: [],
+                  descriptions: [],
+                  statements: [],
+                })),
+              };
+            },
+          },
+          hydrate: unavailable,
+          async hydrateCurrent() {
+            return new Map<string, typeof summary | null>([[id, summary], ...negative]);
+          },
+          icons: Object.fromEntries(Object.keys(bundledRelease.types).map((kind) => [kind, 'catalogue'])),
+        },
+        accounts: {
+          source: { read: unavailable, count: unavailable, page: unavailable },
+          hydrate: unavailable,
+          labels: { en: 'Accounts' },
+          icon: 'account',
+        },
+      }),
+      candidates,
+      undefined,
+      bundledRelease,
+      context,
+    );
+  expect([...(await disclose([[withheld, null]])).keys()]).toEqual([candidates[0]!]);
+  await expect(disclose([])).rejects.toThrow('Current discovery owner evidence is unavailable');
+});
 
 test('Subject-only NOT stays in its domain and an unready metadata owner cannot become an empty success', async () => {
   const subjectType = { type: { in: ['schema:Person'] } };

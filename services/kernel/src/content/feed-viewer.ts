@@ -38,25 +38,32 @@ export async function composeFeedViewerPersonalActions(
   items: readonly FeedItem[],
   deadline: number,
   languages: readonly string[],
-  finalAdmission: () => Promise<readonly FeedItem[]>,
+  finalAdmission: (viewerReady?: Promise<unknown>) => Promise<readonly FeedItem[]>,
 ): Promise<ViewerPersonalActionsPage> {
   const references = feedViewerReferences(items);
-  const subjects = await enrichment.readSubjectSummaryObservation(
-    { ...deps, actor, deadline },
-    [...new Set(references.map((row) => row.subjectId))],
-    { languages },
-  );
-  const rows = references.filter((row) => {
-    const subject = subjects.summaries.get(row.subjectId);
-    return subject?.creativeWork && subject.id === row.subjectId && subject.type === row.resourceType;
-  });
-  const result: ViewerPersonalActionsPage = await deps.viewerPersonalActions(
-    actor,
-    rows,
-    enrichment.standardQuestionId,
-    deadline,
-  );
-  const admitted = await finalAdmission();
+  const reading = (async () => {
+    const subjects = await enrichment.readSubjectSummaryObservation(
+      { ...deps, actor, deadline },
+      [...new Set(references.map((row) => row.subjectId))],
+      { languages },
+    );
+    const rows = references.filter((row) => {
+      const subject = subjects.summaries.get(row.subjectId);
+      return subject?.creativeWork && subject.id === row.subjectId && subject.type === row.resourceType;
+    });
+    const result = await deps.viewerPersonalActions(actor, rows, enrichment.standardQuestionId, deadline);
+    return { subjects, rows, result };
+  })();
+  // Reopen the selected lane operands while Library reads viewer facts. The
+  // final owner checks wait for that private reader to settle.
+  const [viewer, publication] = await Promise.allSettled([
+    reading,
+    Promise.resolve().then(() => finalAdmission(reading)),
+  ]);
+  if (viewer.status === 'rejected') throw viewer.reason;
+  if (publication.status === 'rejected') throw publication.reason;
+  const { subjects, rows, result } = viewer.value;
+  const admitted = publication.value;
   if (!(await subjects.current())) return { state: 'unavailable', reason: 'currentness', retryable: true };
   if (result.state !== 'current') return result;
   const current = new Map(feedViewerReferences(admitted).map((row) => [row.rowKey, row]));
