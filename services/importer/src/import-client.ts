@@ -393,7 +393,10 @@ function hintedRetryDelay(
   return delay;
 }
 
-function httpFailure(reply: ClientResponse, last?: { method: string; path: string }): ImportTransportError {
+export function httpFailure(
+  reply: ClientResponse,
+  last?: { method: string; path: string; origin?: string },
+): ImportTransportError {
   // Only public problem identifiers are exposed. Remote diagnostic text stays on the private cause chain.
   const outer =
     typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error) ? reply.error : undefined;
@@ -443,7 +446,7 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
     undefined,
     {
       ...(request ?? fallback),
-      ...(last && !request ? { method: last.method, path: last.path } : {}),
+      ...(last && !request ? last : {}),
       phase: reply.response ? 'http' : 'response',
       ...(correlationId === undefined ? {} : { correlationId }),
       cause: reply.error,

@@ -228,10 +228,18 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       } as never;
     },
   };
+  let schemeProjectionPending = true;
   const publicClient = createPublicBulkClient({
     origin: 'https://fixture.test',
     fetch: (async (input) => {
       const id = new URL(String(input)).pathname.split('/').at(-1)!;
+      if (schemeProjectionPending && subjects.get(id)?.sourceExternalId === 'vocabulary:bangumi.staff') {
+        schemeProjectionPending = false;
+        return Response.json(
+          { type: 'https://rezics.com/problems/semantic_not_ready', retryable: true },
+          { status: 503, headers: { 'retry-after': '0' } },
+        );
+      }
       return Response.json(read(id));
     }) as typeof fetch,
   });
@@ -270,6 +278,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         },
       },
     );
+    expect(schemeProjectionPending).toBe(false);
     expect(resolution!.publication!.manifest.records).toEqual([]);
     const currentRoles = await currentBangumiCreatorCreditBindings({
       resolution: resolution!,
