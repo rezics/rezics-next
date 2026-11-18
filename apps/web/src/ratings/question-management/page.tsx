@@ -1435,6 +1435,7 @@ export function QuestionManagementPage({
         requireFreshInspection={requiresFreshInspection || postAcknowledgementRead}
       />
       <OwnVotesDeparture
+        owner={owner}
         confirmMovement={confirmMovement}
         onStay={() => cancelDirectoryMovement.current?.()}
         dirty={dirty && !postAcknowledgementRead}

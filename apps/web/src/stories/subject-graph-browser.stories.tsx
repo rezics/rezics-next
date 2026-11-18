@@ -86,6 +86,7 @@ function reading(query: StoryQuery = {}, state: StoryState = 'relations', locale
         ],
         references: [
           {
+            hash: '1'.repeat(64),
             parts: [
               {
                 property: { id: 'schema:url', data_type: 'url' },
