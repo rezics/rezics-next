@@ -500,6 +500,11 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
       }>,
       context: PublicFilterConsumerContext,
     ): Promise<PublicSourceRepairPage>;
+    settleMixed?(
+      request: Readonly<{ bootstrap: string; queried: PublicFilterQueriedObservation; execution: string }>,
+      context: PublicFilterConsumerContext,
+      spent: PublicFilterCost & Readonly<{ bytes: number }>,
+    ): Promise<Awaited<ReturnType<PublicFilterSourceBinding['join']>> & { advanced?: boolean }>;
     settle(
       request: Readonly<{
         bootstrap: string;
@@ -586,6 +591,7 @@ type NativePreparationInput =
   | Readonly<{ bootstrap: string; inputLimit?: number }>;
 export type NativePublicFilterPreparation =
   | PublicSourceBootstrapResult
+  | Readonly<{ status: 'repairing'; bootstrapId: string; cost: PublicFilterCost }>
   | Readonly<{
       status: 'preparing';
       bootstrap: PublicSourceBootstrap;
@@ -964,16 +970,20 @@ export function createNativePublicFilterSourceBinding(
     const publication = cut.row.coverage_publication;
     if (!publication) return requirePopulationBaseline(cut.row);
     const consumer = cut.bootstrap.consumer;
+    const mixed = 'representation' in cut.definition.capture;
+    const coverage = mixed
+      ? 'semantic.public_filter_mixed_coverage($1,$2,$3,$4,$5::text)'
+      : 'semantic.public_filter_published_coverage($1,$2,$3,$4,$5::text[])';
     const current = await db.query(
       `/* semantic.native-keyed:15:20 */
-       SELECT 1 FROM semantic.public_filter_published_coverage($1,$2,$3,$4,$5::text[])
+       SELECT 1 FROM ${coverage}
        WHERE generation >= $6::bigint`,
       [
         consumer.physicalTarget,
         consumer.incarnation,
         cut.definition.readDefinition,
         publication,
-        [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+        mixed ? ports.search.encodeConsumer(consumer) : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
         cut.row.coverage_generation,
       ],
     );
@@ -1868,7 +1878,7 @@ export function createNativePublicFilterSourceBinding(
         cost,
         {
           inputLimit,
-          batch: request.homeLimit !== undefined,
+          batch: request.homeLimit !== undefined || 'representation' in bootstrap.definition.capture,
           ...(replay ? { retained: replay } : {}),
         },
       );
@@ -2307,7 +2317,14 @@ export function createNativePublicFilterSourceBinding(
     return run({ deadline }, async (cost, db) => {
       addCost(cost, resolved.cost);
       // Validate the already registered physical consumer through its real owner, before making a cut.
-      const registration = await ports.search.readGenerationPublicationCustody(pool, consumer, 0, { deadline });
+      const registration = await ports.search.readGenerationPublicationCustody(
+        pool,
+        consumer,
+        0,
+        { deadline },
+        undefined,
+        'representation' in capture ? 'registration' : undefined,
+      );
       addCost(cost, registration.cost);
       if (!('definition' in registration)) return { ...registration, cost };
       requireSameDefinition(resolved.definition, registration.definition);
@@ -2323,11 +2340,15 @@ export function createNativePublicFilterSourceBinding(
           (existing.row.state !== 'capturing' && existing.row.state !== 'begun'))
       )
         throw new BindingError('binding_mismatch');
-      if (usePublishedCoverage && !existing && !('representation' in capture) && !('purpose' in capture)) {
+      if (usePublishedCoverage && !existing && !('purpose' in capture)) {
+        const mixed = 'representation' in capture;
+        const coverage = mixed
+          ? 'semantic.public_filter_mixed_coverage($1,$2,$3,NULL,$10)'
+          : 'semantic.public_filter_published_coverage($1,$2,$3,NULL,$4::text[])';
         const attached = await db.query<{ bootstrap: string }>(
           `/* semantic.native-keyed:18:24:1 */
            WITH parent AS MATERIALIZED (
-             SELECT * FROM semantic.public_filter_published_coverage($1,$2,$3,NULL,$4::text[])
+             SELECT * FROM ${coverage}
            )
            INSERT INTO semantic.public_filter_bootstrap
              (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,
@@ -2350,17 +2371,39 @@ export function createNativePublicFilterSourceBinding(
             consumer.physicalTarget,
             consumer.incarnation,
             resolved.definition.readDefinition,
-            [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
+            mixed ? [] : [...PUBLIC_FILTER_CATALOGUE_TEXT_KEYS],
             randomUUID(),
             hash(encode({ consumer, snapshot })),
             encode(consumer),
             snapshot,
             resolved.definition.source.epoch,
+            ...(mixed ? [ports.search.encodeConsumer(consumer)] : []),
           ],
         );
         if (attached.rows[0]) {
           const cut = await loadBootstrap('0:' + attached.rows[0].bootstrap, db, resolved.definition);
           return { status: 'begun' as const, bootstrap: cut.bootstrap, cost };
+        }
+        if (mixed) {
+          // A second read must not replace the baseline while its original repair
+          // is scanning, verifying writers or acknowledging the receiver homes.
+          const pending = await db.query<{ bootstrap: string }>(
+            `/* semantic.native-keyed:6:8 */
+             SELECT b.bootstrap::text FROM search.public_filter_coverage_home h
+             JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,h.baseline_bootstrap)
+             JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,b.queried)
+             WHERE (h.partition_no,h.registration,h.source_home)=(0,$1,0)
+               AND b.state='adopted' AND b.consumer=$2 AND b.read_definition=$3 AND b.coverage_publication IS NULL
+               AND o.registration=h.registration AND o.consumer_bootstrap='0:'||b.bootstrap::text
+               AND o.state='open' AND o.expires_at>$4 AND NOT EXISTS (
+                 SELECT 1 FROM semantic.public_filter_repair_step seal
+                 WHERE (seal.partition_no,seal.bootstrap,seal.execution)=(0,b.bootstrap,h.acknowledged_execution)
+                   AND seal.verified_root IS NOT NULL AND seal.verified_next IS NULL AND seal.complete AND seal.ack_after=4096
+               )`,
+            [registration.registration.id, encode(consumer), resolved.definition.readDefinition, Date.now()],
+          );
+          if (pending.rows[0])
+            return { status: 'repairing' as const, bootstrapId: '0:' + pending.rows[0].bootstrap, cost };
         }
       }
       const inserted = existing
@@ -2484,6 +2527,7 @@ export function createNativePublicFilterSourceBinding(
     request: Parameters<PublicFilterSourceBootstrapBinding['settle']>[0],
     context: PublicFilterConsumerContext,
     publicationCost?: BindingCost,
+    mixedMaintenance = false,
   ) {
     const input = structuredClone(request),
       deadline = context.deadline;
@@ -2499,6 +2543,7 @@ export function createNativePublicFilterSourceBinding(
         encode(joined.covered) !== encode(cut.bootstrap.covered)
       )
         throw new BindingError('binding_mismatch');
+      if (mixedMaintenance && !('representation' in cut.definition.capture)) throw new BindingError('binding_mismatch');
       const chain = repairChain(cut.bootstrap, joined);
       const seal = await readPublicFilterRepairHomeSeal(db, chain);
       // This is the actual independent terminal prefix, not the producer's
@@ -2997,7 +3042,8 @@ export function createNativePublicFilterSourceBinding(
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
           } else {
-            if (record.bridgeEvents !== undefined && !subjectPublication) throw new BindingError('binding_mismatch');
+            if (record.bridgeEvents !== undefined && !subjectPublication && !('representation' in cut.definition.capture))
+              throw new BindingError('binding_mismatch');
             const bridge = await advanceCreationBridge(
               input.bootstrap,
               record.input,
@@ -3290,7 +3336,9 @@ export function createNativePublicFilterSourceBinding(
     },
     async begin(request, context) {
       const result = await beginRetained(request, context);
-      return result.status === 'preparing' ? fail('owner_unavailable', result.cost) : result;
+      return result.status === 'preparing' || result.status === 'repairing'
+        ? fail('owner_unavailable', result.cost)
+        : result;
     },
     async adopt(request, context) {
       const input = structuredClone(request),
@@ -3420,6 +3468,20 @@ export function createNativePublicFilterSourceBinding(
       });
     },
     settle: settleNative,
+    async settleMixed(input, context, spent) {
+      if (
+        !Number.isSafeInteger(spent.inputKeys) ||
+        spent.inputKeys < 0 ||
+        spent.inputKeys >= preparationInputLimit ||
+        !Number.isSafeInteger(spent.bytes) ||
+        spent.bytes < 0 ||
+        spent.bytes >= 4 * 1024 * 1024
+      )
+        return fail('owner_unavailable');
+      const original = publicFilterBindingCost();
+      addCost(original, spent);
+      return settleNative(input, context, original, true);
+    },
   };
   nativeRepairJoins.set(bootstrapBinding, (request, context) => joinNative(request, context, true));
   nativeRepairStarts.set(bootstrapBinding, async (request, context) => {

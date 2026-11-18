@@ -10,7 +10,7 @@ import { discoveryKindDirectory } from './discovery-registry.ts';
 import { readDiscoveryScope, resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { discoveryAliasMatches } from './generations.ts';
 import { nativeDiscoveryRegistry, type DiscoveryTarget } from './account-discovery.ts';
-import { discoveryIndexName } from './indices.ts';
+import { discoveryIndexName, discoveryPhysicalTargetMatches } from './indices.ts';
 import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -68,6 +68,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     digest: string,
     context: PublicFilterConsumerContext,
     queried?: PublicFilterQueriedObservation,
+    enrollmentOnly?: boolean,
   ): Promise<PublicDiscoveryConsumerOperations>;
   publication: SearchGenerationPublication;
   preparePublication(
@@ -261,6 +262,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     context: PublicFilterConsumerContext,
     registry?: DiscoveryRegistry,
     scope?: DiscoveryTarget,
+    preparation?: 'enrollment' | 'repair',
   ): Promise<PublicDiscoveryConsumerOperations> {
     checkDeadline(context);
     const operations = await createPublicFilterConsumerOperations({
@@ -275,6 +277,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       meaning: { digest: meaning.digest, release: meaning.release },
       ...(registry === undefined ? {} : { registry, discoveryAccess: config.access }),
       ...(scope && { discoveryTarget: scope }),
+      ...(preparation && { discoveryPreparation: preparation }),
     });
     // Native factory close drains owned observations; shutdown and replacement use this wrapper.
     owned.add(operations);
@@ -339,19 +342,15 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     return current;
   }
   return {
-    openDiscovery(registry, scope, digest, context, queried) {
+    openDiscovery(registry, scope, digest, context, queried, enrollmentOnly = false) {
       return track(async () => {
         checkDeadline(context);
         const release = await requestMeaning(context);
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
         const target = discoveryIndexName(config.prefix, scope.generation);
-        if (
-          scope.prefix !== config.prefix ||
-          !scope.uuid ||
-          !(await discoveryAliasMatches(requestSearch(context), scope))
-        )
-          notReady();
+        const matches = enrollmentOnly ? discoveryPhysicalTargetMatches : discoveryAliasMatches;
+        if (scope.prefix !== config.prefix || !scope.uuid || !(await matches(requestSearch(context), scope))) notReady();
         if (
           queried &&
           (queried.consumer.physicalTarget !== target ||
@@ -360,10 +359,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         )
           throw new ProblemError('search_restart_required');
         const allocationKey = JSON.stringify([target, scope.uuid, scope.incarnation, digest]);
-        const key = allocationKey + ':' + JSON.stringify(discoveryKindDirectory(registry).map(({ kind }) => kind));
+        const kinds = discoveryKindDirectory(registry).map(({ kind }) => kind);
+        const key = allocationKey + ':' + JSON.stringify([enrollmentOnly, kinds]);
         let operations = mixed.get(key);
         if (!operations) {
-          operations = create(target, release, context, registry, scope);
+          operations = create(target, release, context, registry, scope, enrollmentOnly ? 'enrollment' : undefined);
           mixed.set(key, operations);
           void operations.catch(() => {
             if (mixed.get(key) === operations) mixed.delete(key);
@@ -539,7 +539,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
               ...(producers && { accounts: producers.accounts }),
             },
           );
-          const operations = await create(job.consumer.physicalTarget, { digest, release }, context, registry);
+          const operations = await create(
+            job.consumer.physicalTarget,
+            { digest, release },
+            context,
+            registry,
+            scope,
+            'repair',
+          );
           try {
             return await operations.repairStep(job, context);
           } finally {

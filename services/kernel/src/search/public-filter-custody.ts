@@ -2428,7 +2428,7 @@ export async function readGenerationPublicationCustody(
   sourceHome: number | undefined,
   context: PublicFilterConsumerContext,
   observation?: string,
-  recovery?: Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
+  recovery?: 'registration' | Readonly<{ bootstrap: { observation: string }; snapshot: 'pit' | 'prepared' }>,
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
@@ -2443,6 +2443,7 @@ export async function readGenerationPublicationCustody(
   try {
     check(context);
     if (sourceHome !== undefined) home(sourceHome);
+    const original = typeof recovery === 'object' ? recovery : undefined;
     const registered = await sql(
       pool,
       meter,
@@ -2452,7 +2453,7 @@ export async function readGenerationPublicationCustody(
        LEFT JOIN LATERAL (
          SELECT queried,expires_at FROM search.public_filter_observation
          WHERE (partition_no,registration)=(r.partition_no,r.id)
-           AND (observation=$5::text OR $5::text IS NULL) AND state='open'
+           AND NOT $8::boolean AND (observation=$5::text OR $5::text IS NULL) AND state='open'
            AND ($6::text IS NULL OR
              (md5(covered)=md5($6) AND covered=$6 AND prepared_build IS NOT DISTINCT FROM $7::text))
          ORDER BY observation DESC LIMIT (CASE WHEN $6::text IS NULL THEN 1 ELSE 2 END)
@@ -2465,8 +2466,9 @@ export async function readGenerationPublicationCustody(
         encode(consumer),
         consumer.incarnation,
         observation ?? null,
-        recovery ? encode(recovery.bootstrap) : null,
-        recovery?.snapshot === 'prepared' ? recovery.bootstrap.observation : null,
+        original ? encode(original.bootstrap) : null,
+        original?.snapshot === 'prepared' ? original.bootstrap.observation : null,
+        recovery === 'registration',
       ],
     );
     const row = registered.rows[0];

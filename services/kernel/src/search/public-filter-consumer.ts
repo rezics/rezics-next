@@ -645,7 +645,7 @@ import {
   repairWriterPosition,
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
-import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
+import { createDiscoveryProjection, nativeDiscoveryRegistry, readDiscoveryWriterPhysicalTarget } from './account-discovery.ts';
 import { readOwnerCandidates, type DiscoveryOwnerCandidate } from './disclosure/owner-current.ts';
 import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
 import { discoveryAliasMatches, discoveryConsumer } from './generations.ts';
@@ -829,9 +829,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   };
   function meter(
     context: PublicFilterConsumerContext,
-    maintenance = false,
+    maintenance = config.discoveryPreparation === 'repair',
     offeredInputs = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT,
-    enrollmentOnly = false,
+    enrollmentOnly = config.discoveryPreparation === 'enrollment',
   ) {
     context = { deadline: context.deadline };
     const inputLimit = Math.min(offeredInputs, PUBLIC_FILTER_PREPARATION_INPUT_LIMIT);
@@ -1389,8 +1389,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const row = (
       await m.sql<{ kinds: string[]; index_uuid: string | null; incarnation: string }>(
         `SELECT kinds,index_uuid,incarnation::text FROM search.discovery_generation
-       WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active','retiring')`,
-        [match[1], match[2]],
+       WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND
+         (state IN ('ready','active','retiring') OR ($3 AND state IN ('populating','replaying','reconciling')))`,
+        [match[1], match[2], Boolean(config.discoveryPreparation)],
       )
     ).rows[0];
     if (
@@ -1423,12 +1424,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (q.consumer.physicalTarget !== target || q.consumer.meaningDigest !== meaning.digest)
       throw new ConsumerFailure('incarnation_changed');
     if (config.discoveryTarget) {
-      if (
-        target !== discoveryIndexName(config.discoveryTarget.prefix, config.discoveryTarget.generation) ||
-        q.consumer.incarnation !== config.discoveryTarget.uuid ||
-        !(await discoveryAliasMatches(m.native, config.discoveryTarget))
-      )
+      const scope = config.discoveryTarget;
+      if (target !== discoveryIndexName(scope.prefix, scope.generation) || q.consumer.incarnation !== scope.uuid)
         throw new ConsumerFailure('incarnation_changed');
+      if (config.discoveryPreparation === 'repair') {
+        const writer = await readDiscoveryWriterPhysicalTarget(m.pool, m.native, target);
+        if (writer.allocation !== scope.incarnation || writer.incarnation !== scope.uuid)
+          throw new ConsumerFailure('incarnation_changed');
+      } else if (!(await discoveryAliasMatches(m.native, scope))) throw new ConsumerFailure('incarnation_changed');
       m.check();
       return;
     }
@@ -1498,6 +1501,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     );
     if (result.rowCount !== 1) throw new ConsumerFailure('source_pending');
     m.cost.frontierWrites++;
+    // The saved enrollment lets the next worker recover the open PIT even
+    // when a later step on this delivery fails.
+    if (registration && config.discoveryPreparation === 'repair' && q) owned.delete(q.snapshot.observation);
     return encoded;
   }
   function failure(error: unknown, m: Meter): PublicFilterConsumerUnavailable {
@@ -2215,6 +2221,28 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       work.adopted = true;
       encoded = await save(work, encoded, true, m);
     }
+    if (config.discoveryPreparation === 'repair' && !work.bootstrap.coveragePublication) {
+      // Move the original work and release the registration together. A retry
+      // finds either the enrollment or the same observation through its bootstrap.
+      const moved = await m.sql(
+        `WITH registration AS MATERIALIZED (
+           SELECT partition_no,id FROM search.public_filter_registration
+           WHERE (partition_no,id)=($1,$2) AND consumer_work=$3 AND consumer_bootstrap=$4 AND state='active'
+           FOR UPDATE
+         ), observation AS (
+           UPDATE search.public_filter_observation o SET consumer_work=$3,consumer_bootstrap=$4
+           FROM registration r WHERE (o.partition_no,o.registration,o.observation)=(r.partition_no,r.id,$5)
+             AND o.state='open' AND o.consumer_work IS NULL
+           RETURNING o.partition_no,o.registration
+         )
+         UPDATE search.public_filter_registration r SET consumer_work=NULL,consumer_bootstrap=NULL
+         FROM observation o WHERE (r.partition_no,r.id)=(o.partition_no,o.registration) RETURNING r.id`,
+        [work.registration.partition, work.registration.id, encoded, work.bootstrap.id, q.snapshot.observation],
+      );
+      if (moved.rowCount !== 1) return m.unavailable('source_pending');
+      m.cost.frontierWrites += 2;
+      return { status: 'preparing', repair: job, cost: m.cost };
+    }
     // Transfer work to THIS immutable observation before clearing the registration's bootstrap intent.
     await save(work, null, false, m);
     await m.sql(
@@ -2298,15 +2326,28 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           [registration.partition, registration.id],
         )
       ).rows[0];
-      if (old?.consumer_work)
-        return advanceCapture(
-          decodeState<ConsumerWork>(old.consumer_work),
-          old.consumer_work,
-          m,
-          context,
-          page,
-          publication,
+      if (old?.consumer_work) {
+        const retained = decodeState<ConsumerWork>(old.consumer_work);
+        // The worker owns the original mixed enrollment through adoption and repair.
+        if (page && config.discoveryTarget && !retained.bootstrap.coveragePublication)
+          return {
+            status: 'preparing',
+            repair: {
+              consumer: retained.bootstrap.consumer,
+              job: `${registration.partition}:bootstrap:${encodeURIComponent(retained.bootstrap.id)}`,
+            },
+            cost: m.cost,
+          };
+        return advanceCapture(retained, old.consumer_work, m, context, page, publication);
+      }
+      if (config.discoveryPreparation === 'enrollment') {
+        const parent = await m.sql(
+          `SELECT 1 FROM search.public_filter_observation WHERE (partition_no,registration)=($1,$2)
+             AND state='open' AND expires_at>$3 LIMIT 1`,
+          [registration.partition, registration.id, Date.now()],
         );
+        if (parent.rowCount) return m.unavailable('source_pending');
+      }
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
         source: config.source,
@@ -2320,9 +2361,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         {
           ...preparation,
           ...(!publication &&
-          !('representation' in canonical) &&
           !('purpose' in canonical) &&
-          canonical.catalogueCoverage !== true
+          ('representation' in canonical ? Boolean(config.discoveryTarget) : canonical.catalogueCoverage !== true)
             ? { usePublishedCoverage: true as const }
             : {}),
           inputLimit: Math.max(0, m.inputLimit - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE),
@@ -2330,6 +2370,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         context,
       );
       const begun = m.takePreparation(native ?? (await binding.begin(preparation, context)));
+      if (begun.status === 'repairing')
+        return {
+          status: 'preparing',
+          repair: {
+            consumer: registered.consumer,
+            job: `${registration.partition}:bootstrap:${encodeURIComponent(begun.bootstrapId)}`,
+          },
+          cost: m.cost,
+        };
       if (begun.status !== 'begun' && begun.status !== 'preparing') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(begun.bootstrap.definition, resolved.definition) ||
@@ -2354,7 +2403,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         adopted: false,
       };
       const encoded = await save(work, null, true, m);
-      if (begun.status === 'preparing' || m.enrollmentOnly) {
+      if (
+        begun.status === 'preparing' ||
+        m.enrollmentOnly ||
+        (page && config.discoveryTarget && !work.bootstrap.coveragePublication)
+      ) {
         m.enrollmentAdvanced = begun.status === 'preparing' && begun.enrollmentAdvanced;
         return {
           status: 'preparing',
@@ -2378,6 +2431,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     page?: Page,
   ): Promise<PublicFilterConsumerQuery | DiscoveryConsumerQuery> {
     let q = structuredClone(input);
+    if (config.discoveryPreparation) throw new ConsumerFailure('source_pending');
     const prefix = refill === undefined ? undefined : structuredClone(refill);
     const m = page?.m ?? meter(context);
     const preparing = () => ({ status: 'preparing' as const, queried: q, cost: m.cost });
@@ -2642,6 +2696,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let encoded = loaded.encoded;
       if (loaded.registration) {
         const result = await advanceCapture(work, encoded, m, context);
+        if (config.discoveryPreparation === 'repair' && (result.status === 'preparing' || result.status === 'captured')) {
+          if (work.materializing) owned.delete(work.materializing.snapshot.observation);
+          if (work.queried) owned.delete(work.queried.snapshot.observation);
+          if (result.status === 'preparing' && !m.enrollmentAdvanced && m.cost.frontierWrites === 0)
+            return m.unavailable('source_pending');
+        }
         return result.status === 'captured'
           ? { status: 'settled' as const, job: result.repair, cost: m.cost }
           : result.status === 'preparing'
@@ -2652,6 +2712,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               }
             : result;
       }
+      if (m.enrollmentOnly) return m.unavailable('source_pending');
       if (!work.queried) return m.unavailable('observation_lost');
       const q = work.queried;
       if (
@@ -2890,7 +2951,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           closed: complete,
         };
         encoded = await saveRepair(work, encoded, state, previous, m);
-        if (!subjectPublication && !complete) return progress();
+        if (!subjectPublication && !complete && config.discoveryPreparation !== 'repair') return progress();
         previous = encodeNative(state);
         advanced++;
       }
@@ -2902,6 +2963,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         ...m.cost,
         inputKeys: PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.inputLimit + m.cost.inputKeys,
       });
+      if (config.discoveryPreparation === 'repair' && binding.settleMixed) {
+        // Source reads Search settlement on this same allowance before each receiver ACK.
+        if (advanced > 0) return progress();
+        const result = m.take(
+          await binding.settleMixed(
+            { bootstrap: work.bootstrap.id, queried: q, execution: work.execution },
+            context,
+            spent(),
+          ),
+        );
+        if (result.status !== 'joined')
+          return 'advanced' in result && result.advanced ? progress() : m.unavailable('source_pending');
+        if (!isDeepStrictEqual(result.covered, work.bootstrap.covered) || result.execution?.id !== work.execution)
+          return m.unavailable('observation_lost');
+        return { status: 'settled' as const, job, cost: m.cost };
+      }
       const nativeSettlement = m.take(
         await withPublicFilterRepairAllowance(
           spent(),
@@ -2946,8 +3023,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const row = (
       await m.sql<{ uuid: string; incarnation: string }>(
         `SELECT index_uuid AS uuid,incarnation::text FROM search.discovery_generation
-         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active')`,
-        [prefix, generation],
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND
+           (state IN ('ready','active') OR ($3 AND state IN ('populating','replaying','reconciling')))`,
+        [prefix, generation, config.discoveryPreparation === 'repair'],
       )
     ).rows[0];
     if (!row?.uuid || row.uuid !== q.consumer.incarnation) throw new ConsumerFailure('incarnation_changed');

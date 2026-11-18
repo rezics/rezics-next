@@ -146,7 +146,7 @@ export type PublicFilterSearchBindingPort = Readonly<{
     sourceHome: number | undefined,
     context: PublicFilterConsumerContext,
     observation?: string,
-    recovery?: Readonly<{ bootstrap: PrivacyReductionStart; snapshot: 'pit' | 'prepared' }>,
+    recovery?: 'registration' | Readonly<{ bootstrap: PrivacyReductionStart; snapshot: 'pit' | 'prepared' }>,
   ): Promise<SourceBindingGenerationResult>;
   readRepairSettlement(
     pool: Pool,

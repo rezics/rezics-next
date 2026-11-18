@@ -187,6 +187,7 @@ export type PublicFilterConsumerOperationsFactory = (
     registry?: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
     discoveryAccess?: import('../request/access.ts').Access;
     discoveryTarget?: import('./account-discovery.ts').DiscoveryTarget;
+    discoveryPreparation?: 'enrollment' | 'repair';
     search: OpenSearch;
     clock: KernelClock;
     context: PublicFilterConsumerContext;
