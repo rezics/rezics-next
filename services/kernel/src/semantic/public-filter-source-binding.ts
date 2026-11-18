@@ -1822,7 +1822,8 @@ export function createNativePublicFilterSourceBinding(
       state.owner !== 'accounts' &&
       ((state.phase === 'scan' && (!replay || replay.scan)) ||
         (state.phase === 'window' && (!replay || replay.windowBatch)));
-    const offeredLimit = (scansHomes ? request.homeLimit : undefined) ?? request.inputLimit;
+    const mixedHomeLimit = 'representation' in bootstrap.definition.capture ? repairHomeBatchLimit : undefined;
+    const offeredLimit = (scansHomes ? request.homeLimit ?? mixedHomeLimit : undefined) ?? request.inputLimit;
     // A lost reply or upgrade replays the exact original range and digest.
     const inputLimit = old?.input_limit ?? offeredLimit;
     if (inputLimit !== offeredLimit && inputLimit !== request.inputLimit) throw new BindingError('owner_unavailable');
