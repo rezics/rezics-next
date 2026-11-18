@@ -22,6 +22,7 @@ import {
   settle,
   trackGrow,
   withGrowthCheck,
+  type GrowthCaptureOptions,
   type GrowthDatabase,
   type MaintenanceTarget,
 } from './growth-capture.ts';
@@ -129,8 +130,10 @@ export type GrowthCheck = {
   /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
   readonly counted?: CountedCheck;
   readonly includeBackends?: boolean;
-  /** Selects bounded cost and occurrence summaries instead of retaining raw native plan documents. */
+  /** Fold each native plan into its occurrence costs under the shared telemetry budget. */
   readonly captureMode?: 'raw' | 'cost-folded';
+  /** Keep selected foreground native documents alongside the folded costs in each repetition. */
+  readonly retainForegroundPlan?: GrowthCaptureOptions['retainForegroundPlan'];
   /** Add captures from other participating databases to this invocation before costs and summaries are computed. */
   readonly aggregateCaptures?: (
     primary: Capture,
@@ -454,7 +457,7 @@ type GrowthReportWithOccurrences<T extends StatementOccurrences> = Omit<GrowthRe
 /** Report type for the default raw capture mode, whose occurrence records retain native documents. */
 export type RawGrowthReport = GrowthReportWithOccurrences<RawStatementOccurrences>;
 
-/** Report type for folded capture mode, whose occurrence records retain bounded summaries only. */
+/** Folded costs and any selected native documents from the same repetition. */
 export type CostFoldedGrowthReport = GrowthReportWithOccurrences<FoldedStatementOccurrences>;
 
 export type ShadowVerdict = (
@@ -1164,6 +1167,8 @@ export async function checkGrowth(
       throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
     if (check.captureMode === 'cost-folded' && check.aggregateCaptures !== undefined)
       throw new TypeError(`${check.name}: aggregateCaptures is unavailable with cost-folded capture`);
+    if (check.retainForegroundPlan && check.captureMode !== 'cost-folded')
+      throw new TypeError(`${check.name}: retainForegroundPlan requires cost-folded capture`);
     const admitted = admitGrowthCheck(check);
     check = { ...check, ...admitted };
     failureContext.captureMode = check.captureMode ?? 'raw';
@@ -1335,7 +1340,10 @@ async function runGrowthCheck(
         failureContext.native = undefined;
         const captured = await captureMeasuredRun(async () =>
           check.captureMode === 'cost-folded'
-            ? captureWithFoldedCost(db, () => check.operation(db, scale, repetition), { includeBackends: true })
+            ? captureWithFoldedCost(db, () => check.operation(db, scale, repetition), {
+                includeBackends: true,
+                ...(check.retainForegroundPlan && { retainForegroundPlan: check.retainForegroundPlan }),
+              })
             : capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
         failureContext.native = captureRunFailureEvidence(captured, captured.value.capture);

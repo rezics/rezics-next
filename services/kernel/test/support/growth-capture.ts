@@ -14,9 +14,14 @@ import {
   type GrowthCaptureEvidenceSide,
   type GrowthNativeNoticeReservation,
 } from './growth-capture-budget.ts';
-import { walkPlanTree } from './growth-plan-walk.ts';
+import { explainPlanEntries, walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
-import { GrowthCostFolder, type CostFoldedCapture, type FoldedStatementInput } from './growth-cost-fold.ts';
+import {
+  GrowthCostFolder,
+  type CostFoldedCapture,
+  type FoldedStatementInput,
+  type RetainedForegroundPlan,
+} from './growth-cost-fold.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
 import {
   GROWTH_FAILURE_CAUSE_LIMIT,
@@ -140,6 +145,8 @@ type ActiveCapture = {
   readonly id: number;
   readonly budget: GrowthCaptureBudget;
   readonly costFolder: GrowthCostFolder | undefined;
+  readonly retainForegroundPlan: GrowthCaptureOptions['retainForegroundPlan'];
+  readonly retainedForegroundPlans: RetainedForegroundPlan[];
   readonly mode: 'measured' | 'warmup';
   readonly settlementOnly: boolean;
   readonly backgroundControls: { statements: number; requestBytes: number; responseBytes: number };
@@ -1141,7 +1148,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
     let reservation: GrowthNativeNoticeReservation | undefined;
     try {
       if (capture.costFolder) {
-        // Folded captures keep cost summaries; per-node entries are raw-plan retention.
+        // Reserve the entire notice before parsing, even when its tree only lives through folding.
         reservation = capture.budget.retainNativeNotice(noticeBytes, side);
         plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length));
       } else {
@@ -1155,6 +1162,25 @@ function instrument(client: PoolClient, state: CaptureState): void {
         const planIndex = capture.settlementOnly
           ? 'warmup'
           : capture.costFolder.addNotice(plan, { side, owner, backend: backendPid(client), database });
+        const select = capture.retainForegroundPlan;
+        if (
+          select &&
+          side === 'foreground' &&
+          typeof planIndex === 'number' &&
+          explainPlanEntries(plan).some(({ queryText }) => queryText !== undefined && select(queryText))
+        ) {
+          retainNativePlanNodes(plan, capture, side);
+          capture.budget.retainFoldedSummary(side, 'selected plan linkage', 0, 80);
+          capture.retainedForegroundPlans.push({
+            index: planIndex,
+            owner,
+            backend: backendPid(client),
+            statement: wireStatement?.record?.text,
+            document: plan,
+          });
+          // This notice and its parsed tree stay charged for the lifetime of the capture.
+          reservation = undefined;
+        }
         retainCapturePlanWrites(
           capture,
           plan,
@@ -1297,6 +1323,8 @@ export async function capture<T>(
 }
 
 export type GrowthCaptureOptions = {
+  /** In a folded measurement, retain foreground documents selected by actual native Query Text. */
+  readonly retainForegroundPlan?: (queryText: string) => boolean;
   readonly includeBackends?: boolean;
   /** A capture may use tighter telemetry limits for a focused check, but cannot raise the documented hard caps. */
   readonly telemetryLimits?: Partial<GrowthCaptureBudgetLimits>;
@@ -1319,6 +1347,7 @@ function foldedInputFor(active: ActiveCapture, elapsedMs: number) {
     statements: active.statementRecords.filter(({ background }) => !background) as FoldedStatementInput[],
     backgroundStatements: active.statementRecords.filter(({ background }) => background) as FoldedStatementInput[],
     backgroundControls: active.backgroundControls,
+    retainedForegroundPlans: active.retainedForegroundPlans,
     includeBackends: active.includeBackends,
   };
 }
@@ -1523,7 +1552,7 @@ function makeCaptureFailureDiagnostic(
     transactions,
     transactionStates: active.transactionHistory,
     ...(active.missingPlanOccurrences === undefined ? {} : { missingPlanOccurrences: active.missingPlanOccurrences }),
-    ...(foldedCapture === undefined ? {} : { foldedCapture }),
+    ...(foldedCapture === undefined ? { retainedForegroundPlans: active.retainedForegroundPlans } : { foldedCapture }),
     ...(runEvidence === undefined ? {} : { run: runEvidence }),
     ...(active.costFolder === undefined
       ? { costAvailability: 'native plan documents retained' }
@@ -1668,6 +1697,8 @@ async function captureInternal<T>(
     id,
     budget,
     costFolder,
+    retainForegroundPlan: mode === 'measured' ? options.retainForegroundPlan : undefined,
+    retainedForegroundPlans: [],
     mode,
     settlementOnly: mode === 'warmup' && options.settlementOnly === true,
     database,

@@ -13,9 +13,12 @@ import {
   ordinaryCountedBounds,
   planKind,
 } from '../performance/support/composed-discovery-bounds.ts';
+import { explainPlanEntries } from '../support/growth-plan-walk.ts';
 import { checkGrowth } from '../support/growth.ts';
 import { createBookComposition } from './support/book-composition.ts';
 import { captureComposedPage } from './support/composed-page-cost.ts';
+
+const privacyPlan = (text: string) => /^\s*\/\* semantic\.privacy-(start|final) \*\//.test(text);
 
 // Use the installed Book journey's single setup window for publication before growth capture.
 const setupMs = 600_000;
@@ -84,6 +87,8 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     bounds: growthSeriesBounds,
     byteBounds: growthByteBounds,
     includeBackends: true,
+    captureMode: 'cost-folded',
+    retainForegroundPlan: privacyPlan,
     repetitions: 1,
     grow: (_db, scale, previous) => world.grow(previous, scale),
     warmupSettlementOnly: true,
@@ -112,14 +117,22 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     expect(cost.statements).toBeLessThanOrEqual(composedLimitBound.statements);
     expect(cost.requestBytes + counted.engineRequestBytes!.value).toBeLessThanOrEqual(counted.requestLimit!.value);
     expect(cost.responseBytes + counted.engineResponseBytes!.value).toBeLessThanOrEqual(counted.responseLimit!.value);
-    for (const { statements } of occurrenceRepetitions) {
-      const coverage = statements.filter(({ statement }) =>
-        /^\/\* semantic\.privacy-(start|final) \*\//.test(statement),
-      );
+    for (const { statements, retainedForegroundPlans } of occurrenceRepetitions) {
+      const coverage = statements.filter(({ statement }) => privacyPlan(statement));
+      expect(retainedForegroundPlans).toHaveLength(2);
       for (const role of ['start', 'final']) {
         const observed = coverage.filter(({ statement }) => statement.startsWith(`/* semantic.privacy-${role} */`));
         expect(observed).toHaveLength(1);
-        expect(observed[0]!.plans.length).toBeGreaterThan(0);
+        const occurrence = observed[0]!;
+        const documents = retainedForegroundPlans.filter(({ owner }) => owner === occurrence.index);
+        expect(documents).toHaveLength(1);
+        const plan = documents[0]!;
+        expect(occurrence.plans).toContain(plan.index);
+        expect(occurrence.error).toBeNull();
+        expect(occurrence.backend).toEqual(expect.any(Number));
+        expect(plan.backend).toBe(occurrence.backend);
+        expect(plan.statement?.trimStart().startsWith(`/* semantic.privacy-${role} */`)).toBe(true);
+        expect(explainPlanEntries(plan.document).map(({ queryText }) => queryText)).toEqual([plan.statement]);
       }
       // All writes and their indexing precede the read. No reduction arrives during the measured page.
       expect(coverage.reduce((n, entry) => n + entry.rows, 0)).toBeLessThanOrEqual(

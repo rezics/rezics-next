@@ -348,11 +348,13 @@ export type RawStatementOccurrences = {
 };
 
 export type FoldedStatementOccurrences = {
+  readonly retainedForegroundPlans: CostFoldedCapture['retainedForegroundPlans'];
   readonly statements: readonly CostFoldedStatementOccurrence[];
   readonly backgroundStatements: readonly CostFoldedStatementOccurrence[];
 };
 
 export type StatementOccurrences = {
+  readonly retainedForegroundPlans?: CostFoldedCapture['retainedForegroundPlans'];
   readonly statements: readonly StatementOccurrence[];
   readonly backgroundStatements: readonly StatementOccurrence[];
 };
@@ -391,6 +393,7 @@ export function statementOccurrences(capture: Capture | CostFoldedCapture): Stat
       });
     };
     return {
+      retainedForegroundPlans: capture.retainedForegroundPlans,
       statements: occurrences(
         capture.statements,
         capture.statementErrors,

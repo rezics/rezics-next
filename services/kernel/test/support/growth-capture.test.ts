@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import {
@@ -10,6 +11,7 @@ import {
   trackGrow,
   type GrowthDatabase,
 } from './growth-capture.ts';
+import { explainPlanEntries } from './growth-plan-walk.ts';
 import { quotedRelationIdentity } from './growth-relation-identity.ts';
 import type { Capture } from './growth-cost.ts';
 import {
@@ -650,14 +652,28 @@ test('one composed caller folds repeated native notices within the retained tele
 
 test('checkGrowth uses the folded capture path for reports and scalar verdicts', async () => {
   const database = db!;
+  const outside = new AsyncResource('background query');
+  const sql = 'SELECT $1::integer AS value';
   const check = {
     name: 'folded capture API',
     scales: [1, 4, 16],
     repetitions: 1,
     captureMode: 'cost-folded',
+    retainForegroundPlan: (text: string) => text === sql,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async () => {},
-    operation: async () => withConnection(database.pool, (client) => client.query('SELECT 1 AS value')),
+    operation: async () =>
+      withConnection(database.pool, async (client) => {
+        await client.query('BEGIN');
+        await client.query(sql, [1]);
+        await client.query('SELECT 3 AS unselected');
+        await client.query(sql, [2]);
+        await client.query('COMMIT');
+        await outside.runInAsyncScope(async () => {
+          await database.pool.query(sql, [4]);
+          await expect(database.pool.query('SELECT 1 / 0')).rejects.toMatchObject({ code: '22012' });
+        });
+      }),
   } as const;
   const report = await checkGrowth(database, check);
 
@@ -665,12 +681,21 @@ test('checkGrowth uses the folded capture path for reports and scalar verdicts',
   expect(report.verdicts.rows.outcome).toBe('compatible');
   expect(report.verdicts.blocks.outcome).toBe('compatible');
   expect(report.verdicts.statements.outcome).toBe('compatible');
-  expect(report.samples[0]!.repetitions[0]).toMatchObject({ statements: 1 });
-  expect(report.samples[0]!.occurrenceRepetitions[0]!.statements[0]).toMatchObject({
-    statement: 'SELECT 1 AS value',
-    planDocumentAvailability: 'cost-folded',
-    plans: [0],
-  });
+  for (const sample of report.samples) {
+    expect(sample.repetitions[0]).toMatchObject({ statements: 3, controlStatements: 2, backgroundStatements: 2 });
+    const { statements, backgroundStatements, retainedForegroundPlans } = sample.occurrenceRepetitions[0]!;
+    expect(backgroundStatements[0]).toMatchObject({ index: 0, plans: [0], backend: expect.any(Number) });
+    expect(backgroundStatements[1]).toMatchObject({ index: 1, plans: [], error: { code: '22012' } });
+    expect(statements[2]).toMatchObject({ planDocumentAvailability: 'cost-folded', plans: [1] });
+    expect(retainedForegroundPlans.map(({ owner }) => owner)).toEqual([1, 3]);
+    for (const plan of retainedForegroundPlans) {
+      const occurrence = statements[plan.owner!]!;
+      expect(occurrence.plans).toEqual([plan.index]);
+      expect(plan.backend).toBe(occurrence.backend);
+      expect(plan.statement).toBe(sql);
+      expect(explainPlanEntries(plan.document)).toMatchObject([{ queryText: sql, plan: { 'Actual Rows': 1 } }]);
+    }
+  }
   await expect(
     checkGrowth(database, {
       ...check,

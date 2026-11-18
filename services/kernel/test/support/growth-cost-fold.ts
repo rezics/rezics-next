@@ -35,9 +35,19 @@ export type FoldedOccurrenceSummary = Readonly<{
   readonly catalogOnly: boolean;
 }>;
 
+/** Native foreground notice and the exact client SQL at its wire occurrence. */
+export type RetainedForegroundPlan = Readonly<{
+  index: number;
+  owner: number | undefined;
+  backend: number | undefined;
+  statement: string | undefined;
+  document: unknown;
+}>;
+
 export type CostFoldedCapture = Readonly<{
   readonly kind: 'growth-cost-folded';
-  readonly rawPlansRetained: false;
+  readonly rawPlansRetained: false | 'selected';
+  readonly retainedForegroundPlans: readonly RetainedForegroundPlan[];
   readonly statements: readonly string[];
   readonly elapsedMs: number;
   readonly requestBytes: readonly number[];
@@ -77,6 +87,7 @@ export type FoldedStatementInput = Readonly<{
 }>;
 
 export type FoldedCaptureInput = Readonly<{
+  readonly retainedForegroundPlans: readonly RetainedForegroundPlan[];
   readonly elapsedMs: number;
   readonly statements: readonly FoldedStatementInput[];
   readonly backgroundStatements: readonly FoldedStatementInput[];
@@ -336,7 +347,8 @@ export class GrowthCostFolder {
     };
     return {
       kind: 'growth-cost-folded',
-      rawPlansRetained: false,
+      rawPlansRetained: input.retainedForegroundPlans.length ? 'selected' : false,
+      retainedForegroundPlans: input.retainedForegroundPlans,
       statements: foregroundStatements,
       elapsedMs: input.elapsedMs,
       requestBytes: input.statements.map(({ requestBytes }) => requestBytes),
