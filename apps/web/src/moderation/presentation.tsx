@@ -3,8 +3,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { m } from '../paraglide/messages.js';
 
 /** Long labels wrap on the official control instead of a custom target size. */
-export const moderationControl =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words';
+export const moderationControl = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export const moderationLink =
   'inline-flex max-w-full items-center gap-2 text-sm underline underline-offset-4 [overflow-wrap:anywhere]';
@@ -23,9 +22,7 @@ export function ModerationReference({
 }) {
   return (
     <details className="min-w-0 border-t pt-2">
-      <summary className="cursor-pointer text-sm font-medium">
-        {label}
-      </summary>
+      <summary className="cursor-pointer text-sm font-medium">{label}</summary>
       <dl className="grid min-w-0 gap-4 py-3 text-sm sm:grid-cols-2">
         {fields.map((field) => (
           <div key={field.label} className="min-w-0 space-y-1">

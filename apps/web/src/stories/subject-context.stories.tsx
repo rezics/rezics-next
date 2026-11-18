@@ -73,7 +73,13 @@ function ContinuedGroup({ fallback = false }: { fallback?: boolean }) {
     content: [
       {
         type: 'SubjectList',
-        props: { id: 'editions', title: m.subject_editions(), property: 'schema:exampleOfWork', limit: 12, paged: true },
+        props: {
+          id: 'editions',
+          title: m.subject_editions(),
+          property: 'schema:exampleOfWork',
+          limit: 12,
+          paged: true,
+        },
       },
       {
         type: 'SubjectList',

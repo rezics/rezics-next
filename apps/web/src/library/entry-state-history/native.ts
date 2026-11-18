@@ -26,7 +26,7 @@ export type RestoreResult =
 function codeOf(error: unknown): string | null {
   if (!error || typeof error !== 'object') return null;
   const outer = error as Record<string, unknown>;
-  const inner = outer.value && typeof outer.value === 'object' ? outer.value as Record<string, unknown> : outer;
+  const inner = outer.value && typeof outer.value === 'object' ? (outer.value as Record<string, unknown>) : outer;
   return typeof inner.code === 'string' ? inner.code : null;
 }
 
@@ -66,10 +66,13 @@ export async function reviewEntryStateChange(
   changeRevision: number,
 ): Promise<HistoryRead<EntryStateReview>> {
   try {
-    const result = await client.libraryEntries({ subjectId })['state-history']({ changeRevision }).get({
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
+    const result = await client
+      .libraryEntries({ subjectId })
+      ['state-history']({ changeRevision })
+      .get({
+        headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
     if (result.error) return readFailure(result.status, result.error);
     const review = receiveReview(result.data);
     return review ? { kind: 'ready', value: review } : { kind: 'unavailable' };
@@ -96,9 +99,7 @@ export async function restoreEntryState(
     );
     if (!result.error) {
       const entry = receiveEntry(result.data?.libraryEntry, command.subjectId);
-      return entry &&
-        entry.incarnationId === command.incarnationId &&
-        entry.revision > command.currentRevision
+      return entry && entry.incarnationId === command.incarnationId && entry.revision > command.currentRevision
         ? { kind: 'recorded', entry }
         : { kind: 'uncertain' };
     }
@@ -108,9 +109,12 @@ export async function restoreEntryState(
     if (result.status === 403) return { kind: 'denied' };
     if (result.status === 409) {
       switch (codeOf(result.error)) {
-        case 'library_entry_state_restore_stale': return { kind: 'stale' };
-        case 'library_entry_state_restore_unavailable': return { kind: 'state_unavailable' };
-        case 'library_entry_state_restore_unchanged': return { kind: 'unchanged' };
+        case 'library_entry_state_restore_stale':
+          return { kind: 'stale' };
+        case 'library_entry_state_restore_unavailable':
+          return { kind: 'state_unavailable' };
+        case 'library_entry_state_restore_unchanged':
+          return { kind: 'unchanged' };
       }
     }
     return { kind: 'rejected' };

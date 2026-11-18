@@ -687,13 +687,21 @@ export function createImportTransport(options: ImportTransportOptions) {
         }
         const invalidReceipt = () => {
           const correlationId = safeDiagnosticField(reply.headers.get('x-request-id'), /^[A-Za-z0-9._:-]+$/u, 128);
-          return new ImportTransportError(reply.status, undefined, 'invalid_batch_receipt', false, undefined, undefined, {
-            method: 'POST',
-            origin: origin.origin,
-            path: '/v1/subjects:batchWrite',
-            phase: 'integrity',
-            ...(correlationId === undefined ? {} : { correlationId }),
-          });
+          return new ImportTransportError(
+            reply.status,
+            undefined,
+            'invalid_batch_receipt',
+            false,
+            undefined,
+            undefined,
+            {
+              method: 'POST',
+              origin: origin.origin,
+              path: '/v1/subjects:batchWrite',
+              phase: 'integrity',
+              ...(correlationId === undefined ? {} : { correlationId }),
+            },
+          );
         };
         if (checkResult(reply.body).length) throw invalidReceipt();
         const result = reply.body as BatchWriteResult;
@@ -1305,7 +1313,10 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     const reply = await exchange(
       () =>
-        client.subjects({ id: input.subjectId })['source-statistics']({ source: 'vndb' }).observations.get(fetchOptions(signal)),
+        client
+          .subjects({ id: input.subjectId })
+          ['source-statistics']({ source: 'vndb' })
+          .observations.get(fetchOptions(signal)),
       200,
       signal,
     );
@@ -1322,10 +1333,18 @@ export function createImportTransport(options: ImportTransportOptions) {
       ensure(typeof observation === 'object' && observation !== null && !Array.isArray(observation));
       ensure(observation.digest === head.digest && observation.payloadVersion === 1);
       statisticAlias(observation);
-      ensure(typeof observation.sourceAlias === 'string' && typeof observation.sourceRecordId === 'string' && typeof observation.asOf === 'string');
+      ensure(
+        typeof observation.sourceAlias === 'string' &&
+          typeof observation.sourceRecordId === 'string' &&
+          typeof observation.asOf === 'string',
+      );
       const payload = observation.payload as Record<string, unknown>;
       ensure(typeof payload === 'object' && payload !== null && !Array.isArray(payload));
-      ensure(payload.sourceAlias === observation.sourceAlias && payload.sourceRecordId === observation.sourceRecordId && payload.asOf === observation.asOf);
+      ensure(
+        payload.sourceAlias === observation.sourceAlias &&
+          payload.sourceRecordId === observation.sourceRecordId &&
+          payload.asOf === observation.asOf,
+      );
       ensure(typeof payload.count === 'number' && Number.isSafeInteger(payload.count) && payload.count >= 0);
       ensure(head.state === 'cleared' ? payload.count === 0 : payload.count > 0);
       if (head.state === 'published') {

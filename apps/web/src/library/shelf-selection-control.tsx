@@ -12,11 +12,7 @@ export function ShelfSelectionControl({
   selection?: ShelfSelectionProps | undefined;
   className?: string;
 }) {
-  if (
-    !selection ||
-    (!selection.selectable && !selection.onSelect && !selection.onSelectedChange)
-  )
-    return null;
+  if (!selection || (!selection.selectable && !selection.onSelect && !selection.onSelectedChange)) return null;
 
   return (
     <Field orientation="horizontal" className={className ?? 'w-auto'}>

@@ -268,7 +268,7 @@ export function ArchiveRecoveryResults({
         <PresentationOutcome presentation={status.presentation} />
         {collectionId ? (
           <a
-           className={buttonVariants({ variant: 'link', className: 'w-fit' })}
+            className={buttonVariants({ variant: 'link', className: 'w-fit' })}
             href={localizeHref(`/collections/${collectionId}`)}
           >
             {m.library_archive_recovery_open_collection()}
@@ -304,7 +304,8 @@ export function ArchiveRecoveryResults({
           ) : null}
           {page?.next ? (
             <Button
-              variant="outline" className={actionClass}
+              variant="outline"
+              className={actionClass}
               type="button"
               disabled={busy}
               onClick={(event) => onNext(page.next!, event)}

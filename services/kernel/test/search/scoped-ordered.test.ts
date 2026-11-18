@@ -30,7 +30,9 @@ test('closed ordering API imports the canonical native ordinal key and raw row c
   >;
   expectTypeOf<Parameters<Order['rawOrdinal']>[1]>().toEqualTypeOf<NativeOrdinalKey | null>();
   expectTypeOf<Awaited<ReturnType<Order['rawOrdinal']>>>().toEqualTypeOf<RawOrdinalCollectionPrefix>();
-  expectTypeOf<ScopedObservations>().toEqualTypeOf<Pick<IdentityScopedObservations, keyof IdentityScopedObservations>>();
+  expectTypeOf<ScopedObservations>().toEqualTypeOf<
+    Pick<IdentityScopedObservations, keyof IdentityScopedObservations>
+  >();
   expectTypeOf<Parameters<typeof createSearchScopeForService>[1]>().toEqualTypeOf<LeafOptions>();
 });
 

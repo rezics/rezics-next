@@ -287,15 +287,7 @@ export function ZoneReadBoundary({
       active = false;
       clearTimeout(timer);
     };
-  }, [
-    visit,
-    kind,
-    cursor,
-    continuation,
-    retryAfter,
-    current.automaticContinuations,
-    current.retrying,
-  ]);
+  }, [visit, kind, cursor, continuation, retryAfter, current.automaticContinuations, current.retrying]);
 
   const retry = (event?: { detail: number; currentTarget: Element | null }) => {
     const retryAllowed =
@@ -303,12 +295,7 @@ export function ZoneReadBoundary({
       ((kind === 'unavailable' || kind === 'preparing') &&
         (kind !== 'preparing' || current.automaticContinuations >= maxAutomaticContinuations) &&
         retryReady);
-    if (
-      !retryAllowed ||
-      current.retrying ||
-      activeVisit.current !== visit ||
-      pendingManual.current?.visit === visit
-    )
+    if (!retryAllowed || current.retrying || activeVisit.current !== visit || pendingManual.current?.visit === visit)
       return;
     const sequence = ++retrySequence.current;
     pendingManual.current = { visit, sequence };
@@ -396,8 +383,7 @@ export function ZoneReadBoundary({
     );
   };
 
-  const focusAcceptedResult =
-    recoveryResult?.visit === visit && recoveryResult.sequence === retrySequence.current;
+  const focusAcceptedResult = recoveryResult?.visit === visit && recoveryResult.sequence === retrySequence.current;
   const recoveryRegion = (label: string, content: ReactNode) => (
     <div
       ref={focusAcceptedResult ? recoveryResultRef : undefined}

@@ -148,9 +148,7 @@ export function ReferenceReusePanel({
       ),
     };
   };
-  const sourceAssertion = origin
-    ? assertionView(origin, `${titleId}-source-${source.holder}`, sourceLabel)
-    : undefined;
+  const sourceAssertion = origin ? assertionView(origin, `${titleId}-source-${source.holder}`, sourceLabel) : undefined;
   return (
     <section data-fact-reuse aria-labelledby={titleId} className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5">
       <ContentItemHeading id={titleId} level={2} className="text-lg font-semibold">
@@ -196,7 +194,7 @@ export function ReferenceReusePanel({
               <Field orientation="horizontal" className="min-w-0">
                 <Checkbox
                   id={id}
-                 
+
                   checked={checked}
                   disabled={!preview.ok || (!checked && selected.length >= reuseTargetLimit)}
                   onCheckedChange={(value) => {

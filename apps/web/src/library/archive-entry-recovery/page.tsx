@@ -13,7 +13,15 @@ import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } 
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 
 import { EvidenceDetails } from '../archive-progress-recovery/review';
-import { ArchiveRecordSummary, ArchiveChoiceSummary, ArchiveNativeReviewSummary, ArchiveCurrentFacts, sectionLabel, statusLabel, recordTitle } from './presentation';
+import {
+  ArchiveRecordSummary,
+  ArchiveChoiceSummary,
+  ArchiveNativeReviewSummary,
+  ArchiveCurrentFacts,
+  sectionLabel,
+  statusLabel,
+  recordTitle,
+} from './presentation';
 import { ArchiveEntryRecordLayout, ArchiveEntryWorkspace } from './entry-workspace';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -151,8 +159,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
   };
   useEffect(() => {
     if (!focusIntent?.ready) return;
-    const clearIntent = () =>
-      setFocusIntent((current) => (current?.token === focusIntent.token ? null : current));
+    const clearIntent = () => setFocusIntent((current) => (current?.token === focusIntent.token ? null : current));
     if (area !== focusIntent.area) {
       clearIntent();
       return;
@@ -176,8 +183,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         ...Array.from(workspace.current?.querySelectorAll<HTMLElement>('[data-archive-focus-trigger]') ?? []),
       ];
       const trigger = candidates.find(
-        (candidate) =>
-          candidate.isConnected && !candidate.closest('[hidden]') && !candidate.matches(':disabled'),
+        (candidate) => candidate.isConnected && !candidate.closest('[hidden]') && !candidate.matches(':disabled'),
       );
       if (trigger) trigger.focus();
     };
@@ -209,7 +215,13 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           <p>{statusLabel(phase)}</p>
           {review ? <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} /> : null}
           {snapshot?.retryOriginal ? (
-            <Button type="button" variant="outline" className={control} disabled={busy} onClick={() => act(journey!.apply())}>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              disabled={busy}
+              onClick={() => act(journey!.apply())}
+            >
               {m.library_archive_recovery_retry_original()}
             </Button>
           ) : null}
@@ -218,7 +230,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       <p>{m.library_archive_entry_cancel_help()}</p>
       <Button
         type="button"
-        variant="outline" className={control}
+        variant="outline"
+        className={control}
         disabled={phase === 'cancelling' && busy}
         onClick={() => act(journey!.cancel())}
       >
@@ -250,7 +263,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           <li key={target}>
             <Button
               type="button"
-              variant="outline" className={control}
+              variant="outline"
+              className={control}
               data-archive-focus-trigger="true"
               aria-current={(hasUpload || state?.results) && area === target ? 'step' : undefined}
               aria-controls={disabled ? undefined : id}
@@ -277,7 +291,10 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 ? m.library_archive_entry_working()
                 : ''}
       </p>
-      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' && snapshot.notice !== 'file_read_failed' ? (
+      {snapshot?.notice &&
+      snapshot.notice !== 'uncertain' &&
+      snapshot.notice !== 'file_too_large' &&
+      snapshot.notice !== 'file_read_failed' ? (
         <EvidenceDetails value={{ notice: snapshot.notice }} />
       ) : null}
     </>
@@ -310,14 +327,21 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           }}
         />
         {snapshot?.uploadUncertain && (
-          <Button type="button" variant="outline" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            disabled={busy}
+            onClick={() => act(journey!.retryUpload())}
+          >
             {m.library_archive_recovery_retry_original()}
           </Button>
         )}
         {!hasUpload && snapshot?.hasOriginalArchive ? (
           <Button
             type="button"
-            variant="outline" className={control}
+            variant="outline"
+            className={control}
             disabled={!live || uploadLocked}
             onClick={() => act(journey!.adoptOriginal())}
           >
@@ -327,7 +351,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
           <Button
             type="button"
-            variant="outline" className={control}
+            variant="outline"
+            className={control}
             disabled={!live || uploadLocked}
             onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
           >
@@ -378,7 +403,13 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           ))}
         </dl>
         <EvidenceDetails value={state!.upload!.metadata} />
-        <Button type="button" variant="outline" className={control} disabled={busy} onClick={() => act(journey!.status())}>
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          disabled={busy}
+          onClick={() => act(journey!.status())}
+        >
           {m.library_archive_entry_status()}
         </Button>
       </details>
@@ -389,7 +420,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       <div className="flex flex-wrap gap-3">
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={previewBusy || state!.pageNavigation.previous.length === 0}
           onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('previous'))}
@@ -398,7 +430,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={previewBusy}
           onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('first'))}
@@ -407,7 +440,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={previewBusy || state!.page?.context.next == null}
           onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('next'))}
@@ -416,7 +450,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={previewBusy || state!.pageNavigation.current === null}
           onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('refresh'))}
@@ -426,7 +461,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         {state!.pageNavigation.staged?.failed && (
           <Button
             type="button"
-            variant="outline" className={control}
+            variant="outline"
+            className={control}
             data-archive-focus-trigger="true"
             disabled={previewBusy}
             onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('retry'))}
@@ -439,7 +475,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       <div className="flex flex-wrap gap-3">
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={busy || state!.resultsNavigation.previous.length === 0}
           onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('previous'))}
@@ -448,7 +485,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={busy}
           onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('first'))}
@@ -457,7 +495,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={busy || state!.results?.context.next == null}
           onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('next'))}
@@ -466,7 +505,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           data-archive-focus-trigger="true"
           disabled={busy}
           onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('refresh'))}
@@ -476,7 +516,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         {state!.resultsNavigation.staged?.failed && (
           <Button
             type="button"
-            variant="outline" className={control}
+            variant="outline"
+            className={control}
             data-archive-focus-trigger="true"
             disabled={busy}
             onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('retry'))}
@@ -486,299 +527,320 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
         )}
       </div>
     ) : null;
-  const records = (hasUpload || state?.results) && !terminal ? (
-    <section
-      id="archive-rows"
-      hidden={area !== 'records'}
-      aria-labelledby="archive-rows-heading"
-      className="space-y-4"
-    >
-      <h2
-        id="archive-rows-heading"
-        tabIndex={-1}
-        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+  const records =
+    (hasUpload || state?.results) && !terminal ? (
+      <section
+        id="archive-rows"
+        hidden={area !== 'records'}
+        aria-labelledby="archive-rows-heading"
+        className="space-y-4"
       >
-        {m.library_archive_entry_records()}
-      </h2>
-      <p>{m.library_archive_entry_mapping_help()}</p>
-      {state!.results ? <p>{m.library_archive_entry_edit_help()}</p> : null}
-      {state!.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
-      {state!.page?.rows.map((row) => (
-        <ArchiveEntryRecordLayout
-          key={owner + ':' + state!.upload!.id + ':' + row.ordinal}
-          context={
-            <>
-              <h3 className="font-semibold">{recordTitle(row)}</h3>
-              <p className="text-sm">
-                {sectionLabel(row.section)} · {statusLabel(row.status)}
-              </p>
-              <ArchiveRecordSummary row={row} />
-              <ArchiveNativeReviewSummary row={row} />
-            </>
-          }
-          operation={
-            supportedRecoverySection(row.section) &&
-            !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
-              row.section === 'annotations' ? (
-                <AnnotationMappingForm
-                  key={row.ordinal + ':' + state!.upload!.id}
-                  row={row}
-                  disabled={
-                    busy ||
-                    locked ||
-                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
-                  }
-                  onChoose={(choice) => journey!.choose(choice)}
-                />
-              ) : row.section === 'journals' ? (
-                <JournalMappingForm
-                  key={row.ordinal + ':' + state!.upload!.id}
-                  row={row}
-                  disabled={
-                    busy ||
-                    locked ||
-                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
-                  }
-                  onChoose={(choice) => journey!.choose(choice)}
-                />
-              ) : row.section === 'provenance' ? (
-                <ObservationMappingForm
-                  key={row.ordinal + ':' + state!.upload!.id}
-                  row={row}
-                  disabled={
-                    busy ||
-                    locked ||
-                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
-                  }
-                  onChoose={(choice) => journey!.choose(choice)}
-                />
-              ) : (
-                <MappingForm
-                  key={row.ordinal + ':' + state!.upload!.id}
-                  row={row}
-                  disabled={
-                    busy ||
-                    locked ||
-                    (state!.choices.length >= 20 &&
-                      !state!.choices.some((choice) => choice.ordinal === row.ordinal))
-                  }
-                  onChoose={(choice) => journey!.choose(choice)}
-                />
-              )
-            ) : (
-              <p>
-                {row.section === 'provenance'
-                  ? m.library_archive_personal_observation_evidence()
-                  : m.library_archive_entry_retained()}
-              </p>
-            )
-          }
-        />
-      ))}
-      <Button
-        type="button"
-        variant="outline" className={control}
-        data-archive-focus-trigger="true"
-        onClick={(event) => showArea('review', event.currentTarget)}
-      >
-        {m.library_archive_entry_selected({ count: state!.choices.length })}
-      </Button>
-    </section>
-  ) : null;
-  const reviewPanel = (hasUpload || state?.results) && !terminal ? (
-    <section
-      id="archive-selected"
-      hidden={area !== 'review'}
-      aria-labelledby="archive-selected-heading"
-      className="space-y-3"
-    >
-      <h2
-        id="archive-selected-heading"
-        tabIndex={-1}
-        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {m.library_archive_entry_selected({ count: state!.choices.length })}
-      </h2>
-      <p>{m.library_archive_entry_assignment_help()}</p>
-      <p>{m.library_archive_entry_confirmation_help()}</p>
-      {state!.choices.map((choice) => {
-        const row = displayedRows.get(choice.ordinal);
-        return (
+        <h2
+          id="archive-rows-heading"
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {m.library_archive_entry_records()}
+        </h2>
+        <p>{m.library_archive_entry_mapping_help()}</p>
+        {state!.results ? <p>{m.library_archive_entry_edit_help()}</p> : null}
+        {state!.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
+        {state!.page?.rows.map((row) => (
           <ArchiveEntryRecordLayout
-            key={choice.ordinal}
-            context={row ? <ArchiveNativeReviewSummary row={row} /> : null}
+            key={owner + ':' + state!.upload!.id + ':' + row.ordinal}
+            context={
+              <>
+                <h3 className="font-semibold">{recordTitle(row)}</h3>
+                <p className="text-sm">
+                  {sectionLabel(row.section)} · {statusLabel(row.status)}
+                </p>
+                <ArchiveRecordSummary row={row} />
+                <ArchiveNativeReviewSummary row={row} />
+              </>
+            }
+            operation={
+              supportedRecoverySection(row.section) &&
+              !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
+                row.section === 'annotations' ? (
+                  <AnnotationMappingForm
+                    key={row.ordinal + ':' + state!.upload!.id}
+                    row={row}
+                    disabled={
+                      busy ||
+                      locked ||
+                      (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                    }
+                    onChoose={(choice) => journey!.choose(choice)}
+                  />
+                ) : row.section === 'journals' ? (
+                  <JournalMappingForm
+                    key={row.ordinal + ':' + state!.upload!.id}
+                    row={row}
+                    disabled={
+                      busy ||
+                      locked ||
+                      (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                    }
+                    onChoose={(choice) => journey!.choose(choice)}
+                  />
+                ) : row.section === 'provenance' ? (
+                  <ObservationMappingForm
+                    key={row.ordinal + ':' + state!.upload!.id}
+                    row={row}
+                    disabled={
+                      busy ||
+                      locked ||
+                      (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                    }
+                    onChoose={(choice) => journey!.choose(choice)}
+                  />
+                ) : (
+                  <MappingForm
+                    key={row.ordinal + ':' + state!.upload!.id}
+                    row={row}
+                    disabled={
+                      busy ||
+                      locked ||
+                      (state!.choices.length >= 20 && !state!.choices.some((choice) => choice.ordinal === row.ordinal))
+                    }
+                    onChoose={(choice) => journey!.choose(choice)}
+                  />
+                )
+              ) : (
+                <p>
+                  {row.section === 'provenance'
+                    ? m.library_archive_personal_observation_evidence()
+                    : m.library_archive_entry_retained()}
+                </p>
+              )
+            }
+          />
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          data-archive-focus-trigger="true"
+          onClick={(event) => showArea('review', event.currentTarget)}
+        >
+          {m.library_archive_entry_selected({ count: state!.choices.length })}
+        </Button>
+      </section>
+    ) : null;
+  const reviewPanel =
+    (hasUpload || state?.results) && !terminal ? (
+      <section
+        id="archive-selected"
+        hidden={area !== 'review'}
+        aria-labelledby="archive-selected-heading"
+        className="space-y-3"
+      >
+        <h2
+          id="archive-selected-heading"
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {m.library_archive_entry_selected({ count: state!.choices.length })}
+        </h2>
+        <p>{m.library_archive_entry_assignment_help()}</p>
+        <p>{m.library_archive_entry_confirmation_help()}</p>
+        {state!.choices.map((choice) => {
+          const row = displayedRows.get(choice.ordinal);
+          return (
+            <ArchiveEntryRecordLayout
+              key={choice.ordinal}
+              context={row ? <ArchiveNativeReviewSummary row={row} /> : null}
+              operation={
+                <>
+                  <ArchiveChoiceSummary choice={choice.choice} {...(row === undefined ? {} : { row })} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={control}
+                    disabled={busy || locked}
+                    onClick={() => journey!.unselect(choice.ordinal)}
+                  >
+                    {m.library_archive_entry_unselect({ ordinal: choice.ordinal })}
+                  </Button>
+                </>
+              }
+            />
+          );
+        })}
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          disabled={busy || locked || state!.choices.length === 0}
+          onClick={(event) => actWithFocus('review', event.currentTarget, journey!.review())}
+        >
+          {m.library_archive_entry_review()}
+        </Button>
+        {review && (
+          <div className="space-y-3 rounded border p-4">
+            {snapshot!.reviewed.map((item) => {
+              const row = displayedRows.get(item.ordinal);
+              return (
+                <p key={item.ordinal}>
+                  {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} · {statusLabel(item.status)}
+                </p>
+              );
+            })}
+            <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={busy || locked}
+                onChange={(event) => setConfirmation(event.currentTarget.checked ? review : null)}
+              />
+              {m.library_archive_entry_confirm()}
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              disabled={busy || locked || !confirmed}
+              onClick={() => {
+                setConfirmation(null);
+                act(journey!.apply());
+              }}
+            >
+              {m.library_archive_entry_apply()}
+            </Button>
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          disabled={locked}
+          onClick={(event) => showArea('records', event.currentTarget)}
+        >
+          {m.library_archive_entry_edit()}
+        </Button>
+        <p>{m.library_archive_entry_edit_help()}</p>
+      </section>
+    ) : null;
+  const resultsPanel =
+    hasUpload || state?.results ? (
+      <section
+        id="archive-results"
+        hidden={area !== 'results'}
+        aria-labelledby="archive-results-heading"
+        className="space-y-3"
+      >
+        <h2
+          id="archive-results-heading"
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {m.library_archive_results_step()}
+        </h2>
+        {phase === 'complete' ? (
+          <p role="status" className="font-semibold">
+            {m.library_archive_recovery_complete_title()}
+          </p>
+        ) : null}
+        <p>{m.library_archive_entry_result_help()}</p>
+        {!state!.results ? <p>{m.library_archive_entry_results_unread()}</p> : null}
+        {state!.results?.rows.length === 0 && <p>{m.library_archive_entry_results_empty()}</p>}
+        {state!.results?.rows.map((row) => (
+          <ArchiveEntryRecordLayout
+            key={row.ordinal}
+            context={
+              <>
+                <h3 className="font-semibold">
+                  {displayedRows.has(row.ordinal)
+                    ? recordTitle(displayedRows.get(row.ordinal)!)
+                    : m.library_archive_present_title_unavailable()}
+                </h3>
+                <p>
+                  {sectionLabel(row.section)} · {statusLabel(row.status)}
+                </p>
+              </>
+            }
             operation={
               <>
-                <ArchiveChoiceSummary choice={choice.choice} {...(row === undefined ? {} : { row })} />
-                <Button
-                  type="button"
-                  variant="outline" className={control}
-                  disabled={busy || locked}
-                  onClick={() => journey!.unselect(choice.ordinal)}
-                >
-                  {m.library_archive_entry_unselect({ ordinal: choice.ordinal })}
-                </Button>
+                <EvidenceDetails value={row} />
+                {row.subjectId && (
+                  <>
+                    <a
+                      className={control + ' inline-flex items-center underline'}
+                      href={localizeHref('/subjects/' + row.subjectId)}
+                    >
+                      {m.library_archive_entry_subject()}
+                    </a>
+                    <a className={control + ' inline-flex items-center underline'} href={localizeHref('/library')}>
+                      {m.library_archive_entry_open_library()}
+                    </a>
+                  </>
+                )}
+                {row.sessionId ? (
+                  <a
+                    className={control + ' inline-flex items-center underline'}
+                    href={localizeHref('/library/progress/' + row.sessionId)}
+                  >
+                    {m.library_archive_progress_open_session()}
+                  </a>
+                ) : null}
+                {(row.subjectId || row.labelId) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={control}
+                    disabled={busy || phase === 'expired'}
+                    onClick={() => act(journey!.readCurrent(row.ordinal))}
+                  >
+                    {m.library_archive_entry_read_current()}
+                  </Button>
+                )}
               </>
             }
           />
-        );
-      })}
-      <Button
-        type="button"
-        variant="outline" className={control}
-        disabled={busy || locked || state!.choices.length === 0}
-        onClick={(event) => actWithFocus('review', event.currentTarget, journey!.review())}
-      >
-        {m.library_archive_entry_review()}
-      </Button>
-      {review && (
-        <div className="space-y-3 rounded border p-4">
-          {snapshot!.reviewed.map((item) => {
-            const row = displayedRows.get(item.ordinal);
-            return (
-              <p key={item.ordinal}>
-                {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} · {statusLabel(item.status)}
-              </p>
-            );
-          })}
-          <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              disabled={busy || locked}
-              onChange={(event) => setConfirmation(event.currentTarget.checked ? review : null)}
-            />
-            {m.library_archive_entry_confirm()}
-          </label>
-          <Button
-            type="button"
-            variant="outline" className={control}
-            disabled={busy || locked || !confirmed}
-            onClick={() => {
-              setConfirmation(null);
-              act(journey!.apply());
-            }}
-          >
-            {m.library_archive_entry_apply()}
-          </Button>
-        </div>
-      )}
-      <Button
-        type="button"
-        variant="outline" className={control}
-        disabled={locked}
-        onClick={(event) => showArea('records', event.currentTarget)}
-      >
-        {m.library_archive_entry_edit()}
-      </Button>
-      <p>{m.library_archive_entry_edit_help()}</p>
-    </section>
-  ) : null;
-  const resultsPanel = hasUpload || state?.results ? (
-    <section
-      id="archive-results"
-      hidden={area !== 'results'}
-      aria-labelledby="archive-results-heading"
-      className="space-y-3"
-    >
-      <h2
-        id="archive-results-heading"
-        tabIndex={-1}
-        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {m.library_archive_results_step()}
-      </h2>
-      {phase === 'complete' ? (
-        <p role="status" className="font-semibold">
-          {m.library_archive_recovery_complete_title()}
-        </p>
-      ) : null}
-      <p>{m.library_archive_entry_result_help()}</p>
-      {!state!.results ? <p>{m.library_archive_entry_results_unread()}</p> : null}
-      {state!.results?.rows.length === 0 && <p>{m.library_archive_entry_results_empty()}</p>}
-      {state!.results?.rows.map((row) => (
-        <ArchiveEntryRecordLayout
-          key={row.ordinal}
-          context={
-            <>
-              <h3 className="font-semibold">
-                {displayedRows.has(row.ordinal)
-                  ? recordTitle(displayedRows.get(row.ordinal)!)
-                  : m.library_archive_present_title_unavailable()}
-              </h3>
-              <p>
-                {sectionLabel(row.section)} · {statusLabel(row.status)}
-              </p>
-            </>
-          }
-          operation={
-            <>
-              <EvidenceDetails value={row} />
-              {row.subjectId && (
-                <>
-                  <a
-                    className={control + ' inline-flex items-center underline'}
-                    href={localizeHref('/subjects/' + row.subjectId)}
-                  >
-                    {m.library_archive_entry_subject()}
-                  </a>
-                  <a className={control + ' inline-flex items-center underline'} href={localizeHref('/library')}>
-                    {m.library_archive_entry_open_library()}
-                  </a>
-                </>
-              )}
-              {row.sessionId ? (
-                <a
-                  className={control + ' inline-flex items-center underline'}
-                  href={localizeHref('/library/progress/' + row.sessionId)}
-                >
-                  {m.library_archive_progress_open_session()}
-                </a>
-              ) : null}
-              {(row.subjectId || row.labelId) && (
-                <Button
-                  type="button"
-                  variant="outline" className={control}
-                  disabled={busy || phase === 'expired'}
-                  onClick={() => act(journey!.readCurrent(row.ordinal))}
-                >
-                  {m.library_archive_entry_read_current()}
-                </Button>
-              )}
-            </>
-          }
-        />
-      ))}
-      {snapshot?.readback && <ArchiveCurrentFacts value={snapshot.readback.value} />}
-      {!terminal && (
-        <>
-          <Button
-            type="button"
-            variant="outline" className={control}
-            disabled={locked}
-            onClick={(event) => showArea('records', event.currentTarget)}
-          >
-            {m.library_archive_entry_edit()}
-          </Button>
-          <p>{m.library_archive_entry_edit_help()}</p>
-        </>
-      )}
-    </section>
-  ) : null;
+        ))}
+        {snapshot?.readback && <ArchiveCurrentFacts value={snapshot.readback.value} />}
+        {!terminal && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              disabled={locked}
+              onClick={(event) => showArea('records', event.currentTarget)}
+            >
+              {m.library_archive_entry_edit()}
+            </Button>
+            <p>{m.library_archive_entry_edit_help()}</p>
+          </>
+        )}
+      </section>
+    ) : null;
   const afterBodyActions = (
     <>
       {(hasUpload || state?.results) && !terminal && !locked ? operation : null}
       {phase === 'expired' && (
         <>
           <p>{m.library_archive_entry_expired()}</p>
-          <Button type="button" variant="outline" className={control} disabled={busy} onClick={() => act(journey!.prune())}>
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            disabled={busy}
+            onClick={() => act(journey!.prune())}
+          >
             {m.library_archive_entry_prune()}
           </Button>
         </>
       )}
       {(phase === 'complete' || phase === 'cancelled' || phase === 'expired') && live ? (
-        <Button type="button" variant="outline" className={control} disabled={busy || locked} onClick={() => journey!.restart()}>
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          disabled={busy || locked}
+          onClick={() => journey!.restart()}
+        >
           {m.library_archive_recovery_restart()}
         </Button>
       ) : null}
@@ -889,7 +951,8 @@ function MappingForm({
           <>
             <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
             <Input
-              id={`${prefix}-subject`} className="block w-full"
+              id={`${prefix}-subject`}
+              className="block w-full"
               name="subjectId"
               required
               pattern={uuidPattern}
@@ -908,10 +971,7 @@ function MappingForm({
                 value={mode}
                 onValueChange={(value) => value !== null && setMode(value)}
               >
-                <SelectTrigger
-                  id={`${prefix}-mode`}
-                  aria-labelledby={`${prefix}-mode-label`} className="block w-full"
-                >
+                <SelectTrigger id={`${prefix}-mode`} aria-labelledby={`${prefix}-mode-label`} className="block w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>
@@ -929,7 +989,8 @@ function MappingForm({
               <>
                 <label htmlFor={`${prefix}-label`}>{m.library_archive_entry_label_id()}</label>
                 <Input
-                  id={`${prefix}-label`} className="block w-full"
+                  id={`${prefix}-label`}
+                  className="block w-full"
                   name="labelId"
                   pattern={uuidPattern}
                   required
@@ -951,7 +1012,8 @@ function MappingForm({
               >
                 <SelectTrigger
                   id={`${prefix}-action`}
-                  aria-labelledby={`${prefix}-action-label`} className="block w-full"
+                  aria-labelledby={`${prefix}-action-label`}
+                  className="block w-full"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -971,7 +1033,8 @@ function MappingForm({
                 <label htmlFor={`${prefix}-state`}>{m.library_archive_entry_state_id()}</label>
                 {action === 'update' ? <p>{m.library_archive_present_replacement()}</p> : null}
                 <Input
-                  id={`${prefix}-state`} className="block w-full"
+                  id={`${prefix}-state`}
+                  className="block w-full"
                   name="stateId"
                   required
                   maxLength={64}
@@ -1065,7 +1128,8 @@ function AnnotationMappingForm({
       <fieldset disabled={disabled} className="space-y-3">
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
         <Input
-          id={`${prefix}-subject`} className="block w-full"
+          id={`${prefix}-subject`}
+          className="block w-full"
           name="subjectId"
           required
           pattern={uuidPattern}
@@ -1073,7 +1137,8 @@ function AnnotationMappingForm({
         />
         <label htmlFor={`${prefix}-incarnation`}>{m.library_archive_personal_incarnation()}</label>
         <Input
-          id={`${prefix}-incarnation`} className="block w-full"
+          id={`${prefix}-incarnation`}
+          className="block w-full"
           name="incarnationId"
           required
           pattern={uuidPattern}
@@ -1134,7 +1199,8 @@ function JournalMappingForm({
       <fieldset disabled={disabled} className="space-y-3">
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
         <Input
-          id={`${prefix}-subject`} className="block w-full"
+          id={`${prefix}-subject`}
+          className="block w-full"
           name="subjectId"
           required
           pattern={uuidPattern}
@@ -1142,7 +1208,8 @@ function JournalMappingForm({
         />
         <label htmlFor={`${prefix}-session`}>{m.library_archive_personal_session()}</label>
         <Input
-          id={`${prefix}-session`} className="block w-full"
+          id={`${prefix}-session`}
+          className="block w-full"
           name="sessionId"
           required
           pattern={uuidPattern}
@@ -1264,7 +1331,8 @@ function ObservationMappingForm({
         <label htmlFor={`${prefix}-subject`} className="block space-y-1">
           <span>{m.library_archive_entry_subject_id()}</span>
           <Input
-            id={`${prefix}-subject`} className="block w-full"
+            id={`${prefix}-subject`}
+            className="block w-full"
             name="subjectId"
             required
             pattern={uuidPattern}
@@ -1283,10 +1351,7 @@ function ObservationMappingForm({
               if (value === 'admit' || value === 'correct') setAction(value);
             }}
           >
-            <SelectTrigger
-              id={`${prefix}-action`}
-              aria-labelledby={`${prefix}-action-label`} className="block w-full"
-            >
+            <SelectTrigger id={`${prefix}-action`} aria-labelledby={`${prefix}-action-label`} className="block w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
@@ -1305,7 +1370,8 @@ function ObservationMappingForm({
             <label htmlFor={`${prefix}-revision`} className="block space-y-1">
               <span>{m.library_archive_observation_revision()}</span>
               <Input
-                id={`${prefix}-revision`} className="block w-full"
+                id={`${prefix}-revision`}
+                className="block w-full"
                 name="revision"
                 type="number"
                 min="1"

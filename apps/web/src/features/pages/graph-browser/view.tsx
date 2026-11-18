@@ -1070,7 +1070,8 @@ export function GraphBrowserPage({
       if (!intent) return;
       if (event.type === 'focusin') {
         const target = event.target;
-        if (target === intent.opener || target === ownerDocument.body || target === ownerDocument.documentElement) return;
+        if (target === intent.opener || target === ownerDocument.body || target === ownerDocument.documentElement)
+          return;
       }
       presentationIntentRef.current = null;
     };
@@ -1227,11 +1228,7 @@ export function GraphBrowserPage({
         </p>
       )}
       <p className="max-w-prose text-muted-foreground">{m.graph_explore_intro({}, o)}</p>
-      {status === 'pending' && (
-        <p role="status">
-          {m.graph_explore_loading({}, o)}
-        </p>
-      )}
+      {status === 'pending' && <p role="status">{m.graph_explore_loading({}, o)}</p>}
       {error && (
         <div className="space-y-3 rounded-lg border p-4">
           <p ref={failureRef} role="alert" tabIndex={-1}>

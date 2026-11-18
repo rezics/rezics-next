@@ -15,12 +15,7 @@ import { subjectHref } from '../src/subject/subject-href';
 // Render and cache-key cases supply only the unused Worker environment boundary; SDK transport remains explicit.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { subjectPageTitle, pageContext } = await import('../src/features/pages/subject');
-const {
-  loadSubjectPage,
-  SubjectPage,
-  subjectBody,
-  subjectPageJsonLd,
-} = await import('../src/features/pages/subject');
+const { loadSubjectPage, SubjectPage, subjectBody, subjectPageJsonLd } = await import('../src/features/pages/subject');
 const { renderSubject } = await import('./helpers/subject-render');
 const { loadViewPages, SubjectViewPage } = await import('../src/features/pages/subject-frame');
 const { assertSamePageContext, contextSubjectAddress, loadContextSubject } =

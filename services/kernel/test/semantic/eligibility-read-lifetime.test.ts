@@ -123,7 +123,13 @@ function poolOf(...checkouts: Array<() => Promise<PoolClient>>) {
 type Binding = Parameters<typeof prepareAnonymousEligibility>[0];
 type Context = Parameters<typeof prepareAnonymousEligibility>[1];
 
-function prepare(entry: Case, eligibility: ResourceEligibility, pool: Pool, deadline: number, work: AccessWorkAccounting) {
+function prepare(
+  entry: Case,
+  eligibility: ResourceEligibility,
+  pool: Pool,
+  deadline: number,
+  work: AccessWorkAccounting,
+) {
   return prepareAnonymousEligibility(
     {
       actor: {} as Binding['actor'],
@@ -140,7 +146,10 @@ function assertPoint(entry: Case, calls: readonly NativeCall[]) {
   const [call] = calls;
   assert.ok(call);
   assert.equal(call.text, entry.statement.sql);
-  assert.deepEqual(call.values, entry.statement.params.map((name) => entry.input[name]));
+  assert.deepEqual(
+    call.values,
+    entry.statement.params.map((name) => entry.input[name]),
+  );
   assert.ok(Number.isInteger(call.query_timeout) && call.query_timeout >= 1 && call.query_timeout <= 250);
 }
 
@@ -170,7 +179,7 @@ for (const entry of cases) {
     const deadline = budget();
     const { work, receipts } = ledger(deadline);
 
-    assert.equal(typeof await prepare(entry, eligibility, source.pool, deadline, work), 'function');
+    assert.equal(typeof (await prepare(entry, eligibility, source.pool, deadline, work)), 'function');
     assert.equal(source.connects, 1);
     assertPoint(entry, healthy.calls);
     assert.deepEqual(healthy.releases, [undefined]);
@@ -214,7 +223,10 @@ for (const entry of cases) {
       return native.promise;
     });
     const healthy = lease(async () => ({ rows: [entry.row] }));
-    const source = poolOf(async () => stalled.client, async () => healthy.client);
+    const source = poolOf(
+      async () => stalled.client,
+      async () => healthy.client,
+    );
     const firstDeadline = budget();
     const first = ledger(firstDeadline);
     const attempt = prepare(entry, eligibility, source.pool, firstDeadline, first.work);
@@ -234,7 +246,7 @@ for (const entry of cases) {
 
     const recoveryDeadline = budget();
     const recovery = ledger(recoveryDeadline);
-    assert.equal(typeof await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work), 'function');
+    assert.equal(typeof (await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work)), 'function');
     assert.equal(source.connects, 2);
     assertPoint(entry, healthy.calls);
     assert.deepEqual(healthy.releases, [undefined]);
@@ -248,7 +260,10 @@ for (const entry of cases) {
       throw rejection;
     });
     const healthy = lease(async () => ({ rows: [entry.row] }));
-    const source = poolOf(async () => failed.client, async () => healthy.client);
+    const source = poolOf(
+      async () => failed.client,
+      async () => healthy.client,
+    );
     const firstDeadline = budget();
     const first = ledger(firstDeadline);
 
@@ -259,7 +274,7 @@ for (const entry of cases) {
 
     const recoveryDeadline = budget();
     const recovery = ledger(recoveryDeadline);
-    assert.equal(typeof await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work), 'function');
+    assert.equal(typeof (await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work)), 'function');
     assert.equal(source.connects, 2);
     assertPoint(entry, healthy.calls);
     assert.deepEqual(healthy.releases, [undefined]);
@@ -272,7 +287,10 @@ for (const entry of cases) {
       throw new Error('query read timeout');
     });
     const healthy = lease(async () => ({ rows: [entry.row] }));
-    const source = poolOf(async () => failed.client, async () => healthy.client);
+    const source = poolOf(
+      async () => failed.client,
+      async () => healthy.client,
+    );
     const firstDeadline = budget();
     const first = ledger(firstDeadline);
 
@@ -284,7 +302,7 @@ for (const entry of cases) {
 
     const recoveryDeadline = budget();
     const recovery = ledger(recoveryDeadline);
-    assert.equal(typeof await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work), 'function');
+    assert.equal(typeof (await prepare(entry, eligibility, source.pool, recoveryDeadline, recovery.work)), 'function');
     assert.equal(source.connects, 2);
     assertPoint(entry, healthy.calls);
     assert.deepEqual(healthy.releases, [undefined]);

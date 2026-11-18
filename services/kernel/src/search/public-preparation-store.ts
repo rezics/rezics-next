@@ -187,7 +187,11 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
         );
         const next = result.rows[0];
         if (next && (!readySuccessor || delayMs !== 0))
-          await enqueueWorkIntent(work, client, intent(record.id, next.revision, schedule(locator), Date.now() + delayMs));
+          await enqueueWorkIntent(
+            work,
+            client,
+            intent(record.id, next.revision, schedule(locator), Date.now() + delayMs),
+          );
         // If the caller or a competing delivery cannot claim this ready
         // successor, due() can still discover the committed revision.
         return next?.revision ?? null;

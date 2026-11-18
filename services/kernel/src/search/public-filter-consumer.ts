@@ -645,7 +645,11 @@ import {
   repairWriterPosition,
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
-import { createDiscoveryProjection, nativeDiscoveryRegistry, readDiscoveryWriterPhysicalTarget } from './account-discovery.ts';
+import {
+  createDiscoveryProjection,
+  nativeDiscoveryRegistry,
+  readDiscoveryWriterPhysicalTarget,
+} from './account-discovery.ts';
 import { readOwnerCandidates, type DiscoveryOwnerCandidate } from './disclosure/owner-current.ts';
 import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
 import { discoveryAliasMatches, discoveryConsumer } from './generations.ts';
@@ -2696,7 +2700,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let encoded = loaded.encoded;
       if (loaded.registration) {
         const result = await advanceCapture(work, encoded, m, context);
-        if (config.discoveryPreparation === 'repair' && (result.status === 'preparing' || result.status === 'captured')) {
+        if (
+          config.discoveryPreparation === 'repair' &&
+          (result.status === 'preparing' || result.status === 'captured')
+        ) {
           if (work.materializing) owned.delete(work.materializing.snapshot.observation);
           if (work.queried) owned.delete(work.queried.snapshot.observation);
           if (result.status === 'preparing' && !m.enrollmentAdvanced && m.cost.frontierWrites === 0)

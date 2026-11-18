@@ -55,7 +55,10 @@ function libraryStateRevision(value: unknown): LibraryStateRevision | undefined 
 }
 
 async function bookShelfEntries(response: Response): Promise<BookShelfEntryObservation[] | undefined> {
-  const body = (await response.clone().json().catch(() => null)) as { libraryEntries?: unknown } | null;
+  const body = (await response
+    .clone()
+    .json()
+    .catch(() => null)) as { libraryEntries?: unknown } | null;
   if (!Array.isArray(body?.libraryEntries) || body.libraryEntries.length > 20) return;
   const entries: BookShelfEntryObservation[] = [];
   for (const value of body.libraryEntries as unknown[]) {
@@ -1389,7 +1392,12 @@ async function startStack(): Promise<
             ? /^\/v1\/libraryEntries\/([^/?]+)$/u.exec(observed.url)
             : null;
         if (bookLibraryStateRoute) {
-          const command = libraryStateRevision(await request.clone().json().catch(() => undefined));
+          const command = libraryStateRevision(
+            await request
+              .clone()
+              .json()
+              .catch(() => undefined),
+          );
           if (command) observed.libraryStateCommand = command;
         }
         if (request.method === 'PUT' && url.pathname === '/v1/libraryHostedReading' && !observed.fixtureRequest) {
@@ -1442,7 +1450,10 @@ async function startStack(): Promise<
             observed.bookShelfEntries = await bookShelfEntries(response);
           }
           if (bookLibraryStateRoute && response.status === 200) {
-            const body = (await response.clone().json().catch(() => null)) as {
+            const body = (await response
+              .clone()
+              .json()
+              .catch(() => null)) as {
               libraryEntry?: { subjectId?: unknown };
             } | null;
             const entry = body?.libraryEntry;

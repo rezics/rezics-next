@@ -82,7 +82,9 @@ function ReferenceIds({ reference }: { reference: { postId: string; revisionId: 
   return (
     <dl className="grid min-w-0 gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
       <dt>{m.realm_rules_authoring_revision()}</dt>
-      <dd className="break-all">{reference.postId} / {reference.revisionId}</dd>
+      <dd className="break-all">
+        {reference.postId} / {reference.revisionId}
+      </dd>
     </dl>
   );
 }
@@ -102,8 +104,7 @@ function CurrentRules({
 
   const current = read.value.current;
   const currentReference = current.state === 'none' ? null : current.reference;
-  if (!sameReference(currentReference, reference))
-    return <p role="status">{m.realm_appearance_unavailable()}</p>;
+  if (!sameReference(currentReference, reference)) return <p role="status">{m.realm_appearance_unavailable()}</p>;
   if (current.state !== 'available') return <p role="status">{rulesReadLabel(read)}</p>;
 
   return (
@@ -189,20 +190,23 @@ export function RealmRulesAuthoringPanel({
   const attachedReference = state.read.kind === 'ready' ? state.read.snapshot.presentation.rules : null;
   const candidateAttached = Boolean(
     published &&
-      (attachOutcome === 'saved' ||
-        (attachedReference &&
-          attachedReference.postId === published.postId &&
-          attachedReference.revisionId === published.revisionId)),
+    (attachOutcome === 'saved' ||
+      (attachedReference &&
+        attachedReference.postId === published.postId &&
+        attachedReference.revisionId === published.revisionId)),
   );
   const pendingCandidate = Boolean(
     published &&
-      (!candidateAttached || attachOutcome === 'conflict' || attachOutcome === 'uncertain' || attachOutcome === 'unavailable'),
+    (!candidateAttached ||
+      attachOutcome === 'conflict' ||
+      attachOutcome === 'uncertain' ||
+      attachOutcome === 'unavailable'),
   );
   const createPermitted = Boolean(
     prepared?.kind === 'ready' &&
-      prepared.value.actions.create.state === 'allowed' &&
-      destinationPage?.state === 'available' &&
-      destinations.some((item) => item.create.state === 'allowed'),
+    prepared.value.actions.create.state === 'allowed' &&
+    destinationPage?.state === 'available' &&
+    destinations.some((item) => item.create.state === 'allowed'),
   );
   const head = snapshot.head;
   const previousHead = useRef(head);
@@ -387,7 +391,7 @@ export function RealmRulesAuthoringPanel({
       const readLabel = rulesReadLabel(prepared);
       if (readLabel) return readLabel;
       return prepared.value.current.state === 'available'
-        ? prepared.value.current.title ?? m.realm_rules_authoring_title_unknown()
+        ? (prepared.value.current.title ?? m.realm_rules_authoring_title_unknown())
         : m.realm_appearance_rules_unavailable();
     }
     return state.read.snapshot.rules.state === 'available'
@@ -479,9 +483,7 @@ export function RealmRulesAuthoringPanel({
                 {m.board_start_thread()}
               </h4>
               <Field className="space-y-2">
-                <FieldLabel htmlFor={ids + '-board'}>
-                  {m.realm_rules_authoring_destination()}
-                </FieldLabel>
+                <FieldLabel htmlFor={ids + '-board'}>{m.realm_rules_authoring_destination()}</FieldLabel>
                 <SharedSelect.Select
                   value={boardId || null}
                   required
@@ -559,10 +561,7 @@ export function RealmRulesAuthoringPanel({
                     checked={attribution}
                     onCheckedChange={(checked) => setAttribution(checked === true)}
                   />
-                  <FieldLabel
-                    htmlFor={ids + '-attribution'}
-                    className="flex flex-1 items-start text-sm leading-6"
-                  >
+                  <FieldLabel htmlFor={ids + '-attribution'} className="flex flex-1 items-start text-sm leading-6">
                     {m.realm_rules_authoring_attribution()}
                   </FieldLabel>
                 </Field>
@@ -665,7 +664,12 @@ export function RealmRulesAuthoringPanel({
                   setReload((value) => value + 1);
                 }}
                 onSuccess={(post) => {
-                  if (!lifetime?.current() || post.availability !== 'available' || !('revisionId' in post) || !post.body)
+                  if (
+                    !lifetime?.current() ||
+                    post.availability !== 'available' ||
+                    !('revisionId' in post) ||
+                    !post.body
+                  )
                     return;
                   setPublished({
                     postId: post.id,
@@ -783,12 +787,8 @@ export function RealmRulesAuthoringPanel({
                   </Button>
                 </div>
               ) : null}
-              {attachOutcome === 'denied' ? (
-                <p role="alert">{m.community_management_denied()}</p>
-              ) : null}
-              {attachOutcome === 'unavailable' ? (
-                <p role="status">{m.realm_appearance_unavailable()}</p>
-              ) : null}
+              {attachOutcome === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
+              {attachOutcome === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
               {prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'denied' ? (
                 <p role="status">{m.community_management_denied()}</p>
               ) : null}
@@ -879,12 +879,8 @@ export function RealmRulesAuthoringPanel({
                   </Button>
                 </div>
               ) : null}
-              {attachOutcome === 'denied' ? (
-                <p role="alert">{m.community_management_denied()}</p>
-              ) : null}
-              {attachOutcome === 'unavailable' ? (
-                <p role="status">{m.realm_appearance_unavailable()}</p>
-              ) : null}
+              {attachOutcome === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
+              {attachOutcome === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
               <Button type="button" variant="outline" onClick={openReview}>
                 {m.realm_rules_authoring_review()}
               </Button>
@@ -925,7 +921,9 @@ export function RealmRulesAuthoringPanel({
                   <dt>{m.realm_rules_authoring_author()}</dt>
                   <dd className="break-all">{published.authorId}</dd>
                   <dt>{m.realm_rules_authoring_revision()}</dt>
-                  <dd className="break-all">{published.postId} / {published.revisionId}</dd>
+                  <dd className="break-all">
+                    {published.postId} / {published.revisionId}
+                  </dd>
                   <dt>{m.thread_history_licence()}</dt>
                   <dd className="break-words">{published.licence}</dd>
                   <dt>{m.realm_rules_authoring_language()}</dt>
@@ -933,7 +931,7 @@ export function RealmRulesAuthoringPanel({
                 </dl>
                 <div
                   lang={published.language ?? undefined}
-                    className="max-h-96 min-w-0 overflow-auto break-words rounded-lg border bg-background p-3"
+                  className="max-h-96 min-w-0 overflow-auto break-words rounded-lg border bg-background p-3"
                 >
                   <DocumentBody
                     document={published.body}

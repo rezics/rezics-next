@@ -147,11 +147,7 @@ function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario })
           <p>Illustrative native checkpoint responses through the actual checkpoint and Book reader components.</p>
           {scenario === 'replaced-visit' ? (
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                disabled={!pending}
-                onClick={() => setGeneration((value) => value + 1)}
-              >
+              <Button variant="outline" disabled={!pending} onClick={() => setGeneration((value) => value + 1)}>
                 Replace reading visit
               </Button>
               <Button

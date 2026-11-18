@@ -2107,7 +2107,11 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         const headerKey = `${provider}/${table}.header`,
           hash = createHash('sha256').update(header!).digest('hex');
         if (this.digests.has(headerKey) && this.digests.get(headerKey) !== hash)
-          throw seedPreparationFailure(new TypeError('Dump changed during selection'), 'vndb-table-read', 'table-changed');
+          throw seedPreparationFailure(
+            new TypeError('Dump changed during selection'),
+            'vndb-table-read',
+            'table-changed',
+          );
         this.digests.set(headerKey, hash);
       } catch (error) {
         throw seedPreparationFailure(error, 'vndb-table-read', 'table-header-invalid');

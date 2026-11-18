@@ -42,12 +42,13 @@ export function SetupBoardPicker({
   const pager = useMemo(() => new BoardChoicePager(setPage), []);
   const resultRegion = useRef<HTMLDivElement>(null);
   const keyboardPosition = useRef<
-    (BoardChoiceScope & {
-      version: number;
-      activator: HTMLButtonElement;
-      ownerDocument: Document;
-      sawLoading: boolean;
-    }) | null
+    | (BoardChoiceScope & {
+        version: number;
+        activator: HTMLButtonElement;
+        ownerDocument: Document;
+        sawLoading: boolean;
+      })
+    | null
   >(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const keyboardPositionCleanup = useRef<(() => void) | null>(null);
@@ -105,13 +106,8 @@ export function SetupBoardPicker({
     const activeElement = ownerDocument.activeElement;
     const stillOwnsFocus = pending.activator.isConnected
       ? activeElement === pending.activator
-      : pending.sawLoading &&
-        (activeElement === ownerDocument.body || activeElement === ownerDocument.documentElement);
-    if (
-      !ownerDocument.hasFocus() ||
-      ownerDocument.visibilityState === 'hidden' ||
-      !stillOwnsFocus
-    ) {
+      : pending.sawLoading && (activeElement === ownerDocument.body || activeElement === ownerDocument.documentElement);
+    if (!ownerDocument.hasFocus() || ownerDocument.visibilityState === 'hidden' || !stillOwnsFocus) {
       cancelKeyboardPosition();
       return;
     }
@@ -171,11 +167,7 @@ export function SetupBoardPicker({
   };
   return (
     <Field className="min-w-0 text-start [overflow-wrap:anywhere]">
-      <FieldLabel
-        id={`${id}-label`}
-        htmlFor={id}
-        className="min-w-0 max-w-full whitespace-normal text-start"
-      >
+      <FieldLabel id={`${id}-label`} htmlFor={id} className="min-w-0 max-w-full whitespace-normal text-start">
         {label}
       </FieldLabel>
       <FieldDescription id={`${id}-hint`} className="min-w-0 text-start leading-relaxed">
@@ -271,11 +263,7 @@ export function SetupBoardPicker({
           )
         ) : shown.status !== 'loading' ? (
           <div className="space-y-3 rounded-xl border border-border bg-muted/50 p-4">
-            <p
-              id={`${id}-recovery-status`}
-              role="status"
-              className="text-sm leading-relaxed text-muted-foreground"
-            >
+            <p id={`${id}-recovery-status`} role="status" className="text-sm leading-relaxed text-muted-foreground">
               {shown.status === 'denied'
                 ? m.space_setup_denied()
                 : shown.status === 'stale'
@@ -297,9 +285,7 @@ export function SetupBoardPicker({
                 disabled={disabled}
                 aria-describedby={`${id}-recovery-status`}
                 onClick={(event) =>
-                  pageAction(event, shown.status !== 'ready' && shown.status !== 'loading', () =>
-                    pager.retry(expected),
-                  )
+                  pageAction(event, shown.status !== 'ready' && shown.status !== 'loading', () => pager.retry(expected))
                 }
               >
                 {m.space_setup_retry()}
@@ -311,9 +297,7 @@ export function SetupBoardPicker({
                   className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
                   disabled={disabled}
                   aria-describedby={`${id}-recovery-status ${id}-restart-hint`}
-                  onClick={(event) =>
-                    pageAction(event, shown.canRestart === true, () => pager.restart(expected))
-                  }
+                  onClick={(event) => pageAction(event, shown.canRestart === true, () => pager.restart(expected))}
                 >
                   {m.space_setup_board_choice_restart()}
                 </Button>

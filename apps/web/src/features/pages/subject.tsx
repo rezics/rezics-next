@@ -1635,11 +1635,7 @@ export function SubjectPage({
                             {literarySubject && (
                               <LiteraryOverviewDestinations
                                 anchor
-                                readingType={
-                                  page.catalogue?.state === 'released'
-                                    ? literarySubject.type
-                                    : undefined
-                                }
+                                readingType={page.catalogue?.state === 'released' ? literarySubject.type : undefined}
                                 subject={literarySubject.id}
                                 locale={locale}
                                 context={page.context}

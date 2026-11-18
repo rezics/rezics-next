@@ -99,10 +99,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       }
     } catch (cause) {
       this.#db.close();
-      throw new TypeError(
-        'Showcase journal requires the canonical schema; explicit state maintenance is required',
-        { cause },
-      );
+      throw new TypeError('Showcase journal requires the canonical schema; explicit state maintenance is required', {
+        cause,
+      });
     }
     if (path !== ':memory:') chmodSync(path, 0o600);
     this.#db.exec(`

@@ -649,8 +649,7 @@ export function createSearchGenerationPublication(
       if (!connection || released) return;
       released = true;
       connection.release(
-        broken ??
-          (mayOwnLock ? new Error('Generation publication session lock ownership is uncertain') : undefined),
+        broken ?? (mayOwnLock ? new Error('Generation publication session lock ownership is uncertain') : undefined),
       );
     };
     try {
@@ -1045,7 +1044,9 @@ export function createSearchGenerationPublication(
           add(meter, page.cost);
           if (page.status !== 'eligible') {
             console.warn('Search publication trace', {
-              gate: 'source-page', home: job.home, status: page.status,
+              gate: 'source-page',
+              home: job.home,
+              status: page.status,
               reason: 'reason' in page ? page.reason : undefined,
             });
             job.after_route = null;
@@ -1061,11 +1062,18 @@ export function createSearchGenerationPublication(
           }
           if (page.partition !== job.home || page.epoch !== before.epoch || page.position !== BigInt(before.position)) {
             console.warn('Search publication trace', {
-              gate: 'source-head', before, partition: page.partition, epoch: page.epoch, position: page.position.toString(),
+              gate: 'source-head',
+              before,
+              partition: page.partition,
+              epoch: page.epoch,
+              position: page.position.toString(),
             });
             // A same-owner advance only invalidates this page. Read it again
             // from its first key under the held fence before witnessing it.
-            if (page.partition === before.partition && advancedUnderSubjectFence(job, before, page.epoch, page.position))
+            if (
+              page.partition === before.partition &&
+              advancedUnderSubjectFence(job, before, page.epoch, page.position)
+            )
               return rewindSubjectHome(job, before.partition, client, meter);
             throw new Pending('source_pending');
           }
@@ -1254,9 +1262,7 @@ export function createSearchGenerationPublication(
         if (job.fenced_pass && (coverage.missing.length || coverage.extra.length)) throw new Pending('source_pending');
         const before = await head(group.partition, context);
         const verifyChanged =
-          job.family === 'subjects'
-            ? () => verifyChangedEngineHome(job, before, group.ids, context, meter)
-            : undefined;
+          job.family === 'subjects' ? () => verifyChangedEngineHome(job, before, group.ids, context, meter) : undefined;
         const remembered = await remember(job, before, client, meter, verifyChanged);
         if (remembered === 'rewound') return;
         if (remembered === 'verified') continue;

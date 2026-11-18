@@ -382,11 +382,7 @@ export function MineCollectionsPageView({
   );
   if (requestedAddress.addressError) return <MineCollectionsAddressRecovery address={requestedAddress} />;
   const directory = (
-    <section
-      aria-labelledby="mine-collections-directory-heading"
-      className="min-w-0 space-y-4"
-      data-current-directory
-    >
+    <section aria-labelledby="mine-collections-directory-heading" className="min-w-0 space-y-4" data-current-directory>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div id="mine-collections-directory-heading" className="min-w-0">
           <PageHeading>{m.library_collections_heading()}</PageHeading>
@@ -568,17 +564,18 @@ export function MineCollectionsPageView({
       ) : null}
     </section>
   );
-  const savedQueries = loaded && viewerId ? (
-    <SavedQueryDirectory
-      collections={page.collections}
-      capability={savedQueryCapability}
-      viewerId={viewerId}
-      canEditRules={canEditRules}
-      currentHref={currentHref}
-      next={page.next}
-      layout={layout}
-    />
-  ) : null;
+  const savedQueries =
+    loaded && viewerId ? (
+      <SavedQueryDirectory
+        collections={page.collections}
+        capability={savedQueryCapability}
+        viewerId={viewerId}
+        canEditRules={canEditRules}
+        currentHref={currentHref}
+        next={page.next}
+        layout={layout}
+      />
+    ) : null;
   return (
     <MineCollectionsWorkspace
       directory={directory}

@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Pool, PoolClient } from 'pg';
-import {
-  AccessUnavailableError,
-  classifyUnavailability,
-  requireAccessDeadline,
-} from '../../src/access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../../src/access/unavailable.ts';
 import type { NativeReadQueryConfig } from '../../src/database/bounded-read-lifetime.ts';
 import type { PublicFilterSourceFactory } from '../../src/semantic/public-filter-source-contract.ts';
 import type {

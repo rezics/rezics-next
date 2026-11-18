@@ -434,7 +434,10 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                     </p>
                   ) : null}
                   {originalPresentation && originalPresentation.cover.state !== 'available' ? (
-                    <p data-publication-cover={originalPresentation.cover.state} className="text-sm text-muted-foreground">
+                    <p
+                      data-publication-cover={originalPresentation.cover.state}
+                      className="text-sm text-muted-foreground"
+                    >
                       {originalPresentation.cover.state === 'empty'
                         ? m.realm_publication_cover_empty()
                         : originalPresentation.cover.state === 'concealed'
@@ -555,10 +558,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               <h4 className="font-semibold">{m.realm_publication_terminal_subject()}</h4>
               <p className="break-words text-sm">{preparation.subject.currentId}</p>
               {terminalPresentation && terminalPresentation.label.state !== 'available' ? (
-                <p
-                  data-publication-label={terminalPresentation.label.state}
-                  className="text-sm text-muted-foreground"
-                >
+                <p data-publication-label={terminalPresentation.label.state} className="text-sm text-muted-foreground">
                   {terminalPresentation.label.state === 'empty'
                     ? m.realm_publication_label_empty()
                     : terminalPresentation.label.state === 'concealed'
@@ -577,7 +577,6 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               ) : null}
             </section>
           ) : null}
-
 
           {control.preparationState && control.preparationState !== 'ready' ? (
             <div role="status" className="min-w-0 max-w-xl space-y-2 text-sm">
@@ -607,7 +606,9 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               {control.target ? (
                 <>
                   <p>{m.realm_publication_original_subject()}</p>
-                  <p className="break-words"><bdi>{control.target.id}</bdi></p>
+                  <p className="break-words">
+                    <bdi>{control.target.id}</bdi>
+                  </p>
                 </>
               ) : null}
               {control.action ? <p>{actionLabel(control.action)}</p> : null}

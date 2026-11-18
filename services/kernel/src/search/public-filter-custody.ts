@@ -202,11 +202,7 @@ function operationCost(pool: Pool, context: PublicFilterConsumerContext): Meter 
 }
 
 /** Keep the original Pool's checkout/release custody, including a checkout arriving after expiry. */
-function connection<T>(
-  meter: Meter,
-  work: (client: PoolClient) => Promise<T>,
-  unfinished?: () => boolean,
-): Promise<T> {
+function connection<T>(meter: Meter, work: (client: PoolClient) => Promise<T>, unfinished?: () => boolean): Promise<T> {
   const { pool, context } = lifetimes.get(meter)!;
   let physical: PoolClient | undefined;
   return withBoundedReadLifetime(
@@ -615,8 +611,7 @@ export async function readPublicFilterRepairSettlement(
         inputs > 1000 ||
         spent.bytes + meter.bytes > 4 * 1024 * 1024 ||
         spent.rows + meter.rows > 64 + 16 * width ||
-        spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints >
-          16 + 8 * width
+        spent.accessPoints + meter.accessPoints + spent.dependencyPoints + meter.dependencyPoints > 16 + 8 * width
       )
         throw new Failure('owner_unavailable');
     };
@@ -1247,7 +1242,14 @@ export function createPublicFilterCustody(
             `UPDATE search.public_filter_registration SET definition=$6
              WHERE (partition_no,id,physical_target)=($1,$2,$3)
                AND consumer=$4 AND definition=$5 AND state='active' RETURNING id`,
-            [identity.partition, identity.id, consumer.physicalTarget, encodedConsumer, retained.previous, retained.encoded],
+            [
+              identity.partition,
+              identity.id,
+              consumer.physicalTarget,
+              encodedConsumer,
+              retained.previous,
+              retained.encoded,
+            ],
           );
           if (!upgraded.rowCount) throw new Failure('binding_mismatch');
         });
@@ -1722,9 +1724,7 @@ export function createPublicFilterCustody(
       return run(context, (meter, context) =>
         transaction(meter, async (client) => {
           // Serialize reader enrollment with the ordinary publication admission fence.
-          await sql(client, meter, lockPublicationAdmission, [
-            input.consumer.physicalTarget,
-          ]);
+          await sql(client, meter, lockPublicationAdmission, [input.consumer.physicalTarget]);
           const token = randomUUID();
           const result = await sql(
             client,

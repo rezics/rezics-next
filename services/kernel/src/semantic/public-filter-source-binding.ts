@@ -3042,7 +3042,11 @@ export function createNativePublicFilterSourceBinding(
             expected = scanned.next;
             expectedWindowBatch = scanned.batch;
           } else {
-            if (record.bridgeEvents !== undefined && !subjectPublication && !('representation' in cut.definition.capture))
+            if (
+              record.bridgeEvents !== undefined &&
+              !subjectPublication &&
+              !('representation' in cut.definition.capture)
+            )
               throw new BindingError('binding_mismatch');
             const bridge = await advanceCreationBridge(
               input.bootstrap,

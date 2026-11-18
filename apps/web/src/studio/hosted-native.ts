@@ -53,23 +53,16 @@ export function createHostedBookNative(
   HostedPublicationPointNative {
   const options = { locale };
   const unavailable = () => hostedFailure('unavailable', m.studio_book_structure_unavailable({}, options));
-  const uncertain = () =>
-    hostedFailure('uncertain', m.studio_book_may_committed({}, options));
+  const uncertain = () => hostedFailure('uncertain', m.studio_book_may_committed({}, options));
 
   function failure(status: number, mutation: boolean): StudioResult<never> {
-    if (status === 401 || status === 403)
-      return hostedFailure('denied', m.studio_book_denied({}, options));
-    if (status === 404)
-      return hostedFailure('unavailable', m.studio_book_chapter_unavailable({}, options));
+    if (status === 401 || status === 403) return hostedFailure('denied', m.studio_book_denied({}, options));
+    if (status === 404) return hostedFailure('unavailable', m.studio_book_chapter_unavailable({}, options));
     if (status === 409)
       return hostedFailure('stale', 'The book inventory continuation is no longer valid. Reopen your books.');
-    if (status === 412)
-      return hostedFailure('stale', m.studio_book_stale({}, options));
+    if (status === 412) return hostedFailure('stale', m.studio_book_stale({}, options));
     if (status === 400 || status === 413 || status === 422)
-      return hostedFailure(
-        'invalid',
-        m.studio_book_rejected({}, options),
-      );
+      return hostedFailure('invalid', m.studio_book_rejected({}, options));
     return mutation ? uncertain() : unavailable();
   }
 

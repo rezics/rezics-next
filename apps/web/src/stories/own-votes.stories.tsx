@@ -182,7 +182,12 @@ function StoryScreen() {
   return (
     <>
       {mode === 'advice-replaced' ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => setPage({
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setPage({
               ...page,
               votes: page.votes.map((vote) => ({ ...vote, actions: { state: 'unavailable', reason: 'read_only' } })),
             })

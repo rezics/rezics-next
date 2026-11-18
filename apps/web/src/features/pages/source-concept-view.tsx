@@ -13,11 +13,7 @@ import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
 import { ConceptMembershipReading } from './source-concept-reading/membership';
-import {
-  useConceptVisit,
-  type ConceptPage,
-  type ConceptTransport,
-} from './source-concept-reading/visit';
+import { useConceptVisit, type ConceptPage, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
 import {
   conceptVisitAddressFor,
@@ -338,7 +334,8 @@ function ConceptVisitView({
   useLayoutEffect(() => {
     if (!routeFocus) return;
     const intent = routeIntentRef.current;
-    if (!intent || intent.consumed || !sameFocus(visit.focus, routeFocus) || visit.focus === intent.focusAtStart) return;
+    if (!intent || intent.consumed || !sameFocus(visit.focus, routeFocus) || visit.focus === intent.focusAtStart)
+      return;
     if (intent.cancelled) {
       intent.consumed = true;
       intent.stop();

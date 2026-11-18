@@ -1548,10 +1548,7 @@ function SummaryContent({
               setSelectionState({ sourceKey, candidateId: value, expanded: false });
             }}
           >
-            <SharedSelect.SelectTrigger
-              id={`${id}-synopsis-choice`}
-              className="w-full px-3 text-sm"
-            >
+            <SharedSelect.SelectTrigger id={`${id}-synopsis-choice`} className="w-full px-3 text-sm">
               <SharedSelect.SelectValue />
             </SharedSelect.SelectTrigger>
             <SharedSelect.SelectContent>

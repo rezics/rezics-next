@@ -119,10 +119,16 @@ export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocu
   const realm = realmResponse.realm as { realmId: string; headRevisionId: string };
   if (!realm?.realmId || !realm.headRevisionId) throw new Error('Native realm response was incomplete');
 
-  const updatedRealmBody = await write(stack, creator, `/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, {
-    method: 'PUT',
-    ifMatch: realm.headRevisionId,
-  });
+  const updatedRealmBody = await write(
+    stack,
+    creator,
+    `/v1/realms/${realm.realmId}/boardScheme`,
+    { schemeId: scheme.id },
+    {
+      method: 'PUT',
+      ifMatch: realm.headRevisionId,
+    },
+  );
   const updatedRealm = updatedRealmBody.realm as { headRevisionId: string };
   if (!updatedRealm?.headRevisionId) throw new Error('Native realm scheme response was incomplete');
 
@@ -132,7 +138,13 @@ export async function createNativeDocumentAuthoringFixture(): Promise<NativeDocu
     visibility: 'published',
     purpose: 'discussion',
   });
-  const board = boardResponse.board as { id: string; route: number; realmId: string; visibility: string; purpose: string };
+  const board = boardResponse.board as {
+    id: string;
+    route: number;
+    realmId: string;
+    visibility: string;
+    purpose: string;
+  };
   if (!board?.id || !Number.isInteger(board.route)) throw new Error('Native board response was incomplete');
   if (board.realmId !== realm.realmId || board.visibility !== 'published' || board.purpose !== 'discussion')
     throw new Error('Native fixture did not create a published discussion board in the requested Realm');

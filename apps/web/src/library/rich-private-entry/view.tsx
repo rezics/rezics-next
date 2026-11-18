@@ -3,11 +3,29 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import type { useSession } from '../../session';
-import { annotationWrite, annotationIssues, annotationDraftChanged, annotationConfirmation, annotationVersion, renewAnnotationDraft, draftOf, type AnnotationDraft, type AnnotationConfirmation, type AnnotationField } from './contract';
+import {
+  annotationWrite,
+  annotationIssues,
+  annotationDraftChanged,
+  annotationConfirmation,
+  annotationVersion,
+  renewAnnotationDraft,
+  draftOf,
+  type AnnotationDraft,
+  type AnnotationConfirmation,
+  type AnnotationField,
+} from './contract';
 import { focusAnnotationEditor } from './annotation-editor';
 import type { AnnotationDepartureIntent } from './annotation-departure';
 import { EntryWorkspace } from './entry-workspace';
-import { readPrivateEntryForSubject, savePrivateAnnotations, savePrivateSourceCorrection, type PrivateEntryCommandResult, type PrivateEntryReadResult, type SourceCorrectionCommandResult } from './server';
+import {
+  readPrivateEntryForSubject,
+  savePrivateAnnotations,
+  savePrivateSourceCorrection,
+  type PrivateEntryCommandResult,
+  type PrivateEntryReadResult,
+  type SourceCorrectionCommandResult,
+} from './server';
 import type {
   PersonalEntry,
   PersonalEntryGuard,
@@ -803,7 +821,8 @@ function PrivateEntryReview({
         <p>{m.library_rich_entry_unavailable()}</p>
         <Button
           type="button"
-          variant="outline" className='mt-2'
+          variant="outline"
+          className="mt-2"
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
         >

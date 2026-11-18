@@ -288,7 +288,9 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
       );
 
     const origin = publicOrigin;
-    const writers = selection?.verifiedAgent ? undefined : await preparePublicationWriters(prepare, setupActor, selection);
+    const writers = selection?.verifiedAgent
+      ? undefined
+      : await preparePublicationWriters(prepare, setupActor, selection);
     if (writers) {
       console.info(
         `web-publication-driver-provision: native writers ready at ${Math.round(performance.now() - factoryStarted)}ms`,

@@ -222,11 +222,7 @@ function BookJourney({
                 acceptance. Review manually; set the readerJourney story parameter to run the retained interaction
                 assertions.
               </p>
-              <Button
-                className="justify-self-start"
-                variant="ghost"
-                onClick={() => runtime.book.replace()}
-              >
+              <Button className="justify-self-start" variant="ghost" onClick={() => runtime.book.replace()}>
                 Replace publication / target / viewer admission
               </Button>
             </aside>

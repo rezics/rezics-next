@@ -361,10 +361,9 @@ export class CrossMediaGraph {
             command_payload,native_candidate,retraction_key,retraction_payload FROM cross_media_graph LIMIT 0`)
           .all();
       } catch (cause) {
-        throw new TypeError(
-          'Cross-media graph requires the canonical schema; explicit state maintenance is required',
-          { cause },
-        );
+        throw new TypeError('Cross-media graph requires the canonical schema; explicit state maintenance is required', {
+          cause,
+        });
       }
       return;
     }

@@ -92,37 +92,46 @@ export async function assertBookShelfSignInReturn(
   }
 
   function observeShelfReads() {
-    return stack.kernelRequests().slice(beforeShelfReturn).flatMap((request) => {
-      if (request.fixtureRequest || request.method !== 'GET') return [];
-      const { pathname, searchParams } = new URL(request.url, stack.kernelOrigin);
-      if (pathname !== '/v1/libraryEntries') return [];
-      const types = searchParams
-        .getAll('type')
-        .map((type) => (type === 'schema:Book' || type === 'schema:BookSeries' || type === 'bf:Instance' ? type : 'other'));
-      const full = searchParams.get('view') === 'FULL';
-      const firstPage = !searchParams.has('cursor') && !searchParams.has('state');
-      const page20 = searchParams.get('limit') === '20';
-      const defaultOrder = searchParams.get('orderBy') === 'lastActivity' && searchParams.get('direction') === 'desc';
-      const exact = types.length === 1 && types[0] === 'schema:Book' && full && firstPage && page20;
-      const entries = request.bookShelfEntries;
-      return [
-        {
-          exact,
-          types,
-          full,
-          firstPage,
-          page20,
-          defaultOrder,
-          status: request.responseStatus ?? null,
-          code: problemCode(request.failure?.body),
-          bearer: request.authorization !== null,
-          actor: request.access?.authenticated ? (request.access.actorId === bobAccountId ? 'bob' : 'other') : 'unobserved',
-          rows: entries?.length ?? null,
-          bobEntry: entries?.find(({ subjectId }) => subjectId === bobBook.id) ?? null,
-          aliceEntry: entries?.some(({ subjectId }) => subjectId === aliceBook.id) ?? null,
-        },
-      ];
-    });
+    return stack
+      .kernelRequests()
+      .slice(beforeShelfReturn)
+      .flatMap((request) => {
+        if (request.fixtureRequest || request.method !== 'GET') return [];
+        const { pathname, searchParams } = new URL(request.url, stack.kernelOrigin);
+        if (pathname !== '/v1/libraryEntries') return [];
+        const types = searchParams
+          .getAll('type')
+          .map((type) =>
+            type === 'schema:Book' || type === 'schema:BookSeries' || type === 'bf:Instance' ? type : 'other',
+          );
+        const full = searchParams.get('view') === 'FULL';
+        const firstPage = !searchParams.has('cursor') && !searchParams.has('state');
+        const page20 = searchParams.get('limit') === '20';
+        const defaultOrder = searchParams.get('orderBy') === 'lastActivity' && searchParams.get('direction') === 'desc';
+        const exact = types.length === 1 && types[0] === 'schema:Book' && full && firstPage && page20;
+        const entries = request.bookShelfEntries;
+        return [
+          {
+            exact,
+            types,
+            full,
+            firstPage,
+            page20,
+            defaultOrder,
+            status: request.responseStatus ?? null,
+            code: problemCode(request.failure?.body),
+            bearer: request.authorization !== null,
+            actor: request.access?.authenticated
+              ? request.access.actorId === bobAccountId
+                ? 'bob'
+                : 'other'
+              : 'unobserved',
+            rows: entries?.length ?? null,
+            bobEntry: entries?.find(({ subjectId }) => subjectId === bobBook.id) ?? null,
+            aliceEntry: entries?.some(({ subjectId }) => subjectId === aliceBook.id) ?? null,
+          },
+        ];
+      });
   }
 
   let reads: ReturnType<typeof observeShelfReads> = [];
@@ -153,7 +162,9 @@ export async function assertBookShelfSignInReturn(
         expect(signInAddress?.origin === origin && signInAddress.pathname === '/auth/sign-in', 'Web sign-in hop').toBe(
           true,
         );
-        expect(signInAddress?.searchParams.getAll('return_to').length, 'Web sign-in received one return target').toBe(1);
+        expect(signInAddress?.searchParams.getAll('return_to').length, 'Web sign-in received one return target').toBe(
+          1,
+        );
         expect(signInAddress?.searchParams.get('return_to') === shelfPath, 'exact typed return target').toBe(true);
         expect(
           authorizeAddress?.origin === issuerOrigin &&
@@ -161,8 +172,14 @@ export async function assertBookShelfSignInReturn(
             authorizeAddress.searchParams.get('redirect_uri') === `${origin}/auth/callback`,
           'issuer authorization hop for the Web callback',
         ).toBe(true);
-        expect(loginAddress.origin === issuerOrigin && loginAddress.pathname === '/login', 'issuer login hop').toBe(true);
-        stage('signed-out shelf sign-in return', { signInPath: '/auth/sign-in', returnTo: shelfPath, issuerPath: '/login' });
+        expect(loginAddress.origin === issuerOrigin && loginAddress.pathname === '/login', 'issuer login hop').toBe(
+          true,
+        );
+        stage('signed-out shelf sign-in return', {
+          signInPath: '/auth/sign-in',
+          returnTo: shelfPath,
+          issuerPath: '/login',
+        });
       },
     });
     const bobPage = bob.continueOnPage();
@@ -205,7 +222,10 @@ export async function assertBookShelfSignInReturn(
   expect(sampled, 'native request observation finished').toBe(true);
   const exactReads = reads.filter(({ exact }) => exact);
   expect(exactReads.length, 'observed native first-page FULL Book shelf reads').toBeGreaterThan(0);
-  expect(exactReads.every(({ actor }) => actor === 'bob'), 'all exact Book shelf reads authenticated Bob').toBe(true);
+  expect(
+    exactReads.every(({ actor }) => actor === 'bob'),
+    'all exact Book shelf reads authenticated Bob',
+  ).toBe(true);
   const successful = exactReads.filter(({ status }) => status === 200);
   expect(successful.length, 'native exact Book shelf returned HTTP 200 as Bob').toBeGreaterThan(0);
   for (const read of successful) {

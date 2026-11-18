@@ -4,7 +4,11 @@ import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { ArchiveRecoveryDeparture } from './departure';
-import { createArchiveCollectionRecoveryJourney, type ArchiveCollectionRecoveryJourney, type RecoveryNotice } from './controller';
+import {
+  createArchiveCollectionRecoveryJourney,
+  type ArchiveCollectionRecoveryJourney,
+  type RecoveryNotice,
+} from './controller';
 import { RECOVERY_APPLY_COMMANDS } from './contract';
 import { useArchiveCollectionRecoveryPort } from './port';
 import { ArchiveCollectionChooser, ArchiveOccurrenceChooser, ArchiveRecoveryReview } from './review';
@@ -195,7 +199,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
     snapshot.stage === 'occurrences' ? (
       <Button
         type="button"
-        variant="outline" className={actionClass}
+        variant="outline"
+        className={actionClass}
         disabled={snapshot.busy || locked || !snapshot.selected.size}
         onClick={() => journey.prepareReview()}
       >
@@ -203,7 +208,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       </Button>
     ) : snapshot.stage === 'conflict' ? (
       <Button
-        variant="outline" className={actionClass}
+        variant="outline"
+        className={actionClass}
         type="button"
         disabled={snapshot.busy || locked}
         onClick={() => touch(journey.refreshConflict())}
@@ -215,7 +221,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         {snapshot.status.state === 'applying' ? (
           <Button
             type="button"
-            variant="outline" className={actionClass}
+            variant="outline"
+            className={actionClass}
             disabled={snapshot.busy || locked}
             onClick={() => touch(journey.continueApply())}
           >
@@ -224,7 +231,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         ) : null}
         <Button
           type="button"
-          variant="outline" className={actionClass}
+          variant="outline"
+          className={actionClass}
           disabled={snapshot.busy || locked || Boolean(snapshot.readRetry)}
           onClick={() => touch(journey.loadOutcomes())}
         >
@@ -328,7 +336,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         <div className="grid gap-4">
           <Button
             type="button"
-            variant="outline" className="justify-self-start"
+            variant="outline"
+            className="justify-self-start"
             disabled={snapshot.busy || locked}
             onClick={() => journey.editSelection()}
           >
@@ -408,7 +417,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           {snapshot.status.presentation.state === 'unsupported_or_stale' && !snapshot.status.collectionId ? (
             <Button
               type="button"
-              variant="outline" className="justify-self-start"
+              variant="outline"
+              className="justify-self-start"
               disabled={snapshot.busy || locked}
               onClick={() => journey.prepareReview()}
             >
@@ -417,7 +427,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           ) : null}
           <Button
             type="button"
-            variant="outline" className="justify-self-start"
+            variant="outline"
+            className="justify-self-start"
             disabled={snapshot.busy || locked}
             onClick={() => touch(journey.readStatus())}
           >
@@ -426,7 +437,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           {['complete', 'partial', 'cancelled'].includes(snapshot.status.state) ? (
             <Button
               type="button"
-              variant="outline" className="justify-self-start"
+              variant="outline"
+              className="justify-self-start"
               disabled={snapshot.busy || locked}
               onClick={() => journey.restart()}
             >
@@ -448,7 +460,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           {snapshot.stage !== 'denied' ? (
             <Button
               type="button"
-              variant="outline" className="justify-self-start"
+              variant="outline"
+              className="justify-self-start"
               disabled={snapshot.busy}
               onClick={() => journey.restart()}
             >

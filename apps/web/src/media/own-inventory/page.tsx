@@ -368,7 +368,7 @@ export function OwnMediaInventoryWorkspace({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-             
+
               disabled={!episodeAuthority || !episodeRow}
               onClick={() => {
                 if (!episodeRow || !episodeAuthority || !isCurrent()) return;
@@ -380,7 +380,7 @@ export function OwnMediaInventoryWorkspace({
             </Button>
             <Button
               variant="outline"
-             
+
               onClick={retryErase}
               disabled={busy || !retryAdmitted || feedback?.kind !== 'uncertain'}
             >

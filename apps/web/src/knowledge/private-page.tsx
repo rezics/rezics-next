@@ -1178,10 +1178,7 @@ function PrivateKnowledgeEditor({
     try {
       const result = await operations.createNotebook(intent);
       if (!active.current) return;
-      if (
-        result.state === 'acknowledged' &&
-        hasReceiptIds(result.receipt, ['notebookId', 'structureRevisionId'])
-      ) {
+      if (result.state === 'acknowledged' && hasReceiptIds(result.receipt, ['notebookId', 'structureRevisionId'])) {
         setNotebookReceipt(result.receipt);
         setNotebookIntent(null);
         notebookIntentRef.current = null;

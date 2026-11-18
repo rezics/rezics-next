@@ -1086,10 +1086,15 @@ export function createCollectionReads(
     }
     if (options.filter !== undefined || options.sort !== undefined)
       return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
-    return listMembers(viewer, collectionId, {
-      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-      ...(options.limit === undefined ? {} : { limit: options.limit }),
-    }, deadline);
+    return listMembers(
+      viewer,
+      collectionId,
+      {
+        ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+        ...(options.limit === undefined ? {} : { limit: options.limit }),
+      },
+      deadline,
+    );
   }
 
   /** Capture native source and reader lifetime with every home released before foreign work. */

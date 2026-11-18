@@ -102,7 +102,8 @@ export function ConsolidationPanel({
   const targetId = reviewedTarget?.id ?? target?.id;
   const sourceRevision = reviewedSource?.revision ?? source.revision;
   const targetRevision = reviewedTarget?.revision;
-  const titleFor = (subjectId: string) => picked.find((item) => item.selected.subjectId === subjectId)?.title ?? subjectId;
+  const titleFor = (subjectId: string) =>
+    picked.find((item) => item.selected.subjectId === subjectId)?.title ?? subjectId;
 
   return (
     <Dialog
@@ -135,14 +136,19 @@ export function ConsolidationPanel({
               </li>
             ))}
           </ol>
-          <div role="group" aria-label={m.library_consolidation_heading()} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <div
+            role="group"
+            aria-label={m.library_consolidation_heading()}
+            className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+          >
             <span className="font-medium">{sourceName}</span>
             <span aria-hidden="true">→</span>
             <span className="font-medium">{targetName}</span>
             <details className="basis-full text-xs text-muted-foreground sm:basis-auto">
               <summary className="min-h-8 cursor-pointer py-1">{m.library_selection_heading()}</summary>
               <code className="block break-all">
-                {sourceId}{sourceRevision !== undefined ? ` · ${sourceRevision}` : ''}
+                {sourceId}
+                {sourceRevision !== undefined ? ` · ${sourceRevision}` : ''}
                 {targetId ? ` → ${targetId}${targetRevision !== undefined ? ` · ${targetRevision}` : ''}` : ''}
               </code>
             </details>
@@ -184,7 +190,10 @@ export function ConsolidationPanel({
                       {cataloguePage.labels
                         .filter((label) => label.id !== source.id)
                         .map((label) => (
-                          <label key={label.id} className="flex min-w-0 items-center gap-3 rounded px-2 py-1 hover:bg-muted/50">
+                          <label
+                            key={label.id}
+                            className="flex min-w-0 items-center gap-3 rounded px-2 py-1 hover:bg-muted/50"
+                          >
                             <input
                               type="radio"
                               name="consolidation-target"
@@ -332,14 +341,18 @@ export function ConsolidationPanel({
             ) : (
               <>
                 <Button
-                  disabled={busy || visit.hasRetainedCommand || (result?.status !== undefined && result.status !== 'active')}
+                  disabled={
+                    busy || visit.hasRetainedCommand || (result?.status !== undefined && result.status !== 'active')
+                  }
                   onClick={onApply}
                 >
                   {m.library_consolidation_apply()}
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={busy || visit.hasRetainedCommand || (result?.status !== undefined && result.status !== 'active')}
+                  disabled={
+                    busy || visit.hasRetainedCommand || (result?.status !== undefined && result.status !== 'active')
+                  }
                   onClick={onCancel}
                 >
                   {m.library_consolidation_cancel()}
@@ -364,7 +377,13 @@ export function ConsolidationPanel({
   );
 }
 
-function SelectedAssignments({ picked, compact = false }: { picked: readonly ConsolidationPicked[]; compact?: boolean }) {
+function SelectedAssignments({
+  picked,
+  compact = false,
+}: {
+  picked: readonly ConsolidationPicked[];
+  compact?: boolean;
+}) {
   return (
     <section aria-labelledby={compact ? undefined : 'consolidation-selection-heading'} className="min-w-0 space-y-3">
       {!compact ? (
@@ -563,7 +582,9 @@ function ResultAssignment({
             </EvidenceValue>
           ) : null}
           {item.sourceUnassignRevision !== undefined ? (
-            <EvidenceValue label={m.library_consolidation_undo_hint()}>{String(item.sourceUnassignRevision)}</EvidenceValue>
+            <EvidenceValue label={m.library_consolidation_undo_hint()}>
+              {String(item.sourceUnassignRevision)}
+            </EvidenceValue>
           ) : null}
         </dl>
       </details>
@@ -574,11 +595,7 @@ function ResultAssignment({
           </Button>
         ) : null}
         {item.selected && item.sourceUnassignRevision !== undefined ? (
-          <form
-            method="post"
-            action={shelfHref(locale, { label: sourceLabelId })}
-            onSubmit={onUndoSubmit}
-          >
+          <form method="post" action={shelfHref(locale, { label: sourceLabelId })} onSubmit={onUndoSubmit}>
             <p className="mb-2 text-sm text-muted-foreground">{m.library_consolidation_undo_hint()}</p>
             <input type="hidden" name="intent" value="restore" />
             <input type="hidden" name="subjectId" value={item.selected.subjectId} />
@@ -601,7 +618,9 @@ function EvidenceValue({ label, children }: { label: string; children: ReactNode
   return (
     <div className="min-w-0">
       <dt className="h-auto break-words text-xs text-muted-foreground">{label}</dt>
-      <dd className="break-all"><code>{children}</code></dd>
+      <dd className="break-all">
+        <code>{children}</code>
+      </dd>
     </div>
   );
 }

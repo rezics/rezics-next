@@ -430,7 +430,9 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
           />
         )}
         <details className="min-w-0">
-          <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">Prepared request operands</summary>
+          <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">
+            Prepared request operands
+          </summary>
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
             {JSON.stringify(commands, null, 2)}
           </pre>

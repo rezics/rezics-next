@@ -351,7 +351,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
         const target = discoveryIndexName(config.prefix, scope.generation);
         const matches = enrollmentOnly ? discoveryPhysicalTargetMatches : discoveryAliasMatches;
-        if (scope.prefix !== config.prefix || !scope.uuid || !(await matches(requestSearch(context), scope))) notReady();
+        if (scope.prefix !== config.prefix || !scope.uuid || !(await matches(requestSearch(context), scope)))
+          notReady();
         if (
           queried &&
           (queried.consumer.physicalTarget !== target ||

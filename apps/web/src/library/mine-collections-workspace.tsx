@@ -26,11 +26,7 @@ export function MineCollectionsWorkspace({
       <div className="min-w-0 space-y-6">
         {directory}
         {savedQueries}
-        <MineCollectionsPinManagement
-          pins={pins}
-          pinsOrigin={pinsOrigin}
-          visible={showPins}
-        />
+        <MineCollectionsPinManagement pins={pins} pinsOrigin={pinsOrigin} visible={showPins} />
       </div>
     </div>
   );
@@ -107,9 +103,7 @@ function MineCollectionsPinManagement({
         </h2>
       ) : null}
       {visible ? (
-        <details
-          className="rounded-xl border border-border/60 bg-muted/20 p-3"
-        >
+        <details className="rounded-xl border border-border/60 bg-muted/20 p-3">
           <summary
             ref={openerRef}
             className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"

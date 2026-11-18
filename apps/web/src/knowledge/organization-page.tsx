@@ -112,9 +112,7 @@ export function KnowledgeOrganizationPage({
     source.frontier.request.kind === 'history' ? null : source.frontier.request.parentPlacementId;
   const sourceParentTitle = (source: NonNullable<typeof snapshot.source>) =>
     source.frontier.breadcrumbs.at(-1)?.title ?? root;
-  const reviewDestinationPlacementId = review
-    ? review.intent.destinationParentPlacementId
-    : parentPlacementId;
+  const reviewDestinationPlacementId = review ? review.intent.destinationParentPlacementId : parentPlacementId;
   const reviewOrder = review?.before ? `${copy.before}: ${review.before}` : copy.end;
   const remember = (documentId: string) => {
     if (snapshot !== reading.getSnapshot() || page?.kind !== 'outline' || frontier.request.kind !== 'outline') return;
@@ -237,9 +235,7 @@ export function KnowledgeOrganizationPage({
                 <dd className="min-w-0 break-words">
                   {sourceParentTitle(snapshot.source)}
                   {sourceParentPlacementId(snapshot.source) && (
-                    <span className="ml-2 break-all font-mono text-xs">
-                      {sourceParentPlacementId(snapshot.source)}
-                    </span>
+                    <span className="ml-2 break-all font-mono text-xs">{sourceParentPlacementId(snapshot.source)}</span>
                   )}
                 </dd>
                 <dt className="text-muted-foreground">{copy.destination}</dt>
@@ -290,9 +286,7 @@ export function KnowledgeOrganizationPage({
             <dd className="min-w-0 break-words">
               {sourceParentTitle(review.source)}
               {sourceParentPlacementId(review.source) && (
-                <span className="ml-2 break-all font-mono text-xs">
-                  {sourceParentPlacementId(review.source)}
-                </span>
+                <span className="ml-2 break-all font-mono text-xs">{sourceParentPlacementId(review.source)}</span>
               )}
             </dd>
             <dt className="text-muted-foreground">{copy.destination}</dt>
@@ -452,9 +446,7 @@ export function KnowledgeOrganizationPage({
                           <dt className="text-muted-foreground">{copy.source}</dt>
                           <dd className="break-all font-mono text-xs">{change.placementId}</dd>
                           <dt className="text-muted-foreground">{copy.parent}</dt>
-                          <dd className="break-all font-mono text-xs">
-                            {change.previousParentPlacementId ?? root}
-                          </dd>
+                          <dd className="break-all font-mono text-xs">{change.previousParentPlacementId ?? root}</dd>
                           <dt className="text-muted-foreground">{copy.destination}</dt>
                           <dd className="break-all font-mono text-xs">{change.parentPlacementId ?? root}</dd>
                           <dt className="text-muted-foreground">{copy.order}</dt>
@@ -482,10 +474,7 @@ export function KnowledgeOrganizationPage({
           ) : (
             <ul className="min-w-0 divide-y divide-border">
               {page.placements.map((row) => (
-                <ListRow
-                  key={row.placementId}
-                  className="@container/content-item min-w-0 py-3 sm:py-4"
-                >
+                <ListRow key={row.placementId} className="@container/content-item min-w-0 py-3 sm:py-4">
                   <div className="min-w-0 wrap-anywhere @min-[40rem]/content-item:grid @min-[40rem]/content-item:grid-cols-[minmax(0,1fr)_fit-content(40%)] @min-[40rem]/content-item:items-start @min-[40rem]/content-item:gap-x-4">
                     <div className="min-w-0">
                       <div
@@ -503,11 +492,8 @@ export function KnowledgeOrganizationPage({
                         </p>
                         {snapshot.source && page.kind === 'outline' && (
                           <p className="min-w-0 break-words">
-                            <span className="text-muted-foreground">{copy.selected}:</span>{' '}
-                            {snapshot.source.row.title}
-                            <span className="ml-2 break-all font-mono text-xs">
-                              {snapshot.source.row.placementId}
-                            </span>
+                            <span className="text-muted-foreground">{copy.selected}:</span> {snapshot.source.row.title}
+                            <span className="ml-2 break-all font-mono text-xs">{snapshot.source.row.placementId}</span>
                           </p>
                         )}
                       </div>
@@ -532,8 +518,7 @@ export function KnowledgeOrganizationPage({
                         </Link>
                       </ContentItemHeading>
                       <p data-content-item-slot="metadata" className="mt-2 break-all text-xs text-muted-foreground">
-                        <span>{copy.source}:</span>{' '}
-                        <span className="font-mono">{row.placementId}</span>
+                        <span>{copy.source}:</span> <span className="font-mono">{row.placementId}</span>
                       </p>
                     </div>
                     <ListRowControl
