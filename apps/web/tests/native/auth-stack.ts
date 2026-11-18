@@ -46,7 +46,13 @@ export type AuthJourney = {
     }[]
   >;
 };
-type NativeSignInOptions = { returnTo?: string; context?: BrowserContext; sessionOnly?: boolean };
+type NativeSignInOptions = {
+  returnTo?: string;
+  context?: BrowserContext;
+  sessionOnly?: boolean;
+  /** Start the same sign-in transaction from a guarded page. */
+  openSignIn?: (page: Page) => Promise<void>;
+};
 type NativeSignup = { accountId: string; handle: string };
 
 export type NativeAuthStack = {
@@ -463,10 +469,13 @@ export async function startAuthStack(
       assertActive('read native Auth account for browser sign-in');
       const email = signup ? `${crypto.randomUUID()}@example.test` : (await stack.authPersona(persona)).email;
       const formPassword = signup ? `newcomer-${crypto.randomUUID()}` : password;
-      const signInUrl = new URL('/auth/sign-in', stack.web);
-      if (options.returnTo !== undefined) signInUrl.searchParams.set('return_to', options.returnTo);
       assertActive('open native Auth sign-in page');
-      await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
+      if (options.openSignIn) await options.openSignIn(page);
+      else {
+        const signInUrl = new URL('/auth/sign-in', stack.web);
+        if (options.returnTo !== undefined) signInUrl.searchParams.set('return_to', options.returnTo);
+        await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
+      }
       await hydrate(page);
       let callbackResponse: Promise<PlaywrightResponse> | undefined;
       let registration: NativeSignup | undefined;
