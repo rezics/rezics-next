@@ -221,10 +221,10 @@ export type NativeWebStack = {
   /** The canonical issuer advertised by discovery, before the optional proxy listener. */
   issuerOrigin: string;
   web: string;
-  /** Read fixture identity for form entry. Explicit scopes request a fresh native Auth credential for that account. */
+  /** Read fixture identity. Explicit scopes issue a variant; renewal uses the original scopes. */
   authPersona(
     persona: string,
-    scopes?: readonly string[],
+    scopes?: readonly string[] | 'renew',
   ): Promise<{ accountId: string; email: string; authorization: string }>;
   /** Confirm the production Auth host has its native operation boundary configured. */
   enableAccountOperations(): Promise<void>;
@@ -1668,8 +1668,9 @@ async function startStack(): Promise<
       web: webOrigin,
       async authPersona(persona, scopes) {
         const account = await getAccount(persona);
+        if (scopes === 'renew') await driver!.fixtures.renewCredential(account);
         const { accountId, bearer } =
-          scopes === undefined ? account : await driver!.fixtures.scopeVariant(account, scopes);
+          scopes === undefined || scopes === 'renew' ? account : await driver!.fixtures.scopeVariant(account, scopes);
         const result = await auth.database.query<{ email: string }>('SELECT email FROM "user" WHERE id=$1', [
           accountId,
         ]);
@@ -2503,7 +2504,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
         else if (method === 'scopedAuthPersona') {
-          const input = JSON.parse(argument!) as { persona: string; scopes: string[] };
+          const input = JSON.parse(argument!) as { persona: string; scopes: string[] | 'renew' };
           value = await stack.authPersona(input.persona, input.scopes);
         } else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
         else if (method === 'accountOperationActors') value = stack.accountOperationActors();
