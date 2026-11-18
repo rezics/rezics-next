@@ -80,6 +80,7 @@ export type FoldedCaptureInput = Readonly<{
   readonly elapsedMs: number;
   readonly statements: readonly FoldedStatementInput[];
   readonly backgroundStatements: readonly FoldedStatementInput[];
+  readonly backgroundControls?: Readonly<{ statements: number; requestBytes: number; responseBytes: number }>;
   readonly includeBackends: boolean;
 }>;
 
@@ -563,19 +564,21 @@ export class GrowthCostFolder {
       foregroundStatements.map(({ responseBytes }) => responseBytes),
       'Response bytes',
     );
-    const backgroundRequestBytes = sumFinite(
-      input.backgroundStatements.map(({ requestBytes }) => requestBytes),
-      'Background request bytes',
-    );
-    const backgroundResponseBytes = sumFinite(
-      input.backgroundStatements.map(({ responseBytes }) => responseBytes),
-      'Background response bytes',
-    );
+    const backgroundRequestBytes =
+      sumFinite(
+        input.backgroundStatements.map(({ requestBytes }) => requestBytes),
+        'Background request bytes',
+      ) + (input.backgroundControls?.requestBytes ?? 0);
+    const backgroundResponseBytes =
+      sumFinite(
+        input.backgroundStatements.map(({ responseBytes }) => responseBytes),
+        'Background response bytes',
+      ) + (input.backgroundControls?.responseBytes ?? 0);
     const failedStatements = new Map<string, number>();
     for (const { errorCode } of foregroundStatements)
       if (errorCode !== null) failedStatements.set(errorCode, (failedStatements.get(errorCode) ?? 0) + 1);
-    const hasBackgroundWork =
-      input.backgroundStatements.length > 0 || backgroundRequestBytes > 0 || backgroundResponseBytes > 0;
+    const backgroundStatements = input.backgroundStatements.length + (input.backgroundControls?.statements ?? 0);
+    const hasBackgroundWork = backgroundStatements > 0 || backgroundRequestBytes > 0 || backgroundResponseBytes > 0;
     const statementCount = foregroundStatements.filter(
       ({ text, index }) => !isControlStatement(text) && !catalogIndexes.has(index),
     ).length;
@@ -596,7 +599,7 @@ export class GrowthCostFolder {
       requestBytes,
       responseBytes,
       ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
-      backgroundStatements: input.backgroundStatements.length,
+      backgroundStatements,
       ...(hasBackgroundWork ? { backgroundRequestBytes, backgroundResponseBytes } : {}),
       backgroundRows: this.#backgroundRows,
       backgroundBlocks: this.#backgroundBlocks,

@@ -86,12 +86,13 @@ test('warmup counts repeated background plans whose raw notices exceed the captu
 
 test('warmup settles transactions even if their commit comes from another execution context', async () => {
   await withConnection(database!.pool, async (client) => {
+    const begin = AsyncResource.bind(() => client.query('BEGIN'));
     const commit = AsyncResource.bind(() => client.query('COMMIT'));
-    const { value } = await captureWarmup(
+    const { value, capture: warmup } = await captureWarmup(
       database!,
       async () => {
         for (let completed = 0; completed < 200; completed++) {
-          await client.query('BEGIN');
+          await begin();
           await commit();
         }
         return 'settled';
@@ -99,6 +100,8 @@ test('warmup settles transactions even if their commit comes from another execut
       { entries: 160 },
     );
     expect(value).toBe('settled');
+    expect(costOf(warmup).backgroundStatements).toBe(400);
+    expect(costOf(warmup).backgroundRequestBytes).toBeGreaterThan(0);
   });
 });
 

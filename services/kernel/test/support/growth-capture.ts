@@ -141,6 +141,7 @@ type ActiveCapture = {
   readonly budget: GrowthCaptureBudget;
   readonly costFolder: GrowthCostFolder | undefined;
   readonly mode: 'measured' | 'warmup';
+  readonly backgroundControls: { statements: number; requestBytes: number; responseBytes: number };
   readonly database: GrowthDatabase;
   readonly run: RunCapture | undefined;
   statementRecords: StatementRecord[];
@@ -608,13 +609,12 @@ function connectedDatabase(client: PoolClient): string | undefined {
 const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
 const IN_FAILED_TRANSACTION = '25P02';
 
-function mayResetCaptureSetting(text: string | undefined): boolean {
-  if (text === undefined) return false;
+function classifiedSqlKind(text: string | undefined) {
+  if (text === undefined) return undefined;
   try {
-    const kind = classifyGrowthSql(text);
-    return kind === 'commit' || kind === 'rollback' || kind === 'rollback-to';
+    return classifyGrowthSql(text);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -913,6 +913,10 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     const text = statementText(args[0]) ?? (name === undefined ? undefined : preparedStatementText(client, name));
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
+    const sqlKind = explain && !suppressAttribution ? classifiedSqlKind(text) : undefined;
+    const resetsSetting = sqlKind === 'commit' || sqlKind === 'rollback' || sqlKind === 'rollback-to';
+    const backgroundControl =
+      attribution?.background && attribution.capture.mode === 'warmup' && (sqlKind === 'begin' || resetsSetting);
     let record: StatementRecord | undefined;
     if (explain && !suppressAttribution && (text !== undefined || name !== undefined) && attribution) {
       const capture = attribution.capture;
@@ -923,7 +927,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (capture.error) capture.omittedStatements++;
       else {
         try {
-          capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
+          if (!backgroundControl) capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
           const index = attribution.background
             ? capture.backgroundStatementCount++
             : capture.foregroundStatementCount++;
@@ -940,8 +944,10 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
             errorMessage: null,
             requiresNativePlan: false,
           };
-          capture.statementRecords.push(record);
-          capture.costFolder?.registerStatement(side, index);
+          if (!backgroundControl) {
+            capture.statementRecords.push(record);
+            capture.costFolder?.registerStatement(side, index);
+          }
         } catch (error) {
           capture.omittedStatements++;
           capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, occurrenceIndex, text ?? ''));
@@ -950,7 +956,6 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
     if (explain && !suppressAttribution) {
-      const resetsSetting = mayResetCaptureSetting(text);
       if (!resetsSetting) {
         const wanted = state.active !== undefined;
         if (explaining !== wanted || pendingQueries > 0) switchTo(wanted);
@@ -976,7 +981,12 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (completed) return;
       completed = true;
       detachWireStatement(client, wireStatement);
-      if (record) {
+      if (backgroundControl && record && attribution) {
+        const counts = attribution.capture.backgroundControls;
+        counts.statements++;
+        counts.requestBytes += record.requestBytes;
+        counts.responseBytes += record.responseBytes;
+      } else if (record) {
         if (failed) {
           const code = (error as { code?: unknown } | null)?.code;
           record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
@@ -1301,6 +1311,7 @@ function foldedInputFor(active: ActiveCapture, elapsedMs: number) {
     elapsedMs,
     statements: active.statementRecords.filter(({ background }) => !background) as FoldedStatementInput[],
     backgroundStatements: active.statementRecords.filter(({ background }) => background) as FoldedStatementInput[],
+    backgroundControls: active.backgroundControls,
     includeBackends: active.includeBackends,
   };
 }
@@ -1656,6 +1667,7 @@ async function captureInternal<T>(
     statementRecords: [],
     foregroundStatementCount: 0,
     backgroundStatementCount: 0,
+    backgroundControls: { statements: 0, requestBytes: 0, responseBytes: 0 },
     plans: [],
     planDatabases: [],
     planStatements: [],
