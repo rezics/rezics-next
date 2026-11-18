@@ -97,6 +97,8 @@ export type NativeWebServices = Pick<NativeWebStack, 'authPersona' | 'kernelOrig
 };
 
 export type NativeWebStackOptions = {
+  /** Serve the bundled TanStack client to the private browser across document navigations. */
+  bundledClient?: boolean;
   /** Expose the owned Kernel and Auth for fixture writes during production Web startup. */
   onServicesReady?(services: NativeWebServices): void;
   /** Register the requesting application on the isolated Auth issuer, with no standing personal grants. */
@@ -1883,6 +1885,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const hostEnvironment: NodeJS.ProcessEnv = {
     ...environment,
     NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_WEB_BUNDLED_CLIENT: options.bundledClient ? '1' : undefined,
     NATIVE_WEB_STARTUP_READINESS: options.onServicesReady ? 'services' : 'website',
     NATIVE_WEB_EXTERNAL_CONSENT_CLIENT: JSON.stringify(options.externalConsentClient),
     NATIVE_BOOK_SEARCH_TIMING: options.observeBookSearchPreparation ? '1' : undefined,
