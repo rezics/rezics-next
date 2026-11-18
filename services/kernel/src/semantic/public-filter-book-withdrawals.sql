@@ -1,12 +1,16 @@
 /* semantic.native-keyed:128:192:1 */
 -- A TypeList reads only the original's type, own label order and ID. A settled
 -- physical withdrawal covers that key for a new PIT. It grants no catalogue ACK.
-WITH parent AS MATERIALIZED (
-  SELECT * FROM semantic.public_filter_published_coverage(
-    :target::text,:incarnation::text,:definition::uuid,NULL,:text_keys::text[])
+WITH input AS (
+  SELECT :target::text AS target,:incarnation::text AS incarnation,:definition::uuid AS definition,
+         :text_keys::text[] AS text_keys
+), parent AS MATERIALIZED (
+  SELECT proof.* FROM input i
+  CROSS JOIN LATERAL semantic.public_filter_published_coverage(
+    i.target,i.incarnation,i.definition,NULL,i.text_keys) proof
 ), pending AS MATERIALIZED (
-  SELECT k.input_key FROM parent p JOIN semantic.public_filter_privacy_pending k
-    ON k.live AND k.input_key=ANY(p.coverage_keys || :text_keys::text[])
+  SELECT k.input_key FROM parent p CROSS JOIN input i JOIN semantic.public_filter_privacy_pending k
+    ON k.live AND k.input_key=ANY(p.coverage_keys || i.text_keys)
   LIMIT 1
 ), dirty AS MATERIALIZED (
   SELECT h.* FROM parent p JOIN search.public_filter_coverage_home h
@@ -46,22 +50,22 @@ WITH parent AS MATERIALIZED (
   -- The writer records source_position only after the exact guarded wait_for
   -- bulk result and physical incarnation check. Compare command positions in
   -- the writer's domain, never the privacy-log sequence or a relay checkpoint.
-  SELECT r.* FROM reductions r JOIN search.identity_writer w ON
-    (w.partition_no,w.physical_target,w.original_id)=(r.source_home,:target::text,r.subject_id)
-  WHERE w.incarnation=:incarnation::text AND w.owner_epoch=r.source_epoch AND w.writer_token IS NULL
+  SELECT r.* FROM reductions r CROSS JOIN input i JOIN search.identity_writer w ON
+    (w.partition_no,w.physical_target,w.original_id)=(r.source_home,i.target,r.subject_id)
+  WHERE w.incarnation=i.incarnation AND w.owner_epoch=r.source_epoch AND w.writer_token IS NULL
     AND w.closed_job IS NULL AND w.dispatch_state='settled' AND w.source_position>=r.command_position
     AND w.visible_transaction_id=w.settled_transaction_id AND w.visible_position=w.settled_position
 ), captured AS (
   INSERT INTO semantic.public_filter_bootstrap
     (partition_no,bootstrap,read_definition,request_key,consumer,snapshot_kind,native_snapshot,
      owner_epoch,source_position,state,coverage_generation,coverage_publication,book_withdrawals)
-  SELECT 0,:bootstrap::uuid,:definition::uuid,:request_key::text||':'||p.job::text||':'||p.generation::text,
+  SELECT 0,:bootstrap::uuid,i.definition,:request_key::text||':'||p.job::text||':'||p.generation::text,
     :consumer::text,'pit',pg_current_snapshot(),owner.epoch,owner.position,'begun',p.generation,p.job,
     (SELECT jsonb_agg(jsonb_build_object('home',source_home,'epoch',source_epoch,'position',position::text,
         'route',route,'id',subject_id,'visibility',visibility,'revision',security_revision::text,
         'command',command_position::text)
       ORDER BY source_home,position) FROM visible)
-  FROM parent p CROSS JOIN budget JOIN core.partition owner ON owner.partition_no=0
+  FROM parent p CROSS JOIN budget CROSS JOIN input i JOIN core.partition owner ON owner.partition_no=0
     AND owner.write_state='active' AND owner.epoch=:owner_epoch::integer
   WHERE budget.steps=(SELECT count(*) FROM visible) AND NOT EXISTS(SELECT 1 FROM pending)
     AND NOT EXISTS(SELECT 1 FROM semantic.public_filter_privacy_head WHERE population_fenced)
