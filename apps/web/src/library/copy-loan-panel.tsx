@@ -236,8 +236,8 @@ function CopyLoanVisit({
                   </Button>
                 </header>
                 <LoanControls
-                  loan={found?.loan}
-                  copy={exhausted ? { id: copy.id, revision: copy.revision } : undefined}
+                  {...(found ? { loan: found.loan } : {})}
+                  {...(exhausted ? { copy: { id: copy.id, revision: copy.revision } } : {})}
                   today={read.page.boundary?.today ?? null}
                   originating={source}
                   disabled={controlsDisabled}

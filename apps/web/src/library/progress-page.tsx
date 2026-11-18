@@ -20,6 +20,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -1219,7 +1220,7 @@ function ProgressIndexPageContent({
             <ProgressPicker
               value={filterSubject}
               label={m.library_progress_discovery_exact_subject()}
-              isCurrent={authority?.isCurrent}
+              {...(authority ? { isCurrent: authority.isCurrent } : {})}
               onValueChange={setFilterSubject}
             />
             <div className="flex flex-wrap gap-2">

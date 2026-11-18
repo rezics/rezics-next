@@ -1,4 +1,4 @@
-import type { Loan, LoanPage } from '@rezics/client';
+import type { KernelClient, Loan, LoanPage, LoanWrite } from '@rezics/client';
 import type { FakeRoute } from '../fake-modules';
 
 /** Illustrative contracts, not recorded native acceptance or a second loan implementation. */
@@ -119,15 +119,22 @@ export function resetLoansStoryMode() {
 const conflict = { status: 409, code: 'conflict', type: 'https://rezics.com/problems/conflict' };
 const unavailable = { status: 503, code: 'unavailable', type: 'https://rezics.com/problems/unavailable' };
 
-async function write(request: Request, operation: 'create' | 'extend' | 'return') {
+type LoanDetailRoute = ReturnType<KernelClient['copy-loans']>;
+type StoryLoanWrite =
+  | { operation: 'create'; input: LoanWrite }
+  | { operation: 'extend'; input: Parameters<LoanDetailRoute['patch']>[0] }
+  | { operation: 'return'; input: Parameters<LoanDetailRoute['return']['post']>[0] };
+
+async function write(request: Request, routeOperation: StoryLoanWrite['operation']) {
   if (!mode || !page) return;
-  const input = await request.json();
+  const { operation, input } = { operation: routeOperation, input: await request.json() } as StoryLoanWrite;
+  const path = new URL(request.url).pathname;
   const key = request.headers.get('idempotency-key') ?? '';
-  const body = JSON.stringify({ operation, path: new URL(request.url).pathname, input });
+  const body = JSON.stringify({ operation, path, input });
   const receipt = receipts.get(key);
   if (receipt)
     return receipt.body === body ? { status: 200, loan: receipt.loan, boundary: loanStoryBoundary } : conflict;
-  const loanId = new URL(request.url).pathname.split('/')[3];
+  const loanId = path.split('/')[3];
   const row = page.items.find((row) => row.loan.id === loanId);
   if (mode === 'conflict' && !conflicted && row) {
     conflicted = true;
@@ -149,7 +156,7 @@ async function write(request: Request, operation: 'create' | 'extend' | 'return'
       copyId: input.copyId,
       revision: 1,
       direction: input.direction,
-      counterparty: input.counterparty,
+      counterparty: input.counterparty.kind === 'name' ? input.counterparty : { kind: 'person', state: 'concealed' },
       startedOn: input.startedOn,
       dueOn: input.dueOn ?? null,
       state: input.dueOn ? 'due' : 'undated',
