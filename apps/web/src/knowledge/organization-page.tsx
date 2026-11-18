@@ -2,7 +2,8 @@ import { KnowledgeDetails } from './workspace';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItem } from '@rezics/ui/content-item';
+import { ContentItemHeading } from '@rezics/ui/content-item';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
 import type { KnowledgeNavigationFrontier } from './navigation-model';
 import type { KnowledgeNavigationReturn, KnowledgeNavigationRestoration } from './navigation-return';
@@ -481,57 +482,64 @@ export function KnowledgeOrganizationPage({
           ) : (
             <ul className="min-w-0 divide-y divide-border">
               {page.placements.map((row) => (
-                <ContentItem
+                <ListRow
                   key={row.placementId}
-                  className="min-w-0"
-                  headingLevel={3}
-                  title={
-                    <Link
-                      to="/knowledge/notebooks/$notebookId/documents/$documentId"
-                      params={{ notebookId: page.notebookId, documentId: row.documentId }}
-                      preload={false}
-                      className={link}
-                      ref={row.documentId === documentId ? selected : undefined}
-                      aria-current={row.documentId === documentId ? 'page' : undefined}
-                      onClick={(event) => {
-                        if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
-                          remember(row.documentId);
-                      }}
-                    >
-                      <span className="sr-only">{m.knowledge_navigation_open_document({}, options)}: </span>
-                      {row.title}
-                    </Link>
-                  }
-                  context={
-                    <div className="min-w-0 space-y-1 text-sm">
-                      <p className="min-w-0 break-words">
-                        <span className="text-muted-foreground">
-                          {page.kind === 'outline' ? copy.destination : copy.parent}:
-                        </span>{' '}
-                        {parentTitle}
-                        {parentPlacementId && (
-                          <span className="ml-2 break-all font-mono text-xs">{parentPlacementId}</span>
-                        )}
-                      </p>
-                      {snapshot.source && page.kind === 'outline' && (
+                  className="@container/content-item min-w-0 py-3 sm:py-4"
+                >
+                  <div className="min-w-0 wrap-anywhere @min-[40rem]/content-item:grid @min-[40rem]/content-item:grid-cols-[minmax(0,1fr)_fit-content(40%)] @min-[40rem]/content-item:items-start @min-[40rem]/content-item:gap-x-4">
+                    <div className="min-w-0">
+                      <div
+                        data-content-item-slot="context"
+                        className="mb-2 min-w-0 space-y-1 whitespace-normal text-sm leading-snug text-muted-foreground"
+                      >
                         <p className="min-w-0 break-words">
-                          <span className="text-muted-foreground">{copy.selected}:</span>{' '}
-                          {snapshot.source.row.title}
-                          <span className="ml-2 break-all font-mono text-xs">
-                            {snapshot.source.row.placementId}
-                          </span>
+                          <span className="text-muted-foreground">
+                            {page.kind === 'outline' ? copy.destination : copy.parent}:
+                          </span>{' '}
+                          {parentTitle}
+                          {parentPlacementId && (
+                            <span className="ml-2 break-all font-mono text-xs">{parentPlacementId}</span>
+                          )}
                         </p>
-                      )}
+                        {snapshot.source && page.kind === 'outline' && (
+                          <p className="min-w-0 break-words">
+                            <span className="text-muted-foreground">{copy.selected}:</span>{' '}
+                            {snapshot.source.row.title}
+                            <span className="ml-2 break-all font-mono text-xs">
+                              {snapshot.source.row.placementId}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                      <ContentItemHeading
+                        level={3}
+                        className="whitespace-normal text-[17px] leading-snug font-semibold wrap-anywhere sm:text-lg md:text-xl"
+                      >
+                        <Link
+                          to="/knowledge/notebooks/$notebookId/documents/$documentId"
+                          params={{ notebookId: page.notebookId, documentId: row.documentId }}
+                          preload={false}
+                          className={link}
+                          ref={row.documentId === documentId ? selected : undefined}
+                          aria-current={row.documentId === documentId ? 'page' : undefined}
+                          onClick={(event) => {
+                            if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
+                              remember(row.documentId);
+                          }}
+                        >
+                          <span className="sr-only">{m.knowledge_navigation_open_document({}, options)}: </span>
+                          {row.title}
+                        </Link>
+                      </ContentItemHeading>
+                      <p data-content-item-slot="metadata" className="mt-2 break-all text-xs text-muted-foreground">
+                        <span>{copy.source}:</span>{' '}
+                        <span className="font-mono">{row.placementId}</span>
+                      </p>
                     </div>
-                  }
-                  metadata={
-                    <p className="break-all text-xs">
-                      <span className="text-muted-foreground">{copy.source}:</span>{' '}
-                      <span className="font-mono">{row.placementId}</span>
-                    </p>
-                  }
-                  actions={
-                    <div className="flex min-w-0 flex-wrap gap-2">
+                    <ListRowControl
+                      data-content-item-slot="actions"
+                      className="mt-3 flex min-w-0 flex-wrap items-center gap-2 @min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end"
+                    >
                       <Button
                         variant="outline"
                         className={control}
@@ -558,9 +566,9 @@ export function KnowledgeOrganizationPage({
                           <span className="sr-only">: {row.title}</span>
                         </Button>
                       )}
-                    </div>
-                  }
-                />
+                    </ListRowControl>
+                  </div>
+                </ListRow>
               ))}
             </ul>
           )}

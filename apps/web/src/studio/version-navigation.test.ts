@@ -23,7 +23,7 @@ async function fixture() {
   });
   const port: StudioPort = {
     isCurrent: () => current,
-    open: mock(async () => ({ ok: true, value: { revision, permissions: { edit: true, publish: false } } })),
+    open: mock(async () => ({ ok: true as const, value: { revision, permissions: { edit: true, publish: false } } })),
     documents: unused,
     createDraft: unused,
     saveDraft: unused,
@@ -36,7 +36,7 @@ async function fixture() {
         ? { ok: false as const, error: { kind: 'unavailable' as const, message: 'Unavailable' } }
         : { ok: true as const, value: response };
     }),
-    revision: mock(async () => ({ ok: true, value: revision })),
+    revision: mock(async () => ({ ok: true as const, value: revision })),
   };
   const controller = new StudioController(
     {

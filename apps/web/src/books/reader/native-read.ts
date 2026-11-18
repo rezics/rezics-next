@@ -24,7 +24,7 @@ import {
 
 const selection = v.strictObject({
   occurrenceId: hostedId,
-  bodyLanguage: v.optional(
+  bodyLanguage: v.exactOptional(
     v.pipe(
       v.string(),
       v.check((value) => bookLanguagePreferenceWithinBounds({ language: value, preferredLanguages: [] })),
@@ -41,7 +41,7 @@ export const nativeBookChapterAddressSchema = v.strictObject({
   kind: v.literal('chapter'),
   publication,
   selection,
-  languagePreference: v.optional(bookLanguagePreferenceSchema),
+  languagePreference: v.exactOptional(bookLanguagePreferenceSchema),
 });
 const request = v.strictObject({
   address: v.variant('kind', [
@@ -50,7 +50,7 @@ const request = v.strictObject({
       kind: v.literal('contents'),
       publication,
       selection: v.nullable(selection),
-      languagePreference: v.optional(bookLanguagePreferenceSchema),
+      languagePreference: v.exactOptional(bookLanguagePreferenceSchema),
       parentOccurrenceId: v.nullable(hostedId),
       cursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
     }),

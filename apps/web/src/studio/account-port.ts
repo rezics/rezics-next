@@ -94,13 +94,18 @@ function exactSelection(selection: StudioSelection, entry: OwnDraftEntry, accoun
   );
 }
 
-function openingEntry({ post, title }: Pick<PostDocumentHead, 'post' | 'title'>): OwnDraftEntry {
+type OpeningPost = Pick<
+  PostDocumentHead['post'],
+  'id' | 'threadId' | 'revisionId' | 'revisedAt' | 'createdAt' | 'licence' | 'subjectIds' | 'mediaIds' | 'boardId'
+>;
+
+function openingEntry(post: OpeningPost, title: string, authorId: string): OwnDraftEntry {
   return {
     id: post.id,
     threadId: post.threadId,
     firstPostId: post.id,
     revisionId: post.revisionId,
-    authorId: post.authorId,
+    authorId,
     kind: 'discussion',
     documentKind: 'opening',
     title,
@@ -111,7 +116,7 @@ function openingEntry({ post, title }: Pick<PostDocumentHead, 'post' | 'title'>)
     board: { id: post.boardId, title: null, realmId: null },
     language: null,
     actions: {
-      resume: `/v1/accounts/${post.authorId}/drafts/${post.id}?threadId=${post.threadId}`,
+      resume: `/v1/accounts/${authorId}/drafts/${post.id}?threadId=${post.threadId}`,
       edit: null,
       publish: null,
       erase: null,
@@ -193,10 +198,16 @@ export function createStudioAccountPort(
         signal,
       });
       if (!head.ok) return head;
-      const { post, viewerId } = head.value;
-      if (post.id !== postId || viewerId !== accountId || signal.aborted || !documents.isCurrent())
+      const { post, title, viewerId } = head.value;
+      if (
+        post.id !== postId ||
+        post.authorId !== accountId ||
+        viewerId !== accountId ||
+        signal.aborted ||
+        !documents.isCurrent()
+      )
         return { ok: false, error: unavailable(locale) };
-      return await openEntry(openingEntry(head.value), signal, async () => {
+      return await openEntry(openingEntry(post, title, post.authorId), signal, async () => {
         const selection = await projectPostDocumentHead(head.value, source.read().csrfReady && !!input.csrfToken);
         return selection ? { ok: true, value: selection } : { ok: false, error: unavailable(locale) };
       });
@@ -252,10 +263,11 @@ export function createStudioAccountPort(
       },
       permissions: { edit: true, publish: true },
     };
-    const entry = openingEntry({
-      post: { ...post, boardId: thread.boardId, licence: thread.licence, subjectIds: thread.subjectIds },
-      title: thread.title,
-    });
+    const entry = openingEntry(
+      { ...post, boardId: thread.boardId, licence: thread.licence, subjectIds: thread.subjectIds },
+      thread.title,
+      post.authorId,
+    );
     visibleEntries.delete(post.id);
     visibleEntries.set(post.id, entry);
     while (visibleEntries.size > 20) visibleEntries.delete(visibleEntries.keys().next().value!);

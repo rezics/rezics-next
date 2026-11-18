@@ -400,11 +400,15 @@ export function createHostedBookNative(
       const body = v.safeParse(hostedBindLanguage, input);
       if (!body.success || !v.is(hostedId, catalogueId) || !v.is(hostedId, occurrenceId) || !v.is(hostedKey, key))
         return failure(400, true);
+      const { makeDefault, ...binding } = body.output;
       return command(catalogueId, 'structure', null, signal, () =>
         client
           .hostedCatalogues({ id: catalogueId })
           .occurrences({ occurrenceId })
-          .$bindLanguage.post(body.output, commandOptions(signal, key)),
+          .$bindLanguage.post(
+            { ...binding, ...(makeDefault === undefined ? {} : { makeDefault }) },
+            commandOptions(signal, key),
+          ),
       );
     },
     async revise(catalogueId, input, key, signal) {

@@ -33,7 +33,7 @@ import {
 } from '../threads';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import { localizeHref, type Locale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { historicalReaderSource, type HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import { hostedReleaseActivationTransport } from '../studio/hosted-release-activation-actions';
 import { hostedOwnerBookHref } from '../studio/hosted-inventory';

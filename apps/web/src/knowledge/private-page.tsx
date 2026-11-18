@@ -505,8 +505,8 @@ function PrivatePageFrame({
   children: React.ReactNode;
   navigation?: React.ReactNode;
   status?: React.ReactNode;
-  lifecycleFocusBoundaryRef?: React.Ref<HTMLDivElement>;
-  lifecycleHeadingRef?: React.Ref<HTMLHeaderElement>;
+  lifecycleFocusBoundaryRef?: React.Ref<HTMLDivElement> | undefined;
+  lifecycleHeadingRef?: React.Ref<HTMLElement> | undefined;
 }) {
   const options = localeOptions(locale);
   return (
@@ -541,17 +541,9 @@ function PrivatePageFrame({
   );
 }
 
-function sameReceipt<T extends object>(value: unknown, fields: readonly (keyof T)[]): value is T {
+function hasReceiptIds<T extends object>(value: T, fields: readonly (keyof T)[]): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const candidate = value as Record<string, unknown>;
-  return fields.every((field) => isKnowledgeId(candidate[String(field)]));
-}
-
-function receiptStatus<T extends object>(
-  result: PrivateOperationResult<T>,
-  fields: readonly (keyof T)[],
-): result is { state: 'acknowledged'; receipt: T } {
-  return result.state === 'acknowledged' && sameReceipt<T>(result.receipt, fields);
+  return fields.every((field) => isKnowledgeId(value[field]));
 }
 
 function mayHaveCommitted(state: PrivateOperationResult<unknown>['state']): boolean {
@@ -682,7 +674,7 @@ function PrivateKnowledgeEditor({
   const [lifecycleOperationAction, setLifecycleOperationAction] = useState<'trash' | 'restore' | null>(null);
   const lifecycleFocusRequest = useRef<LifecycleFocusRequest | null>(null);
   const lifecycleFocusBoundaryRef = useRef<HTMLDivElement>(null);
-  const lifecycleHeadingRef = useRef<HTMLHeaderElement>(null);
+  const lifecycleHeadingRef = useRef<HTMLElement>(null);
   const lifecycleReviewTargetRef = useRef<HTMLDivElement>(null);
   const lifecycleReviewOpenerRef = useRef<HTMLButtonElement>(null);
   const notebookIntentRef = useRef(notebookIntent);
@@ -1186,7 +1178,10 @@ function PrivateKnowledgeEditor({
     try {
       const result = await operations.createNotebook(intent);
       if (!active.current) return;
-      if (receiptStatus<KnowledgeNotebookReceipt>(result, ['notebookId', 'structureRevisionId'])) {
+      if (
+        result.state === 'acknowledged' &&
+        hasReceiptIds(result.receipt, ['notebookId', 'structureRevisionId'])
+      ) {
         setNotebookReceipt(result.receipt);
         setNotebookIntent(null);
         notebookIntentRef.current = null;
@@ -1256,7 +1251,8 @@ function PrivateKnowledgeEditor({
       const result = await operations.createDocument(intent);
       if (!active.current) return;
       if (
-        receiptStatus<KnowledgeDocumentReceipt>(result, [
+        result.state === 'acknowledged' &&
+        hasReceiptIds(result.receipt, [
           'notebookId',
           'documentId',
           'placementId',
@@ -1360,7 +1356,8 @@ function PrivateKnowledgeEditor({
       const result = await operations.revise(intent);
       if (!active.current) return;
       if (
-        receiptStatus<KnowledgeRevisionReceipt>(result, ['documentId', 'revisionId']) &&
+        result.state === 'acknowledged' &&
+        hasReceiptIds(result.receipt, ['documentId', 'revisionId']) &&
         result.receipt.documentId === intent.documentId
       ) {
         setRevisionReceipt(result.receipt);
