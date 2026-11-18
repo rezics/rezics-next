@@ -119,7 +119,18 @@ function validateRevalidation(request: LeafRequest): void {
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-class LeafNotReady extends Error {}
+type LeafReadinessReason =
+  | 'subject-anchor'
+  | 'subject-access'
+  | 'release-definition'
+  | 'selection-progress'
+  | 'candidate-row'
+  | 'candidate-provenance';
+class LeafNotReady extends Error {
+  constructor(readonly reason: LeafReadinessReason) {
+    super();
+  }
+}
 class LeafBasisChanged extends Error {}
 type CurrentEvidence = Omit<Extract<LeafEvidence, { state: 'current' }>, 'usage'>;
 type NativeAnchor = NonNullable<Awaited<ReturnType<LeafNativeWork['anchor']>>>;
@@ -210,8 +221,9 @@ async function publicCandidate(
   work: LeafNativeWork,
   releases: Map<string, Release['properties']>,
 ): Promise<SelectedLeafFact | null> {
-  if (!row.body || row.release === null || row.revision === null || row.property !== property) throw new LeafNotReady();
-  if (row.source_bytes > 0 && row.source === null) throw new LeafNotReady();
+  if (!row.body || row.release === null || row.property !== property) throw new LeafNotReady('candidate-row');
+  if (row.revision === null || (row.source_bytes > 0 && row.source === null))
+    throw new LeafNotReady('candidate-provenance');
   if (row.source !== null) {
     if (
       !sourceObject(row.source) ||
@@ -219,7 +231,7 @@ async function publicCandidate(
       typeof row.source.external_id !== 'string' ||
       row.source.field_group !== 'facts'
     )
-      throw new LeafNotReady();
+      throw new LeafNotReady('candidate-provenance');
     const tuple = sourceTuple(options.routeKey, row.source as Source);
     const fences = await work.snapshot(pool, tuple.route, (client) => {
       const inputBytes = sourceBytes([tuple]);
@@ -272,7 +284,8 @@ async function readNativeLeaf(
   const check = await prepareLeafAccess(pool, request.subject, options, work);
   const initial = await work.snapshot(pool, route, async (client) => {
     const anchor = await work.anchor(client, route, request.subject);
-    if (!liveAnchor(anchor) || !(await check(client, options.nativeT))) throw new LeafNotReady();
+    if (!liveAnchor(anchor)) throw new LeafNotReady('subject-anchor');
+    if (!(await check(client, options.nativeT))) throw new LeafNotReady('subject-access');
     return anchor;
   });
   const basis = basisOf(initial, request);
@@ -288,7 +301,7 @@ async function readNativeLeaf(
   const release = await work.release(pool, initial.current_release, [leaf.property]);
   releases.set(initial.current_release, release);
   const definition = release[leaf.property];
-  if (!definition) throw new LeafNotReady();
+  if (!definition) throw new LeafNotReady('release-definition');
   const relation = definition.relation !== undefined;
   if (relation && !('values' in leaf))
     return work.accounting.unavailable('Semantic native relation range selective access path');
@@ -303,7 +316,7 @@ async function readNativeLeaf(
   const continueAt = (next: LeafProgress, start: LeafProgress) => {
     const previous = request.after ?? start;
     if (next.phase === previous.phase && next.valueOrdinal === previous.valueOrdinal && next.after === previous.after)
-      throw new LeafNotReady();
+      throw new LeafNotReady('selection-progress');
     evidence.progress = next;
   };
   await work.snapshot(pool, route, async (client) => {
@@ -322,15 +335,14 @@ async function readNativeLeaf(
       // Length guards apply before driver transfer. Leave room for final native revalidation.
       const maxBytes = Math.max(0, work.remaining('bytes') - 8192);
       const row = await work.candidate(client, route, request.subject, witness, maxBytes);
-      if (row && (row.body === null || row.property === null || (row.source_bytes > 0 && row.source === null)))
-        throw new LeafNotReady();
+      if (row && (row.body === null || row.property === null)) throw new LeafNotReady('candidate-row');
+      if (row && row.source_bytes > 0 && row.source === null) throw new LeafNotReady('candidate-provenance');
       if (!row || row.property !== leaf.property || row.slot_id !== id) return;
       if (state.operation !== 'expand') {
         if (row.expanded || row.operation !== 'assert') return;
         rank = sourceObject(row.body) ? selectedRank(row.body.rank) : null;
       }
       if (!rank) return;
-      if (row.body === null || (row.source_bytes > 0 && row.source === null)) throw new LeafNotReady();
       pending.set(witness, { row, rank, witness });
     };
 
@@ -436,9 +448,9 @@ async function readNativeLeaf(
   // Source changes during independent foreign reads invalidate the whole observation.
   await work.snapshot(pool, route, async (client) => {
     const anchor = await work.anchor(client, route, request.subject);
-    if (!liveAnchor(anchor)) throw new LeafNotReady();
+    if (!liveAnchor(anchor)) throw new LeafNotReady('subject-anchor');
     if (basisOf(anchor, request) !== basis) throw new LeafBasisChanged();
-    if (!(await check(client, options.nativeT))) throw new LeafNotReady();
+    if (!(await check(client, options.nativeT))) throw new LeafNotReady('subject-access');
   });
   if (relationEmptyPairProven) evidence.coverage = { kind: 'empty_pair', basis };
   if (complete) evidence.coverage = { kind: 'selection', basis };
@@ -467,8 +479,11 @@ export async function readCataloguePointEvidence(
     if (!Number.isSafeInteger(authorizationBudget[axis]) || authorizationBudget[axis] <= 0)
       throw new RangeError('Invalid catalogue point authorization budget');
   const authorization = new LeafNativeWork(authorizationBudget, options.deadline);
-  const evidence = await readLeafEvidence(pool, request, options, authorization.accounting);
-  return { evidence, authorization: authorization.usage() };
+  let readinessReason: LeafReadinessReason | 'work-budget' | undefined;
+  const evidence = await readLeafEvidence(pool, request, options, authorization.accounting, (reason) => {
+    readinessReason = reason;
+  });
+  return { evidence, authorization: authorization.usage(), readinessReason };
 }
 
 async function readLeafEvidence(
@@ -476,6 +491,7 @@ async function readLeafEvidence(
   request: LeafRequest,
   options: LeafOptions,
   authorization?: LeafNativeWork['accounting'],
+  observeNotReady?: (reason: LeafReadinessReason | 'work-budget') => void,
 ): Promise<LeafEvidence> {
   validateBudget(request?.budget);
   validateRevalidation(request);
@@ -495,7 +511,9 @@ async function readLeafEvidence(
   if (result.state === 'complete') return { ...result.value, usage: result.usage };
   if (result.state === 'unavailable') throw new (AccessWorkUnavailableError())(result.dependency);
   if (result.error instanceof LeafBasisChanged) return { state: 'basis_changed', usage: result.usage };
-  if (result.error instanceof LeafNotReady || result.error instanceof LeafReservationUnavailable)
+  if (result.error instanceof LeafNotReady || result.error instanceof LeafReservationUnavailable) {
+    observeNotReady?.(result.error instanceof LeafNotReady ? result.error.reason : 'work-budget');
     return { state: 'not_ready', usage: result.usage };
+  }
   throw result.error;
 }
