@@ -469,9 +469,12 @@ export default defineConfig((context) => {
           const listen = client.listen.bind(client);
           client.listen = async (server) => {
             await listen(server);
-            // Start waits for this compiler in its own SSR middleware. Cloudflare dispatches SSR
-            // directly to workerd, so join the initial output before Vite opens the listener.
-            await bundle['devEngine'].ensureLatestBuildOutput();
+            // Cloudflare dispatches SSR directly to workerd. Wait for Vite to receive Rolldown's
+            // output callback, then require the exact entry Start puts in the document.
+            await bundle['waitForInitialBuildFinish']();
+            if (!bundle.memoryFiles.has('assets/index.js')) {
+              throw bundle['lastBuildError'] ?? new Error('Native Web did not emit /assets/index.js');
+            }
           };
         },
       } satisfies Plugin,
