@@ -8,10 +8,9 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentsForSubjects } from './agents.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { readRelease } from './definition-release-read.ts';
-import { LINKS_CHANGED } from './events.ts';
 import { factDataTypes, SubjectInputError, type FactRow } from './item.ts';
 import { holderFacts, holderKeys, labelOrderKey } from './link-keys.ts';
-import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChangeEvents, linkChanges } from './link-changes.ts';
 import { readContextDefaults, type ContextRecord } from './context.ts';
 import listRelationContexts from './relation-context-list.sql';
 import { readLabels } from './public-subject-facts.ts';
@@ -359,12 +358,7 @@ export async function changeStatementDisclosure(
           data: { id: row.subject_id, revision, kind: 'retract' },
         });
         const changes = await disclosureChanges(tx, row, release, before);
-        if (changes.length)
-          events.push({
-            type: LINKS_CHANGED,
-            subject: row.subject_id,
-            data: { subject: row.subject_id, revision, security_revision: Number(security.security_revision), changes },
-          });
+        events.push(...linkChangeEvents(row.subject_id, revision, Number(security.security_revision), changes));
         await recordSubjectPageDiff(
           tx,
           row.subject_id,
@@ -418,21 +412,10 @@ export async function changeStatementDisclosure(
         visibility.visibility === 'visible' && before ? await disclosureChanges(tx, row, release, before) : [];
       return {
         value: { candidate: options.candidate, disclosed: true },
-        events: changes.length
-          ? [
-              ...events,
-              {
-                type: LINKS_CHANGED,
-                subject,
-                data: {
-                  subject,
-                  revision: row.latest_revision,
-                  security_revision: Number(security.security_revision),
-                  changes,
-                },
-              },
-            ]
-          : events,
+        events: [
+          ...events,
+          ...linkChangeEvents(subject, row.latest_revision, Number(security.security_revision), changes),
+        ],
       };
     },
   );

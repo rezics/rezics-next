@@ -3,6 +3,9 @@ import { ACCOUNT_ROLE_BITS } from './contracts.ts';
 import type { AccountReference, HistoryScope } from './locator.ts';
 import { validateScope } from './locator.ts';
 
+/** Limit on each serialized command result and outbox event retained by History. */
+export const MAX_HISTORY_PAYLOAD_BYTES = 65_536;
+
 /** Permanent numeric namespace. Append explicit IDs; never assign IDs by registration order. */
 export const COMMAND_HISTORY_KINDS = Object.freeze({
   'access.account.preferences': 1,

@@ -14,11 +14,11 @@ import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { readRelease } from './definition-release-read.ts';
-import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
+import { LINKS_VISIBILITY_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { holderFacts } from './link-keys.ts';
-import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChangeEvents, linkChanges } from './link-changes.ts';
 import listRelationContexts from './relation-context-list.sql';
 import moderationBumpSecurity from './moderation-bump-security.sql';
 import moderationDeleteHidden from './moderation-delete-hidden.sql';
@@ -154,8 +154,8 @@ export async function moderationLinks(
   before: FactRow[],
   after: FactRow[],
   contexts: Map<string, { before: FactRow[]; after: FactRow[] }>,
-): Promise<{ type: string; subject: string; data: unknown } | null> {
-  if (before.length === 0 && after.length === 0 && contexts.size === 0) return null;
+): Promise<{ type: string; subject: string; data: unknown }[]> {
+  if (before.length === 0 && after.length === 0 && contexts.size === 0) return [];
   const release = await readRelease(tx, releaseDigest);
   if (!release) throw new Error('Subject revision release is missing');
   const identity = await holderFacts(tx, subject, release);
@@ -173,12 +173,7 @@ export async function moderationLinks(
         after,
       ),
     );
-  if (changes.length === 0) return null;
-  return {
-    type: LINKS_CHANGED,
-    subject,
-    data: { subject, revision, security_revision: securityRevision, changes },
-  };
+  return linkChangeEvents(subject, revision, securityRevision, changes);
 }
 
 export async function readStatementCandidate(pool: Pool, subject: string, candidate: string): Promise<boolean> {
@@ -468,7 +463,7 @@ export async function moderateStatement(
         after,
         contexts,
       );
-      if (links) events.push(links);
+      events.push(...links);
       await recordSubjectPageDiff(
         tx,
         options.subject,

@@ -10,11 +10,11 @@ import type { CandidateAdoptionOptions } from './candidate-contract.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { redirectOf } from './subject-redirect.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
-import { LINK_KEYS_CHANGED, LINKS_CHANGED, SUBJECT_REVISED } from './events.ts';
+import { LINK_KEYS_CHANGED, SUBJECT_REVISED } from './events.ts';
 import { recordPrivacyReduction } from './public-filter-source.ts';
 import { factDataTypes, isRelationProperty, SubjectInputError } from './item.ts';
 import { holderFacts } from './link-keys.ts';
-import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { contextLinkChanges, linkChangeEvents, linkChanges } from './link-changes.ts';
 import { contextSnapshot, readContextDefaults, type ContextRecord } from './context.ts';
 import registerRelationContext from './relation-context-register.sql';
 import listRelationContexts from './relation-context-list.sql';
@@ -300,18 +300,7 @@ export async function adoptCandidates(
               ),
             );
           }
-          if (changes.length > 0) {
-            events.push({
-              type: LINKS_CHANGED,
-              subject: options.subject,
-              data: {
-                subject: options.subject,
-                revision,
-                security_revision: Number(subject.security_revision),
-                changes,
-              },
-            });
-          }
+          events.push(...linkChangeEvents(options.subject, revision, Number(subject.security_revision), changes));
           if (options.context === GLOBAL_CONTEXT && options.property === 'schema:datePublished') {
             for (const direction of ['holder', 'target'] as const)
               events.push({
