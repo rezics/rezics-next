@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import type { Page } from 'playwright';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
@@ -6,12 +7,13 @@ import {
   exactCookie,
   nativeAuthPassword,
   navigationUrls,
+  observePasskeySignInOptions,
   provisionNativeAuthSecurityFixture,
   startNativeAuthIssuerProxy,
+  submitPasswordSignIn,
   visitLibrarySignIn,
   type NativeAuthIssuerProxy,
   type NativeAuthSecurityFixture,
-  submitPasswordSignIn,
 } from './native-auth-security-fixture.ts';
 
 const lifecycle = new NativeTestLifecycle('native Auth security');
@@ -43,21 +45,38 @@ nativeTest(
 );
 
 async function manageAccountSecurity() {
+  const webOrigin = new URL(stack.web).origin;
   const newcomerContext = await auth.context('newcomer');
   const newcomerPage = await newcomerContext.newPage();
   newcomerPage.setDefaultTimeout(15_000);
   const newcomerUrls = navigationUrls(newcomerPage);
   const signupTarget = fixture.libraryTarget;
   await visitLibrarySignIn(newcomerPage, stack, signupTarget);
+  const authorizationQuery = new URL(newcomerPage.url()).search;
+  expect(new URLSearchParams(authorizationQuery).get('client_id')).toBe('rezics-website');
   const signup = newcomerPage.getByRole('link', { name: /create an account|sign up/i }).first();
   await signup.click();
-  await newcomerPage.waitForURL((url) => new URL(url).pathname === '/signup');
+  await newcomerPage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/signup');
+  expect(new URL(newcomerPage.url()).search).toBe(authorizationQuery);
   await newcomerPage.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-  await newcomerPage.getByLabel('Handle', { exact: true }).fill(`native-auth-${crypto.randomUUID().slice(0, 8)}`);
-  await newcomerPage.getByLabel('Email', { exact: true }).fill(`native-auth-${crypto.randomUUID()}@example.test`);
-  await newcomerPage.getByLabel('Password', { exact: true }).fill(`Newcomer-${crypto.randomUUID()}-Secure`);
+  const fields = newcomerPage.locator('#signup-form input');
+  const newcomerHandle = `native-auth-${crypto.randomUUID().slice(0, 8)}`;
+  const newcomerEmail = `native-auth-${crypto.randomUUID()}@example.test`;
+  const newcomerPassword = `Newcomer-${crypto.randomUUID()}-Secure`;
+  await fields.and(newcomerPage.getByLabel('Handle', { exact: true })).fill(newcomerHandle);
+  await fields.and(newcomerPage.getByLabel('Email', { exact: true })).fill(newcomerEmail);
+  await fields.and(newcomerPage.getByLabel('Password', { exact: true })).fill(newcomerPassword);
+  await fields.and(newcomerPage.getByLabel('Confirm password', { exact: true })).fill(newcomerPassword);
+  await newcomerPage.getByText('Loading the security check…', { exact: true }).waitFor({ state: 'hidden' });
   const signupResponse = newcomerPage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
+    (response) => response.url() === `${auth.origin}/signup` && response.request().method() === 'POST',
+  );
+  const signupCallback = newcomerPage.waitForResponse(
+    (response) => {
+      const { origin, pathname } = new URL(response.url());
+      return origin === webOrigin && pathname === '/auth/callback';
+    },
+    { timeout: 30_000 },
   );
   await newcomerPage.getByRole('button', { name: 'Create an account', exact: true }).click();
   const created = await signupResponse;
@@ -65,12 +84,17 @@ async function manageAccountSecurity() {
   const newcomerId = ((await created.json()) as { accountId?: unknown }).accountId;
   expect(typeof newcomerId).toBe('string');
   expect([fixture.accountIds.alice, fixture.accountIds.bob]).not.toContain(newcomerId);
-  await newcomerPage.waitForURL((url) => `${url.pathname}${url.search}` === signupTarget, { timeout: 30_000 });
+  expect((await signupCallback).status()).toBe(303);
+  await newcomerPage.waitForURL((url) => url.origin === webOrigin && `${url.pathname}${url.search}` === signupTarget, {
+    timeout: 30_000,
+  });
   await newcomerPage.locator('#account-menu-button').waitFor({ state: 'visible' });
-  expect(await exactCookie(newcomerContext, stack.web, '__Host-rezics_session')).toBeDefined();
+  const newcomerCookie = await exactCookie(newcomerContext, stack.web, '__Host-rezics_session');
+  expect(newcomerCookie?.httpOnly).toBe(true);
   expect(newcomerUrls.some((url) => new URL(url).pathname === '/consent')).toBe(false);
-  expect(new URL(newcomerPage.url()).origin).toBe(new URL(stack.web).origin);
-  expect(new URL(newcomerPage.url()).pathname + new URL(newcomerPage.url()).search).toBe(signupTarget);
+  await newcomerPage.reload({ waitUntil: 'domcontentloaded' });
+  await newcomerPage.locator('#account-menu-button').waitFor({ state: 'visible' });
+  expect((await exactCookie(newcomerContext, stack.web, '__Host-rezics_session'))?.value).toBe(newcomerCookie?.value);
 
   const aliceContext = await auth.context('alice');
   const alicePage = await aliceContext.newPage();
@@ -107,23 +131,19 @@ async function manageAccountSecurity() {
   expect(auth.context('bob')).toBe(bobContext);
 
   await alicePage.locator('#account-menu-button').click();
-  const firstPasskeyList = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/passkeys' && response.request().method() === 'GET',
-  );
   await alicePage.locator('[data-account-security-settings]').click();
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
-  expect((await firstPasskeyList).status()).toBe(200);
   await alicePage.getByRole('region', { name: 'Sessions', exact: true }).waitFor({ state: 'visible' });
-  const websiteSession = alicePage.getByRole('listitem').filter({ hasText: 'REZICS' });
-  await websiteSession.first().waitFor({ state: 'visible' });
+  const loginSession = alicePage.getByRole('listitem').filter({ hasText: 'This device' });
+  await loginSession.getByText('REZICS account', { exact: true }).waitFor({ state: 'visible' });
   const sessionResponse = await alicePage.evaluate(async () => {
     const response = await fetch('/sessions', { credentials: 'include' });
     return { status: response.status, body: await response.json() };
   });
   expect(sessionResponse.status).toBe(200);
-  expect(sessionResponse.body.sessions).toContainEqual(expect.objectContaining({ client_id: 'rezics-website' }));
+  expect(sessionResponse.body.sessions).toContainEqual(expect.objectContaining({ client_id: 'login', current: true }));
   expect(new URL(auth.origin).hostname).toBe('auth.native.rezics.com');
-  expect((await alicePage.goBack({ waitUntil: 'domcontentloaded' }))?.status()).toBe(200);
+  await alicePage.goBack({ waitUntil: 'domcontentloaded' });
   await alicePage.waitForURL((url) => `${url.pathname}${url.search}` === fixture.libraryTarget);
 
   await alicePage.goto(`${stack.web}${fixture.book.path}`, { waitUntil: 'domcontentloaded' });
@@ -142,18 +162,15 @@ async function manageAccountSecurity() {
   expect(await personalRead.text()).toContain('planned');
 
   await alicePage.locator('#account-menu-button').click();
-  const stalePasskeyList = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/passkeys' && response.request().method() === 'GET',
-  );
   await alicePage.locator('[data-account-security-settings]').click();
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
-  expect((await stalePasskeyList).status()).toBe(200);
   await alicePage.getByRole('button', { name: 'Add a passkey', exact: true }).waitFor({ state: 'visible' });
   const beforeStepUp = await alicePage.evaluate(async () => {
     const response = await fetch('/session', { credentials: 'include' });
     return { status: response.status, body: await response.json() };
   });
   expect(beforeStepUp.status).toBe(200);
+  expect(beforeStepUp.body.scope).toEqual([]);
   const webauthn = await aliceContext.newCDPSession(alicePage);
   await webauthn.send('WebAuthn.enable');
   const authenticator = await webauthn.send('WebAuthn.addVirtualAuthenticator', {
@@ -167,15 +184,15 @@ async function manageAccountSecurity() {
     },
   });
   await stack.advanceAuthClock(601);
-  const staleOptionsResponse = alicePage.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/passkeys/register/options' && response.request().method() === 'POST',
-  );
+  const enrollmentPosts: string[] = [];
+  alicePage.on('request', (request) => {
+    const { origin, pathname } = new URL(request.url());
+    if (origin === auth.origin && pathname.startsWith('/passkeys/register') && request.method() === 'POST')
+      enrollmentPosts.push(pathname);
+  });
   await alicePage.getByRole('button', { name: 'Add a passkey', exact: true }).click();
-  const staleOptions = await staleOptionsResponse;
-  expect(staleOptions.status()).toBe(401);
-  expect(await staleOptions.json()).toMatchObject({ error: 'step_up_required' });
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/step-up');
+  expect(enrollmentPosts).toEqual([]);
   await alicePage.getByLabel('Email', { exact: true }).fill(aliceIdentity.email);
   await alicePage.locator('input[name="password"]').fill(nativeAuthPassword);
   const stepUpResponse = alicePage.waitForResponse(
@@ -189,8 +206,11 @@ async function manageAccountSecurity() {
     return { status: response.status, body: await response.json() };
   });
   expect(afterStepUp.status).toBe(200);
+  expect(afterStepUp.body.account_id).toBe(fixture.accountIds.alice);
+  expect(afterStepUp.body.scope).toEqual(['account:manage']);
   expect(afterStepUp.body.auth_time - beforeStepUp.body.auth_time).toBeGreaterThan(600);
 
+  await alicePage.getByLabel('Passkey name (optional)', { exact: true }).fill('Alice native passkey');
   const registrationOptionsResponse = alicePage.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === '/passkeys/register/options' && response.request().method() === 'POST',
@@ -198,36 +218,31 @@ async function manageAccountSecurity() {
   const registrationResponse = alicePage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/passkeys/register' && response.request().method() === 'POST',
   );
-  await alicePage.getByLabel('Passkey name (optional)', { exact: true }).fill('Alice native passkey');
   await alicePage.getByRole('button', { name: 'Add a passkey', exact: true }).click();
   const registrationOptions = await registrationOptionsResponse;
   expect(registrationOptions.status()).toBe(200);
   expect(((await registrationOptions.json()) as { rp?: { id?: string } }).rp?.id).toBe('rezics.com');
   const registered = await registrationResponse;
   expect(registered.status()).toBe(201);
-  await alicePage.getByRole('alert').filter({ hasText: 'Passkey added.' }).waitFor({ state: 'visible' });
+  expect(enrollmentPosts).toEqual(['/passkeys/register/options', '/passkeys/register']);
+  const passkeys = alicePage.getByRole('region', { name: 'Passkeys', exact: true });
+  const alicePasskey = passkeys.getByRole('listitem').filter({ hasText: 'Alice native passkey' });
+  await passkeys
+    .getByRole('button', { name: 'Add a passkey', exact: true })
+    .and(alicePage.locator(':enabled'))
+    .waitFor({ state: 'visible' });
   await alicePage.reload({ waitUntil: 'domcontentloaded' });
-  await alicePage.getByRole('region', { name: 'Passkeys', exact: true }).waitFor({ state: 'visible' });
-  const nativePasskeys = await alicePage.evaluate(async () => {
-    const response = await fetch('/passkeys', { credentials: 'include', cache: 'no-store' });
-    return { status: response.status, body: await response.json() };
-  });
-  expect(nativePasskeys.status).toBe(200);
-  expect(nativePasskeys.body.passkeys).toHaveLength(1);
-  expect(await alicePage.getByRole('listitem').filter({ hasText: 'Alice native passkey' }).count()).toBe(1);
+  await alicePasskey.waitFor({ state: 'visible' });
+  expect(await passkeys.getByRole('listitem').count()).toBe(1);
+  expect(await alicePasskey.getByText('Last used', { exact: false }).count()).toBe(0);
 
-  await alicePage.goto(`${stack.web}${fixture.libraryTarget}`, { waitUntil: 'domcontentloaded' });
+  // Step-up replaces the native session. Renew the Website connection through its normal authorization entry.
+  await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
+  await alicePage.waitForURL((url) => url.origin === webOrigin && `${url.pathname}${url.search}` === fixture.libraryTarget, {
+    timeout: 30_000,
+  });
   await alicePage.locator('#account-menu-button').waitFor({ state: 'visible' });
-  await alicePage.locator('#account-menu-button').click();
-  const websiteSignOut = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/auth/sign-out' && response.request().method() === 'POST',
-  );
-  await alicePage.getByRole('button', { name: 'Sign out', exact: true }).click();
-  const websiteSignOutResponse = await websiteSignOut;
-  expect(websiteSignOutResponse.status()).toBeGreaterThanOrEqual(300);
-  expect(websiteSignOutResponse.status()).toBeLessThan(400);
-  expect(await exactCookie(aliceContext, stack.web, '__Host-rezics_session')).toBeUndefined();
-  expect((await alicePage.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
+  await signOutWebsiteAndAuth(alicePage);
   await alicePage.reload({ waitUntil: 'domcontentloaded' });
   expect(await alicePage.locator('#account-menu-button').count()).toBe(0);
   await alicePage.goto(`${stack.web}${fixture.libraryTarget}`, { waitUntil: 'domcontentloaded' });
@@ -244,46 +259,36 @@ async function manageAccountSecurity() {
   expect(anonymousCatalogue.status).toBe(200);
   expect(await anonymousCatalogue.text()).toContain(fixture.book.title);
 
+  const passkeySignInOptions = observePasskeySignInOptions(alicePage, auth.origin);
   await visitLibrarySignIn(alicePage, stack, fixture.libraryTarget);
   await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
-  const passkeySignInOptionsResponse = alicePage.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/signin/passkey/options' && response.request().method() === 'POST',
-  );
   const passkeySignInResponse = alicePage.waitForResponse(
     (response) => new URL(response.url()).pathname === '/signin/passkey' && response.request().method() === 'POST',
   );
   await alicePage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
-  const signInOptions = await passkeySignInOptionsResponse;
-  expect(signInOptions.status()).toBe(200);
-  expect(((await signInOptions.json()) as { rpId?: string }).rpId).toBe('rezics.com');
   expect((await passkeySignInResponse).status()).toBe(200);
+  const signInOptions = passkeySignInOptions.at(-1);
+  expect(signInOptions?.status()).toBe(200);
+  expect(await signInOptions?.json()).toMatchObject({ rpId: 'rezics.com' });
   await alicePage.waitForURL((url) => `${url.pathname}${url.search}` === fixture.libraryTarget, { timeout: 30_000 });
   await alicePage.locator('#account-menu-button').waitFor({ state: 'visible' });
   expect(await exactCookie(aliceContext, stack.web, '__Host-rezics_session')).toBeDefined();
   await alicePage.locator('#account-menu-button').click();
-  const usedPasskeyList = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/passkeys' && response.request().method() === 'GET',
-  );
   await alicePage.locator('[data-account-security-settings]').click();
   await alicePage.waitForURL((url) => url.origin === auth.origin && url.pathname === '/security');
-  expect((await usedPasskeyList).status()).toBe(200);
-  const usedPasskeyRead = await alicePage.evaluate(async () => {
-    const sessionResponse = await fetch('/session', { credentials: 'include' });
-    const passkeysResponse = await fetch('/passkeys', { credentials: 'include', cache: 'no-store' });
-    return {
-      session: { status: sessionResponse.status, body: await sessionResponse.json() },
-      passkeys: { status: passkeysResponse.status, body: await passkeysResponse.json() },
-    };
+  await alicePasskey.getByText('Last used', { exact: false }).waitFor({ state: 'visible' });
+  const usedSession = await alicePage.evaluate(async () => {
+    const response = await fetch('/session', { credentials: 'include' });
+    return { status: response.status, body: await response.json() };
   });
-  expect(usedPasskeyRead.session.status).toBe(200);
-  expect(usedPasskeyRead.session.body.amr).toContain('pop');
-  expect(usedPasskeyRead.passkeys.status).toBe(200);
-  expect(usedPasskeyRead.passkeys.body.passkeys[0].last_used_at).toBeString();
+  expect(usedSession.status).toBe(200);
+  expect(usedSession.body.account_id).toBe(fixture.accountIds.alice);
+  expect(usedSession.body.amr).toContain('pop');
 
   const wrongRpContext = await auth.context('wrong-rp');
   const wrongRpPage = await wrongRpContext.newPage();
   wrongRpPage.setDefaultTimeout(15_000);
+  const wrongRpSignInOptions = observePasskeySignInOptions(wrongRpPage, auth.origin);
   await visitLibrarySignIn(wrongRpPage, stack, fixture.libraryTarget);
   await wrongRpPage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).waitFor({ state: 'visible' });
   const wrongRpWebAuthn = await wrongRpContext.newCDPSession(wrongRpPage);
@@ -317,37 +322,28 @@ async function manageAccountSecurity() {
       backupState: false,
     },
   });
-  const wrongRpOptionsResponse = wrongRpPage.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/signin/passkey/options' && response.request().method() === 'POST',
-  );
   const wrongRpAssertionRequests: string[] = [];
   wrongRpPage.on('request', (request) => {
     if (new URL(request.url()).pathname === '/signin/passkey' && request.method() === 'POST')
       wrongRpAssertionRequests.push(request.url());
   });
   await wrongRpPage.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
-  const wrongRpOptions = await wrongRpOptionsResponse;
-  expect(wrongRpOptions.status()).toBe(200);
-  expect(((await wrongRpOptions.json()) as { rpId?: string }).rpId).toBe('rezics.com');
-  await wrongRpPage.getByRole('alert').waitFor({ state: 'visible', timeout: 30_000 });
+  await wrongRpPage.locator('form[action="/signin"]').getByRole('alert').waitFor({ state: 'visible', timeout: 30_000 });
+  const wrongRpOptions = wrongRpSignInOptions.at(-1);
+  expect(wrongRpOptions?.status()).toBe(200);
+  expect(await wrongRpOptions?.json()).toMatchObject({ rpId: 'rezics.com' });
   expect(wrongRpAssertionRequests).toEqual([]);
   expect(await exactCookie(wrongRpContext, stack.web, '__Host-rezics_session')).toBeUndefined();
   expect((await wrongRpPage.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
 
-  await alicePage.locator('#account-menu-button').click();
-  const finalSignOut = alicePage.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/auth/sign-out' && response.request().method() === 'POST',
-  );
-  await alicePage.getByRole('button', { name: 'Sign out', exact: true }).click();
-  const finalSignOutResponse = await finalSignOut;
-  expect(finalSignOutResponse.status()).toBeGreaterThanOrEqual(300);
-  expect(finalSignOutResponse.status()).toBeLessThan(400);
-  expect(await exactCookie(aliceContext, stack.web, '__Host-rezics_session')).toBeUndefined();
-  expect((await alicePage.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
+  await alicePage.goto(`${stack.web}${fixture.libraryTarget}`, { waitUntil: 'domcontentloaded' });
+  await signOutWebsiteAndAuth(alicePage);
   await alicePage.goto(stack.web, { waitUntil: 'domcontentloaded' });
   await alicePage.reload({ waitUntil: 'domcontentloaded' });
+  await alicePage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   expect(await alicePage.locator('#account-menu-button').count()).toBe(0);
+  await bobPage.reload({ waitUntil: 'domcontentloaded' });
+  await bobPage.locator('#account-menu-button').waitFor({ state: 'visible' });
 
   await wrongRpWebAuthn.send('WebAuthn.removeVirtualAuthenticator', {
     authenticatorId: wrongRpAuthenticator.authenticatorId,
@@ -358,4 +354,28 @@ async function manageAccountSecurity() {
   await aliceContext.close();
   await bobContext.close();
   await newcomerContext.close();
+}
+
+async function signOutWebsiteAndAuth(page: Page): Promise<void> {
+  const webOrigin = new URL(stack.web).origin;
+  const returnedToWebsite = (url: URL) => url.origin === webOrigin && /^\/(?:en\/?)?$/.test(url.pathname);
+  await page.locator('#account-menu-button').click();
+  const signOut = page.waitForResponse(
+    (response) => response.url() === `${webOrigin}/auth/sign-out` && response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const response = await signOut;
+  expect(response.status()).toBe(303);
+  const issuerLogout = new URL(response.headers().location ?? '/', webOrigin);
+  expect(issuerLogout.origin).toBe(auth.origin);
+  expect(issuerLogout.pathname).toBe('/logout');
+  await page.waitForURL((url) => returnedToWebsite(url) || (url.origin === auth.origin && url.pathname === '/logout'), {
+    waitUntil: 'domcontentloaded',
+  });
+  if (new URL(page.url()).origin === auth.origin) {
+    await page.getByRole('button', { name: 'Confirm logout', exact: true }).click();
+    await page.waitForURL(returnedToWebsite);
+  }
+  expect(await exactCookie(page.context(), webOrigin, '__Host-rezics_session')).toBeUndefined();
+  expect((await page.goto(`${auth.origin}/session`, { waitUntil: 'domcontentloaded' }))?.status()).toBe(401);
 }

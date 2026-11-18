@@ -10,6 +10,14 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    // The mounted test bridge reaches Vite over loopback. Start and the issuer
+    // must validate the browser's Origin against the fixture's public URL.
+    if (typeof __AUTH_TEST_PAGE_ORIGIN__ !== 'undefined' && __AUTH_TEST_PAGE_ORIGIN__) {
+      const publicOrigin = new URL(__AUTH_TEST_PAGE_ORIGIN__);
+      url.protocol = publicOrigin.protocol;
+      url.host = publicOrigin.host;
+      request = new Request(url, request);
+    }
     const requestClass = classifyAuthRequest(request, url.pathname);
 
     // Start's existing page functions keep issuer cookies on this host. In

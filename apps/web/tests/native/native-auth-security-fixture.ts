@@ -201,6 +201,16 @@ export function navigationUrls(page: Page): string[] {
   return urls;
 }
 
+export function observePasskeySignInOptions(page: Page, issuer: string): PlaywrightResponse[] {
+  const responses: PlaywrightResponse[] = [];
+  page.on('response', (response) => {
+    const { origin, pathname } = new URL(response.url());
+    if (origin === issuer && pathname === '/signin/passkey/options' && response.request().method() === 'POST')
+      responses.push(response);
+  });
+  return responses;
+}
+
 export async function visitLibrarySignIn(page: Page, stack: NativeWebStack, returnTo: string): Promise<void> {
   const target = `${stack.web}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
   const failures: string[] = [];
