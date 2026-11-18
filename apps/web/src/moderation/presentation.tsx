@@ -50,7 +50,7 @@ export function ModerationScope({
 }: {
   kind: 'board' | 'catalogue';
   id?: string;
-  label?: string | null;
+  label?: string | null | undefined;
   admitted: boolean;
 }) {
   return (
