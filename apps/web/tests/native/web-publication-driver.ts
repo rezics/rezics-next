@@ -170,7 +170,12 @@ export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Pr
   const websiteReady = lifecycle.run(
     'start native web publication driver',
     startupTimeoutMs,
-    () => startNativeWebStack({ onServicesReady, ...(sitemapExportToken ? { sitemapExportToken } : {}) }),
+    () =>
+      startNativeWebStack({
+        onServicesReady,
+        ...(sitemapExportToken ? { sitemapExportToken } : {}),
+        ...(selection?.sitemap ? { bundledClient: true } : {}),
+      }),
     false,
   );
   const services = await Promise.race([servicesReady, websiteReady]);
