@@ -1206,7 +1206,7 @@ export function ThreadReadingPost({
           createdAt={post.createdAt}
           revisedAt={post.revisedAt}
           now={now}
-          showAuthor={authorId !== undefined}
+          showAuthor={authors !== null && authorId !== undefined}
           className="min-h-8 min-w-0 flex-1 basis-40"
         />
       }

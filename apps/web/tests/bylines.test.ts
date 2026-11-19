@@ -1,13 +1,11 @@
 import { startDevServer } from './support/dev-server.ts';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
-import type { ReadingPage } from '../src/threads/thread-page';
+import type { BoardPageResponse } from '@rezics/client';
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientKeys = await generateKeyPair('ES256', { extractable: true });
 const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
@@ -32,26 +30,23 @@ const authors = {
   unknown: id(93),
   failure: id(94),
 } as const;
-const accounts = new Map([
+const accounts = new Map<string, { handle: string; displayName: string | null }>([
   [
     authors.alice,
     {
-      id: authors.alice,
       handle: 'alice<script>',
       displayName: 'Alice <img src=x onerror=alert(1)>',
-      state: 'active',
     },
   ],
-  [authors.bob, { id: authors.bob, handle: 'bob', displayName: null, state: 'active' }],
-  [authors.deleted, { id: authors.deleted, handle: null, displayName: null, state: 'deleted' }],
-] as const);
+  [authors.bob, { handle: 'bob', displayName: null }],
+]);
 
 function body(n: number) {
   return {
-    version: 'rezics-document-v1',
-    profile: 'blocks',
+    version: 'rezics-document-v1' as const,
+    profile: 'blocks' as const,
     doc: {
-      type: 'doc',
+      type: 'doc' as const,
       content: [
         {
           type: 'paragraph',
@@ -77,7 +72,9 @@ function post(n: number, authorId: string, ownerThreadId = threadId, createdAt =
     licence: 'CC-BY-4.0',
     subjectIds: [],
     mediaIds: [],
-    availability: 'available',
+    availability: 'available' as const,
+    revisedAt: null,
+    voteCitation: null,
     body: body(n),
   };
 }
@@ -87,13 +84,13 @@ const posts = [
   post(2, authors.bob, threadId, old),
   post(3, authors.deleted),
   post(4, authors.unknown),
-];
-const failedPosts = [post(5, authors.failure, failedThreadId)];
+] as const;
 const threads = [
   {
     ...metadata,
     id: threadId,
     boardId,
+    kind: 'discussion',
     authorId: authors.alice,
     licence: 'CC-BY-4.0',
     subjectIds: [],
@@ -106,6 +103,7 @@ const threads = [
     createdAt: old,
     id: id(3),
     boardId,
+    kind: 'discussion',
     authorId: authors.bob,
     licence: 'CC-BY-4.0',
     subjectIds: [],
@@ -117,6 +115,7 @@ const threads = [
     ...metadata,
     id: id(4),
     boardId,
+    kind: 'discussion',
     authorId: authors.unknown,
     licence: 'CC-BY-4.0',
     subjectIds: [],
@@ -124,8 +123,53 @@ const threads = [
     availability: 'available',
     firstPost: post(9, authors.unknown, id(4)),
   },
-];
-const calls: { method: string; path: string; ids: string[] }[] = [];
+] as const;
+const failedThread = {
+  ...threads[0],
+  id: failedThreadId,
+  authorId: authors.failure,
+  title: 'Identity failure',
+  firstPost: post(5, authors.failure, failedThreadId),
+};
+const board = {
+  ...metadata,
+  id: boardId,
+  title: 'Reading room',
+  purpose: 'discussion',
+  availability: 'available',
+  realmId: null,
+  community: null,
+} as const;
+
+function boardAuthor(id: string): BoardPageResponse['threads'][number]['authors']['thread'] {
+  const account = accounts.get(id);
+  return account ? { state: 'available', id, kind: 'actor', automated: false, ...account } : { state: 'unavailable' };
+}
+
+const boardPage: BoardPageResponse = {
+  board,
+  pinRevision: '1',
+  pinnedThreads: [],
+  threads: threads.map((thread) => ({
+    thread,
+    target: { kind: 'thread', id: thread.id, boardId },
+    authors: { thread: boardAuthor(thread.authorId), openingPost: boardAuthor(thread.firstPost.authorId) },
+    media: { state: 'none', images: [] },
+    interaction: {
+      target: { kind: 'thread', id: thread.id },
+      counts: { state: 'unavailable' },
+      viewer: { state: 'not-applicable' },
+    },
+    comments: { state: 'unavailable' },
+    actions: { reply: 'allowed', react: 'allowed', share: 'available' },
+  })),
+  next: null,
+  rankRefreshedAt: null,
+  reactionsAsOf: null,
+  viewer: { participation: 'allowed' },
+  actions: { createThread: 'allowed' },
+};
+const calls: string[] = [];
 const problem = {
   type: 'https://rezics.com/problems/dependency_unavailable',
   title: 'Dependency Unavailable',
@@ -157,37 +201,19 @@ const fake = Bun.serve({
         token_endpoint_auth_signing_alg_values_supported: ['ES256'],
       });
     if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
-    const ids = url.searchParams.get('ids')?.split(',').filter(Boolean) ?? [];
-    if (url.pathname.startsWith('/v1/')) calls.push({ method: request.method, path: url.pathname, ids });
+    if (url.pathname.startsWith('/v1/')) calls.push(url.pathname);
     if (request.method !== 'GET') return json(problem, 404);
-    if (url.pathname === '/v1/accounts') {
-      if (ids.includes(authors.failure)) return json(problem, 503);
-      return json({ accounts: ids.flatMap((accountId) => (accounts.has(accountId) ? [accounts.get(accountId)] : [])) });
-    }
-    if (url.pathname === `/v1/boards/${boardId}`)
-      return json({ board: { ...metadata, id: boardId, title: 'Reading room', availability: 'available' } });
-    if (url.pathname === `/v1/boards/${boardId}/threads`) return json({ threads, next: null });
-    if (url.pathname.endsWith('/reading-page')) {
-      const failed = url.pathname.includes(failedThreadId);
-      const selected = failed ? failedPosts : posts;
-      const source = failed
-        ? {
-            ...threads[0],
-            id: failedThreadId,
-            authorId: authors.failure,
-            title: 'Identity failure',
-            firstPost: failedPosts[0],
-          }
-        : threads[0];
+    if (url.pathname === `/v1/boards/${boardId}`) return json({ board });
+    if (url.pathname === `/v1/boards/${boardId}/page`) return json(boardPage);
+    // The canonical thread route checks its slug against this read.
+    if (url.pathname === `/v1/threads/${threadId}`) return json({ thread: threads[0] });
+    if (url.pathname === `/v1/threads/${failedThreadId}`) return json({ thread: failedThread });
+    const failed = url.pathname === `/v1/threads/${failedThreadId}/reading-page`;
+    if (failed || url.pathname === `/v1/threads/${threadId}/reading-page`) {
       const page = authoredReadingPage(
-        { ...source, kind: 'discussion' } as ReadingPage['thread'],
-        selected.slice(1) as ReadingPage['replies']['items'],
-        [...accounts.values()].map((account) => ({
-          id: account.id,
-          displayName: account.displayName,
-          handle: account.handle,
-          avatar: null,
-        })),
+        failed ? failedThread : threads[0],
+        failed ? [] : posts.slice(1),
+        failed ? [] : [...accounts].map(([id, account]) => ({ id, ...account, avatar: null })),
       );
       if (failed) {
         page.authors = { state: 'unavailable', retryable: true, items: [] };
@@ -195,19 +221,6 @@ const fake = Bun.serve({
       }
       return json(page);
     }
-    if (url.pathname === `/v1/threads/${threadId}`) return json({ thread: threads[0] });
-    if (url.pathname === `/v1/threads/${threadId}/posts`) return json({ posts, next: null });
-    if (url.pathname === `/v1/threads/${failedThreadId}`)
-      return json({
-        thread: {
-          ...threads[0],
-          id: failedThreadId,
-          authorId: authors.failure,
-          title: 'Identity failure',
-          firstPost: failedPosts[0],
-        },
-      });
-    if (url.pathname === `/v1/threads/${failedThreadId}/posts`) return json({ posts: failedPosts, next: null });
     return json(problem, 404);
   },
 });
@@ -252,18 +265,22 @@ function expectedRecent(locale: string) {
   return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-3, 'hour');
 }
 
+function postBylines(page: Page) {
+  return page.locator('main [data-slot="post-reading-identity"]');
+}
+
 test(
   "each post on a thread page shows its author and when it was posted, in the page's language",
   async () => {
     for (const locale of ['en', 'ja']) {
       const page = await open(`/${locale}/threads/${threadId}`);
       try {
-        const slots = page.locator('main ol > li');
+        const slots = postBylines(page);
         expect(await slots.count()).toBe(4);
         expect(await slots.nth(0).innerText()).toContain('Alice <img src=x onerror=alert(1)>');
         expect(await slots.nth(0).innerText()).toContain('@alice<script>');
         expect(await slots.nth(1).innerText()).toContain('@bob');
-        const times = page.locator('main ol > li time');
+        const times = slots.locator('time');
         expect(await times.count()).toBe(4);
         expect(await times.nth(0).getAttribute('datetime')).toBe(recent);
         expect(await times.nth(0).innerText()).toBe(expectedRecent(locale));
@@ -287,9 +304,10 @@ test(
 test(
   "a board's thread list shows who started each thread and when",
   async () => {
+    calls.length = 0;
     const page = await open(`/en/boards/${boardId}`);
     try {
-      const items = page.locator('main ul > li');
+      const items = page.locator('main li[data-thread-id] > [data-slot="board-thread-meta"]');
       expect(await items.count()).toBe(3);
       expect(await items.nth(0).innerText()).toContain('Alice <img src=x onerror=alert(1)>');
       expect(await items.nth(0).innerText()).toContain(expectedRecent('en'));
@@ -298,6 +316,7 @@ test(
         new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(old)),
       );
       expect(await items.nth(2).innerText()).toContain('Unknown account');
+      expect(calls).not.toContain('/v1/accounts');
     } finally {
       await page.context().close();
     }
@@ -309,8 +328,8 @@ test('a thread page receives composed authors without an account batch', async (
   calls.length = 0;
   const page = await open(`/en/threads/${threadId}`);
   try {
-    const identity = calls.filter((call) => call.path === '/v1/accounts');
-    expect(identity).toHaveLength(0);
+    expect(calls).toContain(`/v1/threads/${threadId}/reading-page`);
+    expect(calls).not.toContain('/v1/accounts');
   } finally {
     await page.context().close();
   }
@@ -325,7 +344,7 @@ test(
     ] as const) {
       const page = await open(`/${locale}/threads/${threadId}`);
       try {
-        const slots = page.locator('main ol > li');
+        const slots = postBylines(page);
         expect(await slots.nth(2).innerText()).toContain(deleted);
         expect(await slots.nth(3).innerText()).toContain(unknown);
         expect(await slots.nth(2).innerText()).not.toContain('@');
@@ -341,12 +360,15 @@ test(
 test(
   'when the identity read fails, the page still shows its posts',
   async () => {
+    calls.length = 0;
     const page = await open(`/en/threads/${failedThreadId}`);
     try {
       expect(await page.locator('main').innerText()).toContain('Contribution 5');
-      expect(await page.locator('main time').count()).toBe(1);
-      expect(await page.locator('main').innerText()).not.toContain('Unknown account');
-      expect(await page.locator('main').innerText()).not.toContain('@');
+      const byline = postBylines(page);
+      expect(await byline.locator('time').count()).toBe(1);
+      expect(await byline.innerText()).not.toContain('Unknown account');
+      expect(await byline.innerText()).not.toContain('@');
+      expect(calls).not.toContain('/v1/accounts');
     } finally {
       await page.context().close();
     }
