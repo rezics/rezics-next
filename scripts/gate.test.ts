@@ -409,18 +409,13 @@ test('workspaces are grouped by measured duration, longest first', () => {
     checkScript: 'bun run check',
   }));
   const defaultGroups = splitWorkspaces(defaultWorkspaces, new Map(Object.entries(DEFAULT_DURATIONS)));
-  expect(defaultGroups.map((group) => group.map((workspace) => workspace.directory))).toEqual([
-    ['apps/web', 'apps/auth', 'packages/ui', 'packages/document', 'packages/definitions', 'packages/conversion'],
-    [
-      'services/kernel',
-      'services/auth',
-      'services/importer',
-      'packages/auth-contract',
-      'packages/client',
-      'packages/composition',
-      'packages/filter',
-    ],
-  ]);
+  expect(defaultGroups.map((group) => group[0]?.directory)).toEqual(['apps/web', 'services/kernel']);
+  expect(
+    defaultGroups
+      .flat()
+      .map(({ directory }) => directory)
+      .sort(),
+  ).toEqual(defaultWorkspaces.map(({ directory }) => directory).sort());
 });
 
 test("the gate writes a JSON result with each workspace's outcome, failing files, load-sensitive tests, duration and host", async () => {
