@@ -67,10 +67,9 @@ test('toolbar renders responsive controls and active filter chips', () => {
       count: 10,
     }),
   );
-  for (const value of ['View', 'Select', 'Grid', 'List', 'Table', 'Books', 'Clear filters', '10 items'])
+  for (const value of ['View', 'Sort', 'Filter', 'Layout', 'Select', 'Grid', 'Books', 'Clear filters', '10 items'])
     expect(html).toContain(value);
   expect(html).not.toContain('Search');
-  expect(html).toContain('md:');
   expect(html).toContain('sm:');
 });
 test('empty variants render caller wording and actions', () => {

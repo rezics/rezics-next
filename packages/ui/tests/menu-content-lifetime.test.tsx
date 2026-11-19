@@ -20,7 +20,7 @@ test('custom ShelfToolbar forms stay bounded and live through their Menu lifetim
         'run',
         story,
         '-t',
-        'Shelf Toolbar Custom Forms Desktop',
+        'Shelf Toolbar (Form Recovery|View Forms)$',
         '--reporter=json',
         `--outputFile=${report}`,
       ],
@@ -31,7 +31,7 @@ test('custom ShelfToolbar forms stay bounded and live through their Menu lifetim
         env: { ...process.env, CI: '1' },
       },
     );
-    const [stdout, stderr] = await Promise.all([
+    const [stdout, stderr, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
       run.exited,
@@ -42,10 +42,12 @@ test('custom ShelfToolbar forms stay bounded and live through their Menu lifetim
     };
     const outcomes = result.testResults
       .flatMap((file) => file.assertionResults)
+      .filter((assertion) => assertion.status !== 'skipped')
       .map((assertion) =>
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       );
-    expect(outcomes).toEqual(['Shelf Toolbar Custom Forms Desktop: passed']);
+    expect(outcomes).toEqual(['Shelf Toolbar Form Recovery: passed', 'Shelf Toolbar View Forms: passed']);
+    expect(code, `${stdout}\n${stderr}`).toBe(0);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

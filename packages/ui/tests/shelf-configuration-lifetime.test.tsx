@@ -11,20 +11,12 @@ test('one connected shelf journey keeps navigation, display controls, and picker
   const report = join(output, 'stories.json');
   try {
     expect(existsSync(join(root, story)), story).toBe(true);
-    const run = Bun.spawn(
-      [
-        'bun',
-        'x',
-        'vitest',
-        'run',
-        story,
-        '-t',
-        'Connected Shelf Configuration Journey',
-        '--reporter=json',
-        `--outputFile=${report}`,
-      ],
-      { cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } },
-    );
+    const run = Bun.spawn(['bun', 'x', 'vitest', 'run', story, '--reporter=json', `--outputFile=${report}`], {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, CI: '1' },
+    });
     const [stdout, stderr, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
@@ -35,11 +27,12 @@ test('one connected shelf journey keeps navigation, display controls, and picker
       testResults: { assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
     };
     const outcomes = result.testResults.flatMap((file) => file.assertionResults);
-    expect(code, `${stdout}\n${stderr}`).toBe(0);
+    expect(outcomes.flatMap((outcome) => outcome.failureMessages)).toEqual([]);
     expect(outcomes.map((outcome) => `${outcome.title}: ${outcome.status}`)).toEqual([
+      'Editable: passed',
       'Connected Shelf Configuration Journey: passed',
     ]);
-    expect(outcomes.flatMap((outcome) => outcome.failureMessages)).toEqual([]);
+    expect(code, `${stdout}\n${stderr}`).toBe(0);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

@@ -36,10 +36,15 @@ function Example() {
 const meta = { title: 'Actions/Shelf Selection', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+function enterSelection(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  return userEvent.click(canvas.getByRole('button', { name: 'Select' }));
+}
 export const Selection: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Select' }));
+    await enterSelection(canvasElement);
     await userEvent.click(canvas.getByRole('link', { name: 'One' }));
     await fireEvent.click(canvas.getByRole('link', { name: 'Three' }), { shiftKey: true });
     await expect(canvas.getByText('3 selected')).toBeInTheDocument();
@@ -48,6 +53,17 @@ export const Selection: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Select Two' }));
     await expect(canvas.getByText('1 selected')).toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+    await enterSelection(canvasElement);
+    const all = canvas.getByRole('button', { name: 'All' });
+    all.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByText('3 selected')).toBeInTheDocument();
+  },
+};
+export const CompactSelection: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
     const link = canvas.getByRole('link', { name: 'One' });
     await fireEvent.pointerDown(link, { pointerType: 'touch', clientX: 10, clientY: 10 });
     await new Promise((resolve) => setTimeout(resolve, 550));
@@ -56,10 +72,10 @@ export const Selection: Story = {
     await fireEvent.click(link);
     await expect(canvas.getByText('1 selected')).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(canvas.getByRole('button', { name: 'Select' }));
-    await userEvent.click(canvas.getByRole('link', { name: 'One' }));
+    await enterSelection(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'More' }));
-    await expect(await screen.findByRole('dialog')).toBeVisible();
+    const more = await screen.findByRole('dialog', { name: 'More' });
+    await userEvent.click(within(more).getByRole('button', { name: 'All' }));
+    await expect(canvas.getByText('3 selected')).toBeInTheDocument();
   },
-  globals: {},
 };
