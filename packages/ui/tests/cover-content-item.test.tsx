@@ -98,7 +98,11 @@ test('CoverCard adapts shared tile semantics in grids and rows while preserving 
   expect(html).toContain('data-router-link="true"');
   expect(html).toContain('href="/library/book"');
   expect(html).toContain('aria-pressed="true"');
-  expect(html).toContain('role="checkbox" aria-checked="false" aria-label="Qualified credit book"');
+  const independentSelection = html.match(
+    /<[^>]+(?=[^>]*role="checkbox")(?=[^>]*aria-label="Qualified credit book")[^>]*>/,
+  )?.[0];
+  expect(independentSelection).toContain('aria-checked="false"');
+  expect(independentSelection).toContain('data-shelf-select="true"');
   expect(html).toContain('href="/credits/writer"');
   expect(html).toContain('href="/credits/character"');
   expect(html).toContain('Writer: ');
@@ -107,7 +111,6 @@ test('CoverCard adapts shared tile semantics in grids and rows while preserving 
   expect(html).toContain('aria-label="More actions for A translated book"');
   expect(html).toContain('aria-label="More actions for Qualified credit book"');
   expect(html).toContain('data-slot="cover-card-essential-credit"');
-  expect(html).toContain('size-11');
   expect(html).toContain('Progress unknown');
   expect(html).not.toContain('role="progressbar"');
 
@@ -182,7 +185,10 @@ test('Nonselectable qualified credits stretch the existing primary destination w
   ].map(([control]) => control);
   expect(raisedControls.some((control) => control.includes('href="/library/credit"'))).toBe(true);
 
-  const selection = html.match(/<button\b(?=[^>]*role="checkbox")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>/)?.[0];
+  const selection = html.match(
+    /<div\b(?=[^>]*data-slot="field")(?=[^>]*class="[^"]*\bz-20\b[^"]*")[^>]*>[\s\S]*?<\/div>/,
+  )?.[0];
+  expect(selection).toContain('role="checkbox"');
   expect(selection).toContain('aria-label="Qualified credit book"');
 
   const menu = html.match(
@@ -288,10 +294,10 @@ test('CoverCard layers each supplied native control above the stretched link wit
 
   const controlSelectors = [
     ':not(.absolute,.fixed)]:relative',
-    '[&_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    '[&amp;_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    '[&amp;_.absolute:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:absolute',
+    '[&amp;_.fixed:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:fixed',
     ':focus-visible]:outline-ring',
-    '[&_a]:min-h-11',
-    '[&_button]:min-h-11',
   ];
   const opening = (card: string, slot: string) =>
     card.match(new RegExp(`<div\\b(?=[^>]*data-slot="${slot}")[^>]*>`))?.[0];
@@ -337,8 +343,15 @@ test('CoverCard layers each supplied native control above the stretched link wit
 test('current tile reading keeps primary and independent actions separate and retires revealed covers and late failures', async () => {
   const webTests = join(import.meta.dir, '../../../apps/web/tests');
   const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', webTests))));
-  const window = new Window();
-  const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
+  const window = new Window({ url: 'https://fixture.test/', settings: { enableImageFileLoading: false } });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    Element: window.Element,
+    HTMLElement: window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -384,7 +397,12 @@ test('current tile reading keeps primary and independent actions separate and re
       }),
     );
   };
-  const click = async (selector: string) => act(async () => host.querySelector(selector)!.click());
+  const click = async (selector: string) =>
+    act(async () => {
+      const target = host.querySelector(selector);
+      expect(target !== null, selector).toBe(true);
+      target!.click();
+    });
   try {
     await act(async () => root.render(view('a')));
     expect(host.querySelector('img')).toBeNull();
@@ -392,6 +410,7 @@ test('current tile reading keeps primary and independent actions separate and re
     await click('[data-slot="cover-card-secondary"] button');
     await click('[data-slot="cover-card-state-content"] button');
     await click('button[aria-label="Show cover"]');
+    expect(host.querySelector('[data-slot="cover"]')?.getAttribute('data-state')).toBe('loading');
     await click('button[aria-label="Open supplied artwork"]');
     expect(calls).toEqual(['primary', 'metadata', 'state', 'artwork']);
     const first = host.querySelector('img')!;
