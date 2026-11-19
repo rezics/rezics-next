@@ -81,7 +81,6 @@ type Head = {
   change: Change | null;
   payload: Record<string, unknown> | null;
   outputs: Output[];
-  transaction_id: string;
 };
 type Saved = {
   scope_digest: string;
@@ -217,8 +216,9 @@ async function readUnit(
       await query(
         tx,
         measured,
-        `SELECT e.*,c.epoch native_epoch,c.position native_position FROM semantic.identity_epoch_mapping_effect e
+        `SELECT e.*,c.epoch native_epoch,c.position native_position,p.result FROM semantic.identity_epoch_mapping_effect e
       JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(e.partition_no,e.transaction_id) AND c.purpose='mapping' AND c.xmin=e.xmin
+      LEFT JOIN semantic.identity_epoch_mapping_payload p ON (p.partition_no,p.job_id,p.unit)=(e.partition_no,e.job_id,e.unit)
       WHERE e.partition_no=$1 AND e.job_id=$2 AND e.unit=$3 AND e.job_epoch=$4 AND e.plan_digest=$5 AND c.epoch=$6 AND c.position<=$7`,
         [home, job.jobId, unit, job.epoch.toString(), digest, owner.epoch, owner.position.toString()],
       )
@@ -227,27 +227,44 @@ async function readUnit(
     return { effect: row ?? null, retained };
   });
 }
-async function completed(pool: Pool, job: IdentityJobRef, head: Head, measured: Work): Promise<IdentityStepProgress> {
+/** Read the current head and its released receipt in one snapshot after the command settles. */
+async function readProgress(
+  pool: Pool,
+  job: IdentityJobRef,
+  measured: Work,
+): Promise<{ unit: number; progress: IdentityStepProgress }> {
   return withReadTransaction(pool, async (tx) => {
     const home = identityJobPartition(job);
     const row = (
       await query(
         tx,
         measured,
-        `SELECT s.* FROM semantic.identity_epoch_step s
+        `SELECT h.unit,s.partition_no,s.transaction_id,s.native_epoch,s.native_position,s.frontier,s.state,s.work
+      FROM semantic.identity_epoch_mapping_head h
+      JOIN semantic.identity_epoch_job j USING (partition_no,job_id)
+      JOIN semantic.identity_epoch_native_commit a ON (a.partition_no,a.transaction_id)=(j.partition_no,j.recorded_transaction_id)
+        AND a.purpose='admission'
+      JOIN semantic.identity_epoch_step s ON (s.partition_no,s.transaction_id,s.job_id,s.job_epoch,s.scope_digest)=
+        (h.partition_no,h.transaction_id,j.job_id,j.epoch,j.scope_digest)
       JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id,c.epoch,c.position)=(s.partition_no,s.transaction_id,s.native_epoch,s.native_position) AND c.xmin=s.xmin AND c.purpose='mapping'
-      JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch AND p.position>=c.position AND p.write_state='active'
-      WHERE s.partition_no=$1 AND s.transaction_id=$2 AND s.job_id=$3 AND s.job_epoch=$4 AND s.step='mapping' AND s.version=1`,
-        [home, head.transaction_id, job.jobId, job.epoch.toString()],
+      JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch AND p.position>=c.position
+        AND p.epoch=a.epoch AND p.position>=a.position AND p.write_state='active'
+      WHERE h.partition_no=$1 AND h.job_id=$2 AND j.epoch=$3 AND j.state IN ('pending','published')
+        AND s.step='mapping' AND s.version=1
+        AND EXISTS (SELECT 1 FROM semantic.identity_epoch_input i WHERE (i.partition_no,i.job_id)=(h.partition_no,h.job_id))`,
+        [home, job.jobId, job.epoch.toString()],
       )
     ).rows[0];
     if (!row) throw unavailable();
     return {
-      job,
-      frontier: row.frontier,
-      state: row.state,
-      work: row.work,
-      receipt: { job, step: 'mapping', version: 1, native: native(row) },
+      unit: row.unit as number,
+      progress: {
+        job,
+        frontier: row.frontier,
+        state: row.state,
+        work: row.work,
+        receipt: { job, step: 'mapping', version: 1, native: native(row) },
+      },
     };
   });
 }
@@ -519,8 +536,8 @@ async function publishedMappingPoints(
 export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => {
   const measured: Work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
   const saved = await load(pool, job, measured);
-  if (saved.head) await cleanCustodiedPayload(pool, job, saved.head, measured, saved.roles);
-  if (saved.head?.frontier.after[1] === 'complete') return completed(pool, job, saved.head, measured);
+  if (saved.head) await cleanCustodiedPayload(pool, job, saved.head.unit, measured, saved.roles);
+  if (saved.head?.frontier.after[1] === 'complete') return (await readProgress(pool, job, measured)).progress;
   if (saved.state !== 'pending') throw stale();
   // Accounts admission has its own actual source-intent authority. Ordinary authority cannot substitute for it.
   if (saved.receipt.kind === 'account-agent.verify' || saved.receipt.kind === 'account-agent.unverify')
@@ -626,10 +643,8 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         return { value: null, events: [wake(job, identityJobPartition(job))] };
       },
     );
-    const current = await load(pool, job, measured);
-    if (!current.head) throw unavailable();
     if (initialized.replayed) throw stale();
-    return completed(pool, job, current.head, measured);
+    return (await readProgress(pool, job, measured)).progress;
   }
   const head = saved.head;
   const proposed = await plan(pool, job, saved, head, measured);
@@ -673,9 +688,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     return { value: true, events: [wake(job, controlHome)] };
   });
   if (!intended.value) {
-    const latest = await load(pool, job, measured);
-    if (!latest.head) throw unavailable();
-    return completed(pool, job, latest.head, measured);
+    return (await readProgress(pool, job, measured)).progress;
   }
   const point = mappingPoint(head, proposed.action);
   if (point && homeOf(point.destination) !== proposed.home) throw stale();
@@ -771,21 +784,10 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     local = (await readUnit(pool, job, proposed.home, head.unit + 1, digest, measured)).effect;
   }
   if (!local || local.scope_digest !== saved.scope_digest) throw unavailable();
-  const payload = await withReadTransaction(
-    pool,
-    async (tx) =>
-      (
-        await query(
-          tx,
-          measured,
-          `SELECT result FROM semantic.identity_epoch_mapping_payload WHERE partition_no=$1 AND job_id=$2 AND unit=$3`,
-          [proposed.home, job.jobId, head.unit + 1],
-        )
-      ).rows[0]?.result as Plan | undefined,
-  );
+  const payload = local.result as Plan | null;
   if (!payload) {
-    const latest = await load(pool, job, measured);
-    if (latest.head && latest.head.unit > head.unit) return completed(pool, job, latest.head, measured);
+    const latest = await readProgress(pool, job, measured);
+    if (latest.unit > head.unit) return latest.progress;
     throw unavailable();
   }
   await runCommand(pool, { partition: controlHome, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
@@ -825,11 +827,12 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     await saveStep(tx, job, saved.scope_digest, payload.frontier, measured);
     return { value: null, events: [wake(job, controlHome)] };
   });
-  const current = await load(pool, job, measured);
-  if (!current.head) throw unavailable();
-  if (current.head.frontier.after[1] === 'complete')
-    await cleanCustodiedPayload(pool, job, current.head, measured, saved.roles);
-  return completed(pool, job, current.head, measured);
+  const current = await readProgress(pool, job, measured);
+  if (current.progress.state === 'complete') {
+    await cleanCustodiedPayload(pool, job, current.unit, measured, saved.roles);
+    return (await readProgress(pool, job, measured)).progress;
+  }
+  return current.progress;
 };
 
 async function lock(tx: CommandTransaction, job: IdentityJobRef, measured: Work): Promise<Head | null> {
@@ -1889,11 +1892,11 @@ async function admitGroupEffect(
 async function cleanCustodiedPayload(
   pool: Pool,
   job: IdentityJobRef,
-  head: Head,
+  unit: number,
   measured: Work,
   roles: SemanticCopyRole[],
 ) {
-  if (head.unit === 0) return;
+  if (unit === 0) return;
   const saved = await withReadTransaction(
     pool,
     async (tx) =>
@@ -1904,7 +1907,7 @@ async function cleanCustodiedPayload(
           `SELECT p.home,r.native_transaction_id FROM semantic.identity_epoch_mapping_plan p
     JOIN semantic.identity_epoch_effect_receipt r ON (r.partition_no,r.job_id,r.step,r.effect_key)=(p.partition_no,p.job_id,'mapping',p.unit::text)
     WHERE p.partition_no=$1 AND p.job_id=$2 AND p.unit=$3`,
-          [identityJobPartition(job), job.jobId, head.unit],
+          [identityJobPartition(job), job.jobId, unit],
         )
       ).rows[0],
   );
@@ -1915,7 +1918,7 @@ async function cleanCustodiedPayload(
       measured,
       `DELETE FROM semantic.identity_epoch_mapping_payload p USING semantic.identity_epoch_mapping_effect e
       WHERE (p.partition_no,p.job_id,p.unit)=(e.partition_no,e.job_id,e.unit) AND p.partition_no=$1 AND p.job_id=$2 AND p.unit=$3 AND e.transaction_id=$4 RETURNING p.unit`,
-      [saved.home, job.jobId, head.unit, saved.native_transaction_id],
+      [saved.home, job.jobId, unit, saved.native_transaction_id],
     );
     if (!removed.rowCount) return noEffect(null);
     bindSemanticProducerRoles(tx, roles);
