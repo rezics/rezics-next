@@ -24,14 +24,13 @@ test('integration admits a branch whose only out-of-scope changes are derived fi
     h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
       current.brief.paths = ['owned.txt'];
     });
-    mkdirSync(join(task.worktree, dirname(generated)), { recursive: true });
     await h.start(task);
     await h.train(undefined, false);
 
     expect(h.outcomes[0]?.passed).toBe(true);
     expect(h.outcomes[0]?.stage).toBe('merge');
     expect(h.head()).toBe(h.head(task.branch));
-    expect(git(h.root, 'show', `dev:${generated}`)).toBe(generated);
+    expect(git(h.root, 'show', `dev:${generated}`)).toBe(git(h.root, 'show', `${task.branch}:${generated}`));
   } finally {
     h.dispose();
   }
@@ -105,6 +104,8 @@ writeFileSync(resolve(root, 'packages/client/src/kernel/fixture.d.ts'), 'declare
     await h.start(task);
     await h.train(undefined, false);
     const integrated = h.head();
+    expect(git(h.root, 'show', `dev:${contract}`)).toBe('initial contract');
+    expect(git(h.root, 'show', `dev:${declaration}`)).toBe('initial declaration');
     const checkedHeads: string[] = [];
 
     await h.promote(async (_command, cwd) => {

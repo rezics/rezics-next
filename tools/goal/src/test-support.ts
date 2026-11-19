@@ -859,16 +859,17 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         .replace('waiting: []', `waiting: []\nafter: ${JSON.stringify(after)}`),
     );
     const task = h.tasks.dispatch(briefFile);
+    planWorkerFile(task, file);
+    return task;
+  }
+  function planWorkerFile(
+    task: { worktree: string },
+    file: string,
+    content = /\.(?:ts|tsx|mts|cts)$/i.test(file) ? 'export const fixture = true;\n' : file,
+  ): void {
     mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
     mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({
-        file,
-        content: /\.(?:ts|tsx|mts|cts)$/i.test(file) ? 'export const fixture = true;\n' : file,
-      }),
-    );
-    return task;
+    writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content }));
   }
   async function seed(file: string, after: string[] = [], acceptance = ['true']) {
     ensureDev();
@@ -943,6 +944,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     head,
     ensureDev,
     dispatch,
+    planWorkerFile,
     seed,
     train,
     advanceBranch,

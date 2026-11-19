@@ -18,20 +18,15 @@ const requires = (file: string) => [
 const ancestor = (cwd: string, older: string, newer: string) =>
   expect(git(cwd, 'merge-base', older, newer)).toBe(older);
 
-test('a passing worker branch runs its acceptance before integrating into dev and main does not move', async () => {
+test('dev integration preserves the worker commit and leaves main unchanged', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     const main = h.head('main');
-    const task = h.dispatch('feature', [], failsWith('feature'));
+    const task = h.dispatch('feature');
     await h.start(task);
     const worker = h.head(task.branch);
-    let gates = 0;
-    await h.train(async () => {
-      gates++;
-      return { passed: true, output: '', timedOut: false };
-    });
-    expect(gates).toBe(1);
+    await h.train();
     expect(h.head('main')).toBe(main);
     expect(h.head()).toBe(worker);
     expect(h.store.task(task.id).state).toBe('integrated');

@@ -26,9 +26,7 @@ function dispatch(
     .replace('command: [bun, test]', `command: ${JSON.stringify(acceptance)}`);
   writeFileSync(briefFile, text);
   const task = h.tasks.dispatch(briefFile);
-  mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
-  mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-  writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content: file }));
+  h.planWorkerFile(task, file);
   return task;
 }
 
@@ -110,7 +108,7 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
     const stabilize = h.head('stabilize');
     const dev = h.head('dev');
     expect(main).not.toBe(base);
-    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
+    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('export const fixture = true;');
     expect(git(h.root, 'rev-parse', 'stabilize^2')).toBe(main);
     expect(git(h.root, 'rev-parse', 'dev^2')).toBe(stabilize);
     expect(git(h.root, 'merge-base', '--is-ancestor', main, stabilize)).toBe('');
@@ -131,7 +129,7 @@ test('a control-plane task whose changes all lie under tools/goal integrates int
     expect(h.store.task(task.id).state).toBe('merged');
     expect(h.outcomes[0]?.mergedCommit).toBe(main);
     // The control plane runs from the main checkout's files, so they must be the landed tree, not just the ref.
-    expect(readFileSync(join(h.root, 'tools/goal/src/hotfix.ts'), 'utf8')).toBe('tools/goal/src/hotfix.ts');
+    expect(readFileSync(join(h.root, 'tools/goal/src/hotfix.ts'), 'utf8')).toBe('export const fixture = true;\n');
     expect(git(h.root, 'status', '--porcelain', '--untracked-files=no')).toBe('');
   } finally {
     h.dispose();
@@ -145,13 +143,13 @@ test('a control-plane task moved onto a newer main still integrates into main wi
     const task = dispatch(h, 'tools/goal/src/hotfix.ts');
     await h.start(task);
     // Another control-plane change lands on main, and a retry moves the branch onto it; the recorded base stays the original one.
-    addCommit(h, 'main', { 'tools/goal/src/other-goal.ts': 'other goal\n' });
+    addCommit(h, 'main', { 'tools/goal/src/other-goal.ts': 'export const otherGoal = true;\n' });
     git(task.worktree, 'rebase', '--quiet', 'main');
 
     await train(h);
 
-    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
-    expect(git(h.root, 'show', 'main:tools/goal/src/other-goal.ts')).toBe('other goal');
+    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('export const fixture = true;');
+    expect(git(h.root, 'show', 'main:tools/goal/src/other-goal.ts')).toBe('export const otherGoal = true;');
     expect(h.store.task(task.id).state).toBe('merged');
   } finally {
     h.dispose();
@@ -177,7 +175,7 @@ test('a control-plane task with any changed file outside tools/goal integrates i
     });
 
     expect(h.head('main')).toBe(main);
-    expect(git(h.root, 'show', 'dev:tools/goal/src/mixed.ts')).toBe('tools/goal/src/mixed.ts');
+    expect(git(h.root, 'show', 'dev:tools/goal/src/mixed.ts')).toBe('export const fixture = true;');
     expect(git(h.root, 'show', 'dev:docs/control-plane-note.md')).toBe('outside control-plane path');
     expect(checks).toEqual([]);
     expect(h.store.task(task.id).state).toBe('integrated');
@@ -202,7 +200,7 @@ test('untargeted control-plane work lands mechanically on dev and leaves main fo
     });
 
     expect(h.head('main')).toBe(main);
-    expect(git(h.root, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('tools/goal/src/dev-change.ts');
+    expect(git(h.root, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('export const fixture = true;');
     expect(checks).toEqual([]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
@@ -225,7 +223,7 @@ test('a task from another goal continues to integrate into dev even when it chan
     });
 
     expect(h.head('main')).toBe(main);
-    expect(git(h.root, 'show', 'dev:tools/goal/src/other-goal.ts')).toBe('tools/goal/src/other-goal.ts');
+    expect(git(h.root, 'show', 'dev:tools/goal/src/other-goal.ts')).toBe('export const fixture = true;');
     expect(checks).toEqual([]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
@@ -280,7 +278,7 @@ test('a target that advances during a control-plane merge is preserved by compar
       beforePromotionAdvance: () => {
         if (raced) return;
         raced = true;
-        racedHead = addCommit(h, 'stabilize', { 'tools/goal/src/concurrent.ts': 'concurrent stabilize change\n' });
+        racedHead = addCommit(h, 'stabilize', { 'tools/goal/src/concurrent.ts': 'export const concurrent = true;\n' });
       },
     });
 
@@ -290,7 +288,7 @@ test('a target that advances during a control-plane merge is preserved by compar
     expect(git(h.root, 'merge-base', '--is-ancestor', racedHead, stabilize)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('main'), stabilize)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', stabilize, dev)).toBe('');
-    expect(git(h.root, 'show', 'dev:tools/goal/src/concurrent.ts')).toBe('concurrent stabilize change');
+    expect(git(h.root, 'show', 'dev:tools/goal/src/concurrent.ts')).toBe('export const concurrent = true;');
   } finally {
     h.dispose();
   }

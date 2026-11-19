@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { frozenFile } from './frozen.ts';
 import { integrationHarness, harness } from './test-support.ts';
@@ -61,14 +61,8 @@ describe('frozen acceptance files', () => {
     try {
       h.ensureDev();
       writeFileSync(h.briefFile, briefWith([block], ['result.txt', 'tests/acceptance.test.ts']));
-      // Dispatch a task whose worker can pass its normal acceptance command.
       const real = h.tasks.dispatch(h.briefFile);
-      // The fixture worker writes the file its plan names, as h.dispatch would arrange.
-      mkdirSync(join(real.worktree, '.temp'), { recursive: true });
-      writeFileSync(
-        join(real.worktree, '.temp/worker-plan.json'),
-        JSON.stringify({ file: 'result.txt', content: 'result\n' }),
-      );
+      h.planWorkerFile(real, 'result.txt');
       const idleJob = new WorkerJob(
         h.tasks,
         h.queue,
@@ -78,12 +72,12 @@ describe('frozen acceptance files', () => {
       );
       await idleJob.start(real.id);
       await idleJob.drain();
-      writeFileSync(join(real.worktree, 'tests/acceptance.test.ts'), 'worker changed the acceptance test\n');
+      writeFileSync(join(real.worktree, 'tests/acceptance.test.ts'), 'test("repaired frozen case", () => {});\n');
       git(real.worktree, ['add', '--', 'tests/acceptance.test.ts']);
       git(real.worktree, ['commit', '-m', 'change frozen acceptance']);
       await h.train();
       expect(h.store.task(real.id).state).toBe('integrated');
-      expect(git(h.root, ['show', 'dev:tests/acceptance.test.ts'])).toBe('worker changed the acceptance test');
+      expect(git(h.root, ['show', 'dev:tests/acceptance.test.ts'])).toBe('test("repaired frozen case", () => {});');
       expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
         'Frozen acceptance file changed: tests/acceptance.test.ts',
       );
