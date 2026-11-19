@@ -2109,6 +2109,9 @@ A later admitted job can reuse a retained destination fence or original gate aft
 producer reads the exact point's committed local effect and then confirms its effect receipt at the published
 job's control home. It compares the retained frame again under the destination lock before replacing it.
 Each point carries its own proof. A changed, unreceipted or still-live owner keeps the existing conflict.
+Ordinary inbound and outbound link projection writes take the destination Subject lock. When a retained fence
+exists, the writer verifies its native mapping effect and exact receipt at the published job's active control
+home. An open source hold or missing proof keeps the write pending. The fence remains available for the next job.
 For a released self gate whose terminal changed, the new gate takes its basis from the current local published
 mapping only when that mapping agrees with the admitted previous terminal.
 
