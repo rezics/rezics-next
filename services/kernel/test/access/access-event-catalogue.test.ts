@@ -5,6 +5,7 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readBatch } from '../../src/events/log.ts';
 
 // The focused acceptance command also runs from the repository root.
@@ -765,6 +766,7 @@ test('real access commands cover every registered event and the log reader accep
     const kernel = testKernel({
       pool,
       auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+      writeRate: createWriteRateLimiter({ secret: 'access-event-catalogue-native-write-rate-secret' }),
     });
     const response = await kernel.handle(
       new Request('https://kernel.test/v1/subjects', {
