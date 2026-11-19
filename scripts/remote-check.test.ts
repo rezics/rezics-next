@@ -5725,7 +5725,13 @@ appendFileSync(directory + '/events', JSON.stringify({ command, args, slice: pro
 const stateFile = directory + '/state';
 const state = JSON.parse(readFileSync(stateFile, 'utf8'));
 const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + slice;
-if (command === 'systemd-run') {
+if (command === 'busctl') {
+  const properties = args.slice(args.indexOf('ssa(sv)a(sa(sv))') + 1);
+  if (properties[0] !== process.env.REZICS_CHECK_SLICE || properties[1] !== 'fail' ||
+      properties.slice(2, 5).join(' ') !== '2 MemoryMax t' || properties.slice(6).join(' ') !== 'MemorySwapMax t 0 0') process.exit(1);
+  state.managerMax = properties[5];
+  state.managerSwap = '0';
+} else if (command === 'systemd-run') {
   if (args.some((arg) => ['--unit=rezics-check-cache-maintenance', '--unit=rezics-check-cache-registration'].includes(arg))) process.exit(0);
   if (args.includes('--help')) {
     if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment\\n--slice-property');
@@ -5746,9 +5752,13 @@ if (command === 'systemd-run') {
   }
   const path = cgroup(process.env.REZICS_CHECK_SLICE!);
   mkdirSync(path, { recursive: true });
+  const max = args.find(arg => arg.startsWith('--slice-property=MemoryMax='));
+  if (max) state.managerMax = String(parseFloat(max.split('=').at(-1)!) * 2 ** 30);
+  if (args.includes('--slice-property=MemorySwapMax=0')) state.managerSwap = '0';
+  writeFileSync(stateFile, JSON.stringify(state));
   if (state.ignoredMemoryLimit) symlinkSync('/dev/null', path + '/memory.max');
-  else writeFileSync(path + '/memory.max', 'max');
-  writeFileSync(path + '/memory.swap.max', 'max');
+  else writeFileSync(path + '/memory.max', state.managerMax ?? 'max');
+  writeFileSync(path + '/memory.swap.max', state.managerSwap ?? 'max');
   writeFileSync(directory + '/self-cgroup', '0::/rezics-check.slice/' + process.env.REZICS_CHECK_SLICE + '/command.scope');
   writeFileSync(path + '/cpu.stat', 'usage_usec 500000\\nuser_usec 400000\\nsystem_usec 100000\\n');
   writeFileSync(path + '/memory.peak', String(64 * 1048576));
@@ -5761,6 +5771,8 @@ if (command === 'systemd-run') {
   }
   if (args[0] === 'show') {
     if (args.includes('--property=TasksCurrent')) console.log(state.slices?.[args.at(-1)!] ?? 1);
+    else if (args.includes('--property=MemoryMax')) console.log(state.managerMax ?? 'infinity');
+    else if (args.includes('--property=MemorySwapMax')) console.log(state.managerSwap ?? 'infinity');
     else if (!state.missingControlGroup) console.log('/rezics-check.slice/' + args.at(-1));
   }
   if (args[0] === 'stop' && state.slices) delete state.slices[args[1]!];
@@ -5802,6 +5814,9 @@ if (command === 'systemd-run') {
     const parent = args.filter((arg) => arg.startsWith('--cgroup-parent=')).at(-1)?.split('=')[1] ?? process.env.REZICS_CHECK_SLICE ?? 'rezics-check.slice';
     const path = cgroup(parent);
     mkdirSync(path, { recursive: true });
+    // Starting the Docker scope realizes the parent again from the manager's configuration.
+    writeFileSync(path + '/memory.max', state.managerMax ?? 'max');
+    writeFileSync(path + '/memory.swap.max', state.managerSwap ?? 'max');
     const previous = existsSync(path + '/cpu.stat') ? Number(readFileSync(path + '/cpu.stat', 'utf8').match(/usage_usec (\\d+)/)![1]) : 0;
     writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + 3000000) + '\\n');
     writeFileSync(path + '/memory.peak', String(768 * 1048576));
@@ -5839,7 +5854,7 @@ if (command === 'systemd-run') {
 }
 writeFileSync(stateFile, JSON.stringify(state));
 `;
-  for (const command of ['systemd-run', 'systemctl', 'docker', 'date', 'sleep']) {
+  for (const command of ['busctl', 'systemd-run', 'systemctl', 'docker', 'date', 'sleep']) {
     writeFileSync(join(bin, command), source);
     chmodSync(join(bin, command), 0o755);
   }
@@ -5994,7 +6009,7 @@ test('the run checks installed packages after the command and before recording i
   const body = encoded.slice(1, -1).replaceAll("'\\''", "'");
   const install = body.indexOf('"$bun" install --frozen-lockfile');
   const marker = body.indexOf('.bun-install-complete', install);
-  const command = body.indexOf('\n        "$@"');
+  const command = body.indexOf(' "$@" &', install);
   const packageCheck = body.indexOf('modified_files=$(find');
   const exitStatus = body.indexOf('printf \'%s\\n\' "$code" > "$terminal_status"');
   expect(install).toBeGreaterThanOrEqual(0);
@@ -6157,11 +6172,11 @@ test('each run and every container it starts share one run slice', async () => {
   }
 });
 
-test('the command requires the aggregate memory limits even when systemd omits ControlGroup', () => {
+test('the aggregate memory limits survive Docker scope creation when systemd omits ControlGroup', () => {
   const fixture = runFixture('old');
   fixture.update({ missingControlGroup: true });
   const id = 'slice-limit';
-  const command = ['sh', '-c', 'touch entered-command'];
+  const command = ['sh', '-ec', 'touch entered-command; docker run -d database'];
   const script = runScript(id, '/srv/rezics-check/runs/' + id, '.', command, 'b', hostRuntime());
   const result = fixture.execute(script);
   expect(result.status, result.stderr).toBe(0);
@@ -6215,7 +6230,7 @@ test('each check run executes in its own cgroup with MemoryMax 6 GiB and MemoryS
   expect(script).toContain('memory.reclaim');
   const install = script.indexOf('"$bun" install --frozen-lockfile');
   const firstReclaim = script.indexOf('reclaim_run_file_cache', install);
-  const command = script.indexOf('\n        "$@"');
+  const command = script.indexOf(' "$@" &', install);
   const secondReclaim = script.lastIndexOf('reclaim_run_file_cache', command);
   expect(install).toBeGreaterThanOrEqual(0);
   expect(firstReclaim).toBeGreaterThan(install);
@@ -8328,7 +8343,7 @@ function preparationFixture() {
   writeFileSync(
     join(bin, 'systemd-run'),
     `#!/bin/sh
-if [ "$1" = --help ]; then echo --expand-environment; exit 0; fi
+if [ "$1" = --help ]; then echo --expand-environment --slice-property; exit 0; fi
 if [ "$1" = --unit=rezics-check-cache-maintenance ]; then
   test ! -f exit-status || exit 97
   printf '%s\\n' "$@" > maintenance-request
@@ -8336,15 +8351,15 @@ if [ "$1" = --unit=rezics-check-cache-maintenance ]; then
 fi
 group="${directory}/cgroups/rezics-check.slice/$REZICS_CHECK_SLICE"
 mkdir -p "$group"
-echo max > "$group/memory.max"
-echo max > "$group/memory.swap.max"
+echo 6442450944 > "$group/memory.max"
+echo 0 > "$group/memory.swap.max"
 while [ "$#" -gt 0 ] && [ "$1" != python3 ]; do shift; done
 exec "$@"
 `,
   );
   writeFileSync(
     join(bin, 'systemctl'),
-    '#!/bin/sh\nif [ "$2" = --property=ControlGroup ]; then echo "/rezics-check.slice/$REZICS_CHECK_SLICE"; fi\n',
+    '#!/bin/sh\ncase "$2" in --property=ControlGroup) echo "/rezics-check.slice/$REZICS_CHECK_SLICE";; --property=MemoryMax) echo 6442450944;; --property=MemorySwapMax) echo 0;; esac\n',
   );
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
   for (const name of ['systemd-run', 'systemctl', 'docker']) chmodSync(join(bin, name), 0o755);
