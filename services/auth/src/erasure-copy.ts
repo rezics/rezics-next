@@ -289,11 +289,10 @@ export async function completeCopy(
   if (value === undefined) {
     invocation?.check();
     const status = await DBOS.getWorkflowStatus(id);
-    if (status?.status !== 'SUCCESS') return false;
-    invocation?.check();
-    value = invocation
-      ? await DBOS.getResult(id, { deadlineEpochMS: invocation.deadline })
-      : await DBOS.retrieveWorkflow(id).getResult();
+    // The SDK point read includes the deserialized persisted output. A timed
+    // getResult would reserve a workflow timer inside the maintenance step.
+    if (status?.status !== 'SUCCESS' || status.output == null) return false;
+    value = status.output;
   }
   invocation?.check();
   const digest = resultDigest(value);
