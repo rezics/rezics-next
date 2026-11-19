@@ -31,6 +31,7 @@ import {
 } from '../../../scripts/compiler-database.ts';
 import {
   admitWalkStack,
+  catalogueWalkRouteKey,
   firstRedactedDiagnostic,
   issuerJwksUrl,
   SEED_JOURNAL_IDENTITY_FILE,
@@ -1843,6 +1844,14 @@ export async function runWalk(
             Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));
           }
           removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
+          if (importCatalogueWalk()) {
+            await privateFile(
+              kernelEnvFile,
+              updateEnvironmentText(kernelEnvSnapshot ?? '', {
+                KERNEL_ROUTE_KEY: catalogueWalkRouteKey().toString('base64url'),
+              }),
+            );
+          }
           for (const script of walkSetupScripts(env)) {
             // A setup step that fails once is retried: a busy host can time out a container start.
             let status = 1;

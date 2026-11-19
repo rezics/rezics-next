@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { catalogueWalkRouteKey } from '../../../../scripts/walk-stack.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { publishReviewedPersonMerge } from '../../../importer/src/showcase-person-identity.ts';
@@ -12,6 +13,7 @@ import {
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { startWorker } from '../../src/worker.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -21,12 +23,10 @@ import { fixtureFetch } from './type-helpers.ts';
 import '../support/native-history-composition.ts';
 
 test('a reviewed Person pair merges once through the native contract and both originals read the canonical Person', async () => {
-  // These two exact imported claims share a partition under this fixture's route key.
   const searchUrl = process.env.OPENSEARCH_URL;
   if (!searchUrl) throw new Error('Person merge publication requires OPENSEARCH_URL');
   const search = createOpenSearch(searchUrl);
-  const routeKey = new Uint8Array(32);
-  new DataView(routeKey.buffer).setUint32(0, 4209);
+  const routeKey = catalogueWalkRouteKey();
   const runtime = await openApiRuntime({
     batchRecords: 8,
     maxFields: 64,
@@ -81,7 +81,6 @@ test('a reviewed Person pair merges once through the native contract and both or
     const pair = first.personReview!.pair;
     expect(pair.state).toBe('selected');
     if (pair.state !== 'selected') throw new Error('Expected the selected Person pair');
-    expect(pair.sources.map(({ boundSubjectId }) => partitionOf(routeOf(boundSubjectId)!))).toEqual([692, 692]);
     const grant = async (actions: string[]) => {
       const response = await editor.http('/v1/grants', {
         resource: { route: 0, id: GLOBAL_CONTEXT },
@@ -106,6 +105,10 @@ test('a reviewed Person pair merges once through the native contract and both or
       { source: 'bangumi_cross_media', externalId: 'person:1916', property: 'wdt:P6298', value: '1916' },
       { source: 'vndb_cross_media', externalId: 's224', property: 'wdt:P3180', value: 's224' },
     ] as const;
+    const claimRoutes = sources.map(({ source, externalId }) => tupleRoute(routeKey, source, externalId));
+    expect(claimRoutes).toEqual([11075, 11072]);
+    expect(subjects.map(routeOf)).toEqual(claimRoutes);
+    expect(claimRoutes.map(partitionOf)).toEqual([692, 692]);
     const endpoints = [];
     for (const [index, source] of sources.entries()) {
       const subject = subjects[index]!;
