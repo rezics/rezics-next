@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import { sourceDigest, type VndbPublicTagCategory } from '@rezics/conversion';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import { subjectSlug } from '@rezics/definitions/slug';
 import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import type { BangumiCreatorCreditDraft } from './bangumi-creator-credits.ts';
 import type { createImportTransport } from './import-client.ts';
@@ -242,6 +243,11 @@ export type ShowcaseReviewPort = Pick<
   'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
 > &
   Partial<Pick<ReturnType<typeof createImportTransport>, 'fence'>>;
+
+export function showcaseSubjectRoute(id: string, labels: Readonly<Record<string, string>> = {}): string {
+  const label = labels.und ?? labels.en ?? labels.ja ?? labels.zh ?? Object.values(labels)[0] ?? 'subject';
+  return `/subjects/${id}/${subjectSlug(label)}`;
+}
 
 export type CrossMediaReading = {
   /** Original claim target; independent reads may return its canonical Subject. */

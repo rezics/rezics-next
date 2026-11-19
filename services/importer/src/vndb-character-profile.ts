@@ -406,16 +406,14 @@ function isProfileVocabularyCommand(command: BatchCommand): boolean {
   return command.source.source === 'vndb_cross_media' && command.source.converter_revision === adapterRevision;
 }
 
-function acknowledgedProfileCreates(journal: ShowcaseJournal): Map<string, string> {
-  return new Map(
-    journal
-      .acknowledgedCommands()
-      .flatMap((row) =>
-        row.command.op === 'create' && row.subjectId && isProfileVocabularyCommand(row.command)
-          ? [[row.command.source.external_id, row.subjectId] as const]
-          : [],
-      ),
-  );
+function acknowledgedProfileCreates(
+  journal: ShowcaseJournal,
+  need: NonNullable<ReturnType<typeof profileVocabularyNeed>>,
+): Map<string, string> {
+  return journal.vocabularyCreateIds('vndb_cross_media', adapterRevision, [
+    need.scheme.sourceKey,
+    ...need.codes.map((code) => `${vndbCharacterBloodTypeTaxonomy}:${code}`),
+  ]);
 }
 
 async function sendProfilePages(
@@ -535,7 +533,7 @@ function journalProfileReferences(
   journal: ShowcaseJournal,
   need: NonNullable<ReturnType<typeof profileVocabularyNeed>>,
 ): VndbCharacterProfileReferences | undefined {
-  const creates = acknowledgedProfileCreates(journal);
+  const creates = acknowledgedProfileCreates(journal, need);
   const schemeId = creates.get(showcaseVocabularyExternalId(need.scheme.sourceKey));
   if (!schemeId) return undefined;
   const concepts = need.codes.flatMap((code) => {
@@ -569,7 +567,7 @@ export async function prepareShowcaseVndbCharacterProfileVocabulary(input: {
       labels: { en: 'VNDB character blood types' },
     }),
   });
-  const schemeCreates = acknowledgedProfileCreates(input.journal);
+  const schemeCreates = acknowledgedProfileCreates(input.journal, need);
   const schemeId = schemeCreates.get(showcaseVocabularyExternalId(need.scheme.sourceKey));
   if (schemeId)
     issues.push(
@@ -610,7 +608,7 @@ export async function prepareShowcaseVndbCharacterProfileVocabulary(input: {
       commands: conceptCommands,
     })),
   );
-  const conceptCreates = acknowledgedProfileCreates(input.journal);
+  const conceptCreates = acknowledgedProfileCreates(input.journal, need);
   const conceptProposals = need.concepts.flatMap((requirement, index) => {
     const subjectId = conceptCreates.get(showcaseVocabularyExternalId(requirement.sourceKey));
     return subjectId

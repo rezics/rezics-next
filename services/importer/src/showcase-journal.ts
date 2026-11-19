@@ -6,6 +6,7 @@ import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import {
   showcaseDigest,
   showcaseLimits,
+  showcaseVocabularyExternalId,
   type CrossMediaPort,
   type ShowcaseAcknowledgement,
   type ShowcaseManifest,
@@ -248,7 +249,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
     return row ? commandAcknowledgement(row) : null;
   }
 
-  acknowledgedCommands(sources?: readonly BatchCommand['source'][]): ShowcaseAcknowledgement[] {
+  acknowledgedCommands(
+    sources?: readonly Pick<BatchCommand['source'], 'source' | 'external_id'>[],
+  ): ShowcaseAcknowledgement[] {
     if (sources) {
       const bound = showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary;
       const rows = new Map<string, JournalCommandRow>();
@@ -274,6 +277,22 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         .map(commandAcknowledgement);
     }
     return this.#commands('acknowledged');
+  }
+
+  vocabularyCreateIds(alias: string, converterRevision: string, sourceKeys: readonly string[]): Map<string, string> {
+    const sources = sourceKeys.map((key) => ({ source: alias, external_id: showcaseVocabularyExternalId(key) }));
+    const ids = new Map<string, string>();
+    for (const { command, commandDigest, subjectId } of this.acknowledgedCommands(sources)) {
+      if (
+        command.op === 'create' &&
+        subjectId &&
+        command.source.converter_revision === converterRevision &&
+        commandDigest === showcaseDigest(command)
+      ) {
+        ids.set(command.source.external_id, subjectId);
+      }
+    }
+    return ids;
   }
 
   preparedCommands(): ShowcaseAcknowledgement[] {

@@ -13,6 +13,7 @@ import {
   emptyCrossMediaPlan,
   showcaseDigest,
   showcaseLimits,
+  showcaseSubjectRoute,
   showcaseSourceMatches,
   showcaseVocabularyExternalId,
   type CrossMediaGap,
@@ -704,7 +705,8 @@ export function buildShowcaseManifest(input: {
           : (member?.kind ?? (bootstrap?.op === 'create' ? kindFromType(bootstrap.subject.type) : 'work')),
       subjectId: subject?.id ?? null,
       nativeType: subject?.type ?? (bootstrap?.op === 'create' ? bootstrap.subject.type : null),
-      readerRoute: reading?.route ?? null,
+      // Publication resolves the canonical public route separately. Intent addresses the original claim.
+      readerRoute: subject ? showcaseSubjectRoute(subject.id, bootstrap?.subject.labels) : null,
       assertions: sourceAssertions,
     });
   }

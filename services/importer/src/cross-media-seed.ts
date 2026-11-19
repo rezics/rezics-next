@@ -28,7 +28,6 @@ import {
   vndbStaffNameLimits,
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
-import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest, sourceWebsiteUrl } from '@rezics/conversion/support';
 import {
   observePersonIdentity,
@@ -87,6 +86,7 @@ import {
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
 import {
+  journalVndbCreditReferences,
   prepareShowcaseVndbCredits,
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
@@ -179,6 +179,7 @@ import {
   collectSelectedDumpRows,
   isCrossMediaTableScanLimitError,
   showcaseLimits,
+  showcaseSubjectRoute,
   type CrossMediaPort,
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
@@ -2326,10 +2327,7 @@ export type VndbWorkRelationOutcome = Readonly<{
 
 function subjectRoute(read: ReviewedSubjectRead): string {
   const subject = (read as { subject?: { id?: string; labels?: Record<string, string> } }).subject;
-  const id = subject?.id;
-  const labels = subject?.labels ?? {};
-  const label = labels.und ?? labels.en ?? labels.ja ?? labels.zh ?? Object.values(labels)[0] ?? 'subject';
-  return id ? `/subjects/${id}/${subjectSlug(label)}` : '/subjects';
+  return subject?.id ? showcaseSubjectRoute(subject.id, subject.labels) : '/subjects';
 }
 
 function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined {
@@ -3581,6 +3579,7 @@ async function runSeedCli(
     planShowcaseCharacterVocabulary,
     prepareShowcaseCharacterVocabulary,
     profileFromCharacterVocabularyBindings,
+    journalCharacterVocabularyProfile,
     readShowcaseCharacterVocabulary,
   } = await import('./showcase-character-vocabulary.ts');
   const optionalFlags = [
@@ -3922,6 +3921,8 @@ async function runSeedCli(
         ...(journal ? { journal } : {}),
       });
 
+      if (journal && !vocabularyPath)
+        vndbVocabularyProfile = journalCharacterVocabularyProfile(characterVocabulary.requirements, journal);
       await refreshReviewedCharacterVocabulary();
     }
     const episodeCatalogueSubjects = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
@@ -3931,7 +3932,17 @@ async function runSeedCli(
       const careers = await acquireBangumiPersonCareerSources(base, { journal });
       return acquireBangumiCoverSources(careers, { journal });
     });
-    const seedExtras = (references = vndbCreditReferences): CrossMediaSeedExtras => ({
+    // Restore the dependencies of the previous bound pass before ordinary record reconciliation.
+    // The journal supplies lookup IDs; the vocabulary readers still check their current native state.
+    const initialCreditReferences =
+      journal && !explicitCreditBindingsPath ? journalVndbCreditReferences(plan, journal) : vndbCreditReferences;
+    if (journal) {
+      if (!explicitProfileBindingsPath)
+        characterProfileBindings = await readShowcaseVndbCharacterProfileVocabulary({ plan, port, journal });
+      if (!characterBindingsPath)
+        bangumiCareerBindings = await readShowcaseBangumiSelectedCharacterVocabulary({ plan, port, journal });
+    }
+    const seedExtras = (references: VndbCreditVocabularyReferences | undefined): CrossMediaSeedExtras => ({
       ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
       ...(references ? { vndbCreditReferences: references } : {}),
       vndbCharacterProfileBindings: characterProfileBindings,
@@ -3977,7 +3988,7 @@ async function runSeedCli(
       ...(vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length
         ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
         : {}),
-      extras: { ...seedExtras(), recordImportProgress },
+      extras: { ...seedExtras(initialCreditReferences), recordImportProgress },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
     recordImportProgress.complete();
@@ -4055,7 +4066,7 @@ async function runSeedCli(
           bindings: releaseContext.bindings,
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-          extras: { ...seedExtras(), recordImportProgress },
+          extras: { ...seedExtras(initialCreditReferences), recordImportProgress },
           ...(characterBindings === undefined ? {} : { characterBindings }),
         });
         recordImportProgress.complete();
@@ -4554,7 +4565,7 @@ async function runSeedCli(
           seed: seedCrossMedia,
           planned: plannedBooks,
           basePlan: publicationPlan,
-          extras: seedExtras(),
+          extras: seedExtras(currentVndbCreditReferences),
           ...(characterBindings === undefined ? {} : { characterBindings }),
           tables: input,
           path: statePath,

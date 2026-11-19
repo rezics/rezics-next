@@ -251,19 +251,11 @@ function vocabularyCommands(input: {
   }));
 }
 
-function ackedCreates(journal: ShowcaseJournal): Map<string, string> {
-  return new Map(
-    journal
-      .acknowledgedCommands()
-      .flatMap((ack) =>
-        ack.command.op === 'create' &&
-        ack.subjectId &&
-        ack.command.source.source === 'bangumi_cross_media' &&
-        ack.command.source.converter_revision === adapterRevision
-          ? [[ack.command.source.external_id, ack.subjectId] as const]
-          : [],
-      ),
-  );
+function ackedCreates(journal: ShowcaseJournal, need: CharacterVocabularyNeed): Map<string, string> {
+  return journal.vocabularyCreateIds('bangumi_cross_media', adapterRevision, [
+    ...[...need.schemes.keys()].map((id) => vocabularyKey(id)),
+    ...need.concepts.map((entry) => vocabularyKey(entry.taxonomy, entry.code)),
+  ]);
 }
 
 async function sendMissing(input: {
@@ -287,7 +279,7 @@ async function sendMissing(input: {
 }
 
 function identityBindings(need: CharacterVocabularyNeed, journal: ShowcaseJournal): SourceVocabularyBindings {
-  const creates = ackedCreates(journal);
+  const creates = ackedCreates(journal, need);
   const schemes = [...need.schemes.keys()].flatMap((id) => {
     const uri = taxonomy[id].scheme;
     const subject = creates.get(showcaseVocabularyExternalId(vocabularyKey(id)));
@@ -332,7 +324,7 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
     vocabularyCommands({ entry, nativeType: 'skos:ConceptScheme' }),
   );
   if (schemeCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: schemeCommands });
-  const schemeCreates = ackedCreates(input.journal);
+  const schemeCreates = ackedCreates(input.journal, need);
   const schemeProposals = schemeEntries.flatMap((entry) => {
     const subjectId = schemeCreates.get(showcaseVocabularyExternalId(vocabularyKey(entry.taxonomy)));
     return subjectId ? vocabularyCommands({ entry, nativeType: 'skos:ConceptScheme', subjectId }) : [];
@@ -353,7 +345,7 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
   const conceptCommands = conceptEntries.flatMap((entry) => vocabularyCommands({ entry, nativeType: 'skos:Concept' }));
   if (conceptCommands.length)
     await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
-  const conceptCreates = ackedCreates(input.journal);
+  const conceptCreates = ackedCreates(input.journal, need);
   const conceptProposals = conceptEntries.flatMap((entry) => {
     const subjectId = conceptCreates.get(showcaseVocabularyExternalId(vocabularyKey(entry.taxonomy, entry.code)));
     const schemeId = currentSchemes.get(entry.taxonomy);
