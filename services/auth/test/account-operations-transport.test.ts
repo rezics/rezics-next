@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys, testReceiptKeysEnv } from '../../kernel/test/support/receipt-keys.ts';
 import {
   MEMBERSHIP_APPROVAL_MAX_RESPONSE_BYTES,
   MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES,
@@ -10,7 +11,7 @@ import {
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
+import { nativeKernelSetupTimeout, preloadNativeKernel } from './support/native-kernel.ts';
 import { fileURLToPath } from 'node:url';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -20,8 +21,7 @@ import { accountOperationTransport } from '../src/account-operations-transport.t
 import { createBarrierProofVerifier } from '../src/barrier-proofs.ts';
 import { createNativeWorkflowProofPorts } from '../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../src/provisioning-evidence.ts';
-import { migrate, POSTGRES_IMAGE, run } from '../scripts/database.ts';
-import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
+import { kernelTestDatabase, testDatabase } from '../scripts/database.ts';
 
 const issuer = 'https://account-operations.auth.test';
 const audience = 'https://account-operations.api.test';
@@ -34,50 +34,24 @@ const cookies = (response: Response) =>
     .map((s) => s.split(';')[0])
     .join('; ');
 
-/** Each fixture owns exactly the container it starts. */
-function ownDatabase() {
-  const container = run('docker', [
-    'run',
-    '-d',
-    '--rm',
-    '-p',
-    '127.0.0.1::5432',
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=2g',
-    '-e',
-    'POSTGRES_USER=rezics',
-    '-e',
-    'POSTGRES_PASSWORD=rezics',
-    '-e',
-    'POSTGRES_DB=rezics',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-  ]);
-  try {
-    const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)![1];
-    const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-    migrateKernel(url);
-    migrate(url);
-    return { url, close: () => run('docker', ['rm', '-f', container]) };
-  } catch (error) {
-    run('docker', ['rm', '-f', container]);
-    throw error;
-  }
-}
-
-type Native = {
-  routeOf(id: string): number | null;
-  PLATFORM_RESOURCE: { route: number; id: string };
-  readPublicAccountByHandle: typeof import('../../kernel/src/access/public-identity.ts').readPublicAccountByHandle;
-};
-let database: ReturnType<typeof ownDatabase>;
+let kernelDatabase: ReturnType<typeof kernelTestDatabase>;
+let authDatabase: ReturnType<typeof testDatabase>;
 let kernelPool: Pool;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
-let native: Native;
+async function loadModules() {
+  await preloadNativeKernel();
+  return {
+    ...(await import('../../kernel/src/access/index.ts')),
+    ...(await import('../../kernel/src/access/native-account-bindings.ts')),
+    ...(await import('../../kernel/src/access/workflow-approvals.ts')),
+    ...(await import('../../kernel/src/access/lifecycle.ts')),
+    ...(await import('../../kernel/src/access/bootstrap-governance.ts')),
+    ...(await import('../../kernel/src/access/public-identity.ts')),
+    ...(await import('../../kernel/src/route/route.ts')),
+  };
+}
+let native: Awaited<ReturnType<typeof loadModules>>;
 let governor: Person;
 let creator: Person;
 let ordinary: Person;
@@ -177,32 +151,26 @@ const scopes = [
 ];
 
 beforeAll(async () => {
-  database = ownDatabase();
-  kernelPool = new Pool({ connectionString: database.url });
-  authPool = new Pool({ connectionString: database.url });
+  authDatabase = testDatabase();
+  kernelDatabase = kernelTestDatabase();
+  kernelPool = new Pool({ connectionString: kernelDatabase.url });
+  configureTestReceiptKeys(kernelPool);
+  authPool = new Pool({ connectionString: authDatabase.url });
   const previous = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = database.url;
-  let modules;
+  process.env.DATABASE_URL = kernelDatabase.url;
   try {
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
-    modules = {
-      ...(await import('../../kernel/src/access/index.ts')),
-      ...(await import('../../kernel/src/access/native-account-bindings.ts')),
-      ...(await import('../../kernel/src/access/workflow-approvals.ts')),
-      ...(await import('../../kernel/src/access/lifecycle.ts')),
-      ...(await import('../../kernel/src/access/bootstrap-governance.ts')),
-      ...(await import('../../kernel/src/access/public-identity.ts')),
-      ...(await import('../../kernel/src/route/route.ts')),
-    };
+    native = await loadModules();
   } finally {
     if (previous === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previous;
   }
-  native = modules;
-  const actions = new Map([...modules.LIFECYCLE_ACTIONS, ['access:grant', { anonymous: false }]]);
+}, nativeKernelSetupTimeout);
+
+beforeAll(async () => {
+  const actions = new Map([...native.LIFECYCLE_ACTIONS, ['access:grant', { anonymous: false }]]);
   actions.set('account:manage', { anonymous: false });
   let service: Awaited<ReturnType<typeof createAuthHost>>['service'];
-  const access = modules.createAccess({
+  const access = native.createAccess({
     actions,
     auth: {
       issuer,
@@ -213,7 +181,7 @@ beforeAll(async () => {
   });
   const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(94)]]) };
   const proofs = createNativeWorkflowProofPorts({ database: authPool });
-  const bindings = modules.createNativeAccountBindings({
+  const bindings = native.createNativeAccountBindings({
     pool: kernelPool,
     access,
     actions,
@@ -278,7 +246,7 @@ beforeAll(async () => {
   grantAny = await person('grant-any');
   const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', governor.accountId], {
     cwd: fileURLToPath(new URL('../../../', import.meta.url)),
-    env: { ...process.env, DATABASE_URL: database.url },
+    env: { ...process.env, ...testReceiptKeysEnv(), DATABASE_URL: kernelDatabase.url },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -289,7 +257,7 @@ beforeAll(async () => {
     await bindings.grants.create(
       { ...context(), actor: actor as never },
       {
-        resource: modules.PLATFORM_RESOURCE,
+        resource: native.PLATFORM_RESOURCE,
         subject: { kind: 'account', id: recipient.accountId },
         actions: [action],
         valid: '(,)',
@@ -299,13 +267,19 @@ beforeAll(async () => {
   };
   await grantGate(governor, creator, 'gate:organizations');
   await grantGate(governor, grantAny, 'gate:any');
-}, 180000);
+}, nativeKernelSetupTimeout);
 
 afterAll(async () => {
-  await host?.stop();
-  if (!host) await Promise.all([kernelPool?.end(), authPool?.end()]);
-  else await kernelPool.end();
-  database?.close();
+  try {
+    await host?.stop();
+  } finally {
+    try {
+      await Promise.all([kernelPool?.end(), host ? undefined : authPool?.end()]);
+    } finally {
+      kernelDatabase?.close();
+      authDatabase?.close();
+    }
+  }
 }, 60000);
 
 test('a signed-in person approves and executes organization creation rename and own account deletion over HTTP and receives the native result', async () => {

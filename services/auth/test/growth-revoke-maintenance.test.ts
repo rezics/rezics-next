@@ -1,3 +1,4 @@
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { serializeSignedCookie } from 'better-call';
@@ -32,6 +33,7 @@ const repetitions = 3;
 const fixed = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 async function makeAuth(db: GrowthDatabase): Promise<AuthService> {
+  installNativeRoleProducer(db.admin);
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'current',

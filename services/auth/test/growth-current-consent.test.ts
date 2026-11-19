@@ -1,7 +1,9 @@
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
+import { configureTestReceiptKeys } from '../../kernel/test/support/receipt-keys.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { setImmediate } from 'node:timers/promises';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -10,6 +12,8 @@ import { createAuthService, createBarrierProofVerifier, createProvisioningEviden
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { routeOf } from '../../kernel/src/route/route.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+
+beforeNativeKernelTests();
 
 test('native exact consent cost stays fixed as unrelated and same-person other-client/history rows grow', async () => {
   const fixture = testDatabase();
@@ -84,12 +88,13 @@ test('durable consent point reader honors native pending reduction ceiling befor
   let release!: () => void;
   let reduction: Promise<Response> | undefined;
   try {
+    installNativeRoleProducer(db.admin);
     migrateKernel(fixture.url);
+    configureTestReceiptKeys(db.pool);
     const previousUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = fixture.url;
     let native;
     try {
-      await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
       native = {
         ...(await import('../../kernel/src/access/lifecycle.ts')),
         ...(await import('../../kernel/src/access/account-data.ts')),

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { Pool } from 'pg';
 import { managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
 import { testDatabase } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { routeOf } from '../../kernel/src/route/route.ts';
 import { operatorSessionTransport } from '../src/operator-session-transport.ts';
+
+beforeNativeKernelTests();
 
 // Reuse the real native Auth/Access composition; no replacement opening/session
 // writer, approval engine, permission fixture or token signer.
@@ -54,7 +56,6 @@ beforeAll(async () => {
   migrateKernel(database.url);
   pool = new Pool({ connectionString: database.url });
   process.env.DATABASE_URL = database.url;
-  await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
   fixture = await import('../../kernel/test/access/native-account-bindings-fixture.ts');
   f = await fixture.nativeFixture(pool);
   human = await f.person('opening-human');

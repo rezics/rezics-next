@@ -1,3 +1,4 @@
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { expect, test } from 'bun:test';
 import {
   createNativeDriver,
@@ -14,6 +15,7 @@ import {
 // verifier selects a synthetic control, which proves assertion sensitivity only.
 const references = ['correct', 'stale', 'deny-all', 'bad-order'] as const;
 const failing = test;
+if (!process.env.CONSENT_OUTCOME_REFERENCE) beforeNativeKernelTests();
 function driver(max = 4): Promise<ConsentIssuanceDriver> {
   const behavior = process.env.CONSENT_OUTCOME_REFERENCE;
   if (!behavior) return createNativeDriver(max);

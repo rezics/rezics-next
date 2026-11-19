@@ -1,3 +1,4 @@
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -62,6 +63,7 @@ async function completed(db: GrowthDatabase, schema: string, id: string) {
 }
 
 async function nativeFixture(db: GrowthDatabase, website: boolean) {
+  if (!website) installNativeRoleProducer(db.admin);
   // Later-expiring backlog and live state must survive every selected full batch.
   await db.admin.query(`INSERT INTO "user" (id,name,"emailVerified")
     SELECT 'history-'||i,'',false FROM generate_series(1,1000) i;

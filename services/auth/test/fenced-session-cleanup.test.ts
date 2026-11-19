@@ -1,14 +1,16 @@
+import { configureTestReceiptKeys } from '../../kernel/test/support/receipt-keys.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { newId, routeOf } from '../../kernel/src/route/route.ts';
 import { createAuthService, type AuthService, type InvalidationReceipt } from '../src/index.ts';
 
-await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
+beforeNativeKernelTests();
+
 let bindings: ReturnType<typeof import('../../kernel/src/access/auth-bindings.ts').createAuthBindings>;
 let lifecycle: ReturnType<typeof import('../../kernel/src/access/lifecycle.ts').createLifecycleInternals>;
 
@@ -55,6 +57,7 @@ beforeAll(async () => {
   fixture = testDatabase();
   migrateKernel(fixture.url);
   pool = new Pool({ connectionString: fixture.url });
+  configureTestReceiptKeys(pool);
   const previousUrl = process.env.DATABASE_URL;
   process.env.DATABASE_URL = fixture.url;
   try {
