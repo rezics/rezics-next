@@ -106,7 +106,12 @@ export async function compilePreparedWebPrograms(env: NodeJS.ProcessEnv): Promis
   let failure: unknown;
   let code = 0;
   try {
-    code = await compileWebProgramsWithSqlAnalysis({ ...env, DATABASE_URL: database.url }, { run: command });
+    const compilerEnv = {
+      ...env,
+      DATABASE_URL: database.url,
+      ...(database.container === undefined ? {} : { KERNEL_DATABASE_CONTAINER: database.container }),
+    };
+    code = await compileWebProgramsWithSqlAnalysis(compilerEnv, { run: command });
   } catch (error) {
     failure = error;
     throw error;
