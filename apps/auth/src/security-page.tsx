@@ -599,8 +599,8 @@ function SecurityPageView({
     setSessionError('');
     setPasskeyNotice('');
     setPasskeyError('');
-    setSignedOutNotice(notice);
-    setLoadMessage(m.auth_security_authority_changed());
+    setSignedOutNotice(state === 'signed-out' ? notice : '');
+    setLoadMessage(notice || m.auth_security_authority_changed());
     setLoadState(state);
   }
 

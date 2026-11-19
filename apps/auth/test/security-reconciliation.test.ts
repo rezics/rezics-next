@@ -215,14 +215,25 @@ test('current account switch and denied readback clear private data without disp
     await page.getByText(unverifiedAction, { exact: true }).waitFor();
     expect(writes).toHaveLength(0);
     expect(await page.getByRole('heading', { name: 'Sessions', exact: true }).count()).toBe(0);
+
     await page.reload();
-    await page.getByRole('heading', { name: 'Sessions', exact: true }).waitFor();
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    denied = true;
+    await confirm(page);
+    await page.getByText(unverifiedAction, { exact: true }).waitFor();
+    expect(writes).toHaveLength(0);
+    expect(await page.getByText('Security key', { exact: true }).count()).toBe(0);
+
+    denied = false;
+    await page.reload();
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
     await confirm(page);
     await check(page).waitFor();
     denied = true;
     await check(page).click();
     await page.getByText(unverifiedAction, { exact: true }).waitFor();
     expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
+    expect(writes).toHaveLength(1);
   } finally {
     await page.context().close();
   }
