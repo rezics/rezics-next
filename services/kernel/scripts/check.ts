@@ -32,6 +32,7 @@ import {
 import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { remoteCheckPhaseReporter } from '../../../scripts/remote-check.ts';
+import type { CandidateSourceManifest } from '../../../scripts/check-source.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
 import { withCommandPhase } from './command-phases.ts';
@@ -935,6 +936,31 @@ export function formatFileConnectionResult(file: string, result: 'PASS' | 'FAIL'
   return `${file}: ${result}; peak database connections ${peak}`;
 }
 
+function kernelFileProgressSource(run: string | undefined) {
+  let manifest: CandidateSourceManifest | undefined;
+  if (run && /^[a-zA-Z0-9-]+$/.test(run)) {
+    const path = resolve(directory, '../../.temp/check-host', `source-manifest-${run}.json`);
+    try {
+      manifest = JSON.parse(readFileSync(path, 'utf8')) as CandidateSourceManifest;
+    } catch {
+      // A check can run without a prepared source manifest. Progress is still available.
+    }
+  }
+  const fileDigests = new Map<string, string>();
+  const prefix = 'services/kernel/';
+  for (const entry of Array.isArray(manifest?.entries) ? manifest.entries : []) {
+    if (entry?.kind === 'file' && typeof entry.path === 'string' && entry.path.startsWith(prefix)) {
+      fileDigests.set(entry.path.slice(prefix.length), entry.sha256);
+    }
+  }
+  return (file: string) => ({
+    run,
+    revision: manifest?.head,
+    sourceSha256: manifest?.sourceSha256,
+    fileSha256: fileDigests.get(file),
+  });
+}
+
 export function formatConnectionRunSummary(
   peakTotal: number,
   filePeaks: ReadonlyMap<string, number>,
@@ -1378,6 +1404,7 @@ async function main(): Promise<void> {
         )) ?? undefined;
     },
     runTests: async (testFiles) => {
+      const progressSource = kernelFileProgressSource(process.env.REZICS_CHECK_RUN);
       const samplerClient = new Client({
         connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
         application_name: 'kernel-check-connection-sampler',
@@ -1442,19 +1469,30 @@ async function main(): Promise<void> {
           dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
           environment: (database) =>
             fileEnvironment(analysisEnvironment, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
-          onFileComplete: (outcome, timing) => {
-            if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
-            else outputByFile.delete(outcome.file);
+          onFileComplete: (outcome, timing, retry) => {
             const peak = sampler.peakFor(outcome.database);
-            timing.peakConnections = peak;
-            filePeaks.set(outcome.file, peak);
-            const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
-            process.stdout.write(
-              `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
-            );
-            process.stdout.write(
-              `${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`,
-            );
+            if (retry !== 'complete') {
+              if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
+              else outputByFile.delete(outcome.file);
+              timing.peakConnections = peak;
+              filePeaks.set(outcome.file, peak);
+              const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
+              process.stdout.write(
+                `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
+              );
+              process.stdout.write(
+                `${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`,
+              );
+            }
+            const progress = {
+              ...progressSource(outcome.file),
+              file: outcome.file,
+              attempt: retry === 'complete' ? 2 : 1,
+              result: retry === 'pending' ? 'retry-pending' : outcome.error ? 'failed' : 'passed',
+              seconds: timing.wall,
+              peakConnections: peak,
+            };
+            process.stdout.write(`[kernel-file] ${JSON.stringify(progress)}\n`);
           },
         });
         failedFiles = result.failed;

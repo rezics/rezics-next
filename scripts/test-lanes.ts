@@ -914,8 +914,8 @@ export type LaneSuite = {
   dropDatabase: (database: string) => Promise<void>;
   /** The environment of every process one test file starts. */
   environment: (database: string) => NodeJS.ProcessEnv;
-  /** Runs after a file and its database clone finish, before this run's timings are written. */
-  onFileComplete?: (outcome: FileOutcome<string>, timing: FileTiming) => void;
+  /** Runs after each attempt and its database clone finish. Only initial timings are persisted. */
+  onFileComplete?: (outcome: FileOutcome<string>, timing: FileTiming, retry: 'pending' | 'complete' | null) => void;
   /** Runs after tests and clone drops to retain this check's compiler/test phase split. */
   runTiming?: () => CheckRunTiming;
   onRunTiming?: (timing: CheckRunTiming) => void;
@@ -1000,9 +1000,28 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       }
     },
   };
-  const runner = recorder.wrap<string>(laneRunner, async (_file, database) =>
-    parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8')),
-  );
+  const readTests = async (_file: string, database: string) =>
+    parseJunit(readFileSync(join(reports, `${database}.xml`), 'utf8'));
+  const runner = recorder.wrap(laneRunner, readTests);
+  const retryRecorder = suite.onFileComplete ? createRecorder() : undefined;
+  const retryRunner = retryRecorder?.wrap(laneRunner, readTests) ?? laneRunner;
+  function classifyRetry(outcome: FileOutcome<string>) {
+    // A test already isolated by an exact name has no competing lane to remove.
+    if (isolatedSelection) return null;
+    const report = reportsByFile.get(outcome.file);
+    return classifyGrowthFailures(outcome, report) ?? classifyLoadInducedFailures(outcome, report);
+  }
+  function reportCompletion(outcome: FileOutcome<string>, timing: FileTiming | undefined, retried = false) {
+    if (!timing || !suite.onFileComplete) return;
+    try {
+      const retry = retried ? 'complete' : outcome.error && classifyRetry(outcome)?.length ? 'pending' : null;
+      suite.onFileComplete(outcome, timing, retry);
+    } catch (error) {
+      process.stderr.write(
+        `Could not record ${outcome.file} completion: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
+  }
   try {
     const outcomes = await runTestFiles(
       suite.service,
@@ -1018,15 +1037,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
             stoppedAtBound.add(outcome.file);
             delete recorder.timings()[outcome.file];
           }
-          if (timing && suite.onFileComplete) {
-            try {
-              suite.onFileComplete(outcome, timing);
-            } catch (error) {
-              process.stderr.write(
-                `Could not record ${outcome.file} completion: ${error instanceof Error ? error.message : String(error)}\n`,
-              );
-            }
-          }
+          reportCompletion(outcome, timing);
         },
       },
       env,
@@ -1035,15 +1046,12 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
     const { failed } = await rerunGrowthFailures(
       outcomes,
       async (file) => {
-        const [outcome] = await scheduleFiles(`${suite.service}_growth_${++rerunIndex}_test`, [file], 1, laneRunner);
+        const [outcome] = await scheduleFiles(`${suite.service}_growth_${++rerunIndex}_test`, [file], 1, retryRunner);
+        reportCompletion(outcome!, retryRecorder?.timings()[file], true);
+        if (retryRecorder) delete retryRecorder.timings()[file];
         return outcome!;
       },
-      (outcome) => {
-        // A test already isolated by an exact name has no competing lane to remove.
-        if (isolatedSelection) return null;
-        const report = reportsByFile.get(outcome.file);
-        return classifyGrowthFailures(outcome, report) ?? classifyLoadInducedFailures(outcome, report);
-      },
+      classifyRetry,
     );
     const timings = retainStoppedTimings(recorder.timings(), latest, stoppedAtBound);
     const run = suite.runTiming?.();

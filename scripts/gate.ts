@@ -597,6 +597,10 @@ async function run(
 // Bound the text passed to Bun's diagnostic classifier and host-prefix formatter. A failed
 // DOM assertion can print a large object graph before the runner prints its file summary.
 const workspaceExcerptBytes = 64 * 1024;
+const workspaceProgressPrefixes: Partial<Record<string, string>> = {
+  'apps/web': '[web-file] ',
+  'services/kernel': '[kernel-file] ',
+};
 
 async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void) {
   const head = Buffer.allocUnsafe(workspaceExcerptBytes);
@@ -713,10 +717,11 @@ async function checkWorkspace(
     stdout: 'pipe',
     stderr: 'pipe',
   });
+  const progressPrefix = workspaceProgressPrefixes[workspace.directory];
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     readWorkspaceOutput(child.stdout, (line) => {
-      if (workspace.directory === 'apps/web' && line.startsWith('[web-file] ')) writeOutput(`${line}\n`, 'stdout', env);
+      if (progressPrefix && line.startsWith(progressPrefix)) writeOutput(`${line}\n`, 'stdout', env);
     }),
     readWorkspaceOutput(child.stderr),
   ]);
