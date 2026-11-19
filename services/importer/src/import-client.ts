@@ -713,31 +713,34 @@ export function createImportTransport(options: ImportTransportOptions) {
           if (item.key !== request.commands[index]!.key) throw invalidReceipt();
           results[sent[index]!] = item;
         });
-        const refused = sent.filter((index) => {
+        const pending = sent.filter((index) => {
           const item = results[index]!;
+          if (!('problem' in item)) return false;
+          const { problem, status } = item;
+          const transient = (status === 429 || status === 503) && problem.retryable;
+          if (!admissionOnly) return transient;
+          if (problem.status !== status || !('effect_status' in problem)) return false;
+          if (problem.effect_status === 'not_applied') return transient;
+          if (problem.effect_status !== 'unknown') return false;
+          // Exact replay lets Kernel reauthorize and read a committed receipt. A failed
+          // COMMIT can leave one even when the underlying internal error is not retryable.
           return (
-            (item.status === 503 || item.status === 429) &&
-            'problem' in item &&
-            item.problem.retryable === true &&
-            (!admissionOnly ||
-              (item.problem.status === item.status &&
-                'effect_status' in item.problem &&
-                item.problem.effect_status === 'not_applied'))
+            (status === 503 && problem.retryable) ||
+            (status === 500 && 'failure_stage' in problem && problem.failure_stage === 'transaction_commit')
           );
         });
         const delay = 100 * 2 ** (attempt - 1);
         if (
-          !refused.length ||
+          !pending.length ||
           attempt + pages.length >= attemptLimit ||
           delay > maxWaitMs ||
           delay > maxTotalWaitMs - scheduledWait ||
           (deadline !== undefined && now() + delay >= deadline)
         )
           continue;
-        // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
         scheduledWait += delay;
         await wait(delay, controller.signal, options.sleep);
-        if (deadline === undefined || now() < deadline) pages.unshift(refused);
+        if (deadline === undefined || now() < deadline) pages.unshift(pending);
       }
       return { results };
     } finally {
