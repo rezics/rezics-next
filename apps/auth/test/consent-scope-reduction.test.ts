@@ -134,7 +134,9 @@ test('Changed grants, current ceiling and failed native reads cannot restore sco
 
 test('A native stale-review refusal stays explicit and never replays the selected reduction', async () => {
   const calls = transport((call) =>
-    call.body === null ? native() : Response.json({ code: 'stale_review' }, { status: 409 }),
+    call.body === null
+      ? native()
+      : Response.json({ error: 'authentication_denied', code: 'stale_review' }, { status: 409 }),
   );
   expect(await reduceConsent(grant(), ['openid'])).toEqual({ kind: 'stale-review' });
   expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([

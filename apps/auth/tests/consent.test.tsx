@@ -106,14 +106,14 @@ test('consent reviews and decisions belong to the current visit and survive sign
       reviewed_requested: ['openid', 'offline_access', 'library:read', 'unknown'],
     });
     await answer(2);
-    expect(host.textContent).toContain('You can return to the client.');
+    expect(host.textContent).toContain('You can return to the application.');
     await navigate(path(body.client_id, 'library:write'));
     await navigate(path('unknown'));
     expect(calls[3]!.init?.signal?.aborted).toBe(true);
     await answer(3);
     expect(button('Approve')).toBeUndefined();
     await answer(4, 404);
-    expect(host.textContent).toContain('Client not found.');
+    expect(host.textContent).toContain('Application not found.');
     await navigate(path());
     await answer(5, 401);
     const login = new URL((host.querySelector('a[href^="/login?"]') as HTMLAnchorElement).href);
