@@ -129,9 +129,8 @@ record the effect, including when it is not yet observable.
 - Repairs of integrated code that is broken on dev (type diagnostics, boot failures, failing tests named in landed
   summaries) go out as urgent briefs under the manager's urgent grant. They carry an honest estimate and are batched
   per area, never one per diagnostic. The dispatch estimate floor is advisory.
-- Finish released capability rows end to end until their composed acceptance passes. Current [scope](../scope.md)
-  controls admission: closed and deferred systems receive no proactive implementation, research or polish without
-  explicit authorization. A historical checklist does not reopen them.
+- Finish first-public capability rows end to end until their composed acceptance passes. Use the current
+  [public scope](../scope.md) to allocate the resident's product work.
 - Commission research only for a named open choice with a consumer task; use one report by default.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.

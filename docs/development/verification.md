@@ -61,6 +61,9 @@ Record its original revision and applicability; a new aggregate head alone does 
 change or new defect evidence justifies a rerun. Never relabel reused evidence as a new run or use it to prove changed
 behavior. Final qualification still covers the promoted candidate.
 
+Judge assertions against the behavior promised by the owner contract, independently of public exposure. Correct
+an assertion that expects behavior outside that contract before spending another run on it.
+
 After the same setup or infrastructure failure recurs, stop resubmitting the affected check unchanged. Send its
 first error, reached stage and needed repair to the infrastructure owner. The manager chooses a narrower useful
 check, deferral or an owner repair under [scheduling](supermanager.md#scheduling-and-progress); independent source

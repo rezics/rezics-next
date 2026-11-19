@@ -134,7 +134,9 @@ bun services/auth/scripts/dev-stack.ts walk --import-catalogue -- bun services/i
 
 Use `--scope all` or omit the scope to run all twelve paths in one session. Append `--reopen-seed` to the catalogue or
 whole-walk command when qualifying composed replay. The mounted and native catalogue reads use the first published
-result. The optional reopen then verifies publication and stable Subject IDs for the same exact provider referents.
+result. The optional reopen verifies the published facts, provenance and existing Subject bindings for the same
+source records. Independent import runs may produce distinct proposal IDs. Retrying one sealed request verifies reuse
+of the original command and result.
 
 Record the exact revision and fixture or seed for each of the twelve paths. A pass requires the complete visible
 path and its applicable native current reads. Follow [shared prerequisite accounting](../development/verification.md#check-selection-and-failures)

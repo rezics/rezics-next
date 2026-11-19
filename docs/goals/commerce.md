@@ -1,8 +1,7 @@
 # Commerce
 
-Status: [Closed; inactive by default](../scope.md). The [Commerce boundary](../commerce.md#system-boundary-and-release-status)
-governs its APIs and journeys. The outcomes below are retained for explicitly requested future work; they are not
-first-public release gates. The separately scoped [Library Goal](library.md) continues under its own release scope.
+Commerce [requires platform grants](../scope.md). The [Commerce boundary](../commerce.md#system-boundary-and-release-status)
+governs its APIs and journeys. The [Library Goal](library.md) has its own release scope.
 
 ## Outcome
 
@@ -40,16 +39,16 @@ distinguish attributed earnings from an actually attested external payment.
 ## Scope
 
 Direct licensed sales on one US Stripe account through hosted Checkout/Managed Payments. Commerce owns native offers,
-Post-scope and fixed-edition benefits, orders, payment evidence, entitlements, sales, statements and their journey pages, together
-with the linked Library Goal under this same manager. No processor catalogue, bundles, gifts, subscriptions,
-consumables, points/wallet/tokens, market/exchange or new ledger. Creator payouts remain outside Stripe.
+Post-scope and fixed-edition benefits, orders, payment evidence, entitlements, sales, statements and their journey
+pages. No processor catalogue, bundles, gifts, subscriptions, consumables, points/wallet/tokens, market/exchange
+or new ledger. Creator payouts remain outside Stripe.
 [Commerce modules](../commerce-modules.md) owns future scope. Dynamic definitions retain adopted Source requirements.
 
 Decision: new offers selecting a Post capture one account-bound, quantity-one benefit keyed only by that routed Post and `post:read`, covering the Post's eligible historical, current and future revisions; sellers must deliberately select an immutable exact-revision edition for fixed-edition scope.
 
 ## Ownership
 
-The commerce manager owns `services/kernel/{src,db,test}/{commerce,library}/**` and the corresponding journey pages.
+Commerce owns `services/kernel/{src,db,test}/commerce/**` and the corresponding journey pages.
 Web owns the shell/navigation, shared list/card patterns, Storybook organization and review; existing producers remain
 handoffs. Semantic owns definitions, identity and filter meaning; Search owns catalogue and maxima; Content owns
 publication, protected bytes and Rating; Accounts owns Auth, Access, grants, lifecycle and scopes; Performance owns

@@ -1,7 +1,7 @@
 # Commerce capability acceptance inventory
 
-Retained [Commerce](commerce.md) checklist: [Closed; inactive by default](../scope.md).
-Commerce cases do not authorize work; Library cases retain the [Library Goal](library.md)'s scope.
+Capability evidence for [Commerce](commerce.md) under [platform grants](../scope.md) and for the separately
+scoped [Library Goal](library.md).
 Its historical inspection was at revision `6557c8ae6379cb0f5f9dbcbd849339530bc87bbb`.
 Shared fixture delivery, credential reachability, profile writers and ordinary entry deletion are reconciled below
 against integration base `21a2c4bbb75a3d17f3d25666a61cfd6c0eb0f679`; unrelated capability evidence remains historical.

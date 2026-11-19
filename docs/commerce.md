@@ -8,14 +8,11 @@ Use explicit owner ports for Content, Accounts/Access and other integrations; a 
 make Commerce a dependency of ordinary catalogue, Library or free-reading journeys. This boundary does not require
 a separate deployment or database service.
 
-Commerce follows [Closed; inactive by default](scope.md): it is excluded from the first public release.
-All Commerce APIs stay within platform-controlled exposure, including discovery and offer reads, money policy,
-checkout, orders, entitlements, creator sales, statements, payout operations and provider ingress. Caller APIs
-require explicit platform gate admission in addition to their existing scopes, owner and resource authorization.
-Provider ingress remains disabled or unmounted while Commerce is closed; a valid provider signature alone does
-not open the system. Commerce pages and embedded purchase entry follow the same closure.
-
-The retained contracts and acceptance below describe closed capabilities, not an instruction to advance them.
+Commerce follows the [platform-grant exposure rules](scope.md). Caller APIs and their Web entry points require
+platform admission alongside the applicable client scopes, owner and resource authorization. This covers
+discovery, offers, money policy, checkout, orders, entitlements, creator sales, statements and payouts.
+Provider ingress requires platform admission and an authenticated provider request. Commerce implementation and
+verification follow the [Commerce Goal](goals/commerce.md).
 
 ## Recorded money presentation
 

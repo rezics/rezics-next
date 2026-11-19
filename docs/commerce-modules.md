@@ -1,7 +1,7 @@
 # Commerce modules: current boundary and future foundations
 
-Owner: Commerce. This retained module map follows the [Commerce boundary](commerce.md#system-boundary-and-release-status)
-and [Closed; inactive by default](scope.md) status. It authorizes no proactive work. Evidence:
+Owner: Commerce. This module map follows the [Commerce boundary](commerce.md#system-boundary-and-release-status)
+and [platform-grant exposure](scope.md). Evidence:
 [benefits](research/commerce-ownership-entitlements-benefits.md) and
 [payments](research/commerce-payment-evidence-settlement.md). The
 [purchase contract](../services/kernel/src/commerce/README.md), [architecture](architecture.md),

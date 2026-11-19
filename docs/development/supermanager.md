@@ -1,8 +1,8 @@
 # Supermanager
 
-The resident supermanager is the only manager. It owns direction with the maintainer, release scope, Goal allocation,
-unit scheduling, cross-owner choices, allowance runway, incidents, progress reporting and publication. Product and
-module names identify contracts and code ownership; they do not require resident domain managers.
+The resident supermanager is the only manager. It owns direction with the maintainer and coordinates the
+[first public release](../scope.md), including Goal allocation, unit scheduling, cross-owner choices, allowance
+runway, incidents, progress reporting and publication. Product and module names identify contract and code owners.
 
 ## Desktop dispatch
 

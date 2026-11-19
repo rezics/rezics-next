@@ -38,6 +38,11 @@ source-stage check and coverage demands elsewhere. Implement product contracts, 
 and production input validation; their tests are scheduled separately. Prioritize repairs that restore Storybook
 or unblock source work. The single publisher builds and publishes the integrated revision afterward.
 
+When a developing feature needs verification for integration, select checks for the target branch and the
+behavior the change can affect. For example, a focused typecheck can suffice on `dev`. On `main`, typechecking
+and a focused check that the product still runs can suffice for code behind platform grants. Choose evidence by
+impact. Feature acceptance and [public exposure](../scope.md) are separate decisions.
+
 ## Implementation and acceptance
 
 Before allocation, name the implementation deliverable, acceptance owner, selected checks and deferred evidence
