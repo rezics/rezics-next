@@ -11,6 +11,7 @@ import { documentActions } from '../../src/search/document.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/test-kernel.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -53,6 +54,7 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });
