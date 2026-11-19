@@ -8,7 +8,7 @@
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
@@ -861,6 +861,20 @@ async function command(name: 'seed' | 'seed-reopen', args: string[], env: NodeJS
   }
   await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}${diagnostic}`, { mode: 0o600 });
   if (code !== 0) throw walkChildFailure(name, code, stderr);
+}
+
+async function retainFailedSeedReopen(result: string, artifact: string): Promise<void> {
+  const prefix = 'Cross-media seed artifact handoff ';
+  const log = await readFile(resolve(evidenceRoot, 'seed-reopen.log'), 'utf8');
+  const line = log.split('\n').findLast((entry) => entry.startsWith(prefix));
+  if (!line) throw new Error('Failed seed reopen did not publish a result');
+  const handoff: unknown = JSON.parse(line.slice(prefix.length));
+  if (!isRecord(handoff) || handoff.version !== 1 || handoff.state !== 'publication-incomplete' || handoff.artifact !== result)
+    throw new Error('Failed seed reopen result does not match the declared artifact');
+  const bytes = await readFile(result);
+  if (createHash('sha256').update(bytes).digest('hex') !== handoff.artifactSha256)
+    throw new Error('Failed seed reopen result does not match the reported digest');
+  await writeFile(artifact, bytes, { mode: 0o600 });
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -1930,6 +1944,11 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
         if (stage === 'seed') {
           // A publication refusal can still produce a report. The fresh journal has no stale result.
           report = await copyFile(result, artifact).then(
+            () => reportName,
+            () => undefined,
+          );
+        } else {
+          report = await retainFailedSeedReopen(result, artifact).then(
             () => reportName,
             () => undefined,
           );
