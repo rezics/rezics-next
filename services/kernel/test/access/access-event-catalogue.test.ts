@@ -87,7 +87,7 @@ beforeAll(async () => {
   publication = await startAccountIdentityPublication({
     databaseUrl: url,
     routeKey: Buffer.from(testRouteKey()).toString('base64url'),
-    searchPrefix: `access-event-catalogue-${key()}-`,
+    searchPrefix: `access-${key()}-`,
     openSearchUrl: process.env.OPENSEARCH_URL,
   });
 }, 120_000);
