@@ -741,8 +741,33 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await page.locator('#security-sessions-heading').waitFor();
       expect(await page.locator('.auth-account-identity').innerText()).toContain(state.sessionAccountId);
       expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
-      const retryPoint = await miraTouchPoint(retry);
+
       identityMode = 'ready';
+      await page.evaluate(() => {
+        const fetch = window.fetch;
+        window.fetch = function interruptIdentityRead(input, init) {
+          if (
+            input !== '/account-identity' ||
+            init?.method !== 'POST' ||
+            init.credentials !== 'same-origin' ||
+            init.body !== '{}'
+          ) {
+            return fetch(input, init);
+          }
+          window.fetch = fetch;
+          return Promise.reject(new TypeError('Failed to fetch'));
+        };
+      });
+      const interruptedPoint = await miraTouchPoint(retry);
+      await page.touchscreen.tap(interruptedPoint.x, interruptedPoint.y);
+      await page.waitForFunction(() => window.fetch.name !== 'interruptIdentityRead');
+      await retry.waitFor();
+      expect(await page.locator('.auth-account-identity').innerText()).toContain(
+        copy.auth_account_identity_unavailable,
+      );
+      expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
+
+      const retryPoint = await miraTouchPoint(retry);
       await page.touchscreen.tap(retryPoint.x, retryPoint.y);
       await assertIdentity(secondEmail, 'security');
 
