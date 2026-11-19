@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createConnection, createServer, type Server, type Socket } from 'node:net';
 import { createInterface } from 'node:readline';
@@ -9,10 +10,11 @@ import { openDb } from './db.ts';
 import { createRuntime } from './config.ts';
 import { hostRequest, type HostRequest } from './integration-cli.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import type { ManagerSpec } from './managers.ts';
+import { ManagerSessions, type ManagedManagerState } from './managers.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { harness, temporaryDirectory } from './test-support.ts';
+import { historicalManager } from '../test-support/historical-manager.ts';
 
 const runtimeScript = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const short = (path: string) => relative(process.cwd(), path);
@@ -57,6 +59,12 @@ function hostFixture(extra: NodeJS.ProcessEnv = {}) {
   const env = {
     ...process.env,
     CODEX_HOME: codexHome,
+    CODEX_THREAD_ID: undefined,
+    CODEX_SESSION_ID: undefined,
+    CLAUDE_CODE_SESSION_ID: undefined,
+    GOAL_MANAGER: undefined,
+    GOAL_TASK_ID: undefined,
+    GOAL_ATTEMPT: undefined,
     FAKE_GOAL_STATE: short(temporary.path),
     FAKE_GOAL_MAIN: temporary.path,
     FAKE_RPC_TIMEOUT_MS: '5000',
@@ -121,45 +129,49 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
-function managerSpec(cwd: string, id: string): ManagerSpec {
-  return {
-    id,
-    goal: id,
-    objective: `Manage ${id}`,
-    brief: 'Wait for instructions',
-    cwd,
-    engine: 'codex',
-    pool: { id: 'fake', codexHome: join(cwd, 'codex') },
-    budget: 1000,
-    effort: 'low',
-    supermanager: 'supervisor',
-    limits: { turns: 100, turnsWithoutDecision: 100, wallMs: 60_000 },
-  };
+async function seedHistoricalManagers(path: string, ...states: Partial<ManagedManagerState>[]) {
+  const db = openDb(join(path, 'state.sqlite'));
+  const managers = new ManagerSessions(db, new SqliteManagerInbox(db, path), {
+    windows: {
+      register: () => {
+        throw new Error('Fixture seeding must not start a manager');
+      },
+      unregister() {},
+    },
+    checkCompletion: async () => {
+      throw new Error('Fixture seeding must not run a check');
+    },
+    command: [],
+  });
+  try {
+    for (const state of states) historicalManager(db, path, { engine: 'codex', status: 'running', ...state });
+  } finally {
+    await managers.close();
+    db.close();
+  }
 }
 
-test('the manager host sends the pinned model and effort in supported provider requests', async () => {
+test('historical manager recovery sends the pinned model and effort without opening a thread', async () => {
   const f = hostFixture();
   let host: Hosted | undefined;
-  let started = false;
-  const spec = { ...managerSpec(f.path, 'model-pinned-manager'), effort: 'high' as const };
+  const threadId = randomUUID();
   try {
-    expect(spec.pool.codexHome).toBe(f.env.CODEX_HOME);
-    expect(readFileSync(join(spec.pool.codexHome, 'config.toml'), 'utf8')).toContain('model = "gpt-6.1-terra"');
+    await seedHistoricalManagers(f.path, {
+      id: 'model-pinned-manager',
+      threadId,
+      activeTurnId: 'existing-turn',
+      effort: 'high',
+    });
     host = startHost(f.env);
     await host.ready;
-    await hostRequest(short(join(f.path, 'manager.sock')), { command: 'start', spec }, 5_000, 10);
-    started = true;
-
-    const threadStart = f.rpc().find((request) => request.method === 'thread/start');
-    expect(threadStart!.params).toMatchObject({
+    await waitFor(() => f.rpc().some(({ method }) => method === 'thread/resume'), 'historical thread resume');
+    expect(f.rpc().find(({ method }) => method === 'thread/resume')?.params).toMatchObject({
+      threadId,
       model: 'gpt-6.1-sol',
       config: { model_reasoning_effort: 'high' },
     });
-    const turnStart = f.rpc().find((request) => request.method === 'turn/start');
-    expect(turnStart!.params).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+    expect(f.rpc().filter(({ method }) => method === 'thread/start' || method === 'turn/start')).toEqual([]);
   } finally {
-    if (started)
-      await hostRequest(short(join(f.path, 'manager.sock')), { command: 'stop', manager: spec.id }, 5_000, 10);
     await stopHost(host);
     f.close();
   }
@@ -174,11 +186,30 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
   try {
     host = startHost(f.env);
     await host.ready;
-    for (const id of ['manager-a', 'manager-b']) {
-      const started = await f.command(f.env, 'manager', 'start', id, '--engine', 'codex', '--budget', '1000');
-      expect(started.code).toBe(0);
-      expect(started.stderr).toBe('');
-    }
+    const threadId = randomUUID();
+    const turnId = 'existing-turn';
+    const completingThread = randomUUID();
+    const completingTurn = randomUUID();
+    await seedHistoricalManagers(
+      f.path,
+      {
+        id: 'manager-a',
+        goal: 'manager-a',
+        threadId,
+        activeTurnId: turnId,
+        countedTurn: turnId,
+        turnsWithoutDecision: 1,
+      },
+      {
+        id: 'manager-b',
+        goal: 'manager-b',
+        engine: 'claude',
+        threadId: completingThread,
+        activeTurnId: completingTurn,
+        countedTurn: completingTurn,
+        turnsWithoutDecision: 1,
+      },
+    );
 
     const inboxDb = openDb(join(f.path, 'state.sqlite'));
     try {
@@ -191,7 +222,7 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
       inboxDb.close();
     }
 
-    writeFileSync(stallFile, JSON.stringify({ method: 'thread/goal/set', threadId: 'thread-1' }));
+    writeFileSync(stallFile, JSON.stringify({ method: 'thread/goal/set', threadId }));
     stoppingA = f.command(f.env, 'manager', 'stop', 'manager-a');
     await waitFor(
       () =>
@@ -200,13 +231,13 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
           .some(
             (request) =>
               request.method === 'thread/goal/set' &&
-              request.params.threadId === 'thread-1' &&
+              request.params.threadId === threadId &&
               request.params.status === 'paused',
           ),
       'manager A pause to reach the stalled provider',
     );
 
-    const managerEnv = { ...f.env, GOAL_MANAGER: 'manager-a' };
+    const managerEnv = { ...f.env, GOAL_MANAGER: 'manager-a', CODEX_THREAD_ID: threadId };
     const decisionStartedAt = Date.now();
     expect((await f.command(managerEnv, 'manager', 'decision', 'manager-a')).code).toBe(0);
     expect((await f.command(managerEnv, 'manager', 'decision', 'manager-a')).code).toBe(0);
@@ -215,13 +246,20 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     const read = await f.command(managerEnv, 'inbox', 'read', 'manager-a');
     expect(Date.now() - readStartedAt).toBeLessThan(800);
     expect(read.code).toBe(0);
-    const entries = JSON.parse(read.stdout) as { id: number; event: { summary: string } }[];
+    const { entries, hasMore, nextCursor } = JSON.parse(read.stdout) as {
+      entries: { id: number; event: { summary: string } }[];
+      hasMore: boolean;
+      nextCursor: number | null;
+    };
+    expect({ hasMore, nextCursor }).toEqual({ hasMore: false, nextCursor: null });
     expect(entries.map((entry) => entry.event.summary)).toEqual(['Choose the next task']);
     const ackStartedAt = Date.now();
     const ack = await f.command(managerEnv, 'inbox', 'ack', 'manager-a', String(entries[0]!.id));
     expect(Date.now() - ackStartedAt).toBeLessThan(800);
     expect(ack.code).toBe(0);
-    expect((await f.command(managerEnv, 'inbox', 'read', 'manager-a')).stdout).toBe('[]\n');
+    const reread = await f.command(managerEnv, 'inbox', 'read', 'manager-a');
+    expect(reread.code).toBe(0);
+    expect(JSON.parse(reread.stdout)).toMatchObject({ entries: [], hasMore: false, nextCursor: null });
 
     const settings = {
       ...h.settings,
@@ -243,30 +281,41 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     const blocker = tasks.dispatch(blockerBrief);
     const blockedBrief = join(h.settings.stateDirectory, 'blocked.md');
     writeFileSync(blockedBrief, scopedBrief.replace('waiting: []', `waiting: []\nafter: ["${blocker.id}"]`));
-    const oldManager = process.env.GOAL_MANAGER;
+    const oldEnv = { ...process.env };
     const output: string[] = [];
     const oldLog = console.log;
     process.env.GOAL_MANAGER = 'manager-a';
+    process.env.CODEX_THREAD_ID = threadId;
+    delete process.env.CLAUDE_CODE_SESSION_ID;
+    delete process.env.GOAL_TASK_ID;
+    delete process.env.GOAL_ATTEMPT;
     console.log = (...values: unknown[]) => output.push(values.join(' '));
     let dispatched = 1;
     try {
       let transferredDatabaseToCli = false;
       try {
         dispatched = await run(['dispatch', blockedBrief], () => {
+          const runtime = createRuntime({ settings, db: commandDb, tasks });
           transferredDatabaseToCli = true;
-          return createRuntime({ settings, db: commandDb, tasks });
+          return runtime;
         });
       } finally {
         if (!transferredDatabaseToCli) commandDb.close();
       }
     } finally {
       console.log = oldLog;
-      if (oldManager === undefined) delete process.env.GOAL_MANAGER;
-      else process.env.GOAL_MANAGER = oldManager;
+      for (const key of ['GOAL_MANAGER', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'GOAL_TASK_ID', 'GOAL_ATTEMPT']) {
+        if (oldEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = oldEnv[key];
+      }
     }
     expect(dispatched).toBe(0);
     expect(output).toHaveLength(1);
     const createdTaskId = output[0]!;
+
+    const completingEnv = { ...f.env, GOAL_MANAGER: 'manager-b', CLAUDE_CODE_SESSION_ID: completingThread };
+    expect((await f.command(completingEnv, 'manager', 'decision', 'manager-b')).code).toBe(0);
+    expect((await f.command(completingEnv, 'manager', 'turn-end', 'manager-b')).code).toBe(0);
 
     const stopBStartedAt = Date.now();
     const stoppedB = await f.command(f.env, 'manager', 'stop', 'manager-b');
@@ -277,27 +326,39 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     rmSync(stallFile, { force: true });
     const stoppedA = await stoppingA;
     expect(stoppedA.code).toBe(0);
+    expect(stoppedA.stderr).toBe('');
     await waitFor(() => {
       const db = openDb(join(f.path, 'state.sqlite'));
       try {
         const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('manager-a') as { state: string };
-        const state = JSON.parse(row.state) as {
-          activeTurnId: string | null;
-          turnsWithoutDecision: number;
-          decision: boolean;
-        };
-        return state.activeTurnId === null && state.turnsWithoutDecision === 0 && state.decision;
+        const state = JSON.parse(row.state) as ManagedManagerState;
+        return state.activeTurnId === null && state.turnDisposition?.status === 'interrupted';
       } finally {
         db.close();
       }
-    }, 'manager A decision to be applied to its completed turn');
+    }, 'manager A interruption to be committed');
 
     const verifyDb = openDb(join(f.path, 'state.sqlite'));
     try {
       const decisions = verifyDb
-        .query('SELECT thread_id, turn_id FROM manager_turn_decisions WHERE manager = ?')
-        .all('manager-a') as { thread_id: string | null; turn_id: string | null }[];
-      expect(decisions).toEqual([{ thread_id: 'thread-1', turn_id: 'turn-1' }]);
+        .query('SELECT manager, thread_id, turn_id FROM manager_turn_decisions ORDER BY manager')
+        .all();
+      expect(decisions).toEqual([
+        { manager: 'manager-a', thread_id: threadId, turn_id: turnId },
+        { manager: 'manager-b', thread_id: completingThread, turn_id: completingTurn },
+      ]);
+      const completedRow = verifyDb
+        .query<{ state: string }, [string]>('SELECT state FROM manager_sessions WHERE id = ?')
+        .get('manager-b');
+      expect(JSON.parse(completedRow!.state)).toMatchObject({
+        activeTurnId: null,
+        turnsWithoutDecision: 0,
+        decision: true,
+        turnDisposition: { threadId: completingThread, turnId: completingTurn, status: 'completed', intent: 'work' },
+      });
+      expect(
+        verifyDb.query('SELECT read_at, acknowledged_at FROM manager_inbox WHERE id = ?').get(entries[0]!.id),
+      ).toEqual({ read_at: expect.any(Number), acknowledged_at: expect.any(Number) });
       const verifyStore = new WorkerStore(verifyDb);
       expect(verifyStore.taskIds()).toHaveLength(2);
       expect(verifyStore.task(createdTaskId).state).toBe('held');
@@ -305,7 +366,7 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     } finally {
       verifyDb.close();
     }
-    expect(f.rpc().filter((request) => request.method === 'thread/start')).toHaveLength(2);
+    expect(f.rpc().filter((request) => request.method === 'thread/start')).toEqual([]);
     expect(f.rpc().some((request) => request.method === 'decision')).toBe(false);
     expect(host.child.exitCode).toBeNull();
   } finally {
@@ -320,19 +381,15 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
 test('the manager socket accepts another manager while recovery waits on a provider request', async () => {
   const f = hostFixture({ FAKE_RPC_TIMEOUT_MS: '2500' });
   const stallFile = join(f.path, 'stall.json');
-  let initial: Hosted | undefined;
   let recovering: Hosted | undefined;
+  const threadId = randomUUID();
   try {
-    initial = startHost(f.env);
-    await initial.ready;
-    for (const id of ['manager-a', 'manager-b']) {
-      const started = await f.command(f.env, 'manager', 'start', id, '--engine', 'codex', '--budget', '1000');
-      expect(started.code).toBe(0);
-    }
-    await stopHost(initial);
-    initial = undefined;
-
-    writeFileSync(stallFile, JSON.stringify({ method: 'thread/resume', threadId: 'thread-1' }));
+    await seedHistoricalManagers(
+      f.path,
+      { id: 'manager-a', threadId, activeTurnId: 'existing-turn' },
+      { id: 'manager-b' },
+    );
+    writeFileSync(stallFile, JSON.stringify({ method: 'thread/resume', threadId }));
     recovering = startHost({ ...f.env, FAKE_RPC_STALL_FILE: stallFile });
     await Promise.race([
       recovering.ready,
@@ -341,7 +398,7 @@ test('the manager socket accepts another manager while recovery waits on a provi
       }),
     ]);
     await waitFor(
-      () => f.rpc().some((request) => request.method === 'thread/resume' && request.params.threadId === 'thread-1'),
+      () => f.rpc().some((request) => request.method === 'thread/resume' && request.params.threadId === threadId),
       'manager A recovery to reach the stalled provider',
     );
 
@@ -360,7 +417,6 @@ test('the manager socket accepts another manager while recovery waits on a provi
   } finally {
     rmSync(stallFile, { force: true });
     await stopHost(recovering);
-    await stopHost(initial);
     f.close();
   }
 }, 15_000);
@@ -371,8 +427,7 @@ test('the public completion command reports the completed verification result', 
   try {
     host = startHost(f.env);
     await host.ready;
-    const started = await f.command(f.env, 'manager', 'start', 'manager-a', '--engine', 'codex', '--budget', '1000');
-    expect(started.code).toBe(0);
+    await seedHistoricalManagers(f.path, { id: 'manager-a' });
 
     const completed = await f.command(f.env, 'manager', 'complete', 'manager-a');
     expect(completed.code).toBe(1);
@@ -477,7 +532,7 @@ test('a timed-out absent-socket request leaves no retry that can reach a later h
   try {
     let error: unknown;
     try {
-      await hostRequest(path, { command: 'start', spec: managerSpec(f.path, 'manager-a') }, 70, 25);
+      await hostRequest(path, { command: 'stop', manager: 'manager-a' }, 70, 25);
     } catch (caught) {
       error = caught;
     }
@@ -498,38 +553,52 @@ test('a client disconnect during a mutating host request never replays the mutat
   try {
     host = startHost(f.env);
     await host.ready;
-    const request: HostRequest = { command: 'start', spec: managerSpec(f.path, 'uncertain-manager') };
+    const threadId = randomUUID();
+    await seedHistoricalManagers(f.path, { id: 'uncertain-manager', threadId });
+    const stallFile = join(f.path, 'stall.json');
+    writeFileSync(stallFile, JSON.stringify({ method: 'thread/goal/set', threadId, status: 'paused' }));
+    const request: HostRequest = { command: 'stop', manager: 'uncertain-manager' };
+    const pauses = () =>
+      f
+        .rpc()
+        .filter(
+          ({ method, params }) =>
+            method === 'thread/goal/set' && params.threadId === threadId && params.status === 'paused',
+        );
     await new Promise<void>((resolve, reject) => {
       client = createConnection(short(join(f.path, 'manager.sock')));
       client.once('error', reject);
       client.once('connect', () => {
         client!.write(`${JSON.stringify(request)}\n`, (error) => {
           if (error) reject(error);
-          else {
-            client!.destroy();
-            resolve();
-          }
+          else resolve();
         });
       });
     });
-    await waitFor(() => f.rpc().some((entry) => entry.method === 'thread/start'), 'the uncertain start to execute');
+    await waitFor(() => pauses().length > 0, 'the stop to reach the stalled provider');
+    const disconnected = new Promise<void>((resolve) => client!.once('close', () => resolve()));
+    client!.destroy();
+    await disconnected;
+    rmSync(stallFile, { force: true });
     await waitFor(() => {
       const db = openDb(join(f.path, 'state.sqlite'));
       try {
         const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('uncertain-manager') as {
           state: string;
         } | null;
-        return Boolean(row && JSON.parse(row.state).status === 'running');
+        const state = row && (JSON.parse(row.state) as ManagedManagerState);
+        return state?.status === 'paused' && state.goalState?.status === 'paused';
       } finally {
         db.close();
       }
-    }, 'the manager start to commit');
+    }, 'the provider pause to commit');
     await delay(50);
-    expect(f.rpc().filter((entry) => entry.method === 'thread/start')).toHaveLength(1);
+    expect(pauses()).toHaveLength(1);
     expect(host.child.exitCode).toBeNull();
     expect(host.stderr()).not.toContain('EPIPE');
   } finally {
     client?.destroy();
+    rmSync(join(f.path, 'stall.json'), { force: true });
     await stopHost(host);
     f.close();
   }

@@ -1,21 +1,32 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, relative } from 'node:path';
 import { ManagerSessions, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { openDb } from './db.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { nativeUnitContext } from './native-unit-context.ts';
 import { harness, temporaryDirectory } from './test-support.ts';
+import { historicalManager } from '../test-support/historical-manager.ts';
 
 const cliRuntime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const publicCli = join(import.meta.dir, 'cli.ts');
 
 function cleanEnvironment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env = { ...process.env };
-  for (const key of ['CLAUDE_CODE_SESSION_ID', 'CODEX_THREAD_ID', 'GOAL_MANAGER', 'GOAL_TASK_ID', 'GOAL_ATTEMPT'])
+  for (const key of [
+    'CLAUDE_CODE_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'CODEX_SESSION_ID',
+    'GOAL_MANAGER',
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'REZICS_NATIVE_UNIT_CONTEXT',
+  ])
     delete env[key];
   return Object.assign(env, overrides);
 }
@@ -136,24 +147,6 @@ test.each(['claude', 'codex'] as const)(
       FAKE_GOAL_DATABASE: 'goal.sqlite',
     });
     const { host, exited } = await startHost(env);
-    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
-    const ownerWindows: string[] = [];
-    const ownerManagers = new ManagerSessions(h.store.db, inbox, {
-      connect: async () => {
-        throw new Error('Claude owner should not connect to an app-server');
-      },
-      windows: {
-        register(id) {
-          ownerWindows.push(`register:${id}`);
-          return '@owner';
-        },
-        unregister(id) {
-          ownerWindows.push(`unregister:${id}`);
-        },
-      },
-      checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'unused' }),
-      command: ['goal'],
-    });
     try {
       const registered = await invokePublicCli(h, undefined, sessionId, provider, 'manager', 'register-supermanager');
       expect(registered.code).toBe(0);
@@ -185,22 +178,11 @@ test.each(['claude', 'codex'] as const)(
       });
 
       const task = h.tasks.dispatch(h.briefFile);
-      const owner: ManagerSpec = {
+      const owner = historicalManager(h.store.db, h.root, {
         id: task.brief.manager,
         goal: task.brief.goal,
-        objective: 'Own this task',
-        brief: 'Manage the task',
-        cwd: h.root,
-        engine: 'claude',
-        pool: { id: 'fixture', codexHome: h.root, executable: 'claude' },
-        budget: 1000,
-        effort: 'low',
-        supermanager: 'supermanager',
-        limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 60_000 },
-      };
-      const ownerState = await ownerManagers.start(owner);
-      expect(ownerState.status).toBe('running');
-      expect(ownerWindows).toEqual([`register:${owner.id}`]);
+        status: 'running',
+      });
 
       const granted = await invokePublicCli(h, undefined, sessionId, provider, 'priority', 'grant', task.id);
       expect(granted.code).toBe(0);
@@ -212,15 +194,14 @@ test.each(['claude', 'codex'] as const)(
         provenance: { kind: 'manager-session', sessionId },
       });
 
-      const consumed = await invokePublicCli(
-        h,
-        owner.id,
-        ownerState.threadId!,
-        'claude',
-        'priority',
-        task.id,
-        'critical',
-      );
+      const unregistered = await invokePublicCli(h, owner.id, randomUUID(), 'claude', 'priority', task.id, 'critical');
+      expect(unregistered.code).toBe(1);
+      expect(unregistered.stderr).toContain('authenticated manager session');
+      const beforeConsumption = h.store.task(task.id);
+      expect(beforeConsumption.brief.criticalPath).toBe(false);
+      expect(beforeConsumption.priorityGrants?.[0]?.consumedAt).toBeUndefined();
+
+      const consumed = await invokePublicCli(h, owner.id, owner.threadId!, 'claude', 'priority', task.id, 'critical');
       expect(consumed.code).toBe(0);
       expect(consumed.stderr).toBe('');
       const updated = h.store.task(task.id);
@@ -228,7 +209,7 @@ test.each(['claude', 'codex'] as const)(
       expect(updated.priorityHistory?.[0]).toMatchObject({
         setter: owner.id,
         grantor: 'supermanager',
-        provenance: { kind: 'manager-session', sessionId: ownerState.threadId },
+        provenance: { kind: 'manager-session', sessionId: owner.threadId },
       });
       expect(updated.priorityGrants?.[0]).toMatchObject({
         grantor: 'supermanager',
@@ -246,7 +227,6 @@ test.each(['claude', 'codex'] as const)(
         ).count,
       ).toBe(0);
     } finally {
-      await ownerManagers.close();
       host.kill('SIGTERM');
       await exited;
       h.dispose();
@@ -266,14 +246,6 @@ test('resident registration rejects unauthorized callers and atomically replaces
   const env = cleanEnvironment(base);
   const { host, exited } = await startHost(env);
   const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
-  const ownerManagers = new ManagerSessions(h.store.db, inbox, {
-    connect: async () => {
-      throw new Error('not used');
-    },
-    windows: { register: () => '@owner', unregister() {} },
-    checkCompletion: async () => ({ passed: false, evidencePath: 'unused', summary: 'unused' }),
-    command: ['goal'],
-  });
   try {
     const register = (overrides: NodeJS.ProcessEnv, ...args: string[]) =>
       invoke(cleanEnvironment({ ...base, ...overrides }), 'manager', 'register-supermanager', ...args);
@@ -305,28 +277,19 @@ test('resident registration rejects unauthorized callers and atomically replaces
     expect(worker.stderr).toContain('Workers cannot register');
 
     const task = h.tasks.dispatch(h.briefFile);
-    const owner: ManagerSpec = {
+    const owner = historicalManager(h.store.db, h.root, {
       id: task.brief.manager,
       goal: task.brief.goal,
-      objective: 'Own this task',
-      brief: 'Manage the task',
-      cwd: h.root,
-      engine: 'claude',
-      pool: { id: 'fixture', codexHome: h.root, executable: 'claude' },
-      budget: 1000,
-      effort: 'low',
-      supermanager: 'supermanager',
-      limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 60_000 },
-    };
-    const ownerState = await ownerManagers.start(owner);
+      status: 'running',
+    });
     const ordinary = await register({
-      CLAUDE_CODE_SESSION_ID: ownerState.threadId!,
+      CLAUDE_CODE_SESSION_ID: owner.threadId!,
       GOAL_MANAGER: owner.id,
     });
     expect(ordinary.code).toBe(1);
     expect(ordinary.stderr).toContain('cannot register the configured supermanager');
     const ordinaryReplacement = await register(
-      { CLAUDE_CODE_SESSION_ID: ownerState.threadId! },
+      { CLAUDE_CODE_SESSION_ID: owner.threadId! },
       '--replace-session',
       sessionId,
     );
@@ -340,12 +303,18 @@ test('resident registration rejects unauthorized callers and atomically replaces
     expect(JSON.parse(idempotent.stdout)).toEqual(JSON.parse(first.stdout));
 
     const rootEnv = cleanEnvironment({ ...base, CLAUDE_CODE_SESSION_ID: sessionId, GOAL_MANAGER: 'supermanager' });
-    const start = await invoke(rootEnv, 'manager', 'start', 'supermanager', '--engine', 'claude', '--budget', '1000');
-    expect(start.code).toBe(1);
-    expect(start.stderr).toContain('external session and cannot be started');
-    const renew = await invoke(rootEnv, 'manager', 'renew', 'supermanager');
-    expect(renew.code).toBe(1);
-    expect(renew.stderr).toContain('external session and cannot be renewed');
+    for (const args of [
+      ['start', 'supermanager', '--engine', 'claude', '--budget', '1000'],
+      ['renew', 'supermanager'],
+      ['assign', task.brief.goal, owner.id],
+    ]) {
+      const retired = await invoke(rootEnv, 'manager', ...args);
+      expect(retired.code).toBe(1);
+      expect(retired.stdout).toBe('');
+      expect(retired.stderr).toContain(
+        'Managed manager launches and assignments are retired; use unit register for an execution unit',
+      );
+    }
     const stop = await invoke(rootEnv, 'manager', 'stop', 'supermanager');
     expect(stop.code).toBe(1);
     expect(stop.stderr).toContain('external session');
@@ -356,7 +325,7 @@ test('resident registration rejects unauthorized callers and atomically replaces
     const replacement = await register({ CLAUDE_CODE_SESSION_ID: randomUUID() });
     expect(replacement.code).toBe(1);
     expect(replacement.stderr).toContain('use --replace-session');
-    const assigned = await register({ CLAUDE_CODE_SESSION_ID: ownerState.threadId!, GOAL_MANAGER: 'supermanager' });
+    const assigned = await register({ CLAUDE_CODE_SESSION_ID: owner.threadId!, GOAL_MANAGER: 'supermanager' });
     expect(assigned.code).toBe(1);
     expect(assigned.stderr).toContain('already assigned');
     const stillRegistered = JSON.parse(
@@ -369,7 +338,22 @@ test('resident registration rejects unauthorized callers and atomically replaces
     expect(wrongPrevious.stderr).toContain('replacement mismatch');
     expect(authenticatedManager(h.store.db, { CLAUDE_CODE_SESSION_ID: sessionId })?.id).toBe('supermanager');
 
+    inbox.deliver({ managerId: 'supermanager', kind: 'instruction', summary: 'Read before handoff' });
     inbox.deliver({ managerId: 'supermanager', kind: 'instruction', summary: 'Keep this inbox' });
+    const inboxCommand = (threadId: string, provider: 'claude' | 'codex', ...flags: string[]) =>
+      invokePublicCli(h, undefined, threadId, provider, 'inbox', 'read', 'supermanager', ...flags);
+    const [firstMessage, nextMessage] = inbox.pending('supermanager');
+    const firstRead = await inboxCommand(sessionId, 'claude', '--limit', '1');
+    expect(firstRead.code).toBe(0);
+    expect(JSON.parse(firstRead.stdout)).toMatchObject({
+      entries: [{ id: firstMessage!.id }],
+      hasMore: true,
+      nextCursor: firstMessage!.id,
+    });
+    const durableCursor = () =>
+      h.store.db
+        .query('SELECT after_id, provider, session_id FROM manager_inbox_resident_cursor WHERE manager = ?')
+        .get('supermanager');
     const messagesBefore = inbox.pending('supermanager');
     const nextIds = [randomUUID(), randomUUID()];
     const competing = await Promise.all(
@@ -409,8 +393,21 @@ test('resident registration rejects unauthorized callers and atomically replaces
     expect(retired.code).toBe(1);
     expect(retired.stderr).toContain('authenticated manager session');
     expect(inbox.pending('supermanager')).toEqual(messagesBefore);
+    const foreignRead = await inboxCommand(sessionId, 'claude');
+    expect(foreignRead.code).toBe(0);
+    expect(durableCursor()).toEqual({ after_id: firstMessage!.id, provider: 'claude', session_id: sessionId });
+    const successorRead = await inboxCommand(nextId, 'codex');
+    expect(successorRead.code).toBe(0);
+    expect(JSON.parse(successorRead.stdout)).toMatchObject({
+      entries: [{ id: nextMessage!.id, event: { summary: 'Keep this inbox' } }],
+      hasMore: false,
+      nextCursor: null,
+    });
+    expect(durableCursor()).toEqual({ after_id: nextMessage!.id, provider: 'codex', session_id: nextId });
+    const reread = await inboxCommand(nextId, 'codex');
+    expect(reread.code).toBe(0);
+    expect(JSON.parse(reread.stdout)).toMatchObject({ entries: [] });
   } finally {
-    await ownerManagers.close();
     host.kill('SIGTERM');
     await exited;
     h.dispose();
@@ -514,3 +511,110 @@ test('native Codex registration refuses a legacy host response that ignored the 
     h.dispose();
   }
 });
+
+test('a desktop resident handoff authorizes registration of the exact native execution unit', async () => {
+  const h = harness();
+  const former = randomUUID();
+  const successor = randomUUID();
+  const threadId = randomUUID();
+  const goalId = randomUUID();
+  const worktree = join(h.settings.stateDirectory, 'native-worktree');
+  const brief = join(h.settings.stateDirectory, 'native-brief.md');
+  const pool = h.settings.pools[0]!;
+  const invokeAs = (session: string, ...args: string[]) => invokePublicCli(h, undefined, session, 'codex', ...args);
+  const registerResident = (session: string, ...flags: string[]) =>
+    invokeAs(session, 'manager', 'register-supermanager', '--desktop', pool.name, ...flags);
+  const registerUnit = (session: string, thread: string) =>
+    invokeAs(
+      session,
+      'unit',
+      'register',
+      'fixture-unit',
+      '--desktop',
+      '--thread',
+      thread,
+      '--worktree',
+      worktree,
+      '--brief',
+      brief,
+      '--pool',
+      pool.name,
+    );
+  try {
+    const added = spawnSync('git', ['-C', h.root, 'worktree', 'add', '--detach', worktree], { encoding: 'utf8' });
+    expect(added.status, added.stderr).toBe(0);
+    mkdirSync(pool.configDirectory, { recursive: true });
+    const threads = openDb(join(pool.configDirectory, 'state_5.sqlite'));
+    const goals = openDb(join(pool.configDirectory, 'goals_1.sqlite'));
+    try {
+      threads.exec(
+        'CREATE TABLE threads(id TEXT PRIMARY KEY, cwd TEXT, source TEXT, originator TEXT, archived INTEGER, rollout_path TEXT)',
+      );
+      goals.exec(
+        'CREATE TABLE thread_goals(thread_id TEXT PRIMARY KEY, goal_id TEXT, objective TEXT, status TEXT, updated_at_ms INTEGER)',
+      );
+      for (const [id, cwd, goal] of [
+        [former, h.root, randomUUID()],
+        [successor, h.root, randomUUID()],
+        [threadId, worktree, goalId],
+      ] as const) {
+        threads
+          .query('INSERT INTO threads VALUES (?, ?, ?, ?, 0, ?)')
+          .run(id, cwd, 'vscode', 'Codex Desktop', join(pool.configDirectory, id + '.jsonl'));
+        goals.query('INSERT INTO thread_goals VALUES (?, ?, ?, ?, ?)').run(id, goal, 'Verify the fixture', 'active', 1);
+      }
+    } finally {
+      goals.close();
+      threads.close();
+    }
+    writeFileSync(
+      brief,
+      '---\nacceptance:\n  command: [bun, fixture.ts]\n  requires: [native]\n---\nVerify the fixture.\n',
+    );
+
+    const initial = await registerResident(former);
+    expect(initial.code).toBe(0);
+    const mismatched = await registerResident(successor, '--replace-session', randomUUID());
+    expect(mismatched.code).toBe(1);
+    expect(mismatched.stderr).toContain('replacement mismatch');
+    const replaced = await registerResident(successor, '--replace-session', former);
+    expect(replaced.code).toBe(0);
+    expect(JSON.parse(replaced.stdout)).toMatchObject({ kind: 'resident-supermanager', threadId: successor });
+
+    const stale = await registerUnit(former, threadId);
+    expect(stale.code).toBe(1);
+    expect(stale.stderr).toContain('Only the registered root manager may register native units');
+    const wrongTree = await registerUnit(successor, former);
+    expect(wrongTree.code).toBe(1);
+    expect(wrongTree.stderr).toContain('thread must be in its assigned worktree');
+    const registered = await registerUnit(successor, threadId);
+    expect(registered.code).toBe(0);
+    expect(JSON.parse(registered.stdout)).toMatchObject({ id: 'fixture-unit', threadId, goalId, worktree, pane: null });
+    const repeated = await registerUnit(successor, threadId);
+    expect(repeated.code).toBe(0);
+    expect(JSON.parse(repeated.stdout)).toEqual(JSON.parse(registered.stdout));
+
+    const context = await invokeAs(threadId, 'unit', 'context', 'fixture-unit');
+    expect(context.code).toBe(0);
+    const { cwd, environment, command } = JSON.parse(context.stdout);
+    expect(cwd).toBe(worktree);
+    expect(command).toEqual(['bun', 'fixture.ts']);
+    const observed = nativeUnitContext(environment);
+    expect(observed).toMatchObject({ unit: 'fixture-unit', threadId, goalId, worktree });
+    writeFileSync(
+      join(worktree, 'fixture.ts'),
+      `if (process.cwd() !== ${JSON.stringify(worktree)} || process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT ||
+          JSON.parse(process.env.REZICS_NATIVE_UNIT_CONTEXT).threadId !== ${JSON.stringify(threadId)} ||
+          !process.env.REZICS_NATIVE_UNIT_RUN_ID) process.exit(1);
+`,
+    );
+    const executed = await invokeAs(threadId, 'unit', 'run', 'fixture-unit');
+    expect(executed.code, executed.stderr).toBe(0);
+    expect(h.store.db.query('SELECT unit, requested_source_commit, exit_code FROM native_unit_runs').all()).toEqual([
+      { unit: 'fixture-unit', requested_source_commit: observed!.sourceRevision, exit_code: 0 },
+    ]);
+    expect(h.store.taskIds()).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+}, 10_000);
