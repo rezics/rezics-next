@@ -334,12 +334,13 @@ test('one episode shares a disclosed future container and repeats the exact unce
   const uncertain = calls.at(-1)!.init;
   await recovery.upload(second, signal());
   const posts = calls.filter(({ init }) => init.method === 'POST');
-  expect(JSON.parse(String(posts[1]!.init.body))).toMatchObject({ containerId: 'private-thread' });
-  expect(posts[2]!.init.body).toBe(uncertain.body);
-  expect(new Headers(posts[2]!.init.headers).get('idempotency-key')).toBe(
+  expect(JSON.parse(String(posts[1]!.init.body))).toMatchObject(context.target);
+  expect(JSON.parse(String(posts[2]!.init.body))).toMatchObject({ containerId: 'private-thread' });
+  expect(posts[3]!.init.body).toBe(uncertain.body);
+  expect(new Headers(posts[3]!.init.headers).get('idempotency-key')).toBe(
     new Headers(uncertain.headers).get('idempotency-key'),
   );
-  expect(posts.filter(({ init }) => JSON.parse(String(init.body)).newThread)).toHaveLength(1);
+  expect(posts).toHaveLength(4);
 });
 
 test('unknown 409 identity stays unknown across exact retries and independent composers', async () => {

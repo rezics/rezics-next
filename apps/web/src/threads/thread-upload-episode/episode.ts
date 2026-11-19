@@ -5,6 +5,7 @@
  */
 export class FutureThreadUploadEpisode {
   #containerId: string | undefined;
+  #existing = false;
   #retired = false;
 
   constructor(private readonly current: () => boolean) {}
@@ -19,6 +20,11 @@ export class FutureThreadUploadEpisode {
     return this.#containerId;
   }
 
+  get existingContainerId(): string | undefined {
+    const containerId = this.containerId;
+    return this.#existing ? containerId : undefined;
+  }
+
   remember(containerId: string): void {
     this.assertCurrent();
     // A native identity cannot be replaced by a conflicting late response.
@@ -27,8 +33,14 @@ export class FutureThreadUploadEpisode {
     this.#containerId = containerId;
   }
 
+  confirmExistingContainer(containerId: string): void {
+    this.remember(containerId);
+    this.#existing = true;
+  }
+
   retire(): void {
     this.#retired = true;
     this.#containerId = undefined;
+    this.#existing = false;
   }
 }

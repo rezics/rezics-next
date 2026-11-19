@@ -2,13 +2,14 @@ import { startDevServer } from './support/dev-server.ts';
 import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page } from 'playwright';
-import type { KernelClient } from '@rezics/client';
+import type { BoardPageResponse, KernelClient, ReadingPageResponse } from '@rezics/client';
+import { documentText, fromPlainText } from '@rezics/document';
+import { boardOpeningCard, boardOpeningExample } from '../src/threads/board-opening-fixtures';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -60,72 +61,72 @@ let counter = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
-type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
-type Data<F extends (...args: never[]) => unknown> = NonNullable<
-  Awaited<ReturnType<F>> extends { data: infer D } ? D : never
->;
-type BoardRead = Data<BoardResource['get']>;
-type ThreadRead = Data<ThreadResource['get']>;
-type Threads = Data<BoardResource['threads']['get']>;
-type Posts = Data<ThreadResource['posts']['get']>;
-type ThreadCreated = Data<KernelClient['threads']['post']>;
-type PostCreated = Data<ThreadResource['posts']['post']>;
+type CreateDraft = Parameters<KernelClient['threads']['post']>[0];
+type Thread = ReturnType<typeof boardOpeningCard>['thread'];
 type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['error']>['value'];
-type Snapshot = NonNullable<Posts['posts'][number]['body']>;
+
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const boardPath = (locale = 'en') => `/${locale}/boards/${id(1)}`;
-const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
+const boardPath = () => `/en/boards/${id(1)}`;
 const licence = 'LicenseRef-rezics-terms';
-const metadata = {
-  route: 0,
-  visibility: 'published',
-  securityRevision: '1',
-  createdAt: '2026-01-01T00:00:00.000Z',
-} as const;
-const snapshot = (text: string): Snapshot => ({
-  version: 'rezics-document-v1',
-  profile: 'blocks',
-  doc: {
-    type: 'doc',
-    content: [{ type: 'paragraph', attrs: { id: 'paragraph' }, content: text ? [{ type: 'text', text }] : [] }],
-  },
-});
-function post(n: number, body = snapshot('Existing contribution'), threadId = id(2)): Posts['posts'][number] {
-  return {
-    ...metadata,
-    id: id(n),
-    threadId,
-    boardId: id(1),
-    authorId: id(90),
-    parentId: null,
-    revisionId: id(n + 100),
-    sha256: 'a'.repeat(64),
+const boardExample = boardOpeningExample('sparse', 0);
+const board = { ...boardExample.board, realmId: null, community: null };
+const existingCard = boardOpeningCard(0);
+const existing = { ...existingCard.thread, title: 'A shared reading' };
+const threads = new Map<string, Thread>();
+const createdThreadKeys = new Map<string, string>();
+
+function recordThread(threadId: string, draft: Pick<CreateDraft, 'title' | 'body' | 'mediaIds'>): Thread {
+  const opening = existingCard.thread.firstPost;
+  if (opening.availability !== 'available') throw new Error('The opening post fixture must be available');
+  const thread: Thread = {
+    ...existing,
+    id: threadId,
+    title: draft.title,
     licence,
-    subjectIds: [],
-    mediaIds: [],
-    availability: 'available',
-    body,
-  };
-}
-function thread(n: number, title: string, body = snapshot('Opening contribution')): ThreadRead {
-  return {
-    thread: {
-      ...metadata,
-      id: id(n),
-      boardId: id(1),
-      authorId: id(90),
+    firstPost: {
+      ...opening,
+      id: id(13),
+      threadId,
       licence,
-      subjectIds: [],
-      title,
-      availability: 'available',
-      firstPost: post(n + 10, body, id(n)),
+      mediaIds: draft.mediaIds ?? [],
+      body: draft.body,
     },
   };
+  threads.set(threadId, thread);
+  return thread;
 }
-const board: BoardRead = { board: { ...metadata, id: id(1), title: 'Reading room', availability: 'available' } };
-let current = thread(2, 'A shared reading');
-let posts: Posts = { posts: [post(12)], next: null };
+
+function boardPage(member: boolean): BoardPageResponse {
+  return {
+    ...boardExample,
+    board,
+    threads: [...threads.values()].map((thread) => ({
+      ...existingCard,
+      thread,
+      target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
+      interaction: { ...existingCard.interaction, target: { kind: 'thread', id: thread.id } },
+    })),
+    next: null,
+    rankRefreshedAt: null,
+    viewer: { participation: member ? 'allowed' : 'sign-in' },
+    actions: { createThread: member ? 'allowed' : 'sign-in' },
+  };
+}
+
+function readingPage(thread: Thread, member: string | undefined): ReadingPageResponse {
+  const page = authoredReadingPage(thread);
+  if (member) page.viewer = { kind: 'account', id: member };
+  return page;
+}
+
+function readKey(request: Request): string | null {
+  const header = request.headers.get('idempotency-key');
+  if (!header) return null;
+  const key: unknown = JSON.parse(header);
+  return typeof key === 'string' ? key : null;
+}
+
 type Call = { method: string; path: string; body: unknown; key: string | null; authorization: string | null };
 const calls: Call[] = [];
 type MediaRefusal = 'type' | 'size' | 'rate' | 'reject';
@@ -144,7 +145,6 @@ type Reservation = {
 };
 const reservations = new Map<string, Reservation>();
 const futureThreads = new Map<string, string>();
-const createdThreadKeys = new Set<string>();
 
 function contentId(): string {
   const bytes = randomBytes(16);
@@ -194,8 +194,8 @@ function reset() {
   reservations.clear();
   futureThreads.clear();
   createdThreadKeys.clear();
-  current = thread(2, 'A shared reading');
-  posts = { posts: [post(12)], next: null };
+  threads.clear();
+  threads.set(existing.id, existing);
 }
 
 function reservedContainer(input: { containerId?: string; newThread?: { idempotencyKey?: string } }): string {
@@ -337,9 +337,9 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       authorization: request.headers.get('authorization'),
     });
+    const sub = subjects.get(request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
     const mediaMatch = /^\/v1\/media(?:\/([^/:]+)(?::(complete))?)?$/.exec(url.pathname);
     if (mediaMatch) {
-      const sub = subjects.get(request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
       if (!sub) return mediaProblem(401, 'authentication_required');
       if (!mediaMatch[1] && request.method === 'POST') {
         if (!request.headers.get('idempotency-key')) return mediaProblem(400, 'invalid_request');
@@ -353,8 +353,9 @@ const fake = Bun.serve({
           sha256?: string;
           newThread?: { idempotencyKey?: string };
         };
-        if (input.newThread && createdThreadKeys.has(input.newThread.idempotencyKey ?? ''))
+        if (input.newThread && threads.has(futureThreads.get(input.newThread.idempotencyKey ?? '') ?? ''))
           return mediaProblem(409, 'conflict');
+        if (input.containerId && !threads.has(input.containerId)) return mediaProblem(403, 'forbidden');
         const mediaId = contentId();
         const media: Reservation = {
           id: mediaId,
@@ -394,32 +395,29 @@ const fake = Bun.serve({
       return mediaProblem(404, 'not_found');
     }
     if (request.method === 'GET') {
-      if (url.pathname === `/v1/boards/${id(1)}`) return json(board);
-      if (url.pathname === `/v1/boards/${id(1)}/threads`) {
-        const page: Threads = { threads: [current.thread], next: null };
-        return json(page);
-      }
-      if (url.pathname === `/v1/threads/${current.thread.id}`) return json(current);
-      if (url.pathname === `/v1/threads/${current.thread.id}/posts`) return json(posts);
+      if (url.pathname === `/v1/boards/${board.id}`) return json({ board });
+      if (url.pathname === `/v1/boards/${board.id}/page`) return json(boardPage(Boolean(sub)));
+      const reading = /^\/v1\/threads\/([^/]+)(\/reading-page)?$/.exec(url.pathname);
+      const thread = reading && threads.get(reading[1]!);
+      if (thread) return json(reading[2] ? readingPage(thread, sub) : { thread });
     }
-    if (
-      request.method === 'POST' &&
-      (url.pathname === '/v1/threads' || url.pathname === `/v1/threads/${id(2)}/posts`)
-    ) {
-      if (url.pathname === '/v1/threads') {
-        const draft = body as Parameters<KernelClient['threads']['post']>[0];
-        const key = request.headers.get('idempotency-key');
-        if (key) createdThreadKeys.add(key);
-        current = thread(3, draft.title, draft.body);
-        current.thread.firstPost = { ...current.thread.firstPost, mediaIds: draft.mediaIds ?? [] };
-        posts = { posts: [current.thread.firstPost], next: null };
-        const result: ThreadCreated = { thread: current.thread };
-        return Response.json(result, { status: 201, headers: { Location: `/v1/threads/${id(3)}` } });
-      }
-      const draft = body as Parameters<ThreadResource['posts']['post']>[0];
-      const result: PostCreated = { post: post(20 + posts.posts.length, draft.body) };
-      posts.posts.push(result.post);
-      return json(result, 201);
+    if (request.method === 'POST' && url.pathname === '/v1/threads') {
+      if (!sub) return mediaProblem(401, 'authentication_required');
+      const key = readKey(request);
+      if (!key) return mediaProblem(400, 'invalid_request');
+      const draft = body as CreateDraft;
+      const threadId = reservedContainer({ newThread: { idempotencyKey: key } });
+      if (
+        draft.mediaIds?.some((id) => {
+          const media = reservations.get(id);
+          return media?.state !== 'available' || media.containerId !== threadId || media.uploaderId !== sub;
+        })
+      )
+        return mediaProblem(409, 'media_unavailable');
+      const previous = createdThreadKeys.get(key);
+      const thread = previous ? threads.get(previous)! : recordThread(threadId, draft);
+      createdThreadKeys.set(key, thread.id);
+      return Response.json({ thread }, { status: 201, headers: { Location: `/v1/threads/${thread.id}` } });
     }
     return Response.json(problem(404), { status: 404, headers: { 'content-type': 'application/problem+json' } });
   },
@@ -440,6 +438,7 @@ function site(): Promise<string> {
       WEBSITE_SCOPES: scopes.join(' '),
     },
     warmUpPaths: [],
+    exclusive: true,
   }).then((running) => {
     server = running;
     return running.origin;
@@ -459,13 +458,14 @@ async function signIn(returnTo = '/ja') {
   const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
   const location = new URL(start.headers.get('location')!);
   const params = location.searchParams;
+  expect(params.get('scope')?.split(' ').sort()).toEqual(['openid', 'offline_access', ...scopes].sort());
   const code = `code-${randomUUID()}`;
   codes.set(code, {
     challenge: params.get('code_challenge')!,
     nonce: params.get('nonce')!,
     redirectUri: params.get('redirect_uri')!,
     scope: params.get('scope')!,
-    sub: 'alice',
+    sub: existing.authorId,
     expiresIn: 3600,
   });
   const loginCookie = cookieValue(start, login);
@@ -536,7 +536,7 @@ afterAll(async () => {
 });
 
 const editor = (page: Page) => page.locator('main .ProseMirror[contenteditable="true"]');
-const send = (page: Page) => page.locator('main').getByRole('button', { name: /send|publish|post|送信|投稿/i });
+const send = (page: Page) => page.locator('main').getByRole('button', { name: 'Send', exact: true });
 async function readyEditor(page: Page) {
   await editor(page).waitFor({ state: 'visible', timeout: 30_000 });
 }
@@ -597,18 +597,28 @@ test(
   "a member adds an image to a new thread's opening post, and the thread is created with its media id",
   async () => {
     reset();
-    const { page, access } = await open(`${boardPath()}/new`);
+    const { page, access } = await open(boardPath());
     const hops = watchMedia(page);
+    const transfer = Promise.withResolvers<void>();
     try {
+      await page.getByRole('link', { name: 'Start a new thread' }).click();
       await readyEditor(page);
       await title(page).fill('A charted reading');
       await editor(page).fill('See this chart');
       const key = await draftKey(page).inputValue();
       expect(key).toMatch(uuid);
       expect(await send(page).isEnabled()).toBe(true);
+      await page.route('**/media/*', async (route) => {
+        if (route.request().method() === 'PUT') await transfer.promise;
+        await route.continue();
+      });
       await chooseImage(page, 'A reading chart');
-      await page.getByRole('status', { name: 'Uploading image' }).waitFor();
+      await page
+        .getByRole('group', { name: 'A reading chart' })
+        .getByText('Uploading image…', { exact: true })
+        .waitFor();
       expect(await send(page).isDisabled(), 'send waits for the upload').toBe(true);
+      transfer.resolve();
       await page.getByRole('img', { name: 'A reading chart' }).waitFor();
       expect(await send(page).isEnabled()).toBe(true);
       await eventually(() => hops.filter((hop) => hop.method === 'GET').length >= 2);
@@ -628,14 +638,22 @@ test(
         byteCount: png.byteLength,
       });
       const complete = calls.find((call) => call.path.endsWith(':complete'));
-      expect(complete!.body).toMatchObject({ containerId: media.containerId, byteCount: png.byteLength });
+      expect(complete).toMatchObject({
+        path: `/v1/media/${media.id}:complete`,
+        authorization: `Bearer ${access}`,
+        body: {
+          containerId: media.containerId,
+          byteCount: png.byteLength,
+          sha256: createHash('sha256').update(png).digest('hex'),
+        },
+      });
       expect(
         calls.filter((call) => call.method === 'GET' && call.path.startsWith('/v1/media/')).length,
       ).toBeGreaterThanOrEqual(3);
       await send(page).click();
       await eventually(() => calls.some((call) => call.method === 'POST' && call.path === '/v1/threads'));
       const sent = calls.find((call) => call.method === 'POST' && call.path === '/v1/threads')!;
-      expect(sent.key).toBe(key);
+      expect(sent.key).toBe(JSON.stringify(key));
       expect(sent).toMatchObject({ authorization: `Bearer ${access}` });
       expect(Object.keys(sent.body as object).sort()).toEqual([
         'boardId',
@@ -654,13 +672,26 @@ test(
         visibility: 'published',
         mediaIds: [media.id],
       });
-      const document = JSON.stringify((sent.body as { body: unknown }).body);
-      expect(document).toContain('A reading chart');
-      expect(document).toContain('See this chart');
-      expect(document).toContain(media.id);
-      expect(document).toContain('"width":1');
-      expect(document).toContain('"height":1');
+      const draft = sent.body as CreateDraft;
+      expect(documentText(draft.body)).toContain('See this chart');
+      expect(draft.body.doc.content?.filter((node) => node.type === 'image')).toEqual([
+        expect.objectContaining({
+          attrs: expect.objectContaining({ src: media.id, alt: 'A reading chart', width: 1, height: 1 }),
+        }),
+      ]);
+      await page.waitForURL(`**/en/threads/${media.containerId}/a-charted-reading`);
+      await page.getByRole('heading', { name: 'A charted reading', exact: true }).waitFor();
+      await page.getByText('See this chart', { exact: true }).waitFor();
+      expect(calls).toContainEqual(expect.objectContaining({ method: 'GET', path: `/v1/boards/${board.id}/page` }));
+      expect(calls).toContainEqual(
+        expect.objectContaining({ method: 'GET', path: `/v1/threads/${media.containerId}/reading-page` }),
+      );
+      expect(threads.get(media.containerId)?.firstPost).toMatchObject({
+        availability: 'available',
+        mediaIds: [media.id],
+      });
     } finally {
+      transfer.resolve();
       await page.context().close();
     }
   },
@@ -759,11 +790,15 @@ test(
       await send(page).click();
       await eventually(() => calls.some((call) => call.method === 'POST' && call.path === '/v1/threads'));
       const sent = calls.find((call) => call.method === 'POST' && call.path === '/v1/threads')!;
-      expect(sent.key).toBe(key);
+      expect(sent.key).toBe(JSON.stringify(key));
       const ids = [...reservations.values()].map((media) => media.id).sort();
       expect(ids).toHaveLength(2);
       expect([...(sent.body as { mediaIds: string[] }).mediaIds].sort()).toEqual(ids);
-      expect(await draftKey(page).inputValue()).toBe(key);
+      expect(sent.authorization).toBe(`Bearer ${access}`);
+      const threadId = futureThreads.get(key);
+      expect([...reservations.values()].map((media) => media.containerId)).toEqual([threadId, threadId]);
+      await page.waitForURL(`**/en/threads/${threadId}/opening-chart`);
+      await page.getByRole('heading', { name: 'Opening chart', exact: true }).waitFor();
     } finally {
       await page.context().close();
     }
@@ -784,12 +819,19 @@ test(
       await chooseImage(page, 'First chart');
       await page.getByRole('img', { name: 'First chart' }).waitFor();
       const first = [...reservations.values()].at(-1)!;
-      createdThreadKeys.add(key);
+      const alreadyCreated = recordThread(first.containerId, {
+        title: 'Already opened',
+        body: fromPlainText('The first chart stays', 'blocks'),
+      });
       const before = mediaPosts().length;
-      await chooseImage(page, 'Second chart');
+      await Promise.all([
+        page.waitForResponse((response) => response.url().endsWith('/media') && response.status() === 409),
+        chooseImage(page, 'Second chart'),
+      ]);
       await page.getByRole('img', { name: 'Second chart' }).waitFor();
       const added = mediaPosts().slice(before);
       expect(added).toHaveLength(2);
+      expect(added[0]!.key).not.toBe(added[1]!.key);
       expect(added[0]).toMatchObject({ authorization: `Bearer ${access}` });
       expect(added[0]!.body).toEqual({
         newThread: { boardId: id(1), idempotencyKey: key },
@@ -804,7 +846,17 @@ test(
         mediaType: 'image/png',
         byteCount: png.byteLength,
       });
+      expect(await draftKey(page).inputValue()).toBe(key);
       expect(reservations.size).toBe(2);
+      const second = [...reservations.values()].at(-1)!;
+      expect(second.id).not.toBe(first.id);
+      expect(second).toMatchObject({
+        containerId: alreadyCreated.id,
+        uploaderId: first.uploaderId,
+        state: 'available',
+      });
+      expect(threads.get(alreadyCreated.id)).toEqual(alreadyCreated);
+      expect(calls.filter((call) => call.method === 'POST' && call.path === '/v1/threads')).toEqual([]);
     } finally {
       await page.context().close();
     }

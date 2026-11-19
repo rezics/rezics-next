@@ -116,6 +116,7 @@ export class ReplyImageUploadRecovery {
           identity: new FutureThreadUploadEpisode(() => sameContext(original, this.current())),
         };
       }
+      const existingContainerId = this.episode?.identity.existingContainerId;
       entry = {
         context: structuredClone(context),
         controller: new AbortController(),
@@ -127,9 +128,7 @@ export class ReplyImageUploadRecovery {
           ? {
               reservation: {
                 original: source.createMediaReservationIntent(
-                  this.episode?.identity.containerId
-                    ? { containerId: this.episode.identity.containerId }
-                    : context.target,
+                  existingContainerId ? { containerId: existingContainerId } : context.target,
                   file,
                   'post-image',
                   context.session.subject,
