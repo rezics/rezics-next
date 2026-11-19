@@ -11,7 +11,7 @@ import { trustedAccessPorts } from './support/trusted-access.ts';
 const issuer = 'https://session-point.auth.test';
 const password = 'native session point correct horse battery staple';
 
-async function nativeAuth(pool: Pool, admin = pool) {
+async function nativeAuth(pool: Pool) {
   const accounts = new Map<string, AccessAccount>();
   let afterTargetRead: (() => Promise<void>) | undefined;
   // Schedule real database mutations after the actual owner read has completed.
@@ -92,7 +92,7 @@ async function nativeAuth(pool: Pool, admin = pool) {
     changeAfterOwnerRead(change: () => Promise<void>) {
       afterTargetRead = change;
     },
-    snapshot: async () => (await admin.query('SELECT * FROM session ORDER BY id')).rows,
+    snapshot: async () => (await pool.query('SELECT * FROM session ORDER BY id')).rows,
   };
 }
 
@@ -247,7 +247,7 @@ test('native session revoke examines a fixed exact session neighborhood as the s
   const fixture = testDatabase();
   const db = await openAuthGrowthDatabase(fixture.url);
   try {
-    const f = await nativeAuth(db.pool, db.admin);
+    const f = await nativeAuth(db.pool);
     let selected: { caller: string; id: string; owner: string };
     // A fresh native caller and target are prepared after the harness settles,
     // on every physical invocation (including cold-backend discards). Neither
@@ -283,14 +283,17 @@ test('native session revoke examines a fixed exact session neighborhood as the s
         connection.release();
       }
       selected = { caller: caller.cookie, id: target.id, owner };
+      expect((await db.admin.query('SELECT id FROM session WHERE id=$1', [selected.id])).rowCount).toBe(1);
     }
     async function operation() {
-      expect((await db.admin.query('SELECT id FROM session WHERE id=$1', [selected.id])).rowCount).toBe(1);
       const response = await f.revoke(selected.id, selected.caller);
       expect(response.status).toBe(200);
       const output = await response.text();
       expect(output).toBe('{}');
       expect(response.headers.getSetCookie()).toEqual([]);
+      return { output: output.length };
+    }
+    async function verify(scale: number) {
       expect((await db.admin.query('SELECT id FROM session WHERE id=$1', [selected.id])).rowCount).toBe(0);
       const retained = await db.admin.query(
         `SELECT count(*) FILTER (WHERE "expiresAt">now())::int AS live,
@@ -298,7 +301,7 @@ test('native session revoke examines a fixed exact session neighborhood as the s
         [selected.owner],
       );
       expect(retained.rows[0].live).toBe(63);
-      return { output: output.length, expired: retained.rows[0].expired };
+      expect(retained.rows[0].expired).toBe(scale * 1000);
     }
     const report = await checkGrowth(db, {
       name: 'native exact session revoke with fresh target and retained owner history',
@@ -342,13 +345,11 @@ test('native session revoke examines a fixed exact session neighborhood as the s
       prepare: (_, scale) => prepare(scale),
       async warmup(_, scale) {
         await prepare(scale);
-        expect((await operation()).expired).toBe(scale * 1000);
+        await operation();
+        await verify(scale);
       },
-      async operation(_, scale) {
-        const value = await operation();
-        expect(value.expired).toBe(scale * 1000);
-        return value;
-      },
+      operation,
+      verify: (_, scale) => verify(scale),
     });
     assertGrowthAccessPaths(report.name, report.samples, [
       'public.session',
