@@ -995,7 +995,7 @@ async function readPersona(): Promise<SeedEnv> {
   };
 }
 
-async function grantOwner(persona: SeedEnv) {
+async function grantOwner(persona: SeedEnv, includeCatalogue: boolean) {
   const grantor = await createAccountTokenProvider({
     accountKeyPath: persona.accountKeyPath,
     account: persona.account,
@@ -1006,7 +1006,9 @@ async function grantOwner(persona: SeedEnv) {
   });
   await grantOrdinaryOwnerActions({
     accountId: persona.account,
-    actions: BOOK_OWNER_GRANT_ACTIONS,
+    actions: includeCatalogue
+      ? [...BOOK_OWNER_GRANT_ACTIONS, 'subject:merge', 'gate:subject_identity']
+      : BOOK_OWNER_GRANT_ACTIONS,
     post: async ({ path, body, idempotencyKey }) => {
       const response = await fetch(`${persona.kernel}${path}`, {
         method: 'POST',
@@ -1812,7 +1814,7 @@ async function existingReviewedScheme(owner: ReturnType<typeof reviewedCatalogue
 async function runReviewedBootstrap(existingScheme: boolean) {
   requireCatalogueWalk();
   const persona = await readPersona();
-  if (!existingScheme) await grantOwner(persona);
+  if (!existingScheme) await grantOwner(persona, false);
   await waitForKernelReadiness({ origin: persona.kernel });
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: persona.accountKeyPath,
@@ -2126,7 +2128,7 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
   try {
     // The admitted host provisions its persona before answering native readiness.
     persona = await readPersona();
-    await grantOwner(persona);
+    await grantOwner(persona, selection.scope !== 'operators');
     prerequisites.push({ stage: 'setup', elapsedMs: Date.now() - setupStarted, cause: null });
   } catch (error) {
     prerequisites.push({ stage: 'setup', elapsedMs: Date.now() - setupStarted, cause: walkFailureCause(error) });
