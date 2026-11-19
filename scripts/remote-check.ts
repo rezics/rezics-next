@@ -2825,19 +2825,28 @@ def serialize_preparation_io(install):
     return owned_install
 
 
-def digest(path):
-    value = hashlib.sha256()
-    with open(path, 'rb') as source:
+def stream_file(path, target=None, checksum=None):
+    with open(path, 'rb') as source, (target.open('wb') if target is not None else contextlib.nullcontext()) as outgoing:
         while True:
             preparation_io_gate()
             block = source.read(1024 * 1024)
             if not block:
                 break
-            value.update(block)
+            if checksum is not None:
+                checksum.update(block)
+            if outgoing is not None:
+                outgoing.write(block)
+    if target is not None:
+        shutil.copystat(path, target)
+
+
+def digest(path, target=None):
+    value = hashlib.sha256()
+    stream_file(path, target, value)
     return value.hexdigest()
 
 
-def inventory(root, allocated=None, digest_cache=None):
+def inventory(root, allocated=None, digest_cache=None, staging=None):
     result = {}
     # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
     excluded = {'.git'} | CONTROL_ROOT_FILES | CONTROL_ROOT_DIRECTORIES | RUN_SCRATCH_PATHS
@@ -2862,10 +2871,16 @@ def inventory(root, allocated=None, digest_cache=None):
                     directories.remove(name)
             elif path.is_dir():
                 result[relative] = ['directory', mode]
+                if staging is not None:
+                    preparation_io_gate()
+                    (staging / relative).mkdir()
             elif path.is_file():
                 identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, mode)
                 prior = digest_cache.get(relative) if digest_cache is not None else None
-                value = prior[-1] if prior is not None and prior[:-1] == identity else digest(path)
+                if staging is not None:
+                    value = digest(path, staging / relative)
+                else:
+                    value = prior[-1] if prior is not None and prior[:-1] == identity else digest(path)
                 if digest_cache is not None:
                     digest_cache[relative] = (*identity, value)
                 result[relative] = ['file', mode, value]
@@ -2887,7 +2902,7 @@ def remove(path):
         shutil.rmtree(path)
 
 
-def copy_entries(source, destination, entries):
+def copy_entries(source, destination, entries, move_files=False):
     for name, entry in sorted(entries.items(), key=lambda pair: (pair[0].count('/'), pair[0])):
         preparation_io_gate()
         target = destination / name
@@ -2902,19 +2917,15 @@ def copy_entries(source, destination, entries):
             remove(target)
             if kind == 'link':
                 target.symlink_to(entry[1])
+            elif move_files:
+                (source / name).replace(target)
+                target.chmod(entry[1])
             else:
                 # Never share mutable package inodes between runs, the artifact cache or Bun's tarball cache.
-                with (source / name).open('rb') as incoming, target.open('wb') as outgoing:
-                    while True:
-                        preparation_io_gate()
-                        block = incoming.read(1024 * 1024)
-                        if not block:
-                            break
-                        outgoing.write(block)
-                shutil.copystat(source / name, target)
+                stream_file(source / name, target)
 
 
-def verified(entry, key, allocated=None):
+def verified(entry, key, allocated=None, staging=None):
     try:
         if retirement_marker(entry).exists():
             return None
@@ -2926,11 +2937,29 @@ def verified(entry, key, allocated=None):
         if any(Path(name).is_absolute() or '..' in Path(name).parts
                for name in [*manifest['entries'], *manifest['removed']]):
             return None
-        if inventory(entry / 'payload', allocated) != manifest['entries']:
+        if inventory(entry / 'payload', allocated, staging=staging) != manifest['entries']:
             return None
         return manifest
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def restore_source_artifacts(root, entry, key):
+    if not entry.exists():
+        return None
+    # Keep the streamed files private until the complete payload matches the manifest.
+    with tempfile.TemporaryDirectory(prefix='restore-', dir=root / '.temp/check-host') as stage:
+        staging = Path(stage)
+        manifest = verified(entry, key, staging=staging)
+        if manifest is None:
+            return None
+        touch_artifacts(entry)
+        preparation_progress(root, 'artifact-restore')
+        for name in manifest['removed']:
+            preparation_io_gate()
+            remove(root / name)
+        copy_entries(staging, root, manifest['entries'], move_files=True)
+        return manifest
 
 
 # First page-in of the ~50MiB statically linked Task binary after frozen install exceeds the 5s Docker probe window
@@ -4283,7 +4312,7 @@ def install():
             except BlockingIOError:
                 time.sleep(0.02)
         preparation_progress(root, 'source-cache-verification')
-        manifest = verified(entry, key)
+        manifest = restore_source_artifacts(root, entry, key)
         hit = manifest is not None
         native_hit = None
         installer_seconds = None
@@ -4340,12 +4369,6 @@ def install():
             removed = sorted(set(before) - set(after), key=lambda name: -name.count('/'))
             manifest = {'schema': 2, 'key': key, 'entries': outputs, 'removed': removed, 'nativeChecks': native_checks}
             publish_artifacts(root, entry, manifest)
-        else:
-            touch_artifacts(entry)
-            preparation_progress(root, 'artifact-restore')
-            for name in manifest['removed']:
-                remove(root / name)
-            copy_entries(entry / 'payload', root, manifest['entries'])
         packages = []
         for name in manifest['entries']:
             if name.endswith('/package.json'):
