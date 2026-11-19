@@ -48,8 +48,9 @@ function story(kind: Kind, locale: 'en' | 'ja', theme: 'light' | 'dark'): Story 
     args: { kind, locale },
     name: kind === 'short' ? 'Short content' : kind === 'tall' ? 'Scrollable content' : 'Back action available',
     ...(locale !== 'en' || theme !== 'light' ? { tags: ['!dev'] } : {}),
-    globals: {},
+    globals: { theme, locale, viewport: { value: 'phone', isRotated: false } },
     play: async () => {
+      await expect(document.documentElement).toHaveClass(theme);
       await userEvent.click(
         await screen.findByRole('button', { name: locale === 'ja' ? 'シートを開く' : 'Open sheet' }),
       );

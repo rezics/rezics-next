@@ -9,7 +9,7 @@ test('BottomSheet centralizes the handle, title row, localized Done close and sa
   expect(source).toContain('showSwipeHandle');
   expect(source).toContain('DrawerTitle');
   expect(source).toContain('DrawerClose');
-  expect(source).toContain('min-h-11');
+  expect(source).toContain('size="sm"');
   expect(source).toContain('max-h-[85dvh]');
   expect(source).toContain('overflow-y-auto');
   expect(source).toContain('env(safe-area-inset-bottom)');
@@ -36,5 +36,5 @@ test('BottomSheet stories cover short, long and Back-slot content in English and
     'BackJapaneseDark',
   ])
     expect(story).toContain(name);
-  expect(story).toContain("defaultViewport: 'phone'");
+  expect(story).toContain("globals: { theme, locale, viewport: { value: 'phone', isRotated: false } }");
 });
