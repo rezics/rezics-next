@@ -581,7 +581,7 @@ test(
     const page = await open(canonical, redirect.cookie!);
     const create = page.locator('a[href="/en/collections/new"]').first();
     await create.waitFor();
-    const next = page.getByRole('link', { name: 'More', exact: true });
+    const next = page.locator('[data-current-directory]').getByRole('link', { name: 'More', exact: true });
     expect(await next.getAttribute('href')).toContain('cursor=collections-next');
     await next.click();
     await page.waitForURL((url) => url.searchParams.get('cursor') === 'collections-next');

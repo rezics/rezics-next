@@ -667,6 +667,18 @@ const fake = Bun.serve({
       if (action[2] === 'record') return record(item, payload, key!);
       return transition(item, payload, key!, action[2] as 'complete' | 'abandon');
     }
+    const journal = /^\/v1\/progressSessions\/([^/]+)\/journal$/.exec(url.pathname);
+    if (request.method === 'GET' && journal && sessions.has(journal[1]!))
+      return json({
+        journal: {
+          sessionId: journal[1],
+          revision: 0,
+          startDate: null,
+          finishDate: null,
+          reflection: null,
+          assessment: null,
+        },
+      });
     const child = /^\/v1\/progressSessions\/([^/]+)\/(completedUnits|changes)$/.exec(url.pathname);
     if (child && request.method === 'GET') {
       const item = sessions.get(child[1]!);
@@ -774,7 +786,6 @@ async function open(path: string): Promise<{ page: Page; access: string }> {
         },
       ]);
       const page = await context.newPage();
-      page.on('pageerror', (error) => console.error('Progress browser error:', error.message));
       await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
       await hydrated(page);
       if (path.includes('/progress/')) await waitForSession(page);
@@ -792,9 +803,8 @@ async function waitForSession(page: Page) {
   } catch (error) {
     const reads = calls.filter((call) => call.method === 'GET').map(({ path, view }) => [path, view]);
     throw new Error(
-      `Progress detail at ${new URL(page.url()).pathname}: ${await page.locator('main').innerText()}
-Reads: ${JSON.stringify(reads)}
-${server?.diagnostics().slice(-2800)}`,
+      `Progress detail at ${new URL(page.url()).pathname}: ${await page.locator('#main-content').innerText()}
+Reads: ${JSON.stringify(reads)}`,
       { cause: error },
     );
   }
@@ -820,15 +830,24 @@ async function chooseMode(page: Page, mode: string, unit: string, total?: string
 }
 function expectReads(sessionId: string, access: string) {
   const reads = calls.filter(
-    (call) => call.method === 'GET' && call.path.startsWith(`/v1/progressSessions/${sessionId}`),
+    (call) =>
+      call.method === 'GET' &&
+      call.path.startsWith(`/v1/progressSessions/${sessionId}`) &&
+      !call.path.endsWith('/journal'),
   );
-  expect(reads.map((call) => call.path).sort()).toEqual(
+  const paths = reads.map((call) => call.path);
+  expect([...new Set(paths)].sort()).toEqual(
     [
       `/v1/progressSessions/${sessionId}`,
       `/v1/progressSessions/${sessionId}/changes`,
       `/v1/progressSessions/${sessionId}/completedUnits`,
     ].sort(),
   );
+  // Each loader (route entry or fresh viewer observation) reads one point and both history windows.
+  const pointReads = reads.filter((call) => call.path === `/v1/progressSessions/${sessionId}`).length;
+  expect(pointReads).toBeLessThanOrEqual(2);
+  expect(reads.filter((call) => call.path.endsWith('/changes'))).toHaveLength(pointReads);
+  expect(reads.filter((call) => call.path.endsWith('/completedUnits'))).toHaveLength(pointReads);
   expect(reads.every((call) => call.view === 'FULL' && call.authorization === `Bearer ${access}`)).toBe(true);
   expect(reads.find((call) => call.path.endsWith('/changes'))?.limit).toBe(pageLimit);
   expect(reads.find((call) => call.path.endsWith('/completedUnits'))?.limit).toBe(pageLimit);
@@ -874,6 +893,8 @@ test(
       });
       expect(creates()[0]?.key).toMatch(quotedUuid);
       expect(await page.locator('main').innerText()).toContain('Night watch');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      expect(await page.getByText('scalar_amount', { exact: true }).isVisible()).toBe(true);
       expect(await page.locator('main').innerText()).toContain('page');
       expect(await page.locator('main').innerText()).toContain('240');
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
@@ -890,7 +911,8 @@ test(
       expect(creates()[1]?.body).toEqual({ subjectId, mode: 'cursor_position', unit: 'chapter' });
       expect(creates()[1]?.key).toMatch(quotedUuid);
       expect(creates()[1]?.key).not.toBe(creates()[0]?.key);
-      expect(await page.locator('main').innerText()).toContain('Reading place');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      expect(await page.getByText('cursor_position', { exact: true }).isVisible()).toBe(true);
       expect(await page.locator('main').innerText()).toContain('chapter');
       expect(await page.locator('main').innerText()).not.toContain('240');
       expectReads(cursorId, access);
@@ -910,7 +932,8 @@ test(
         { subjectId, mode: 'completed_units', unit: 'episode' },
       ]);
       expect(new Set(creates().map((call) => call.key)).size).toBe(3);
-      expect(await page.locator('main').innerText()).toContain('Completed units');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      expect(await page.getByText('completed_units', { exact: true }).isVisible()).toBe(true);
       expect(await page.locator('main').innerText()).toContain('episode');
       expect(sessions.get(unitsId)?.state).toBe('active');
       expect(sessions.get(unitsId)?.total).toBeNull();
