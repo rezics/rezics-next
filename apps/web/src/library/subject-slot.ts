@@ -238,7 +238,7 @@ async function readSlotLabels(client: KernelClient, subjectId: string, authoriza
 }
 
 function labelPresentation(labels: SubjectLabel[] | null, result?: string, undo?: SubjectLabelUndo, undoKey?: string) {
-  const labelResult =
+  const labelResult: SubjectLibrarySlotResult | undefined =
     result === 'label-capacity' ||
     result === 'label-restore-stale' ||
     result === 'label-restore-expired' ||
