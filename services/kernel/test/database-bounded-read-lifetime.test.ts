@@ -245,7 +245,6 @@ test('settled PostgreSQL failures roll back safely and rollback failures preserv
     {
       mapError: (error) => (error === readError ? mappedReadError : error),
       isUncertainError: () => true,
-      isUncertainSettledQueryError: () => true,
       isUncertainWorkError: () => true,
     },
   ).catch((error: unknown) => error);

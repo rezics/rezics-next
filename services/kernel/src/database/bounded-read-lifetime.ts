@@ -334,8 +334,8 @@ export function withBoundedReadLifetime<T>(
         remember(mapped);
         if (
           (!settledServerErrors.has(error) ||
-            (command &&
-              (options.isUncertainSettledQueryError?.(error) || options.isUncertainSettledQueryError?.(mapped)))) &&
+            options.isUncertainSettledQueryError?.(error) ||
+            options.isUncertainSettledQueryError?.(mapped)) &&
           (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped))
         )
           discard(mapped);
