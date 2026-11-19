@@ -10,6 +10,7 @@ import { freeze } from './core/freeze.ts';
 import releaseExists from './definitions-exists.sql';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import releaseRead from './definitions-read.sql';
+import releaseBodies from './definitions-read-bodies.sql';
 import releasePointer from './definitions-active.sql';
 import composite from './composite-read.sql';
 import registerComposite from './composite-register.sql';
@@ -44,6 +45,37 @@ export async function readRelease(
     freeze(release);
     releases.set(digest, release);
     return release;
+  });
+}
+
+/** Observe each base digest on the caller's snapshot. Only uncached immutable bodies cross the wire. */
+export async function readBaseReleases(db: Db, digests: readonly string[]): Promise<Map<string, Release | null>> {
+  const requested = [...new Set(digests)].filter((digest) => DIGEST.exec(digest)?.[0] === digest);
+  const result = new Map<string, Release | null>();
+  if (!requested.length) return result;
+  const cached = new Map(requested.map((digest) => [digest, releases.get(digest)]));
+  return definitionRead(db, async (client) => {
+    const rows = await nativeSourceQuery(client, releaseBodies, {
+      digests: requested,
+      missing: requested.filter((digest) => !cached.get(digest)),
+    });
+    for (const { digest, body } of rows) {
+      let found = cached.get(digest);
+      if (!found) {
+        try {
+          const release = validated(body);
+          if (releaseDigest(release) === digest) {
+            freeze(release);
+            releases.set(digest, release);
+            found = release;
+          }
+        } catch {
+          // A present but invalid body cannot prove the referenced definition.
+        }
+      }
+      result.set(digest, found ?? null);
+    }
+    return result;
   });
 }
 

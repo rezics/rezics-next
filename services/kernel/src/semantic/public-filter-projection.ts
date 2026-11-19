@@ -27,7 +27,7 @@ import { sourceTuple } from './fences.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
-import { readRelease } from './definition-release-read.ts';
+import { readBaseReleases, readRelease } from './definition-release-read.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
@@ -46,7 +46,6 @@ import type {
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
-import readReleases from './search-source-releases.sql';
 import readSubjects from './search-source-subjects.sql';
 import readPrivacyHead from './public-filter-projection-head-read.sql';
 import readBuild from './public-filter-projection-build-read.sql';
@@ -444,21 +443,11 @@ async function storedMeaningRelease(pool: Pool, digest: string, deadline: number
   return inSnapshot(pool, deadline, async (client) => {
     const owner = await readPartition(client, 0);
     if (!owner || owner.writeState !== 'active') return null;
-    const found = rows(await nativeSourceQuery(client, readReleases, { route: 0, digests: [digest] })) as {
-      digest: string;
-      body: unknown;
-    }[];
-    const body = found.find((row) => row.digest === digest)?.body;
+    const found = await readBaseReleases(client, [digest]);
     // Binding accepts persisted composite digests through the release owner.
     // Resolve that same immutable authority instead of treating a missing base
     // release row as missing meaning or trusting the caller's release body.
-    if (body === undefined) return readRelease(client, digest);
-    if (!object(body)) return null;
-    try {
-      return releaseDigest(body as unknown as Release) === digest ? (body as unknown as Release) : null;
-    } catch {
-      return null;
-    }
+    return found.has(digest) ? (found.get(digest) ?? null) : readRelease(client, digest);
   });
 }
 
@@ -1233,23 +1222,10 @@ export async function readPublicFilterProjectionPage(
       const releases = await inSnapshot(config.pool, deadline, async (client) => {
         const owner = await readPartition(client, 0);
         if (!owner || owner.writeState !== 'active') return null;
-        const found = rows(await nativeSourceQuery(client, readReleases, { route: 0, digests: missingDigests })) as {
-          digest: string;
-          body: unknown;
-        }[];
+        const found = await readBaseReleases(client, missingDigests);
         const result = new Map<string, Release>();
-        for (const row of found) {
-          try {
-            if (object(row.body) && releaseDigest(row.body as unknown as Release) === row.digest)
-              result.set(row.digest, row.body as unknown as Release);
-          } catch {
-            // A malformed stored release is unresolved metadata, never an empty facet.
-          }
-        }
-        const storedDigests = new Set(found.map((row) => row.digest));
         for (const digest of missingDigests) {
-          if (storedDigests.has(digest)) continue;
-          const release = await readRelease(client, digest);
+          const release = found.has(digest) ? found.get(digest) : await readRelease(client, digest);
           if (release) result.set(digest, release);
         }
         return result;
