@@ -352,7 +352,11 @@ export function clearRenameContinuation(expected?: RenameContinuation): void {
   )
     return;
   const pending = pendingManagementOperationStepUpState();
-  if (pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, expected))
+  const { accountId, operationKey, operation } = state.value;
+  if (
+    pending.kind === 'pending' &&
+    pendingManagementOperationMatches(pending.value, { accountId, operationKey, operation })
+  )
     clearPendingManagementOperationStepUp();
   try {
     window.sessionStorage.removeItem(storageKey);

@@ -17,9 +17,15 @@ import {
   RENAME_PROFILE,
   type RenameOperation,
 } from '../src/account-rename';
-import { pendingManagementOperationStepUpState } from '../src/management-operation-step-up';
+import {
+  markRenameReviewReturned,
+  pendingManagementOperationStepUpState,
+  pendingRenameReviewStepUpState,
+} from '../src/management-operation-step-up';
 
-const issuer = 'https://rename.auth.test';
+const issuer = 'https://auth.test';
+const nativeReference = 'AQ.' + 'a'.repeat(43);
+const stepUpUrl = '/step-up?management_operation=rename&return_to=%2Faccount%2Frename';
 const accountId = '00000000-0000-4000-8000-000000000001';
 const otherId = '00000000-0000-4000-8000-000000000002';
 const human: SessionProof = {
@@ -116,9 +122,18 @@ function fixture() {
   const profileHandler = accountProfileReadTransport(service, async () => new Response(null, { status: 404 }), access);
   const handler = accountRenamePageTransport(service, profileHandler, pageAccess);
   globalThis.fetch = (async (path, init) => {
+    // The Start server preload supplies the originating request for the issuer GET.
+    if (String(path) === `${issuer}/session`) {
+      const headers = new Headers(init?.headers);
+      expect(init?.method).toBe('GET');
+      expect(init?.redirect).toBe('manual');
+      expect(init?.cache).toBe('no-store');
+      expect(headers.get('origin')).toBe(issuer);
+      expect(headers.get('cookie')).toBe('auth_session=original');
+      return Response.json(state.proof);
+    }
     expect(init?.credentials).toBe('same-origin');
     expect(init?.redirect).toBe('error');
-    if (path === '/session') return Response.json(state.proof);
     if (path === '/account-management/rename-page')
       return handler(
         new Request(`${issuer}${path}`, {
@@ -136,7 +151,7 @@ function fixture() {
     const body = JSON.parse(String(init?.body));
     commands.push({ path: String(path), body });
     if (path === '/account-operations/approve')
-      return Response.json({ reference: 'original-reference', expiresAt: new Date(Date.now() + 60000).toISOString() });
+      return Response.json({ reference: nativeReference, expiresAt: new Date(Date.now() + 60000).toISOString() });
     state.handle = body.operation.handle;
     return new Response(null, { status: 503 }); // The native mutation committed; its response was lost.
   }) as typeof fetch;
@@ -176,7 +191,7 @@ test('the default source reads a handleless human and reconciles a lost rename r
       operationKey: attempt.operationKey,
       operation: { kind: 'rename', accountId, handle: 'after', expectedHandle: null },
     },
-    { operationKey: attempt.operationKey, operation: attempt.operation, reference: 'original-reference' },
+    { operationKey: attempt.operationKey, operation: attempt.operation, reference: nativeReference },
   ]);
   expect(await nativeRenameSource.run(attempt)).toMatchObject({
     kind: 'unknown',
@@ -187,9 +202,13 @@ test('the default source reads a handleless human and reconciles a lost rename r
   expect(await nativeRenameSource.stepUp(next)).toBe(false);
   expect(f.navigations).toEqual([]);
   expect(await nativeRenameSource.stepUp(attempt)).toBe(true);
-  expect(f.navigations).toEqual(['/step-up?management_operation=rename&return_to=%2Faccount%2Frename']);
-  expect([...f.stored.values()].join('')).not.toContain('original-reference');
-  clearRenameContinuation();
+  expect(f.navigations).toEqual([stepUpUrl]);
+  expect(pendingManagementOperationStepUpState()).toMatchObject({
+    kind: 'pending',
+    value: { operationKey: attempt.operationKey, operation: attempt.operation },
+  });
+  expect([...f.stored.values()].join('')).not.toContain(nativeReference);
+  clearRenameContinuation(attempt);
   expect(pendingManagementOperationStepUpState()).toEqual({ kind: 'absent' });
 });
 test('native read failure, substituted profiles and session changes stay unavailable and recover without issuing commands', async () => {
@@ -263,12 +282,31 @@ test('native projection and production reader retain maximal identities, eight a
   f.state.proof = { ...human, account_id: f.state.selected };
   expect(await nativeRenameSource.readCurrent()).toEqual({ kind: 'unavailable' });
   f.state.selected = accountId;
+  f.state.count = 1;
+  const priorReads = f.pageReads.length;
   f.state.proof = { ...human, client_id: 'login' };
   expect(await nativeRenameSource.readCurrent()).toEqual({ kind: 'management-auth-required', accountId });
+  expect(f.pageReads).toHaveLength(priorReads);
+  expect(await nativeRenameSource.stepUpForReview!(accountId)).toBe(true);
+  expect(f.navigations).toEqual([stepUpUrl]);
+  const pending = pendingRenameReviewStepUpState();
+  expect(pending).toEqual({
+    kind: 'pending',
+    value: { kind: 'rename', accountId, returnTo: '/account/rename', phase: 'awaiting' },
+  });
+  if (pending.kind !== 'pending') throw new Error('missing rename review continuation');
+  expect(markRenameReviewReturned(pending.value)).toBe(true);
   f.state.proof = human;
   f.state.nativeStatus = 403;
   expect(await nativeRenameSource.readCurrent()).toEqual({ kind: 'refused' });
+  expect(pendingRenameReviewStepUpState()).toMatchObject({ kind: 'pending', value: { phase: 'returned' } });
   f.state.nativeStatus = 0;
+  f.state.handle = 'current_after_authentication';
+  expect(await nativeRenameSource.readCurrent()).toMatchObject({
+    kind: 'ready',
+    target: { accountId, handle: 'current_after_authentication', managementReviewReturned: true },
+  });
+  expect(pendingRenameReviewStepUpState()).toEqual({ kind: 'absent' });
   f.state.sessionStatus = 401;
   expect(await nativeRenameSource.readCurrent()).toEqual({ kind: 'signed-out' });
   expect(f.commands).toHaveLength(0);
