@@ -258,6 +258,14 @@ test('a reviewed Person pair merges once through the native contract and both or
       coordinator: expect.any(String),
       redirected: true,
     });
+    const requests = await runtime.database.admin.query(
+      `SELECT workflow_uuid, output::jsonb->'json'->'receipt' AS receipt
+       FROM dbos.operation_outputs WHERE workflow_uuid LIKE $1 AND function_name='semantic.identityEpoch.produce'
+         AND output::jsonb->'json'->>'writerRequested'='true'`,
+      [`semantic:identity:${published.operation}:%`],
+    );
+    expect(requests.rowCount).toBeGreaterThan(0);
+    expect(new Set(requests.rows.map((row) => JSON.stringify(row))).size).toBe(requests.rowCount!);
     const acks = await runtime.database.admin.query(
       `SELECT step FROM semantic.identity_epoch_ack WHERE partition_no=$1 AND job_id=$2
        AND progress->>'state'='complete' ORDER BY step`,
