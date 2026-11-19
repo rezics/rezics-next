@@ -17,7 +17,8 @@ async function staffCommand(
   configureTestReceiptKeys(pool);
   const staff = newId(0xfffe);
   await pool.query(
-    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    `INSERT INTO access.account(route,account_id,kind,display_name,state,transaction_id)
+     VALUES ($1,$2,'actor','Suspension fixture staff','active',$2)`,
     [routeOf(staff), staff],
   );
   await pool.query(

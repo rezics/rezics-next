@@ -9,14 +9,16 @@ import {
 } from '../../src/access/account-agent-effect.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { readSubject } from '../../src/semantic/subject.ts';
+import accountAgentSubject from '../../src/semantic/account-agent-subject.sql';
 import { bindReceiptKeys, receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { ensureActiveAccountAgents, ACCOUNT_AGENT_PAGE_SIZE } from '../../scripts/ensure-account-agents.ts';
+import { identityEpochDatabase } from '../semantic/support/identity-epoch.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -31,6 +33,7 @@ const crashId = newId(route);
 const fencedId = newId(route);
 const suspendedId = newId(route);
 const deletedId = newId(route);
+let beforeRelease: Awaited<ReturnType<typeof identityEpochDatabase>>;
 
 type SeedAccount = {
   id: string;
@@ -42,8 +45,8 @@ type SeedAccount = {
   fenced?: boolean;
 };
 
-async function seedAccounts(accounts: readonly SeedAccount[]): Promise<void> {
-  await admin.query(
+async function seedAccounts(accounts: readonly SeedAccount[], client = admin): Promise<void> {
+  await client.query(
     `INSERT INTO access.account
        (route, account_id, kind, handle, display_name, state, operator_account_id, authn_fenced, transaction_id)
      SELECT $1, seed.account_id, seed.kind, seed.handle, seed.display_name, seed.state,
@@ -85,20 +88,15 @@ function event(
   };
 }
 
-async function currentSubject(accountId: string) {
-  const result = await readSubject(
-    pool,
-    accountAgentId(accountId),
-    async () => true,
-    undefined,
-    new Uint8Array(32).fill(1),
-  );
-  if (!result) throw new Error(`Missing account agent for ${accountId}`);
-  return result.subject;
+async function currentSubject(accountId: string, client = admin) {
+  // This effect commits native rows. Public projection has its own checkpoint and consumer.
+  const subject = await accountAgentSubject.run(client, { route, subject_id: accountAgentId(accountId) });
+  if (!subject) throw new Error(`Missing account agent for ${accountId}`);
+  return subject;
 }
 
-async function revisionCount(accountId: string): Promise<number> {
-  const result = await admin.query(
+async function revisionCount(accountId: string, client = admin): Promise<number> {
+  const result = await client.query(
     'SELECT count(*)::integer AS count FROM semantic.revision WHERE route = $1 AND subject_id = $2::uuid',
     [route, accountAgentId(accountId)],
   );
@@ -124,6 +122,8 @@ function failEnsureCheckoutOnce(source: Pool, failure: Error): Pool {
 }
 
 beforeAll(async () => {
+  beforeRelease = await identityEpochDatabase(databaseUrl);
+  configureTestReceiptKeys(beforeRelease.pool);
   await bootstrapRelease(pool, bundledRelease);
   await seedAccounts([
     { id: personId, handle: 'agent_person', displayName: 'Person Display' },
@@ -144,8 +144,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await Promise.all([pool.end(), admin.end()]);
-});
+  await Promise.all([pool.end(), admin.end(), beforeRelease?.close()]);
+}, 20_000);
 
 test('activation, organization creation and automated activation ensure the current account agent once', async () => {
   const effect = createAccountAgentEffect(pool);
@@ -277,42 +277,36 @@ test('the active-account backfill crosses page boundaries and is idempotent', as
   expect(revisionsAfter.rows[0]!.count).toBe(revisions.rows[0]!.count);
 });
 
-test('with no active global definition release the effect completes without creating an agent', async () => {
+test('the effect skips creation before release activation and the backfill recovers the missing agent once', async () => {
   const accountId = newId(route);
-  await seedAccounts([{ id: accountId, handle: 'agent_before_release', displayName: 'Before Release' }]);
-  await withoutActiveRelease(async () => {
-    await expect(
-      applyAccountAgentEffect(pool, event('com.rezics.access.actor-activated.v1', accountId)),
-    ).resolves.toBeUndefined();
-    const subjects = await admin.query(
-      'SELECT count(*)::integer AS count FROM semantic.subject WHERE route = $1 AND subject_id = $2::uuid',
-      [route, accountAgentId(accountId)],
-    );
-    expect(subjects.rows[0]!.count).toBe(0);
-    expect(await revisionCount(accountId)).toBe(0);
-    const links = await admin.query(
-      'SELECT count(*)::integer AS count FROM semantic.account_agent_subject WHERE account_id = $1::uuid',
-      [accountId],
-    );
-    expect(links.rows[0]!.count).toBe(0);
-  });
-});
+  const { pool, admin } = beforeRelease;
+  await seedAccounts([{ id: accountId, handle: 'agent_before_release', displayName: 'Before Release' }], admin);
+  await expect(
+    applyAccountAgentEffect(pool, event('com.rezics.access.actor-activated.v1', accountId)),
+  ).resolves.toBeUndefined();
+  const subjects = await admin.query(
+    'SELECT count(*)::integer AS count FROM semantic.subject WHERE route = $1 AND subject_id = $2::uuid',
+    [route, accountAgentId(accountId)],
+  );
+  expect(subjects.rows[0]!.count).toBe(0);
+  expect(await revisionCount(accountId, admin)).toBe(0);
+  const links = await admin.query(
+    'SELECT count(*)::integer AS count FROM semantic.account_agent_subject WHERE account_id = $1::uuid',
+    [accountId],
+  );
+  expect(links.rows[0]!.count).toBe(0);
 
-test('running the ensure-account-agents backfill after a release activates creates the missing agent', async () => {
-  const accountId = newId(route);
-  await seedAccounts([{ id: accountId, handle: 'agent_after_release', displayName: 'After Release' }]);
-  await withoutActiveRelease(async () => {
-    await applyAccountAgentEffect(pool, event('com.rezics.access.actor-activated.v1', accountId));
-    expect(await revisionCount(accountId)).toBe(0);
-    await bootstrapRelease(pool, bundledRelease);
-    await ensureActiveAccountAgents(pool);
-    expect(await currentSubject(accountId)).toMatchObject({
-      id: accountAgentId(accountId),
-      type: 'schema:Person',
-      labels: { und: 'After Release' },
-    });
-    expect(await revisionCount(accountId)).toBe(1);
+  await bootstrapRelease(pool, bundledRelease);
+  await ensureActiveAccountAgents(pool);
+  expect(await currentSubject(accountId, admin)).toMatchObject({
+    id: accountAgentId(accountId),
+    type: 'schema:Person',
+    labels: { und: 'Before Release' },
   });
+  // One birth revision and one native label revision.
+  expect(await revisionCount(accountId, admin)).toBe(2);
+  await ensureActiveAccountAgents(pool);
+  expect(await revisionCount(accountId, admin)).toBe(2);
 });
 
 test('an ensure failure with the missing-release message still throws so delivery retries', async () => {
@@ -326,20 +320,6 @@ test('an ensure failure with the missing-release message still throws so deliver
   await applyAccountAgentEffect(failing, activation);
   expect((await currentSubject(accountId)).labels).toEqual({ und: 'Other Failure' });
 });
-
-async function withoutActiveRelease(run: () => Promise<void>): Promise<void> {
-  const saved = await admin.query('DELETE FROM semantic.definition_activation WHERE route = 0 RETURNING *');
-  try {
-    await run();
-  } finally {
-    await admin.query('DELETE FROM semantic.definition_activation WHERE route = 0');
-    for (const row of saved.rows)
-      await admin.query(
-        'INSERT INTO semantic.definition_activation (route, head, digest, recorded_transaction_id) VALUES ($1, $2, $3, $4)',
-        [row.route, row.head, row.digest, row.recorded_transaction_id],
-      );
-  }
-}
 
 async function lastAccountEvent(
   accountId: string,
