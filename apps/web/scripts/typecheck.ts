@@ -96,6 +96,36 @@ async function command(args: readonly string[], env: NodeJS.ProcessEnv): Promise
   return await child.exited;
 }
 
+/** Compile generated Web inputs with the same migrated SQL types in a standalone Gate run. */
+export async function compilePreparedWebPrograms(env: NodeJS.ProcessEnv): Promise<number> {
+  if (env.DATABASE_URL) return await compileWebProgramsWithSqlAnalysis(env, { run: command });
+
+  const { prepareCompilerDatabase, retainOriginalAndCleanupFailure } =
+    await import('../../../scripts/compiler-database.ts');
+  const database = await prepareCompilerDatabase();
+  let failure: unknown;
+  let code = 0;
+  try {
+    code = await compileWebProgramsWithSqlAnalysis({ ...env, DATABASE_URL: database.url }, { run: command });
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    try {
+      await database.remove();
+    } catch (cleanupError) {
+      if (failure !== undefined || code !== 0)
+        throw retainOriginalAndCleanupFailure(
+          failure ?? new Error(`Web typecheck failed with status ${code}`),
+          cleanupError,
+          'Web compiler database cleanup failed',
+        );
+      throw cleanupError;
+    }
+  }
+  return code;
+}
+
 async function compile(env: NodeJS.ProcessEnv): Promise<number> {
   for (const args of [
     ['bun', 'run', 'generate'],
@@ -107,7 +137,7 @@ async function compile(env: NodeJS.ProcessEnv): Promise<number> {
   // Tooling imports Kernel/Auth's Node interfaces. Its owning config includes every script with Bun/Node globals;
   // the product program keeps Cloudflare Worker globals. Both retain the inherited Reylo content mapper.
   // Both programs run even when the web program has diagnostics; the scripts are never skipped by a red web program.
-  return compileWebProgramsWithSqlAnalysis(env, { run: (args, compilerEnv) => command(args, compilerEnv) });
+  return compilePreparedWebPrograms(env);
 }
 
 async function run(args: readonly string[]): Promise<number> {

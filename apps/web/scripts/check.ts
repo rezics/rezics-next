@@ -25,7 +25,7 @@ import {
 } from '../../../services/auth/scripts/database.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { withCommandPhase } from '../../../services/kernel/scripts/command-phases.ts';
-import { compileWebPrograms } from './typecheck.ts';
+import { compilePreparedWebPrograms } from './typecheck.ts';
 import {
   admitWebHostTestCommand,
   isWebHostTestFile,
@@ -384,16 +384,7 @@ export async function placeBrowserCheck(
 async function runWebTypecheck(env: NodeJS.ProcessEnv): Promise<void> {
   process.stdout.write('\n[web check] typecheck\n');
   const started = performance.now();
-  const code = await compileWebPrograms(async (args) => {
-    const child = Bun.spawn([...args], {
-      cwd: app,
-      env,
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-    return await child.exited;
-  });
+  const code = await compilePreparedWebPrograms(env);
   process.stdout.write(`[web check] typecheck ${(performance.now() - started) / 1000}s\n`);
   if (code !== 0) throw new Error(`typecheck failed with status ${code}`);
 }
