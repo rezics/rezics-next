@@ -49,7 +49,8 @@ command shape it recognizes so it can stage the source closure. Read optional me
 
 Verify backend behavior through its API or owning worker with the original authority and compatible data. Reserve
 browser runs for behavior the browser owns, such as a real login return, hydration or client interaction. Stop
-after the required observation. Prefer existing checks to a new harness.
+after the required observation. Prefer existing checks to a new harness. For focus and element identity assertions, report
+a role, name or selector on failure. Printing whole live DOM objects can dominate the cost of the check.
 
 Reuse a compatible live stack or prepared fixture with isolated state. Restart only the process whose lifetime
 matters. Use full preparation, cold startup or growth when the outcome depends on it, preserving its original bound.
