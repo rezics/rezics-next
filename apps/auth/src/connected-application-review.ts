@@ -147,7 +147,8 @@ export function useConnectedApplicationReview({
     lifetime?.addEventListener('abort', retire, { once: true });
     clearReadState(false);
     setObservation({ source, lifetime });
-    if (!lifetime?.aborted) void navigate(undefined, 'first');
+    // Loading Security also starts this read. Focus belongs to the owning return or review.
+    if (!lifetime?.aborted) void navigate(undefined, 'first', false);
     return () => {
       lifetime?.removeEventListener('abort', retire);
       retireReview();
@@ -171,7 +172,7 @@ export function useConnectedApplicationReview({
     target?.focus();
   }, [observationRetired, page, selection]);
 
-  async function navigate(target?: string, direction: NavigationDirection = 'first') {
+  async function navigate(target?: string, direction: NavigationDirection = 'first', focusResult = true) {
     if (lifetime?.aborted || pendingRef.current || phase.current === 'review' || phase.current === 'submitting') return;
     const transition: NavigationTransition = { ...(target === undefined ? {} : { target }), direction };
     pendingRef.current = true;
@@ -198,10 +199,10 @@ export function useConnectedApplicationReview({
       acceptedCursorRef.current = target;
       setAcceptedCursor(target);
       setHasAcceptedPage(true);
-      setFocusAcceptedPage((count) => count + 1);
+      if (focusResult) setFocusAcceptedPage((count) => count + 1);
     } else {
       setFailedTransition(transition);
-      setFocusFailedPage((count) => count + 1);
+      if (focusResult) setFocusFailedPage((count) => count + 1);
       if (result.kind === 'signed-out') onSessionEndedRef.current?.();
     }
   }

@@ -126,7 +126,7 @@ test('cached return reads current advice once, keeps generic history, and requir
   await flush(() => ui.reads[2]!.resolve({ kind: 'failure', message: 'Malformed current Security page' }));
   expect(ui.host.textContent).toContain(m.auth_security_password_return_stage());
   expect(ui.host.querySelector('#security-new-password')).toBeNull();
-  expect(ui.host.querySelector('[data-password-return-status]')).toBe(document.activeElement);
+  expect(document.activeElement === ui.host.querySelector('[data-password-return-status]')).toBe(true);
 
   const retry = ui.host.querySelector<HTMLButtonElement>('[data-password-return-review]')!;
   await flush(() => {
@@ -143,7 +143,7 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(history?.textContent).not.toContain('replacement-account');
   expect(history?.textContent).not.toContain('replacement.person@example.test');
   expect(ui.host.querySelector('#security-new-password')).toBeNull();
-  expect(ui.host.querySelector('[data-password-return-status]')).toBe(document.activeElement);
+  expect(document.activeElement === ui.host.querySelector('[data-password-return-status]')).toBe(true);
   expect(ui.identityReads).toBe(2);
   expect(ui.inventoryReads).toHaveLength(4);
 
@@ -155,8 +155,9 @@ test('cached return reads current advice once, keeps generic history, and requir
   );
   expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-password-return-acknowledge]')!.click());
-  expect(ui.host.querySelector('#security-new-password')).not.toBeNull();
-  expect(document.activeElement).toBe(ui.host.querySelector('#security-new-password'));
+  const freshPassword = ui.host.querySelector<HTMLInputElement>('#security-new-password');
+  expect(freshPassword?.value).toBe('');
+  expect(document.activeElement === freshPassword).toBe(true);
   expect(ui.calls).toHaveLength(1);
 
   await flush(() => {
@@ -171,5 +172,6 @@ test('cached return reads current advice once, keeps generic history, and requir
   });
   expect(ui.calls).toHaveLength(2);
   expect(ui.calls[1]!.body.key).not.toBe(oldKey);
+  expect(ui.calls[1]!.body.subjectId).toBe('replacement-account');
   expect(ui.calls[1]!.body.credential.password).toBe('fresh password secret');
 }, 60_000);
