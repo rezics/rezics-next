@@ -1446,7 +1446,15 @@ BEGIN
     AND (t.account_id IS NULL OR t.account_id=account_key)
     AND (t.target->>'operation'=operation OR
       (TG_TABLE_NAME='auth_client_coverage' AND TG_OP='INSERT' AND operation='client-coverage'
-       AND t.target->>'operation'='client-config'));
+       AND t.target->>'operation'='client-config') OR
+      (TG_TABLE_NAME='auth_client' AND TG_OP='UPDATE' AND operation='client-config'
+       AND t.target->>'operation'='client-reduction-finish'
+       AND EXISTS (
+         SELECT 1 FROM auth_client_reduction r WHERE r.client_id=client_key
+           AND r.operation_id=t.target->>'operationId'
+           AND to_jsonb(r.scopes)=t.target->'scopes'
+           AND (to_jsonb(r.first_party)#>>'{}')=t.target->>'firstParty'
+       )));
   IF NOT FOUND THEN RAISE EXCEPTION 'Kind consent dependency closure required before Auth write' USING ERRCODE='55000'; END IF;
   IF EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key
       AND (transition.account_id IS NULL OR d.account_id=transition.account_id)
@@ -1469,6 +1477,7 @@ BEGIN
   ELSIF TG_TABLE_NAME='auth_client' THEN
     IF TG_OP='UPDATE' THEN
       IF operation='client-config' THEN
+        -- The same exact target authorizes the client update and gate removal.
         IF transition.target->'scopes' IS DISTINCT FROM to_jsonb(NEW.scopes) OR
           transition.target->>'firstParty' IS DISTINCT FROM to_jsonb(NEW.first_party)#>>'{}' THEN
           RAISE EXCEPTION 'Kind client transition target mismatch' USING ERRCODE='23514';

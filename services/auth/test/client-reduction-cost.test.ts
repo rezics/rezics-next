@@ -5,13 +5,41 @@ import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { migrate, schemaDump, testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount, type AuthService, type EffectAuthorization } from '../src/index.ts';
-import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
+import { createAccountWorkflows, type AccountOperation, type AccountWorkflowPorts } from '../src/workflows.ts';
+
+const approver = 'approved-admin';
+const approvalClient = 'reduction-approval';
+function reductionBinding(reference: string | null, operation: AccountOperation) {
+  if (
+    reference !== 'approved' ||
+    operation.kind !== 'client-reduction' ||
+    operation.firstParty ||
+    operation.scopes.length !== 1 ||
+    operation.scopes[0] !== 'read'
+  )
+    return;
+  const operationKey = operation.operationKey;
+  if (
+    (operationKey !== 'reduce' || operation.clientId !== 'target') &&
+    (operationKey !== 'reduce-native' || operation.clientId !== 'native-default')
+  )
+    return;
+  return {
+    operationKey,
+    digest: new Bun.CryptoHasher('sha256')
+      .update(JSON.stringify([operationKey, operation.clientId, false, ['read']]))
+      .digest('hex'),
+    commandKeyPrefix: `approve:${operationKey}`,
+  };
+}
+
+type ApprovalContext = { actor: { accountId: string }; binding?: ReturnType<typeof reductionBinding> };
 
 let fixture: ReturnType<typeof testDatabase>;
 let pool: Pool;
 let auth: AuthService;
 let workflows: ReturnType<typeof createAccountWorkflows>;
-let options: Parameters<typeof createAccountWorkflows>[0];
+let options: Parameters<typeof createAccountWorkflows<ApprovalContext>>[0];
 const openings = new Map<string, EffectAuthorization>();
 const issuer = 'https://reduction.auth.test';
 const password = randomBytes(24).toString('base64url');
@@ -97,6 +125,12 @@ beforeAll(async () => {
         return readAccount(id);
       },
       readRecoveryAccount: readAccount,
+      async readAuthErasureBarrier(accountId) {
+        const account = await readAccount(accountId);
+        return account?.state === 'deleted' && account.fenced
+          ? { accountId, version: 1, at: '2026-01-01T00:00:00.000Z' }
+          : null;
+      },
       async consumeAuthorization({ authorization }) {
         const receipt = openings.get(authorization);
         if (!receipt) throw new Error('No opening authorization');
@@ -106,7 +140,8 @@ beforeAll(async () => {
       authorizeProvisioning: async (accountId) => ({ accountId }),
     }),
   });
-  const ports: AccountWorkflowPorts = {
+  await auth.internal.registerClient({ clientId: approvalClient, firstParty: true, scopes: ['client:manage'] });
+  const ports: AccountWorkflowPorts<ApprovalContext> = {
     registrationTarget: (key) => key,
     reserveHandle: denied,
     createPending: denied,
@@ -116,7 +151,41 @@ beforeAll(async () => {
     releaseExpiredRegistrationHandle: denied,
     provisioningReference: denied,
     provisioningEvidence: denied,
-    authorizeOperation: async () => ({ actor: { accountId: 'approved-admin' } }),
+    async authorizeOperation(reference, operation) {
+      const binding = reductionBinding(reference, operation);
+      if (!binding && !(reference === 'approved' && operation.kind === 'opening')) return denied();
+      return { actor: { accountId: approver }, binding };
+    },
+    approvalBinding: (context) => context.binding,
+    copyActors: async (context) => [
+      { accountId: context.actor.accountId, role: 'human' },
+      { accountId: context.actor.accountId, role: 'initiator' },
+    ],
+    async readNativeCreationContext({ approvalReference, operation, operationKey }) {
+      const binding = reductionBinding(approvalReference, operation);
+      if (!binding || binding.operationKey !== operationKey || operation.kind !== 'client-reduction')
+        return { kind: 'unavailable', reason: 'historical-provenance' };
+      return {
+        kind: 'available',
+        context: {
+          actorAccountId: approver,
+          actingHumanId: approver,
+          operatorAccountId: null,
+          principalAccountId: null,
+          sourceClientId: approvalClient,
+          approvalReference: operation.authorization,
+          commandKey: binding.commandKeyPrefix,
+          operationKey,
+          operationDigest: binding.digest,
+          operation: {
+            kind: 'client-reduction',
+            action: 'client:manage',
+            targetResourceId: 'platform',
+            targetClientId: operation.clientId,
+          },
+        },
+      };
+    },
     authorizeOpening: async () => ({ value: { receiptId: 'native-opening' } }),
     async readAccount(id) {
       const account = await readAccount(id);
@@ -205,10 +274,14 @@ test('bounded production behavior preserves security outcomes through missing se
   await auth.internal.revokeSessions('a-owner');
   expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', ['a-owner'])).rows).toHaveLength(0);
   expect((await signin('b-owner')).status).toBe(200);
-  expect((await signin('c-deleted')).status).toBe(200);
+  const deletedSession = await signin('c-deleted');
+  expect(deletedSession.status).toBe(200);
   await pool.query(
     'UPDATE reduction_account SET value=value || \'{"state":"deleted","fenced":true,"authnEpoch":2}\'::jsonb WHERE id=\'c-deleted\'',
   );
+  expect((await request('/token', {}, cookieOf(deletedSession))).status).toBeGreaterThanOrEqual(400);
+  // Exercise session invalidation separately while native erasure awaits its source transfer.
+  await auth.internal.revokeSessions('c-deleted');
   await auth.internal.eraseAccount('c-deleted');
   // One hundred unrelated owners per ordinary affected owner, with authority for another client only.
   await pool.query(`INSERT INTO "user" (id,name,email,"emailVerified","createdAt","updatedAt")
@@ -216,6 +289,8 @@ test('bounded production behavior preserves security outcomes through missing se
   await pool.query(
     `INSERT INTO auth_consent SELECT 'unrelated-'||i,'other',ARRAY['read'] FROM generate_series(1,400) i`,
   );
+  // Race an already admitted consent against the reduction's exclusive barrier.
+  expect((await signin('z-late')).status).toBe(200);
   const entered = new Promise<void>((resolve) => {
     enteredIssuance = resolve;
   });
@@ -231,9 +306,11 @@ test('bounded production behavior preserves security outcomes through missing se
     firstParty: false,
     scopes: ['read'],
   });
+  // Observe an early rejection while allowing the paused issuance to release its lock.
+  void reduction.catch(() => {});
   releaseIssuance!();
   expect((await late).status).toBe(200);
-  await expect(reduction).rejects.toThrow();
+  await expect(reduction).rejects.toThrow('Account workflow step failed: client-reduction-page');
   expect(
     (
       await pool.query('SELECT account_id FROM auth_consent WHERE client_id=$1 ORDER BY account_id', ['target'])
@@ -281,119 +358,105 @@ test('bounded production behavior preserves security outcomes through missing se
   expect((await request('/token', {}, cookieOf(other))).status).toBe(200);
 }, 60000);
 
-test('native website, password, key and delegated issuance materialize implicit consent before session insertion', async () => {
+test('native email, account ID, key and delegated sign-in return with materialized implicit consent', async () => {
   await auth.internal.registerClient({ clientId: 'native-default', firstParty: true, scopes: ['read', 'write'] });
-  await pool.query(`CREATE FUNCTION require_native_consent() RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN
-      IF NEW."clientId"='native-default' AND NOT EXISTS
-        (SELECT 1 FROM auth_consent WHERE client_id=NEW."clientId" AND account_id=NEW."userId")
-      THEN RAISE EXCEPTION 'Session preceded consent authority'; END IF;
-      RETURN NEW;
-    END $$`);
-  await pool.query(
-    'CREATE TRIGGER native_consent BEFORE INSERT ON session FOR EACH ROW EXECUTE FUNCTION require_native_consent()',
+  for (const id of ['native-human', 'native-password', 'native-key', 'native-bot']) await owner(id);
+  const human = await signin('native-human', 'native-default', true);
+  expect(human.status).toBe(200);
+  expect((await signin('native-password', 'native-default')).status).toBe(200);
+  const key = await generateKeyPair('ES256', { extractable: true });
+  await pool.query('INSERT INTO auth_public_key VALUES ($1,$2,$3)', [
+    'native-key',
+    'own',
+    { ...(await exportJWK(key.publicKey)), alg: 'ES256' },
+  ]);
+  const now = Math.floor(Date.now() / 1000);
+  const assertion = await new SignJWT({
+    iss: 'native-key',
+    sub: 'native-key',
+    aud: `${issuer}/token`,
+    iat: now,
+    exp: now + 60,
+    jti: 'native-key-once',
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'own' })
+    .sign(key.privateKey);
+  const ownKey = await request('/signin/key', {
+    account_id: 'native-key',
+    assertion,
+    client_id: 'native-default',
+    scope: ['read'],
+  });
+  expect(ownKey.status).toBe(200);
+  await pool.query(`UPDATE reduction_account SET value=jsonb_set(value,'{automated}','true') WHERE id='native-bot'`);
+  openings.set('native-opening', {
+    receiptId: 'native-opening',
+    subjectAccountId: 'native-bot',
+    actingHumanId: 'native-human',
+    operatorAccountId: 'native-human',
+    purpose: 'session',
+    clientId: 'native-default',
+    scopes: ['read'],
+    humanEpoch: 1,
+    subjectEpoch: 1,
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+  });
+  const delegated = await workflows.openOperatorSession({
+    key: 'native-delegated',
+    authorization: 'approved',
+    operatorAccountId: 'native-human',
+    subjectAccountId: 'native-bot',
+    headers: new Headers({ cookie: cookieOf(human) }),
+  });
+  expect(delegated.status).toBe(200);
+  expect(
+    (
+      await pool.query(
+        "SELECT account_id,scopes FROM auth_consent WHERE client_id='native-default' ORDER BY account_id",
+      )
+    ).rows,
+  ).toEqual(
+    ['native-bot', 'native-human', 'native-key', 'native-password'].map((account_id) => ({
+      account_id,
+      scopes: ['read', 'write'],
+    })),
   );
-  try {
-    for (const id of ['native-human', 'native-password', 'native-key', 'native-bot']) await owner(id);
-    const human = await signin('native-human', 'native-default', true);
-    expect(human.status).toBe(200);
-    expect((await signin('native-password', 'native-default')).status).toBe(200);
-    const key = await generateKeyPair('ES256', { extractable: true });
-    await pool.query('INSERT INTO auth_public_key VALUES ($1,$2,$3)', [
-      'native-key',
-      'own',
-      { ...(await exportJWK(key.publicKey)), alg: 'ES256' },
-    ]);
-    const now = Math.floor(Date.now() / 1000);
-    const assertion = await new SignJWT({
-      iss: 'native-key',
-      sub: 'native-key',
-      aud: `${issuer}/token`,
-      iat: now,
-      exp: now + 60,
-      jti: 'native-key-once',
-    })
-      .setProtectedHeader({ alg: 'ES256', kid: 'own' })
-      .sign(key.privateKey);
-    const ownKey = await request('/signin/key', {
-      account_id: 'native-key',
-      assertion,
-      client_id: 'native-default',
-      scope: ['read'],
-    });
-    expect(ownKey.status).toBe(200);
-    await pool.query(`UPDATE reduction_account SET value=jsonb_set(value,'{automated}','true') WHERE id='native-bot'`);
-    openings.set('native-opening', {
-      receiptId: 'native-opening',
-      subjectAccountId: 'native-bot',
-      actingHumanId: 'native-human',
-      operatorAccountId: 'native-human',
-      purpose: 'session',
-      clientId: 'native-default',
-      scopes: ['read'],
-      humanEpoch: 1,
-      subjectEpoch: 1,
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-    });
-    const delegated = await workflows.openOperatorSession({
-      key: 'native-delegated',
-      authorization: 'approved',
-      operatorAccountId: 'native-human',
-      subjectAccountId: 'native-bot',
-      headers: new Headers({ cookie: cookieOf(human) }),
-    });
-    expect(delegated.status).toBe(200);
-    expect(
-      (
-        await pool.query(
-          "SELECT account_id,scopes FROM auth_consent WHERE client_id='native-default' ORDER BY account_id",
-        )
-      ).rows,
-    ).toEqual(
-      ['native-bot', 'native-human', 'native-key', 'native-password'].map((account_id) => ({
-        account_id,
-        scopes: ['read', 'write'],
-      })),
-    );
-    for (const response of [human, ownKey, delegated])
-      expect((await request('/token', {}, cookieOf(response))).status).toBe(200);
-    await pool.query(`INSERT INTO session (id,token,"userId","clientId","grantedScope","authnEpoch","authTime","authMethods","createdAt","updatedAt","expiresAt")
-      SELECT 'retained-'||i,'retained-token-'||i,'native-password','native-default','read',1,1,'pwd',now(),now(),now()+interval '1 day'
-      FROM generate_series(1,201) i`);
-    // Native admission caps all stored sessions; the bounded cleanup can remove this entire cohort.
-    expect(
-      (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
-    ).toBe(64);
-    await auth.internal.revokeSessions('native-key');
-    await workflows.reduceClientScopes({
-      key: 'reduce-native',
-      authorization: 'approved',
-      clientId: 'native-default',
-      firstParty: false,
-      scopes: ['read'],
-    });
-    expect(
-      (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
-    ).toBe(0);
-    const floor = (await pool.query("SELECT value FROM reduction_floor WHERE value->>'accountId'='native-password'"))
-      .rows[0].value;
-    await auth.internal.revokeSessions('native-password', {
-      boundedCleanup: true,
-      barrier: { ...floor, minimumAuthnEpoch: Number(floor.minimumAuthnEpoch) },
-    });
-    expect(
-      (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
-    ).toBe(0);
-    expect((await request('/token', {}, cookieOf(human))).status).toBeGreaterThanOrEqual(400);
-    for (const id of ['native-bot', 'native-human', 'native-key', 'native-password'])
-      expect((await readAccount(id))?.fenced).toBe(true);
-  } finally {
-    await pool.query('DROP TRIGGER native_consent ON session');
-    await pool.query('DROP FUNCTION require_native_consent()');
-  }
+  for (const response of [human, ownKey, delegated])
+    expect((await request('/token', {}, cookieOf(response))).status).toBe(200);
+  await pool.query(`INSERT INTO session (id,token,"userId","clientId","grantedScope","authnEpoch","authTime","authMethods","createdAt","updatedAt","expiresAt")
+    SELECT 'retained-'||i,'retained-token-'||i,'native-password','native-default','read',1,1,'pwd',now(),now(),now()+interval '1 day'
+    FROM generate_series(1,201) i`);
+  // Native admission caps all stored sessions; the bounded cleanup can remove this entire cohort.
+  expect(
+    (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
+  ).toBe(64);
+  await auth.internal.revokeSessions('native-key');
+  await workflows.reduceClientScopes({
+    key: 'reduce-native',
+    authorization: 'approved',
+    clientId: 'native-default',
+    firstParty: false,
+    scopes: ['read'],
+  });
+  expect(
+    (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
+  ).toBe(0);
+  const floor = (await pool.query("SELECT value FROM reduction_floor WHERE value->>'accountId'='native-password'"))
+    .rows[0].value;
+  await auth.internal.revokeSessions('native-password', {
+    boundedCleanup: true,
+    barrier: { ...floor, minimumAuthnEpoch: Number(floor.minimumAuthnEpoch) },
+  });
+  expect(
+    (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
+  ).toBe(0);
+  expect((await request('/token', {}, cookieOf(human))).status).toBeGreaterThanOrEqual(400);
+  for (const id of ['native-bot', 'native-human', 'native-key', 'native-password'])
+    expect((await readAccount(id))?.fenced).toBe(true);
 }, 60000);
 
 test('legacy deployment coverage is an explicit bounded barrier and migrations produce the committed dump', async () => {
+  await owner('legacy-owner');
   await auth.internal.registerClient({ clientId: 'legacy', firstParty: true, scopes: ['read'] });
   await pool.query(
     "UPDATE auth_client_coverage SET ready=false,after_ordinal=0,ready_after=now()+interval '5 minutes' WHERE client_id='legacy'",
@@ -406,7 +469,7 @@ test('legacy deployment coverage is an explicit bounded barrier and migrations p
       scopes: [],
     }),
   ).rejects.toThrow();
-  expect((await signin('other-owner', 'legacy')).status).toBeGreaterThanOrEqual(400);
+  expect((await signin('legacy-owner', 'legacy')).status).toBeGreaterThanOrEqual(400);
   await expect(auth.internal.backfillClientIssuance({ clientId: 'legacy', limit: 101 })).rejects.toThrow();
   let pages = 0;
   let result;
@@ -418,7 +481,10 @@ test('legacy deployment coverage is an explicit bounded barrier and migrations p
   expect(result.ready).toBe(false);
   await pool.query("UPDATE auth_client_coverage SET ready_after=now()-interval '1 second' WHERE client_id='legacy'");
   expect((await auth.internal.backfillClientIssuance({ clientId: 'legacy', limit: 17 })).ready).toBe(true);
-  expect((await signin('other-owner', 'legacy')).status).toBe(200);
+  expect(
+    (await pool.query("SELECT 1 FROM auth_consent WHERE client_id='legacy' AND account_id='c-deleted'")).rowCount,
+  ).toBe(0);
+  expect((await signin('legacy-owner', 'legacy')).status).toBe(200);
   migrate(fixture.url);
   // Test-only tables are removed before comparing the generated schema.
   await pool.query('DROP TABLE reduction_account, reduction_floor');
