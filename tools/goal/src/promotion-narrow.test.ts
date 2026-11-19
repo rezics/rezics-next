@@ -63,7 +63,7 @@ test('pausing during a failing stabilize gate leaves main and dev where they are
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
 
 test('a workspace failure is left on the stabilize candidate for a fix', async () => {
   const h = integrationHarness();

@@ -94,7 +94,7 @@ test('the real control-plane check boundary records a dirty candidate before bas
     const log = readFileSync(outcome.logPath, 'utf8');
     expect(outcome.passed).toBe(false);
     expect(outcome.firstFailure?.assertion).toContain(
-      'Candidate integrity violation phase=control-plane typecheck and test suite',
+      'Candidate integrity violation phase=control-plane typecheck and impact-selected tests',
     );
     expect(log).toContain(`expected HEAD=${expected}`);
     expect(log).toContain(`unstaged paths: ["${file}"]`);
