@@ -318,8 +318,10 @@ async function reserve(
   const media = mediaOf(payload);
   if (!media) throw new UploadRefusal('unavailable');
   if (typeof target !== 'string' && 'newThread' in target) {
-    const containerId = containerIdFrom(payload);
-    if (containerId) options?.episode?.remember(containerId);
+    options?.episode?.remember(media.containerId);
+  } else if (options?.episode && typeof target !== 'string' && 'containerId' in target) {
+    if (media.containerId !== target.containerId) throw new UploadRefusal('unavailable');
+    options.episode.confirmExistingContainer(media.containerId);
   }
   return media;
 }

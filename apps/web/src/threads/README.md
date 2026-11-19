@@ -156,7 +156,8 @@ local occurrence; it makes no native cancellation or erasure claim. Unrelated te
 remain intact. Closing the transient image chooser alone does not retire a draft or an uncertain command.
 
 One future-thread episode retains the disclosed native container across its current attachments, with independent
-reservation commands per occurrence. A second image can reserve directly in that admitted container. A disclosed 409
+reservation commands per occurrence. Attachments keep using the draft key until a reservation against the existing
+thread succeeds. Later images can reserve directly in that admitted container. A disclosed 409
 can admit a container reservation; an undisclosed 409 without a current known container remains unavailable. Retries
 retain each original key, body, viewer and any admitted container command. Accepted discard, departure, successful
 creation receipt and account/credential/CSRF/board/key replacement retire the existing caller irreversibly. Old stage,
