@@ -21,6 +21,7 @@ let stack: NativeWebStack;
 let archiveSubject: Awaited<ReturnType<typeof prepareArchiveSubject>>;
 const lifecycle = new NativeTestLifecycle('native private Library export restore walk');
 const entryOnly = process.env.WEB_ARCHIVE_ENTRY_FOCUSED === '1';
+const mountedRestoreOnly = process.env.WEB_ARCHIVE_MOUNTED_RESTORE_FOCUSED === '1';
 const japaneseHydrationOnly = process.env.WEB_ARCHIVE_JAPANESE_HYDRATION_FOCUSED === '1';
 const evidence = resolve(
   import.meta.dir,
@@ -1588,24 +1589,51 @@ async function restoreOwnerLibrary() {
     timeout: 60_000,
   });
   await page.getByRole('button', { name: 'Read current Session and exact units', exact: true }).click();
-  const sessions = await json<{ progressSessions: { id: string; subjectId: string }[] }>(
+  const openRestoredSession = page.getByRole('link', {
+    name: await message('en', 'library_archive_progress_open_session'),
+    exact: true,
+  });
+  await openRestoredSession.waitFor({ state: 'visible', timeout: 30_000 });
+  const restoredSessionHref = await openRestoredSession.getAttribute('href');
+  const restoredSessionId = restoredSessionHref?.match(/^\/en\/library\/progress\/([0-9a-f-]{36})$/u)?.[1];
+  if (!restoredSessionId) throw new Error('The current Archive result has no exact Session link');
+  expect(restoredSessionId).not.toBe(prepared.sessionId);
+  const sessions = await json<{
+    progressSessions: { id: string; subjectId: string; mode: string; unit: string; total: string }[];
+  }>(
     await stack.kernel(
-      `/v1/progressSessions?subjectId=${encodeURIComponent(prepared.subjectId)}&limit=100`,
+      `/v1/progressSessions?subjectId=${encodeURIComponent(prepared.subjectId)}&view=FULL&limit=100`,
       undefined,
       'alice',
     ),
     200,
     'progress readback',
   );
-  expect(sessions.progressSessions.some((row) => row.id === prepared.sessionId)).toBe(true);
-  expect(sessions.progressSessions.length).toBeGreaterThan(1);
+  expect(sessions.progressSessions.map((row) => row.id).sort()).toEqual([prepared.sessionId, restoredSessionId].sort());
+  expect(sessions.progressSessions.find((row) => row.id === restoredSessionId)).toMatchObject({
+    subjectId: prepared.subjectId,
+    mode: 'scalar_amount',
+    unit: 'page',
+    total: '12',
+  });
+  const otherSession = await stack.kernel(`/v1/progressSessions/${restoredSessionId}`, undefined, 'bob');
+  expect(otherSession.status).toBe(404);
   if (labelDisagreement)
     await writeArchiveProvenance({ ...labelDisagreement, entryStatePreserved: true, progressSessionRestored: true });
+  assertLabelReadbacks();
+  await writeArchiveProvenance({
+    outcome: 'incomplete',
+    phase: 'checking-mounted-collection-privacy',
+    identity,
+    restoredSessionId,
+    sourceSessionPreserved: true,
+    otherProgressMemberStatus: otherSession.status,
+  });
   await leaveRecoveryFor(page, await message('en', 'library_export_title'));
 
-  const headings = await visitLocalizedArchiveRoutes(page, auth.moduleFailureTrace);
+  const headings = mountedRestoreOnly ? undefined : await visitLocalizedArchiveRoutes(page, auth.moduleFailureTrace);
 
-  // Finish Alice's localized visits before opening Bob's separate context.
+  // Release Alice's browser context before opening Bob's separate context.
   await signedIn.context.close();
   const bob = await auth.signIn('bob', { returnTo: `/en/collections/${restoredId}` });
   const bobPage = bob.continueOnPage();
@@ -1614,7 +1642,6 @@ async function restoreOwnerLibrary() {
   expect(await bobPage.getByRole('heading', { name: prepared.collectionTitle }).count()).toBe(0);
   await auth.stop();
 
-  assertLabelReadbacks();
   await writeArchiveProvenance({
     outcome: 'passed',
     stack: { kernel: stack.kernelOrigin, web: stack.web },
@@ -1625,6 +1652,7 @@ async function restoreOwnerLibrary() {
       restoredCollectionId: restoredId,
       labelId: prepared.labelId,
       sourceSessionId: prepared.sessionId,
+      restoredSessionId,
     },
     archive: {
       path: archivePath,
@@ -1642,6 +1670,7 @@ async function restoreOwnerLibrary() {
       restoredLabel,
       labelIdentity: identity,
       progressSessionCount: sessions.progressSessions.length,
+      otherProgressMemberStatus: otherSession.status,
     },
   });
 }
