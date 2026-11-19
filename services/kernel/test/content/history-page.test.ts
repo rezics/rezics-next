@@ -240,7 +240,7 @@ test('history keeps the recorded review score, question scale and current title'
 });
 
 test('a concealed current author keeps immutable revision authorship with a safe identity state', async () => {
-  const { post, path } = await fixture();
+  const { path } = await fixture();
   const authorId = system.actors.author.actor.accountId;
   const prior = await system.database.pool.query<{ authn_fenced: boolean }>(
     'SELECT authn_fenced FROM access.account WHERE account_id = $1',

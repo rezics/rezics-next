@@ -5,7 +5,7 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { ownQueryInput } from './query-input.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, type OpenSearch, SearchUnavailableError } from './opensearch.ts';
-import { EVIDENCE_HIT_TEMPLATE, EVIDENCE_SEARCH_TEMPLATE, HIT_TEMPLATE } from './query-templates.ts';
+import { EVIDENCE_SEARCH_TEMPLATE, HIT_TEMPLATE } from './query-templates.ts';
 import { type HitResult, type SearchPlan, type SearchResult } from './query.ts';
 import { MATCH_EVIDENCE_LIMITS, readEngineMatchEvidence } from './match-evidence.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
@@ -401,7 +401,6 @@ export async function searchRatingSubjectHits(
 ): Promise<HitResult> {
   const admitted = validatePlan(prefix, plan);
   plan = admitted;
-  const templateId = plan.matchEvidence ? EVIDENCE_HIT_TEMPLATE : HIT_TEMPLATE;
   const generation = await resolveGeneration(search, prefix, plan.generation);
   const target = subjectIndexName(prefix, generation);
   const phases: PhaseHits[] = [];

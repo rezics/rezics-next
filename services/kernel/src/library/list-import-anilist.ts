@@ -1625,9 +1625,9 @@ export function createAniListImport(deps: Dependencies) {
     };
   }
   async function reviewConsumptionDates(actor: Actor, id: string, input: AniListDateReviewInput, key: string) {
-    const deadline = deadlineFor(5000),
-      account = owner(actor),
-      stored = await load(actor, id, input.ordinal, deadline),
+    const deadline = deadlineFor(5000);
+    owner(actor);
+    const stored = await load(actor, id, input.ordinal, deadline),
       sourceReview = stored.review;
     if (
       !sourceReview ||

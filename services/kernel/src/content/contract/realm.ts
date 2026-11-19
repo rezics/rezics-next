@@ -111,7 +111,7 @@ export type RealmRecent<T, M> = Readonly<{
 export type RealmCommunityPorts<
   D,
   C,
-  B extends RealmCommunityBoard,
+  _B extends RealmCommunityBoard,
   T extends RealmCommunityThread,
   M,
   S extends RealmCommunitySelection,

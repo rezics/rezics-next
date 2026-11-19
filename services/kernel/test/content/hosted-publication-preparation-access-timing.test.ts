@@ -39,7 +39,7 @@ function delayFirstTargetRead(targetIds: ReadonlySet<string>, entered: () => voi
     get(target, property, receiver) {
       if (property !== 'prepare') return Reflect.get(target, property, receiver);
       return async (...args: Parameters<NonNullable<Access['prepare']>>) => {
-        const [actor, action, resource, context] = args;
+        const [, action, resource] = args;
         if (!delayed && action === 'post:read' && targetIds.has(resource.id)) {
           delayed = true;
           entered();

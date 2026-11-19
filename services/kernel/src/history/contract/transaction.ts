@@ -4,7 +4,7 @@
  * narrows a handle to its concrete type at the composition boundary.
  */
 /** The command transaction handle: the native `query` surface. Assignable to and from the Kernel command type. */
-export type HistoryTransaction = { query<R = any>(...args: any[]): Promise<any> };
+export type HistoryTransaction = { query<_R = any>(...args: any[]): Promise<any> };
 export type HistoryPool = object;
 export type HistoryWorkClient = object;
 export type HistoryWorkContext = object;

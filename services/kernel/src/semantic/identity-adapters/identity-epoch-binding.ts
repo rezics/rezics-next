@@ -593,11 +593,6 @@ export function createIdentityBindingOperations(capabilities: NativeIdentityCapa
     ).value;
   }
 
-  function identityBindingAccountRoles(binding: IdentityReceiptBinding) {
-    identityBindingData(binding);
-    return accountSources.get(binding)?.roles ?? [];
-  }
-
   /** All original-source replay/admission/undo paths share the original binding row lock.
    * A committed terminal pointer permits only the separate accepted-input receiver lookup.
    * Undo resolves Accounts' accepted technical source after transfer; an ordinary

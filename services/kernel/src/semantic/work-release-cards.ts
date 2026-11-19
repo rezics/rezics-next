@@ -11,7 +11,7 @@ import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Stat
 import { withReadTransaction } from './read.ts';
 import { applyWorkReleaseCardFieldFences } from './work-release-card-field-fences.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
-import type { WorkReleaseCardMembershipLink, WorkReleaseCardsInput } from './copy-work-reader-port.ts';
+import type { WorkReleaseCardsInput } from './copy-work-reader-port.ts';
 import {
   workReleaseCardFieldLimit,
   workReleaseCardLimit,
@@ -48,8 +48,6 @@ export type WorkReleaseCard = {
 };
 
 export type WorkReleaseCards = { state: 'unavailable' } | { state: 'available'; cards: WorkReleaseCard[] };
-
-type MembershipLink = WorkReleaseCardMembershipLink;
 
 type SelectedField = { facts: FactRow[]; withheld: boolean; unavailable?: boolean };
 type CardSource = {

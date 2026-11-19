@@ -17,7 +17,7 @@ test('native root append retains old drafts/releases, races heads, and replays e
   const f = await hostedChaptersFixture();
   const observer = observeSql(f.native.pool);
   try {
-    const { route, parameters, path, source, target, placements, created, published } = await hostedRootAppendBase(f);
+    const { parameters, path, source, target, placements, created, published } = await hostedRootAppendBase(f);
     const migration = readFileSync(
       new URL('../../db/content/migrations/20261113025800_hosted_root_append.sql', import.meta.url),
       'utf8',

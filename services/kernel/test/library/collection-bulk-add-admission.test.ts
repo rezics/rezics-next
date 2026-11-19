@@ -153,13 +153,6 @@ test('represented subjects skip and capacity failures stay individual outcomes',
     ]),
   );
   expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, key())).status).toBe(200);
-  const stored = await withConnection(f.pool, (tx) =>
-    readCollectionBulk(tx, {
-      route,
-      accountId: f.owner.actor.accountId,
-      operationId,
-    }),
-  );
   await runCollectionBulkPage(await worker(), { route, operationId });
   expect((await outcomes(operationId)).outcomes.map(({ state, reason }) => [state, reason])).toEqual([
     ['no_effect', null],

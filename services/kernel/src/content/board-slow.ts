@@ -104,10 +104,6 @@ function legacyActorKey(routeKey: Uint8Array, boardId: string, actor: Actor): Bu
   return createHmac('sha256', routeKey).update(`content.board.slow-mode\n${boardId}\n${actor.accountId}`).digest();
 }
 
-function legacyActorKeyForAccount(routeKey: Uint8Array, boardId: string, accountId: string): Buffer {
-  return createHmac('sha256', routeKey).update(`content.board.slow-mode\n${boardId}\n${accountId}`).digest();
-}
-
 function actorKeyForAccount(routeKey: Uint8Array, accountId: string): Buffer {
   return createHmac('sha256', routeKey).update(`content.board.slow-mode.actor\n${accountId}`).digest();
 }

@@ -55,7 +55,6 @@ type Locator = {
   source_revision: number;
   source_security_revision: string;
 };
-type Membership = { kind: 'works'; ids: string[] } | { kind: 'concealed' } | { kind: 'overflow' };
 type SourceObservation = CopyWorkSourceObservation;
 type PartitionCut = CopyWorkPartitionCut;
 

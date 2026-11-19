@@ -853,22 +853,6 @@ type ScopedConsumerOwner = {
     seal: LibraryScopeEffectSeal,
   ): Promise<IdentityNativeReceipt | null>;
 };
-type TechnicalConsumerOwner = {
-  readAccountIdentityReversalSettlement(
-    pool: Pool,
-    reference: IdentitySourceConsumerReference,
-    context: IdentitySourceConsumerContext,
-  ): Promise<AccountIdentityReversalSettlement | null>;
-  acceptAccountIdentityTechnicalSource(
-    tx: CommandTransaction,
-    reference: IdentitySourceConsumerReference,
-  ): Promise<IdentityNativeReceipt | null>;
-  verifyAccountIdentityTechnicalSource(
-    tx: CommandTransaction,
-    reference: IdentitySourceConsumerReference,
-    receiving: IdentityNativeReceipt,
-  ): Promise<boolean>;
-};
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;

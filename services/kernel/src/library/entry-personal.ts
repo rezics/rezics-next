@@ -605,7 +605,7 @@ function newFactId(route: number, subjectId: string): string {
 }
 
 export function createEntryPersonalCommands(dependencies: Dependencies) {
-  const { pool, access, clock } = dependencies;
+  const { pool, clock } = dependencies;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
   function receiptDigest(actor: Actor, kind: string, input: unknown): string {

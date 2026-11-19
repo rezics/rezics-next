@@ -1819,7 +1819,6 @@ export function createPublicFilterCustody(
         const consumer = await registered(input.registration, meter);
         return transaction(meter, async (client) => {
           await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
-          const key = preparationKey(input.registration, input.build, input.generation);
           const prepared = await sql(
             client,
             meter,

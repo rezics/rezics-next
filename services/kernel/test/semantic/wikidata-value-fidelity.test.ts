@@ -7,7 +7,6 @@ import { routeOf } from '../../src/route/route.ts';
 import { admitWikidataValue } from '../../src/semantic/wikidata-value-admission.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 
-const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 const julian = 'http://www.wikidata.org/entity/Q1985786';
 const schema = `id: https://example.org/wikidata-fidelity
 name: wikidata_fidelity

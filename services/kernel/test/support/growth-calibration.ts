@@ -403,8 +403,7 @@ export function detectableSlope(
     const slope = (target - base) / x;
     if (slope > 0 && slope < maximum) breakpoints.add(slope);
   };
-  for (const [index, scale] of scales.entries()) {
-    const x = coordinates[index]!;
+  for (const x of coordinates) {
     // The pointwise envelope changes slope when the absolute and relative terms cross.
     if (uncertainty.relative > 0) addBreakpoint(uncertainty.absolute / uncertainty.relative, x);
     // The lower interval is clipped at zero while the absolute term dominates.

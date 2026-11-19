@@ -22,7 +22,7 @@ import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint } from '..
 import { feedExcerpt, feedAuthor } from '../feed-summary.ts';
 import type { FeedContentContextReference } from '../feed-context.ts';
 import { projectFeedReactions } from '../feed-reactions.ts';
-import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from '../feed-reaction-advice.ts';
+import { prepareFeedReactionAdvice } from '../feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from '../feed-subject-reactions.ts';
 import { feedDiscoveryItem } from '../feed-discovery.ts';
 import { readFeedViewerFollows } from './feed-follows.ts';
@@ -138,7 +138,6 @@ export function createNativeFeedPorts(
   let conversation = createConversationActivityBatch(deps.pool);
   let space: FollowingSpace | undefined;
   let spacePopulation: SpaceSubjectPopulation | undefined;
-  let reactionAdvice: FeedReactionAdviceComposition | undefined;
 
   async function supported(activity: ActivityRef, actor: Actor, deadline: number): Promise<boolean> {
     const status = (await producers.checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]
@@ -705,7 +704,6 @@ export function createNativeFeedPorts(
           live,
           deadline,
         );
-        reactionAdvice = advice;
         return {
           items: advice.items as FeedItem[],
           hasTargets: advice.hasTargets,

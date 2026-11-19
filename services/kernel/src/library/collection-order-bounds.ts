@@ -606,8 +606,6 @@ function continuationRequest() {
 const jsonSize = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const uuid = '0'.repeat(uuidBytes);
 const timestamp = '\0'.repeat(64);
-const collectionPoint = { route: 65535, collection_id: uuid };
-const memberPoint = { ...collectionPoint, member_id: uuid };
 function memberResult() {
   return memoizedValue(memberResult, () => ({
     collectionId: uuid,

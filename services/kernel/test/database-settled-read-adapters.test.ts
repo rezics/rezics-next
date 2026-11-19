@@ -33,8 +33,6 @@ import { withReadingDashboardReadConnection } from '../src/library/reading-dashb
 const begin = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
 const select = 'SELECT matrix';
 
-type FakeQueryResult = QueryResult<Record<string, unknown>> | QueryArrayResult<unknown[]>;
-
 function queryResult<Row extends QueryResultRow>(rows: Row[]): QueryResult<Row> {
   return { command: 'SELECT', rowCount: rows.length, oid: 0, fields: [], rows };
 }

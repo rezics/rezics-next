@@ -312,7 +312,6 @@ test('native Realm presentation claims stay bounded across unrelated and retaine
   const warmupRealm = await fixture.createRealm('presentation claim warmup');
   const warmupIcon = await fixture.upload(warmupRealm.realmId, 'realm-icon');
   const warmupBanner = await fixture.upload(warmupRealm.realmId, 'realm-banner');
-  const warmupAssets = [warmupIcon, warmupBanner];
 
   const zeroTarget = await fixture.createRealm('presentation claim zero');
   const oneTarget = await fixture.createRealm('presentation claim one');

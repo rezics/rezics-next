@@ -17,7 +17,6 @@ import {
   VoteReviewStaleError,
   VoteReviewUnavailableError,
   type RatingQuestion,
-  type Vote,
   type VoteReview,
   type VoteReviewGuard,
   type VoteCommandAdmission,
@@ -239,13 +238,6 @@ function nativeQuestionView(question: RatingQuestion): NativeQuestion {
     scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
     aggregateEffect: 'public-standard-aggregate',
   };
-}
-
-function nativeVoteView(vote: Pick<Vote, 'units' | 'revision' | 'changedAt'> | null): NativeVoteObservation {
-  if (!vote) return { state: 'absent' };
-  return vote.units === null
-    ? { state: 'cleared', revision: vote.revision, at: vote.changedAt }
-    : { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
 }
 
 /** Counted zero stays a set vote; explicit clear stays cleared; proven absence stays absent. */

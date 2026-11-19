@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
 import { openApiRuntime } from './api-runtime.ts';
@@ -192,8 +192,7 @@ export async function openMultisourceBatchCli() {
       const sources = [...new Set(body.commands.map((command) => command.source.source))];
       expect(sources).toHaveLength(1);
       const response = await runtime.replay(request);
-      const responseBytes = await response.clone().text();
-      const parsed = JSON.parse(responseBytes) as BatchWriteResult;
+      await response.clone().json();
       exchanges.push({
         source: sources[0]!,
         keys: body.commands.map((command) => command.key),
