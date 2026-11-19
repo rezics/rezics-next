@@ -260,8 +260,13 @@ test('native normalization bounds complete name sort values on writes while pres
     );
     const native = new Map<string, string>();
     for (const { texts, tokens } of batches.requests) {
-      for (const text of texts) native.set(text, await nativeKey(index, text));
-      expect(tokens.map(({ token }) => token)).toEqual(texts.map((text) => native.get(text)));
+      const keys: string[] = [];
+      for (const text of texts) {
+        const key = await nativeKey(index, text);
+        native.set(text, key);
+        keys.push(key);
+      }
+      expect(tokens.map(({ token }) => token)).toEqual(keys);
     }
     for (const [n, action] of bounded.entries()) {
       const original = manyBefore[n]!;
