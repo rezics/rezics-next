@@ -177,7 +177,10 @@ test('incompatible worker result fields and missing remote options identify the 
         ].join('\n');
         if (source.split(writer).length !== 2)
           throw new Error('Could not identify the local worker-check result serialization boundary.');
-        return source.replace(writer, writer.replace(localRecord, 'writeAtomicJson(file, { ...record, runnerHost: undefined });'));
+        return source.replace(
+          writer,
+          writer.replace(localRecord, 'writeAtomicJson(file, { ...record, runnerHost: undefined });'),
+        );
       },
       'scripts/remote-check.ts': (source) => {
         const incompatible = source.replace("if (flag === '--returns') {", "if (flag === '--returns-incompatible') {");

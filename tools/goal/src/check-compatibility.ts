@@ -178,10 +178,7 @@ function displayResult(result: RunResult, policy = defaultPolicy.nativeCommands)
   };
 }
 
-function executableObservation(
-  executable: string,
-  cache: BunExecutableValidationCache,
-): ExecutableObservation {
+function executableObservation(executable: string, cache: BunExecutableValidationCache): ExecutableObservation {
   const stat = statSync(executable, { bigint: true });
   const identity = `${stat.dev}:${stat.ino}`;
   const signature = `${identity}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
@@ -447,7 +444,7 @@ function addRecordChecks(
 
 function startWorkerCheck(
   checks: CompatibilityCheck[],
-  workerScript: string,
+  workerCommand: string[],
   scratchRoot: string,
   exitCode: number,
   contract: CheckCompatibilityContract,
@@ -462,7 +459,9 @@ function startWorkerCheck(
     "test('check lifecycle child', async () => {",
     ...(keepRunning ? ['  await new Promise((resolve) => setTimeout(resolve, 2000));'] : []),
     ...(pinnedRuntime
-      ? ['  console.log("compatibility child runtime", JSON.stringify({ version: Bun.version, revision: Bun.revision, executable: process.execPath }));']
+      ? [
+          '  console.log("compatibility child runtime", JSON.stringify({ version: Bun.version, revision: Bun.revision, executable: process.execPath }));',
+        ]
       : []),
     `  process.exitCode = ${exitCode};`,
     '});',
@@ -470,7 +469,7 @@ function startWorkerCheck(
   writeFileSync(join(scratchRoot, fixture), source);
   const childArgv = [pinnedRuntime ? 'bun' : process.execPath, 'test', fixture];
   const startArgs = [...contract.workerCheck.startArgv.slice(0, -1), '--local', ...childArgv];
-  const command = [process.execPath, workerScript, ...startArgs];
+  const command = [...workerCommand, ...startArgs];
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     REZICS_CHECK_MEMORY: 'off',
@@ -538,12 +537,15 @@ function checkWorkerCheckLifecycle(
     'Required worker-check script exists.',
   );
 
-  const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime, policy);
+  const workerCommand = [
+    pinnedRuntime ? join(scriptsRoot, contract.workerCheck.bun.lookup) : process.execPath,
+    workerScript,
+  ];
+  const pending = startWorkerCheck(checks, workerCommand, scratchRoot, 0, contract, true, pinnedRuntime, policy);
   if (!pending.id) return;
   const running = readWorkerRecord(scratchRoot, pending.id, contract);
   const startCommand = [
-    process.execPath,
-    workerScript,
+    ...workerCommand,
     ...contract.workerCheck.startArgv.slice(0, -1),
     '--local',
     ...pending.childArgv,
@@ -561,7 +563,7 @@ function checkWorkerCheckLifecycle(
     true,
   );
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? pending.id! : part));
-  const waitCommand = [process.execPath, workerScript, ...waitArgs];
+  const waitCommand = [...workerCommand, ...waitArgs];
   const pendingWait = run(waitCommand, scratchRoot, process.env, policy);
   const pendingRecord = readWorkerRecord(scratchRoot, pending.id, contract);
   const pendingLog = pendingWait.stdout
@@ -597,10 +599,10 @@ function checkWorkerCheckLifecycle(
     false,
   );
 
-  const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false, pinnedRuntime, policy);
+  const failure = startWorkerCheck(checks, workerCommand, scratchRoot, 7, contract, false, pinnedRuntime, policy);
   if (!failure.id) return;
   const failureWaitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? failure.id! : part));
-  const failureWaitCommand = [process.execPath, workerScript, ...failureWaitArgs];
+  const failureWaitCommand = [...workerCommand, ...failureWaitArgs];
   const failureWait = run(failureWaitCommand, scratchRoot, process.env, policy);
   const failureRecord = readWorkerRecord(scratchRoot, failure.id, contract);
   const failureLog = failureWait.stdout
@@ -639,7 +641,10 @@ function checkWorkerCheckLifecycle(
     const pin = (JSON.parse(readFileSync(join(scriptsRoot, 'package.json'), 'utf8')) as { packageManager: string })
       .packageManager;
     const artifact = contract.workerCheck.bun.artifacts[pin]!;
-    for (const [exitCode, record] of [[0, pendingRecord], [7, failureRecord]] as const) {
+    for (const [exitCode, record] of [
+      [0, pendingRecord],
+      [7, failureRecord],
+    ] as const) {
       let proofPath = scratchRoot;
       try {
         const log = record?.log;
@@ -648,8 +653,10 @@ function checkWorkerCheckLifecycle(
           typeof log !== 'string' ||
           !log.startsWith(logPrefix) ||
           basename(log) !== log.slice(logPrefix.lastIndexOf('/') + 1)
-        ) throw new Error('Missing or invalid worker log path');
+        )
+          throw new Error('Missing or invalid worker log path');
         proofPath = join(scratchRoot, log);
+        if (!lstatSync(proofPath).isFile()) throw new Error('Worker runtime evidence requires a regular log file');
         const entry = readFileSync(proofPath, 'utf8').match(/^compatibility child runtime (.+)$/m)?.[1];
         if (!entry) throw new Error('Missing worker runtime evidence in the child log');
         const proof = JSON.parse(entry) as {
@@ -865,10 +872,7 @@ function checkBunPin(
       const packageBinaryPath = join(dirname(packageManifest), 'bin/bun.exe');
       const packageBinary = realpathSync(packageBinaryPath);
       const actualSha256 = executableSha256(resolved, cache);
-      const platformSha256 =
-        installedBinary === undefined
-          ? undefined
-          : executableSha256(installedBinary, cache);
+      const platformSha256 = installedBinary === undefined ? undefined : executableSha256(installedBinary, cache);
       const layoutOk = platformBinaryPresent
         ? (resolved === packageBinary || resolved === installedBinary) && platformSha256 === binary.executableSha256
         : resolved === packageBinaryPath &&

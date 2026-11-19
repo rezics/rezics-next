@@ -393,7 +393,10 @@ test('admitted walk commands are distinct from other unknown Bun scripts', () =>
     'bun',
     'services/importer/src/imports-public-journey.ts',
   ];
-  expect(classifyCheck(walk, repository).placement).toBe('remote');
+  expect(classifyCheck(walk, repository)).toEqual({
+    placement: 'local',
+    reason: 'admitted walk stack stays on the worker host',
+  });
   expect(isWalkStackCommand(['--local', '--', ...walk])).toBe(true);
 });
 
