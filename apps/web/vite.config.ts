@@ -15,7 +15,12 @@ import { bundledWebStartupPlugin } from './scripts/bundled-web-startup.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
-import { catalogueLocaleModules, catalogueParaglideImports, paraglideViteOptions } from './scripts/paraglide-vite.ts';
+import {
+  catalogueLocaleModules,
+  catalogueParaglideImports,
+  catalogueParaglideRuntime,
+  paraglideViteOptions,
+} from './scripts/paraglide-vite.ts';
 import { clientModuleSelectorEsm } from './scripts/client-module-esm.ts';
 import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
 import { logWebStartupMemory, webStartupMemoryAdmitted } from './tests/native/native-memory.ts';
@@ -568,11 +573,10 @@ export default defineConfig((context) => {
           if (code !== 0) throw new Error(`Paraglide generation exited ${code} before Vite started`);
         },
       },
-      // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
-      // rewrites that shared tree while Bun and the Worker optimizer are reading it.
-      ...(testRuntime ? [] : [paraglideVitePlugin(paraglide)]),
+      // Finite checks and catalogue walks prepare messages before starting the Worker.
+      ...(testRuntime || compactMessages ? [] : [paraglideVitePlugin(paraglide)]),
       compactMessages ? catalogueParaglideImports(appRoot) : messageImports(appRoot),
-      generatedMessageSourceMaps(appRoot, paraglide.outdir),
+      generatedMessageSourceMaps(appRoot, compactMessages ? catalogueParaglideRuntime : undefined),
       // The generated client route tree references every route. Split loaders and page components so their feature
       // graphs load with the visited route instead of blocking the root shell.
       tanstackStart({

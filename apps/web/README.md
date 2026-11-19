@@ -26,9 +26,9 @@ Paraglide's generated `src/paraglide/messages/_index.js`, groups selected bindin
 full namespace for dynamic or unresolved access. Public message IDs therefore keep working when compiler-normalized
 leaf filenames differ from those IDs during ordinary local startup.
 
-The admitted Importer catalogue walk prepares a separate locale-module catalogue in `.temp`. The Worker and
-client both use that output and its shared locale runtime. This bounds file-by-file module loading on the first
-mounted request while retaining every compiled message and locale.
+The admitted Importer catalogue walk compiles and minifies its locale modules in a disposable process. Both
+Vite environments load those modules and the same request locale runtime from `.temp`. The live Web process
+serves every compiled message and locale without running a second compiler pass.
 
 The startup trace correlates message readiness and the Vite child with a per-launch ID. It records the effective
 test/walk/cache flags, resolved executable and package identity, Node/Vite identity, Vite config and environment
