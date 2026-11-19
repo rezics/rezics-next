@@ -157,9 +157,7 @@ test('Web prepares messages in disposable Bun processes while the live plugin va
   expect(source).toContain('await prepareLiveMessages(webRoot, startupEnv');
   expect(viteConfig).toContain('shouldUseStandaloneLocalizationGenerator()');
   expect(viteConfig).toContain("env.REZICS_TEST_RUNTIME === '1' && Boolean(env.REZICS_PARAGLIDE_COMPILER_MODULE)");
-  expect(viteConfig).toContain(
-    "[paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' })]",
-  );
+  expect(viteConfig).toContain('paraglideVitePlugin(paraglideViteOptions(false))');
   expect(viteConfig).toContain('traceWebVitePlugins(');
   expect(viteConfig).toContain("name: 'web-startup-evidence'");
   expect(viteConfig).not.toContain('withParaglideGenerateLock');
