@@ -174,6 +174,12 @@ test('same-client scope changes, invalid queries, Back/Forward, locale and cache
     expect(v.notices()).toHaveLength(1);
     expect(v.notices()[0]!.textContent).toContain('Access declined. This sends no approval.');
     expect(v.calls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    await v.go(query('b', '1e3'));
+    const numericRead = v.calls.at(-1)!;
+    expect(numericRead.url).toBe('/consent/b?scope=1e3');
+    await v.go(query('b', '1000'));
+    expect(numericRead.init?.signal?.aborted).toBe(true);
+    expect(v.calls.at(-1)!.url).toBe('/consent/b?scope=1000');
   } finally {
     overwriteGetLocale(() => 'en');
     await v.close();

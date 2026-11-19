@@ -1,7 +1,7 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, afterEach, beforeAll, mock } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ReactNode } from 'react';
+import { act, useLayoutEffect, type ReactNode } from 'react';
 const { Window } = require(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))),
 );
@@ -30,6 +30,12 @@ function serverFn(): ServerFnBuilder {
 mock.module('@tanstack/react-start', () => ({
   createServerFn: () => serverFn(),
   createServerOnlyFn: <T extends (...args: never[]) => unknown>(handler: T) => handler,
+}));
+// Base UI may have been loaded by a preceding SSR test. Use the browser hook
+// for mounted tests even when Bun has cached the server-side module.
+const baseUi = Bun.resolveSync('@base-ui/react/alert-dialog', `${import.meta.dir}/../../../packages/ui`);
+mock.module(Bun.resolveSync('@base-ui/utils/useIsoLayoutEffect', dirname(baseUi)), () => ({
+  useIsoLayoutEffect: useLayoutEffect,
 }));
 mock.module('cloudflare:workers', () => ({ env: nativeEnv }));
 mock.module('@tanstack/react-start/server', () => ({

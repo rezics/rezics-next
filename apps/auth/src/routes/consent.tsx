@@ -1,6 +1,15 @@
-import { createFileRoute, useBlocker, useLocation, useRouter } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type RefObject,
+} from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -20,12 +29,15 @@ function ConsentPage() {
   const [notices, setNotices] = useState<ConsentNotices>({});
   const [outcomes] = useState(() => createConsentRequestReturn(setNotices));
   const current = useRef<HTMLDivElement>(null);
-  const { searchStr: query, search } = useLocation();
+  const { history, options } = useRouter();
+  const readQuery = () => history.location.search;
+  // The router's normalized location can coerce scope strings such as 1e3.
+  const query = useSyncExternalStore(history.subscribe, readQuery, readQuery);
   const parameters = new URLSearchParams(query);
   const clients = parameters.getAll('client_id');
   const scopes = parameters.getAll('scope');
   // The router serializes duplicate query operands as arrays before rendering.
-  const operands = search as Record<string, unknown>;
+  const operands = options.parseSearch(query);
   const invalid =
     clients.length !== 1 || scopes.length > 1 || Array.isArray(operands.client_id) || Array.isArray(operands.scope);
   const clientId = invalid ? '' : (clients[0] ?? '');

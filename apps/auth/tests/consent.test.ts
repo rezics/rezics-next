@@ -202,7 +202,7 @@ function writes() {
 
 async function approve(page: Page) {
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
-  await page.getByRole('status').filter({ hasText: 'You can return to the client.' }).waitFor();
+  await page.getByRole('status').filter({ hasText: 'You can return to the application.' }).waitFor();
 }
 
 test(
@@ -292,7 +292,7 @@ test(
       await page
         .getByRole('region', { name: 'Latest review outcome' })
         .getByRole('status')
-        .filter({ hasText: 'Review declined. This choice sends no approval.' })
+        .filter({ hasText: 'Access declined. This sends no approval.' })
         .waitFor();
       expect(writes()).toHaveLength(0);
       expect(reads()).toHaveLength(1);
@@ -309,7 +309,8 @@ test(
   'signed out, the page offers sign-in; an unknown or first-party client shows not found',
   async () => {
     calls.length = 0;
-    const { page } = await open(requestPath(), false);
+    const path = requestPath(clientId, '1e3');
+    const { page } = await open(path, false);
     try {
       await page.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
       const login = new URL(
@@ -317,7 +318,8 @@ test(
         'https://auth.test',
       );
       expect(login.pathname).toBe('/login');
-      expect(login.searchParams.get('return_to')).toBe(requestPath().replace(/&return_to=.*$/, ''));
+      expect(login.searchParams.get('return_to')).toBe(path.replace(/&return_to=.*$/, ''));
+      expect(reads()[0]!.url).toBe(`/consent/${encodeURIComponent(clientId)}?scope=1e3`);
       expect(await page.getByRole('button', { name: 'Approve', exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();
@@ -325,7 +327,7 @@ test(
     for (const id of ['unknown', 'rezics-website']) {
       const { page } = await open(requestPath(id));
       try {
-        await page.getByText('Client not found.', { exact: true }).waitFor();
+        await page.getByText('Application not found.', { exact: true }).waitFor();
         expect(await page.getByRole('button', { name: 'Approve', exact: true }).count()).toBe(0);
       } finally {
         await page.context().close();
