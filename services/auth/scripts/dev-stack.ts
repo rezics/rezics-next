@@ -1,7 +1,8 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
-import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
@@ -268,8 +269,8 @@ export function semanticWalkClientRegistration() {
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
 
-function importCatalogueWalk(): boolean {
-  return process.env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+function importCatalogueWalk(env = process.env): boolean {
+  return env.REZICS_WALK_IMPORT_CATALOGUE === '1';
 }
 
 function ordinaryAuthWalk(): boolean {
@@ -1289,12 +1290,18 @@ function developmentFrontendBindings(
   { environment, website, keys, kernelEnvironment }: FrontendInputs,
 ) {
   return {
-    AUTH_ORIGIN: origins.native,
+    ...frontendOriginBindings(),
     ...developmentWebsiteBindings(keys, website, {
       AUTH_MANAGEMENT_PAGE_ROUTES: environment.AUTH_MANAGEMENT_PAGE_ROUTES,
     }),
     ...developmentMediaBindings(kernelEnvironment, keys),
     ...(action === 'pages' ? developmentAuthPageBindings(website) : {}),
+  };
+}
+
+function frontendOriginBindings() {
+  return {
+    AUTH_ORIGIN: origins.native,
     PUBLIC_ORIGIN: origins.web,
     TURNSTILE_SITE_KEY: 'local',
     TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
@@ -1402,16 +1409,55 @@ async function prepareAdmittedWebBindings(): Promise<NodeJS.ProcessEnv> {
   }
 }
 
+const catalogueWebDigest = 'REZICS_WALK_WEB_BINDINGS_SHA256';
+
+function webBindingsDigest(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+/** Replay can add physical schema objects. Web consumes the binding file from this admission's completed setup. */
+async function catalogueWebProcess(
+  args: readonly string[],
+  environment: NodeJS.ProcessEnv,
+  file = resolve(root, 'apps/web/.dev.vars'),
+) {
+  const text = await readFile(file, 'utf8');
+  if (webBindingsDigest(text) !== environment[catalogueWebDigest])
+    throw new Error('Catalogue Web bindings differ from walk setup');
+  const bindings = parseEnv(text);
+  if (
+    bindings.AUTH_ISSUER !== origins.issuer ||
+    bindings.KERNEL_ORIGIN !== origins.kernel ||
+    bindings.SITE_ORIGINS !== origins.web
+  )
+    throw new Error('Catalogue Web bindings belong to another stack');
+  return frontendProcess('web', args, environment, { ...bindings, ...frontendOriginBindings() });
+}
+
+export async function resolveFrontendProcess(
+  action: 'pages' | 'web',
+  args: readonly string[],
+  admitted: boolean,
+  environment = process.env,
+  setupFile?: string,
+) {
+  if (admitted && action === 'web') {
+    if (importCatalogueWalk(environment)) return catalogueWebProcess(args, environment, setupFile);
+    if (firstPublicWebWalk(environment))
+      return frontendProcess(action, args, environment, await prepareAdmittedWebBindings());
+  }
+  return developmentFrontendProcess(action, args, await currentFrontendInputs());
+}
+
 async function launch(action: 'pages' | 'web', args: string[]) {
-  const isolated = action === 'web' && firstPublicWebWalk();
   const observe = action === 'web' && process.env[webStartupMemoryOptIn] === '1';
-  const admitted = (isolated || observe) && walkStackAdmitted(process.env, root);
+  const admitted =
+    action === 'web' &&
+    (importCatalogueWalk() || firstPublicWebWalk() || observe) &&
+    walkStackAdmitted(process.env, root);
   const memory = observe && admitted;
   if (memory) logWebStartupMemory('declarations-before', 'webPreparer');
-  const launch =
-    isolated && admitted
-      ? frontendProcess('web', args, process.env, await prepareAdmittedWebBindings())
-      : developmentFrontendProcess(action, args, await currentFrontendInputs());
+  const launch = await resolveFrontendProcess(action, args, admitted);
   delete launch.environment[webStartupMemoryAdmitted];
   if (memory) {
     logWebStartupMemory('declarations-after', 'webPreparer');
@@ -1868,6 +1914,7 @@ export async function runWalk(
             }
             if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
           }
+          if (importCatalogueWalk()) env[catalogueWebDigest] = webBindingsDigest(await readFile(webVarsFile, 'utf8'));
           const log = walkStackLogPath(root, task);
           await mkdir(dirname(log), { recursive: true });
           // Every walk creates a new database, so retire old native identifiers even when slot URLs are reused.
