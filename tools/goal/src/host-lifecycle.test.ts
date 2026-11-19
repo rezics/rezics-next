@@ -7,6 +7,7 @@ import { createServer as createNetServer } from 'node:net';
 import { dirname, join, relative } from 'node:path';
 import type { Attempt } from './types.ts';
 import { createInterface } from 'node:readline';
+import { historicalManager } from '../test-support/historical-manager.ts';
 import {
   appServerEnvironmentFingerprint,
   attachPool,
@@ -18,7 +19,9 @@ import {
 import { openDb } from './db.ts';
 import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { ManagerSessionTransport } from './manager-session-transport.ts';
+import { ManagerSessions, registerResidentSupermanager, type ManagerSpec } from './managers.ts';
+import { defaultPolicy } from './policy.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { brief, harness, prepareKernelCompilerFixture, temporaryDirectory } from './test-support.ts';
 import { createManagerTerminalOwnerLookup, stoppedTaskSweepRetainsOrdinaryProof } from './manager-host.ts';
@@ -27,6 +30,7 @@ import { git } from './tasks.ts';
 import { hostRequest } from './integration-cli.ts';
 import { createTerminalProcessSweep } from './attempt-resources.ts';
 import { HOST_UNIT, reportServices } from './service.ts';
+import { TermspacesWindows } from './windows.ts';
 import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
 import {
   grantWorkerTypingRecovery,
@@ -136,13 +140,46 @@ function installFakeWebSocketCodex(stateDirectory: string): string {
   return executable;
 }
 
-function startIsolatedTmux(socket: string, session: string, cwd: string): void {
+function persistCodexSession(f: ReturnType<typeof fixture>, status: 'running' | 'paused' = 'running') {
+  const db = openDb(join(f.path, 'state.sqlite'));
+  try {
+    registerResidentSupermanager(db, 'supermanager', randomUUID());
+    const threadId = 'thread-1';
+    const turnId = 'turn-1';
+    const goalState = { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: 1000 } as const;
+    const state = historicalManager(db, f.path, {
+      kind: 'managed',
+      engine: 'codex',
+      pool: {
+        id: 'fake',
+        codexHome: join(f.path, 'codex'),
+        ...(f.env.FAKE_CODEX_EXECUTABLE ? { executable: f.env.FAKE_CODEX_EXECUTABLE } : {}),
+      },
+      status,
+      threadId,
+      ...(f.env.FAKE_THREAD_STATE ? { activeTurnId: turnId, countedTurn: turnId } : { turns: 0 }),
+      goalState,
+    });
+    if (f.env.FAKE_THREAD_STATE) {
+      writeFileSync(
+        f.env.FAKE_THREAD_STATE,
+        JSON.stringify({ [threadId]: { turns: [{ id: turnId, status: 'inProgress' }], goal: goalState } }),
+      );
+    }
+    return { ...state, threadId };
+  } finally {
+    db.close();
+  }
+}
+
+function startIsolatedTmux(socket: string, session: string, cwd: string, env: NodeJS.ProcessEnv): void {
   if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
   const result = spawnSync(
     tmuxBinary,
     ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'],
     {
       encoding: 'utf8',
+      env,
     },
   );
   if (result.status !== 0)
@@ -195,7 +232,7 @@ function appServerRegistryEntry(stateDirectory: string): {
   const entry = records.find((record) => record.attachment?.poolId === 'fake');
   if (!entry?.attachment) throw new Error('Manager host did not record a complete pool app-server attachment');
   expect(entry.attachment.identity).toEqual(entry.identity);
-  expect(entry.attachment).toMatchObject({
+  expect({ ...entry.attachment }).toMatchObject({
     version: 1,
     poolId: 'fake',
     codexHome: expect.any(String),
@@ -288,17 +325,24 @@ test('the app-server a host owns exits with the host', async () => {
   let host: Hosted | undefined;
   let server: ProcessIdentity | undefined;
   try {
+    const { threadId } = persistCodexSession(f);
     host = startHost(f.env);
     await host.ready;
-    const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
-    expect(started.code).toBe(0);
+    await waitForJsonLine(
+      join(f.path, 'rpc.jsonl'),
+      (message) => message.method === 'thread/resume' && message.params.threadId === threadId,
+      'the host to resume the stored thread',
+    );
     const registry = JSON.parse(readFileSync(join(f.path, 'manager-app-servers.json'), 'utf8')) as {
       identity: ProcessIdentity;
     }[];
     server = registry[0]?.identity;
     expect(server).toBeDefined();
+    expect(children(host.pid)).toContainEqual(server!);
+    expect(sameProcess(server!)).toBe(true);
     host.child.kill('SIGTERM');
     await host.exited;
+    expect(host.child.exitCode).toBe(0);
     if (server && sameProcess(server)) throw new Error(hostShutdownEvidence(f.path, host, server));
     expect(server && sameProcess(server)).toBe(false);
   } finally {
@@ -313,35 +357,40 @@ test('a host that finds a recorded app-server of a dead host stops it before res
   let second: Hosted | undefined;
   let oldServer: ProcessIdentity | undefined;
   try {
+    const { threadId } = persistCodexSession(f);
+    const rpcPath = join(f.path, 'rpc.jsonl');
     first = startHost(f.env);
     await first.ready;
-    const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
-    expect(started.code).toBe(0);
-    oldServer = children(first.pid)[0];
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/resume' && message.params.threadId === threadId,
+      'the first host to resume the stored thread',
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === threadId,
+      'the first host to read the resumed thread state',
+    );
+    const registry = JSON.parse(readFileSync(join(f.path, 'manager-app-servers.json'), 'utf8')) as {
+      identity: ProcessIdentity;
+    }[];
+    oldServer = registry[0]?.identity;
     expect(oldServer).toBeDefined();
+    expect(children(first.pid)).toContainEqual(oldServer!);
     first.child.kill('SIGKILL');
     await first.exited;
     expect(oldServer && sameProcess(oldServer)).toBe(true);
 
-    const recovery = startHost({ ...f.env, FAKE_APP_SERVER_MUST_STOP_PID: String(oldServer!.pid) });
-    second = recovery;
+    const rpcOffset = jsonLines(rpcPath).length;
+    second = startHost({ ...f.env, FAKE_APP_SERVER_MUST_STOP_PID: String(oldServer!.pid) });
     await second.ready;
-    // Socket readiness can precede asynchronous manager recovery.
-    const deadline = Date.now() + 5000;
-    let resumed: { method: string; oldProcessAlive?: boolean } | undefined;
-    while (!resumed) {
-      const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line));
-      resumed = rpc.findLast((message) => message.method === 'thread/resume');
-      if (resumed) break;
-      if (second.child.exitCode !== null || second.child.signalCode !== null)
-        throw new Error('Recovery host exited before thread/resume.');
-      if (Date.now() >= deadline) throw new Error('Timed out waiting for recovered thread/resume RPC.');
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    expect(resumed?.oldProcessAlive).toBe(false);
+    const resumed = await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/resume' && message.params.threadId === threadId,
+      'the replacement host to resume the stored thread',
+      rpcOffset,
+    );
+    expect(resumed.oldProcessAlive).toBe(false);
     expect(sameProcess(oldServer!)).toBe(false);
   } finally {
     await cleanHosted(f.path, second, oldServer ? [oldServer] : []);
@@ -375,25 +424,40 @@ test.skipIf(!tmuxBinary)(
         FAKE_TMUX_SOCKET: tmuxSocket,
         FAKE_TMUX_SESSION: session,
       });
-      startIsolatedTmux(tmuxSocket, session, f.path);
+      const historical = persistCodexSession(f);
+      startIsolatedTmux(tmuxSocket, session, f.path, f.env);
       first = startHost(f.env);
       await first.ready;
-      const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
-      expect(started.code).toBe(0);
+      const originalThreadId = historical.threadId;
+      await waitForJsonLine(
+        rpcPath,
+        (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+        'the first host to read the stored thread state',
+      );
+      const original = appServerRegistryEntry(f.path);
+      const viewerClient = await attachPool(historical.pool, original.attachment, undefined, f.env);
+      try {
+        const windows = new TermspacesWindows({ socket: tmuxSocket, session });
+        const transport = new ManagerSessionTransport(
+          { windows, command: [], checkCompletion: async () => ({ passed: false, evidencePath: '', summary: '' }) },
+          defaultPolicy.appServer,
+          f.path,
+          () => {},
+        );
+        await transport.registerCodexViewer(historical, originalThreadId, viewerClient);
+      } finally {
+        await viewerClient.detach();
+      }
       const originalViewer = await waitForJsonLine(
         viewerPath,
         (entry) => entry.phase === 'attached',
         'the initial tmux viewer to attach to its app-server',
       );
-      const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
-      expect(originalThread).toBeDefined();
       const originalState = storedManagerState(f.path);
-      const originalThreadId = originalState.threadId as string;
-      expect(originalThreadId).toBeTruthy();
+      expect(originalState.threadId).toBe(originalThreadId);
       const originalWindow = managerWindow(tmuxSocket, session);
       expect(originalWindow).not.toBe('');
       const originalPanes = tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}');
-      const original = appServerRegistryEntry(f.path);
       const originalViewerIdentity = processIdentity(originalViewer.pid);
       expect(originalViewerIdentity).toBeDefined();
       expect(originalViewer.codexHome).toBe(join(f.path, 'codex'));
@@ -415,6 +479,7 @@ test.skipIf(!tmuxBinary)(
       expect(await reportServices('restart', mockSystemctl, () => {}, undefined, f.path)).toBe(0);
       expect(sameProcess(original.identity)).toBe(true);
 
+      const restartRpcOffset = jsonLines(rpcPath).length;
       second = startHost(f.env);
       await second.ready;
       const resumed = await waitForJsonLine(
@@ -424,6 +489,7 @@ test.skipIf(!tmuxBinary)(
           message.params.threadId === originalThreadId &&
           message.params.model === 'gpt-6.1-sol',
         'the original manager thread to resume',
+        restartRpcOffset,
       );
       expect(resumed.params.threadId).toBe(originalThreadId);
       const adopted = appServerRegistryEntry(f.path);
@@ -451,8 +517,8 @@ test.skipIf(!tmuxBinary)(
       ])
         expect(resumedState[key]).toEqual(originalState[key]);
       expect(jsonLines(serverStartPath)).toHaveLength(1);
-      expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
-      expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(0);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(0);
       expect(sameProcess(originalViewerIdentity!)).toBe(true);
       expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'started')).toHaveLength(1);
       expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'attached')).toHaveLength(1);
@@ -533,13 +599,14 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
       FAKE_SERVER_START_LOG: serverStartPath,
       FAKE_THREAD_STATE: join(f.path, 'threads.json'),
     });
+    const { threadId: originalThreadId } = persistCodexSession(f);
     first = startHost(f.env);
     await first.ready;
-    expect((await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000')).code).toBe(0);
-    const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
-    expect(originalThread).toBeDefined();
-    const originalThreadId = storedManagerState(f.path).threadId as string;
-    expect(originalThreadId).toBeTruthy();
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the first host to read the stored thread state',
+    );
     const initial = appServerRegistryEntry(f.path);
 
     signal(initial.identity, 'SIGTERM');
@@ -612,9 +679,9 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
           message.params.threadId === originalThreadId &&
           message.params.model === 'gpt-6.1-sol',
       ),
-    ).toHaveLength(2);
-    expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
-    expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
+    ).toHaveLength(3);
+    expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(0);
+    expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(0);
     third.child.kill('SIGTERM');
     await third.exited;
     expect(third.child.exitCode).toBe(0);
@@ -1185,7 +1252,7 @@ test('a host whose state directory is gone exits', async () => {
   }
 }, 10_000);
 
-test('manager commands request systemd activation and retain its exact failure', async () => {
+test('supported manager commands report systemd activation failures and retired start skips activation', async () => {
   const f = fixture();
   const bin = join(f.path, 'bin');
   mkdirSync(bin);
@@ -1197,19 +1264,18 @@ test('manager commands request systemd activation and retain its exact failure',
   chmodSync(join(bin, 'systemctl'), 0o755);
   f.env.PATH = bin + ':' + process.env.PATH;
   try {
-    for (const command of ['start', 'stop', 'complete', 'decision', 'turn-start', 'turn-end']) {
-      const result = await f.command(
-        'manager',
-        command,
-        'accounts',
-        ...(command === 'start' ? ['--engine', 'codex', '--budget', '1000'] : []),
-      );
+    const start = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
+    expect(start.code).toBe(1);
+    expect(start.stderr).toContain('Managed manager launches and assignments are retired');
+    expect(existsSync(calls)).toBe(false);
+    for (const command of ['stop', 'complete', 'decision', 'turn-start', 'turn-end']) {
+      const result = await f.command('manager', command, 'accounts');
       expect(result.code).toBe(1);
       expect(result.stderr).toContain('fixture user bus unavailable');
       expect(hostIdentity(f.path)).toBeUndefined();
     }
     expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual(
-      Array(6).fill('--user start rezics-goal-host.service'),
+      Array(5).fill('--user start rezics-goal-host.service'),
     );
   } finally {
     f.close();
@@ -1426,9 +1492,12 @@ async function waitForFlag(path: string, child: ChildProcess, label: string): Pr
 
 test('extracted host answers while recovery continues and finishes one in-flight request before stop', async () => {
   const f = fixture({ FAKE_GOAL_HOST_SWEEP_MS: '25' });
+  const { threadId } = persistCodexSession(f, 'paused');
   const script = join(f.path, 'extracted-host.ts');
   const recoveryStarted = join(f.path, 'recovery-started');
   const requestStarted = join(f.path, 'request-started');
+  const requestRelease = join(f.path, 'request-release');
+  const signalReceived = join(f.path, 'signal-received');
   extractedHostScript(
     script,
     `
@@ -1437,11 +1506,12 @@ test('extracted host answers while recovery continues and finishes one in-flight
         return new Promise(() => {});
       };
       const connect = runtime.managerServices.connect;
-      runtime.managerServices.connect = async () => {
+      runtime.managerServices.connect = async (...args) => {
         writeFileSync(${JSON.stringify(requestStarted)}, '1');
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        return connect();
+        while (!existsSync(${JSON.stringify(requestRelease)})) await new Promise(resolve => setTimeout(resolve, 20));
+        return connect(...args);
       };
+      process.on('SIGTERM', () => writeFileSync(${JSON.stringify(signalReceived)}, '1'));
     `,
   );
   let child: ChildProcess | undefined;
@@ -1461,17 +1531,21 @@ test('extracted host answers while recovery continues and finishes one in-flight
     await expect(
       hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000),
     ).rejects.toThrow('Unknown manager');
-    const starting = f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
-    await waitForFlag(requestStarted, child, 'in-flight start');
-    const started = await starting;
-    expect(started.stderr).toBe('');
-    expect(started.code).toBe(0);
-    expect(JSON.parse(started.stdout).threadId).toBe('thread-1');
-    rmSync(f.path, { recursive: true, force: true });
+    const stopping = f.command('manager', 'stop', 'accounts');
+    await waitForFlag(requestStarted, child, 'in-flight manager stop');
+    child.kill('SIGTERM');
+    await waitForFlag(signalReceived, child, 'host shutdown signal handler');
+    writeFileSync(requestRelease, '1');
+    const stopped = await stopping;
+    expect(stopped.stderr).toBe('');
+    expect(stopped.code).toBe(0);
+    expect(storedManagerState(f.path)).toMatchObject({ threadId, goalState: { status: 'paused' } });
     await hostExited;
+    expect(child.exitCode).toBe(0);
     expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
     expect(existsSync(join(f.path, 'manager-app-servers.json'))).toBe(false);
   } finally {
+    writeFileSync(requestRelease, '1');
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill('SIGKILL');
       await hostExited;
