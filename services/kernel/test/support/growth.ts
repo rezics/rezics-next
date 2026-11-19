@@ -165,7 +165,13 @@ export type GrowthCheck = {
    */
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
   /** Read-only assertions after the measured capture and its tracked queries have drained. */
-  verify?(db: GrowthDatabase, scale: number, repetition: number, value: unknown): Promise<void>;
+  verify?(
+    db: GrowthDatabase,
+    scale: number,
+    repetition: number,
+    value: unknown,
+    capture: Capture | CostFoldedCapture,
+  ): Promise<void>;
   /** One unmeasured run of the same code path on spare state, used for warm-ups in place of `operation`. */
   warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
   /**
@@ -1352,7 +1358,7 @@ async function runGrowthCheck(
         await assertRunTransactionsClosed(captured);
         const measured = captured.value;
         failureContext.phase = 'verification';
-        await check.verify?.(db, scale, repetition, measured.value);
+        await check.verify?.(db, scale, repetition, measured.value, measured.capture);
         failureContext.phase = 'report';
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;

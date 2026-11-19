@@ -163,10 +163,10 @@ export function releasedDiscoveryRuntime(
     );
     return pending;
   }
-  async function startInstrumentedWorker() {
-    if (!kernelPool || !env) throw new Error('Instrumented worker is unavailable');
-    instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
-    await instrumentedWorker.request<WorkerStats>('init', { env });
+  function startOwnedWorker(initialInstant: number | undefined) {
+    if (!env) throw new Error('Owned worker environment is unavailable');
+    worker = startOutcomeWorkerProcess(env, initialInstant === undefined ? {} : { frozenInstant: initialInstant });
+    return worker.ready;
   }
   function workerRequest<T>(method: string, params?: unknown): Promise<T> {
     if (instrumentedWorker) return instrumentedWorker.request<T>(method, params);
@@ -228,11 +228,7 @@ export function releasedDiscoveryRuntime(
         workerOperation(async () => {
           if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
           // Reuse the original environment, database, prefix and durable preparations verbatim.
-          worker = startOutcomeWorkerProcess(
-            env!,
-            initialInstant === undefined ? {} : { frozenInstant: initialInstant },
-          );
-          return worker.ready;
+          return startOwnedWorker(initialInstant);
         }),
       );
     },
@@ -242,16 +238,18 @@ export function releasedDiscoveryRuntime(
           await workerRequest('indexing', { state });
         }),
       ),
-    backgroundWork: (state) =>
-      operation(() =>
+    backgroundWork(state) {
+      ownership.requireOwnedChild();
+      const initialInstant = frozenInstant;
+      return operation(() =>
         workerOperation(async () => {
-          if (!kernelPool) throw new Error('Background work control requires the owned instrumented worker');
+          if (!worker) throw new Error('Owned worker has not started');
           if (state === 'paused') {
-            await instrumentedWorker?.close();
-            instrumentedWorker = undefined;
-          } else if (!instrumentedWorker) await startInstrumentedWorker();
+            await worker.close();
+          } else if (worker.exited) await startOwnedWorker(initialInstant);
         }),
-      ),
+      );
+    },
     converge: (subjects) =>
       operation(async () => {
         for (const subject of subjects) {
@@ -379,14 +377,10 @@ export function releasedDiscoveryRuntime(
           OPENSEARCH_URL: proxy!.url,
           KERNEL_SEARCH_PREFIX: prefix,
         });
-        if (kernelPool) await startInstrumentedWorker();
-        else {
-          worker = startOutcomeWorkerProcess(
-            env,
-            initialInstant === undefined ? {} : { frozenInstant: initialInstant },
-          );
-          await worker.ready;
-        }
+        if (kernelPool) {
+          instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
+          await instrumentedWorker.request<WorkerStats>('init', { env });
+        } else await startOwnedWorker(initialInstant);
         started = true;
       }));
     },

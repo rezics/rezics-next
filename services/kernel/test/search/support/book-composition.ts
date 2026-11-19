@@ -39,15 +39,16 @@ type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 const editorCredentialWindowMs = 30_000;
 
-export async function publishBookOriginals(setupDeadline: number, cleanupMs: number) {
+export async function publishBookOriginals(setupDeadline: number, cleanupMs: number, searchWorker?: 'owned-child') {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
     const fixture = await createReleasedDiscoveryFixture({
       version: 1,
       search: 'native',
+      ...(searchWorker === undefined ? {} : { searchWorker }),
       async kernelPool(url) {
-        // The installed worker has its own checkout. Include it in the same native capture.
+        // The default instrumented worker has its own checkout and shares the capture.
         if (database) {
           assert.equal(database.url, url);
           return database.openPool(database.pool.options);
@@ -230,7 +231,7 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
 
 export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
   const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
-    await publishBookOriginals(setupDeadline, cleanupMs);
+    await publishBookOriginals(setupDeadline, cleanupMs, 'owned-child');
   try {
     const search = fixture.search;
     assert(search);

@@ -256,7 +256,12 @@ function requireBinding(value: unknown, binding: string): asserts value {
 
 /** Owns a native driver; never accepts a transport, truth callback or replacement release. */
 export async function createReleasedDiscoveryFixture(
-  options: { version: 1; kernelPool?: (url: string) => Pool | Promise<Pool>; search?: 'native' } = {
+  options: {
+    version: 1;
+    kernelPool?: (url: string) => Pool | Promise<Pool>;
+    search?: 'native';
+    searchWorker?: 'owned-child';
+  } = {
     version: releasedDiscoveryVersion,
   },
 ): Promise<ReleasedDiscoveryFixture> {
@@ -298,7 +303,10 @@ export async function createReleasedDiscoveryFixture(
       return kernelClock();
     },
   };
-  const native = options.search === 'native' ? releasedDiscoveryRuntime(options.kernelPool) : undefined;
+  const native =
+    options.search === 'native'
+      ? releasedDiscoveryRuntime(options.searchWorker === 'owned-child' ? undefined : options.kernelPool)
+      : undefined;
   const onClockChange = (instant: Date) => {
     native?.onClockChange(instant);
     if (ownerIndexWorker) {

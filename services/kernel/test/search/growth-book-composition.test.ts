@@ -14,7 +14,7 @@ import {
   planKind,
 } from '../performance/support/composed-discovery-bounds.ts';
 import { explainPlanEntries } from '../support/growth-plan-walk.ts';
-import { checkGrowth } from '../support/growth.ts';
+import { checkGrowth, costOf } from '../support/growth.ts';
 import { createBookComposition } from './support/book-composition.ts';
 import { captureComposedPage } from './support/composed-page-cost.ts';
 
@@ -98,6 +98,11 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
       await world.pauseBackgroundWork();
     },
     operation: measurePage,
+    async verify(_db, scale, _repetition, _value, capture) {
+      expect(costOf(capture).statements, `Native statement count at catalogue scale ${scale}`).toBeLessThanOrEqual(
+        composedLimitBound.statements,
+      );
+    },
     counted: {
       read: (value) => value as Awaited<ReturnType<typeof measurePage>>,
       limits: {
@@ -116,7 +121,6 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     const rows = counted.rowLimit!.value;
     expect(cost.rows).toBeLessThanOrEqual(rows);
     expect(cost.blocks).toBeLessThanOrEqual(6 * rows);
-    expect(cost.statements).toBeLessThanOrEqual(composedLimitBound.statements);
     expect(cost.requestBytes + counted.engineRequestBytes!.value).toBeLessThanOrEqual(counted.requestLimit!.value);
     expect(cost.responseBytes + counted.engineResponseBytes!.value).toBeLessThanOrEqual(counted.responseLimit!.value);
     for (const { statements, retainedForegroundPlans } of occurrenceRepetitions) {
