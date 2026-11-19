@@ -124,6 +124,7 @@ export function creationFixture() {
 }
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
+  const sessionReads: { method: string; cookie: string | null }[] = [];
   globalThis.fetch = ((path, init) => {
     const requestPath = new URL(String(path), 'https://auth.test').pathname;
     if (requestPath === '/signin/page')
@@ -167,8 +168,11 @@ export async function open(page: ReactNode, sessionBody: object) {
         );
       }
     }
-    if (['/session', '/account-management/deletion-page'].includes(requestPath))
+    if (requestPath === '/session') {
+      sessionReads.push({ method: init?.method ?? 'GET', cookie: new Headers(init?.headers).get('cookie') });
       return Promise.resolve(Response.json(sessionBody));
+    }
+    if (requestPath === '/account-management/deletion-page') return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();
     calls.push({ path: String(path), body: JSON.parse(String(init?.body)), resolve: request.resolve });
     return request.promise;
@@ -179,7 +183,7 @@ export async function open(page: ReactNode, sessionBody: object) {
   // Own the root before rendering, including a render that rejects during setup.
   roots.add(root);
   await render(page);
-  return { host, calls, render };
+  return { host, calls, render, sessionReads };
 }
 export const send = (host: HTMLElement) => host.querySelector<HTMLFormElement>('form')!.requestSubmit();
 export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
