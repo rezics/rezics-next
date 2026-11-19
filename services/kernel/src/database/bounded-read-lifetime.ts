@@ -28,6 +28,7 @@ export class RetiredReadClientError extends Error {
 
 export type BoundedReadLifetimeOptions = Readonly<{
   transaction?: 'repeatable-read-read-only';
+  mode?: 'command';
   deadlineError?: () => Error;
   mapError?: (error: unknown) => unknown;
   isUncertainError?: (error: unknown) => boolean;
@@ -171,6 +172,11 @@ export function withBoundedReadLifetime<T>(
   let hasFailure = false;
   let firstFailure: unknown;
   let deferredDiscard: Error | undefined;
+  const command = options.mode === 'command';
+
+  // After a settled read with no open transaction, retiring the lease is enough.
+  // Command checkouts also discard on expiry while their callback drains.
+  const mustDiscard = () => activeQueries > 0 || transaction === 'open' || (command && Date.now() >= deadline);
 
   const retire = () => {
     if (retired) return;
@@ -328,8 +334,8 @@ export function withBoundedReadLifetime<T>(
         remember(mapped);
         if (
           (!settledServerErrors.has(error) ||
-            options.isUncertainSettledQueryError?.(error) ||
-            options.isUncertainSettledQueryError?.(mapped)) &&
+            (command &&
+              (options.isUncertainSettledQueryError?.(error) || options.isUncertainSettledQueryError?.(mapped)))) &&
           (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped))
         )
           discard(mapped);
@@ -354,7 +360,7 @@ export function withBoundedReadLifetime<T>(
     } catch (error) {
       const mapped = mapError(error, options);
       remember(mapped);
-      if (Date.now() >= deadline || activeQueries > 0 || transaction === 'open') discard(firstFailure);
+      if (mustDiscard()) discard(firstFailure);
       throw firstFailure;
     } finally {
       retire();
@@ -363,9 +369,10 @@ export function withBoundedReadLifetime<T>(
   });
 
   return until(operation, deadline, deadlineError).catch((error: unknown) => {
-    retire();
-    if (connection && (Date.now() >= deadline || activeQueries > 0 || transaction === 'open'))
-      discard(hasFailure ? firstFailure : error);
+    if (!retired) {
+      if (connection && mustDiscard()) discard(hasFailure ? firstFailure : error);
+      else retire();
+    }
     if (hasFailure) throw firstFailure;
     throw mapError(error, options);
   });
