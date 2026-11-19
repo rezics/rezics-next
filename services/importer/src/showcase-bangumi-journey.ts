@@ -13,6 +13,8 @@ import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { startSeededWalkFrontends } from '../../../scripts/walk-stack.ts';
+import { MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
+import { createPublicBulkClient, PublicSubjectGetUnavailable, ReviewedSubjectNotReady } from './public-bulk-client.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
@@ -291,10 +293,23 @@ function targetFromInverseLink(
   };
 }
 
-async function current(api: string, id: string): Promise<PublicSubject> {
-  const response = await fetch(`${api}/v1/subjects/${id}`);
-  assert.equal(response.status, 200, `anonymous Subject ${id}`);
-  const body: unknown = await response.json();
+export async function readJourneySubject(api: string, id: string) {
+  const reader = createPublicBulkClient({ origin: api });
+  const signal = AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS);
+  let body: unknown;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      body = await reader.readSubject(id, signal);
+      break;
+    } catch (error) {
+      if (
+        attempt === 5 ||
+        (!(error instanceof ReviewedSubjectNotReady) && !(error instanceof PublicSubjectGetUnavailable))
+      )
+        throw error;
+      await Bun.sleep(200);
+    }
+  }
   if (
     !isRecord(body) ||
     !isRecord(body.subject) ||
@@ -303,7 +318,14 @@ async function current(api: string, id: string): Promise<PublicSubject> {
     !isRecord(body.subject.statements)
   )
     throw new TypeError(`Current Subject ${id} has an invalid response shape`);
-  return body as unknown as PublicSubject;
+  return body as {
+    subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
+    summary?: unknown;
+  };
+}
+
+async function current(api: string, id: string): Promise<PublicSubject> {
+  return (await readJourneySubject(api, id)) as PublicSubject;
 }
 
 /** Exact und-language names on a public Subject; these are the labels the page must show unchanged. */
@@ -443,7 +465,6 @@ export type BangumiJourneyOptions = {
   skipPersona?: boolean;
   skipSeed?: boolean;
   seedReport?: CrossMediaSeedReport;
-  startFrontends?: boolean | 'web';
   onMountedStart?(target: JourneyTarget): void | Promise<void>;
   onMountedVisit?(visit: JourneyMountedVisit): void | Promise<void>;
 };
@@ -455,9 +476,9 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await mkdir(privateLogs, { recursive: true, mode: 0o700 });
   // An admitted walk starts Kernel first; Auth pages and Web start after the seed.
-  await ready(`${issuer}/.well-known/openid-configuration`);
   await ready(api);
   if (!options.skipPersona) {
+    await ready(`${issuer}/.well-known/openid-configuration`);
     phase = 'persona';
     await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
   }
@@ -610,16 +631,17 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
     { mode: 0o600 },
   );
 
+  // Finish the shared anonymous API assertions before loading either frontend or a browser.
   phase = 'anonymous-browser';
-  const frontends =
-    options.startFrontends === false ? undefined : await startSeededWalkFrontends(root, { issuer, web });
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as {
     chromium: { launch(options: { headless: boolean; env?: NodeJS.ProcessEnv }): Promise<any> };
   };
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-  const browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
+  const frontends = await startSeededWalkFrontends(root, { issuer, web });
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
+    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
     const visits: {
       viewport: string;
       sourceKey: string;
@@ -675,8 +697,11 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
     await writeFile(resolve(evidence, 'browser.json'), JSON.stringify(visits, null, 2), { mode: 0o600 });
     if (failures.length > 0) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
   } finally {
-    await browser.close();
-    await frontends?.stop();
+    try {
+      await browser?.close();
+    } finally {
+      await frontends.stop();
+    }
   }
   phase = 'complete';
 }

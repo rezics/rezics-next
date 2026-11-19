@@ -21,7 +21,7 @@ import {
   type WalkPostgresFailure,
 } from '@rezics/definitions/bulk';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
-import { startSeededWalkFrontends, walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
+import { walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
@@ -39,7 +39,7 @@ import {
   remainingRequestFromPreparedJournal,
   type SeedRemainingRequest,
 } from './seed-remaining-request.ts';
-import { importCorrelationId, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
+import { importCorrelationId } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
 import { BindingInspectionStore } from './binding-inspection-store.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
@@ -48,8 +48,6 @@ import {
   createPublicBulkClient,
   GLOBAL_CONTEXT,
   publicRelationPageSize,
-  PublicSubjectGetUnavailable,
-  ReviewedSubjectNotReady,
   selectedSynopsisQueryFromPublic,
 } from './public-bulk-client.ts';
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
@@ -57,6 +55,7 @@ import {
   citedAnimeCreditTargets,
   journeyTargets,
   journeyViewports,
+  readJourneySubject as currentSubject,
   runBangumiJourney,
   selectJourneyWorks,
   type JourneyMountedVisit,
@@ -906,37 +905,6 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
     if (match?.groups) values[match.groups.name!] = match.groups.value!.replace(/^'(.*)'$/, '$1');
   }
   return values;
-}
-
-async function currentSubject(api: string, id: string) {
-  const reader = createPublicBulkClient({ origin: api });
-  const signal = AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS);
-  let body: unknown;
-  for (let attempt = 1; ; attempt++) {
-    try {
-      body = await reader.readSubject(id, signal);
-      break;
-    } catch (error) {
-      if (
-        attempt === 5 ||
-        (!(error instanceof ReviewedSubjectNotReady) && !(error instanceof PublicSubjectGetUnavailable))
-      )
-        throw error;
-      await Bun.sleep(200);
-    }
-  }
-  if (
-    !isRecord(body) ||
-    !isRecord(body.subject) ||
-    typeof body.subject.id !== 'string' ||
-    typeof body.subject.type !== 'string' ||
-    !isRecord(body.subject.statements)
-  )
-    throw new TypeError(`Current Subject ${id} has an invalid response shape`);
-  return body as {
-    subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
-    summary?: unknown;
-  };
 }
 
 async function currentLinks(api: string, id: string, property: string) {
@@ -2109,30 +2077,20 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
     };
     await recordStage('mounted');
     try {
-      const frontends = await startSeededWalkFrontends(root, origins);
-      try {
-        await runBangumiJourney({
-          skipPersona: true,
-          seedReport: seeded,
-          startFrontends: false,
-          async onMountedStart(work) {
-            const id = work.role === 'anime' ? 'I05' : (work.series ?? work.sourceKey) === '499' ? 'I11' : 'I12';
-            await markActiveWalkRow(id, Date.now());
-          },
-          async onMountedVisit(visit) {
-            browserVisits.push(visit);
-            await recordMountedRows();
-          },
-        });
-      } catch (error) {
-        run.browserStageFailure = walkFailureCause(error);
-      } finally {
-        await frontends.stop();
-      }
+      await runBangumiJourney({
+        skipPersona: true,
+        seedReport: seeded,
+        async onMountedStart(work) {
+          const id = work.role === 'anime' ? 'I05' : (work.series ?? work.sourceKey) === '499' ? 'I11' : 'I12';
+          await markActiveWalkRow(id, Date.now());
+        },
+        async onMountedVisit(visit) {
+          browserVisits.push(visit);
+          await recordMountedRows();
+        },
+      });
     } catch (error) {
-      const cause = walkFailureCause(error);
-      if (run.browserStageFailure) console.error(`mounted stage cleanup failed; ${cause}`);
-      run.browserStageFailure ??= cause;
+      run.browserStageFailure = walkFailureCause(error);
     }
     if (run.browserStageFailure) console.error(`mounted stage failed; ${run.browserStageFailure}`);
     await recordMountedRows(run.browserStageFailure);
