@@ -78,6 +78,7 @@ const serverIndependentTests = [
   // These journeys own servers with private issuer/client bindings.
   'tests/home-continue.test.ts',
   'tests/post-editing.test.ts',
+  'tests/shell-navigation.test.ts',
   'tests/root-application-shell.test.tsx',
   'tests/server-custody.test.ts',
   'tests/with-dev-server.test.ts',
