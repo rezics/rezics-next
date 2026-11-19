@@ -33,6 +33,7 @@ for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { createRoot } = await import('react-dom/client');
 const { RenameAccountPage } = await import('../src/routes/account.rename');
+const { m } = await import('../src/paraglide/messages.js');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
 const target: RenameTarget = {
@@ -87,24 +88,30 @@ test('ordinary session gets the exact authentication continuation without profil
     }),
   );
   expect(host.querySelector('form')).toBeNull();
-  expect(host.textContent).toContain('Continue with the rename management session');
-  expect(host.textContent).not.toContain(target.handle ?? 'private_handle');
-  await flush(() => host.querySelector('button')!.click());
+  expect(host.textContent).toContain(m.auth_rename_management_auth_required());
+  expect(host.textContent).not.toContain(target.accountId);
+  expect(host.textContent).not.toContain('private_handle');
+  const authenticate = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === m.auth_rename_management_authenticate(),
+  );
+  expect(authenticate).toBeDefined();
+  await flush(() => authenticate!.click());
   expect(continued).toBe(target.accountId);
   expect(host.querySelector('form')).toBeNull();
 });
 
 test('signed-out page offers the existing sign-in path', async () => {
   const host = await mount(source({ readCurrent: async (): Promise<RenameRead> => ({ kind: 'signed-out' }) }));
-  expect(host.textContent).toContain('Sign in to rename your own account');
+  expect(host.textContent).toContain(m.auth_rename_signed_out());
   expect(host.querySelector<HTMLAnchorElement>('a[href="/login"]')).not.toBeNull();
   expect(host.querySelector('form')).toBeNull();
 });
 
 test('refusal hides an undisclosed profile', async () => {
   const host = await mount(source({ readCurrent: async (): Promise<RenameRead> => ({ kind: 'refused' }) }));
-  expect(host.textContent).toContain('Your current session cannot rename this account');
+  expect(host.textContent).toContain(m.auth_rename_denied());
   expect(host.textContent).not.toContain('private_handle');
+  expect(host.textContent).not.toContain(target.accountId);
   expect(host.querySelector('form')).toBeNull();
 });
 
@@ -120,19 +127,18 @@ test('dependency recovery reloads an admitted handleless actor and requires a ne
             : { kind: 'ready', target: { ...target, managementReviewReturned: true } },
     }),
   );
-  expect(host.textContent).toContain('We could not read or confirm your current account securely');
+  expect(host.textContent).toContain(m.auth_rename_unavailable());
   await flush(() => host.querySelector('button')!.click());
   expect(host.textContent).toContain('private_handle');
   await flush(() => host.querySelector('button')!.click());
   expect(host.textContent).toContain(target.accountId);
-  expect(host.textContent).toContain('No handle');
-  expect(host.textContent).toContain('Returning here did not submit a rename');
+  expect(host.textContent).toContain(m.auth_rename_no_handle());
+  expect(host.textContent).toContain(m.auth_rename_management_returned());
   expect(host.querySelector<HTMLInputElement>('#rename-handle')?.value).toBe('');
   expect(host.querySelector<HTMLInputElement>('#rename-confirm')).toBeNull();
   expect(host.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(true);
 });
 
-const { m } = await import('../src/paraglide/messages.js');
 const ready = (): RenameRead => ({ kind: 'ready', target: { ...target, handle: 'private_before' } });
 async function savedReview(readCurrent = async () => ready()) {
   const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
