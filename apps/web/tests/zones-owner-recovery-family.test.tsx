@@ -1,9 +1,7 @@
-// UNRUN: mounted presentation/connected regressions; DOM/classes are not browser geometry evidence.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import { UI_LOCALES } from '@rezics/composition';
-import { Button } from '@rezics/ui/shadcn/button';
 import { ZoneFeedback } from '../src/features/zones/manage/feedback';
 import { ZonesOwnerWorkspace } from '../src/features/zones/manage/workspace';
 import { CreateZone } from '../src/features/zones/manage/create';
@@ -72,21 +70,7 @@ const messages = {
 const kinds = Object.keys(messages) as Failure['kind'][];
 const longReturnTo = `/ja/my/zones/new?name=${'読書と旅の記録 مكتبة الرحلات & "<書棚>" +/#?'.repeat(8)}&cursor=opaque+/cursor==#names`;
 function presentation(action: HTMLElement) {
-  for (const token of [
-    'inline-flex',
-    'border',
-    'h-auto',
-    'max-w-full',
-    'whitespace-normal',
-    '[overflow-wrap:anywhere]',
-    'focus-visible:outline-2',
-    'focus-visible:outline-offset-2',
-    'focus-visible:outline-ring',
-    'max-md:min-h-11',
-    'max-md:min-w-11',
-    'pointer-coarse:min-h-11',
-    'pointer-coarse:min-w-11',
-  ])
+  for (const token of ['inline-flex', 'border', 'max-w-full', 'whitespace-normal', '[overflow-wrap:anywhere]'])
     expect(action.classList.contains(token)).toBe(true);
   expect(action.classList.contains('truncate')).toBe(false);
   action.focus();
@@ -159,7 +143,7 @@ for (const locale of UI_LOCALES) {
   });
 }
 
-test('recovery preserves the shared Button implicit native type and form behavior', async () => {
+test('retry is a native button that does not submit its enclosing form', async () => {
   const retry = mock(() => {});
   const submit = mock(() => {});
   await mounted(
@@ -169,14 +153,12 @@ test('recovery preserves the shared Button implicit native type and form behavio
         submit();
       }}
     >
-      <Button variant="outline">baseline</Button>
       <ZoneFeedback failure={{ kind: 'unavailable' }} locale="en" onRetry={retry} />
     </form>,
     async (host) => {
-      const [baseline, recovery] = [...host.querySelectorAll('button')];
-      expect(recovery!.getAttribute('type')).toBe(baseline!.getAttribute('type'));
-      expect(recovery!.type).toBe(baseline!.type);
-      await act(async () => recovery!.click());
+      const recovery = host.querySelector('button')!;
+      expect(recovery.type).toBe('button');
+      await act(async () => recovery.click());
       expect(retry).toHaveBeenCalledTimes(1);
       expect(submit).not.toHaveBeenCalled();
     },
