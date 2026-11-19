@@ -11,7 +11,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
-import { bundledWebStartupPlugin, catalogueWebOutputEnv } from './scripts/bundled-web-startup.ts';
+import { bundledWebStartupPlugin, catalogueWebOutputEnv, releaseWebOutput } from './scripts/bundled-web-startup.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
@@ -402,6 +402,7 @@ export default defineConfig((context) => {
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
   const output = process.env.NATIVE_WEB_PREVIEW_ROOT;
   const catalogueOutput = output && output === process.env[catalogueWebOutputEnv];
+  const releaseOutput = output && output === releaseWebOutput(process.env);
   const previewRoot =
     catalogueOutput || (testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1') ? output : undefined;
   const compactMessages =
@@ -415,9 +416,10 @@ export default defineConfig((context) => {
   });
   if (previewRoot && context.isPreview) {
     // Preview loads the emitted Worker manifest and assets into local workerd.
+    // The release fixture supplies its bindings through the process environment; use its private env directory.
     return {
       root: previewRoot,
-      ...(catalogueOutput ? { envDir: previewRoot } : {}),
+      ...(catalogueOutput || releaseOutput ? { envDir: previewRoot } : {}),
       preview: {
         allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
         ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
@@ -450,7 +452,7 @@ export default defineConfig((context) => {
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
     ...(previewRoot ? { root: previewRoot, cacheDir: join(previewRoot, '.vite') } : {}),
-    ...(catalogueOutput ? { envDir: previewRoot } : {}),
+    ...(catalogueOutput || releaseOutput ? { envDir: previewRoot } : {}),
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],

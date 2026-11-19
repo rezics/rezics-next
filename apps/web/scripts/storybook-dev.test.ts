@@ -76,6 +76,17 @@ test('ordinary Web bounds V8 while retaining caller Node options and explicit he
   expect(webServeEnvironment('vite', {}).NODE_OPTIONS).toBeUndefined();
 });
 
+test('stages the native release bundle through the finite Vite entry', () => {
+  const output = { REZICS_RELEASE_WEB_OUTPUT: '/private/compiled-release-web' };
+  const env = { ...output, REZICS_TEST_RUNTIME: '1', NATIVE_WEB_BUNDLED_CLIENT: '1' };
+  const build = storybookLaunchPlan(['--app', '--build-bundled'], env, roots);
+  const preview = storybookLaunchPlan(['--app'], env, roots);
+  expect(build).toEqual({ ...preview, releaseBuild: true });
+  expect(preview.kind).toBe('vite');
+  expect(build.args).not.toContain('--build-bundled');
+  expect(() => storybookLaunchPlan(['--app', '--build-bundled'], output, roots)).toThrow('private output directory');
+});
+
 test('starts Web Storybook on the requested port and a loopback host', () => {
   expect(storybookLaunchPlan(['--port', '16497', '--exact-port', '--ci'], {}, roots)).toEqual({
     kind: 'storybook',

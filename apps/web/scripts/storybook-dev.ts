@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
-import { bundledWebStage, catalogueWebOutputEnv } from './bundled-web-startup.ts';
+import { bundledWebStage, catalogueWebOutputEnv, releaseWebOutput } from './bundled-web-startup.ts';
 import { ensureMessagesReady, prepareLiveMessages } from './messages-ready.ts';
 import { ownBunProcess } from '../tests/support/server-custody.ts';
 import {
@@ -25,6 +25,7 @@ type LaunchPlan = {
   command: string;
   cwd: string;
   args: string[];
+  releaseBuild?: true;
 };
 
 function isLoopbackHost(host: string): boolean {
@@ -60,8 +61,9 @@ export function storybookLaunchPlan(
   if (args[0] === '--app') {
     const forwarded = args.slice(1);
     const buildOnly = forwarded[0] === '--build-bundled';
-    const catalogue = Boolean(env[catalogueWebOutputEnv]);
-    if (buildOnly && !catalogue) throw new Error('Catalogue Web build requires a private output directory');
+    const release = releaseWebOutput(env);
+    const catalogue = !release && Boolean(env[catalogueWebOutputEnv]);
+    if (buildOnly && !catalogue && !release) throw new Error('Bundled Web build requires a private output directory');
     if (buildOnly) forwarded.shift();
     const hosts = storybookHosts(forwarded);
     for (const host of hosts) {
@@ -84,6 +86,7 @@ export function storybookLaunchPlan(
       command: 'vite',
       cwd: roots.web,
       args: ['--config', 'vite.config.ts', ...port, '--strictPort', ...forwarded],
+      ...(buildOnly && release ? { releaseBuild: true } : {}),
     };
   }
 
@@ -139,8 +142,14 @@ export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.Proces
 async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signal: AbortSignal, traceId: string) {
   // Cloudflare places Build Output under the Vite root. Give each launch its own output and keep
   // the real source and packages at their original paths for the Worker and client builds.
-  const buildOnly = plan.kind === 'catalogue-build';
-  const output = buildOnly || plan.kind === 'catalogue-preview' ? env[catalogueWebOutputEnv] : undefined;
+  const catalogueBuild = plan.kind === 'catalogue-build';
+  const buildOnly = catalogueBuild || plan.releaseBuild;
+  const output =
+    plan.kind === 'vite'
+      ? releaseWebOutput(env)
+      : catalogueBuild || plan.kind === 'catalogue-preview'
+        ? env[catalogueWebOutputEnv]
+        : undefined;
   const parent = env.WEB_TEST_STATE_INSTANCE_DIR ?? resolve(repoRoot, '.temp');
   if (!output) await mkdir(parent, { recursive: true });
   const root = output ?? (await mkdtemp(resolve(parent, 'compiled-web-')));
@@ -156,7 +165,7 @@ async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signa
       for (const input of ['cloudflare.config.ts', 'scripts', 'src', 'public', 'node_modules', 'package.json']) {
         await symlink(resolve(webRoot, input), resolve(root, input));
       }
-      if (buildOnly) {
+      if (catalogueBuild) {
         // Feed the compiler the scopes validated from setup. The preview receives the real local secrets.
         const file = resolve(root, 'website.json');
         await writeFile(file, JSON.stringify({ WEBSITE_SCOPES: env.WEBSITE_SCOPES }), { mode: 0o600, flag: 'wx' });
@@ -213,7 +222,7 @@ if (import.meta.main) {
     }
 
     let generated = 0;
-    if (webServeNeedsGeneratedMessages(plan.kind)) {
+    if (webServeNeedsGeneratedMessages(plan.kind) && (plan.kind !== 'vite' || !releaseWebOutput(startupEnv))) {
       const startedAt = performance.now();
       if (buildOnly || (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1'))
         bundledWebStage('prepare-messages');
