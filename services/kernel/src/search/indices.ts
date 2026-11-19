@@ -384,12 +384,13 @@ export async function markSubjectCalendarReady(
   return incarnation;
 }
 
-/** Read the UUID of one immutable physical generation, never through its mutable alias. */
-export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, generation: number): Promise<string> {
+async function readSubjectIndexSettings(search: OpenSearch, prefix: string, generation: number) {
   const index = subjectIndexName(prefix, generation);
   let response: { status: number; body: unknown };
   try {
-    response = await search.request('GET', `/${index}/_settings`);
+    response = await search.request('GET', `/${index}/_settings`, undefined, {
+      query: { filter_path: '*.settings.index.uuid,*.settings.index.sort,error,status' },
+    });
   } catch (error) {
     if (error instanceof OpenSearchError)
       throw new SearchUnavailableError('Subject generation incarnation is unavailable', { cause: error });
@@ -400,7 +401,23 @@ export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, g
   const native = record(settings) ? settings.index : undefined;
   if (response.status !== 200 || !record(native) || typeof native.uuid !== 'string' || !native.uuid)
     throw new SearchUnavailableError('Subject generation incarnation is missing or malformed');
-  return native.uuid;
+  return { uuid: native.uuid, sort: native.sort };
+}
+
+/** Read the UUID of one immutable physical generation, never through its mutable alias. */
+export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, generation: number): Promise<string> {
+  return (await readSubjectIndexSettings(search, prefix, generation)).uuid;
+}
+
+/** Historical generations retain their own layout until a new generation is published. */
+export async function hasSubjectNameOrder(search: OpenSearch, prefix: string, generation: number): Promise<boolean> {
+  const { sort } = await readSubjectIndexSettings(search, prefix, generation);
+  return (
+    record(sort) &&
+    isDeepStrictEqual(sort.field, ['name_sort', 'id']) &&
+    isDeepStrictEqual(sort.order, ['asc', 'asc']) &&
+    isDeepStrictEqual(sort.missing, ['_last', '_last'])
+  );
 }
 
 export async function readSubjectActivationTime(

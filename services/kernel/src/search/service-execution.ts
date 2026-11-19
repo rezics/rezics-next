@@ -50,6 +50,7 @@ import { searchObservation } from './search-context.ts';
 import { admitProperties, projectFacts, projectHit, validateHitOptions } from './hits.ts';
 import {
   discoveryIndexUuid,
+  hasSubjectNameOrder,
   readSubjectCalendarFormat,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
@@ -215,7 +216,10 @@ async function requireCurrentTextMatch(result: Promise<RelationFacetMatch>): Pro
 
 /** Preserve already classified adapter failures while native evidence recovery owns preparation. */
 function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
-  return runSearchSource(() => requestStep(operation), (error) => error instanceof ProblemError);
+  return runSearchSource(
+    () => requestStep(operation),
+    (error) => error instanceof ProblemError,
+  );
 }
 
 function containsOwnerPredicate(value: unknown): boolean {
@@ -1578,9 +1582,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             // physical index. Its first page need not materialize the whole type.
             const indexedTypeList =
               !readContext?.savedCollection && !text && sort === 'name' && filter && 'type' in filter;
+            const readNameOrder = () => indexRequest(() => hasSubjectNameOrder(client, prefix, generation!));
+            const boundedOrder =
+              !capturePlan.bookTypeList ||
+              (await (bookPage ? (bookPage.nameOrdered ??= readNameOrder()) : readNameOrder()));
             const bound = await indexRequest(() =>
               runtime.bindRequest(
-                { plan: capturePlan, snapshot: indexedTypeList ? 'pit' : 'prepared' },
+                { plan: capturePlan, snapshot: indexedTypeList && boundedOrder ? 'pit' : 'prepared' },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
                 bookPage,

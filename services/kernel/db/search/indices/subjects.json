@@ -2,6 +2,9 @@
   "settings": {
     "number_of_shards": 1,
     "number_of_replicas": 0,
+    "index.sort.field": ["name_sort", "id"],
+    "index.sort.order": ["asc", "asc"],
+    "index.sort.missing": ["_last", "_last"],
     "refresh_interval": "100ms",
     "analysis": {
       "char_filter": {

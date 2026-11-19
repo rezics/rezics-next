@@ -23,6 +23,9 @@ type PageSample = {
   iteratorSteps: number;
   requestBytes: number;
   responseBytes: number;
+  profileSearches: number;
+  profileRequestBytes: number;
+  profileResponseBytes: number;
 };
 
 const measured = new AsyncLocalStorage<PageSample>();
@@ -47,7 +50,16 @@ export async function observeComposedWarmup<T>(read: () => Promise<T>) {
 }
 
 export async function captureComposedPage<T>(read: () => Promise<T>) {
-  const sample: PageSample = { reads: [], engineSearches: 0, iteratorSteps: 0, requestBytes: 0, responseBytes: 0 };
+  const sample: PageSample = {
+    reads: [],
+    engineSearches: 0,
+    iteratorSteps: 0,
+    requestBytes: 0,
+    responseBytes: 0,
+    profileSearches: 0,
+    profileRequestBytes: 0,
+    profileResponseBytes: 0,
+  };
   const value = await measured.run(sample, read);
   return { value, sample };
 }
@@ -58,17 +70,20 @@ export async function observeEngineRequest<T>(client: OpenSearch, ...args: Param
   if (!sample) return client.request<T>(...args);
   const [method, path, body, options] = args;
   const search = /\/_search(?:\/template)?$/.test(path);
-  const payload = search && path.endsWith('/_search') ? { ...(body as object), profile: true } : body;
   // OpenSearch settles the serialized input first, then actual response bytes before JSON decoding.
   // Keep the caller's existing allowance and deadline. The transport's own hard cap applies in both cases.
   const original = options?.work;
+  const deadline = Math.min(
+    original?.deadline ?? Number.MAX_SAFE_INTEGER,
+    options?.timeoutMs === undefined ? Number.MAX_SAFE_INTEGER : Date.now() + options.timeoutMs,
+  );
   let input = true;
   if (search) sample.engineSearches++;
-  const result = await client.request<T>(method, path, payload, {
+  const result = await client.request<T>(method, path, body, {
     ...options,
     work: {
       bytes: original?.bytes ?? Number.MAX_SAFE_INTEGER,
-      deadline: original?.deadline ?? Number.MAX_SAFE_INTEGER,
+      deadline,
       settle(bytes) {
         original?.settle(bytes);
         if (input) sample.requestBytes += bytes;
@@ -77,8 +92,43 @@ export async function observeEngineRequest<T>(client: OpenSearch, ...args: Param
       },
     },
   });
-  if (search) sample.iteratorSteps += measurePublicFilterIteratorSteps(result.body);
-  return result;
+  if (!search) return result;
+  if (typeof result.body === 'object' && result.body !== null && 'profile' in result.body) {
+    sample.iteratorSteps += measurePublicFilterIteratorSteps(result.body);
+    return result;
+  }
+
+  // Measure the same immutable candidate query. Check every serving field against
+  // the real first response, including the successor PIT, before attributing its profile.
+  assert(path === '/_search' && body && typeof body === 'object' && 'pit' in body);
+  const fields = options?.query?.filter_path;
+  assert(typeof fields === 'string');
+  let diagnosticInput = true;
+  sample.profileSearches++;
+  const profiled = await client.request<Record<string, unknown>>(
+    method,
+    path,
+    { ...body, profile: true },
+    {
+      ...options,
+      query: { ...options?.query, filter_path: fields + ',profile' },
+      work: {
+        bytes: original?.bytes ?? Number.MAX_SAFE_INTEGER,
+        deadline,
+        settle(bytes) {
+          if (diagnosticInput) sample.profileRequestBytes += bytes;
+          else sample.profileResponseBytes += bytes;
+          diagnosticInput = false;
+        },
+      },
+    },
+  );
+  assert.equal(profiled.status, result.status);
+  const { profile, ...served } = profiled.body;
+  assert.deepEqual(served, result.body);
+  const steps = measurePublicFilterIteratorSteps({ ...served, profile });
+  sample.iteratorSteps += steps;
+  return { ...result, measuredIteratorSteps: steps };
 }
 
 export function observeComposedReads(runtime: DefaultPublicFilterRuntime): DefaultPublicFilterRuntime {

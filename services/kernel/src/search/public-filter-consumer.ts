@@ -387,10 +387,11 @@ function admitPitPayload(body: unknown, plan: OrdinaryPlan, physicalTarget: stri
 export async function queryPublicFilterConsumerPit(
   search: OpenSearch,
   retainedQueried: PublicFilterQueriedObservation,
-  retainedPlan: OrdinaryPlan,
+  retainedPlan: OrdinaryPlan & Pick<Partial<PublicFilterConsumerCaptureInput>, 'bookTypeList' | 'filterDocument'>,
   context: PublicFilterConsumerContext,
   retainPit?: (pit: string) => Promise<void>,
-): Promise<Readonly<{ result: SearchResult; successorPit: string; engineIteratorSteps: number }>> {
+  servingPage = false,
+): Promise<Readonly<{ result: SearchResult; successorPit: string; engineIteratorSteps: number | undefined }>> {
   const queried = structuredClone(retainedQueried);
   const plan = structuredClone(retainedPlan);
   if (queried.snapshot.kind !== 'pit') throw new TypeError('PIT execution requires a retained PIT');
@@ -406,38 +407,55 @@ export async function queryPublicFilterConsumerPit(
           ? [{ public_collection_count: { order: 'desc', missing: 0 } }, { name_sort: 'asc' }, { id: 'asc' }]
           : [{ id: 'asc' }];
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
-  const { status, body } = await search.request<unknown>(
+  const book = plan.bookTypeList === true;
+  const profile = !book || !servingPage;
+  const query =
+    book && plan.filterDocument
+      ? (plan.filter ?? compileFilter(plan.filterDocument, { prefix: 'f', relationOverflow: true }).query)
+      : {
+          bool: {
+            must: plan.query ?? { match_all: {} },
+            ...(plan.filter === undefined ? {} : { filter: plan.filter }),
+            ...(plan.boost === undefined
+              ? {}
+              : {
+                  should: [
+                    { term: { 'names.exact': { value: plan.boost, boost: 10 } } },
+                    { match_phrase: { names: { query: plan.boost, boost: 3 } } },
+                  ],
+                }),
+          },
+        };
+  const response = await search.request<unknown>(
     'POST',
     '/_search',
     {
-      // Keep the existing subjects-search-v2 semantics without changing its immutable template.
-      query: {
-        bool: {
-          must: plan.query ?? { match_all: {} },
-          ...(plan.filter === undefined ? {} : { filter: plan.filter }),
-          ...(plan.boost === undefined
-            ? {}
-            : {
-                should: [
-                  { term: { 'names.exact': { value: plan.boost, boost: 10 } } },
-                  { match_phrase: { names: { query: plan.boost, boost: 3 } } },
-                ],
-              }),
-        },
-      },
+      query,
       pit: { id: queried.snapshot.pit },
       size: plan.size,
       sort,
       ...(plan.after === undefined ? {} : { search_after: plan.after }),
-      track_total_hits: 10_000,
-      profile: true,
+      // Book pages publish no total. A native threshold of one retains the internal
+      // exact/lower-bound contract and lets the sorted collector stop at the page boundary.
+      track_total_hits: book ? 1 : 10_000,
+      ...(profile && { profile: true }),
       _source: ['partition', 'security_revision'],
       ...(hasOverflow
         ? { aggs: { overflow: { filter: { terms: { relation_facet_overflow: plan.overflowProperties } } } } }
         : {}),
     },
-    { timeoutMs: remaining(context), query: { allow_partial_search_results: false } },
+    {
+      timeoutMs: remaining(context),
+      query: {
+        allow_partial_search_results: false,
+        ...(book && {
+          filter_path:
+            'error,status,timed_out,terminated_early,_shards,pit_id,hits.total,hits.hits' + (profile ? ',profile' : ''),
+        }),
+      },
+    },
   );
+  const { status, body } = response;
   if (record(body) && typeof body.pit_id === 'string' && retainPit) await retainPit(body.pit_id);
   if (status !== 200) throw new SearchUnavailableError('Native consumer PIT query did not complete');
   admitPitPayload(body, plan, queried.consumer.physicalTarget);
@@ -457,7 +475,11 @@ export async function queryPublicFilterConsumerPit(
     },
     ...(hasOverflow ? { overflow: requireSearchOverflow(body) } : {}),
   };
-  return { result, successorPit: body.pit_id, engineIteratorSteps: iteratorSteps(body) };
+  return {
+    result,
+    successorPit: body.pit_id,
+    engineIteratorSteps: profile ? iteratorSteps(body) : response.measuredIteratorSteps,
+  };
 }
 
 /** Count-free, keyed native preparation on the same retained PIT and stored template.
@@ -1887,6 +1909,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     use: CustodyUse,
     m: Meter,
     context: PublicFilterConsumerContext,
+    servingPage = false,
   ) {
     if (q.snapshot.kind !== 'pit') throw new ConsumerFailure('observation_lost');
     let current = q;
@@ -1995,8 +2018,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       { ...plan, sort: plan.sort, size, ...(after === undefined ? {} : { after }) },
       context,
       retain,
+      servingPage,
     );
-    m.cost.engineIteratorSteps += executed.engineIteratorSteps;
+    if (executed.engineIteratorSteps !== undefined) m.cost.engineIteratorSteps += executed.engineIteratorSteps;
     return {
       queried: current,
       raw: executed.result.hits,
@@ -2719,7 +2743,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const preparedMixed = mixed && q.snapshot.kind === 'prepared';
       const allowance = preparedMixed ? 600 : Math.min(600, 6 * pageSize + 3);
       const maxWindow = preparedMixed ? Math.min(200, allowance) : Math.min(200, 2 * pageSize + 1);
-      const size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
+      // A direct Book list needs one lookahead. Current-authority rejects can use
+      // the usual larger refill on this same PIT and retained execution.
+      let size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
+      if (!prefix && q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList)
+        size = Math.min(size, pageSize + 1);
       if (!Number.isInteger(size) || size < 1 || size > maxWindow) throw new TypeError('Invalid retained refill size');
       let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];
@@ -2797,7 +2825,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       } else {
         const tail = reused.at(-1)?.sort ?? after;
         if (page) await dispatchPageEngine(page, use, execution);
-        const result = await nativeBatch(q, plan, size - reused.length, tail, use, m, context);
+        const result = await nativeBatch(q, plan, size - reused.length, tail, use, m, context, page !== undefined);
         q = result.queried;
         raw = [...reused, ...result.raw];
         exhausted = result.exhausted;
