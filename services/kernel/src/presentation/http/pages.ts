@@ -1,3 +1,4 @@
+import { pairGlobalReadPreparation } from '../../access/global-read-preparation.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import {
@@ -18,6 +19,7 @@ import { actionCatalogue, SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
+import { createBookPagePublication } from '../../search/book-page-publication.ts';
 import { openBookCatalogue } from '../../search/http/catalogue-search.ts';
 import type { SearchServiceContract } from '../../search/service-contract.ts';
 import { validateHitOptions } from '../../search/hits.ts';
@@ -331,14 +333,20 @@ function nativePageRoute<App, const Path extends string>(
       if (stream && continuation && stream !== continuation.node)
         reject([{ pointer: '/stream', code: 'invalid_format' }]);
 
+      const pageFloor = !draftPreview && includeEligibility ? globalReadEligibility('presentation:read') : undefined;
+      const searchFloor =
+        bookSearch?.includeEligibility && !draftPreview ? globalReadEligibility('subject:read') : undefined;
+      if (pageFloor && searchFloor)
+        pairGlobalReadPreparation(actor, { pool, deadline: job.deadline }, pageFloor, searchFloor);
       const check = await authorize({
         ...resource(),
-        ...(!draftPreview && includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
+        ...(pageFloor ? { eligibility: pageFloor } : {}),
       });
       const pageAccess: Access =
         typeof access === 'function'
           ? access({ actions: actionCatalogue(routed) })
           : (access ?? createAccess({ actions: actionCatalogue(routed) }));
+      const publication = bookSearch && !draftPreview ? createBookPagePublication(pool, job.deadline) : undefined;
       const result = await presentationApplication().readConfiguredPage({
         execution: {
           pool,
@@ -348,21 +356,25 @@ function nativePageRoute<App, const Path extends string>(
           clock,
           deadlineNow,
           dispatch,
-          ...(bookSearch && !draftPreview
+          ...(bookSearch && publication
             ? {
-                bookCatalogue: (active, signal) =>
-                  openBookCatalogue({
-                    pool,
-                    routeKey,
-                    access: pageAccess,
-                    actor,
-                    admission,
-                    job: { ...job, signal },
-                    clock,
-                    search: bookSearch.service,
-                    active,
-                    includeEligibility: bookSearch.includeEligibility,
-                  }),
+                bookCatalogue: {
+                  readRelease: publication.readRelease,
+                  open: (active, signal) =>
+                    openBookCatalogue({
+                      pool,
+                      routeKey,
+                      access: pageAccess,
+                      actor,
+                      admission,
+                      job: { ...job, signal },
+                      clock,
+                      search: bookSearch.service,
+                      active,
+                      eligibility: searchFloor,
+                      bookPage: publication.page,
+                    }),
+                },
               }
             : {}),
           actor,

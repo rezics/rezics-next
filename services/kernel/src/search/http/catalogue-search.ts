@@ -4,7 +4,6 @@ import type { Admission, JobContext } from '../../http/admission.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor, type Resource } from '../../request/access.ts';
 import { GLOBAL_CONTEXT, type activeRelease } from '../../semantic/definitions.ts';
-import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { runBookCatalogueRead } from '../composed-book-reads.ts';
 import type { PublicSearchReadContext, SearchRequest, SearchServiceContract } from '../service-contract.ts';
 import { createCatalogueResponseAdapter, type SearchHttpResponse } from './catalogue.ts';
@@ -58,11 +57,11 @@ export function openBookCatalogue(input: {
   clock: () => Date;
   search: Pick<SearchServiceContract, 'search'>;
   active: ActiveRelease;
-  includeEligibility: boolean;
+  eligibility: Resource['eligibility'];
+  bookPage: NonNullable<PublicSearchReadContext['bookPage']>;
 }): BookCatalogueReader {
-  const { pool, routeKey, access, actor, admission, job, active } = input;
+  const { pool, routeKey, access, actor, admission, job, active, bookPage } = input;
   const catalogue = createCatalogueResponseAdapter({ pool, routeKey });
-  const bookPage: NonNullable<PublicSearchReadContext['bookPage']> = {};
   const scope = { access, actor, deadline: job.deadline, routeKey };
   const authorize = (resource: Resource) =>
     accessCheck(access, actor, 'subject:read', resource, { pool, deadline: job.deadline });
@@ -71,7 +70,7 @@ export function openBookCatalogue(input: {
     const check = await authorize({
       route: 0,
       id: GLOBAL_CONTEXT,
-      ...(input.includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+      ...(input.eligibility ? { eligibility: input.eligibility } : {}),
     });
     if (
       !(await withBoundedReadConnection(pool, job.deadline, (client) => check(client), {

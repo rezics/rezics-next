@@ -1,3 +1,4 @@
+import { globalReadPreparation } from './global-read-preparation.ts';
 import {
   accessNativeWork,
   accessNativeDeclaration,
@@ -720,7 +721,8 @@ export function createAccess(config: PermissionConfig): Access {
     perId = false,
   ) {
     const evidence = Object.freeze({});
-    const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
+    const shared = globalReadPreparation(context.pool);
+    const deadline = shared?.deadline ?? accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
     const source = permissionReadClient(context.pool, deadline);
     try {
       requireAccessDeadline(deadline);
@@ -780,8 +782,9 @@ export function createAccess(config: PermissionConfig): Access {
       );
       // Every source query has its own bounded checkout before resource checkout.
       // None holds a connection while another partition is consulted.
-      const recorded = await readPermissionTime(source, config.clock, context.work);
+      const recorded = shared?.clock ?? (await readPermissionTime(source, config.clock, context.work));
       if (!recorded?.databaseAt) return evidence;
+      if (shared) shared.clock = recorded;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
       const at = time ? authoritativeTimeValue(time) : recorded.at;

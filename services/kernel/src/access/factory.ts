@@ -1,3 +1,4 @@
+import { bindGlobalReadPreparation } from './global-read-preparation.ts';
 import { platformGateChecks, preparedReadTimes } from './read-bindings.ts';
 
 import { memoizedValue } from '../memoized.ts';
@@ -257,6 +258,8 @@ export function createAccess(config: AccessConfig): Access {
         pool: deadlineClient(context.pool, deadline) as typeof context.pool,
         deadline,
       };
+      if (actor.kind === 'anonymous' && !attempt && !page && !nativeTime && !context.work)
+        bindGlobalReadPreparation(permissions, actor, resource, context, permissionContext);
       const evidence = await within(deadline, () =>
         page
           ? permissions.preparePage!(

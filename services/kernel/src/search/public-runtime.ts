@@ -1,3 +1,4 @@
+import { bookPageRelease } from './book-page-publication.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { forwardPublicFilterCoveragePage, openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import type { RetainedSearchContinuation } from './cursor.ts';
@@ -156,8 +157,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       },
     };
   }
-  async function openSubjectPublication(context: PublicFilterConsumerContext, acceptedRelease?: string) {
-    const release = await requestMeaning(context, acceptedRelease);
+  async function openSubjectPublication(
+    context: PublicFilterConsumerContext,
+    acceptedRelease?: string,
+    bookPage?: object,
+  ) {
+    const opening =
+      acceptedRelease === undefined ? bookPageRelease(bookPage, config.pool, context.deadline) : undefined;
+    const release = opening ?? (await requestMeaning(context, acceptedRelease));
     if (!release) notReady();
     const { active } = await subjectGenerations(requestSearch(context), config.prefix);
     if (active === null) notReady();
@@ -173,7 +180,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     if (!releases) bookPublications.set(bookPage, (releases = new Map()));
     let opening = releases.get(acceptedRelease);
     if (!opening) {
-      opening = openSubjectPublication(context, acceptedRelease);
+      opening = openSubjectPublication(context, acceptedRelease, bookPage);
       releases.set(acceptedRelease, opening);
     }
     return opening;

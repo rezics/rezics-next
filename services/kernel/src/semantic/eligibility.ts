@@ -1,3 +1,4 @@
+import { globalReadPreparation } from '../access/global-read-preparation.ts';
 import { createResourcePublicEligibility, type ResourceEligibility } from '../access/eligibility.ts';
 import type {
   ResourceEligibilityPrepareContext,
@@ -131,6 +132,8 @@ export function globalReadEligibility(action: GlobalReadAction): ResourceEligibi
   const prepare = measured<Prepare, { kind: string } | null>(
     ({ resource }) => pointWork(resource, bytes({ kind: 'community' }), true),
     async ({ pool, resource: identity, deadline }) => {
+      const shared = globalReadPreparation(pool);
+      if (shared?.context) return { value: shared.context, usage: EMPTY_ACCESS_WORK };
       const row =
         (await withBoundedReadConnection(
           pool,
@@ -138,6 +141,7 @@ export function globalReadEligibility(action: GlobalReadAction): ResourceEligibi
           (client) => point(client, contextPublicEvidence, { route: identity.route, context_id: identity.id }),
           eligibilityReadOptions(deadline),
         )) ?? null;
+      if (row && shared) shared.context = row;
       return {
         value: row,
         usage: {

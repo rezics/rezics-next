@@ -45,11 +45,18 @@ export async function activeProfile(
   return withReadTransaction(
     pool,
     async (client) => {
-      const active = await pointer.run(client, { route: resource.route });
+      const {
+        rows: [active],
+      } = await client.query<{ digest: string; head: number; present: boolean; body: unknown }>(
+        `SELECT a.digest, a.head, p.digest IS NOT NULL AS present, p.body
+         FROM (SELECT route, digest, head FROM presentation.profile_activation
+               WHERE route=$1 ORDER BY head DESC LIMIT 1) a
+         LEFT JOIN presentation.profile p USING (route, digest)`,
+        [resource.route],
+      );
       if (!active) return null;
-      const profile = await readProfile(client, active.digest);
-      if (!profile) throw new Error('Active presentation profile is missing');
-      return { ...active, profile };
+      if (!active.present) throw new Error('Active presentation profile is missing');
+      return { digest: active.digest, head: active.head, profile: profiles().read(active.digest, active.body) };
     },
     deadline,
   );

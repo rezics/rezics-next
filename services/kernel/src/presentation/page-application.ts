@@ -1031,7 +1031,7 @@ async function readConfiguredPage(
   const draftPreview = execution.draftPreview;
   const captured = execution.capturedProfile;
   const includeEligibility = execution.includeEligibility;
-  const active = await execution.run(async () => {
+  const { active, definitionRelease: publishedRelease } = await execution.run(async () => {
     lifetime.check();
     const admitted = await withBoundedReadConnection(
       pool,
@@ -1044,7 +1044,20 @@ async function readConfiguredPage(
     );
     lifetime.check();
     if (!admitted) throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
-    if (!captured) return application.activeProfile(pool, execution.deadline);
+    if (!captured)
+      return ports.semantic.withReadTransaction(
+        pool,
+        async (client) => {
+          const active = await application.activeProfile(pool, execution.deadline);
+          lifetime.check();
+          if (!active) return { active, definitionRelease: null };
+          const definitionRelease = await (execution.bookCatalogue
+            ? execution.bookCatalogue.readRelease()
+            : ports.semantic.activeRelease(client, execution.deadline));
+          return { active, definitionRelease };
+        },
+        execution.deadline,
+      );
     const readResource = {
       ...resource(),
       ...(includeEligibility
@@ -1086,7 +1099,7 @@ async function readConfiguredPage(
       );
     if ('route' in target && !captured.routes.some((entry) => entry.route === target.route))
       reject([{ pointer: '/target/route', code: 'unsupported' }]);
-    return { digest: profileDigest(captured), profile: captured };
+    return { active: { digest: profileDigest(captured), profile: captured }, definitionRelease: undefined };
   });
   lifetime.check();
   if (!active) throw new ProblemError('presentation_not_ready', { headers: { 'retry-after': '1' } });
@@ -1133,7 +1146,8 @@ async function readConfiguredPage(
   let resolved: ResolvedTemplate;
   let views: View[] | null = null;
   lifetime.check();
-  const definitionRelease = await ports.semantic.activeRelease(pool, execution.deadline);
+  const definitionRelease =
+    publishedRelease === undefined ? await ports.semantic.activeRelease(pool, execution.deadline) : publishedRelease;
   lifetime.check();
   if ('route' in target) {
     resolved = resolveTemplate(active.profile, { route: target.route });
@@ -1277,7 +1291,9 @@ async function readConfiguredPage(
       : undefined;
   return answerPage(application, ports, lifetime, {
     release: definitionRelease?.release,
-    ...(execution.bookCatalogue ? { bookCatalogue: execution.bookCatalogue(definitionRelease, lifetime.signal) } : {}),
+    ...(execution.bookCatalogue
+      ? { bookCatalogue: execution.bookCatalogue.open(definitionRelease, lifetime.signal) }
+      : {}),
     continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
     execution,
     session,

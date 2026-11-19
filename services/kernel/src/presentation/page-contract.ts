@@ -83,10 +83,13 @@ export type PageExecution = {
   clock: () => Date;
   deadlineNow: () => number;
   dispatch: (request: Request) => Promise<Response>;
-  bookCatalogue?: (
-    active: import('./page-semantic-port.ts').PageActiveRelease | null,
-    signal: AbortSignal,
-  ) => import('../search/http/catalogue-search.ts').BookCatalogueReader;
+  bookCatalogue?: {
+    readRelease(): Promise<import('./page-semantic-port.ts').PageActiveRelease | null>;
+    open(
+      active: import('./page-semantic-port.ts').PageActiveRelease | null,
+      signal: AbortSignal,
+    ): import('../search/http/catalogue-search.ts').BookCatalogueReader;
+  };
   actor: Actor;
   deadline: number;
   request: Request;
