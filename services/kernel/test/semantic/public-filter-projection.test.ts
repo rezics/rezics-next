@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { releaseDigest } from '@rezics/definitions';
+import identityPoints from '../../src/semantic/public-filter-identity-points.sql';
+import identityFloors from '../../src/semantic/public-filter-identity-floors.sql';
 import { withQueryAccounting } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
 import { lockProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
@@ -56,7 +58,31 @@ test('native public Subject identity batches retain the same anchors without cre
       expected.push({ subject, terminal, partition, securityRevision, currentRelease });
     }
     expect(identities.rows).toEqual(expected);
-    expect((await read([subjects[0]!, newId(160)])).status).toBe('unready');
+    const calls: string[] = [];
+    const windows = await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(sql, _values, dispatch) {
+          calls.push(sql);
+          return dispatch();
+        },
+      },
+      () =>
+        source.readPublicFilterSubjectIdentityWindows!(
+          [subjects.toReversed(), [subjects[0]!, newId(160)]].map((ids) => ({
+            subjects: ids,
+            context: readContext(),
+            meaning: f.meaning,
+            inputLimit: ids.length,
+          })),
+        ),
+    );
+    expect(windows.map((window) => window.status)).toEqual(['observed', 'unready']);
+    expect(windows[0]?.status === 'observed' && windows[0].rows).toEqual(expected.toReversed());
+    expect(windows.reduce((n, window) => n + window.cost.inputKeys, 0)).toBe(3);
+    expect(calls.filter((sql) => sql === identityPoints.sql)).toHaveLength(1);
+    expect(calls.filter((sql) => sql === identityFloors.sql)).toHaveLength(1);
+    expect(calls.filter((sql) => sql.includes('FROM access.resource_grant'))).toHaveLength(1);
   } finally {
     await f.close();
   }

@@ -23,6 +23,32 @@ export async function readBookIdentities(waiting: BookIdentityRead[], check: () 
   for (const [source, reads] of Map.groupBy(waiting, (r) => r.source)) {
     for (const group of Map.groupBy(reads, (read) => read.request.meaning.digest).values()) {
       try {
+        if (source.readPublicFilterSubjectIdentityWindows) {
+          check();
+          const windows = await group[0]!.admit(() =>
+            source.readPublicFilterSubjectIdentityWindows!(group.map((read) => read.request)),
+          );
+          if (windows.length !== group.length) throw new Error('Incomplete Book identity windows');
+          const failures: unknown[] = [];
+          group.forEach((read, i) => {
+            const window = windows[i]!;
+            try {
+              read.charge(window.cost);
+            } catch (error) {
+              failures.push(error);
+            }
+            const byId = new Map(window.status === 'observed' ? window.rows.map((row) => [row.subject, row]) : []);
+            const rows = read.request.subjects.map((id) => byId.get(id));
+            const complete =
+              window.status === 'observed' &&
+              byId.size === new Set(read.request.subjects).size &&
+              window.rows.length === byId.size &&
+              rows.every((row) => row !== undefined);
+            settled.set(read, () => read.answer.resolve(complete ? rows : undefined));
+          });
+          if (failures.length) throw failures[0];
+          continue;
+        }
         const owners = new Map<string, number[]>();
         const result = group.map(() => ({ rows: new Map<string, BookIdentityRow>(), spent: 0, complete: true }));
         group.forEach(({ request }, i) => {

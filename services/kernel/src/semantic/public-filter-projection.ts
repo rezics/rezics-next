@@ -1,8 +1,10 @@
+import { MAX_PAGE_READS } from '@rezics/composition';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { facetProperties } from '@rezics/filter';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
+import { prepareReadDecisions } from '../request/access.ts';
 import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import {
@@ -46,6 +48,8 @@ import type {
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
+import readIdentityFloors from './public-filter-identity-floors.sql';
+import readIdentityPointsQuery from './public-filter-identity-points.sql';
 import readSubjects from './search-source-subjects.sql';
 import readPrivacyHead from './public-filter-projection-head-read.sql';
 import readBuild from './public-filter-projection-build-read.sql';
@@ -439,16 +443,12 @@ async function inSnapshot<T>(pool: Pool, deadline: number, work: (client: PoolCl
   );
 }
 
-async function storedMeaningRelease(pool: Pool, digest: string, deadline: number): Promise<Release | null> {
-  return inSnapshot(pool, deadline, async (client) => {
-    const owner = await readPartition(client, 0);
-    if (!owner || owner.writeState !== 'active') return null;
-    const found = await readBaseReleases(client, [digest]);
-    // Binding accepts persisted composite digests through the release owner.
-    // Resolve that same immutable authority instead of treating a missing base
-    // release row as missing meaning or trusting the caller's release body.
-    return found.has(digest) ? (found.get(digest) ?? null) : readRelease(client, digest);
-  });
+async function storedMeaningRelease(client: PoolClient, digest: string): Promise<Release | null> {
+  const owner = await readPartition(client, 0);
+  if (!owner || owner.writeState !== 'active') return null;
+  const found = await readBaseReleases(client, [digest]);
+  // Binding also accepts persisted composite digests through the release owner.
+  return found.has(digest) ? (found.get(digest) ?? null) : readRelease(client, digest);
 }
 
 function sourceObservation(
@@ -690,6 +690,141 @@ async function readPublicIdentities(
   return { states, heads, epochs, complete };
 }
 
+function identityWindow(ids: readonly string[], inputLimit: number) {
+  const observed: Pick<IdentityRead, 'states' | 'heads' | 'complete'> = {
+    states: new Map(),
+    heads: new Map(),
+    complete: true,
+  };
+  return { pending: new Set(ids), observed, cost: { ...emptyCost() }, inputLimit, spent: 0 };
+}
+type IdentityWindow = ReturnType<typeof identityWindow>;
+type IdentityPoint = SubjectRow & { epoch: number; privacy_position: string };
+
+/** Prepare before checkout, then verify the exact visibility revision and evaluate native Access at T
+ * on the same snapshot as the owner, privacy head, redirect and selection evidence. */
+async function readIdentityPoints(
+  config: Configuration,
+  keys: { id: string; route: number }[],
+  time: AuthoritativeTime,
+  deadline: number,
+) {
+  const context = { pool: config.pool, deadline };
+  const actor = { kind: 'anonymous' } as const;
+  const input = { ids: keys.map(({ id }) => id), routes: keys.map(({ route }) => route) };
+  // Small catalogues can otherwise scan every Subject once per supplied key.
+  const floors = await inSnapshot(config.pool, deadline, async (client) => {
+    await client.query('SET LOCAL enable_seqscan = off');
+    return nativeSourceQuery(client, readIdentityFloors, input);
+  });
+  const prepared = new Map(floors.map((row) => [row.id, row]));
+  const decisions = await prepareReadDecisions(config.access, {
+    actor,
+    actions: new Set(['subject:read']),
+    context,
+    time,
+  });
+  return inSnapshot(config.pool, deadline, async (client) => {
+    await client.query('SET LOCAL enable_seqscan = off');
+    const points = (await nativeSourceQuery(client, readIdentityPointsQuery, input)) as IdentityPoint[];
+    const result = new Map<string, { row: IdentityPoint; allowed: boolean }>();
+    const eligible = new Map<string, IdentityPoint>();
+    for (const row of points) {
+      const floor = prepared.get(row.id);
+      if (!floor) continue;
+      if (floor.visible && row.visibility === 'visible' && floor.revision === row.securityRevision)
+        eligible.set(row.id, row);
+      else result.set(row.id, { row, allowed: false });
+    }
+    if (eligible.size) {
+      const decided = await decisions.decide(
+        client,
+        {
+          action: 'subject:read',
+          resourceType: 'semantic.subject',
+          ids: [...eligible.keys()],
+          eligibility: async (_client, ids) => Object.fromEntries(ids.map((id) => [id, eligible.has(id)])),
+        },
+        time,
+      );
+      for (const [id, row] of eligible) {
+        const allowed = decided[id]?.allowed;
+        if (typeof allowed === 'boolean') result.set(id, { row, allowed });
+      }
+    }
+    return result;
+  });
+}
+
+/** Admit each logical window independently. Shared exact points are charged once and every
+ * requester spends its full redirect allowance before entering the next depth. */
+async function readIdentityWindows(
+  config: Configuration,
+  port: PublicFilterAccessBindingPort,
+  windows: IdentityWindow[],
+  time: AuthoritativeTime,
+  deadline: number,
+) {
+  for (let depth = 0; depth < 8; depth++) {
+    const owners = new Map<string, IdentityWindow[]>();
+    for (const window of windows) {
+      const ids = [...window.pending].filter((id) => !window.observed.states.has(id));
+      window.pending.clear();
+      if (window.spent + ids.length > window.inputLimit) {
+        window.observed.complete = false;
+        continue;
+      }
+      window.spent += ids.length;
+      for (const id of ids) {
+        if (!routePartition(id)) {
+          window.observed.complete = false;
+          continue;
+        }
+        const members = owners.get(id);
+        if (members) members.push(window);
+        else owners.set(id, [window]);
+      }
+    }
+    if (!owners.size) break;
+    const ids = [...owners.keys()];
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      port.requireDeadline(deadline);
+      const keys = ids.slice(offset, offset + 200).map((id) => ({ id, route: routeOf(id)! }));
+      for (const [i, { id }] of keys.entries()) {
+        const members = owners.get(id)!;
+        const payer = members[(offset + i) % members.length]!;
+        payer.cost.inputKeys++;
+        payer.cost.accessPoints++;
+        payer.cost.dependencyPoints++;
+      }
+      const result = await readIdentityPoints(config, keys, time, deadline);
+      for (const { id, route } of keys) {
+        const state = result.get(id);
+        const partition = partitionOf(route);
+        for (const { observed, pending } of owners.get(id)!) {
+          if (!state) {
+            observed.complete = false;
+            continue;
+          }
+          const { epoch, privacy_position } = state.row;
+          const position = BigInt(privacy_position);
+          const prior = observed.heads.get(partition);
+          if (prior && (prior.epoch !== epoch || prior.position !== position)) {
+            observed.complete = false;
+            continue;
+          }
+          observed.heads.set(partition, { partition, epoch, position });
+          observed.states.set(id, state);
+          if (state.allowed && state.row.visibility === 'visible' && state.row.redirect)
+            pending.add(state.row.redirect);
+        }
+      }
+    }
+  }
+  for (const { observed, pending } of windows)
+    if ([...pending].some((id) => !observed.states.has(id))) observed.complete = false;
+}
+
 function resolveIdentity(
   root: string,
   states: ReadonlyMap<string, IdentityState>,
@@ -709,62 +844,83 @@ function resolveIdentity(
   return { visible: true, path, terminal: path.at(-1)! };
 }
 
-/** One native public identity read for an ordinary mixed window. Statement
- * projection and its retained builds belong to the fact-reading path. */
-export async function readPublicFilterSubjectIdentities(
+/** Current identity evidence for one ordinary window or the first windows of a composed Book page. */
+export async function readPublicFilterSubjectIdentityWindows(
   config: Configuration,
-  request: PublicFilterSubjectIdentityRequest,
+  requests: readonly PublicFilterSubjectIdentityRequest[],
   accessPort: PublicFilterAccessBindingPort,
-): Promise<PublicFilterSubjectIdentities> {
-  const subjects = [...new Set(request.subjects)];
-  const { deadline } = request.context;
-  const cost: MutableCost = { ...emptyCost() };
-  if (
-    !subjects.length ||
-    subjects.length > 200 ||
-    !Number.isSafeInteger(request.inputLimit) ||
-    request.inputLimit < subjects.length ||
-    request.inputLimit > 1000 ||
-    !validMeaning(request.meaning) ||
-    subjects.some((id) => !routePartition(id))
-  )
-    throw new TypeError('Invalid native public identity request');
-  if (identitySourceSupportRoot() || identitySourceSupportJob()) return unready('identity_pending', cost);
+): Promise<readonly PublicFilterSubjectIdentities[]> {
+  if (!requests.length || requests.length > MAX_PAGE_READS) throw new TypeError('Invalid public identity windows');
+  const meaning = requests[0]!.meaning;
+  const deadline = Math.min(...requests.map(({ context }) => context.deadline));
+  const members = requests.map((request) => {
+    const subjects = [...new Set(request.subjects)];
+    if (
+      !subjects.length ||
+      subjects.length > 200 ||
+      !Number.isSafeInteger(request.inputLimit) ||
+      request.inputLimit < subjects.length ||
+      request.inputLimit > 1000 ||
+      !validMeaning(request.meaning) ||
+      request.meaning.digest !== meaning.digest ||
+      subjects.some((id) => !routePartition(id))
+    )
+      throw new TypeError('Invalid native public identity request');
+    return { subjects, window: identityWindow(subjects, request.inputLimit) };
+  });
+  if (identitySourceSupportRoot() || identitySourceSupportJob())
+    return members.map(({ window }) => unready('identity_pending', window.cost));
   try {
-    if (!(await storedMeaningRelease(config.pool, request.meaning.digest, deadline)))
-      return unready('metadata_missing', cost);
-    const time = await inSnapshot(config.pool, deadline, (client) => mintReadTime(client, config.clock, config.pool));
-    const observed = await readPublicIdentities(
-      config,
-      accessPort,
-      subjects,
-      time,
-      deadline,
-      cost,
-      undefined,
-      request.inputLimit,
+    const time = await inSnapshot(config.pool, deadline, async (client) =>
+      (await storedMeaningRelease(client, meaning.digest)) ? mintReadTime(client, config.clock, config.pool) : null,
     );
-    if (!observed.complete) return unready('dependency_pending', cost);
-    const rows = [];
-    for (const subject of subjects) {
-      const row = observed.states.get(subject)?.row;
-      if (!row?.selection_ready || !row.current_revision || row.currentRelease !== request.meaning.digest)
-        return unready('metadata_missing', cost);
-      const partition = partitionOf(row.route);
-      if (!observed.heads.has(partition)) return unready('owner_pending', cost);
-      rows.push({
-        subject,
-        partition,
-        securityRevision: row.securityRevision,
-        currentRelease: row.currentRelease,
-        terminal: resolveIdentity(subject, observed.states).terminal,
-      });
+    if (!time) return members.map(({ window }) => unready('metadata_missing', window.cost));
+    if (config.access.prepareReadDecisions) {
+      await readIdentityWindows(
+        config,
+        accessPort,
+        members.map(({ window }) => window),
+        time,
+        deadline,
+      );
+    } else {
+      for (const { subjects, window } of members)
+        window.observed = await readPublicIdentities(
+          config,
+          accessPort,
+          subjects,
+          time,
+          deadline,
+          window.cost,
+          undefined,
+          window.inputLimit,
+        );
     }
     requireAccessDeadline(deadline);
-    return { status: 'observed', rows, cost };
+    return members.map(({ subjects, window: { observed, cost } }) => {
+      if (!observed.complete) return unready('dependency_pending', cost);
+      const rows = [];
+      for (const subject of subjects) {
+        const row = observed.states.get(subject)?.row;
+        if (!row?.selection_ready || !row.current_revision || row.currentRelease !== meaning.digest)
+          return unready('metadata_missing', cost);
+        const partition = partitionOf(row.route);
+        if (!observed.heads.has(partition)) return unready('owner_pending', cost);
+        rows.push({
+          subject,
+          partition,
+          securityRevision: row.securityRevision,
+          currentRelease: row.currentRelease,
+          terminal: resolveIdentity(subject, observed.states).terminal,
+        });
+      }
+      return { status: 'observed', rows, cost };
+    });
   } catch (error) {
     if (accessPort.isUnavailable(error))
-      return Date.now() >= deadline ? unavailable('deadline', cost) : unready('dependency_pending', cost);
+      return members.map(({ window }) =>
+        Date.now() >= deadline ? unavailable('deadline', window.cost) : unready('dependency_pending', window.cost),
+      );
     throw error;
   }
 }
@@ -1064,7 +1220,7 @@ export async function readPublicFilterProjectionPage(
   try {
     const pinnedRelease = identitySourceSupportJob()
       ? await readRelease(config.pool, request.meaning.digest)
-      : await storedMeaningRelease(config.pool, request.meaning.digest, deadline);
+      : await inSnapshot(config.pool, deadline, (client) => storedMeaningRelease(client, request.meaning.digest));
     if (!pinnedRelease) return unready('metadata_missing', cost);
     const meaning = { ...request.meaning, release: pinnedRelease };
     const snapshot = await inSnapshot(

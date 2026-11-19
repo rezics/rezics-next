@@ -7,6 +7,7 @@ import type {
   PrivacyReductionObservationRequest,
   PublicFilterProjectionMeaning,
   PublicFilterProjectionRequest,
+  PublicFilterSubjectIdentityRequest,
   PublicFilterSource,
   PublicFilterSourceFactory,
   RecordPrivacyReduction as RecordPrivacyReductionType,
@@ -45,7 +46,7 @@ import { enqueuePublicFilterCoverage } from './public-filter-coverage-pending.ts
 import { readPublicFilterPopulation, readPublicFilterPagePopulations } from './public-filter-coverage-population.ts';
 import {
   readPublicFilterProjectionPage as readProjectionPage,
-  readPublicFilterSubjectIdentities,
+  readPublicFilterSubjectIdentityWindows,
 } from './public-filter-projection.ts';
 import { isDeepStrictEqual } from 'node:util';
 import realmOfBoard from '../content/realm-of-board.sql';
@@ -398,8 +399,15 @@ export function createNativePublicFilterSource(
       return readProjectionPage(config, request, accessPort);
     },
     async readPublicFilterSubjectIdentities(request) {
-      return readPublicFilterSubjectIdentities(config, request, accessPort);
+      const [window] = await readPublicFilterSubjectIdentityWindows(config, [request], accessPort);
+      return window!;
     },
+    ...(config.access.prepareReadDecisions
+      ? {
+          readPublicFilterSubjectIdentityWindows: (requests: readonly PublicFilterSubjectIdentityRequest[]) =>
+            readPublicFilterSubjectIdentityWindows(config, requests, accessPort),
+        }
+      : {}),
     readPrivacyReductionHeads,
     async readPrivacyReductionPage(request: PrivacyReductionLogRequest): Promise<PrivacyReductionLogPage> {
       if (

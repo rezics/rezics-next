@@ -283,6 +283,10 @@ export type PublicFilterSource = Readonly<{
   readPublicFilterSubjectIdentities?(
     request: PublicFilterSubjectIdentityRequest,
   ): Promise<PublicFilterSubjectIdentities>;
+  /** First windows at one release. Each keeps its input allowance, redirect chain and readiness. */
+  readPublicFilterSubjectIdentityWindows?(
+    requests: readonly PublicFilterSubjectIdentityRequest[],
+  ): Promise<readonly PublicFilterSubjectIdentities[]>;
   readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
   readPrivacyReductionPage(request: PrivacyReductionLogRequest): Promise<PrivacyReductionLogPage>;
 }>;
