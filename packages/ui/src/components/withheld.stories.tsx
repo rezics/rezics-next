@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { CoverCard, CoverGrid } from './cover-card.tsx';
 import { Withheld } from './withheld.tsx';
-import { withSurface } from '../stories/support.tsx';
+import { darkTestGlobals, withSurface } from '../stories/support.tsx';
 
 const meta = {
   title: 'Feedback/Withheld',
@@ -17,14 +17,14 @@ function Examples() {
   return (
     <div className="flex flex-col gap-6">
       <section aria-label="Covers">
-        <CoverGrid ratio="3:4">
+        <CoverGrid ratio="3:4" fixedDensity>
           <CoverCard
             href="/garden"
             title="The garden notebook"
             secondary="M. Green"
             state="Reading"
             cover={{
-              subject: { id: 'garden', title: 'The garden notebook', types: ['schema:Book'] },
+              subject: { id: 'garden', title: 'The garden notebook', types: ['schema:CreativeWork'] },
               cover: null,
               src: () => '',
             }}
@@ -85,4 +85,4 @@ const footprints: Story['play'] = async ({ canvasElement }) => {
 };
 
 export const Light: Story = { globals: {}, render: () => <Examples />, play: footprints };
-export const Dark: Story = { ...Light, globals: {} };
+export const Dark: Story = { ...Light, globals: darkTestGlobals };
