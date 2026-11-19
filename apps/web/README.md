@@ -356,9 +356,17 @@ under one memory limit. The browser pool includes the page-story suite once. A s
 matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to change that upper bound. The host lease
 sets the actual stack concurrency from `REZICS_STACK_SLOTS` (eight by default on this host). When the check already
 holds a stack slot, browser and dev-server files run one at a time inside that slot. The placed browser worker runs
-shared-server consumers in one network namespace. Each file starts a fresh Bun process and can borrow the default
-Vite server when its requested Worker bindings match. Custom commands, exclusive fixtures and binding mismatches
-still start dedicated servers. Host and server-independent files keep their own placement. Pure unit tests run directly,
+the known default-server consumers in one network namespace. Each file starts a fresh Bun process and can borrow
+the server when its requested Worker bindings match. Custom commands, exclusive fixtures and binding mismatches
+start dedicated servers. After the shared group exits, remaining files run through their own isolation and placement.
+Serial browser fixtures reuse the worker's prepared Vite dependency cache.
+
+Each completed lane attempt writes a `[web-file]` line and an `outcomes.jsonl` report entry. A fingerprinted run
+records its physical run ID, source revision and digest, file digest, argv, exit code and elapsed seconds. A
+load-sensitive first failure stays pending until its isolated retry completes. The root Gate forwards these lines
+while Web is running and settles the workspace through its normal complete result.
+
+Host and server-independent files keep their own placement. Pure unit tests run directly,
 without the isolated wrapper or a slot, in a wider ten-lane pool configurable with `WEB_UNIT_CHECK_CONCURRENCY`. Both
 pools schedule files by their latest recorded wall time, longest first, and update
 [`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
