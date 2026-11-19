@@ -138,7 +138,8 @@ export function MemberReadingItem({
       aria-controls={detailId}
       data-collection-detail-opener
       size="sm"
-      className="h-auto min-h-6 max-w-full justify-start px-0 whitespace-normal text-left"
+      // The nearest grid sibling has an 8px gap. A 28px box plus 8px on each side fits without covering it.
+      className="h-auto min-h-6 max-w-full justify-start px-0 whitespace-normal text-left [--hitbox-l:-1px] [--hitbox-r:-1px] max-md:min-h-7 max-md:min-w-11 max-md:hitbox-y-[9px] pointer-coarse:min-h-7 pointer-coarse:min-w-11 pointer-coarse:hitbox-y-[9px]"
       onClick={(event) => onInspect(event.currentTarget)}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && expanded && onClose && !event.defaultPrevented) {
