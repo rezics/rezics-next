@@ -180,6 +180,8 @@ write the OpenAPI document or client, or touch the development database. Argumen
 Reylo analysis owner and removes its one-run database. Native Web host check preparation runs this action before
 the test process. The native fixture validates its migrated schema against that analysis and owns real Auth, Kernel
 and Worker startup within its declared setup budget.
+Bind each Reylo named parameter once per statement. Use an input CTE column wherever the statement needs that value
+again.
 
 Derived generation keeps one throwaway database per checkout in a container labeled with that checkout's cache key.
 It reuses the container only while the pinned PostgreSQL image and migration fingerprint match, and recreates only that
