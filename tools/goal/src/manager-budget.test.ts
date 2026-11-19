@@ -1,13 +1,16 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { createInterface } from 'node:readline';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { historicalManager } from '../test-support/historical-manager.ts';
 import { StdioAppServer, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
+import { readFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration, type IntegrationRuntime } from './integration-cli.ts';
-import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { ManagerSessions, type GoalState, type ManagedManagerState, type ManagerSpec } from './managers.ts';
 import { temporaryDirectory } from './test-support.ts';
 import { readControlPolicy, type ControlPolicy } from './policy.ts';
 
@@ -21,20 +24,10 @@ async function setup(policy?: ControlPolicy) {
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
-  const windows: { manager: string; argv: string[] }[] = [];
-  const removed: string[] = [];
   const services = {
     ...(policy ? { policy } : {}),
     connect: async () => client,
-    windows: {
-      register(manager: string, argv: string[]) {
-        windows.push({ manager, argv });
-        return `@${windows.length}`;
-      },
-      unregister(manager: string) {
-        removed.push(manager);
-      },
-    },
+    windows: { register: () => '@1', unregister: () => {} },
     checkCompletion: async () => ({
       passed: false,
       evidencePath: join(temporary.path, 'completion.log'),
@@ -68,50 +61,98 @@ async function setup(policy?: ControlPolicy) {
     await client.request('test/notify', notification);
     await managers.flush();
   };
+  async function providerSession() {
+    const threadId = randomUUID();
+    const { goal } = await client.request('thread/goal/set', {
+      threadId,
+      objective: spec.objective,
+      status: 'active',
+      tokenBudget: spec.budget,
+    });
+    const { turn } = await client.request<{ turn: { id: string } }>('turn/start', { threadId, input: [] });
+    return {
+      threadId,
+      status: 'running',
+      activeTurnId: turn.id,
+      countedTurn: turn.id,
+      turnDisposition: { threadId, turnId: turn.id, at: Date.now(), status: 'inProgress', intent: 'work' },
+      goalState: goal,
+      continuationAsked: false,
+      continuationRenewed: false,
+    } as const;
+  }
+  async function recoverSession() {
+    // Load the same thread and active turn from the fake provider and the historical store.
+    const provider = await providerSession();
+    const state = historicalManager(db, temporary.path, { ...spec, ...provider });
+    await managers.recover();
+    await managers.flush();
+    return { ...state, threadId: provider.threadId };
+  }
+
+  function runtime(managerSocket = join(temporary.path, 'manager.sock')): IntegrationRuntime {
+    return {
+      db,
+      mainCheckout: temporary.path,
+      stateDirectory: temporary.path,
+      worktreeRoot: join(temporary.path, 'worktrees'),
+      managerSocket,
+      inbox,
+      fence: {} as IntegrationRuntime['fence'],
+      sink: {} as IntegrationRuntime['sink'],
+      landing: () => ({}) as ReturnType<IntegrationRuntime['landing']>,
+      manager: () => spec,
+      managerServices: services,
+    };
+  }
   return {
     ...temporary,
     db,
     client,
     inbox,
     managers,
-    windows,
-    removed,
+    recoverSession,
+    providerSession,
+    runtime,
     services,
     spec,
     requests,
     notify,
     async close() {
-      await managers.close();
-      db.close();
-      temporary.close();
+      try {
+        await managers.close();
+      } finally {
+        await client.close();
+        db.close();
+        temporary.close();
+      }
     },
   };
 }
 
-async function report(s: Awaited<ReturnType<typeof setup>>, threadId: string, status: string, tokensUsed: number) {
-  await s.notify({
-    method: 'thread/goal/updated',
-    params: { threadId, goal: { status, tokensUsed, timeUsedSeconds: 120, tokenBudget: s.spec.budget } },
+async function report(
+  s: Awaited<ReturnType<typeof setup>>,
+  threadId: string,
+  status: GoalState['status'],
+  tokensUsed: number,
+) {
+  const { goal } = await s.client.request('thread/goal/set', {
+    threadId,
+    status,
+    tokensUsed,
+    timeUsedSeconds: 120,
+    tokenBudget: s.spec.budget,
   });
-}
-
-function continuationPath(root: string, manager: string): string {
-  return join(root, '.temp', 'goal', manager, 'CONTINUATION.md');
-}
-
-async function writeContinuation(s: Awaited<ReturnType<typeof setup>>) {
-  const path = continuationPath(s.path, s.spec.id);
-  mkdirSync(join(path, '..'), { recursive: true });
-  writeFileSync(path, '- Next action: implement the manager stop-loss rule in tools/goal/src/managers.ts.\n');
-  return path;
+  await s.managers.flush();
+  return goal;
 }
 
 test('a Codex manager reaching 90% of its budget is asked once to write a continuation file', async () => {
   const s = await setup();
   try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 900);
-    await report(s, started.threadId!, 'active', 950);
+    const started = await s.recoverSession();
+    await report(s, started.threadId, 'active', 900);
+    await report(s, started.threadId, 'active', 950);
 
     const instructions = s.inbox.pending(started.id).filter((entry) => entry.event.kind === 'instruction');
     expect(instructions).toHaveLength(1);
@@ -130,25 +171,22 @@ test('a Codex manager reaching 90% of its budget is asked once to write a contin
       status: 'running',
       threadId: started.threadId,
     });
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(0);
   } finally {
     await s.close();
   }
 });
 
-test('a manager launches with an over-budget opening and records its prompt manifest', async () => {
+test('public managed start refuses launch even with a restrictive prompt budget', async () => {
   const s = await setup(readControlPolicy({ prompt: { managerRoleBytes: 1, managerOpeningBytes: 1 } }));
   try {
-    const started = await s.managers.start(s.spec);
-    expect(started.status).toBe('running');
-    expect(started.promptManifest?.overBudget).toEqual(['role', 'opening']);
-    expect(started.promptManifest?.budgets).toEqual({ role: 1, opening: 1 });
-    const event = s.db.query("SELECT detail FROM flow_events WHERE stage='manager' AND action='started'").get() as {
-      detail: string;
-    };
-    expect(JSON.parse(event.detail).prompt).toMatchObject({
-      overBudget: ['role', 'opening'],
-    });
+    const requests = s.requests();
+    await expect(runIntegration(['manager', 'start', s.spec.id], s.runtime())).rejects.toThrow(
+      'Managed manager launches and assignments are retired',
+    );
+    expect(s.managers.list()).toEqual([]);
+    expect(readFlow(s.db).filter((event) => event.stage === 'manager' && event.action === 'started')).toEqual([]);
+    expect(s.requests()).toEqual(requests);
   } finally {
     await s.close();
   }
@@ -157,8 +195,8 @@ test('a manager launches with an over-budget opening and records its prompt mani
 test('a Codex manager below the threshold is not asked or renewed', async () => {
   const s = await setup();
   try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 899);
+    const started = await s.recoverSession();
+    await report(s, started.threadId, 'active', 899);
 
     expect(s.inbox.pending(started.id).filter((entry) => entry.event.kind === 'instruction')).toHaveLength(0);
     expect(s.managers.get(started.id)).toMatchObject({
@@ -166,7 +204,7 @@ test('a Codex manager below the threshold is not asked or renewed', async () => 
       status: 'running',
       threadId: started.threadId,
     });
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(0);
   } finally {
     await s.close();
   }
@@ -175,11 +213,10 @@ test('a Codex manager below the threshold is not asked or renewed', async () => 
 test('a budget-limited Codex manager without a fresh continuation parks and notifies the supermanager once', async () => {
   const s = await setup();
   try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 900);
+    const started = await s.recoverSession();
+    await report(s, started.threadId, 'active', 900);
     await s.managers.outgoingMessage(started.id, 'supervisor', 'continuation written');
-    await report(s, started.threadId!, 'budgetLimited', 1000);
-    await report(s, started.threadId!, 'budgetLimited', 1000);
+    const goal = await report(s, started.threadId, 'budgetLimited', 1000);
 
     const parked = s.managers.get(started.id);
     expect(parked).toMatchObject({
@@ -187,7 +224,10 @@ test('a budget-limited Codex manager without a fresh continuation parks and noti
       threadId: started.threadId,
       continuationAsked: true,
       continuationRenewed: false,
+      activeTurnId: null,
+      goalState: { status: 'paused', tokensUsed: 1000, tokenBudget: 1000 },
     });
+    await s.notify({ method: 'thread/goal/updated', params: { threadId: started.threadId, goal } });
     expect(
       s
         .requests()
@@ -198,7 +238,7 @@ test('a budget-limited Codex manager without a fresh continuation parks and noti
             request.params.status === 'paused',
         ),
     ).toBe(true);
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(0);
     const notices = s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'blocker');
     expect(notices).toHaveLength(1);
     expect(notices[0]!.event.summary).toContain('without a fresh, bounded continuation');
@@ -208,92 +248,83 @@ test('a budget-limited Codex manager without a fresh continuation parks and noti
   }
 });
 
-test('a continuation confirmation to the configured supermanager renews a Codex manager', async () => {
-  const s = await setup();
-  try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 900);
-    await writeContinuation(s);
-    await s.client.request('thread/goal/set', {
-      threadId: started.threadId,
-      status: 'active',
-      tokensUsed: 900,
-      timeUsedSeconds: 120,
-      tokenBudget: s.spec.budget,
-    });
-    await s.managers.flush();
-
-    await s.managers.outgoingMessage(started.id, 'supervisor', 'continuation written');
-    const renewed = s.managers.get(started.id);
-    expect(renewed.threadId).toBe('thread-2');
-    expect(renewed.history?.[0]).toMatchObject({ continuationRenewed: true, continuationTokensUsed: 900 });
-    expect(s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
-  } finally {
-    await s.close();
-  }
-});
-
-test('a persisted continuation request and renewal survive manager-host recovery without duplicate events', async () => {
+test('recovery delivers a persisted continuation notice once to the configured supermanager', async () => {
   const s = await setup();
   const closeClient = s.client.close.bind(s.client);
   let recovered: ManagerSessions | undefined;
   let recoveredAgain: ManagerSessions | undefined;
   try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 900);
+    const old = await s.recoverSession();
+    await report(s, old.threadId, 'active', 900);
+    await s.managers.stop(old.id);
+    await s.managers.flush();
+    const checkpoint = s.managers.get(old.id) as ManagedManagerState;
+    const provider = await s.providerSession();
+    const { threadId } = provider;
+    const replacement: ManagedManagerState = {
+      ...old,
+      ...provider,
+      history: [{ ...checkpoint, continuationRenewed: true, continuationTokensUsed: 900 }],
+      pendingRenewal: { tokensUsed: 900, oldThreadId: old.threadId, ready: true },
+    };
+    // Keep the fake provider alive while replacing the host that observes it.
     s.client.close = () => {};
     await s.managers.close();
-
-    const pending = s.managers.get(started.id);
-    pending.continuationRenewed = true;
-    pending.continuationTokensUsed = 900;
-    pending.pendingRenewal = { tokensUsed: 900, oldThreadId: started.threadId, ready: false };
-    s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(pending), started.id);
+    s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(replacement), old.id);
 
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     await recovered.recover();
     await recovered.flush();
-    expect(recovered.get(started.id).threadId).toBe('thread-2');
-    expect(s.inbox.pending(started.id).filter((entry) => entry.event.kind === 'instruction')).toHaveLength(1);
-    expect(s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
+    const persisted = recovered.get(old.id) as ManagedManagerState;
+    expect(persisted.pendingRenewal).toBeUndefined();
+    expect(persisted).toMatchObject({
+      threadId,
+      budget: old.budget,
+      goalState: { tokenBudget: old.budget },
+      history: [{ threadId: old.threadId, continuationThreadId: old.threadId, continuationTokensUsed: 900 }],
+    });
 
     await recovered.close();
     recoveredAgain = new ManagerSessions(s.db, s.inbox, s.services);
     await recoveredAgain.recover();
     await recoveredAgain.flush();
-    expect(recoveredAgain.get(started.id).threadId).toBe('thread-2');
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
-    expect(s.inbox.pending(started.id).filter((entry) => entry.event.kind === 'instruction')).toHaveLength(1);
-    expect(s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
+    expect(recoveredAgain.get(old.id)).toEqual(persisted);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(0);
+    expect(s.inbox.pending(old.id).filter((entry) => entry.event.kind === 'instruction')).toHaveLength(1);
+    expect(s.inbox.pending(old.supermanager).map(({ event }) => [event.kind, event.summary])).toEqual([
+      ['environment', `Manager ${old.id} renewed after using 900 tokens; new thread ${threadId}.`],
+    ]);
   } finally {
     await recoveredAgain?.close();
     await recovered?.close();
     s.client.close = closeClient;
-    closeClient();
     await s.close();
   }
 });
 
-test('manager renew accepts budget-limited and blocked Codex Goals without a separate stop', async () => {
-  for (const status of ['budgetLimited', 'blocked'] as const) {
+test.each(['budgetLimited', 'blocked'] as const)(
+  'public renew refuses a historical %s Goal and preserves its budget and ownership',
+  async (status) => {
     const s = await setup();
     try {
-      const started = await s.managers.start({ ...s.spec, goals: [s.spec.goal, 'search'] });
-      await s.managers.flush();
-      const state = s.managers.get(started.id);
-      state.goalState = { status, tokensUsed: 950, timeUsedSeconds: 10, tokenBudget: s.spec.budget };
-      s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(state), started.id);
+      const started = historicalManager(s.db, s.path, {
+        ...s.spec,
+        status: 'running',
+        goals: [s.spec.goal, 'search'],
+        goalState: { status, tokensUsed: 950, timeUsedSeconds: 10, tokenBudget: s.spec.budget },
+      });
 
-      const renewed = await s.managers.renew(started.id, s.spec);
-      expect(renewed.status).toBe('running');
-      expect(renewed.threadId).not.toBe(started.threadId);
-      expect(renewed.goals).toEqual([s.spec.goal, 'search']);
-      expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
+      const requests = s.requests();
+      await expect(runIntegration(['manager', 'renew', started.id], s.runtime())).rejects.toThrow(
+        'Managed manager launches and assignments are retired',
+      );
+      expect(s.managers.get(started.id)).toEqual(started);
+      expect(s.requests()).toEqual(requests);
     } finally {
       await s.close();
     }
-  }
-});
+  },
+);
 
 test('inbox send reports a continuation confirmation to the manager host', async () => {
   const s = await setup();
@@ -308,34 +339,35 @@ test('inbox send reports a continuation confirmation to the manager host', async
   const priorManager = process.env.GOAL_MANAGER;
   const priorCodexThread = process.env.CODEX_THREAD_ID;
   try {
-    const started = await s.managers.start(s.spec);
-    await report(s, started.threadId!, 'active', 900);
+    const started = await s.recoverSession();
+    await report(s, started.threadId, 'active', 900);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
     process.env.GOAL_MANAGER = started.id;
-    process.env.CODEX_THREAD_ID = started.threadId!;
-    const runtime: IntegrationRuntime = {
-      db: s.db,
-      mainCheckout: s.path,
-      stateDirectory: s.path,
-      worktreeRoot: join(s.path, 'worktrees'),
-      managerSocket: socketPath,
-      inbox: s.inbox,
-      fence: {} as IntegrationRuntime['fence'],
-      sink: {} as IntegrationRuntime['sink'],
-      landing: () => ({}) as ReturnType<IntegrationRuntime['landing']>,
-      manager: () => s.spec,
-      managerServices: s.services,
-    };
+    const send = ['inbox', 'send', 'supervisor', 'instruction', 'continuation written'];
+    process.env.CODEX_THREAD_ID = 'unrecognized-thread';
+    await expect(runIntegration(send, s.runtime(socketPath))).rejects.toThrow('authenticated manager session');
+    expect(hostRequests).toEqual([]);
+    expect(s.inbox.pending('supervisor')).toEqual([]);
 
-    await runIntegration(['inbox', 'send', 'supervisor', 'instruction', 'continuation written'], runtime);
+    process.env.CODEX_THREAD_ID = started.threadId;
+    await runIntegration(send, s.runtime(socketPath));
+    expect(s.inbox.pending('supervisor').map(({ event }) => event)).toEqual([
+      expect.objectContaining({ from: started.id, summary: 'continuation written' }),
+    ]);
 
     expect(hostRequests.map((request) => request.command)).toEqual(['decision', 'outgoing-message']);
     expect(hostRequests[1]).toMatchObject({
       command: 'outgoing-message',
       manager: started.id,
-      recipient: 'supervisor',
+      recipient: started.supermanager,
       summary: 'continuation written',
     });
+
+    await s.managers.stop(started.id);
+    await s.managers.flush();
+    await expect(runIntegration(send, s.runtime(socketPath))).rejects.toThrow('authenticated manager session');
+    expect(hostRequests).toHaveLength(2);
+    expect(s.inbox.pending('supervisor')).toHaveLength(1);
   } finally {
     if (priorManager === undefined) delete process.env.GOAL_MANAGER;
     else process.env.GOAL_MANAGER = priorManager;
@@ -346,21 +378,17 @@ test('inbox send reports a continuation confirmation to the manager host', async
   }
 });
 
-test('manager override changes prompt guidance, sleep alarms and the continuation boundary together', async () => {
+test('historical manager policy overrides apply to sleep alarms and the continuation boundary', async () => {
   const s = await setup(
     readControlPolicy({
-      manager: { continuationBudgetPercent: 50, continuationCharacters: 1200, messageWords: 25, sleepAlarmPerHour: 1 },
-      backlog: { lowWater: 3, stoppedTaskLimitMs: 1000 },
+      manager: { continuationBudgetPercent: 50, continuationCharacters: 1200, sleepAlarmPerHour: 1 },
     }),
   );
   try {
-    const state = await s.managers.start(s.spec);
-    const opening = s.requests().find((request) => request.method === 'turn/start').params.input[0].text;
-    for (const text of ['Keep about 3', '1000 ms', 'at most 25 words', 'under 1,200 characters'])
-      expect(opening).toContain(text);
-    await report(s, state.threadId!, 'active', 499);
+    const state = await s.recoverSession();
+    await report(s, state.threadId, 'active', 499);
     expect(s.inbox.pending(state.id)).toHaveLength(0);
-    await report(s, state.threadId!, 'active', 500);
+    await report(s, state.threadId, 'active', 500);
     expect(s.inbox.pending(state.id)[0]!.event.summary).toContain('at least 50%');
     expect(s.inbox.pending(state.id)[0]!.event.summary).toContain('at most 1,200 characters');
     for (let index = 0; index < 3; index++)
