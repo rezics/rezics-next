@@ -214,7 +214,7 @@ function OccurrenceRow({
             : m.library_archive_recovery_order_unsupported()}
         </p>
         {unavailable ? (
-          <p className="text-sm text-destructive-foreground">{m.library_archive_recovery_note_cannot_preserve()}</p>
+          <p className="text-sm text-destructive">{m.library_archive_recovery_note_cannot_preserve()}</p>
         ) : null}
         <EvidenceDetails value={row} />
       </div>

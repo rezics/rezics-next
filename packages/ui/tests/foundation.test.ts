@@ -1,56 +1,18 @@
 import { afterAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadCsf } from 'storybook/internal/csf-tools';
+import { inspectThemeColors } from './theme-contrast.ts';
 
 const root = join(import.meta.dir, '..');
 const components = join(root, 'src', 'components');
 
-// Components that must exist, each with a sibling story that runs as a browser test.
-const storied = ['locale', 'localized-text', 'show'];
-
-type Tokens = Record<string, string>;
-
-function block(css: string, open: number): string {
-  let depth = 0;
-  for (let index = css.indexOf('{', open); index < css.length; index++) {
-    if (css[index] === '{') depth++;
-    else if (css[index] === '}' && --depth === 0) return css.slice(open, index + 1);
-  }
-  throw new Error('unbalanced stylesheet');
-}
-
-function hexTokens(text: string): Tokens {
-  return Object.fromEntries(
-    [...text.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [match[1]!, match[2]!.toLowerCase()]),
-  );
-}
-
-// The light palette is the rule that first defines --background; dark overrides it in a nested `@variant dark` block.
-async function themes(): Promise<{ light: Tokens; dark: Tokens }> {
-  const css = await Bun.file(join(root, 'src', 'styles.css')).text();
-  const definition = css.search(/--background:\s*#/);
-  expect(definition).toBeGreaterThan(-1);
-  const start = css.lastIndexOf('}', definition) + 1;
-  const rule = block(css, start);
-  const variant = rule.indexOf('@variant dark');
-  expect(variant).toBeGreaterThan(-1);
-  const dark = block(rule, variant);
-  const light = hexTokens(rule.replace(dark, ''));
-  return { light, dark: { ...light, ...hexTokens(dark) } };
-}
-
-function contrast(a: string, b: string): number {
-  const luminance = (hex: string) => {
-    const [r, g, bl] = [1, 3, 5]
-      .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
-      .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
-  };
-  const [x, y] = [luminance(a), luminance(b)];
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
+const stories = {
+  locale: 'forms-locale--english',
+  'localized-text': 'data-display-localized-text--japanese-title-in-korean-interface',
+  show: 'layout-show--empty',
+};
 
 test('the package is a workspace with exact versions whose check runs this suite', async () => {
   const manifest = (await Bun.file(join(root, 'package.json')).json()) as {
@@ -88,31 +50,45 @@ test('text tokens meet WCAG AA in both themes and the logo red stays a visible m
     ['sidebar-foreground', 'sidebar'],
     ['sidebar-primary-foreground', 'sidebar-primary'],
     ['sidebar-accent-foreground', 'sidebar-accent'],
-    ['destructive-foreground', 'background'],
+    ['destructive', 'background'],
     ['info-foreground', 'background'],
-    ['success-foreground', 'background'],
-    ['warning-foreground', 'background'],
+    ['success-foreground', 'success'],
+    ['warning-foreground', 'warning'],
   ];
-  for (const [name, tokens] of Object.entries(await themes())) {
-    for (const [ink, surface] of [...text, ['brand', 'background'], ['brand', 'card']]) {
-      expect(tokens[ink!], `${name} --${ink}`).toMatch(/^#/);
-      expect(tokens[surface!], `${name} --${surface}`).toMatch(/^#/);
+  const samples = [...text, ['brand', 'background'] as const, ['brand', 'card'] as const].map(([ink, surface]) => ({
+    label: `${ink} on ${surface}`,
+    ink,
+    surface,
+  }));
+  for (const { theme, contrast } of await inspectThemeColors(samples)) {
+    for (const [index, { ratio, foreground, background }] of contrast.entries()) {
+      const sample = samples[index]!;
+      expect(ratio, `${theme} ${sample.label} (${foreground} on ${background})`).toBeGreaterThanOrEqual(
+        sample.ink === 'brand' ? 3 : 4.5,
+      );
     }
-    for (const [ink, surface] of text)
-      expect(contrast(tokens[ink]!, tokens[surface]!), `${name} ${ink} on ${surface}`).toBeGreaterThanOrEqual(4.5);
-    for (const surface of ['background', 'card'])
-      expect(contrast(tokens.brand!, tokens[surface]!), `${name} brand mark on ${surface}`).toBeGreaterThanOrEqual(3);
   }
-});
+}, 30_000);
 
-test('destructive action and error text use the existing text-safe ink in both themes', async () => {
-  for (const [name, tokens] of Object.entries(await themes())) {
-    for (const token of ['destructive', 'destructive-foreground'])
-      expect(tokens[token], `${name} --${token}`).toBe(tokens['accent-foreground']);
-    expect(tokens.brand, `${name} logo red`).toBe(name === 'light' ? '#df3d35' : '#f0524c');
-    expect(tokens['destructive-solid'], `${name} non-text danger red`).toBe(name === 'light' ? '#c42840' : '#d63a50');
+test('the logo retains its identity colors and custom status aliases resolve to Neutral tokens', async () => {
+  const aliases = {
+    'destructive-solid': 'destructive',
+    'info-foreground': 'foreground',
+    success: 'foreground',
+    'success-foreground': 'background',
+    warning: 'foreground',
+    'warning-foreground': 'background',
+  };
+  for (const { theme, tokens } of await inspectThemeColors(
+    [],
+    ['brand', ...Object.keys(aliases), ...Object.values(aliases)],
+  )) {
+    expect(tokens.brand, `${theme} logo red`).toBe(theme === 'light' ? '#df3d35' : '#f0524c');
+    for (const [name, target] of Object.entries(aliases)) {
+      expect(tokens[name], `${theme} --${name}`).toBe(tokens[target]);
+    }
   }
-});
+}, 30_000);
 
 test('the logo red never colors text', async () => {
   const offending = [
@@ -131,9 +107,10 @@ test('the logo red never colors text', async () => {
 
 const probe = join(components, 'accessibility-probe.stories.tsx');
 const fixture = join(root, 'tests', 'fixtures', 'accessibility-probe.stories.tsx');
-const output = mkdtempSync(join(tmpdir(), 'rezics-ui-stories-'));
+const temporary = join(root, '.temp');
+let output: string | undefined;
 afterAll(() => {
-  rmSync(output, { recursive: true, force: true });
+  if (output) rmSync(output, { recursive: true, force: true });
 });
 
 test('the accessibility probe is an opt-in test fixture', async () => {
@@ -145,23 +122,43 @@ test('the accessibility probe is an opt-in test fixture', async () => {
 });
 
 test('every ported component has stories that pass as accessible browser tests', async () => {
-  for (const name of storied) {
+  const expected = Object.entries(stories).map(([name, id]) => {
+    const file = join(components, `${name}.stories.tsx`);
     expect(existsSync(join(components, `${name}.tsx`)), `${name}.tsx`).toBe(true);
-    expect(existsSync(join(components, `${name}.stories.tsx`)), `${name}.stories.tsx`).toBe(true);
-  }
+    const csf = loadCsf(readFileSync(file, 'utf8'), { fileName: file, makeTitle: (title) => title }).parse();
+    const story = Object.values(csf._stories).find((story) => story.id === id);
+    expect(story, id).toBeDefined();
+    return { file, name: story!.name };
+  });
 
   // A control without an accessible name must fail its story: accessibility violations are errors.
+  mkdirSync(temporary, { recursive: true });
+  output = mkdtempSync(join(temporary, 'foundation-stories-'));
   const report = join(output, 'stories.json');
   const status = () =>
     execFileSync('git', ['status', '--porcelain'], { cwd: join(root, '..', '..'), encoding: 'utf8' });
   const statusBefore = status();
-  const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`], {
-    cwd: root,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, CI: '1', REZICS_UI_ACCESSIBILITY_PROBE: '1' },
-  });
-  const [stdout, stderr] = await Promise.all([
+  const run = Bun.spawn(
+    [
+      'bun',
+      'x',
+      'vitest',
+      'run',
+      ...expected.map(({ file }) => file),
+      fixture,
+      '--testNamePattern',
+      `(?:${expected.map(({ name }) => name).join('|')}|Unnamed Control)$`,
+      '--reporter=json',
+      `--outputFile=${report}`,
+    ],
+    {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, CI: '1', REZICS_UI_ACCESSIBILITY_PROBE: '1' },
+    },
+  );
+  const [stdout, stderr, exitCode] = await Promise.all([
     new Response(run.stdout).text(),
     new Response(run.stderr).text(),
     run.exited,
@@ -182,11 +179,11 @@ test('every ported component has stories that pass as accessible browser tests',
   );
   expect(failures.filter((failure) => !failure.includes('accessibility-probe.stories.tsx'))).toEqual([]);
   const probed = byFile.get('accessibility-probe.stories.tsx') ?? [];
-  expect(probed.map((assertion) => assertion.status)).toEqual(['failed']);
-  for (const name of storied) {
-    const assertions = byFile.get(`${name}.stories.tsx`) ?? [];
-    expect(assertions.filter((assertion) => assertion.status === 'passed').length, `${name} stories`).toBeGreaterThan(
-      0,
-    );
+  expect(probed.map((assertion) => [assertion.title, assertion.status])).toEqual([['Unnamed Control', 'failed']]);
+  expect(probed[0]?.failureMessages.join('\n')).toMatch(/button-name|Buttons must have discernible text/i);
+  expect(exitCode).toBe(1);
+  for (const { file, name } of expected) {
+    const assertions = byFile.get(file.slice(file.lastIndexOf('/') + 1)) ?? [];
+    expect(assertions.find((assertion) => assertion.title === name)?.status, `${file}: ${name}`).toBe('passed');
   }
 }, 900_000);

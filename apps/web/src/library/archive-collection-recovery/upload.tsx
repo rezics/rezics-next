@@ -190,7 +190,7 @@ export function ArchiveCollectionRecoveryUpload({
           </p>
         ) : null}
         {error ? (
-          <p role="alert" className="text-sm text-destructive-foreground">
+          <p role="alert" className="text-sm text-destructive">
             {error === 'size'
               ? m.library_archive_recovery_upload_too_large()
               : error === 'empty'

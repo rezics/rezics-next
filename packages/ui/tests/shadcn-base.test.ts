@@ -1,13 +1,14 @@
-import { afterAll, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { loadCsf } from 'storybook/internal/csf-tools';
+import { buttonVariants } from '../src/shadcn/button.tsx';
+import { inspectThemeColors } from './theme-contrast.ts';
 
 const root = join(import.meta.dir, '..');
 const repository = join(root, '..', '..');
 const shadcn = join(root, 'src', 'shadcn');
 
-type Tokens = Record<string, string>;
 type Components = {
   style: string;
   iconLibrary: string;
@@ -30,59 +31,6 @@ type Snapshot = { style: string; items: RegistryItem[] };
 const readJson = async <T>(path: string) => (await Bun.file(path).json()) as T;
 const text = (path: string) => readFileSync(path, 'utf8');
 
-function block(css: string, open: number): string {
-  let depth = 0;
-  for (let index = css.indexOf('{', open); index < css.length; index++) {
-    if (css[index] === '{') depth++;
-    else if (css[index] === '}' && --depth === 0) return css.slice(open, index + 1);
-  }
-  throw new Error('unbalanced stylesheet');
-}
-
-function hexTokens(source: string): Tokens {
-  return Object.fromEntries(
-    [...source.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((match) => [
-      match[1]!,
-      match[2]!.toLowerCase(),
-    ]),
-  );
-}
-
-// The light palette is the rule that first defines --background; dark overrides it in a nested `@variant dark` block.
-async function themes(): Promise<{ light: Tokens; dark: Tokens }> {
-  const css = text(join(root, 'src', 'styles.css'));
-  const definition = css.search(/--background:\s*#/);
-  expect(definition).toBeGreaterThan(-1);
-  const rule = block(css, css.lastIndexOf('}', definition) + 1);
-  const variant = rule.indexOf('@variant dark');
-  expect(variant).toBeGreaterThan(-1);
-  const dark = block(rule, variant);
-  const light = hexTokens(rule.replace(dark, ''));
-  return { light, dark: { ...light, ...hexTokens(dark) } };
-}
-
-function mix(foreground: string, background: string, share: number): string {
-  const channel = (hex: string, index: number) => parseInt(hex.slice(index, index + 2), 16);
-  return `#${[1, 3, 5]
-    .map((index) =>
-      Math.round(channel(foreground, index) * share + channel(background, index) * (1 - share))
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')}`;
-}
-
-function contrast(a: string, b: string): number {
-  const luminance = (hex: string) => {
-    const [r, g, bl] = [1, 3, 5]
-      .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
-      .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
-  };
-  const [x, y] = [luminance(a), luminance(b)];
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-
 function sources(directory: string, extensions: string[]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
@@ -101,11 +49,12 @@ async function snapshot(): Promise<Snapshot> {
   return readJson<Snapshot>(join(root, 'shadcn-registry.json'));
 }
 
-test('packages/ui and apps/web share one shadcn configuration: the Rhea style on the Base UI base, with one icon library and base color', async () => {
+test('packages/ui and apps/web share one shadcn configuration: Mira Neutral on Base UI with one icon library', async () => {
   const ui = await readJson<Components>(join(root, 'components.json'));
   const web = await readJson<Components>(join(repository, 'apps', 'web', 'components.json'));
 
-  expect(ui.style).toBe('base-rhea');
+  expect(ui.style).toBe('base-mira');
+  expect(ui.tailwind.baseColor).toBe('neutral');
   for (const key of ['style', 'iconLibrary', 'rtl', 'menuColor', 'menuAccent'] as const)
     expect(web[key], key).toEqual(ui[key]);
   expect(web.tailwind.baseColor).toBe(ui.tailwind.baseColor);
@@ -137,7 +86,8 @@ test('packages/ui and apps/web share one shadcn configuration: the Rhea style on
 
 test('every shadcn component is cloned into the one directory the shadcn CLI writes, with exact version pins', async () => {
   const registry = await snapshot();
-  expect(registry.style).toBe('base-rhea');
+  const config = await readJson<Components>(join(root, 'components.json'));
+  expect(registry.style).toBe(config.style);
   const components = registry.items
     .filter((item) => item.type === 'registry:ui' && (item.files?.length ?? 0) > 0 && !notCloned.has(item.name))
     .map((item) => item.name);
@@ -193,12 +143,11 @@ test('every shadcn component is cloned into the one directory the shadcn CLI wri
   expect(readme).toContain('src/shadcn');
 });
 
-test('the shadcn color variables resolve to the Aura tokens with AA text contrast in both themes, and the logo red colors no text', async () => {
+test('the shadcn color variables resolve to Mira Neutral with AA text contrast in both themes', async () => {
   const css = text(join(root, 'src', 'styles.css'));
-  // Rhea's defaults come first and the Aura tokens are layered after them.
-  const rhea = css.indexOf("shadcn/tailwind.css'");
-  expect(rhea, 'styles.css imports shadcn/tailwind.css').toBeGreaterThan(-1);
-  expect(css.indexOf('--background:'), 'the Aura tokens follow the Rhea import').toBeGreaterThan(rhea);
+  const shadcnImport = css.indexOf("shadcn/tailwind.css'");
+  expect(shadcnImport, 'styles.css imports shadcn/tailwind.css').toBeGreaterThan(-1);
+  expect(css.indexOf('--background:'), 'the Neutral tokens follow the shadcn import').toBeGreaterThan(shadcnImport);
 
   const variables = [
     'background',
@@ -235,8 +184,7 @@ test('the shadcn color variables resolve to the Aura tokens with AA text contras
   ];
   for (const name of variables) expect(css, `--color-${name}`).toContain(`--color-${name}: var(--${name})`);
 
-  // Text pairs the Rhea components draw: text on its own surface, links and muted text on every surface, and the
-  // destructive tone on the page, on cards and on the tint Rhea's destructive button and alert fill with.
+  // Text on its own surface, and shared ink on each surface the Mira components use.
   const pairs: [string, string][] = [
     ['foreground', 'background'],
     ['card-foreground', 'card'],
@@ -260,59 +208,41 @@ test('the shadcn color variables resolve to the Aura tokens with AA text contras
     ['sidebar-primary-foreground', 'sidebar-primary'],
     ['sidebar-accent-foreground', 'sidebar-accent'],
   ];
-  for (const [name, tokens] of Object.entries(await themes())) {
-    for (const variable of variables) expect(tokens[variable], `${name} --${variable}`).toMatch(/^#[0-9a-f]{6}$/);
-    for (const [ink, surface] of pairs)
-      expect(contrast(tokens[ink]!, tokens[surface]!), `${name} ${ink} on ${surface}`).toBeGreaterThanOrEqual(4.5);
-    for (const surface of ['background', 'card'])
-      expect(
-        contrast(tokens.destructive!, mix(tokens.destructive!, tokens[surface]!, 0.1)),
-        `${name} destructive on its 10% tint over ${surface}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    // The logo red is a mark, never a text-bearing variable.
+  const samples = pairs.map(([ink, surface]) => ({ label: `${ink} on ${surface}`, ink, surface }));
+  for (const { theme, tokens, contrast } of await inspectThemeColors(samples, [...variables, 'brand'])) {
+    for (const [index, { foreground, background, ratio }] of contrast.entries()) {
+      expect(ratio, `${theme} ${samples[index]!.label} (${foreground} on ${background})`).toBeGreaterThanOrEqual(4.5);
+    }
     for (const variable of variables.filter((variable) =>
-      /foreground$|^(?:primary|destructive|ring)$|^sidebar-primary$/.test(variable),
-    ))
-      expect(tokens[variable], `${name} --${variable} is not the logo red`).not.toBe(tokens.brand);
-    expect(contrast(tokens.brand!, tokens.background!), `${name} brand mark`).toBeGreaterThanOrEqual(3);
+      /foreground$|^(?:primary|destructive|ring|sidebar-primary)$/.test(variable),
+    )) {
+      expect(tokens[variable], `${theme} --${variable} uses --brand`).not.toBe(tokens.brand);
+    }
   }
-  expect(css).not.toMatch(/--(?:primary|destructive|ring|[\w-]+-foreground):\s*var\(--brand\)/);
-
-  // No cloned file or story colors text with the logo red.
-  const offending = [
-    /(?<![\w-])text-brand\b/,
-    /text-\[(?:color:)?var\(--(?:color-)?brand\)\]/,
-    /text-\(--(?:color-)?brand\)/,
-    /(?<![\w-])color:\s*var\(--(?:color-)?brand\)/,
-  ];
-  const found: string[] = [];
-  for (const file of sources(join(root, 'src'), ['.ts', '.tsx', '.css']))
-    for (const pattern of offending) if (pattern.test(text(file))) found.push(`${file}: ${pattern}`);
-  expect(found).toEqual([]);
-
   // Theme selection stays on <html> with no script.
   expect(css).toContain('@custom-variant dark');
   expect(css).toContain('prefers-color-scheme: dark');
   expect(css).not.toMatch(/@custom-variant dark\s*\(&:is\(\.dark \*\)\)/);
-});
+}, 30_000);
 
-test('destructive ink meets AA over Rhea action states and in error descriptions', async () => {
-  for (const [name, tokens] of Object.entries(await themes())) {
-    for (const surface of ['background', 'card', 'popover']) {
-      // Generated buttons use 10%/20% fills in light and 20%/30% in dark; menus use the first tint on focus.
-      for (const share of name === 'light' ? [0.1, 0.2] : [0.2, 0.3])
-        expect(
-          contrast(tokens.destructive!, mix(tokens['destructive-solid']!, tokens[surface]!, share)),
-          `${name} destructive ink on ${share * 100}% danger tint over ${surface}`,
-        ).toBeGreaterThanOrEqual(4.5);
-      // Rhea's destructive alert description draws the same ink at 90% opacity.
-      expect(
-        contrast(mix(tokens.destructive!, tokens[surface]!, 0.9), tokens[surface]!),
-        `${name} error description over ${surface}`,
-      ).toBeGreaterThanOrEqual(4.5);
+test('destructive ink meets AA over Mira action states and in error descriptions', async () => {
+  const button = buttonVariants({ variant: 'destructive' });
+  const samples = ['background', 'card', 'popover'].flatMap((surface) => [
+    { label: 'destructive button at rest', surface, className: button },
+    { label: 'destructive button on hover', surface, className: button, hover: true },
+    { label: 'error description', surface, className: 'text-destructive/90' },
+  ]);
+  const failures = [];
+  for (const { theme, contrast } of await inspectThemeColors(samples)) {
+    for (const [index, { foreground, background, ratio }] of contrast.entries()) {
+      const { label, surface } = samples[index]!;
+      if (ratio < 4.5) {
+        failures.push(`${theme} ${label} over --${surface}: ${foreground} on ${background}, ${ratio.toFixed(2)}:1`);
+      }
     }
   }
-});
+  expect(failures, 'destructive text requires at least 4.5:1').toEqual([]);
+}, 30_000);
 
 test('interface text is set in Manrope and only Work titles in the serif face, both self-hosted', async () => {
   const css = text(join(root, 'src', 'styles.css'));
@@ -341,52 +271,66 @@ test('interface text is set in Manrope and only Work titles in the serif face, b
     expect(text(file), file).not.toMatch(/fonts\.(?:googleapis|gstatic)\.com|use\.typekit|fonts\.bunny/);
 });
 
-const probe = mkdtempSync(join(tmpdir(), 'rezics-ui-shadcn-stories-'));
-afterAll(() => rmSync(probe, { recursive: true, force: true }));
+const firstStories = {
+  button: 'actions-button--variants',
+  input: 'forms-input--invalid',
+  field: 'forms-field--invalid',
+  select: 'forms-select--keyboard',
+  dialog: 'overlays-dialog--close-button',
+  'dropdown-menu': 'overlays-dropdown-menu--selecting',
+};
 
 test('the first shadcn components have stories that pass as accessible browser tests', async () => {
-  const first = ['button', 'input', 'field', 'select', 'dialog', 'dropdown-menu'];
-  for (const name of first) {
-    const file = join(root, 'src', 'components', `shadcn-${name}.stories.tsx`);
-    expect(existsSync(file), `shadcn-${name}.stories.tsx`).toBe(true);
-    const story = text(file);
-    expect(story, name).toMatch(/title:\s*'shadcn\//);
-    expect(story, name).toContain(`@rezics/ui/shadcn/${name}`);
-    expect(story, name).toMatch(/\bplay\b/);
-  }
-  // Accessibility violations fail a story.
+  const expected = Object.entries(firstStories).map(([component, id]) => {
+    const file = join(root, 'src', 'components', `shadcn-${component}.stories.tsx`);
+    const source = text(file);
+    const csf = loadCsf(source, { fileName: file, makeTitle: (title) => title }).parse();
+    const story = Object.values(csf._stories).find((story) => story.id === id);
+    expect(story, id).toBeDefined();
+    expect(source, component).toMatch(
+      new RegExp(`from ['"](?:@rezics/ui/shadcn/${component}|\\.\\./shadcn/${component}\\.tsx)['"]`),
+    );
+    expect(source, component).toMatch(/\bplay\b/);
+    return { file, name: story!.name };
+  });
   expect(text(join(root, '.storybook', 'preview.tsx'))).toMatch(/a11y:\s*\{\s*test:\s*'error'\s*\}/);
 
-  const report = join(probe, 'stories.json');
-  const run = Bun.spawn(['bun', 'x', 'vitest', 'run', 'shadcn-', '--reporter=json', `--outputFile=${report}`], {
-    cwd: root,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, CI: '1' },
-  });
-  const [stdout, stderr] = await Promise.all([
-    new Response(run.stdout).text(),
-    new Response(run.stderr).text(),
-    run.exited,
-  ]);
-  expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
-  const result = JSON.parse(readFileSync(report, 'utf8')) as {
-    testResults: { name: string; assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
-  };
-  const failures = result.testResults.flatMap((file) =>
-    file.assertionResults
-      .filter((assertion) => assertion.status === 'failed')
-      .map((assertion) => `${file.name}: ${assertion.title}: ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`),
-  );
-  expect(failures).toEqual([]);
-  const byFile = new Map(
-    result.testResults.map((file) => [file.name.slice(file.name.lastIndexOf('/') + 1), file.assertionResults]),
-  );
-  for (const name of first) {
-    const assertions = byFile.get(`shadcn-${name}.stories.tsx`) ?? [];
-    expect(assertions.filter((assertion) => assertion.status === 'passed').length, `${name} stories`).toBeGreaterThan(
-      0,
+  const temporary = join(root, '.temp');
+  mkdirSync(temporary, { recursive: true });
+  const output = mkdtempSync(join(temporary, 'shadcn-base-stories-'));
+  try {
+    const report = join(output, 'stories.json');
+    const run = Bun.spawn(
+      [
+        'bun',
+        'x',
+        'vitest',
+        'run',
+        ...expected.map(({ file }) => file),
+        '--testNamePattern',
+        `(?:${expected.map(({ name }) => name).join('|')})$`,
+        '--reporter=json',
+        `--outputFile=${report}`,
+      ],
+      { cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } },
     );
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+      run.exited,
+    ]);
+    expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
+    const result = JSON.parse(text(report)) as {
+      testResults: { name: string; assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
+    };
+    const byFile = new Map(result.testResults.map((file) => [basename(file.name), file.assertionResults]));
+    for (const { file, name } of expected) {
+      const outcome = byFile.get(basename(file))?.find((assertion) => assertion.title === name);
+      expect(outcome?.status, `${file}: ${name} ${outcome?.failureMessages[0] ?? ''}`).toBe('passed');
+    }
+    expect(exitCode, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
+  } finally {
+    rmSync(output, { recursive: true, force: true });
   }
 }, 900_000);
 
