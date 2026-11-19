@@ -1630,9 +1630,11 @@ population completeness, or expand the existing preview's disclosure guarantees.
   move also clears the previous slot, and clearing a group's last slot removes its row. Backfill runs under
   both source write locks. Triggers follow native changes in the same transaction, including replica-mode
   writes and truncation. Outbox retention and timestamp changes need no summary updates.
-- Bound: up to 64 head groups and 64 checkpoint groups for the named Search generation, up to 64 scalar
-  positions per differing group, and one indexed envelope seek per behind home. At fixed group and lag counts,
-  checkpoint history, unrelated generations and retained outbox history add only logarithmic index work.
+- At most 64 head groups and 64 checkpoint groups qualify for the named Search generation. Comparing
+  groups can inspect up to 4,096 in-memory positions even when caught up. Only differing groups expand into
+  home rows, and each behind home adds one indexed envelope seek. PostgreSQL can scan the small group table
+  or use its consumer-leading index as unrelated generations grow. Concurrent writers to the same consumer
+  and group serialize on that row, including head writers sharing a 64-home range.
   Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
   callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
   the deadline (default one hour).
