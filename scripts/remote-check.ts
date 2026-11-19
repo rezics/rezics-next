@@ -5442,19 +5442,18 @@ function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string
     *) slice_cgroup=; return 1 ;;
   esac
 }
-apply_run_memory_limit() {
+verify_run_memory_limit() {
   resolve_run_slice_cgroup || return 1
+  # Docker starts sibling scopes through systemd, which reapplies its configured slice limits.
+  [ "$(systemctl show --property=MemoryMax --value "$REZICS_CHECK_SLICE")" = "${bytes}" ] || return 1
+  [ "$(systemctl show --property=MemorySwapMax --value "$REZICS_CHECK_SLICE")" = 0 ] || return 1
   page_bytes=$(getconf PAGESIZE) || return 1
   for control in memory.max memory.swap.max; do
     expected=$((${bytes} / page_bytes * page_bytes))
     if [ "$control" = memory.swap.max ]; then expected=0; fi
     file="/sys/fs/cgroup$slice_cgroup/$control"
     actual=$(cat "$file") || return 1
-    if [ "$actual" != "$expected" ]; then
-      printf '%s\\n' "$expected" > "$file" || return 1
-      actual=$(cat "$file") || return 1
-      [ "$actual" = "$expected" ] || return 1
-    fi
+    [ "$actual" = "$expected" ] || return 1
   done
 }
 run_memory_killed() {
@@ -5505,7 +5504,7 @@ reclaim_run_inactive_file() {
   ;;
   esac
 }
-apply_run_memory_limit || {
+verify_run_memory_limit || {
   echo "remote-check: could not enforce the run slice memory limit on $REZICS_CHECK_SLICE" >&2
   exit 70
 }`;
@@ -5808,6 +5807,11 @@ slice_properties=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
 if systemd-run --help 2>/dev/null | grep -q -- '--slice-property'; then
   slice_properties='--slice-property=MemoryMax=${memoryPerRunGiB}G --slice-property=MemorySwapMax=0'
+else
+  # Older systemd-run cannot submit slice properties alongside the scope. Create the same transient unit
+  # through the manager before starting the scope. Normal run cleanup stops and releases it.
+  busctl --system call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager StartTransientUnit \\
+    'ssa(sv)a(sa(sv))' "$REZICS_CHECK_SLICE" fail 2 MemoryMax t ${Math.round(memoryPerRunGiB * 2 ** 30)} MemorySwapMax t 0 0 >/dev/null || exit 70
 fi
 exec systemd-run --scope --quiet --collect $expand_environment $slice_properties --slice=${runSlice(id)} --unit=${checkHostScopeUnitStem(id)} \\
   -p MemoryMax=${memoryPerRunGiB}G -p MemorySwapMax=0 \\
