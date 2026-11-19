@@ -131,12 +131,13 @@ export function clientAuthority(
     connection: PoolClient;
     afterRelease: Array<() => Promise<void>>;
   }>();
+  const checkout = new AsyncLocalStorage<{ connection?: PoolClient }>();
   const nativeReduction = new AsyncLocalStorage<{ operationId: string; obligationId: string }>();
   // Route both native Better Auth and our hooks through the held connection.
   // A request never holds one pool slot while waiting for a second slot.
   const database = new Proxy(pool, {
     get(target, property) {
-      const held = issuance.getStore()?.connection;
+      const held = issuance.getStore()?.connection ?? checkout.getStore()?.connection;
       if (held && property === 'query') return held.query.bind(held);
       if (held && property === 'connect')
         return async () =>
@@ -151,6 +152,18 @@ export function clientAuthority(
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
+  async function withCheckout<T>(action: () => Promise<T>): Promise<T> {
+    if (issuance.getStore() || checkout.getStore()?.connection) return action();
+    const connection = await pool.connect();
+    const scope: { connection?: PoolClient } = { connection };
+    try {
+      return await checkout.run(scope, action);
+    } finally {
+      // Detached adapter work must acquire a new lease after the request ends.
+      delete scope.connection;
+      await connection.release();
+    }
+  }
   async function withIssuance<T>(clientId: string, action: () => Promise<T>): Promise<T> {
     if (issuance.getStore()) {
       if (issuance.getStore()!.clientId !== clientId) deny();
@@ -716,5 +729,14 @@ export function clientAuthority(
       );
     });
   }
-  return { database, withIssuance, withConsent, afterIssuance, materialize, internal, cleanupFencedSessions };
+  return {
+    database,
+    withCheckout,
+    withIssuance,
+    withConsent,
+    afterIssuance,
+    materialize,
+    internal,
+    cleanupFencedSessions,
+  };
 }

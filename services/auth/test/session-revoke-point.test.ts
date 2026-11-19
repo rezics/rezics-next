@@ -14,30 +14,26 @@ const password = 'native session point correct horse battery staple';
 async function nativeAuth(pool: Pool) {
   const accounts = new Map<string, AccessAccount>();
   let afterTargetRead: (() => Promise<void>) | undefined;
-  // Schedule real database mutations after the actual owner read has completed.
-  // No query result, proof, adapter or authentication outcome is substituted.
-  const database = new Proxy(pool, {
-    get(target, property) {
-      if (property === 'query')
-        return async (...args: unknown[]) => {
-          const result = await Reflect.apply(target.query, target, args);
-          if (args[0] === 'SELECT "userId" FROM session WHERE id=$1' && afterTargetRead) {
-            const change = afterTargetRead;
-            afterTargetRead = undefined;
-            await change();
-          }
-          return result;
-        };
-      const value = Reflect.get(target, property);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
+  // Observe the exact read on the checked-out client while racing it from another backend.
+  pool.on('connect', (client) => {
+    const query = client.query.bind(client);
+    client.query = function (...args: unknown[]) {
+      const result = Reflect.apply(query, client, args);
+      if (args[0] !== 'SELECT "userId" FROM session WHERE id=$1' || !afterTargetRead) return result;
+      const change = afterTargetRead;
+      afterTargetRead = undefined;
+      return Promise.resolve(result).then(async (rows) => {
+        await change();
+        return rows;
+      });
+    } as typeof client.query;
   });
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'point',
   };
   const auth = await createAuthService({
-    database,
+    database: pool,
     issuer,
     audience: 'https://session-point.api.test',
     secret: 'native-session-point-secret-at-least-32-bytes',

@@ -2420,28 +2420,30 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (url.pathname === '/sessions/revoke') {
           fields(body, ['session_id']);
           const sessionId = text(body.session_id);
-          const human = await humanProof(request.headers);
-          // Preserve unknown/foreign concealment before attempting the mutation.
-          const target = (
-            await database.query<{ userId: string }>('SELECT "userId" FROM session WHERE id=$1', [sessionId])
-          ).rows[0];
-          if (target?.userId !== human.account_id) throw new Denied(404);
-          const cookies: string[] = [];
-          if (sessionId === proofSources.get(human)!.id) {
-            const { authCookies } = await getContext();
-            for (const cookie of [authCookies.sessionToken, authCookies.sessionData, authCookies.dontRememberToken])
-              cookies.push(serializeCookie(cookie.name, '', { ...cookie.attributes, maxAge: 0 }));
-          }
-          // Both mutation and ownership proof address only the exact key. An
-          // ordinary owner predicate here lets the planner scan owner history.
-          // Recheck ownership in this statement's snapshot, including key reuse
-          // since the read above. Native (id,userId) immutability also preserves
-          // that guard if DELETE must recheck a concurrently updated tuple.
-          await database.query('DELETE FROM session WHERE id=$1 AND (SELECT "userId" FROM session WHERE id=$1)=$2', [
-            sessionId,
-            human.account_id,
-          ]);
-          return json({}, 200, cookies);
+          return await authority.withCheckout(async () => {
+            const human = await humanProof(request.headers);
+            // Preserve unknown/foreign concealment before attempting the mutation.
+            const target = (
+              await database.query<{ userId: string }>('SELECT "userId" FROM session WHERE id=$1', [sessionId])
+            ).rows[0];
+            if (target?.userId !== human.account_id) throw new Denied(404);
+            const cookies: string[] = [];
+            if (sessionId === proofSources.get(human)!.id) {
+              const { authCookies } = await getContext();
+              for (const cookie of [authCookies.sessionToken, authCookies.sessionData, authCookies.dontRememberToken])
+                cookies.push(serializeCookie(cookie.name, '', { ...cookie.attributes, maxAge: 0 }));
+            }
+            // Both mutation and ownership proof address only the exact key. An
+            // ordinary owner predicate here lets the planner scan owner history.
+            // Recheck ownership in this statement's snapshot, including key reuse
+            // since the read above. Native (id,userId) immutability also preserves
+            // that guard if DELETE must recheck a concurrently updated tuple.
+            await database.query('DELETE FROM session WHERE id=$1 AND (SELECT "userId" FROM session WHERE id=$1)=$2', [
+              sessionId,
+              human.account_id,
+            ]);
+            return json({}, 200, cookies);
+          });
         }
         if (url.pathname === '/recovery/start') {
           const email = recoveryAddress(body);
