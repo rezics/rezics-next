@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { prepareExposure } from '../../kernel/exposure';
@@ -35,6 +35,9 @@ type ContinueLoaderData = {
   result: Awaited<ReturnType<typeof readContinueEntries>>;
 };
 
+// Keep the producer identity with in-process loader results, outside serialized route data.
+const loaderOwners = new WeakMap<ContinueLoaderData, ReturnType<typeof continueWindowOwner>>();
+
 export const Route = createFileRoute('/library/continue')({
   beforeLoad: async (context) => {
     await requireSignedIn(context);
@@ -42,10 +45,12 @@ export const Route = createFileRoute('/library/continue')({
   },
   validateSearch: (search: Record<string, unknown>) => ({ ...search, cursor: search.cursor }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: async ({ deps }): Promise<ContinueLoaderData> => ({
-    address: continueAddress(deps),
-    result: await readContinueEntries({ data: deps }),
-  }),
+  loader: async ({ context, deps }): Promise<ContinueLoaderData> => {
+    const owner = continueWindowOwner(context.queryClient, getLocale(), readContinueEntries);
+    const data = { address: continueAddress(deps), result: await readContinueEntries({ data: deps }) };
+    loaderOwners.set(data, owner);
+    return data;
+  },
   head: ({ match }) =>
     pageHead({ title: m.library_continue(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ContinuePage,
@@ -62,32 +67,35 @@ function ContinuePage() {
   const currentCursor = address.cursor ?? null;
   const routeState = location.state as { continueWindowVisit?: string } | undefined;
   const visitId = routeState?.continueWindowVisit;
+  const subscribeSession = useCallback(
+    (notify: () => void) =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (isContinueSessionQuery(event.query.queryKey)) notify();
+      }),
+    [queryClient],
+  );
+  const readSession = useCallback(() => queryClient.getQueryState(sessionQueryKey), [queryClient]);
+  const sessionState = useSyncExternalStore(subscribeSession, readSession, readSession);
   const sessionQuery = queryClient.getQueryCache().find({ queryKey: sessionQueryKey, exact: true });
-  const sessionState = queryClient.getQueryState(sessionQueryKey);
   const owner = useMemo(
     () => continueWindowOwner(queryClient, locale, readContinueEntries),
     [queryClient, locale, sessionQuery, sessionState?.dataUpdateCount, sessionState?.dataUpdatedAt],
   );
 
-  const requestOwner = useRef({ searchStr: location.searchStr, owner });
-  if (requestOwner.current.searchStr !== location.searchStr)
-    requestOwner.current = { searchStr: location.searchStr, owner };
-
-  const loaderOwner = useRef({ data: loaderData, owner });
-  if (loaderOwner.current.data !== loaderData)
-    loaderOwner.current = {
-      data: loaderData,
-      owner: requestOwner.current.searchStr === location.searchStr ? requestOwner.current.owner : owner,
-    };
+  // Hydrated loader data has no local identity until its first render.
+  let loaderOwner = loaderOwners.get(loaderData);
+  if (!loaderOwner) {
+    loaderOwner = owner;
+    loaderOwners.set(loaderData, owner);
+  }
   const loaderAddressMatches =
     loaderData.address.cursor === address.cursor && loaderData.address.malformed === address.malformed;
-  const loaderOwnerMatches = sameContinueWindowOwner(loaderOwner.current.owner, owner);
+  const loaderOwnerMatches = sameContinueWindowOwner(loaderOwner, owner);
   const savedVisit = queryClient.getQueryData<ContinueWindowVisit>(CONTINUE_WINDOW_QUERY_KEY);
   const savedVisitOwnerChanged =
     savedVisit !== undefined && savedVisit.visitId === visitId && !sameContinueWindowOwner(savedVisit.owner, owner);
   const initial = loaderAddressMatches && loaderOwnerMatches && !savedVisitOwnerChanged ? loaderData.result : undefined;
-  const ownerChangedForLoader =
-    (loaderOwner.current.data === loaderData && !loaderOwnerMatches) || savedVisitOwnerChanged;
+  const ownerChangedForLoader = !loaderOwnerMatches || savedVisitOwnerChanged;
 
   const read = useCallback(() => {
     if (address.malformed) return Promise.resolve({ state: 'unavailable', reason: 'invalid-address' } as const);
@@ -135,12 +143,10 @@ function ContinuePage() {
       setMoving(false);
       setNavigationRevision((revision) => revision + 1);
     };
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (isContinueSessionQuery(event.query.queryKey)) retireReplacedOwner();
-    });
+    const unsubscribe = subscribeSession(retireReplacedOwner);
     retireReplacedOwner();
     return unsubscribe;
-  }, [queryClient, locale]);
+  }, [queryClient, locale, subscribeSession]);
 
   useLayoutEffect(() => {
     if (address.malformed) {
@@ -258,17 +264,38 @@ function ContinuePage() {
       }
       setNavigationRevision((revision) => revision + 1);
       const run = async () => {
+        // The router can suspend this page while its destination loader is pending.
+        const stopWatching = subscribeSession(() => {
+          if (
+            continueWindowVisit(queryClient, nextVisitId, owner) &&
+            !sameContinueWindowOwner(owner, continueWindowOwner(queryClient, locale, readContinueEntries))
+          )
+            retireContinueWindow(queryClient);
+        });
         try {
           if (!visitId) await navigateWindow(currentCursor, nextVisitId, true);
-          await navigateWindow(action.target, nextVisitId, false);
+          if (continueWindowVisit(queryClient, nextVisitId, owner))
+            await navigateWindow(action.target, nextVisitId, false);
         } finally {
+          stopWatching();
           movingRef.current = false;
           if (mounted.current) setMoving(false);
         }
       };
       void run();
     },
-    [visit?.staged, resume.result, address.malformed, visitId, queryClient, owner, currentCursor, navigateWindow],
+    [
+      visit?.staged,
+      resume.result,
+      address.malformed,
+      visitId,
+      queryClient,
+      owner,
+      currentCursor,
+      navigateWindow,
+      subscribeSession,
+      locale,
+    ],
   );
 
   const navigationAddress = `${locale}:${location.searchStr}`;
