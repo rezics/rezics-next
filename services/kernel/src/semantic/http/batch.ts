@@ -1,4 +1,10 @@
-import { BATCH_CONSTRAINT_NAME, type BatchWriteFailureStage, type WalkCommitCause } from '@rezics/definitions/bulk';
+import {
+  BATCH_CONSTRAINT_NAME,
+  WALK_GRAPH_SQL_FUNCTIONS,
+  type BatchWriteFailureStage,
+  type WalkCommitCause,
+  type WalkPostgresFailure,
+} from '@rezics/definitions/bulk';
 import { classifyUnavailability } from '../../access/unavailable.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandCommitUncertainError, CommandUnavailableError } from '../../command/command.ts';
@@ -187,6 +193,30 @@ function catalogueCommandDiagnostics(
   };
 }
 
+function walkPostgresFailure(error: unknown): WalkPostgresFailure | undefined {
+  const cause = error instanceof CommandCommitUncertainError ? error.cause : error;
+  if (!isPostgresServerError(cause) || cause.code !== '53200') return undefined;
+
+  const file = 'file' in cause ? cause.file : undefined;
+  const routine = 'routine' in cause ? cause.routine : undefined;
+  const hint = 'hint' in cause ? cause.hint : undefined;
+  let resource: WalkPostgresFailure['resource'] = 'unknown';
+  if (file === 'lock.c' && hint === 'You might need to increase "max_locks_per_transaction".')
+    resource = 'heavyweight_lock_table';
+  else if (file === 'predicate.c' && hint === 'You might need to increase "max_pred_locks_per_transaction".')
+    resource = 'predicate_lock_table';
+  else if (file === 'predicate.c' && (routine === 'SetRWConflict' || routine === 'SetPossibleUnsafeConflict'))
+    resource = 'serializable_conflict_pool';
+  else if (file === 'mcxt.c' && routine === 'MemoryContextAllocationFailure') resource = 'backend_heap';
+  else if ('message' in cause && cause.message === 'out of shared memory') resource = 'shared_memory_unspecified';
+
+  // The final context line is the enclosing PL/pgSQL frame. Earlier lines may contain arbitrary SQL text.
+  const tail = 'where' in cause && typeof cause.where === 'string' ? cause.where.slice(-512) : '';
+  const frame = /(?:^|\n)PL\/pgSQL function ([a-z_]+\.[a-z_]+)\([^()\n]*\) line \d+ at [^\n]+$/.exec(tail);
+  const sqlFunction = WALK_GRAPH_SQL_FUNCTIONS.find((name) => name === frame?.[1]);
+  return sqlFunction ? { resource, sqlFunction } : { resource };
+}
+
 function walkCommitCause(cause: unknown): WalkCommitCause {
   if (cause instanceof CommandUnavailableError && cause.reason === 'deadline') return 'command_deadline';
   if (!(cause instanceof Error)) return 'unknown';
@@ -230,6 +260,7 @@ export async function bulkWriteCommandProblem(
       route: BULK_WRITE_ROUTE,
       cause: error,
       commandIndex: options.commandIndex,
+      postgresFailure: observeCommand ? walkPostgresFailure(error) : undefined,
       ...(observeCommand && error instanceof CommandCommitUncertainError && !isPostgresServerError(error.cause)
         ? { commitCause: walkCommitCause(error.cause) }
         : {}),

@@ -13,7 +13,13 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
-import { WALK_COMMIT_CAUSES, type WalkCommitCause } from '@rezics/definitions/bulk';
+import {
+  WALK_COMMIT_CAUSES,
+  WALK_GRAPH_SQL_FUNCTIONS,
+  WALK_POSTGRES_RESOURCES,
+  type WalkCommitCause,
+  type WalkPostgresFailure,
+} from '@rezics/definitions/bulk';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { startSeededWalkFrontends, walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
@@ -726,7 +732,13 @@ export async function captureSeedStderr(
 
 type WalkCommandFailure =
   | { state: 'unavailable' }
-  | { state: 'matched'; category: string; commitCause?: WalkCommitCause; firstProjectFrame?: string };
+  | {
+      state: 'matched';
+      category: string;
+      commitCause?: WalkCommitCause;
+      postgresFailure?: WalkPostgresFailure;
+      firstProjectFrame?: string;
+    };
 
 const kernelErrorNames = [
   'TypeError',
@@ -803,6 +815,9 @@ async function walkCommandFailure(request?: SeedRemainingRequest): Promise<WalkC
       const category = request.sqlstate
         ? 'postgres_server'
         : (kernelErrorNames.find((name) => name === event.name) ?? 'unknown');
+      const pg = request.sqlstate === '53200' && isRecord(event.postgres_failure) ? event.postgres_failure : undefined;
+      const resource = WALK_POSTGRES_RESOURCES.find((value) => value === pg?.resource);
+      const sqlFunction = WALK_GRAPH_SQL_FUNCTIONS.find((name) => name === pg?.sqlFunction);
       const frame = await firstProjectFrame(event.stack).catch(() => undefined);
       const commitCause =
         category === 'CommandCommitUncertainError' && request.failureStage === 'transaction_commit'
@@ -812,6 +827,7 @@ async function walkCommandFailure(request?: SeedRemainingRequest): Promise<WalkC
         state: 'matched',
         category,
         ...(commitCause ? { commitCause } : {}),
+        ...(resource ? { postgresFailure: { resource, ...(sqlFunction ? { sqlFunction } : {}) } } : {}),
         ...(frame ? { firstProjectFrame: frame } : {}),
       };
     }

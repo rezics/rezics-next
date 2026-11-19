@@ -15,7 +15,7 @@ export {
   type FieldError,
 } from './problem-error.ts';
 import { commandTimingSnapshot } from '../command/timing.ts';
-import type { WalkCommitCause } from '@rezics/definitions/bulk';
+import type { WalkCommitCause, WalkPostgresFailure } from '@rezics/definitions/bulk';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
@@ -102,6 +102,7 @@ export function logInternalError(options: {
   cause: unknown;
   commandIndex?: number | undefined;
   commitCause?: WalkCommitCause;
+  postgresFailure?: WalkPostgresFailure | undefined;
   event?: 'internal_error' | 'dependency_unavailable';
 }): void {
   const { requestId, method, route, cause, commandIndex } = options;
@@ -116,6 +117,7 @@ export function logInternalError(options: {
       ...(code === undefined ? {} : { code }),
       stack: cause instanceof Error ? cause.stack : undefined,
       ...(commandIndex === undefined ? {} : { command_index: commandIndex }),
+      ...(options.postgresFailure === undefined ? {} : { postgres_failure: options.postgresFailure }),
       ...(options.commitCause === undefined ? {} : { commit_cause: options.commitCause }),
     }),
   );

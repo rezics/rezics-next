@@ -23,6 +23,30 @@ export const WALK_COMMIT_CAUSES = [
   'unknown',
 ] as const;
 export type WalkCommitCause = (typeof WALK_COMMIT_CAUSES)[number];
+/** Closed vocabulary for a private walk observation of a PostgreSQL 53200. */
+export const WALK_POSTGRES_RESOURCES = [
+  'heavyweight_lock_table',
+  'predicate_lock_table',
+  'serializable_conflict_pool',
+  'backend_heap',
+  'shared_memory_unspecified',
+  'unknown',
+] as const;
+export const WALK_GRAPH_SQL_FUNCTIONS = [
+  'search.capture_freshness_position',
+  'semantic.capture_candidate_erasure',
+  'semantic.capture_erasure_roles',
+  'semantic.capture_erasure_roles_unfunded',
+  'semantic.record_erasure_locator',
+  'semantic.capture_provider_review_queue_key',
+  'semantic.capture_provider_review_queue_roles',
+  'semantic.require_record_source_member',
+  'semantic.validate_erasure_source_commit',
+] as const;
+export type WalkPostgresFailure = {
+  resource: (typeof WALK_POSTGRES_RESOURCES)[number];
+  sqlFunction?: (typeof WALK_GRAPH_SQL_FUNCTIONS)[number];
+};
 export const BATCH_SQLSTATE = /^[0-9A-Z]{5}$/;
 export const BATCH_CONSTRAINT_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 export const FIELD_GROUPS = ['facts', 'summary', 'cover'] as const;

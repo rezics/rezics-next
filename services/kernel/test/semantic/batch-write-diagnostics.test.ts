@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { CommandUnavailableError } from '../../src/command/command.ts';
+import { CommandCommitUncertainError, CommandUnavailableError } from '../../src/command/command.ts';
 import { countContentionRetry, withCommandTiming } from '../../src/command/timing.ts';
 import { PROBLEM_TYPE_BASE } from '../../src/http/problem.ts';
 import {
@@ -94,6 +94,52 @@ test('bulk internal failures expose only the supplied stage and the response com
     });
     expect(JSON.stringify(result.problem)).not.toContain('private provider text');
   } finally {
+    log.mockRestore();
+  }
+});
+
+test('catalogue 53200 observations preserve the uncertain receipt and classify only private server evidence', async () => {
+  const log = spyOn(console, 'error').mockImplementation(() => {});
+  const { REZICS_WALK_IMPORT_CATALOGUE, REZICS_WALK_STACK_SLOT } = process.env;
+  Object.assign(process.env, { REZICS_WALK_IMPORT_CATALOGUE: '1', REZICS_WALK_STACK_SLOT: '1' });
+  try {
+    for (const [fields, resource] of [
+      [{ file: 'lock.c', hint: 'You might need to increase "max_locks_per_transaction".' }, 'heavyweight_lock_table'],
+      [
+        { file: 'predicate.c', hint: 'You might need to increase "max_pred_locks_per_transaction".' },
+        'predicate_lock_table',
+      ],
+      [{ file: 'predicate.c', routine: 'SetRWConflict' }, 'serializable_conflict_pool'],
+      [{ file: 'mcxt.c', routine: 'MemoryContextAllocationFailure' }, 'backend_heap'],
+      [{ message: 'out of shared memory' }, 'shared_memory_unspecified'],
+      [{ file: 'unknown.c', routine: 'private_routine' }, 'unknown'],
+    ] as const) {
+      const cause = Object.assign(new Error('private database message'), fields, {
+        code: '53200',
+        severity: 'ERROR',
+        where: 'SQL statement "private SQL"\nPL/pgSQL function semantic.capture_candidate_erasure() line 5 at PERFORM',
+      });
+      const result = await bulkWriteCommandProblem(new CommandCommitUncertainError(12, cause), {
+        commandIndex: 0,
+        requestId: 'walk-test',
+        op: 'propose',
+      });
+      expect(result.problem).toMatchObject({
+        sqlstate: '53200',
+        failure_stage: 'transaction_commit',
+        effect_status: 'unknown',
+        retryable: false,
+      });
+      expect(result.problem).not.toHaveProperty('postgres_failure');
+      const event = JSON.parse(log.mock.calls.at(-1)![0] as string);
+      expect(event.postgres_failure).toEqual({ resource, sqlFunction: 'semantic.capture_candidate_erasure' });
+      expect(JSON.stringify(event)).not.toContain('private SQL');
+    }
+  } finally {
+    for (const [key, value] of Object.entries({ REZICS_WALK_IMPORT_CATALOGUE, REZICS_WALK_STACK_SLOT })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     log.mockRestore();
   }
 });

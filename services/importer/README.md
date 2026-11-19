@@ -221,6 +221,28 @@ Omit `--scope` or use `--scope all` for I01–I12. The catalogue reads and mount
 on the same journals after those observations. Return the private `.temp/imports-walk` evidence with the original
 selection, revision, seed results, row observations and any shared failure.
 
+A refused graph proposal with PostgreSQL `53200` retains the classified resource and, when recognized,
+the enclosing SQL function in `remaining-request.json` under `kernelFailure.postgresFailure`. The
+request ID and command index select the private Kernel event. The SQL function identifies the caller
+that encountered pressure. Other transactions can hold the resource.
+
+For a scoped native probe of VNDB release `r27673`, use the admitted catalogue stack with its ordinary
+database settings, Search worker and source fences. The published manifest for that release identifies
+four graph assertions with the same source tuple. The failed request identifies the holder and batch
+index but omits the property. The probe fits on one graph page.
+
+1. Select the release, its work `v2002` and producers `p102`, `p42`, `p146` from the pinned VNDB dump.
+   Bind these five records through ordinary record import. Keep only their four `releases_vn` and
+   `releases_producers` edges in the graph journal. Use the probe's own native Subject bindings.
+2. Pass those edges through `CrossMediaGraph.deliver` once. Observe the one batch page containing the
+   publisher, example-of-work and two developer proposals. Record its receipts, or the first refused
+   index and correlated resource classification. Any receipt recovery uses the same actor, sealed bytes and key.
+3. To distinguish concurrent holders from the failing writer, take a lock snapshot during the in-flight page and one on return.
+   Left join `pg_locks` to `pg_stat_activity` by PID, group by holder, lock type, mode and relation,
+   and retain the eight largest counts and transaction ages. Include `SIReadLock` rows with no active PID.
+   For a heap refusal, read the database container's memory peak, limit and OOM-event counters before teardown. A successful page establishes only that
+   these four proposals finished under the observed load.
+
 ### Reviewed catalogue
 
 Definitions owns the released reviewed inventory as public data (`@rezics/definitions/reviewed-vocabulary`, revision `reviewed-vocabulary@1`). Importer planning, binding and native review live in one application (`reviewed-catalogue-application.ts`) behind a vocabulary port. The request/result, ledger, receipt and pure seed helper vocabulary is the import-acyclic `reviewed-catalogue-contract.ts`; the compatibility facade re-exports it and delegates to the application. The ordinary CLI, resume path, operator seed CLI and development seed bind the released vocabulary with live transport and the run ledger; they do not import Definitions private JSON or construct native review at module load. Complete inventory preflight, source/revision/digest, Bangumi scheme bindings, source fences and owner identity stay exact. Acceptance and adoption remain separate authorized operations with independent current reads.
