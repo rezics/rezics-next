@@ -69,11 +69,12 @@ test('canonical enrollment ceiling covers every admitted maximum JSON row-array 
     pending_scopes: null,
     revision: null,
   };
+  const existingConsumerPathBytes = emptyRowsBytes + jsonBytes([currentRow]) + jsonBytes([existingRow]);
   const admittedPathBytes = [
     2 * emptyRowsBytes + jsonBytes([currentRow]) + jsonBytes([{ reference_id: referenceId }]),
     2 * emptyRowsBytes + jsonBytes([noStoredConsentCurrentRow]) + jsonBytes([{ reference_id: referenceId }]),
     3 * emptyRowsBytes + jsonBytes([currentRow]),
-    emptyRowsBytes + jsonBytes([currentRow]) + jsonBytes([existingRow]),
+    existingConsumerPathBytes,
     2 * emptyRowsBytes + jsonBytes([{ ...currentRow, ready: false }]),
     jsonBytes([{ '?column?': 1 }]),
   ];
@@ -115,7 +116,7 @@ test('canonical enrollment ceiling covers every admitted maximum JSON row-array 
   };
   expect(participant.enroll.actual(lookalikeInput, result)).toBeUndefined();
   const nativeActual = participant.enroll.actual(input, result);
-  expect(nativeActual?.source.bytes).toBe(inputBytes + admittedPathBytes[2]!);
+  expect(nativeActual?.source.bytes).toBe(inputBytes + existingConsumerPathBytes);
   expect(nativeActual?.source.bytes).toBeLessThanOrEqual(bound!.source.bytes);
   expect(participant.enroll.actual(input, result)).toBeUndefined();
 
