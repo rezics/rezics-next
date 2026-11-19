@@ -1,12 +1,11 @@
 import { startDevServer } from './support/dev-server.ts';
+import { boardOpeningCard, boardOpeningExample, boardOpeningId } from '../src/threads/board-opening-fixtures.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
-import type { KernelClient } from '@rezics/client';
+import type { BoardPageResponse } from '@rezics/client';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const resource = 'https://api.rezics.test';
@@ -16,41 +15,23 @@ const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', k
 const issuerKeys = await generateKeyPair('ES256', { extractable: true });
 const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
 
-type BoardResource = ReturnType<KernelClient['boards']>;
-type Data<F extends (...args: never[]) => unknown> = NonNullable<
-  Awaited<ReturnType<F>> extends { data: infer D } ? D : never
->;
-type BoardRead = Data<BoardResource['get']>;
+const boardApiPath = `/v1/boards/${boardOpeningId}`;
+const boardPageApiPath = `${boardApiPath}/page`;
+const opening = boardOpeningExample('current', 0);
+const board = { ...opening.board, realmId: null, community: null };
 
-const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const metadata = {
-  route: 0,
-  visibility: 'published',
-  securityRevision: '1',
-  createdAt: '2026-01-01T00:00:00.000Z',
-} as const;
-const board: BoardRead = { board: { ...metadata, id: id(1), title: 'Reading room', availability: 'available' } };
-function thread(n: number, title: string) {
-  return {
-    thread: {
-      ...metadata,
-      id: id(n),
-      boardId: id(1),
-      authorId: id(90),
-      licence: 'CC-BY-4.0',
-      subjectIds: [],
-      title,
-      availability: 'available',
-    },
-  };
+function thread(n: number, title: string): BoardPageResponse['threads'][number] {
+  const card = boardOpeningCard(n);
+  return { ...card, thread: { ...card.thread, title } };
 }
 
 const cursor = 'signed+page/next==';
+const rankRefreshedAt = '2026-01-01T00:00:00.000Z';
 // Each sort answers a different order, so a page shows which sort the kernel was asked for.
 const ranked = {
   active: [thread(2, 'Active one'), thread(3, 'Active two'), thread(4, 'Active three')],
   hot: [thread(5, 'Hot one'), thread(6, 'Hot two'), thread(7, 'Hot three')],
-  newest: [thread(8, 'New one'), thread(9, 'New two'), thread(10, 'New three')],
+  new: [thread(8, 'New one'), thread(9, 'New two'), thread(10, 'New three')],
 };
 const calls: { path: string; cursor: string | null; sort: string | null }[] = [];
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -88,26 +69,22 @@ const fake = Bun.serve({
       });
     if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    if (url.pathname === `/v1/boards/${id(1)}`) return json(board);
-    if (url.pathname === `/v1/boards/${id(1)}/threads`) {
+    if (url.pathname === boardApiPath) return json({ board });
+    if (request.method === 'GET' && url.pathname === boardPageApiPath) {
       const sort = url.searchParams.get('sort');
-      calls.push({ path: url.pathname, cursor: url.searchParams.get('cursor'), sort });
+      const requestedCursor = url.searchParams.get('cursor');
+      calls.push({ path: url.pathname, cursor: requestedCursor, sort });
       const rank = sort === 'active' || sort === 'hot';
-      const list = rank ? ranked[sort] : ranked.newest;
-      const page =
-        url.searchParams.get('cursor') === cursor
-          ? {
-              threads: [list[2]!.thread],
-              next: null,
-              anchors: [],
-              rankRefreshedAt: rank ? '2026-01-01T00:00:00.000Z' : undefined,
-            }
-          : {
-              threads: [list[0]!.thread, list[1]!.thread],
-              next: cursor,
-              anchors: [],
-              rankRefreshedAt: rank ? '2026-01-01T00:00:00.000Z' : undefined,
-            };
+      if (!rank && sort !== 'new') return json(missing, 404);
+      const list = ranked[sort];
+      const continuation = requestedCursor === cursor;
+      const page: BoardPageResponse = {
+        ...opening,
+        board,
+        threads: continuation ? list.slice(2) : list.slice(0, 2),
+        next: continuation ? null : cursor,
+        rankRefreshedAt: rank ? rankRefreshedAt : null,
+      };
       return json(page);
     }
     return Response.json(missing, { status: 404, headers: { 'content-type': 'application/problem+json' } });
@@ -155,8 +132,9 @@ afterAll(async () => {
   await server?.stop();
 });
 const moreLink = (page: Page) => page.locator('main a[href*="cursor="]');
-const boardPath = `/boards/${id(1)}`;
-const titles = (page: Page) => page.locator('main a[href*="/threads/"]').allTextContents();
+const boardPath = `/boards/${boardOpeningId}`;
+const titles = (page: Page) => page.locator('main h3 a[href*="/threads/"]').allTextContents();
+const rankTime = (page: Page) => page.locator(`[data-slot="board-sort-toolbar"] time[datetime="${rankRefreshedAt}"]`);
 const sortNav = (page: Page, name: string) => page.getByRole('navigation', { name, exact: true });
 const hrefOf = async (page: Page, name: string, link: string) =>
   new URL((await sortNav(page, name).getByRole('link', { name: link, exact: true }).getAttribute('href'))!, page.url());
@@ -166,7 +144,7 @@ const labels = {
   ja: { nav: 'スレッドの並べ替え', active: 'アクティブ', hot: '人気', new: '新着' },
 } as const;
 
-// Active is the default and has no parameter; New asks the kernel for no sort at all.
+// The Active link omits the URL parameter. The page request always sends the selected sort.
 test(
   'a board offers Active, Hot and New sorts, defaults to Active, and keeps the chosen sort in the URL',
   async () => {
@@ -177,6 +155,7 @@ test(
       try {
         expect(calls.filter((call) => call.cursor === null).map((call) => call.sort)).toEqual(['active']);
         expect(await titles(page)).toEqual(['Active one', 'Active two']);
+        expect(await rankTime(page).isVisible()).toBe(true);
         const nav = sortNav(page, text.nav);
         expect(await nav.getByRole('link').allTextContents()).toEqual([text.active, text.hot, text.new]);
         expect((await hrefOf(page, text.nav, text.active)).search).toBe('');
@@ -188,12 +167,14 @@ test(
         expect(new URL(page.url()).searchParams.get('sort')).toBe('hot');
         expect(await titles(page)).toEqual(['Hot one', 'Hot two']);
         expect(calls.filter((call) => call.cursor === null).map((call) => call.sort)).toEqual(['hot']);
+        expect(await rankTime(page).isVisible()).toBe(true);
 
         calls.length = 0;
         await nav.getByRole('link', { name: text.new, exact: true }).click();
         expect(new URL(page.url()).searchParams.get('sort')).toBe('new');
         expect(await titles(page)).toEqual(['New one', 'New two']);
-        expect(calls.filter((call) => call.cursor === null).map((call) => call.sort)).toEqual([null]);
+        expect(calls.filter((call) => call.cursor === null).map((call) => call.sort)).toEqual(['new']);
+        expect(await rankTime(page).count()).toBe(0);
 
         await page.reload();
         expect(await titles(page)).toEqual(['New one', 'New two']);
@@ -218,7 +199,7 @@ test(
     for (const [query, sort, first, last] of [
       ['', 'active', 'Active one', 'Active three'],
       ['?sort=hot', 'hot', 'Hot one', 'Hot three'],
-      ['?sort=new', null, 'New one', 'New three'],
+      ['?sort=new', 'new', 'New one', 'New three'],
     ] as const) {
       const page = await open(`/en${boardPath}${query}`);
       try {
@@ -231,7 +212,7 @@ test(
         calls.length = 0;
         await more.click();
         expect(await titles(page)).toEqual([last]);
-        expect(calls).toEqual([{ path: `/v1/boards/${id(1)}/threads`, cursor, sort }]);
+        expect(calls).toEqual([{ path: boardPageApiPath, cursor, sort }]);
         const nav = sortNav(page, 'Sort threads');
         for (const name of ['Active', 'Hot', 'New'])
           expect((await hrefOf(page, 'Sort threads', name)).searchParams.has('cursor')).toBe(false);
@@ -285,7 +266,7 @@ test(
         expect(await nav.locator('a[aria-current="page"]').count()).toBe(1);
         // The control sits above the thread list.
         const navBox = (await nav.boundingBox())!;
-        const listBox = (await page.locator('main ul').first().boundingBox())!;
+        const listBox = (await page.locator('main li[data-thread-id]').first().boundingBox())!;
         expect(navBox.y + navBox.height).toBeLessThanOrEqual(listBox.y);
         // Following a link is a plain navigation.
         const hot = await hrefOf(page, 'Sort threads', 'Hot');
