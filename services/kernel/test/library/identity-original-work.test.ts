@@ -46,6 +46,17 @@ import * as installedLibraryWork from '../../src/library/collection-source-work.
 
 composeLibraryDomain();
 
+test('a live work ledger distinguishes an expired deadline from missing operation funding', () => {
+  const declaration = declareLibraryIdentityStatement('planner', 'COMMIT', [])!;
+  const allowance = { reservationId: 'deadline-check', remaining: declaration.work };
+  const expired = new NativeCollectionWork(allowance, Date.now() - 1);
+  expect(() => expired.assertReady()).toThrow(
+    expect.objectContaining({ code: 'dependency_unavailable', reason: 'deadline' }),
+  );
+  const live = new NativeCollectionWork(allowance, Date.now() + 30_000);
+  expect(() => live.reserve(undefined)).toThrow(expect.not.objectContaining({ reason: 'deadline' }));
+});
+
 // This is a no-IO refusal fixture, never a native database or private Accounts grant fixture.
 function forbiddenPool(): { pool: Pool; calls: () => number } {
   let calls = 0;

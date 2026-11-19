@@ -709,8 +709,9 @@ Required `semantic/identity-epoch-coordinator.ts` exports `resumeIdentityEpochJo
 `waitIdentityEpochPublished: WaitIdentityEpochPublished`. The final binding serially drains mapping, invokes the fixed
 participants, reconciles their committed ACKs and publishes once. It registers through existing `WorkModule.register`
 and `WorkContext.addEffects`, `DBOS.registerStep/registerWorkflow`, `WorkClient.enqueue` with stable job workflow ID
-and `return-existing`. New segments use the existing governance queue so routine maintenance cannot occupy their
-capacity. Account verification and reversal wait for publication from the separate workflows queue. Existing
+and `return-existing`. The admitted-event effect and its coordinator segments use the existing governance queue so a backlog of
+ordinary effects cannot delay the first coordinator enqueue. Each wake rereads the saved job and enqueues the
+deterministic segment with `return-existing`; concurrent deliveries converge on that segment. Account verification and reversal wait for publication from the separate workflows queue. Existing
 segments keep their stored queue and subsequent segments use the governance queue.
 `composeWork` launches DBOS once. `KERNEL_WORK_MODULES` owns default binding and `startWorker` owns lifecycle. No scheduler/process/second launch or independently invented maintenance engine.
 STORE and mapping import only native dependencies and these types; participant producers import STORE/types;

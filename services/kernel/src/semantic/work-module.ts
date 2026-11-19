@@ -164,6 +164,7 @@ export function createSemanticWorkModule(
         },
         {
           name: 'identity_epoch_admission',
+          queue: 'governance',
           types: [IDENTITY_EPOCH_ADMITTED],
           run: async (event) => {
             const data = event.data as { jobId: string; epoch: string };
