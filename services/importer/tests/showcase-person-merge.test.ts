@@ -20,6 +20,7 @@ const bangumiOriginal = '00000000-0000-4000-8000-00000000000a';
 const vndbOriginal = '00000000-0000-4000-8000-00000000000b';
 const survivor = bangumiOriginal;
 const operation = '00000000-0000-4000-8000-0000000000c1';
+const operationLocation = `/v1/subjectIdentityOperations/${operation}`;
 const claim = '00000000-0000-4000-8000-0000000000d1';
 
 const bangumi = personIdentityForSource('bangumi', 'person:1916', 'schema:Person')!;
@@ -90,9 +91,10 @@ function transport(options: { doneAfter?: number; mergeError?: unknown; withhold
     async mergeReviewedPersons(body, key) {
       calls.merges.push({ body: structuredClone(body), key });
       if (options.mergeError !== undefined) throw options.mergeError;
-      return { operation: { id: operation }, location: `/v1/subjectIdentityOperations/${operation}` };
+      return { operation: { id: operation }, location: operationLocation };
     },
     async readReviewedPersonOperation(location) {
+      expect(location).toBe(operationLocation);
       calls.polls += 1;
       return calls.polls >= (options.doneAfter ?? 1)
         ? { id: operation, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } }
@@ -106,14 +108,21 @@ test('a reviewed pair merges once, observes the native job and reads both identi
   const directory = await mkdtemp(join(tmpdir(), 'person-merge-'));
   const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
   try {
-    const { calls, native } = transport({ doneAfter: 2 });
+    const { calls, native } = transport({ doneAfter: 121 });
+    const reads: string[] = [];
+    const continuation = new AbortController();
     const publish = () =>
       publishReviewedPersonMerge({
         pair,
         transport: native,
-        readPublic: async (id) => publicPerson(survivor),
+        readPublic: async (id) => {
+          expect(calls.polls).toBe(121);
+          reads.push(id);
+          return publicPerson(survivor);
+        },
         journal,
         pause: async () => {},
+        continuationSignal: () => continuation.signal,
       });
     const published = await publish();
     expect(published).toEqual({
@@ -127,6 +136,7 @@ test('a reviewed pair merges once, observes the native job and reads both identi
         { boundSubjectId: vndbOriginal, identity: vndb, currentSubjectId: survivor },
       ],
     });
+    expect(reads).toEqual([bangumiOriginal, vndbOriginal]);
     expect(calls.merges).toHaveLength(1);
     expect(calls.merges[0]!.body).toMatchObject({
       subjects: [bangumiOriginal, vndbOriginal],
@@ -209,7 +219,27 @@ test('a pending native job resumes from its admitted operation, and disagreeing 
       journal,
       pause: async () => {},
     };
-    expect(await publishReviewedPersonMerge({ ...bounded, polls: 2 })).toEqual({ state: 'pending', operation });
+    const deadline = new AbortController();
+    const pending = await publishReviewedPersonMerge({
+      ...bounded,
+      polls: 2,
+      continuationSignal: () => deadline.signal,
+      transport: {
+        ...first.native,
+        async readReviewedPersonOperation(location, signal) {
+          if (!signal) return first.native.readReviewedPersonOperation(location);
+          expect(location).toBe(operationLocation);
+          expect(signal).toBe(deadline.signal);
+          deadline.abort(new DOMException('Continuation deadline exceeded', 'TimeoutError'));
+          signal.throwIfAborted();
+          throw new Error('Expected expired deadline');
+        },
+      },
+      readPublic: async () => {
+        throw new Error('Pending operation has no final identity read');
+      },
+    });
+    expect(pending).toEqual({ state: 'pending', operation });
     const resumed = transport({ doneAfter: 1 });
     expect(await publishReviewedPersonMerge({ ...bounded, transport: resumed.native, polls: 5 })).toMatchObject({
       state: 'published',
