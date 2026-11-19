@@ -205,7 +205,8 @@ const journey: Story['play'] = async ({ canvasElement }) => {
   const next = within(frame()).getByRole('button', { name: m.library_next_page() });
   next.focus();
   await userEvent.keyboard('{Enter}');
-  await expect(canvas.getByRole('region', { name: m.nav_home() })).toHaveFocus();
+  const discover = canvas.getByRole('region', { name: m.home_feed_discovery(), exact: true });
+  await expect(document.activeElement === discover).toBe(true);
   await expect(canvas.getByRole('heading', { name: emptyTitle('continuation') })).toBeVisible();
   await userEvent.click(within(frame()).getByRole('button', { name: m.home_feed_restart() }));
   await select('partial');
