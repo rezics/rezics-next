@@ -649,9 +649,12 @@ test('an unmetered checkout preserves the underlying query method on an observed
       return key === 'query' ? target.query.bind(target) : Reflect.get(target, key);
     },
   });
-  await withConnection(fakePool(async () => observed), async (client) => {
-    await client.query('SELECT 1');
-  });
+  await withConnection(
+    fakePool(async () => observed),
+    async (client) => {
+      await client.query('SELECT 1');
+    },
+  );
   expect(raw.query).toBe(query);
 });
 
