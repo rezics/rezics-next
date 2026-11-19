@@ -1,5 +1,5 @@
 import type { AgentAdapter, AgentLaunchOptions } from '../agents.ts';
-import { tokens, textSignals, parseExitObject } from './shared.ts';
+import { tokens, textSignals, parseExitObject, isCursorResumeStopped } from './shared.ts';
 import type { Cli } from '../types.ts';
 
 export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
@@ -12,6 +12,7 @@ export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
     canResume: false,
     streamsLog: false,
     signals: textSignals,
+    ...(cli === 'cursor' ? { requiresFreshSession: isCursorResumeStopped } : {}),
     canImport: true,
     start(options) {
       return command(cli, options);

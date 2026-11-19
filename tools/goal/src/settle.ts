@@ -20,7 +20,6 @@ import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSu
 import { agentAdapter } from './agents.ts';
 import {
   isTransportFailure,
-  isCursorResumeStopped,
   lastNonemptyLine,
   CURSOR_FRESH_SESSION_EVENT,
   CURSOR_FRESH_SESSION_RETRY_LIMIT,
@@ -502,8 +501,7 @@ export async function settle(
         .events(ref.taskId, ref.attempt)
         .filter((event) => event.kind === CURSOR_FRESH_SESSION_EVENT).length;
       if (
-        adapter.cli === 'cursor' &&
-        isCursorResumeStopped(stderr) &&
+        adapter.requiresFreshSession?.(stderr) &&
         cursorResumeStops < CURSOR_FRESH_SESSION_RETRY_LIMIT &&
         !measurement.failureKind &&
         !measurement.blocker &&
