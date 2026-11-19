@@ -11,23 +11,28 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { packageManager } from '../../../package.json';
 import { verifyDev } from './dev-verifier.ts';
 import { git, processGroupRunner } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 import { typecheck } from '../../../scripts/typecheck.ts';
 import type { DevVerifierRun } from './types.ts';
 
-const rootTypecheck = readFileSync(resolve(import.meta.dir, '../../../scripts/typecheck.ts'), 'utf8');
-const rootGate = `export function resolveBunCommand(command: string[], _directory?: string): string[] { return command; }\n`;
+const rootTypecheck = resolve(import.meta.dir, '../../../scripts/typecheck.ts');
 const compiler = resolve(import.meta.dir, '../../../node_modules/.bin/tsc');
 const sourceFile = 'apps/widget/src/value.ts';
 
-function setupCompilerFixture(h: ReturnType<typeof integrationHarness>): void {
+function setupCompilerFixture(h: ReturnType<typeof integrationHarness>, prelandingTypecheck = false): void {
   mkdirSync(join(h.root, 'scripts'), { recursive: true });
-  writeFileSync(join(h.root, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
+  writeFileSync(
+    join(h.root, 'package.json'),
+    JSON.stringify({ packageManager, devDependencies: { bun: packageManager.slice('bun@'.length) } }),
+  );
   writeFileSync(join(h.root, '.gitignore'), '.temp/\nnode_modules/\n');
-  writeFileSync(join(h.root, 'scripts/typecheck.ts'), rootTypecheck);
-  writeFileSync(join(h.root, 'scripts/gate.ts'), rootGate);
+  writeFileSync(
+    join(h.root, 'scripts/typecheck.ts'),
+    `import { typecheck } from ${JSON.stringify(rootTypecheck)};\nprocess.exit(await typecheck());\n`,
+  );
   mkdirSync(join(h.root, 'apps/widget/src'), { recursive: true });
   writeFileSync(
     join(h.root, 'apps/widget/package.json'),
@@ -77,17 +82,16 @@ function setupCompilerFixture(h: ReturnType<typeof integrationHarness>): void {
   writeFileSync(join(h.root, 'apps/other/src/unrelated.ts'), 'export const unrelated = false;\n');
   writeFileSync(join(h.root, 'apps/widget/src/source.ts'), 'export const source = 1;\n');
   writeFileSync(join(h.root, sourceFile), 'export const value = 1;\n');
-  const staged = spawnSync(
-    'git',
-    ['add', '.gitignore', 'package.json', 'scripts/typecheck.ts', 'scripts/gate.ts', 'apps/widget', 'apps/other'],
-    { cwd: h.root, encoding: 'utf8' },
-  );
-  if (staged.status !== 0) throw new Error(staged.stderr || 'could not stage compiler fixture');
-  const committed = spawnSync('git', ['commit', '-m', 'Prepare compiler fixture'], { cwd: h.root, encoding: 'utf8' });
-  if (committed.status !== 0) throw new Error(committed.stderr || 'could not commit compiler fixture');
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: h.root,
+    encoding: 'utf8',
+  });
+  if (lock.status !== 0) throw new Error(lock.stderr || 'could not lock the compiler fixture Bun pin');
+  git(h.root, 'add', '.gitignore', 'package.json', 'bun.lock', 'scripts/typecheck.ts', 'apps');
+  git(h.root, 'commit', '-m', 'Prepare compiler fixture');
   h.ensureDev();
   h.settings.integration.batchSize = 2;
-  h.settings.integration.devLandingChecks = false;
+  h.settings.integration.devPrelandingTypecheck = prelandingTypecheck;
   h.settings.affectedTests = [];
   h.settings.verifierChecks = [];
 }
@@ -143,19 +147,20 @@ function setPlan(
   writeFileSync(join(task.worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content }));
 }
 
-test('the combined candidate compiler catches duplicate imports and leaves dev unchanged', async () => {
+test('the opt-in compiler guard catches duplicate imports in a batch and leaves dev unchanged', async () => {
   const h = integrationHarness();
   try {
-    setupCompilerFixture(h);
+    setupCompilerFixture(h, true);
     h.settings.integration.batchSize = 3;
     const first = h.dispatch(sourceFile);
-    const second = h.dispatch(sourceFile);
+    const second = h.dispatch(sourceFile, [], ['true'], 'second-import');
+    expect(second.id).not.toBe(first.id);
     const unrelatedFile = 'apps/other/src/unrelated.ts';
     const unrelated = h.dispatch(unrelatedFile);
     setPlan(h, first, "import { source as loaded } from './source.js';\nexport const value = 1;\n");
     setPlan(h, second, "export const value = 1;\nimport { source as loaded } from './source.js';\n");
     setPlan(h, unrelated, 'export const unrelated = true;\n', unrelatedFile);
-    await Promise.all([h.start(first), h.start(second), h.start(unrelated)]);
+    for (const task of [first, second, unrelated]) await h.start(task);
     const dev = h.head('dev');
 
     const commands = await compileTrain(h);
@@ -179,12 +184,13 @@ test('the combined candidate compiler catches duplicate imports and leaves dev u
   }
 }, 120_000);
 
-test('a repaired combined compiler candidate advances dev after one mandatory typecheck', async () => {
+test('a repaired batch advances dev after one opt-in typecheck', async () => {
   const h = integrationHarness();
   try {
-    setupCompilerFixture(h);
+    setupCompilerFixture(h, true);
     const first = h.dispatch(sourceFile);
-    const second = h.dispatch(sourceFile);
+    const second = h.dispatch(sourceFile, [], ['true'], 'second-import');
+    expect(second.id).not.toBe(first.id);
     setPlan(h, first, "import { source as loadedOne } from './source.js';\nexport const value = 1;\n");
     setPlan(h, second, "export const value = 1;\nimport { source as loadedTwo } from './source.js';\n");
     await h.start(first);
@@ -205,7 +211,7 @@ test('a repaired combined compiler candidate advances dev after one mandatory ty
   }
 }, 120_000);
 
-test('a single landing keeps the mandatory typecheck when optional landing checks are disabled', async () => {
+test('a single source-only landing advances dev without running the compiler', async () => {
   const h = integrationHarness();
   try {
     setupCompilerFixture(h);
@@ -217,8 +223,7 @@ test('a single landing keeps the mandatory typecheck when optional landing check
 
     const commands = await compileTrain(h);
 
-    expect(commands).toHaveLength(1);
-    expect(commands[0]).toContain(`TYPECHECK_CHANGED=${sourceFile}`);
+    expect(commands).toEqual([]);
     expect(h.head('dev')).not.toBe(base);
     expect(h.outcomes).toMatchObject([{ taskId: task.id, passed: true }]);
   } finally {
@@ -231,7 +236,7 @@ test('a dev ref move during typecheck discards the receipt and checks the rebase
   let movedDev = false;
   let typecheckRuns = 0;
   try {
-    setupCompilerFixture(h);
+    setupCompilerFixture(h, true);
     h.settings.integration.batchSize = 1;
     const task = h.dispatch(sourceFile);
     setPlan(h, task, 'export const value = 2;\n');
@@ -264,7 +269,7 @@ test('a dev ref move during typecheck discards the receipt and checks the rebase
 test('a candidate mutated after typecheck cannot advance dev', async () => {
   const h = integrationHarness();
   try {
-    setupCompilerFixture(h);
+    setupCompilerFixture(h, true);
     h.settings.integration.batchSize = 1;
     const task = h.dispatch(sourceFile);
     setPlan(h, task, 'export const value = 2;\n');
@@ -277,6 +282,7 @@ test('a candidate mutated after typecheck cannot advance dev', async () => {
         return { passed: false, output: `Unexpected preintegration check: ${command.join(' ')}`, timedOut: false };
       installFixtureBun(cwd);
       const result = await run(command, cwd, logPath);
+      expect(result.passed).toBe(true);
       writeFileSync(join(cwd, sourceFile), 'export const value = 3;\n');
       return result;
     });
@@ -289,10 +295,10 @@ test('a candidate mutated after typecheck cannot advance dev', async () => {
   }
 }, 120_000);
 
-test('a shared-workspace landing uses the same mandatory root typecheck guard', async () => {
+test('a shared-workspace landing honors the opt-in compiler guard', async () => {
   const h = integrationHarness();
   try {
-    setupCompilerFixture(h);
+    setupCompilerFixture(h, true);
     h.settings.sharedWebModules = { widget: ['apps/widget/src/**'] };
     const task = h.dispatch(sourceFile);
     expect(task.workspace?.module).toBe('widget');
@@ -356,15 +362,14 @@ test('23 ready landings advance while the independent verifier waits on an affec
 
     const tasks = Array.from({ length: 23 }, (_, index) => {
       const file = `apps/widget/src/ready-${index}.ts`;
-      const task = h.dispatch(file);
+      const task = h.dispatch(file, [], ['true'], `ready-${index}`);
       setPlan(h, task, `export const ready${index} = ${index};\n`, file);
       return task;
     });
-    await Promise.all(tasks.map((task) => h.start(task)));
+    for (const task of tasks) await h.start(task);
     const commands = await compileTrain(h);
 
-    expect(commands).toHaveLength(1);
-    expect(commands[0]).toContain('scripts/typecheck.ts');
+    expect(commands).toEqual([]);
     expect(h.outcomes.filter(({ passed }) => passed)).toHaveLength(23);
     expect(tasks.every((task) => h.store.task(task.id).state === 'integrated')).toBe(true);
     expect(h.head('dev')).not.toBe(h.head('dev-verified'));
@@ -490,7 +495,7 @@ test('postintegration verifier selects explicit affected, sibling and task accep
       ),
     ).toBe(true);
     expect(commands).toContainEqual(['affected-widget']);
-    expect(commands).toContainEqual(['bun', 'test', 'apps/widget/src/value.test.ts']);
+    expect(commands.some((command) => command.slice(-2).join(' ') === 'test apps/widget/src/value.test.ts')).toBe(true);
     expect(commands).toContainEqual(['acceptance-check']);
     expect(commands).not.toContainEqual(['legacy-affected']);
     expect(h.head('dev-verified')).toBe(landing);
