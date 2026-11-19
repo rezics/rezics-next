@@ -155,10 +155,11 @@ test('a newly committed identity wake gets a bounded turn during effects backlog
     await Promise.race([wakeAccepted.promise, timedOut]);
     expect(turns.slice(0, 4)).toEqual([oldestHome, partition, oldestHome + 1, partition]);
     expect(wakeAttempts).toBe(2);
-    expect(firstReceipt).toEqual([
+    const initialReceipt = firstReceipt ?? [];
+    expect(initialReceipt).toEqual([
       { workflow_id: workflowId, consumer, queue_name: 'governance', created_at: expect.any(String) },
     ]);
-    expect(await readReceipt()).toEqual(firstReceipt);
+    expect(await readReceipt()).toEqual(initialReceipt);
     await Promise.race([DBOS.retrieveWorkflow(workflowId).getResult(), timedOut]);
     expect(worked).toEqual([expect.objectContaining({ id: eventId, type: IDENTITY_EPOCH_ADMITTED, data: wakeData })]);
     expect(await checkpoint(partition)).toBe('151');
