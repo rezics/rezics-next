@@ -104,8 +104,9 @@ test('baseline validation shares one file snapshot per call and refreshes it on 
 
 test('baseline validation refuses byte, aggregate, lexical-work, and template-depth excesses with entry context', () => {
   withTemporaryTestDirectory((absolute, relative) => {
-    const oversized = 'services/kernel/test/support/.temp/oversized.test.ts';
-    writeFileSync(join(absolute, 'oversized.test.ts'), `//${'x'.repeat(512 * 1_024)}\n`);
+    const filename = 'oversized.test.ts';
+    const oversized = `${relative}/${filename}`;
+    writeFileSync(join(absolute, filename), `//${'x'.repeat(512 * 1_024)}\n`);
     expect(() =>
       validateGrowthBaseline([{ name: 'oversized check', file: oversized, reason: 'verification run' }]),
     ).toThrow(`Growth baseline entry oversized check cannot inspect ${oversized}: source byte limit exceeded`);
