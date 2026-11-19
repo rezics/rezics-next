@@ -1,3 +1,5 @@
+import { durableHistory, maintenanceOutputs, startMeasuredMaintenanceTick } from './support/consumable-growth.ts';
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
@@ -41,6 +43,7 @@ if (process.argv.includes('--growth-child')) {
 
 async function runGrowth() {
   const db = await openGrowthDatabase(process.env.AUTH_SCHEDULE_GROWTH_URL!);
+  installNativeRoleProducer(db.admin);
   const system = db.openPool({ max: 8 });
   const unused = async (): Promise<never> => {
     throw new Error('Maintenance must not call Access');
@@ -77,7 +80,6 @@ async function runGrowth() {
     }),
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
-  let seedHistory: () => Promise<number>;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -88,8 +90,6 @@ async function runGrowth() {
     stagingKey: randomBytes(32),
     registerWorkflows: () => {
       maintenance = registerAuthMaintenance(auth);
-      const count = DBOS.registerStep(async () => 1, { name: 'growth.history.count' });
-      seedHistory = DBOS.registerWorkflow(async () => count(), { name: 'growth.history' });
     },
   });
   try {
@@ -112,6 +112,7 @@ async function runGrowth() {
     for (const dimension of ['unrelated', 'sessions', 'verifications', 'keys']) {
       const report = await checkGrowth(db, {
         name: `one durable Auth tick against ${dimension}`,
+        captureMode: 'cost-folded',
         warmups: 1,
         repetitions: 2,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -120,16 +121,15 @@ async function runGrowth() {
         async grow(_, scale, previous) {
           // Give both SDK tables production-shaped history before the first
           // planner sample, then grow unrelated history in every dimension.
-          // Native runs persist status, step and workflow outputs together.
           const historyCount = (seededHistory === 0 ? 2048 : 0) + (scale - previous) * 32;
-          for (let offset = 0; offset < historyCount; offset += 32) {
-            await Promise.all(
-              Array.from({ length: Math.min(32, historyCount - offset) }, async () => {
-                const handle = await DBOS.startWorkflow(seedHistory!)();
-                expect(await handle.getResult()).toBe(1);
-              }),
-            );
-          }
+          await durableHistory(
+            db,
+            AUTH_SYSTEM_SCHEMA,
+            AUTH_MAINTENANCE_SCHEDULE,
+            'schedule-history-',
+            seededHistory + 1,
+            seededHistory + historyCount,
+          );
           seededHistory += historyCount;
           for (const table of ['workflow_status', 'workflow_output']) {
             expect(
@@ -179,13 +179,7 @@ async function runGrowth() {
           ).rows[0];
           // Enqueue the installed scheduled workflow explicitly: the harness
           // treats sched-* IDs (including triggerSchedule) as background work.
-          const schedule = await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE);
-          expect(schedule).not.toBeNull();
-          const tick = await DBOS.enqueueWorkflowWithOptions(
-            { workflowName: schedule!.workflowName, queueName: schedule!.queueName! },
-            new Date(),
-            null,
-          );
+          const tick = await startMeasuredMaintenanceTick(crypto.randomUUID());
           await tick.getResult();
           const after = (
             await db.admin.query(
@@ -194,14 +188,13 @@ async function runGrowth() {
           ).rows[0];
           expect(before.sessions - after.sessions).toBe(1000);
           expect(before.verifications - after.verifications).toBe(1000);
-          const outputs = (
-            await db.admin.query(
-              `SELECT output FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
-              [tick.workflowID],
-            )
-          ).rows;
-          expect(outputs).toHaveLength(3);
-          expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([1000, 1, 1000]);
+          const outputs = await maintenanceOutputs(db, AUTH_SYSTEM_SCHEMA, tick.workflowID);
+          expect(outputs).toMatchObject({
+            'auth.maintenance.sweepExpiredSessions': 1000,
+            'auth.maintenance.retireSigningKeys': 1,
+            'auth.maintenance.sweepExpiredVerifications': 1000,
+          });
+          expect(outputs['auth.maintenance.eraseDueConsents']).toBeUndefined();
           expect((await db.admin.query(`SELECT kid FROM auth_signing_key WHERE slot='retiring'`)).rows).toEqual([]);
         },
       });

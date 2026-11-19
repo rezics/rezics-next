@@ -1,3 +1,7 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { getFunctionRegistrationByName } from '@dbos-inc/dbos-sdk/internal/decorators';
+import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA } from '../../src/maintenance.ts';
+import { expect } from 'bun:test';
 import type { GrowthCheck, GrowthDatabase } from '../../../kernel/test/support/growth.ts';
 
 /** One selected native neighbourhood per physical invocation, including cold-backend retries.
@@ -70,11 +74,11 @@ export function consumableGrowth<T>(options: {
 export async function prepareMaintenanceTarget(db: GrowthDatabase, id: string, history: string, clients: number) {
   const tag = `${id}-`;
   const date = new Date('1990-01-01');
-  // These fixture accounts are already absent. Their legitimate native delayed-erasure
-  // neighbourhood is due; no real user's 310-second deadline is changed.
+  // Admit this fresh cohort ahead of the still-due residue of every previous invocation.
   await db.admin.query(
     `INSERT INTO auth_consent_erasure (account_id,due_at)
-     SELECT $1||i,$2 FROM generate_series(1,100) i`,
+     SELECT $1||i,LEAST($2::timestamptz,(SELECT min(due_at) FROM auth_consent_erasure) - interval '1 second')
+     FROM generate_series(1,100) i`,
     [tag, date],
   );
   await db.admin.query(
@@ -92,6 +96,69 @@ export async function prepareMaintenanceTarget(db: GrowthDatabase, id: string, h
     `INSERT INTO verification (id,identifier,value,"expiresAt")
      SELECT $1||i,$1||i,'due',$2 FROM generate_series(1,1000) i`,
     [tag, date],
+  );
+}
+
+/** Account 1 sorts first among 100 absent owners. Its last client also retires its marker. */
+export async function expectMaintenancePage(db: GrowthDatabase, id: string, history: string, clients: number) {
+  const account = `${id}-1`;
+  const client = `${history}1`;
+  const result = await db.admin.query(
+    `SELECT
+      (SELECT count(*)::int FROM auth_consent WHERE account_id LIKE $1) AS consents,
+      (SELECT count(*)::int FROM auth_consent_erasure WHERE account_id LIKE $1) AS markers,
+      EXISTS (SELECT 1 FROM auth_consent WHERE account_id=$2 AND client_id=$3) AS first_consent,
+      (SELECT after_client FROM auth_consent_erasure WHERE account_id=$2) AS cursor`,
+    [`${id}-%`, account, client],
+  );
+  expect(result.rows[0]).toEqual({
+    consents: 100 * clients - 1,
+    markers: clients === 1 ? 99 : 100,
+    first_consent: false,
+    cursor: clients === 1 ? null : client,
+  });
+}
+
+export async function maintenanceOutputs(db: GrowthDatabase, schema: string, id: string) {
+  const result = await db.admin.query(
+    `SELECT function_name,output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1`,
+    [id],
+  );
+  return Object.fromEntries(result.rows.map((row) => [row.function_name, JSON.parse(row.output).json]));
+}
+
+/** startWorkflow associates the queued worker's SQL with the caller's growth capture. */
+export async function startMeasuredMaintenanceTick(workflowID: string) {
+  const schedule = (await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE))!;
+  expect(schedule.workflowName).toBe('auth.maintenance.tick');
+  expect(schedule.queueName).toBe(AUTH_MAINTENANCE_SCHEDULE);
+  const registration = getFunctionRegistrationByName(schedule.workflowClassName, schedule.workflowName);
+  const tick = registration?.wrappedFunction as (date: Date, context: unknown) => Promise<void>;
+  return DBOS.startWorkflow(tick, { queueName: schedule.queueName!, workflowID })(new Date(0), schedule.context);
+}
+
+export async function durableHistory(
+  db: GrowthDatabase,
+  schema: string,
+  queue: string,
+  tag: string,
+  from: number,
+  to: number,
+) {
+  await db.admin.query(
+    `WITH inserted AS (
+    INSERT INTO ${schema}.workflow_status
+      (workflow_uuid,status,name,queue_name,authenticated_roles,recovery_attempts,created_at,updated_at,inputs,queue_partition_key,serialization)
+    SELECT $1||i,'SUCCESS',$5,CASE WHEN i%2=0 THEN $4 ELSE 'other-queue' END,'[]',0,i,i,'[]',
+      CASE WHEN i%2=0 THEN 'hot' ELSE 'other-'||i END,'JSON' FROM generate_series($2::int,$3::int) i
+    RETURNING workflow_uuid
+  ), inputs AS (
+    INSERT INTO ${schema}.workflow_input (workflow_uuid,inputs) SELECT workflow_uuid,'[]' FROM inserted
+  ), outputs AS (
+    INSERT INTO ${schema}.workflow_output (workflow_uuid,output,error) SELECT workflow_uuid,'null','' FROM inserted
+  ) INSERT INTO ${schema}.operation_outputs (workflow_uuid,function_id,function_name,output,error)
+    SELECT workflow_uuid,1,'history','null','' FROM inserted`,
+    [tag, from, to, queue, schema === AUTH_SYSTEM_SCHEMA ? 'auth.maintenance.tick' : 'history'],
   );
 }
 
