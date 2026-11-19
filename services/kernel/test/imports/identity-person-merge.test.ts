@@ -17,6 +17,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
+import { readPersonMergeContinuation } from '../../scripts/read-person-merge-continuation.ts';
 import { startWorker } from '../../src/worker.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -73,6 +74,7 @@ test('a reviewed Person pair merges once through the native contract and both or
         birth_mon: 1,
         birth_day: 3,
         summary: 'Source biography',
+        career: ['producer'],
       },
     });
     plan.entities.vndb.push({
@@ -84,7 +86,10 @@ test('a reviewed Person pair merges once through the native contract and both or
         main: '28069',
         prod: null,
         name: '前田 純',
-        staff_alias: [{ id: 's224', aid: '28069', name: '前田 純', latin: 'Maeda Jun' }],
+        aliases: [
+          { id: 's224', aid: '386', name: '麻枝 准' },
+          { id: 's224', aid: '28069', name: '前田 純' },
+        ],
       },
     });
     const first = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port, { origin: runtime.origin });
@@ -127,33 +132,64 @@ test('a reviewed Person pair merges once through the native contract and both or
         type: 'schema:TVSeries',
         externalId: '1851',
         label: 'Angel Beats!',
-        citation: 'https://bgm.tv/subject/1851#/subject-persons/1851/1916/position',
+        roles: [
+          ['schema:author', '1'],
+          ['schema:musicBy', '6'],
+          ['schema:contributor', '10'],
+          ['schema:musicBy', '31'],
+          ['schema:lyricist', '32'],
+          ['schema:author', '3'],
+        ],
+        citation: () => 'https://bgm.tv/subject/1851#/subject-persons/1851/1916/position',
       },
       {
         type: 'wd:Q689445',
         externalId: 'v4',
         label: 'CLANNAD',
-        citation: 'https://vndb.org/v4#/vn_staff/v4/386/scenario',
+        roles: [
+          ['schema:author', 'scenario'],
+          ['schema:contributor', 'staff'],
+          ['schema:musicBy', 'music'],
+        ],
+        citation: (role: string) => `https://vndb.org/v4#/vn_staff/v4/386/${role}`,
       },
-    ];
+    ] as const;
+    const snak = (id: string, content: string) => ({ property: { id }, value: { type: 'value' as const, content } });
     const creditedWorks: { externalId: string; boundSubjectId: string }[] = [];
     for (const [i, work] of works.entries()) {
+      const statements: Record<
+        string,
+        {
+          property: { id: string };
+          value: { type: 'value'; content: string };
+          qualifiers: ReturnType<typeof snak>[];
+          references: { parts: ReturnType<typeof snak>[] }[];
+        }[]
+      > = {};
+      for (const [property, role] of work.roles) {
+        const concept = await runtime.request(
+          '/v1/subjects',
+          {
+            type: 'skos:Concept',
+            labels: { en: role },
+          },
+          runtime.bulk.bearer,
+          randomUUID(),
+        );
+        expect(concept.status).toBe(201);
+        const { subject } = (await concept.json()) as { subject: { id: string } };
+        (statements[property] ??= []).push({
+          ...snak(property, subjects[i]!),
+          qualifiers: [snak('wdt:P3831', subject.id), ...(i === 1 ? [snak('wdt:P1932', '麻枝 准')] : [])],
+          references: [{ parts: [snak('schema:url', work.citation(role))] }],
+        });
+      }
       const response = await runtime.request(
         '/v1/subjects',
         {
           type: work.type,
           labels: { en: work.label },
-          statements: {
-            'schema:author': [
-              {
-                property: { id: 'schema:author' },
-                value: { type: 'value', content: subjects[i] },
-                references: [
-                  { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: work.citation } }] },
-                ],
-              },
-            ],
-          },
+          statements,
         },
         runtime.bulk.bearer,
         randomUUID(),
@@ -161,6 +197,15 @@ test('a reviewed Person pair merges once through the native contract and both or
       const created = (await response.json()) as { subject: { id: string } };
       expect(response.status, JSON.stringify(created)).toBe(201);
       creditedWorks.push({ externalId: work.externalId, boundSubjectId: created.subject.id });
+    }
+    // The catalogue has already published and read both works before it submits the merge.
+    for (const [i, work] of creditedWorks.entries()) {
+      const current = await publicClient.readSubject(work.boundSubjectId);
+      for (const [property] of works[i]!.roles) {
+        expect(current.subject.statements?.[property]).toHaveLength(
+          works[i]!.roles.filter(([key]) => key === property).length,
+        );
+      }
     }
     const endpoints = [];
     for (const [index, source] of sources.entries()) {
@@ -199,16 +244,20 @@ test('a reviewed Person pair merges once through the native contract and both or
     const published = await merge();
     if (published.state === 'pending') {
       const id = published.operation;
-      const last = await runtime.database.admin.query(
-        `SELECT function_name, error::jsonb->'json'->>'message' AS error, output::jsonb->'json'->>'state' AS state
-        FROM dbos.operation_outputs WHERE workflow_uuid LIKE $1 ORDER BY completed_at_epoch_ms DESC LIMIT 1`,
-        ['semantic:identity:' + id + ':%'],
-      );
-      throw new Error(`Operation ${id} remained pending at ${JSON.stringify(last.rows)}`);
+      const observation = await readPersonMergeContinuation(runtime.database.admin, id);
+      throw new Error(`Operation ${id} remained pending at ${JSON.stringify(observation)}`);
     }
     expect(published.state).toBe('published');
     if (published.state !== 'published') throw new Error('Expected the native merge to publish');
     expect(admitted).toEqual({ state: 'pending', operation: published.operation });
+    expect(await readPersonMergeContinuation(runtime.database.admin, published.operation)).toMatchObject({
+      state: 'observed',
+      job: 'published',
+      admitted_event: true,
+      effect_queue: 'governance',
+      coordinator: expect.any(String),
+      redirected: true,
+    });
     const acks = await runtime.database.admin.query(
       `SELECT step FROM semantic.identity_epoch_ack WHERE partition_no=$1 AND job_id=$2
        AND progress->>'state'='complete' ORDER BY step`,
@@ -239,15 +288,30 @@ test('a reviewed Person pair merges once through the native contract and both or
       works: creditedWorks,
       readPublic: (id) => publicClient.readSubject(id),
     });
-    expect(combined).toMatchObject({
-      credits: works.map((work, i) => ({
-        workExternalId: work.externalId,
-        canonicalPersonId: published.survivor,
-        boundPersonId: subjects[i],
-        property: 'schema:author',
-        citations: [work.citation],
-      })),
-    });
+    if (!('credits' in combined)) throw new Error('Both original credit windows must be readable');
+    const expectedCredits = works.flatMap((work, i) =>
+      work.roles.map(([property, role]) => [
+        work.externalId,
+        subjects[i],
+        published.survivor,
+        property,
+        i === 1 ? ['麻枝 准'] : [],
+        [work.citation(role)],
+      ]),
+    );
+    const creditKeys = (rows: unknown[][]) => rows.map((row) => JSON.stringify(row)).sort();
+    expect(
+      creditKeys(
+        combined.credits.map((credit) => [
+          credit.workExternalId,
+          credit.boundPersonId,
+          credit.canonicalPersonId,
+          credit.property,
+          credit.creditedAs,
+          credit.citations,
+        ]),
+      ),
+    ).toEqual(creditKeys(expectedCredits));
     const redirect = await runtime.request(`/v1/subjects/${published.redirected}`);
     expect([redirect.status, redirect.headers.get('location')]).toEqual([308, `/v1/subjects/${published.survivor}`]);
     // A reopened run replays the journaled intent: the admitted operation is not sent again.

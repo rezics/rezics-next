@@ -138,7 +138,7 @@ export class NativeCollectionWork {
    */
   async withinAllowance<T>(allowance: WorkAllowance, operation: () => Promise<T>): Promise<T> {
     this.assertReady();
-    if (Date.now() >= this.deadline) throw this.unavailable();
+    if (Date.now() >= this.deadline) throw this.unavailable('deadline');
     if (allowance.reservationId !== this.allowance.reservationId)
       throw new TypeError('Foreign source work reservation');
     const end = zero();
@@ -174,7 +174,7 @@ export class NativeCollectionWork {
     finish(): WorkReceipt;
   }> {
     this.assertReady();
-    if (Date.now() >= this.deadline) throw this.unavailable();
+    if (Date.now() >= this.deadline) throw this.unavailable('deadline');
     const entries = Object.entries(declarations) as [K, WorkDimensions][];
     if (!entries.length) throw new TypeError('Missing native child declarations');
     const total = zero();
@@ -232,7 +232,7 @@ export class NativeCollectionWork {
     ceiling?: WorkDimensions,
   ): Promise<T> {
     this.assertReady();
-    if (Date.now() >= this.deadline) throw this.unavailable();
+    if (Date.now() >= this.deadline) throw this.unavailable('deadline');
     const available = zero();
     const ceilingSnapshot = ceiling === undefined ? undefined : { ...ceiling };
     for (const axis of axes) {
@@ -306,7 +306,8 @@ export class NativeCollectionWork {
     if (this.closed) throw new TypeError('Native work allocation is closed');
     receivingLifetimes.get(this)?.();
     if (this.failure) throw this.failure;
-    if (!this.open || Date.now() >= this.deadline || !livePlan(this.planned.getStore())) throw this.unavailable();
+    if (!this.open || !livePlan(this.planned.getStore())) throw this.unavailable();
+    if (Date.now() >= this.deadline) throw this.unavailable('deadline');
   }
 
   /** Undefined means unproved, including for an operation expected to return no rows. */
@@ -324,7 +325,8 @@ export class NativeCollectionWork {
     receivingLifetimes.get(this)?.();
     if (!this.open || !livePlan(plan)) throw this.unavailable();
     if (!cleanup) this.assertReady();
-    if (Date.now() >= this.deadline || footprint === undefined) throw this.unavailable();
+    if (Date.now() >= this.deadline) throw this.unavailable('deadline');
+    if (footprint === undefined) throw this.unavailable();
     const bound = Object.freeze({ ...footprint });
     for (const axis of axes) {
       if (!Number.isSafeInteger(bound[axis]) || bound[axis] < 0) throw new TypeError('Invalid native footprint');
@@ -346,9 +348,13 @@ export class NativeCollectionWork {
       dispatch: () => {
         if (state !== 'reserved') throw new TypeError('Source work already dispatched');
         receivingLifetimes.get(this)?.();
-        if (!this.open || !livePlan(plan) || (!cleanup && Date.now() >= this.deadline)) {
+        if (!this.open || !livePlan(plan)) {
           release(zero());
           throw this.unavailable();
+        }
+        if (!cleanup && Date.now() >= this.deadline) {
+          release(zero());
+          throw this.unavailable('deadline');
         }
         state = 'dispatched';
       },
@@ -356,7 +362,8 @@ export class NativeCollectionWork {
       // single dispatched query; no unreserved operation can enter the enclosing frame this way.
       query: async (operation) => {
         receivingLifetimes.get(this)?.();
-        if (!this.open || !livePlan(plan) || Date.now() >= this.deadline) throw this.unavailable();
+        if (!this.open || !livePlan(plan)) throw this.unavailable();
+        if (Date.now() >= this.deadline) throw this.unavailable('deadline');
         if (state !== 'dispatched' || queried) throw new TypeError('Source query was not uniquely dispatched');
         queried = true;
         // A local ledger is only a child cap unless its receipt is actually
@@ -393,7 +400,8 @@ export class NativeCollectionWork {
         }
         assertObservation(active);
         receivingLifetimes.get(this)?.();
-        if (!this.open || !livePlan(plan) || Date.now() >= this.deadline) throw this.unavailable();
+        if (!this.open || !livePlan(plan)) throw this.unavailable();
+        if (Date.now() >= this.deadline) throw this.unavailable('deadline');
         return result;
       },
       settle: (actual = {}) => {
@@ -413,8 +421,9 @@ export class NativeCollectionWork {
     };
   }
 
-  private unavailable(): ProblemError {
+  private unavailable(reason?: 'deadline'): ProblemError {
     const error = new ProblemError('dependency_unavailable');
+    if (reason) Object.defineProperty(error, 'reason', { value: reason });
     Object.defineProperty(error, 'work', { value: this.receipt(), configurable: true });
     return error;
   }

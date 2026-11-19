@@ -879,6 +879,37 @@ async function command(name: 'seed' | 'seed-reopen', args: string[], env: NodeJS
   if (code !== 0) throw walkChildFailure(name, code, stderr);
 }
 
+async function retainPendingPersonMerge(stage: 'seed' | 'seed-reopen', report: unknown) {
+  const merge = isRecord(report) && report.personMerge;
+  if (!isRecord(merge) || merge.state !== 'pending' || typeof merge.operation !== 'string') return;
+  let observation: unknown;
+  try {
+    const kernel = await parseEnv(resolve(root, 'services/kernel/.env'));
+    const reader = Bun.spawn([process.execPath, 'services/kernel/scripts/read-person-merge-continuation.ts'], {
+      cwd: root,
+      stdin: new Blob([
+        JSON.stringify({
+          operation: merge.operation,
+          databasePort: process.env.KERNEL_DATABASE_PORT,
+          databaseUrl: kernel.DATABASE_URL,
+        }),
+      ]),
+      stdout: 'pipe',
+      stderr: 'ignore',
+      timeout: 8_000,
+    });
+    const [value, status] = await Promise.all([new Response(reader.stdout).json(), reader.exited]);
+    observation = status === 0 && isRecord(value) ? value : { state: 'unavailable' };
+  } catch {
+    observation = { state: 'unavailable' };
+  }
+  await writeFile(
+    resolve(evidenceRoot, `${stage}-person-merge.json`),
+    JSON.stringify({ operation: merge.operation, observation }),
+    { mode: 0o600 },
+  );
+}
+
 async function retainFailedSeedReopen(result: string, artifact: string): Promise<void> {
   const prefix = 'Cross-media seed artifact handoff ';
   const log = await readFile(resolve(evidenceRoot, 'seed-reopen.log'), 'utf8');
@@ -1941,11 +1972,17 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
             () => undefined,
           );
         }
+        if (report)
+          await readFile(artifact, 'utf8')
+            .then((bytes) => retainPendingPersonMerge(stage, JSON.parse(bytes)))
+            .catch(() => {});
         throw error;
       }
       await copyFile(result, artifact);
       report = reportName;
-      const seeded = publishedWalkSeed(JSON.parse(await readFile(artifact, 'utf8')));
+      const value: unknown = JSON.parse(await readFile(artifact, 'utf8'));
+      await retainPendingPersonMerge(stage, value);
+      const seeded = publishedWalkSeed(value);
       if (first) assertUnchangedSeedReopen(first, seeded);
       prerequisites.push({
         stage,

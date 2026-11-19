@@ -22,7 +22,7 @@ export type Effect = {
   name: string;
   types: string[];
   delivery?: undefined;
-  queue?: typeof MEDIA_QUEUE;
+  queue?: typeof MEDIA_QUEUE | 'governance';
   run(event: CloudEvent): Promise<void>;
   admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
@@ -216,13 +216,16 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
           );
           for (const { envelope, eventSeq, event, effect } of jobs) {
             if (isIdentityOriginalEffect(effect, event)) requireIdentityFxOriginalDispatch(effect, locatorPool());
+            const queue = ERASURE_LOCATOR_EFFECTS.has(effect.name)
+              ? LOCATOR_EFFECTS_QUEUE
+              : (effect.queue ?? EFFECTS_QUEUE);
             await DBOS.startWorkflow(workflow, {
               workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
               workflowIDReusePolicy: 'return-existing',
-              queueName: ERASURE_LOCATOR_EFFECTS.has(effect.name)
-                ? LOCATOR_EFFECTS_QUEUE
-                : (effect.queue ?? EFFECTS_QUEUE),
-              enqueueOptions: { queuePartitionKey: `${effect.name}:${partition}` },
+              queueName: queue,
+              ...(queue === 'governance'
+                ? {}
+                : { enqueueOptions: { queuePartitionKey: `${effect.name}:${partition}` } }),
             })(effect.name, event);
           }
         }),

@@ -168,7 +168,7 @@ export type WorkEffect = Readonly<{
   name: string;
   types: string[];
   delivery?: 'native';
-  queue?: typeof MEDIA_QUEUE;
+  queue?: typeof MEDIA_QUEUE | 'governance';
   run?: (event: unknown) => Promise<void>;
   admit?: (client: WorkQueryClient, event: unknown) => Promise<void>;
 }>;
