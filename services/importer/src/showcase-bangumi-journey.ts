@@ -627,6 +627,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
       text: string;
       targets: JourneyBrowserTarget[];
     }[] = [];
+    const failures: Error[] = [];
     for (const [name, viewport] of Object.entries(journeyViewports)) {
       const context = await browser.newContext({ viewport, locale: 'en-US' });
       const page = await context.newPage();
@@ -635,32 +636,29 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
           await options.onMountedStart?.(work);
           const route = work.row.readerRoute;
           assert.ok(route, `journey target bangumi:${work.sourceKey} has no reader route`);
-          const response = await page.goto(`${web}/en${route}`);
-          assert.equal(response?.status(), 200, `mounted ${name} work ${work.sourceKey}`);
-          await page.locator('main').waitFor();
-          const text = await page.locator('main').innerText();
-          const url = page.url();
           const targets = browserTargets.get(work.sourceKey) ?? [];
-          visits.push({
-            viewport: name,
-            sourceKey: work.sourceKey,
-            url,
-            text,
-            targets,
-          });
-          const read = currentReads.get(work.sourceKey)!;
-          for (const label of undNames(read))
-            assert.ok(text.includes(label), `${name} ${work.sourceKey} shows und name ${label}`);
-          assert.ok(
-            (await page.locator('main a[href*="bgm.tv"]').count()) > 0,
-            `${name} ${work.sourceKey} renders its Bangumi citation`,
-          );
-          for (const target of targets) await checkBrowserTarget(page, web, work.row.subjectId, target, name);
-          // Required visits are the selected comic, both Kara volumes, the anime counterpart and anime detail targets.
-          if (work.sourceKey === '26')
-            assert.ok(text.includes('文学少女'), `${name} Book Girl volume retains its exact title`);
-          if (work.sourceKey === '233')
-            assert.ok(text.includes('劇場版 空の境界 第一章 俯瞰風景'), `${name} anime 233 shows its exact und name`);
+          let text: string;
+          let url: string;
+          try {
+            const response = await page.goto(`${web}/en${route}`);
+            const status = response?.status();
+            assert.ok(status === 200, status === undefined ? 'navigation returned no HTTP response' : `HTTP ${status}`);
+            await page.locator('main').waitFor();
+            text = await page.locator('main').innerText();
+            url = page.url();
+            for (const label of undNames(currentReads.get(work.sourceKey)!))
+              assert.ok(text.includes(label), `missing und name ${label}`);
+            assert.ok((await page.locator('main a[href*="bgm.tv"]').count()) > 0, 'missing Bangumi citation');
+            for (const target of targets) await checkBrowserTarget(page, web, work.row.subjectId, target, name);
+            if (work.sourceKey === '26') assert.ok(text.includes('文学少女'), 'missing exact Book Girl title');
+            if (work.sourceKey === '233')
+              assert.ok(text.includes('劇場版 空の境界 第一章 俯瞰風景'), 'missing exact anime title');
+          } catch (cause) {
+            const detail = cause instanceof Error ? cause.message : String(cause);
+            failures.push(new Error(`mounted ${name} work ${work.sourceKey}: ${detail}`, { cause }));
+            continue;
+          }
+          visits.push({ viewport: name, sourceKey: work.sourceKey, url, text, targets });
           await options.onMountedVisit?.({
             sourceKey: work.sourceKey,
             role: work.role,
@@ -675,6 +673,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
       }
     }
     await writeFile(resolve(evidence, 'browser.json'), JSON.stringify(visits, null, 2), { mode: 0o600 });
+    if (failures.length > 0) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
   } finally {
     await browser.close();
     await frontends?.stop();
