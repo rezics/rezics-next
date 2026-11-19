@@ -147,7 +147,10 @@ export const LongAndCjkText: Story = {
       contentStyle={{ '--alert-dialog-caller-marker': 'preserved' } as CSSProperties}
     />
   ),
-  globals: {},
+  parameters: {
+    viewport: { options: { shortPhone: { name: 'Short phone', styles: { width: '320px', height: '440px' } } } },
+  },
+  globals: { viewport: { value: 'shortPhone', isRotated: false } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Delete shelf' }));
     const dialog = await settled(await screen.findByRole('alertdialog', { name: /^刪除書架/ }));

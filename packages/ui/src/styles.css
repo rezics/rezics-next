@@ -499,6 +499,13 @@
   }
 }
 
+@layer utilities {
+  /* The mobile Sidebar uses Sheet, whose side-specific width takes precedence over its width utility. */
+  [data-slot='sidebar'][data-mobile='true'][data-side] {
+    width: min(var(--sidebar-width), 100%);
+  }
+}
+
 /* Retired Aura hooks. Flat official surfaces so existing class names keep working. */
 @utility aura-canvas {
   background-color: var(--background);
