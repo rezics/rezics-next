@@ -1,4 +1,6 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { readRegistrationPage } from '../../../services/auth/src/registration-page';
+import { signInPage } from '../../../services/auth/src/signin-page';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 
 const accountId = 'screenshot-account';
@@ -108,6 +110,35 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         body,
         headers: Object.fromEntries(request.headers.entries()),
       });
+
+      const signedIn =
+        !state.signedOut &&
+        request.headers
+          .get('cookie')
+          ?.split(';')
+          .some((cookie) => cookie.trim().startsWith('auth_session='));
+      if (url.pathname === '/signin/page' && request.method === 'POST') {
+        return Response.json(
+          signInPage(
+            JSON.parse(body).query,
+            url.origin,
+            signedIn ? { kind: 'signed-in', account_id: state.sessionAccountId, email: null } : { kind: 'signed-out' },
+          ),
+          { headers },
+        );
+      }
+
+      if (url.pathname === '/registration-page' && request.method === 'GET') {
+        return Response.json(
+          await readRegistrationPage({
+            readSession: async () =>
+              signedIn ? Response.json({ account_id: state.sessionAccountId }) : new Response(null, { status: 401 }),
+            passwordLimits: async () => ({ minLength: 8, maxLength: 128 }),
+            verificationConfigured: true,
+          }),
+          { headers },
+        );
+      }
 
       if (url.pathname === '/recovery/page' && request.method === 'POST')
         return Response.json(
