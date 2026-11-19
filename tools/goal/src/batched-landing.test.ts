@@ -125,7 +125,7 @@ test('a failed batch check reports its responsible member and leaves the passing
     await h.start(failing);
     const base = h.head('dev');
 
-    const check = async (_command: string[], cwd: string) =>
+    const check = async (_command: readonly string[], cwd: string) =>
       existsSync(join(cwd, 'broken.ts'))
         ? { passed: false, output: 'broken.ts:1:1: error TS2304: AssertionError: broken member', timedOut: false }
         : { passed: true, output: '', timedOut: false };
