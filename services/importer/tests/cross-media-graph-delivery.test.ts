@@ -141,22 +141,99 @@ test('an Episode position stays literal when the same provider key names a Book'
   });
 });
 
+function releaseEdge(holder: string): GraphEdgeDraft {
+  return {
+    source: 'vndb',
+    alias: 'vndb_cross_media',
+    table: 'releases_vn',
+    holder,
+    target: 'v1',
+    property: 'schema:exampleOfWork',
+    url: `https://vndb.org/${holder}`,
+    membership: 'referenced',
+    record: { id: holder, vid: 'v1', rtype: 'complete' },
+    fields: ['releases_vn.id'],
+  };
+}
+
+test('graph resolves uncertain commits with their sealed commands within the page attempt limit', async () => {
+  using db = new Database(':memory:');
+  const graph = new CrossMediaGraph(db);
+  const drafts = ['r13', 'r14', 'r15', 'r16'].map(releaseEdge);
+  graph.remember(drafts);
+  const journal = new ShowcaseJournal(':memory:');
+  const order = graph.planned();
+  const failures: Record<string, [number, string]> = {
+    r13: [503, 'deadline_exceeded'],
+    r14: [500, 'internal_error'],
+    r15: [403, 'forbidden'],
+  };
+  const sends: string[] = [];
+  const transport = createImportTransport({
+    origin: 'https://kernel.test',
+    tokenProvider: async () => 'fixture-token',
+    maxAttempts: 2,
+    sleep: async () => {},
+    fetch: (async (request: Request) => {
+      const body = await request.text();
+      sends.push(body);
+      const { commands } = JSON.parse(body) as BatchWriteRequest;
+      return Response.json({
+        results: commands.map(({ key, source: { external_id } }) => {
+          if (external_id === 'r16' || (external_id === 'r13' && sends.length > 1))
+            return { key, status: 201, value: { candidate: id(Number(external_id.slice(1))), revision: 1 } };
+          const [status, code] = failures[external_id]!;
+          return {
+            key,
+            status,
+            problem: {
+              type: `https://rezics.com/problems/${code}`,
+              title: code,
+              status,
+              code,
+              retryable: status === 503,
+              effect_status: status === 403 ? 'not_applied' : 'unknown',
+              ...(status === 403 ? {} : { failure_stage: 'transaction_commit' }),
+            },
+          };
+        }),
+      });
+    }) as typeof fetch,
+  });
+  try {
+    await expect(
+      graph.deliver({
+        claim: ({ external_id }) => ({ state: 'bound', subject: id(Number(external_id.slice(1))) }),
+        nativeType: () => undefined,
+        currentRelationEndpoint: async () => 'current',
+        fence: async () => ({ fenced: false, securityRevision: null }),
+        batch: captureShowcaseCommands(transport, journal).batch,
+      }),
+    ).rejects.toThrow('Cross-media graph batch failed');
+    const commands = graph.evidence(order).map(({ command }) => command!);
+    expect(sends).toEqual([
+      JSON.stringify({ commands }),
+      JSON.stringify({ commands: commands.filter(({ source }) => ['r13', 'r14'].includes(source.external_id)) }),
+    ]);
+    const keys = drafts.map(graphEdgeCommandKey);
+    expect(journal.acknowledgedCommand(keys[0]!)?.candidateId).toBe(id(13));
+    expect(journal.acknowledgedCommand(keys[3]!)?.candidateId).toBe(id(16));
+    expect(
+      journal
+        .preparedCommands()
+        .map(({ command }) => command.key)
+        .sort(),
+    ).toEqual([keys[1]!, keys[2]!].sort());
+  } finally {
+    journal.close();
+  }
+});
+
 test('graph delivery keeps sealed order and skips acknowledged proposal pages on reopen', async () => {
   const db = new Database(':memory:');
   try {
     const graph = new CrossMediaGraph(db);
-    const drafts: GraphEdgeDraft[] = Array.from({ length: 66 }, (_, i) => ({
-      source: 'vndb',
-      alias: 'vndb_cross_media',
-      table: 'releases_vn',
-      holder: `r${i + 100}`,
-      target: 'v1',
-      property: 'schema:exampleOfWork',
-      url: `https://vndb.org/r${i + 100}`,
-      membership: 'referenced',
-      record: { id: `r${i + 100}`, vid: 'v1', rtype: 'complete' },
-      fields: ['releases_vn.id'],
-    }));
+    const drafts = Array.from({ length: 66 }, (_, i) => releaseEdge(`r${i + 100}`));
     graph.remember(drafts);
     const keys = graph.planned().map(graphEdgeCommandKey);
     const expectedPages = Array.from({ length: Math.ceil(keys.length / 8) }, (_, page) =>
