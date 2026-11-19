@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DEFAULT_DURATIONS, loadDurationTable, runLocalGate, splitWorkspaces, type Workspace } from './gate.ts';
 
@@ -8,92 +17,116 @@ const gate = join(repository, 'scripts/gate.ts');
 
 // A fake ssh answers each kind of remote script by what it contains; a fake rsync and fake bun record what reaches
 // them. Nothing here touches a network or installs packages.
-const fakeSsh = `#!/usr/bin/env bun
+const fakeSsh = `#!${process.execPath}
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
-const script = args.at(-1)!;
-const address = args.at(-2);
+const control = args.includes('-O');
+const address = args.at(control ? -1 : -2)!;
+if (address !== 'ops@b.test' && address !== 'ops@c.test') throw new Error('Unexpected fixture host: ' + address);
+if (control) process.exit(0);
+let script = args.at(-1)!;
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+if (script.startsWith('python3 -c ') && script.includes('truncated launch')) {
+  const [size, digest] = script.split(/\\s+/).slice(-2);
+  const bytes = Buffer.from(await Bun.stdin.arrayBuffer());
+  if (bytes.length !== Number(size) || sha256(bytes) !== digest) throw new Error('Invalid launch payload');
+  script = bytes.toString();
+}
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, at: Date.now(), ...event }) + '\\n');
-const runId = script.match(/runs\\/([^/' ]+)/)?.[1] ?? 'none';
+const runId = script.match(/runs\\/([a-z0-9-]+)/)?.[1] ?? 'none';
+const returnsDir = dir + '/remote-returns/' + runId;
+const hold = (release: () => void) => {
+  process.stdin.on('data', () => {});
+  process.stdin.on('end', release);
+  process.on('SIGTERM', release);
+  process.on('SIGHUP', release);
+  process.stdin.resume();
+};
 if (script.includes('REMOTE_CHECK_RETURNS')) {
   log({ kind: 'returns' });
-  for (const [, path] of script.matchAll(/# PATH ([^\\n]+)/g)) {
-    const file = dir + '/remote-returns/' + runId + '/' + path;
-    console.log((existsSync(file) ? 'PRESENT ' : 'ABSENT ') + path);
+  const inventory = [];
+  for (const [, path] of script.matchAll(/^# PATH (.+)$/gm)) {
+    const file = returnsDir + '/' + path;
+    if (existsSync(file)) {
+      const bytes = readFileSync(file);
+      inventory.push({ kind: 'file', path, size: bytes.length, sha256: sha256(bytes) });
+      console.log('PRESENT ' + path);
+    } else {
+      console.log('ABSENT ' + path);
+    }
   }
+  console.log('MANIFEST ' + Buffer.from(JSON.stringify(inventory)).toString('base64'));
+  console.log('ZSTD 0');
 } else if (script.includes('MemAvailable')) {
   log({ kind: 'probe' });
   console.log('MEMORY_CURRENT -');
   console.log('MEMORY_MAX -');
   console.log('MEMORY_HEADROOM 32000000000');
+  console.log('MEMORY_RESERVED 0');
+  console.log('MEMORY_RECLAIMABLE 0');
   console.log('PROCESSORS 32');
-  console.log('SLICE_PROCESSORS 16');
+  console.log('SLICE_PROCESSORS 18');
   console.log('LOAD 0');
-  console.log('SLOTS_USED 0');
+  console.log('PRESSURE_PAUSED 0');
+  console.log('AVAILABLE 32000000000');
+  console.log('TMP_BYTES 16000000000');
+  console.log('TMP_INODES 1000000');
+  console.log('DISK_FREE 512000000000');
+  console.log('ORDINARY_SLOTS_USED 0');
+  console.log('EXPRESS_SLOT_USED 0');
   console.log('GATE_WAITING 0');
+  console.log('MULTI_SLOT_WAITING_SLOTS 0');
+  console.log('MULTI_SLOT_WAITING_ID -');
+  console.log('LANDING_WAITING_SLOTS 0');
+  console.log('LANDING_WAITING_ID -');
+  console.log('LANDING_WAITING_STARTED -');
+  console.log('LANDING_WAITING_ESTIMATE_MS -1');
+  console.log('LANDING_WAITING_MEMORY_BYTES 2684354560');
+} else if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
+  console.log('REMOTE_CHECK_CONTROL_OK');
+} else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
+  console.log('BASE -\\nAGE -\\nZSTD 0');
 } else if (script.includes('REMOTE_CHECK_GATE_MARKER')) {
   log({ kind: 'gate-marker' });
   console.log('GATE_MARKER');
-  const release = () => {
+  hold(() => {
     log({ kind: 'gate-marker-release' });
     process.exit(0);
-  };
-  process.stdin.on('end', release);
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
-  process.stdin.resume();
-} else if (script.includes('REMOTE_CHECK_RESERVATION')) {
-  log({ kind: 'reservation' });
-  console.log('RESERVATION');
-  const release = () => {
-    log({ kind: 'reservation-release' });
-    process.exit(0);
-  };
-  process.stdin.on('end', release);
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
-  process.stdin.resume();
+  });
 } else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
   const count = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
   const slotLimit = Number(script.match(/# REMOTE_CHECK_SLOT_LIMIT (\\d+)/)?.[1] ?? count);
   for (let slot = 0; slot < count; slot += 1) log({ kind: 'slot', slot, requested: count, slotLimit });
   console.log('SLOTS ' + count);
-  const release = () => {
+  hold(() => {
     for (let slot = 0; slot < count; slot += 1) log({ kind: 'release', slot });
     process.exit(0);
-  };
-  process.stdin.on('end', release);
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
-  process.stdin.resume();
-} else if (script.includes('flock')) {
-  log({ kind: 'slot' });
-  console.log('SLOT 0');
-  const release = () => {
-    log({ kind: 'release' });
-    process.exit(0);
-  };
-  process.stdin.on('end', release);
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
-  process.stdin.resume();
+  });
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
   log({ kind: 'status', runId });
   const status = dir + '/status-' + runId;
-  if (!existsSync(status)) process.exit(1);
-  console.log(readFileSync(status, 'utf8'));
-} else if (script.includes('systemd-run')) {
+  console.log(existsSync(status) ? readFileSync(status, 'utf8') : 'NOT_STARTED');
+} else if (script.startsWith('# REMOTE_CHECK_RUN_LIFETIME_MS ')) {
   const group = Number(script.match(/GATE_GROUP_INDEX=(\\d+)/)?.[1] ?? 0);
   const countFile = dir + '/run-count-' + group;
   const count = (existsSync(countFile) ? Number(readFileSync(countFile, 'utf8')) : 0) + 1;
   writeFileSync(countFile, String(count));
   log({ kind: 'run', script, group, runId, count });
-  if (process.env.FAKE_DROP_FIRST_RUN === '1' && count === 1 && group === Number(process.env.FAKE_DROP_GROUP ?? 0)) process.exit(255);
+  if (process.env.FAKE_DROP_FIRST_RUN === '1' && count === 1 && group === Number(process.env.FAKE_DROP_GROUP ?? 0)) {
+    // The launch disconnects and its status reply cannot establish whether the command started.
+    writeFileSync(dir + '/status-' + runId, 'invalid status');
+    process.exit(255);
+  }
   if (process.env.FAKE_HANG) {
+    writeFileSync(dir + '/status-' + runId, 'STARTED');
+    process.on('SIGTERM', () => {
+      log({ kind: 'run-stopped', runId });
+      process.exit(143);
+    });
     console.log('remote gate output');
     console.log('started');
-    process.on('SIGTERM', () => process.exit(143));
     setInterval(() => {}, 1000);
   } else {
     await Bun.sleep(Number(process.env.FAKE_RUN_DELAY_MS ?? 0));
@@ -123,33 +156,42 @@ if (script.includes('REMOTE_CHECK_RETURNS')) {
           ? { controlPlane: { passed: code === 0, durationSeconds: 0.5, host: address.includes('@b.') ? 'b' : 'c' } }
           : {}),
       };
-      const resultFile = dir + '/remote-returns/' + runId + '/' + resultPath;
+      const resultFile = returnsDir + '/' + resultPath;
       mkdirSync(resultFile.slice(0, resultFile.lastIndexOf('/')), { recursive: true });
       writeFileSync(resultFile, JSON.stringify(result));
     }
     console.log((address.includes('@b.') ? 'b' : 'c') + ': remote gate output');
     process.exit(code);
   }
-} else {
-  log({ kind: 'cleanup', script });
+} else if (script.includes("printf 'STOPPED")) {
+  log({ kind: 'stop', runId });
+  console.log('STOPPED');
+} else if (script.startsWith('run_id=') && script.includes("printf 'CLEANED %s")) {
+  log({ kind: 'cleanup', runId });
+  console.log('CLEANED ' + runId);
+} else if (!script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
+  throw new Error('Unexpected fixture SSH request: ' + script.slice(0, 100));
 }
 `;
 
-const fakeRsync = `#!/usr/bin/env bun
+const fakeRsync = `#!${process.execPath}
 import { appendFileSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 const input = await Bun.stdin.text();
 const args = process.argv.slice(2);
 const source = args.at(-2) ?? '';
 const destination = args.at(-1) ?? '';
+const remoteRun = /^ops@[bc]\\.test:\\/srv\\/rezics-check\\/runs\\/([a-z0-9-]+)\\/$/;
+const returned = source.match(remoteRun);
+if (!returned && !remoteRun.test(destination)) throw new Error('Unexpected fixture rsync endpoints');
 const files = input.split('\\0').filter(Boolean);
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   destination,
   files: files.length,
 }) + '\\n');
-const runId = source.match(/runs\\/([^/]+)\\/?$/)?.[1];
-if (runId && !destination.includes('@')) {
+if (returned) {
+  const runId = returned[1]!;
   for (const path of files) {
     const from = join(process.env.FAKE_DIR, 'remote-returns', runId, path);
     const to = join(destination, path);
@@ -236,7 +278,7 @@ beforeAll(() => {
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-function scenario(slots = 8): { env: Record<string, string>; events: () => Event[]; local: () => string; dir: string } {
+function scenario(): { env: Record<string, string>; events: () => Event[]; local: () => string; dir: string } {
   const dir = join(root, `scenario-${counter++}`);
   mkdirSync(dir);
   writeFileSync(
@@ -248,18 +290,18 @@ function scenario(slots = 8): { env: Record<string, string>; events: () => Event
           performance: true,
           address: 'ops@b.test',
           identity: '/keys/b',
-          memoryMaxGiB: 48,
-          cpuQuotaPercent: 1600,
-          slots,
+          memoryMaxGiB: 54,
+          cpuQuotaPercent: 1800,
+          slots: 9,
         },
         {
           name: 'c',
           performance: true,
           address: 'ops@c.test',
           identity: '/keys/c',
-          memoryMaxGiB: 48,
-          cpuQuotaPercent: 1600,
-          slots,
+          memoryMaxGiB: 54,
+          cpuQuotaPercent: 1800,
+          slots: 9,
         },
       ],
     }),
@@ -275,9 +317,13 @@ function scenario(slots = 8): { env: Record<string, string>; events: () => Event
       ...env,
       PATH: `${join(root, 'bin')}:${process.env.PATH}`,
       FAKE_DIR: dir,
+      GIT_ALLOW_PROTOCOL: '',
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
       GATE_RESULT_FILE: join(dir, 'result.json'),
       KERNEL_CHECK_REMOTE: join(dir, 'hosts.json'),
       REMOTE_CHECK_POLL_MS: '20',
+      REMOTE_CHECK_SSH_CONTROL_DIR: join(root, 'ssh'),
     },
     events: () => {
       const file = join(dir, 'log.jsonl');
@@ -293,18 +339,26 @@ function scenario(slots = 8): { env: Record<string, string>; events: () => Event
   };
 }
 
-async function runGate(
+function spawnGate(
   env: Record<string, string>,
-  cwd = repository,
+  cwd = candidateCheckout(env.FAKE_DIR!),
   args: string[] = [],
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = Bun.spawn([process.execPath, gate, ...args], {
+) {
+  return Bun.spawn([process.execPath, gate, ...args], {
     cwd,
     env,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
+}
+
+async function runGate(
+  env: Record<string, string>,
+  cwd?: string,
+  args: string[] = [],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const child = spawnGate(env, cwd, args);
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -317,6 +371,32 @@ function fixtureWorkspace(cwd: string, directory: string, name: string, check = 
   const target = join(cwd, directory);
   mkdirSync(target, { recursive: true });
   writeFileSync(join(target, 'package.json'), JSON.stringify({ name, scripts: { check } }));
+}
+
+function candidateCheckout(dir: string): string {
+  const cwd = join(dir, 'checkout');
+  // Equal default durations give the full gate one workspace per group and put the control plane in group zero.
+  fixtureWorkspace(cwd, 'apps/a-plain', '@fixture/plain');
+  fixtureWorkspace(cwd, 'packages/b-runner', '@fixture/runner');
+  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
+  const git = (args: string[]) => {
+    const result = Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', ...args], {
+      cwd,
+      env: { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PATH: process.env.PATH },
+    });
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+  };
+  git(['init', '--quiet', '--template=']);
+  git(['add', '--all']);
+  git(['-c', 'user.name=Gate Fixture', '-c', 'user.email=gate@example.test', 'commit', '--quiet', '-m', 'Candidate']);
+
+  const bunPackage = join(cwd, 'node_modules/bun');
+  mkdirSync(join(bunPackage, 'bin'), { recursive: true });
+  writeFileSync(join(bunPackage, 'package.json'), JSON.stringify({ version: Bun.version }));
+  symlinkSync(process.execPath, join(bunPackage, 'bin/bun.exe'));
+  mkdirSync(join(cwd, 'node_modules/.bin'));
+  symlinkSync(join(root, 'local/bun'), join(cwd, 'node_modules/.bin/bun'));
+  return cwd;
 }
 
 function selectedWorkspaceDirectories(script: string): string[] {
@@ -339,7 +419,7 @@ test('with KERNEL_CHECK_REMOTE the gate runs two workspace groups on check hosts
     GATE_REMOTE_SLOTS: '4',
     GATE_CONCURRENCY: '3',
   });
-  expect(result.code).toBe(7);
+  expect(result.code, result.stderr).toBe(7);
   expect(result.stdout).toContain('Failed workspaces:');
   expect(result.stdout).toContain('b: remote gate output');
   expect(result.stdout).toContain('c: remote gate output');
@@ -494,7 +574,7 @@ test('a noisy Auth Pages check retains its native failure and middle report entr
 test('a transport failure is not replayed, and local load-induced reruns keep their reports', async () => {
   const { env, events } = scenario();
   const result = await runGate({ ...env, FAKE_DROP_FIRST_RUN: '1', FAKE_DROP_GROUP: '0', GATE_REMOTE_SLOTS: '4' });
-  expect(result.code).toBe(75);
+  expect(result.code, result.stderr).toBe(75);
   expect(result.stderr).not.toContain('retrying once');
   const runs = events().filter((event) => event.kind === 'run');
   expect(runs.filter((event) => event.group === 0)).toHaveLength(1);
@@ -524,10 +604,7 @@ test('a transport failure is not replayed, and local load-induced reruns keep th
 
 test('selected workspaces and control-plane inclusion are preserved on remote handoff despite local markers', async () => {
   const { env, events, dir } = scenario();
-  const fixture = join(dir, 'checkout');
-  mkdirSync(fixture);
-  fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain');
-  fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner');
+  const fixture = candidateCheckout(dir);
 
   const result = await runGate(
     {
@@ -544,7 +621,7 @@ test('selected workspaces and control-plane inclusion are preserved on remote ha
     ['--workspaces', 'apps/a-plain', 'tools/goal/scripts/gate.ts'],
   );
 
-  expect(result.code).toBe(0);
+  expect(result.code, result.stderr).toBe(0);
   expect(result.stdout).not.toContain('$ bun install');
   expect(events().filter((event) => event.kind === 'install' || event.kind === 'check')).toEqual([]);
   const scripts = events()
@@ -578,17 +655,14 @@ test('selected workspaces and control-plane inclusion are preserved on remote ha
 
 test('a selected remote workspace does not gain the full gate or control plane', async () => {
   const { env, events, dir } = scenario();
-  const fixture = join(dir, 'checkout');
-  mkdirSync(fixture);
-  fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain');
-  fixtureWorkspace(fixture, 'packages/b-runner', '@fixture/runner');
+  const fixture = candidateCheckout(dir);
 
   const result = await runGate({ ...env, FAKE_RESULT_WORKSPACE: 'apps/a-plain' }, fixture, [
     '--workspaces',
     'apps/a-plain',
   ]);
 
-  expect(result.code).toBe(0);
+  expect(result.code, result.stderr).toBe(0);
   const scripts = events()
     .filter((event) => event.kind === 'run')
     .map((event) => event.script as string);
@@ -607,7 +681,7 @@ test('a selected remote workspace does not gain the full gate or control plane',
 test('the gate asks for four slots per group and forwards concurrency only when set', async () => {
   const { env, events } = scenario();
   const result = await runGate(env);
-  expect(result.code).toBe(0);
+  expect(result.code, result.stderr).toBe(0);
   const seen = events();
   expect(seen.filter((event) => event.kind === 'slot')).toHaveLength(8);
   const scripts = seen.filter((event) => event.kind === 'run').map((event) => event.script as string);
@@ -617,7 +691,7 @@ test('the gate asks for four slots per group and forwards concurrency only when 
 
   const configured = scenario();
   const second = await runGate({ ...configured.env, GATE_CONCURRENCY: '2', GATE_REMOTE_SLOTS: '2' });
-  expect(second.code).toBe(0);
+  expect(second.code, second.stderr).toBe(0);
   const forwarded = configured
     .events()
     .filter((event) => event.kind === 'run')
@@ -628,24 +702,26 @@ test('the gate asks for four slots per group and forwards concurrency only when 
 
 test('a signal sent to the gate reaches the remote runs, which are cleaned up before the gate exits', async () => {
   const { env, events } = scenario();
-  const child = Bun.spawn([process.execPath, gate], {
-    cwd: repository,
-    env: { ...env, FAKE_HANG: '1', GATE_REMOTE_SLOTS: '4' },
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'ignore',
-  });
+  const child = spawnGate({ ...env, FAKE_HANG: '1', GATE_REMOTE_SLOTS: '4' });
+  const stderr = new Response(child.stderr).text();
   const reader = child.stdout.getReader();
   let text = '';
-  while (!text.includes('started')) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    text += new TextDecoder().decode(chunk.value);
+  try {
+    while (!text.includes('started')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      text += new TextDecoder().decode(chunk.value);
+    }
+  } finally {
+    child.kill('SIGTERM');
   }
-  expect(text).toContain('started');
-  child.kill('SIGTERM');
-  expect(await child.exited).toBe(143);
-  expect(events().some((event) => event.kind === 'cleanup')).toBe(true);
+  const [code, diagnostic] = await Promise.all([child.exited, stderr]);
+  expect(text, diagnostic).toContain('started');
+  expect(code, diagnostic).toBe(143);
+  const seen = events();
+  const stopped = seen.find((event) => event.kind === 'run-stopped');
+  expect(stopped).toBeDefined();
+  expect(seen.some((event) => event.kind === 'cleanup' && event.runId === stopped?.runId)).toBe(true);
 });
 
 test('missing, unreadable and empty host configuration fail closed before local installation', async () => {
