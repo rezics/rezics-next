@@ -717,7 +717,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           const item = results[index]!;
           if (!('problem' in item)) return false;
           const { problem, status } = item;
-          const transient = (status === 429 || status === 503) && problem.retryable;
+          const transient = (status === 429 || status === 503) && problem.retryable === true;
           if (!admissionOnly) return transient;
           if (problem.status !== status || !('effect_status' in problem)) return false;
           if (problem.effect_status === 'not_applied') return transient;
@@ -725,7 +725,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           // Exact replay lets Kernel reauthorize and read a committed receipt. A failed
           // COMMIT can leave one even when the underlying internal error is not retryable.
           return (
-            (status === 503 && problem.retryable) ||
+            (status === 503 && problem.retryable === true) ||
             (status === 500 && 'failure_stage' in problem && problem.failure_stage === 'transaction_commit')
           );
         });
