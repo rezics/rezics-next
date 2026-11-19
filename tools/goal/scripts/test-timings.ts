@@ -149,11 +149,10 @@ export async function runTestTimings(
   const totalMs = performance.now() - started;
   const tests = fileResults.flatMap((file) => parseTestTimings(file.file, file.output));
   const failed = fileResults.filter((file) => file.status !== 0);
-  const output =
-    formatTimings(fileResults, tests, totalMs) +
-    (failed.length
-      ? `\n${failed.length} file(s) failed:\n${failed.map((file) => `${file.file}\n${file.output.trimEnd()}`).join('\n\n')}\n`
-      : '');
+  const failures = failed.length
+    ? `${failed.length} file(s) failed:\n${failed.map((file) => `${file.file}\n${file.output.trimEnd()}`).join('\n\n')}\n\n`
+    : '';
+  const output = failures + formatTimings(fileResults, tests, totalMs);
   return { status: failed.length ? 1 : 0, output, files: fileResults, tests, totalMs };
 }
 
