@@ -869,7 +869,12 @@ async function retainFailedSeedReopen(result: string, artifact: string): Promise
   const line = log.split('\n').findLast((entry) => entry.startsWith(prefix));
   if (!line) throw new Error('Failed seed reopen did not publish a result');
   const handoff: unknown = JSON.parse(line.slice(prefix.length));
-  if (!isRecord(handoff) || handoff.version !== 1 || handoff.state !== 'publication-incomplete' || handoff.artifact !== result)
+  if (
+    !isRecord(handoff) ||
+    handoff.version !== 1 ||
+    handoff.state !== 'publication-incomplete' ||
+    handoff.artifact !== result
+  )
     throw new Error('Failed seed reopen result does not match the declared artifact');
   const bytes = await readFile(result);
   if (createHash('sha256').update(bytes).digest('hex') !== handoff.artifactSha256)
