@@ -23,6 +23,7 @@ for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { createRoot } = await import('react-dom/client');
 const { AccountHome } = await import('../src/account-home-view');
+const { m } = await import('../src/paraglide/messages.js');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 const { applyDocumentLocale, initializeDocumentLocale } = await import('../src/locale-observation');
 overwriteGetLocale(() => 'en');
@@ -91,7 +92,9 @@ test('signed-out, denied, unavailable and missing-email states stay distinct', a
     expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
   for (const href of ['/security', '/account/rename', '/account/delete', '/organizations/new', '/automated/new'])
     expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
-  expect(signedOut.host.textContent).toContain('does not promise an action is available');
+  expect(signedOut.host.querySelector('[aria-labelledby="auth-home-settings-heading"] > p')?.textContent).toBe(
+    m.auth_home_settings_description({}, { locale: 'en' }),
+  );
 
   const denied = await mount(async () => ({ kind: 'denied' }));
   expect(denied.host.querySelector('[role="status"]')?.textContent).toContain('was refused');
@@ -104,6 +107,9 @@ test('signed-out, denied, unavailable and missing-email states stay distinct', a
 
   const missingEmail = await mount(async () => identity('sample-account', null));
   expect(missingEmail.host.textContent).toContain('No email address is available');
+  expect(missingEmail.host.querySelector('.auth-home-identity-note')?.textContent).toBe(
+    m.auth_home_identity_note({}, { locale: 'en' }),
+  );
   expect(missingEmail.host.textContent).not.toContain('verified');
 });
 
