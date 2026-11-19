@@ -10,7 +10,7 @@ import {
   installPublicFilterCoveragePage,
   type PublicFilterCoveragePage,
 } from '../../src/search/public-filter-coverage-page.ts';
-import type { DiscoveryReadContext, DiscoveryRegistry } from '../../src/search/discovery.ts';
+import type { DiscoveryReadContext } from '../../src/search/discovery.ts';
 import type {
   PublicDiscoveryConsumerOperations,
   PublicFilterConsumerJob,

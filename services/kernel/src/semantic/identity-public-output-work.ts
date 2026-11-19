@@ -328,11 +328,8 @@ export function publicOutputReadWork(visits: number): WorkDimensions {
  * mapping snapshots, up to sixteen original/terminal cuts, native event fences and cleanup controls. */
 export function publicOutputAdvanceWork(): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
-  return nativePublicOutputWorkDimensions(sumBounds(
-    native.bindNew,
-    native.read,
-    repeatBound(sumBounds(native.revalidate, native.lock), 3),
-    {
+  return nativePublicOutputWorkDimensions(
+    sumBounds(native.bindNew, native.read, repeatBound(sumBounds(native.revalidate, native.lock), 3), {
       candidateKeys: 100,
       nativeRows: 4096 + 16 * 512,
       identityMetadataRows: 512 + 16 * 64,
@@ -342,36 +339,37 @@ export function publicOutputAdvanceWork(): WorkDimensions {
       statements: 128 + 16 * 48,
       bytes: 8 * 2097152 + 16 * 131072,
       engineRequests: 0,
-    },
-  ));
+    }),
+  );
 }
 
 /** Cancellation funds a retained page (at most sixteen cut releases) or one native transition.
  * The exact supersession check, repeated accepted/gate reads, and Core fences share this caller frame. */
 export function publicOutputRetireWork(): WorkDimensions {
   return nativePublicOutputWorkDimensions(
-    sumBounds(
-      { ...publicOutputAdvanceWork(), engineRequests: 0 },
-      NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
-    ),
+    sumBounds({ ...publicOutputAdvanceWork(), engineRequests: 0 }, NATIVE_PUBLIC_OUTPUT_JOURNEYS().release),
   );
 }
 
 export function publicOutputFrozenCaptureWork(): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
-  return nativePublicOutputWorkDimensions(sumBounds(
-    { ...publicOutputAdvanceWork(), engineRequests: 0 },
-    repeatBound(native.frozenRead, 3),
-    repeatBound(native.frozenOrigin, 2),
-  ));
+  return nativePublicOutputWorkDimensions(
+    sumBounds(
+      { ...publicOutputAdvanceWork(), engineRequests: 0 },
+      repeatBound(native.frozenRead, 3),
+      repeatBound(native.frozenOrigin, 2),
+    ),
+  );
 }
 
 export function publicOutputFreezeWork(): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
-  return nativePublicOutputWorkDimensions(sumBounds(
-    { ...publicOutputAdvanceWork(), engineRequests: 0 },
-    native.frozenRead,
-    native.frozenSuccessor,
-    native.transfer,
-  ));
+  return nativePublicOutputWorkDimensions(
+    sumBounds(
+      { ...publicOutputAdvanceWork(), engineRequests: 0 },
+      native.frozenRead,
+      native.frozenSuccessor,
+      native.transfer,
+    ),
+  );
 }

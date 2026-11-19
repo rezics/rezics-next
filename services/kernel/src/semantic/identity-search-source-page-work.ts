@@ -293,10 +293,15 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
         if (
           values.length !== 4 ||
           typeof route !== 'number' ||
-          typeof subject !== 'string' || routeOf(subject) !== route ||
+          typeof subject !== 'string' ||
+          routeOf(subject) !== route ||
           (after !== null && !uuid(after)) ||
-          typeof limit !== 'number' || !Number.isInteger(limit) || limit < 0 || limit > 32
-        ) return undefined;
+          typeof limit !== 'number' ||
+          !Number.isInteger(limit) ||
+          limit < 0 ||
+          limit > 32
+        )
+          return undefined;
         return Object.freeze({
           candidateKeys: 0,
           identityMetadataRows: 0,

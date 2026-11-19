@@ -14,15 +14,10 @@ export type {
   IdentityEffect,
 } from '../identity-core/index.ts';
 import type {
-  IdentityEpoch,
   IdentityJobRef,
   IdentityIntent,
-  IdentityStepName,
-  IdentityNativeReceipt,
   IdentityStepReceipt,
   IdentityChange,
-  IdentityFrontier,
-  NativeStepWork,
   IdentityStepProgress,
   IdentityEpochState,
   IdentityMapping,

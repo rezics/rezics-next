@@ -727,7 +727,8 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
         if (context === GLOBAL_CONTEXT) {
           result.push(...linkChanges([], global, factDataTypes(release, global), metadata));
         } else {
-          const selected = (await slotView(client, data.subject, property, context, defaults.get(context)!, slot)).facts;
+          const selected = (await slotView(client, data.subject, property, context, defaults.get(context)!, slot))
+            .facts;
           result.push(
             ...contextLinkChanges(
               global,

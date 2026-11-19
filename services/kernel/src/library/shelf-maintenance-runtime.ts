@@ -1,7 +1,6 @@
 import {
   gateEnsure,
   gateLock,
-  inputs,
   runRead,
   stepSave,
   uuid,

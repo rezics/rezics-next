@@ -63,22 +63,45 @@ test('Kernel tests-only plans explicit native files and preserves focused option
   try {
     mkdirSync(join(fixture.kernel, 'test'), { recursive: true });
     writeFileSync(join(fixture.kernel, 'test/native.test.ts'), '');
-    expect(planCheck(['--tests-only', 'test/native.test.ts', '--', '-t', 'qualification'], fixture.kernel, { env: {} }).plan)
-      .toEqual({ files: ['test/native.test.ts'], tests: ['test/native.test.ts'], testsOnly: true, testArguments: ['-t', 'qualification'] });
+    expect(
+      planCheck(['--tests-only', 'test/native.test.ts', '--', '-t', 'qualification'], fixture.kernel, { env: {} }).plan,
+    ).toEqual({
+      files: ['test/native.test.ts'],
+      tests: ['test/native.test.ts'],
+      testsOnly: true,
+      testArguments: ['-t', 'qualification'],
+    });
     expect(() => planCheck(['--tests-only'], fixture.kernel, { env: {} })).toThrow('requires explicit test files');
-  } finally { fixture.dispose(); }
+  } finally {
+    fixture.dispose();
+  }
 });
 
 test('Kernel tests-only reaches native setup and tests without compiler lint or format', async () => {
   const phases: string[] = [];
   await runKernelCheckStages({
-    plan: { files: ['test/media.test.ts', 'test/rating.test.ts'], tests: ['test/media.test.ts', 'test/rating.test.ts'], testsOnly: true },
-    environment: {}, reyloConfig: 'unused', ownedFiles: [],
+    plan: {
+      files: ['test/media.test.ts', 'test/rating.test.ts'],
+      tests: ['test/media.test.ts', 'test/rating.test.ts'],
+      testsOnly: true,
+    },
+    environment: {},
+    reyloConfig: 'unused',
+    ownedFiles: [],
     programs: { tsc: 'unused', lintProgram: 'unused', formatProgram: 'unused' },
-    captureCommand: async () => { throw new Error('quality command must not run'); },
-    aroundCompiler: async () => { throw new Error('compiler must not run'); },
-    afterQuality: async () => { phases.push('native setup'); },
-    runTests: async (files) => { phases.push(...files); return []; },
+    captureCommand: async () => {
+      throw new Error('quality command must not run');
+    },
+    aroundCompiler: async () => {
+      throw new Error('compiler must not run');
+    },
+    afterQuality: async () => {
+      phases.push('native setup');
+    },
+    runTests: async (files) => {
+      phases.push(...files);
+      return [];
+    },
   });
   expect(phases).toEqual(['native setup', 'test/media.test.ts', 'test/rating.test.ts']);
 });

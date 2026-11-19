@@ -90,7 +90,6 @@ import releaseSql from './identity-receiving-native-release.sql';
 import releaseProofSql from './identity-receiving-native-release-proof.sql';
 import drainSql from './identity-receiving-native-drain.sql';
 import drainGateSql from './identity-receiving-native-drain-gate.sql';
-import { validateLocator } from '../history/contract/index.ts';
 
 /** Indexed SQL text for SearchNativeReceivingSql. Declaration emit cannot name reylo error fields. */
 export type SearchNativeReceivingStatements = {

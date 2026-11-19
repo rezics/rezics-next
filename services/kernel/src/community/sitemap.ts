@@ -158,10 +158,15 @@ async function activeAddress(
   spaceId: string,
   address: string,
 ): Promise<boolean> {
-  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    const claim = await readSpaceAddress(deadlineClient(client, deadline), address);
-    return claim?.spaceId === spaceId;
-  }, boundedReadOptions);
+  return withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const claim = await readSpaceAddress(deadlineClient(client, deadline), address);
+      return claim?.spaceId === spaceId;
+    },
+    boundedReadOptions,
+  );
 }
 
 function candidatePosition(candidate: Candidate): Position {
@@ -202,14 +207,19 @@ async function candidates(
   limit: number,
 ): Promise<Candidate[]> {
   const params = { route: after?.route ?? -1, id: after?.id ?? ZERO_ID, limit };
-  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    if (feed === 'realms') {
-      const rows = await realmsPage.run(client, params);
-      return rows.map((row) => ({ route: row.route, id: row.realm_id }));
-    }
-    const rows = await spacesPage.run(client, params);
-    return rows.map((row) => ({ route: row.route, id: row.space_id }));
-  }, boundedReadOptions);
+  return withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      if (feed === 'realms') {
+        const rows = await realmsPage.run(client, params);
+        return rows.map((row) => ({ route: row.route, id: row.realm_id }));
+      }
+      const rows = await spacesPage.run(client, params);
+      return rows.map((row) => ({ route: row.route, id: row.space_id }));
+    },
+    boundedReadOptions,
+  );
 }
 
 async function listedRealm(
@@ -228,38 +238,48 @@ async function listedRealm(
   if (!initial) return null;
   const realmCheck = await anonymousCheck(dependencies, deadline, 'realm', candidate.route, candidate.id);
   const spaceCheck = await anonymousCheck(dependencies, deadline, 'space', candidate.route, initial.space_id);
-  const admitted = await withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    const home = deadlineClient(client, deadline);
-    return (await realmCheck(home)) && (await spaceCheck(home));
-  }, boundedReadOptions);
+  const admitted = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const home = deadlineClient(client, deadline);
+      return (await realmCheck(home)) && (await spaceCheck(home));
+    },
+    boundedReadOptions,
+  );
   if (!admitted) return null;
   if (initial.address !== null && !(await activeAddress(dependencies, deadline, initial.space_id, initial.address)))
     return null;
 
-  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    const home = deadlineClient(client, deadline);
-    if (!(await realmCheck(home)) || !(await spaceCheck(home))) return null;
-    const board = await newestRealmBoard.run(home, candidate);
-    const current = await readRealmHead.run(home, params);
-    if (
-      !sameRealmSource(current, initial) ||
-      current.revision_created_at === null ||
-      current.space_revision_created_at === null
-    )
-      return null;
-    return {
-      id: candidate.id,
-      canonicalDestination:
-        current.address === null
-          ? { kind: 'realm', realmId: candidate.id }
-          : { kind: 'space', spaceId: current.space_id, address: current.address },
-      lastModified: latestTimestamp(
-        sitemapTimestamp(current.revision_created_at),
-        sitemapTimestamp(current.space_revision_created_at),
-        board?.created_at ?? null,
-      ),
-    };
-  }, boundedReadOptions);
+  return withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const home = deadlineClient(client, deadline);
+      if (!(await realmCheck(home)) || !(await spaceCheck(home))) return null;
+      const board = await newestRealmBoard.run(home, candidate);
+      const current = await readRealmHead.run(home, params);
+      if (
+        !sameRealmSource(current, initial) ||
+        current.revision_created_at === null ||
+        current.space_revision_created_at === null
+      )
+        return null;
+      return {
+        id: candidate.id,
+        canonicalDestination:
+          current.address === null
+            ? { kind: 'realm', realmId: candidate.id }
+            : { kind: 'space', spaceId: current.space_id, address: current.address },
+        lastModified: latestTimestamp(
+          sitemapTimestamp(current.revision_created_at),
+          sitemapTimestamp(current.space_revision_created_at),
+          board?.created_at ?? null,
+        ),
+      };
+    },
+    boundedReadOptions,
+  );
 }
 
 async function listedSpace(
@@ -270,20 +290,30 @@ async function listedSpace(
 ): Promise<SitemapSpaceItem | null> {
   const check = await anonymousCheck(dependencies, deadline, 'space', candidate.route, candidate.id);
   const params = { ...candidate, at };
-  const initial = await withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    const home = deadlineClient(client, deadline);
-    if (!(await check(home))) return null;
-    return readSpace.run(home, params);
-  }, boundedReadOptions);
+  const initial = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const home = deadlineClient(client, deadline);
+      if (!(await check(home))) return null;
+      return readSpace.run(home, params);
+    },
+    boundedReadOptions,
+  );
   if (!initial || initial.address === null || initial.revision_created_at === null) return null;
   if (!(await activeAddress(dependencies, deadline, candidate.id, initial.address))) return null;
-  return withBoundedReadConnection(dependencies.pool, deadline, async (client) => {
-    const home = deadlineClient(client, deadline);
-    if (!(await check(home))) return null;
-    const head = await readSpace.run(home, params);
-    if (!sameSpaceSource(head, initial) || head.address === null || head.revision_created_at === null) return null;
-    return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };
-  }, boundedReadOptions);
+  return withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    async (client) => {
+      const home = deadlineClient(client, deadline);
+      if (!(await check(home))) return null;
+      const head = await readSpace.run(home, params);
+      if (!sameSpaceSource(head, initial) || head.address === null || head.revision_created_at === null) return null;
+      return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };
+    },
+    boundedReadOptions,
+  );
 }
 
 async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(

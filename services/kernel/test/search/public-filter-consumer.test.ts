@@ -135,11 +135,7 @@ async function execute(n: Native, queried: PublicFilterQueriedObservation) {
   expect(result.queried.snapshot.observation).toBe(queried.snapshot.observation);
   return result;
 }
-async function measuredQuery(
-  n: Native,
-  queried: PublicFilterQueriedObservation,
-  refill?: PublicFilterConsumerRefill,
-) {
+async function measuredQuery(n: Native, queried: PublicFilterQueriedObservation, refill?: PublicFilterConsumerRefill) {
   return capture(
     n.f.db,
     async () => {
@@ -568,9 +564,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
     const author = await n.f.create();
     const dependentBooks: string[] = [];
     for (let attempt = 0; attempt < 8; attempt++) {
-      dependentBooks.push(
-        await n.f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] }),
-      );
+      dependentBooks.push(await n.f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] }));
       if (dependentBooks.length >= 2 && dependentBooks.some((book) => home(book) !== home(author))) break;
     }
     expect(dependentBooks.length).toBeGreaterThanOrEqual(2);
@@ -655,8 +649,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
 
       const beforeHead = await head(n.source, home(author));
       const beforeDocuments = await Promise.all(dependentBooks.map((book) => liveDocument(n, book)));
-      for (const document of beforeDocuments)
-        expect(document._source.statements).toContain(`schema:author=${author}`);
+      for (const document of beforeDocuments) expect(document._source.statements).toContain(`schema:author=${author}`);
 
       await n.f.post(`/v1/subjects/${author}:hide`, { reason: 'Foreign target privacy reduction' });
       const reduction = await head(n.source, home(author));
@@ -666,9 +659,12 @@ test('native delayed foreign projection blocks a retained page and continuation 
 
       const gate = n.consumer.arm('write');
       let repairing:
-        | Promise<{
-            value: Awaited<ReturnType<PublicFilterConsumerOperations['repairStep']>>;
-          } | { error: unknown }>
+        | Promise<
+            | {
+                value: Awaited<ReturnType<PublicFilterConsumerOperations['repairStep']>>;
+              }
+            | { error: unknown }
+          >
         | undefined;
       try {
         repairing = n.operations.repairStep(affected.repair, context()).then(
@@ -683,8 +679,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
         expect(heldDocuments.map((document) => document._version)).toEqual(
           beforeDocuments.map((document) => document._version),
         );
-        for (const document of heldDocuments)
-          expect(document._source.statements).toContain(`schema:author=${author}`);
+        for (const document of heldDocuments) expect(document._source.statements).toContain(`schema:author=${author}`);
 
         const snapshot = page.queried.snapshot;
         if (snapshot.kind !== 'pit') throw new Error('Expected retained native PIT for delayed page');
@@ -808,13 +803,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
 
       repaired.resolve();
       const { value, capture: whole } = await measuredPage;
-      await assertPageCapture(
-        'public-filter-delayed-original-page-acknowledged',
-        whole,
-        value.page,
-        value.final,
-        1,
-      );
+      await assertPageCapture('public-filter-delayed-original-page-acknowledged', whole, value.page, value.final, 1);
       expect(value.final.pending).toEqual([]);
       expect(value.final.changed).toContainEqual(reduction);
       expect(value.final.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });

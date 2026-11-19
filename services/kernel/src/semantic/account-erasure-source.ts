@@ -35,7 +35,6 @@ import type {
 import type {
   SubjectErasurePageReceipt,
   SubjectErasureSourceFactory,
-  SubjectErasureSourceOverflow,
   SubjectErasureSourcePage,
   SubjectErasureSourceRecord,
   SubjectErasureSourceProof,

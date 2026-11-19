@@ -93,22 +93,26 @@ export async function readAutomatedCreationOperator(
   if (!Number.isFinite(deadline)) throw new AccessUnavailableError('deadline');
   async function point<T>(id: string, read: (client: Parameters<Access['authorize']>[0], route: number) => Promise<T>) {
     requireAccessDeadline(deadline);
-    return withReadTransaction(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      const route = routeOf(id)!;
-      const home = partitionOf(route);
-      const partition = await readPartition(bounded, home);
-      if (!partition) throw new CommandUnavailableError('contention', home);
-      if (partition.writeState !== 'active')
-        throw new CommandUnavailableError(
-          partition.writeState === 'moved' ? 'moved' : 'fenced',
-          home,
-          partition.movedTo,
-        );
-      // Position advances for unrelated commands in the partition. Only the
-      // actual home/epoch and selected account revision bind this observation.
-      return { home: { node: partition.node, epoch: partition.epoch }, row: await read(bounded, route) };
-    }, deadline);
+    return withReadTransaction(
+      pool,
+      async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        const route = routeOf(id)!;
+        const home = partitionOf(route);
+        const partition = await readPartition(bounded, home);
+        if (!partition) throw new CommandUnavailableError('contention', home);
+        if (partition.writeState !== 'active')
+          throw new CommandUnavailableError(
+            partition.writeState === 'moved' ? 'moved' : 'fenced',
+            home,
+            partition.movedTo,
+          );
+        // Position advances for unrelated commands in the partition. Only the
+        // actual home/epoch and selected account revision bind this observation.
+        return { home: { node: partition.node, epoch: partition.epoch }, row: await read(bounded, route) };
+      },
+      deadline,
+    );
   }
   const human = () => point(humanId, (client, route) => humanSource.run(client, { route, account_id: humanId }));
   const operator = () =>
@@ -154,12 +158,17 @@ export async function readAutomatedCreationOperator(
         row.operatorAccountId === null;
       if (eligible && target) {
         const check = await accessCheck(access, actor, 'account:manage', target, { pool, deadline, time });
-        await withBoundedReadConnection(pool, deadline, async (client) => {
-          if (!(await check(deadlineClient(client, deadline), time))) {
-            if (!selection.genericRefusal) throw new AuthBindingDeniedError();
-            eligible = false;
-          }
-        }, boundedReadOptions(deadline));
+        await withBoundedReadConnection(
+          pool,
+          deadline,
+          async (client) => {
+            if (!(await check(deadlineClient(client, deadline), time))) {
+              if (!selection.genericRefusal) throw new AuthBindingDeniedError();
+              eligible = false;
+            }
+          },
+          boundedReadOptions(deadline),
+        );
       }
       equal(before, await operator());
       equal(caller, await human());

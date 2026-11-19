@@ -100,8 +100,7 @@ async function readBoardMetadata(pool: Pool, boardId: string, deadline: number):
       const partitionNo = partitionOf(boardRoute);
       const partition = await readPartition(client, partitionNo);
       if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-      if (partition.writeState === 'moved')
-        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
       const row = await readBoard.run(client, {
         route: boardRoute,
         id: boardId,

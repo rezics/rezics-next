@@ -537,12 +537,13 @@ export function createAniListImport(deps: Dependencies) {
       fingerprint: hash(claims),
     };
   }
-  async function observe(actor: Actor, subjectId: string, deadline = deadlineFor(5000)): Promise<AniListObservation | null> {
+  async function observe(
+    actor: Actor,
+    subjectId: string,
+    deadline = deadlineFor(5000),
+  ): Promise<AniListObservation | null> {
     const at = await withBoundedReadConnection(pool, deadline, (client) => mintReadTime(client, clock));
-    const observed = await readLibraryProfileSourceObservation(
-      { pool, access, actor, at, deadline },
-      subjectId,
-    );
+    const observed = await readLibraryProfileSourceObservation({ pool, access, actor, at, deadline }, subjectId);
     if (!observed) return null;
     const { source, anchor } = observed;
     const current = await snapshot(actor, deadline, (client, account) =>

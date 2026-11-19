@@ -36,7 +36,11 @@ test('mounted provider observations refresh independently, preserve zero means a
   const vndb = value('v17');
   const bangumi = { ...value('123'), sourceAlias: 'bangumi-feed' };
   const nativeBefore = await fixture.database.admin.query('SELECT count(*)::int AS n FROM rating.vote');
-  const vndbEnvelope = { source: 'vndb', ...vndb, observation: { kind: 'unversioned', digest: sourceObservation(id, 'vndb', vndb).digest } };
+  const vndbEnvelope = {
+    source: 'vndb',
+    ...vndb,
+    observation: { kind: 'unversioned', digest: sourceObservation(id, 'vndb', vndb).digest },
+  };
   expect(await result(await write(id, 'vndb', vndb))).toEqual(vndbEnvelope);
   const digest = sourceObservation(id, 'bangumi', bangumi).digest;
   const initial = { source: 'bangumi', ...bangumi, observation: { kind: 'unversioned', digest } };

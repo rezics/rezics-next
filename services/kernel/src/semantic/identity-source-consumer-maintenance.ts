@@ -38,7 +38,7 @@ import {
   type IdentitySourceLibraryOperation,
   type IdentitySourceScheduledOperation,
 } from './identity-source-maintenance-config.ts';
-import { historyComposition, withPrepaidAgentIdentityHistoryUnit } from '../history/application/index.ts';
+import { historyComposition } from '../history/application/index.ts';
 import { HistoryRegistry } from '../history/contract/index.ts';
 import { identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
 

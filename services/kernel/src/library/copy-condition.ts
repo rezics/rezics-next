@@ -2,7 +2,7 @@ import type { LibraryCopyKindDescriptor, LibraryProfilePin } from './profile.ts'
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 
 import { COPY_CONDITION_CHOICES, COPY_CONDITION_VOCABULARY } from './contract/index.ts';
-import type { CopyConditionValue, CopyConditionField, CopyConditionPatch } from './contract/index.ts';
+import type { CopyConditionValue, CopyConditionPatch } from './contract/index.ts';
 export { COPY_CONDITION_CHOICES, COPY_CONDITION_VOCABULARY } from './contract/index.ts';
 export type { CopyConditionValue, CopyConditionField, CopyConditionPatch } from './contract/index.ts';
 import { parseCopyConditionFields, isCopyConditionValue, CopyConditionInvalidError } from './core/index.ts';

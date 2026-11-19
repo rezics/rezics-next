@@ -4,11 +4,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { WorkClient } from '../work/client.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
-import type {
-  PublicFilterConsumerContext,
-  PublicFilterConsumerJob,
-  PublicFilterConsumerUnavailable,
-} from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerJob, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
 import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';

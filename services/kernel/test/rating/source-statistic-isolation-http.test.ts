@@ -24,7 +24,11 @@ type SourceStatistic = {
 };
 
 function envelope(subjectId: string, value: Omit<SourceStatistic, 'source'>): SourceStatistic {
-  return { source: 'vndb', ...value, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest } };
+  return {
+    source: 'vndb',
+    ...value,
+    observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest },
+  };
 }
 
 async function readJson(response: Response, status = 200): Promise<unknown> {

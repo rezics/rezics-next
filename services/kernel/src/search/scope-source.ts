@@ -95,7 +95,6 @@ import {
   type ScopeOrderedPrefixRequest,
   type SearchScopeOrderedPrefix,
 } from './scope-ordered.ts';
-import { nativeWork } from '../history/application/index.ts';
 export type {
   ScopeNativeOrder,
   ScopeNameSortTuple,
@@ -1130,11 +1129,13 @@ export function createSearchScopeSource({
         if (!options?.readOnly) {
           work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
           await store.retain(publicIdentity, publicDefinition, reader.deadline);
-          await createScopePreparation({ pool, prefix, routeKey: reader.routeKey, access: reader.access, clock }).prepare(
-            publicIdentity,
-            reader.deadline,
-            work,
-          );
+          await createScopePreparation({
+            pool,
+            prefix,
+            routeKey: reader.routeKey,
+            access: reader.access,
+            clock,
+          }).prepare(publicIdentity, reader.deadline, work);
         }
         work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
         publicObservation = await readPreparedScopeObservation(pool, prefix, publicIdentity, reader.deadline);

@@ -1051,9 +1051,7 @@ async function requirePublishedReceivingCustody(pool: Pool, record: NativeIdenti
     const job = (await tx.query(receivingJob.sql, [home, ref.jobId, ref.epoch.toString()])).rows[0];
     if (!job || job.state !== 'published') throw stale();
     if (!record.applied || job.scope_digest !== record.scopeDigest) throw stale();
-    const planned = (
-      await tx.query(receivingPlan.sql, [home, ref.jobId, ref.epoch.toString(), effectKey])
-    ).rows[0];
+    const planned = (await tx.query(receivingPlan.sql, [home, ref.jobId, ref.epoch.toString(), effectKey])).rows[0];
     if (
       !planned ||
       planned.binding_digest !== digest(record) ||
@@ -1495,7 +1493,8 @@ async function releasePublishedSearchPredecessor(pool: Pool, binding: SearchIden
   const { receivingHome, locator } = binding.source;
   const deadline = searchContext(pool).deadline;
   const args = [receivingHome, locator.planId, binding.job.jobId, String(binding.job.epoch), binding.original];
-  const read = async (tx: CommandTransaction) => (await tx.query<SearchPredecessor>(searchPredecessor.sql, args)).rows[0];
+  const read = async (tx: CommandTransaction) =>
+    (await tx.query<SearchPredecessor>(searchPredecessor.sql, args)).rows[0];
   const predecessor = await withReadTransaction(
     pool,
     async (tx) => {
@@ -1590,7 +1589,10 @@ export async function advanceSearchIdentityReceivingAcceptance(
       if (!saved) return { prepared: null, checked: await verified(tx) };
       if (digest(decodeSearchBinding(saved.binding)) !== bindingDigest || bindingDigest !== saved.binding_digest)
         throw stale();
-      return { prepared: receipt(home, saved.transaction_id, saved.native_epoch, saved.native_position), checked: null };
+      return {
+        prepared: receipt(home, saved.transaction_id, saved.native_epoch, saved.native_position),
+        checked: null,
+      };
     },
     work.deadline,
   );

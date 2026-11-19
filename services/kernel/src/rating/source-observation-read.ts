@@ -233,9 +233,13 @@ function readCursor(
     return invalidCursor();
   const [format, order, digest, ceiling] = decoded.after as [string, string, string, string];
   if (
-    format !== HISTORY_CURSOR_FORMAT || !validOrder(order) || !validOrder(ceiling) ||
-    !/^[0-9a-f]{64}$/.test(digest) || BigInt(order) > BigInt(ceiling)
-  ) return invalidCursor();
+    format !== HISTORY_CURSOR_FORMAT ||
+    !validOrder(order) ||
+    !validOrder(ceiling) ||
+    !/^[0-9a-f]{64}$/.test(digest) ||
+    BigInt(order) > BigInt(ceiling)
+  )
+    return invalidCursor();
   return { epoch: decoded.epoch, boundary: { order, digest, ceiling } };
 }
 
@@ -405,11 +409,15 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     cursor: Cursor | null,
   ) {
     const currentRows = await query<MetaRow & { inconsistent: boolean; emptySubjectEpoch: string }>(
-      headQuery, { route, subject_id: input.subjectId, source }, input.deadline,
+      headQuery,
+      { route, subject_id: input.subjectId, source },
+      input.deadline,
     );
     if (currentRows[0]?.inconsistent) throw new ProblemError('partition_unavailable');
     const current = currentRows[0]?.digest ? currentRows[0] : null;
-    let subjectEpoch = subjectEpochOf(currentRows.map((row) => ({ subjectEpoch: row.subjectEpoch ?? row.emptySubjectEpoch })));
+    let subjectEpoch = subjectEpochOf(
+      currentRows.map((row) => ({ subjectEpoch: row.subjectEpoch ?? row.emptySubjectEpoch })),
+    );
     if (input.digest !== undefined) {
       const selectedRows = await query<MetaRow>(
         exactQuery,
@@ -439,7 +447,9 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const rows = await query<HistoryQueryRow>(
       historyQuery,
       {
-        route, subject_id: input.subjectId, source,
+        route,
+        subject_id: input.subjectId,
+        source,
         cursor_order: cursor?.order ?? null,
         cursor_digest: cursor?.digest ?? null,
         ceiling_order: cursor?.ceiling ?? null,
@@ -451,7 +461,8 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     if (!page.cursorRetained) throw new ProblemError('conflict');
     const selected = page.items[0] ?? null;
     return {
-      current, selected,
+      current,
+      selected,
       historyItems: selected ? [selected] : [],
       lookahead: page.items[1] ?? null,
       subjectEpoch,
@@ -476,10 +487,9 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const currentMeta = initial.current;
     // Current and exact observations are required resources. History positions are
     // consumed independently of disclosure, including an unreturned lookahead.
-    const required = [
-      currentMeta,
-      ...(input.digest === undefined ? [] : [initial.selected]),
-    ].filter((row): row is MetaRow => row !== null);
+    const required = [currentMeta, ...(input.digest === undefined ? [] : [initial.selected])].filter(
+      (row): row is MetaRow => row !== null,
+    );
     const allForFence = [
       ...required,
       ...initial.historyItems,
@@ -531,7 +541,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       return item;
     };
     const currentItem = currentMeta ? itemOf(currentMeta) : null;
-    if (currentItem && (currentItem.payload.count > 0) !== currentMeta!.projectionExists)
+    if (currentItem && currentItem.payload.count > 0 !== currentMeta!.projectionExists)
       throw new ProblemError('partition_unavailable');
     const selectedItem = input.digest !== undefined && initial.selected ? itemOf(initial.selected) : null;
     if (input.digest !== undefined && selectedItem?.digest !== input.digest) throw new ProblemError('not_found');

@@ -18,11 +18,14 @@ test('release-only migration refuses an actual retained definition before changi
   try {
     const { publicFilterSource } = await nativeProducer();
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
-    const resolved = await binding.resolve({
-      source: publicFilterSource(f.config),
-      meaning: f.meaning,
-      capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined },
-    }, readContext());
+    const resolved = await binding.resolve(
+      {
+        source: publicFilterSource(f.config),
+        meaning: f.meaning,
+        capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined },
+      },
+      readContext(),
+    );
     expect(resolved.status).toBe('resolved');
     if (resolved.status !== 'resolved') throw new Error(`Native retained definition: ${resolved.reason}`);
     const snapshot = async () => {
@@ -56,14 +59,21 @@ test('release-only migration refuses an actual retained definition before changi
       const guard = await f.db.admin.query(
         "SELECT pg_get_functiondef('semantic.retain_public_filter_definition()'::regprocedure) AS definition",
       );
-      return { definition: definition.rows, rows, schema: schema.rows, constraints: constraints.rows, guard: guard.rows };
+      return {
+        definition: definition.rows,
+        rows,
+        schema: schema.rows,
+        constraints: constraints.rows,
+        guard: guard.rows,
+      };
     };
     const before = await snapshot();
     expect(before.definition).toHaveLength(1);
-    const migration = (await Bun.file(new URL(
-      '../../db/semantic/migrations/20261115000200_public_filter_release_only_meaning.sql',
-      import.meta.url,
-    )).text()).split('-- migrate:down')[0]!;
+    const migration = (
+      await Bun.file(
+        new URL('../../db/semantic/migrations/20261115000200_public_filter_release_only_meaning.sql', import.meta.url),
+      ).text()
+    ).split('-- migrate:down')[0]!;
     const client = await f.db.admin.connect();
     try {
       await client.query('BEGIN');

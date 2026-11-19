@@ -20,7 +20,6 @@ import type {
   LibraryBulkReceiptLocator,
 } from '../contract/index.ts';
 import {
-  decodeLocator,
   encodeLocator,
   LIBRARY_BULK_TARGET_COMMAND_KIND,
   LIBRARY_BULK_TARGET_COMMAND_KIND_ID,

@@ -12,11 +12,7 @@ import nativeSource from './members-preparation-source.sql';
 import original from './members-preparation-original.sql';
 import completionResult from './members-preparation-completion.sql';
 import { admitSavedCollectionMemberQuery, type CollectionMemberAdmission } from './owner-filter.ts';
-import type {
-  OwnerFilterCandidateClosure,
-  OwnerFilterReadBinding,
-  OwnerFilterNativeOperations,
-} from './owner-filter-plan.ts';
+import type { OwnerFilterReadBinding, OwnerFilterNativeOperations } from './owner-filter-plan.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import canonicalize from 'canonicalize';

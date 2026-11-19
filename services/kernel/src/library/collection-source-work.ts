@@ -203,13 +203,16 @@ export async function advanceFrozenCollection(
 
 async function retireSupersededPublication(context: WorkContext, row: { route: number; collection: string }) {
   const deadline = workStepDeadline();
-  const retired = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
-    (
-      await tx.query<{ captureId: string; bindingDigest: string; disposed: boolean }>(publicationSupersededSQL.sql, [
-        row.route,
-        row.collection,
-      ])
-    ).rows[0],
+  const retired = await withCollectionReadConnection(
+    context.pool,
+    deadline,
+    async (tx) =>
+      (
+        await tx.query<{ captureId: string; bindingDigest: string; disposed: boolean }>(publicationSupersededSQL.sql, [
+          row.route,
+          row.collection,
+        ])
+      ).rows[0],
   );
   if (!retired) return;
   const { captureId, bindingDigest } = retired;
@@ -234,8 +237,11 @@ async function recoverCollectionPublication(
   sweep: string,
 ): Promise<void> {
   const { route, collection, owner } = input;
-  const publication = await withCollectionReadConnection(context.pool, workStepDeadline(), async (tx) =>
-    (await tx.query<{ publicationId: string }>(publicationRecoverySQL.sql, [route, collection, owner])).rows[0],
+  const publication = await withCollectionReadConnection(
+    context.pool,
+    workStepDeadline(),
+    async (tx) =>
+      (await tx.query<{ publicationId: string }>(publicationRecoverySQL.sql, [route, collection, owner])).rows[0],
   );
   if (!publication) return;
   await context.client.enqueue(
@@ -245,7 +251,13 @@ async function recoverCollectionPublication(
       workflowID: `${publication.publicationId}:recovery:${sweep}:output:0`,
       workflowIDReusePolicy: 'return-existing',
     },
-    { route, publicationId: publication.publicationId, collectionId: collection, ownerAccountId: owner, accounts: [owner] },
+    {
+      route,
+      publicationId: publication.publicationId,
+      collectionId: collection,
+      ownerAccountId: owner,
+      accounts: [owner],
+    },
     0,
   );
 }

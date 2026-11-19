@@ -12,13 +12,11 @@ import {
 } from '../../command/command.ts';
 import { partitionOf } from '../../route/route.ts';
 import type { originalAccountIdentitySource } from '../../access/agent-verification-identity.ts';
-import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import './agent-identity-inventory-work.ts';
 import { nativePool } from './handles.ts';
 import type { AgentIdentityCommandDeclaration } from './agent-identity-source.ts';
 import { historyComposition } from '../application/composition.ts';
 import {
-  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-  AGENT_IDENTITY_HISTORY_GUARD_COST,
   addNativeWork,
   commandAgentIdentitySource,
   currentAgentIdentityHistoryUnit,

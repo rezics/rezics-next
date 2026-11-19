@@ -40,19 +40,21 @@ export function createHostedBookResumeReads(deps: {
   content?: HostedBookResumeContentPort;
 }) {
   return {
-    async read(actor: Actor, input: {
-      sessionId: string;
-      catalogueId: string;
-      /** Explicit reader selection; omitted means use the exact saved chapter checkpoint. */
-      selection?: unknown;
-      deadline: number;
-    }): Promise<HostedBookResumeResult> {
+    async read(
+      actor: Actor,
+      input: {
+        sessionId: string;
+        catalogueId: string;
+        /** Explicit reader selection; omitted means use the exact saved chapter checkpoint. */
+        selection?: unknown;
+        deadline: number;
+      },
+    ): Promise<HostedBookResumeResult> {
       if (actor.kind !== 'account' || !actor.scopes.includes('progress_session:read')) throw new GrantDeniedError();
       const { sessionId, catalogueId, deadline } = input;
       // Copy the caller's selection before IO; later mutation cannot replace the requested operands.
       const requested = input.selection === undefined ? undefined : normalizeHostedBookResumeAddress(input.selection);
-      if (routeOf(catalogueId) === null || !Number.isFinite(deadline))
-        throw new ProblemError('invalid_request');
+      if (routeOf(catalogueId) === null || !Number.isFinite(deadline)) throw new ProblemError('invalid_request');
       // Session callbacks run after the native owner snapshot is released. Native final owner/account/session
       // checks still surround all checkpoint and Content work, including empty and unavailable outcomes.
       return deps.sessions.readPresentedSession<HostedBookResumeResult>(actor, sessionId, async (session) => {
@@ -66,8 +68,12 @@ export function createHostedBookResumeReads(deps: {
           let invalid: 'unavailable' | 'changed' | 'retired' | null = null;
           for (const lease of leases) {
             const state = await lease.verify();
-            if (state === 'retired' || (state === 'changed' && invalid !== 'retired') ||
-              (state === 'unavailable' && invalid === null)) invalid = state;
+            if (
+              state === 'retired' ||
+              (state === 'changed' && invalid !== 'retired') ||
+              (state === 'unavailable' && invalid === null)
+            )
+              invalid = state;
           }
           if (invalid !== null) return { state: invalid };
           return Date.now() >= deadline ? { state: 'unavailable' } : result;

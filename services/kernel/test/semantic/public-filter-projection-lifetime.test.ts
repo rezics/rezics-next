@@ -82,19 +82,23 @@ function fakeClient(
     query(input: QueryConfig | string, values?: unknown[]) {
       const sql = typeof input === 'string' ? input : input.text;
       const operands = typeof input === 'string' ? (values ?? []) : (input.values ?? []);
-      return Promise.resolve().then(() => query(sql, operands)).then((native) => {
-        if (typeof input !== 'string' && 'rowMode' in input && input.rowMode === 'array')
-          return {
-            ...native,
-            rows: native.rows.map((row) => Object.values(row).map((value) => {
-              if (value === null || typeof value === 'string') return value;
-              if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean')
-                return String(value);
-              throw new TypeError('Lifetime fixture requires scalar PostgreSQL text fields');
-            })),
-          };
-        return native;
-      });
+      return Promise.resolve()
+        .then(() => query(sql, operands))
+        .then((native) => {
+          if (typeof input !== 'string' && 'rowMode' in input && input.rowMode === 'array')
+            return {
+              ...native,
+              rows: native.rows.map((row) =>
+                Object.values(row).map((value) => {
+                  if (value === null || typeof value === 'string') return value;
+                  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean')
+                    return String(value);
+                  throw new TypeError('Lifetime fixture requires scalar PostgreSQL text fields');
+                }),
+              ),
+            };
+          return native;
+        });
     },
     release,
   } as unknown as PoolClient;
@@ -164,7 +168,9 @@ test('changed retained head cannot validate the original page', async () => {
               ? [{ ...headRow, current_position: partitionArgument(values) === homes[2] ? '12' : '11' }]
               : [],
         ),
-      () => { released = true; },
+      () => {
+        released = true;
+      },
     ),
   );
   expect(await read(pool)).toBe(false);
@@ -183,7 +189,15 @@ test('queued expiry releases a late checkout without SQL and a later retained re
   });
 
   await expect(read(pool, Date.now() + 40)).rejects.toBeInstanceOf(AccessUnavailableError);
-  checkout.resolve(fakeClient((sql) => { lateSql.push(sql); return result(); }, (error) => released.resolve(error)));
+  checkout.resolve(
+    fakeClient(
+      (sql) => {
+        lateSql.push(sql);
+        return result();
+      },
+      (error) => released.resolve(error),
+    ),
+  );
   expect(await released.promise).toBeUndefined();
   expect(lateSql).toEqual([]);
   expect(await read(pool)).toBe(true);
@@ -199,7 +213,7 @@ test('settled native failure keeps its cause when rollback expires and the next 
     checkouts++;
     if (checkouts === 1)
       return fakeClient(
-        (sql) => isBuild(sql) ? Promise.reject(failure) : sql === 'ROLLBACK' ? never : result(),
+        (sql) => (isBuild(sql) ? Promise.reject(failure) : sql === 'ROLLBACK' ? never : result()),
         (error) => released.resolve(error),
       );
     return fakeClient((sql) => result(isBuild(sql) ? [buildRow] : isHead(sql) ? [headRow] : []));

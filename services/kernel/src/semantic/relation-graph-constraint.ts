@@ -44,10 +44,7 @@ function clear(complete: boolean): RelationGraphResult {
  * Preparation is O(mapping rows + edge rows); iterative search and witness storage are
  * bounded by maxSteps and maxVertices. Duplicate edges consume budget, not extra vertices.
  */
-export function checkRelationClosingEdge(
-  input: RelationGraphInput,
-  proposed: RelationGraphEdge,
-): RelationGraphResult {
+export function checkRelationClosingEdge(input: RelationGraphInput, proposed: RelationGraphEdge): RelationGraphResult {
   const graph = prepareRelationGraph(input, proposed);
   if (graph.status !== 'prepared') return graph;
   const edge = graph.proposed!;

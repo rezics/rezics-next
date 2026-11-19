@@ -7,13 +7,11 @@ import { GrantDeniedError } from '../access/contract/errors.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { routeOf } from '../route/route.ts';
 import type {
-  ViewerFact,
   ViewerFactsPage,
   ViewerPersonalAction,
   ViewerPersonalActionInput,
   ViewerPersonalActionState,
   ViewerPersonalActionsPage,
-  ViewerPersonalFact,
   ViewerQuestion,
 } from './contract/index.ts';
 export type {

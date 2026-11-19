@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { SourceObservationReadResponse } from '../../src/rating/source-observation-read.ts';
-import { materializeSourceObservations, prepareSourceObservationMaterialization } from '../../src/rating/source-observation-maintenance.ts';
+import {
+  materializeSourceObservations,
+  prepareSourceObservationMaterialization,
+} from '../../src/rating/source-observation-maintenance.ts';
 import { sourceObservation } from '../../src/rating/source-provider.ts';
 import payloadQuery from '../../src/rating/source-observation-read-payload.sql';
 import headQuery from '../../src/rating/source-observation-read-head.sql';
@@ -19,8 +22,11 @@ let headStatement: string;
 
 function witnessedStatement(sql: string): string {
   const body = sql.replace(/[;\s]+$/u, '');
-  const observed = observer.records.find(({ statement }) => statement === sql ||
-    (statement.startsWith(body) && /^\s*\/\*[\s\S]*\*\/;?\s*$/u.test(statement.slice(body.length))));
+  const observed = observer.records.find(
+    ({ statement }) =>
+      statement === sql ||
+      (statement.startsWith(body) && /^\s*\/\*[\s\S]*\*\/;?\s*$/u.test(statement.slice(body.length))),
+  );
   if (!observed) throw new Error('Expected native statement was not observed');
   return observed.statement;
 }
@@ -92,7 +98,9 @@ async function materialize(id: string) {
   if (route === null) throw new Error('Fixture Subject has no route');
   for (let step = 0; step < 8; step++) {
     const result = await materializeSourceObservations(fixture.database.pool, {
-      route, subjectId: id, source: 'bangumi',
+      route,
+      subjectId: id,
+      source: 'bangumi',
     });
     if (result.done) return;
   }

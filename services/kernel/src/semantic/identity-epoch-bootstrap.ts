@@ -35,7 +35,6 @@ import bootstrapWithLegacyMember from './identity-epoch-bootstrap-with-legacy-me
 import bootstrapInsertBootstrapCustody from './identity-epoch-bootstrap-insert-bootstrap-custody.sql';
 import bootstrapSelectBootstrapPage3 from './identity-epoch-bootstrap-select-bootstrap-page-3.sql';
 import bootstrapSelectBootstrapHome2 from './identity-epoch-bootstrap-select-bootstrap-home-2.sql';
-import bootstrapInsertMapping from './identity-epoch-bootstrap-insert-mapping.sql';
 import bootstrapUpdateDirty from './identity-epoch-bootstrap-update-dirty.sql';
 import bootstrapUpdateMemberDirty from './identity-epoch-bootstrap-update-member-dirty.sql';
 import bootstrapUpdateBootstrapPage from './identity-epoch-bootstrap-update-bootstrap-page.sql';
@@ -148,11 +147,11 @@ function bootstrapCause(error: unknown): string {
 
 /** Retain only a deployed guard identity, never PostgreSQL's SQL text or argument context. */
 function bootstrapNativeContext(error: unknown): { nativeFunction?: string; nativeLine?: number } {
-  if (typeof error !== 'object' || error === null || !('where' in error) || typeof error.where !== 'string')
-    return {};
-  const context = /\bfunction ((?:semantic|core|access|editorial)\.[a-z_][a-z0-9_]{0,95})\([^\n]*?\) line ([1-9][0-9]{0,5}) at\b/.exec(
-    error.where.slice(0, 4096),
-  );
+  if (typeof error !== 'object' || error === null || !('where' in error) || typeof error.where !== 'string') return {};
+  const context =
+    /\bfunction ((?:semantic|core|access|editorial)\.[a-z_][a-z0-9_]{0,95})\([^\n]*?\) line ([1-9][0-9]{0,5}) at\b/.exec(
+      error.where.slice(0, 4096),
+    );
   const nativeFunction = context?.[1];
   const nativeLine = context?.[2];
   return nativeFunction && nativeLine ? { nativeFunction, nativeLine: Number(nativeLine) } : {};
@@ -887,8 +886,10 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       withReadTransaction(pool, async (tx) => {
         const state = (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0];
         if (!state) throw fail();
-        return bootstrapFrontierHasPendingWork(state.remaining, async () =>
-          (await tx.query(bootstrapSelectBootstrapHome3.sql, [state.repair_partition])).rows[0]?.partition_no ?? null,
+        return bootstrapFrontierHasPendingWork(
+          state.remaining,
+          async () =>
+            (await tx.query(bootstrapSelectBootstrapHome3.sql, [state.repair_partition])).rows[0]?.partition_no ?? null,
         );
       }),
   );

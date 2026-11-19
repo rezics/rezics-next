@@ -1,6 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import type { BatchReference, Source } from '@rezics/definitions/bulk';
-import type { Pool, PoolClient } from 'pg';
+import type { PoolClient } from 'pg';
 import type { CommandAuthorization } from '../command/command.ts';
 import type { AccountActor } from '../request/access.ts';
 import type { ProposalInstall } from './authored.ts';

@@ -32,9 +32,7 @@ import { searchIdentityWriterChanged } from './identity-epoch-participant-events
 import stepSql from './identity-epoch-participant-step.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
 import completeSql from './identity-epoch-participant-complete.sql';
-import {
-  validSearchIdentityReceivingFrontier,
-} from './identity-receiving-native-contract.ts';
+import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
 import {
   readRetainedWriterCopySql,
   searchIdentityWriterAdmissionSql,
@@ -89,10 +87,7 @@ import {
   readSearchIdentityDispatchBasisSql,
   retainSearchIdentityBulkResponseSql,
 } from './identity-search-writer-dispatch-sql.ts';
-import {
-  applySearchIdentityWriterStep,
-  readSearchIdentityDispatchBasis,
-} from './identity-search-writer-dispatch.ts';
+import { applySearchIdentityWriterStep, readSearchIdentityDispatchBasis } from './identity-search-writer-dispatch.ts';
 import { searchNativeOriginalOperationSql, searchNativeReleaseAppliedSql } from './identity-receiving-native-work.ts';
 export type { SearchReceivingConfiguration };
 
@@ -431,14 +426,19 @@ export function createSearchIdentityEpochParticipant(options: {
           : null;
         if (request.plan && !dispatch) return stageWriter({ planId: request.plan.planId });
         if (dispatch) {
-          const effectKey = searchIdentityWriterEffectKey(configuration.consumer, change.original, dispatch.source.disposition);
+          const effectKey = searchIdentityWriterEffectKey(
+            configuration.consumer,
+            change.original,
+            dispatch.source.disposition,
+          );
           if (
             dispatch.source.consumer !== configuration.consumer ||
             dispatch.effect_key !== effectKey ||
             (request.plan?.holdId && request.plan.holdId !== dispatch.hold_id)
           )
             throw unavailable('Retained dispatch differs from the selected original plan');
-          if (!dispatch.released) return stageWriter({ planId: dispatch.source.locator.planId, holdId: dispatch.hold_id });
+          if (!dispatch.released)
+            return stageWriter({ planId: dispatch.source.locator.planId, holdId: dispatch.hold_id });
         }
         const selection = dispatch
           ? {

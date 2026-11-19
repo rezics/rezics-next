@@ -207,11 +207,21 @@ export async function advanceSearchIdentityDispatch(
       );
       if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
         throw unavailable('Search writer dispatch request no longer names the accepted hold');
-      const reconcile = basis.state === 'applied' && !basis.released
-        ? await prepareSearchIdentityReceivingReconciliation(pool, searchIdentityDispatchEffect(job, {
-            original: basis.source.original, effectKey: basis.effect_key, native: basis.source.locator,
-          }, basis))
-        : null;
+      const reconcile =
+        basis.state === 'applied' && !basis.released
+          ? await prepareSearchIdentityReceivingReconciliation(
+              pool,
+              searchIdentityDispatchEffect(
+                job,
+                {
+                  original: basis.source.original,
+                  effectKey: basis.effect_key,
+                  native: basis.source.locator,
+                },
+                basis,
+              ),
+            )
+          : null;
       return {
         basis,
         roles: basis.state === null || basis.state === 'visible' ? await identityErasureRoles(pool, job.jobId) : [],

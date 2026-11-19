@@ -182,10 +182,7 @@ export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (
         });
         const owner = joined.definition.source;
         const now = config.clock().getTime();
-        async function currentHome<T>(
-          client: PoolClient,
-          work: (client: PoolClient) => Promise<T>,
-        ): Promise<T | null> {
+        async function currentHome<T>(client: PoolClient, work: (client: PoolClient) => Promise<T>): Promise<T | null> {
           const home = await readPartition(client, owner.partition);
           cost = plus(cost, { dependencyPoints: 1 });
           if (!home || home.epoch !== owner.epoch || home.writeState !== 'active') return null;
@@ -249,53 +246,59 @@ export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (
             next.position = String(BigInt(next.base!) + 1n);
             next.phase = 'bridge';
             if (BigInt(next.position) > page.position) next = advanceHome(next);
-          } else if (page.after === null || fingerprint(page.after) === fingerprint(state.after)) return fail('unready');
+          } else if (page.after === null || fingerprint(page.after) === fingerprint(state.after))
+            return fail('unready');
         } else if (state.phase === 'bridge' || state.phase === 'anchor') {
-          const bridge = await withBoundedReadOnlyTransaction(config.pool, context.deadline, async (client) => {
-            const home = await readPartition(client, state.partition);
-            cost = plus(cost, { dependencyPoints: 1 });
-            if (!home || home.writeState !== 'active') return null;
-            if (home.epoch !== state.epoch || home.position < BigInt(state.through!)) return 'changed';
-            cost = plus(cost, { inputKeys: 1 });
-            if (state.phase === 'anchor') {
-              const route = routeOf(state.pending!);
-              if (route === null || partitionOf(route) !== state.partition) return 'changed';
-              const anchored = await client.query<{ id: string }>(anchorSql, [route, state.pending]);
-              if (!anchored.rows.length) return 'unready';
-              subjects = anchored.rows.map(({ id }) => ({ partition: state.partition, subject: id }));
-              next = { ...state, phase: 'bridge', pending: null };
-            } else {
-              const result = await client.query<{
-                epoch: number;
-                event_count: number;
-                type: string;
-                subject: string | null;
-              }>(bridgeSql, [state.partition, state.position, state.sequence]);
-              const event = result.rows[0];
-              if (
-                !event ||
-                event.epoch !== state.epoch ||
-                (state.eventCount !== null && state.eventCount !== event.event_count)
-              )
-                return 'changed';
-              const last = state.sequence + 1 === event.event_count;
-              next = {
-                ...state,
-                position: last ? String(BigInt(state.position!) + 1n) : state.position,
-                sequence: last ? 0 : state.sequence + 1,
-                eventCount: last ? null : event.event_count,
-              };
-              // Reuse the ordinary subject-event convention consumed by search/indexer.ts.
-              // Other product event subjects can name candidates, resources or foreign anchors.
-              if (event.type.startsWith('com.rezics.subject.')) {
-                const route = event.subject === null ? null : routeOf(event.subject);
+          const bridge = await withBoundedReadOnlyTransaction(
+            config.pool,
+            context.deadline,
+            async (client) => {
+              const home = await readPartition(client, state.partition);
+              cost = plus(cost, { dependencyPoints: 1 });
+              if (!home || home.writeState !== 'active') return null;
+              if (home.epoch !== state.epoch || home.position < BigInt(state.through!)) return 'changed';
+              cost = plus(cost, { inputKeys: 1 });
+              if (state.phase === 'anchor') {
+                const route = routeOf(state.pending!);
                 if (route === null || partitionOf(route) !== state.partition) return 'changed';
-                next = { ...next, phase: 'anchor', pending: event.subject };
+                const anchored = await client.query<{ id: string }>(anchorSql, [route, state.pending]);
+                if (!anchored.rows.length) return 'unready';
+                subjects = anchored.rows.map(({ id }) => ({ partition: state.partition, subject: id }));
+                next = { ...state, phase: 'bridge', pending: null };
+              } else {
+                const result = await client.query<{
+                  epoch: number;
+                  event_count: number;
+                  type: string;
+                  subject: string | null;
+                }>(bridgeSql, [state.partition, state.position, state.sequence]);
+                const event = result.rows[0];
+                if (
+                  !event ||
+                  event.epoch !== state.epoch ||
+                  (state.eventCount !== null && state.eventCount !== event.event_count)
+                )
+                  return 'changed';
+                const last = state.sequence + 1 === event.event_count;
+                next = {
+                  ...state,
+                  position: last ? String(BigInt(state.position!) + 1n) : state.position,
+                  sequence: last ? 0 : state.sequence + 1,
+                  eventCount: last ? null : event.event_count,
+                };
+                // Reuse the ordinary subject-event convention consumed by search/indexer.ts.
+                // Other product event subjects can name candidates, resources or foreign anchors.
+                if (event.type.startsWith('com.rezics.subject.')) {
+                  const route = event.subject === null ? null : routeOf(event.subject);
+                  if (route === null || partitionOf(route) !== state.partition) return 'changed';
+                  next = { ...next, phase: 'anchor', pending: event.subject };
+                }
               }
-            }
-            if (next.phase === 'bridge' && BigInt(next.position!) > BigInt(next.through!)) next = advanceHome(next);
-            return 'ok';
-          }, readOptions);
+              if (next.phase === 'bridge' && BigInt(next.position!) > BigInt(next.through!)) next = advanceHome(next);
+              return 'ok';
+            },
+            readOptions,
+          );
           if (bridge === null) return fail('unavailable');
           if (bridge === 'changed') return fail('changed');
           if (bridge === 'unready') return fail('unready');

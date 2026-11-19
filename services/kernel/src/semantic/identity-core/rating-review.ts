@@ -8,7 +8,6 @@ import type { IdentityMapping } from './values.ts';
 import { serializeIdentityValue } from './encoding.ts';
 import {
   IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS,
-  IDENTITY_RATING_REVIEW_MAX_KEYS,
   IDENTITY_RATING_REVIEW_MAX_OPERAND_BYTES,
 } from './rating-review-bounds.ts';
 
@@ -21,7 +20,6 @@ export {
 import type {
   IdentityRatingControlLocator,
   IdentityRatingReviewOperand,
-  IdentityRatingReviewUnavailableReason,
   IdentityRatingReviewResult,
 } from '../contract/index.ts';
 export type {

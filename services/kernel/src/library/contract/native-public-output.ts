@@ -160,7 +160,9 @@ export type NativePublicOutputApplication<Tx, PoolLike, Time> = Readonly<{
     binding: NativePublicOutputBinding,
     context: PublicOutputCommandContext<PoolLike, Time>,
     hold?: 'predecessor' | 'successor',
-  ): Promise<PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>>;
+  ): Promise<
+    PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>
+  >;
   /** Check an account-free successor on the caller's repeatable-read page snapshot. */
   readNativeFrozenCollectionOutputSuccessor(
     snapshot: Tx,

@@ -1,12 +1,6 @@
 import type { Pool } from 'pg';
 import { shareAccount } from './access-port.ts';
-import {
-  currentCommand,
-  noEffect,
-  registerCommandCallback,
-  runCommand,
-  type CommandTransaction,
-} from '../command/command.ts';
+import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import type { IdentityEpochStep, IdentityJobRef, IdentityStepProgress } from '../semantic/identity-epoch-contract.ts';
@@ -1331,7 +1325,8 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
             json(frontier),
             json(work),
           ]);
-          if (inserted.rowCount !== 1) throw unavailable('ALL-Library completion lost its native scope or receiving custody');
+          if (inserted.rowCount !== 1)
+            throw unavailable('ALL-Library completion lost its native scope or receiving custody');
         });
         return { value: null, events: [wake(job)] };
       },

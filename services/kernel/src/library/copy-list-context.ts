@@ -98,7 +98,10 @@ export async function attachCopyListContext<T extends ContextCopy>(
   const now = Date.now();
   // Pool-only identity readers inherit this scope; explicit readers receive the same
   // deadline. An enclosing request can shorten the page budget, never extend it.
-  const deadline = Math.min(deps.deadline, deadlineFor(Math.max(1, deps.deadline - now), () => now));
+  const deadline = Math.min(
+    deps.deadline,
+    deadlineFor(Math.max(1, deps.deadline - now), () => now),
+  );
   return withRequestDeadline(deadline, async () => {
     const rows = await attachCopyListContextWithinDeadline({ ...deps, deadline }, copies, options);
     requireAccessDeadline(deadline);

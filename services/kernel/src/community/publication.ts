@@ -1,11 +1,6 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import {
-  resourceAuthorization,
-  accessCommandAttempt,
-  accessCheck,
-  subjectReadEligibility,
-} from './domain-ports.ts';
+import { resourceAuthorization, accessCommandAttempt, accessCheck, subjectReadEligibility } from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {

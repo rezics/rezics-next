@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline';
 import { spawn, spawnSync } from 'node:child_process';
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { readErasureStatus } from '../../../src/access/erasure.ts';

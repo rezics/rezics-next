@@ -341,8 +341,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
           observationDigest: next.digest,
           state: cleared ? 'cleared' : 'published',
         };
-        if (admitClassificationObservation(next, current, expectedObservation) === 'identical')
-          return noEffect(value);
+        if (admitClassificationObservation(next, current, expectedObservation) === 'identical') return noEffect(value);
         // A retained clear cannot silently rebind an existing slot to an unrelated source record.
         if (
           cleared &&

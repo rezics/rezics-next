@@ -168,8 +168,8 @@ export function createRealmRatingScoredReader(input: {
     if (
       page.partition !== frontier.partition ||
       page.generation !== (publication?.generation ?? '0') ||
-      [publication, home].some((expected) =>
-        expected && (page.epoch !== expected.epoch || page.position.toString() !== expected.position),
+      [publication, home].some(
+        (expected) => expected && (page.epoch !== expected.epoch || page.position.toString() !== expected.position),
       )
     )
       throw restart();
@@ -247,13 +247,14 @@ function canonicalHit(
     (!proof.scored && proof.figure !== null && proof.figure.score !== null)
   )
     throw notReady();
-  const figure = proof.figure === null
-    ? null
-    : {
-        ...proof.figure,
-        questionId: context.questionId,
-        populationId: context.populationId,
-      };
+  const figure =
+    proof.figure === null
+      ? null
+      : {
+          ...proof.figure,
+          questionId: context.questionId,
+          populationId: context.populationId,
+        };
   // Validate the actual figure BEFORE suppressing a scored row in the complement.
   // Score zero is scored; an absent/below-threshold figure is never fabricated.
   const hit: RealmRatingHit = {
@@ -420,13 +421,18 @@ export async function discloseRealmRatingWindow(input: {
     const compiled = query.filter ? compileFilter(query.filter, { prefix: 'f', relationOverflow: true }) : undefined;
     const clauses = new Map<string, FactClause>(compiled?.leaves.map((leaf) => [leaf.name, leaf]));
     const relationProperties = query.release
-      ? [...new Set(compiled?.leaves.flatMap((leaf) =>
-          leaf.facet === 'statement' && relationFacetProperty(query.release!, leaf.property) ? [leaf.property] : [],
-        ))]
+      ? [
+          ...new Set(
+            compiled?.leaves.flatMap((leaf) =>
+              leaf.facet === 'statement' && relationFacetProperty(query.release!, leaf.property) ? [leaf.property] : [],
+            ),
+          ),
+        ]
       : [];
     const text = createCurrentTextMatcher((analyzer, texts) =>
       analyzeInstalledMany(input.search, subjectIndexName(input.prefix, context.searchGeneration), {
-        analyzer, text: texts,
+        analyzer,
+        text: texts,
       }),
     );
     // Carry the original deadline through the configured source and retained
@@ -437,12 +443,14 @@ export async function discloseRealmRatingWindow(input: {
         ...(query.text ? { currentText: (subject: IndexedSubject) => text.matchesText(subject, query.text!) } : {}),
         includeOutcomes: true,
         ...(query.release
-          ? { observeRelationRelease: async () => {
-              const release = await readRealmRatingRelease(pool, query.deadline);
-              if (!release) throw notReady();
-              if (release.digest !== context.meaningDigest) throw restart();
-              return release;
-            } }
+          ? {
+              observeRelationRelease: async () => {
+                const release = await readRealmRatingRelease(pool, query.deadline);
+                if (!release) throw notReady();
+                if (release.digest !== context.meaningDigest) throw restart();
+                return release;
+              },
+            }
           : {}),
       }),
     );

@@ -97,12 +97,10 @@ test('multibyte labels and complete cover credit survive, while an oversized obl
   };
   let serializedOversizedObligation = false;
   const stringify = JSON.stringify.bind(JSON);
-  const stringifySpy = spyOn(JSON, 'stringify').mockImplementation(
-    ((...args: Parameters<typeof JSON.stringify>) => {
-      if (args[0] === oversizedObligation) serializedOversizedObligation = true;
-      return stringify(...args);
-    }) as typeof JSON.stringify,
-  );
+  const stringifySpy = spyOn(JSON, 'stringify').mockImplementation(((...args: Parameters<typeof JSON.stringify>) => {
+    if (args[0] === oversizedObligation) serializedOversizedObligation = true;
+    return stringify(...args);
+  }) as typeof JSON.stringify);
   let projected: ReturnType<typeof projectPublicationPresentations>;
   try {
     projected = projectPublicationPresentations(

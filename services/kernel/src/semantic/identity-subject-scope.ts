@@ -65,7 +65,8 @@ export async function readIdentitySubjectScope(client: Client, requested: string
   // A split can keep a restored terminal's group in the prior group's control home.
   const home = selected.evidence.sourceRows[0]?.control_partition;
   if (home == null || routeOf(terminal) === null) return { state: 'unavailable' };
-  const canonical = terminal === requested ? selected : await readReleasedIdentityMappingsInSnapshot(client, [terminal]);
+  const canonical =
+    terminal === requested ? selected : await readReleasedIdentityMappingsInSnapshot(client, [terminal]);
   const target = canonical.mappings[0];
   if (
     target?.state !== 'mapped' ||
@@ -135,12 +136,13 @@ export async function readIdentitySubjectScopePage(
   // A short directory page is exhaustion only if the published cardinality
   // accounts for every consumed member. The extra key must still fit that count.
   const more = aliases.length > aliasLimit;
-  if (seen >= count || seen + scanned > count || (!more && seen + scanned !== count))
-    return { state: 'unavailable' };
+  if (seen >= count || seen + scanned > count || (!more && seen + scanned !== count)) return { state: 'unavailable' };
 
   const pageAliases = aliases.slice(0, aliasLimit);
   const otherOriginals = pageAliases.filter((id) => id !== requested);
-  const membership = otherOriginals.length ? await readReleasedIdentityMappingsInSnapshot(client, otherOriginals) : null;
+  const membership = otherOriginals.length
+    ? await readReleasedIdentityMappingsInSnapshot(client, otherOriginals)
+    : null;
   if (
     membership?.mappings.some(
       (member) => member.state !== 'mapped' || member.terminal !== terminal || member.epoch !== epoch,

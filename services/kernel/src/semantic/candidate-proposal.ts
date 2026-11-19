@@ -7,7 +7,6 @@ import {
 import { retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { disclosureAccount, keepStatementPrivate } from './statement-disclosure.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
-import type { Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
@@ -19,12 +18,7 @@ import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorship
 import { creationDeclares } from '../access/parent-creation.ts';
 import { baseOf } from './definition-release-read.ts';
 import { SUBJECT_REVISED } from './events.ts';
-import {
-  itemFacts,
-  isRelationProperty,
-  SubjectInputError,
-  type Violation,
-} from './item.ts';
+import { itemFacts, isRelationProperty, SubjectInputError, type Violation } from './item.ts';
 import { rejectContent, rejectBulkContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
 import { accountSource, assertAgentStatementAccess, readItemDetails } from './subject.ts';
@@ -114,11 +108,7 @@ export async function proposeStatement(pool: Pool, options: ProposalStatementOpt
 }
 
 /** Allocate and validate a proposal inside its subject's command transaction. */
-export async function writeProposal(
-  tx: CommandTransaction,
-  transactionId: string,
-  options: ProposalWriteOptions,
-) {
+export async function writeProposal(tx: CommandTransaction, transactionId: string, options: ProposalWriteOptions) {
   const sourceSet = await beginSemanticRecordSourceSet(tx);
   const route = routeOf(options.subject)!;
   const subject = listed(await readSubjectRevision.run(tx, { route, subject_id: options.subject }))[0];

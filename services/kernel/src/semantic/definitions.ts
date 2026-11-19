@@ -6,7 +6,6 @@ import {
   runCommand,
   type CommandAuthorization,
   type CommandOutcome,
-  type CommandTransaction,
 } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';

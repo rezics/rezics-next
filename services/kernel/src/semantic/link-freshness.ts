@@ -92,9 +92,14 @@ function checkpointWaitReason(row: Behind, subject: string): SubjectLinkWaitReas
     else owner = row.owner_behind ? 'behind' : 'covers';
     const source = row.partition_no === 0 ? 'global' : 'nonroot';
     const first = row.first_present ? 'present' : 'absent';
-    const scan = row.scan_since_first === null
-      ? (row.scan_recorded ? 'recorded' : 'unseen')
-      : (row.scan_since_first ? 'since-first' : 'before-first');
+    const scan =
+      row.scan_since_first === null
+        ? row.scan_recorded
+          ? 'recorded'
+          : 'unseen'
+        : row.scan_since_first
+          ? 'since-first'
+          : 'before-first';
     const effects = row.effects_covers ? 'covers' : row.effects_registered ? 'behind' : 'absent';
     return `foreign-checkpoint-missing/${source}/required-positive/owner-${owner}/first-${first}/scan-${scan}/effects-${effects}`;
   }
@@ -145,10 +150,11 @@ export async function linksCaughtUp(
             (await coversSubjectAnchor(client, behind, anchor))
           ) {
             const otherRequirements = requirementsFor(
-              seen.filter((component) =>
-                component.partition !== anchor.partition ||
-                component.epoch !== anchor.epoch ||
-                component.position > anchor.position
+              seen.filter(
+                (component) =>
+                  component.partition !== anchor.partition ||
+                  component.epoch !== anchor.epoch ||
+                  component.position > anchor.position,
               ),
             );
             behind = otherRequirements.partitions.length

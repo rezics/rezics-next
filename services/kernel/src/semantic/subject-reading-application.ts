@@ -23,15 +23,8 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionReadClient, partitionReadClients } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, readPartition } from '../partition/partition.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessCheck,
-  type AccessClient,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
-import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
+import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
+import { relatedReadEligibility } from './eligibility.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
 import { slotId, slotView } from './slots.ts';
 import { chooseLabel } from './language.ts';
@@ -66,7 +59,6 @@ import readSourceMembers from './source-records-members.sql';
 import { loadRelated, readRelated as readRelatedNative } from './related-subject-read.ts';
 export type { RelatedState } from './related-subject-read.ts';
 import { RELATED_SUBJECT_BATCH_LIMIT as BATCH_LIMIT } from './contract/subject-values.ts';
-import { withConnection } from '../database/pool.ts';
 import { memoizedValue } from '../memoized.ts';
 import {
   authorizedContextMetadata,

@@ -1,6 +1,5 @@
 import type {
   AccessActor,
-  AccessDeadline,
   AccessDecision,
   AccessIdentityIntent,
   AccessIdentityJobRef,

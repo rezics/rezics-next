@@ -61,9 +61,7 @@ async function readParties(config: NativeSource, request: LifecycleRequest) {
                 client,
                 actor.requestedBy,
                 actor.accountId,
-                request.time
-                  ? () => new Date(authoritativeTimeValue(request.time!))
-                  : accessClock(config.access),
+                request.time ? () => new Date(authoritativeTimeValue(request.time!)) : accessClock(config.access),
                 request.work,
               ),
             approvalResolutionReadOptions,
@@ -114,8 +112,7 @@ export async function readNativeCreationContext(
       withBoundedReadConnection(
         config.pool,
         request.deadline,
-        (client) =>
-          readAccount(client, routeOf(operation.subjectAccountId)!, operation.subjectAccountId, request.work),
+        (client) => readAccount(client, routeOf(operation.subjectAccountId)!, operation.subjectAccountId, request.work),
         approvalResolutionReadOptions,
       ),
     );

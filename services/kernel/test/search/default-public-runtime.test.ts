@@ -152,7 +152,10 @@ test('default Subject Search activates and returns an authored Book', async () =
       await driver.close();
     } catch (cleanupError) {
       if (assertionFailure)
-        throw new AggregateError([assertionFailure, cleanupError], 'Native Book Search and fixture cleanup both failed');
+        throw new AggregateError(
+          [assertionFailure, cleanupError],
+          'Native Book Search and fixture cleanup both failed',
+        );
       throw cleanupError;
     }
   }

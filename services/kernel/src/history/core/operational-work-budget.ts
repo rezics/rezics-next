@@ -1,7 +1,5 @@
 import { memoizedValue } from '../../memoized.ts';
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
-import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
-import { type OperationalWorkPhase } from '../contract/index.ts';
 
 /** Complete native dimensions used by the operational History producer. */
 export type OperationalWorkCost = Bound;

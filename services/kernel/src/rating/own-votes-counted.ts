@@ -670,10 +670,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     });
     if (!sameRequest(request, actor, requestHash))
       return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
-    if (
-      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
-      !validPreparation(preparation)
-    )
+    if (requestWitness.preparationFingerprint !== preparation.preparationFingerprint || !validPreparation(preparation))
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     return {
       status: 'read',
@@ -804,10 +801,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     );
     if (!sameRequest(request, actor, requestHash))
       return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
-    if (
-      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
-      !validPreparation(preparation)
-    )
+    if (requestWitness.preparationFingerprint !== preparation.preparationFingerprint || !validPreparation(preparation))
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     if (!accountObservationsEqual(current.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };

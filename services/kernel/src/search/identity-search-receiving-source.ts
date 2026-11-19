@@ -38,12 +38,13 @@ export async function locateSearchIdentityOriginalPlan(
 ) {
   const rows = await withReadTransaction(
     pool,
-    async (tx) => (
-      await tx.query<{ plan_id: string; original_barrier: boolean }>(
-        locateSearchIdentityOriginalPlanSql,
-        originalPlanBinds(job, original, configuration),
-      )
-    ).rows,
+    async (tx) =>
+      (
+        await tx.query<{ plan_id: string; original_barrier: boolean }>(
+          locateSearchIdentityOriginalPlanSql,
+          originalPlanBinds(job, original, configuration),
+        )
+      ).rows,
     deadline,
   );
   if (rows.length > 1) throw unavailable('Retained Search plan changed for the selected original');

@@ -43,7 +43,7 @@ import {
   sumOriginalControl,
 } from './core/index.ts';
 import { ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION } from './agent-verification-identity-work.ts';
-import { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
+import { IDENTITY_ORIGINAL_DEADLINE_MS } from './contract/index.ts';
 
 export const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = 'identity-history-original-source-transfer-unavailable';
 

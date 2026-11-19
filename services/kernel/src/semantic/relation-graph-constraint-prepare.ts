@@ -27,13 +27,18 @@ export function prepareRelationGraph(
       return unknownGraph('invalid-input', 'Budgets must be nonnegative safe integers.');
   }
   if (
-    !identifier(scope.context) || !identifier(scope.release) || !identifier(scope.property) ||
+    !identifier(scope.context) ||
+    !identifier(scope.release) ||
+    !identifier(scope.property) ||
     (scope.orientation !== 'forward' && scope.orientation !== 'inverse')
-  ) return unknownGraph('invalid-input', 'Expected one Context, release, property and orientation.');
+  )
+    return unknownGraph('invalid-input', 'Expected one Context, release, property and orientation.');
   if (
-    scope.definition.datatype !== 'wikibase-item' || scope.definition.relation?.acyclic !== true ||
+    scope.definition.datatype !== 'wikibase-item' ||
+    scope.definition.relation?.acyclic !== true ||
     scope.definition.relation.symmetric === true
-  ) return unknownGraph('unsupported-property', 'Expected a declared acyclic directed item property.');
+  )
+    return unknownGraph('unsupported-property', 'Expected a declared acyclic directed item property.');
   if (coverage.selection !== 'effective' || coverage.observation !== 'coherent')
     return unknownGraph('insufficient-coverage', 'Effective selection and a coherent native observation are required.');
   if (input.edges.length > budget.maxEdges - (proposed === undefined ? 0 : 1))
@@ -89,7 +94,9 @@ export function prepareRelationGraph(
     mappedProposal = mapped;
   }
   return {
-    status: 'prepared', outgoing, proposed: mappedProposal,
+    status: 'prepared',
+    outgoing,
+    proposed: mappedProposal,
     complete: coverage.extent === 'complete' && coverage.owners === 'complete',
   };
 }

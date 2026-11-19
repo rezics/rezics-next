@@ -7,7 +7,7 @@ import {
 } from './discovery-mutation.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { deadlineClient, within, readAccount, notificationAllowed, resourceAuthorization } from './access-port.ts';
+import { deadlineClient, readAccount, notificationAllowed, resourceAuthorization } from './access-port.ts';
 import {
   CommandUnavailableError,
   authoritativeTimeValue,
@@ -583,23 +583,28 @@ export function createAppealEffect(pool: Pool): Effect {
       );
       if (event.type !== resolvedType) return;
       const recipientRoute = routeOf(row.appellant_account_id)!;
-      await withWritableNoticeRoute(pool, recipientRoute, async (client) => {
-        if (await notificationAllowed(client, { recipient: row.appellant_account_id, kind: 'moderation_decision' }))
-          await writeNotices(client, [
-            {
-              recipientId: row.appellant_account_id,
-              noticeId: newId(recipientRoute),
-              kind: 'moderation_decision',
-              actorId: null,
-              threadId: row.thread_id,
-              postId: row.target_kind === 'post' ? row.target_id : null,
-              decisionId: row.decision_id,
-              reportId: null,
-              sourceId: appealId,
-              createdAt: new Date(row.resolved_at!),
-            },
-          ]);
-      }, deadline);
+      await withWritableNoticeRoute(
+        pool,
+        recipientRoute,
+        async (client) => {
+          if (await notificationAllowed(client, { recipient: row.appellant_account_id, kind: 'moderation_decision' }))
+            await writeNotices(client, [
+              {
+                recipientId: row.appellant_account_id,
+                noticeId: newId(recipientRoute),
+                kind: 'moderation_decision',
+                actorId: null,
+                threadId: row.thread_id,
+                postId: row.target_kind === 'post' ? row.target_id : null,
+                decisionId: row.decision_id,
+                reportId: null,
+                sourceId: appealId,
+                createdAt: new Date(row.resolved_at!),
+              },
+            ]);
+        },
+        deadline,
+      );
     },
   };
 }

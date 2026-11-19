@@ -43,7 +43,9 @@ function withKnowledgeTransaction<T>(
           if (open)
             discardConnection(
               raw,
-              failure?.error instanceof Error ? failure.error : new Error('Knowledge discovery transaction did not close'),
+              failure?.error instanceof Error
+                ? failure.error
+                : new Error('Knowledge discovery transaction did not close'),
             );
         }
       }),
@@ -81,7 +83,9 @@ export function createKnowledgeDiscoveryStore(pool: Pool, now: () => number): Kn
     id: randomUUID,
     async cut(subjectId, deadline = deadlineFor(NATIVE_TURN_MS)) {
       return withKnowledgeConnection(pool, deadline, async (client) => {
-        const installed = await client.query('SELECT version FROM search.knowledge_discovery_installation WHERE version=1');
+        const installed = await client.query(
+          'SELECT version FROM search.knowledge_discovery_installation WHERE version=1',
+        );
         if (!installed.rowCount) return null;
         const result = await client.query<{ sequence: string }>(
           'SELECT sequence::text FROM search.knowledge_discovery_subject WHERE subject_id=$1',

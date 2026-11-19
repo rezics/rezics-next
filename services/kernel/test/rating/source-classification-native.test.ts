@@ -7,7 +7,6 @@ import { createHash } from 'node:crypto';
 import { type Statement } from '../../src/semantic/item.ts';
 import {
   createSourceClassificationProducer,
-  classificationObservation,
   classificationQualifiersDigest,
   type ClassificationAssociation,
   type ClassificationObservation,

@@ -6,7 +6,6 @@ import {
   readDiscoverySubjectMembership,
   type CollectionDiscoveryContext,
   type CollectionCurator,
-  type CollectionDiscoveryContextFilters,
   type DiscoveryMemberKey,
 } from './collection-discovery-context.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';

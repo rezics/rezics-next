@@ -35,12 +35,9 @@ import { declareCommandHistory } from '../history/application/index.ts';
 import { appendEditorialRevision, retryEditorialUniqueness } from './candidate-command.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './contract/subject-errors.ts';
 
-const listed = <T>(result: T[] | T | null): T[] => result == null ? [] : Array.isArray(result) ? result : [result];
+const listed = <T>(result: T[] | T | null): T[] => (result == null ? [] : Array.isArray(result) ? result : [result]);
 
-export async function adoptCandidates(
-  pool: Pool,
-  options: CandidateAdoptionOptions,
-) {
+export async function adoptCandidates(pool: Pool, options: CandidateAdoptionOptions) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
   const defaults =

@@ -186,7 +186,10 @@ test('a caught native callback timeout keeps its first mapped cause through expi
   const released = deferred<Error | boolean | undefined>();
   let caught: unknown;
   const database = fakePool(async () =>
-    fakeClient(() => Promise.reject(original), (error) => released.resolve(error)),
+    fakeClient(
+      () => Promise.reject(original),
+      (error) => released.resolve(error),
+    ),
   );
   const visit = withBoundedReadConnection(
     database,
@@ -334,7 +337,9 @@ test('manual BEGIN and START TRANSACTION retain custody through non-query callba
     expect(await callbackFinished.promise).toBeInstanceOf(RetiredReadClientError);
     expect(statements).toEqual([begin]);
 
-    const next = await withBoundedReadConnection(database, Date.now() + 500, (client) => client.query('SELECT healthy'));
+    const next = await withBoundedReadConnection(database, Date.now() + 500, (client) =>
+      client.query('SELECT healthy'),
+    );
     expect(next.rows).toEqual([{ healthy: true }]);
     expect(checkouts).toBe(2);
   }
@@ -388,7 +393,12 @@ test('manual callback expiry preserves the configured public error mapping', asy
   const mapped = new Error('mapped read deadline', { cause: deadlineError });
   const resume = deferred<void>();
   const released = deferred<Error | boolean | undefined>();
-  const database = fakePool(async () => fakeClient(() => queryResult([]), (error) => released.resolve(error)));
+  const database = fakePool(async () =>
+    fakeClient(
+      () => queryResult([]),
+      (error) => released.resolve(error),
+    ),
+  );
   const visit = withBoundedReadConnection(
     database,
     Date.now() + 40,

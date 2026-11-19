@@ -2,7 +2,6 @@ import { memoizedValue } from '../../memoized.ts';
 import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { IdentitySourceConsumerMaintenanceWork } from '../../semantic/identity-source-consumer-maintenance.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -17,23 +16,9 @@ import { withConnection } from '../../database/pool.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import { lockNativeFamilyCoverage, type NativeFamilyCoverage } from './family-coverage-state.ts';
-import type { AccountErasureSearchObservation } from '../../search/account-erasure-source.ts';
 import zoneSource from './zone-consumers.sql';
 import { nativePool } from './handles.ts';
 import { searchObservationSource } from './handles.ts';
-import {
-  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-  AGENT_IDENTITY_HISTORY_GUARD_COST,
-  addNativeWork,
-  assertAgentIdentityHistoryUnit,
-  currentAgentIdentityHistoryUnit,
-  lockAgentIdentityReceivingArtifact,
-  lockRecordedAgentIdentityHistory,
-  nativeWork,
-  reserveIdentityHistoryWork,
-  resolveAgentIdentitySDKWork,
-  verifyAgentIdentityRecoveryArtifactReadiness,
-} from '../application/identity.ts';
 import { commandHistoryKind } from '../application/records.ts';
 import {
   ACCOUNT_ROLE_BITS,

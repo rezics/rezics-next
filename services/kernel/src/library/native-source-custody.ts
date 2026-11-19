@@ -123,7 +123,6 @@ function nextCapture() {
 }
 
 import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
-import type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
 export type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
 export type NativeSourceDriver =

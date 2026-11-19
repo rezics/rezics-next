@@ -20,22 +20,11 @@ import {
   type SdkWriterState,
 } from '../../work/sdk-retirement-fence.ts';
 import { partitionOf } from '../../route/route.ts';
-import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import './agent-identity-inventory-work.ts';
 import { nativeWriterState } from './handles.ts';
 import type { AgentIdentitySDKWorkMapping } from './agent-identity-work.ts';
 import { historyComposition } from '../application/composition.ts';
-import {
-  addNativeWork,
-  assertAgentIdentityHistoryUnit,
-  currentAgentIdentityHistoryUnit,
-  identityHistoryAccountsLocalWork,
-  identityHistoryCommand,
-  nativeWork,
-  reserveIdentityHistoryWork,
-  resolveAgentIdentitySDKWork,
-  unpricedIdentityHistoryWork,
-  verifyAgentIdentityRetirementStage,
-} from '../application/identity.ts';
+import { identityHistoryAccountsLocalWork, unpricedIdentityHistoryWork } from '../application/identity.ts';
 import { historyDeadline, lockHistoryBarrier } from '../application/receiving.ts';
 import {
   type AgentIdentityHistoryAuthority,

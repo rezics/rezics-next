@@ -40,9 +40,10 @@ async function release(): Promise<void> {
 }
 
 try {
-  const receiptKeys = input.receiptKeys === undefined
-    ? testReceiptKeys()
-    : readReceiptKeyRing({ ...process.env, KERNEL_RECEIPT_KEYS: input.receiptKeys });
+  const receiptKeys =
+    input.receiptKeys === undefined
+      ? testReceiptKeys()
+      : readReceiptKeyRing({ ...process.env, KERNEL_RECEIPT_KEYS: input.receiptKeys });
   configureTestReceiptKeys(pool, receiptKeys);
   client = await createWorkClient(input.databaseUrl, pool);
   const openSearchUrl =
@@ -53,11 +54,14 @@ try {
     typeof input.executorId === 'string' && input.executorId.length > 0
       ? input.executorId
       : `identity-work-${process.pid}`;
-  const modules = input.workModules === undefined ? KERNEL_WORK_MODULES : input.workModules.map((name: string) => {
-    const module = KERNEL_WORK_MODULES.find((candidate) => candidate.name === name);
-    if (!module) throw new Error(`Unknown native work module: ${name}`);
-    return module;
-  });
+  const modules =
+    input.workModules === undefined
+      ? KERNEL_WORK_MODULES
+      : input.workModules.map((name: string) => {
+          const module = KERNEL_WORK_MODULES.find((candidate) => candidate.name === name);
+          if (!module) throw new Error(`Unknown native work module: ${name}`);
+          return module;
+        });
   work = await composeWork(modules, {
     databaseUrl: input.databaseUrl,
     pool,

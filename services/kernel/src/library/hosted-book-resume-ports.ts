@@ -49,15 +49,16 @@ export type HostedBookResumeNativeResolution = Readonly<{
   revisionId: string;
   kind: 'structure' | 'publication';
   sourceRevisionId: string | null;
-  occurrence: Readonly<{ occurrenceId: string }> & (
-    | Readonly<{ availability: 'unavailable'; kind: 'part' | 'chapter' }>
-    | Readonly<{ availability: 'available'; kind: 'part'; target: null }>
-    | Readonly<{
-        availability: 'available';
-        kind: 'chapter';
-        target: Readonly<{ threadId: string; postId: string; revisionId: string; sha256: string }>;
-      }>
-  );
+  occurrence: Readonly<{ occurrenceId: string }> &
+    (
+      | Readonly<{ availability: 'unavailable'; kind: 'part' | 'chapter' }>
+      | Readonly<{ availability: 'available'; kind: 'part'; target: null }>
+      | Readonly<{
+          availability: 'available';
+          kind: 'chapter';
+          target: Readonly<{ threadId: string; postId: string; revisionId: string; sha256: string }>;
+        }>
+    );
   document: Readonly<{ encoding: 'base64'; sha256: string }> | null;
 }>;
 

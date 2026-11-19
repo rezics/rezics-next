@@ -1,11 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
-import type {
-  HostedChapterTarget,
-  HostedPlacement,
-  OrderedHostedPlacement,
-} from '../../src/content/hosted-chapters-model.ts';
+import type { HostedPlacement, OrderedHostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import {
   captureHostedPublicBaselineInput,
   readHostedPublicBaselineInputPage,

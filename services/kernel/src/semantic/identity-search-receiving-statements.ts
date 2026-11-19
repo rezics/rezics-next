@@ -337,7 +337,8 @@ const receivingCost: Partial<Record<keyof typeof receivingStatements, Cost>> = {
 export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
   const costs = new Map<string, Readonly<{ sql: string; work: WorkDimensions }>>();
   const add = (sql: string, cost: Cost) => costs.set(receivingSqlKey(sql), Object.freeze({ sql, work: work(cost) }));
-  for (const { sql, work } of identitySearchSourcePageCosts()) costs.set(receivingSqlKey(sql), Object.freeze({ sql, work }));
+  for (const { sql, work } of identitySearchSourcePageCosts())
+    costs.set(receivingSqlKey(sql), Object.freeze({ sql, work }));
   for (const entry of searchReceivingCaptureStatementCosts) costs.set(receivingSqlKey(entry.sql), entry);
   for (const [name, sql] of Object.entries(receivingStatements)) {
     const cost = receivingCost[name as keyof typeof receivingStatements];

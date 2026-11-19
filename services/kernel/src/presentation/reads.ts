@@ -496,7 +496,10 @@ export class PageReadLifetime {
   ) {
     if (deadline !== undefined && !Number.isFinite(deadline)) throw new TypeError('Page deadline must be finite');
     // An absent ambient deadline adds no new budget to compatible standalone callers.
-    this.deadline = Math.min(deadline ?? Infinity, deadlineFor(1, () => Infinity));
+    this.deadline = Math.min(
+      deadline ?? Infinity,
+      deadlineFor(1, () => Infinity),
+    );
     incoming.signal.addEventListener('abort', this.cancelIncoming, { once: true });
     if (incoming.signal.aborted) this.cancelIncoming();
     const expire = () => {

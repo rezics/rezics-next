@@ -692,34 +692,34 @@ export async function runKernelCheckStages(input: KernelCheckStages): Promise<vo
   const productFailures = input.productFailures ?? [];
   const quality: QualityOutcome = { diagnostics: [], qualityFailures: [...productFailures], compilerOutput: '' };
   if (!input.plan.testsOnly) {
-  try {
-    const typecheck = await aroundCompiler(() =>
-      Promise.resolve(
-        invokeTypecheck(
-          input.programs.tsc,
-          input.plan.files,
-          input.environment,
-          input.reyloConfig,
-          input.captureCommand,
+    try {
+      const typecheck = await aroundCompiler(() =>
+        Promise.resolve(
+          invokeTypecheck(
+            input.programs.tsc,
+            input.plan.files,
+            input.environment,
+            input.reyloConfig,
+            input.captureCommand,
+          ),
         ),
-      ),
-    );
-    const classified = classifyTypecheckResult(typecheck, input.ownedFiles);
-    quality.diagnostics = classified.diagnostics;
-    quality.compilerOutput = classified.compilerOutput;
-  } catch (error) {
-    fail(withQualityFailures(asFailureMessage(error), quality));
-  }
-  const qualityStarted = performance.now();
-  try {
-    quality.qualityFailures = [
-      ...productFailures,
-      ...(await collectLintFormatFailures(input.plan.files, input.programs, input.environment, input.captureCommand)),
-    ];
-  } catch (error) {
-    fail(withQualityFailures(asFailureMessage(error), quality));
-  }
-  input.onQualitySeconds?.(seconds(qualityStarted));
+      );
+      const classified = classifyTypecheckResult(typecheck, input.ownedFiles);
+      quality.diagnostics = classified.diagnostics;
+      quality.compilerOutput = classified.compilerOutput;
+    } catch (error) {
+      fail(withQualityFailures(asFailureMessage(error), quality));
+    }
+    const qualityStarted = performance.now();
+    try {
+      quality.qualityFailures = [
+        ...productFailures,
+        ...(await collectLintFormatFailures(input.plan.files, input.programs, input.environment, input.captureCommand)),
+      ];
+    } catch (error) {
+      fail(withQualityFailures(asFailureMessage(error), quality));
+    }
+    input.onQualitySeconds?.(seconds(qualityStarted));
   }
   try {
     await input.afterQuality?.(quality);

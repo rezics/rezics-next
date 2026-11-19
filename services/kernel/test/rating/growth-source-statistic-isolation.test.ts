@@ -230,7 +230,11 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         key,
       });
       const committed = await json(write);
-      expect(committed).toEqual({ source: 'vndb', ...fixedStatistic, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest } });
+      expect(committed).toEqual({
+        source: 'vndb',
+        ...fixedStatistic,
+        observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest },
+      });
 
       const replay = await fixture.request('PUT', path, {
         actor: fixture.actors.importer,
@@ -244,7 +248,13 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         actor: fixture.actors.importer,
       });
       const result = await json(read);
-      expect(result).toEqual([{ source: 'vndb', ...fixedStatistic, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest } }]);
+      expect(result).toEqual([
+        {
+          source: 'vndb',
+          ...fixedStatistic,
+          observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', fixedStatistic).digest },
+        },
+      ]);
       return { committed, replayed, result };
     },
   });

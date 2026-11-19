@@ -72,7 +72,8 @@ function uuid(value: unknown, label: string): string {
   return value;
 }
 function int4(value: unknown, label: string): number {
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' && INTEGER.test(value) ? Number(value) : Number.NaN;
+  const parsed =
+    typeof value === 'number' ? value : typeof value === 'string' && INTEGER.test(value) ? Number(value) : Number.NaN;
   if (!Number.isSafeInteger(parsed)) throw unavailable(`Committed control proof lacks ${label}`);
   return parsed;
 }
@@ -89,17 +90,32 @@ function field(row: object, key: string): unknown {
 function names(input: ProofName): unknown[] {
   const route = routeOf(input.original);
   if (
-    !Number.isSafeInteger(input.controlPartition) || input.controlPartition < 0 || input.controlPartition > 4095
-    || !Number.isSafeInteger(input.ownerEpoch) || input.ownerEpoch < 0
-    || input.job.epoch <= 0n || !/^[0-9a-f]{64}$/.test(input.scopeDigest) || !INTEGER.test(input.basisVersion)
-    || !UUID.test(input.job.jobId) || !UUID.test(input.terminal) || !UUID.test(input.generation)
-    || route === null
+    !Number.isSafeInteger(input.controlPartition) ||
+    input.controlPartition < 0 ||
+    input.controlPartition > 4095 ||
+    !Number.isSafeInteger(input.ownerEpoch) ||
+    input.ownerEpoch < 0 ||
+    input.job.epoch <= 0n ||
+    !/^[0-9a-f]{64}$/.test(input.scopeDigest) ||
+    !INTEGER.test(input.basisVersion) ||
+    !UUID.test(input.job.jobId) ||
+    !UUID.test(input.terminal) ||
+    !UUID.test(input.generation) ||
+    route === null
   )
     throw new TypeError('Invalid native control-proof name');
   if (partitionOf(route) === input.controlPartition) throw unavailable('Control proof requires a foreign control home');
   return [
-    input.controlPartition, input.job.jobId, input.job.epoch.toString(), input.scopeDigest, route, input.original,
-    input.terminal, input.generation, input.basisVersion, input.ownerEpoch,
+    input.controlPartition,
+    input.job.jobId,
+    input.job.epoch.toString(),
+    input.scopeDigest,
+    route,
+    input.original,
+    input.terminal,
+    input.generation,
+    input.basisVersion,
+    input.ownerEpoch,
   ];
 }
 function committedProof(row: object): IdentityMappingPointControlProof {
@@ -111,7 +127,13 @@ function committedProof(row: object): IdentityMappingPointControlProof {
     throw unavailable('Committed control proof lacks scope');
   if (typeof registrationXid !== 'string' || registrationXid.length === 0)
     throw unavailable('Committed control proof lacks registration xid');
-  if (route < 0 || route > 65535 || controlPartition < 0 || controlPartition > 4095 || partitionOf(route) === controlPartition)
+  if (
+    route < 0 ||
+    route > 65535 ||
+    controlPartition < 0 ||
+    controlPartition > 4095 ||
+    partitionOf(route) === controlPartition
+  )
     throw unavailable('Committed control proof names the source home');
   return Object.freeze({
     controlPartition,
@@ -154,33 +176,47 @@ async function recordIdentityMappingPointControlProof(
   roles: readonly SemanticCopyRole[],
 ): Promise<IdentityMappingPointControlProof | null> {
   const pin = names(input);
-  const outcome = await runCommand(pool, { partition: input.controlPartition, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
-    const command = currentCommand(tx);
-    if (command.basis !== null || command.partition !== input.controlPartition || command.transactionId !== transactionId)
-      throw unavailable('Control proof requires its own mechanical command');
-    const result = await measuredQuery(tx, measured, proof.sql, [...pin, transactionId]);
-    const row = result.rows[0];
-    if (
-      result.rows.length === 1 &&
-      row?.kind === 'unregistered' &&
-      row.transaction_id === null &&
-      row.inserted === null
-    ) return noEffect(null);
-    if (result.rows.length !== 1 || row?.kind !== 'registered' || typeof row.inserted !== 'boolean')
-      throw unavailable('Control-home point proof is not current');
-    const stored = uuid(row.transaction_id, 'transaction');
-    if (row.inserted) {
-      if (stored !== transactionId) throw unavailable('Control-home point proof is not current');
-      bindSemanticProducerRoles(tx, roles);
-      recordIdentityEpochNativeCommit(tx, 'mapping');
-      return {
-        value: stored,
-        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: input.controlPartition, generation: input.job.epoch.toString() } }],
-      };
-    }
-    if (stored === transactionId) throw unavailable('Control-home point proof is not current');
-    return noEffect(stored);
-  });
+  const outcome = await runCommand(
+    pool,
+    { partition: input.controlPartition, deadline: Date.now() + 5000 },
+    async (tx, { transactionId }) => {
+      const command = currentCommand(tx);
+      if (
+        command.basis !== null ||
+        command.partition !== input.controlPartition ||
+        command.transactionId !== transactionId
+      )
+        throw unavailable('Control proof requires its own mechanical command');
+      const result = await measuredQuery(tx, measured, proof.sql, [...pin, transactionId]);
+      const row = result.rows[0];
+      if (
+        result.rows.length === 1 &&
+        row?.kind === 'unregistered' &&
+        row.transaction_id === null &&
+        row.inserted === null
+      )
+        return noEffect(null);
+      if (result.rows.length !== 1 || row?.kind !== 'registered' || typeof row.inserted !== 'boolean')
+        throw unavailable('Control-home point proof is not current');
+      const stored = uuid(row.transaction_id, 'transaction');
+      if (row.inserted) {
+        if (stored !== transactionId) throw unavailable('Control-home point proof is not current');
+        bindSemanticProducerRoles(tx, roles);
+        recordIdentityEpochNativeCommit(tx, 'mapping');
+        return {
+          value: stored,
+          events: [
+            {
+              type: IDENTITY_EPOCH_PROGRESS,
+              data: { partition: input.controlPartition, generation: input.job.epoch.toString() },
+            },
+          ],
+        };
+      }
+      if (stored === transactionId) throw unavailable('Control-home point proof is not current');
+      return noEffect(stored);
+    },
+  );
   if (outcome.value === null) return null;
   const stored = typeof outcome.value === 'string' ? outcome.value : '';
   const visible = await withReadTransaction(pool, async (tx) => {
@@ -191,12 +227,17 @@ async function recordIdentityMappingPointControlProof(
     throw unavailable('Committed control proof is not visible');
   const committed = committedProof(visible);
   if (
-    committed.controlPartition !== input.controlPartition || committed.jobId !== input.job.jobId
-    || committed.jobEpoch !== input.job.epoch.toString() || committed.scopeDigest !== input.scopeDigest
-    || committed.original !== input.original || committed.route !== routeOf(input.original)
-    || committed.terminal !== input.terminal || committed.generation !== input.generation
-    || committed.basisVersion !== input.basisVersion
-    || committed.ownerEpoch !== input.ownerEpoch || committed.transactionId !== stored
+    committed.controlPartition !== input.controlPartition ||
+    committed.jobId !== input.job.jobId ||
+    committed.jobEpoch !== input.job.epoch.toString() ||
+    committed.scopeDigest !== input.scopeDigest ||
+    committed.original !== input.original ||
+    committed.route !== routeOf(input.original) ||
+    committed.terminal !== input.terminal ||
+    committed.generation !== input.generation ||
+    committed.basisVersion !== input.basisVersion ||
+    committed.ownerEpoch !== input.ownerEpoch ||
+    committed.transactionId !== stored
   )
     throw unavailable('Committed control proof no longer matches its name');
   return committed;
@@ -211,14 +252,37 @@ type AdmittedInput = Readonly<{
 }>;
 function depositPin(home: number, committed: IdentityMappingPointControlProof): unknown[] {
   return [
-    home, committed.jobId, committed.jobEpoch, committed.scopeDigest, committed.route, committed.original,
-    committed.terminal, committed.generation, committed.incarnation, committed.basisVersion, committed.ownerEpoch,
-    committed.controlPartition, committed.enrollment, committed.sourceRevision, committed.sourceEpoch,
-    committed.exportTransaction, committed.preparedTransactionId, committed.preparedEpoch, committed.preparedPosition,
-    committed.acquiredTransactionId, committed.acquiredEpoch, committed.acquiredPosition,
-    committed.registrationTransactionId, committed.registrationEpoch, committed.registrationPosition,
-    committed.registrationXid, committed.installTransactionId, committed.controlPartition, committed.transactionId,
-    committed.epoch, committed.position,
+    home,
+    committed.jobId,
+    committed.jobEpoch,
+    committed.scopeDigest,
+    committed.route,
+    committed.original,
+    committed.terminal,
+    committed.generation,
+    committed.incarnation,
+    committed.basisVersion,
+    committed.ownerEpoch,
+    committed.controlPartition,
+    committed.enrollment,
+    committed.sourceRevision,
+    committed.sourceEpoch,
+    committed.exportTransaction,
+    committed.preparedTransactionId,
+    committed.preparedEpoch,
+    committed.preparedPosition,
+    committed.acquiredTransactionId,
+    committed.acquiredEpoch,
+    committed.acquiredPosition,
+    committed.registrationTransactionId,
+    committed.registrationEpoch,
+    committed.registrationPosition,
+    committed.registrationXid,
+    committed.installTransactionId,
+    committed.controlPartition,
+    committed.transactionId,
+    committed.epoch,
+    committed.position,
   ];
 }
 async function depositIdentityMappingPointCustody(
@@ -230,33 +294,40 @@ async function depositIdentityMappingPointCustody(
   const home = partitionOf(committed.route);
   if (home === committed.controlPartition) throw unavailable('Source deposit requires a foreign control home');
   const pin = depositPin(home, committed);
-  const outcome = await runCommand(pool, { partition: home, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
-    const command = currentCommand(tx);
-    if (command.basis !== null || command.partition !== home || command.transactionId !== transactionId)
-      throw unavailable('Source deposit requires its own mechanical command');
-    const result = await measuredQuery(tx, measured, depositSql.sql, [...pin, transactionId]);
-    const row = result.rows[0];
-    if (result.rows.length !== 1 || row === undefined || typeof row.inserted !== 'boolean')
-      throw unavailable('Source-home point deposit is not current');
-    const stored = uuid(row.transaction_id, 'deposit transaction');
-    if (row.inserted) {
-      if (stored !== transactionId) throw unavailable('Source-home point deposit is not current');
-      bindSemanticProducerRoles(tx, roles);
-      recordIdentityEpochNativeCommit(tx, 'mapping');
-      return {
-        value: stored,
-        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: home, generation: committed.jobEpoch } }],
-      };
-    }
-    if (stored === transactionId) throw unavailable('Source-home point deposit is not current');
-    return noEffect(stored);
-  });
+  const outcome = await runCommand(
+    pool,
+    { partition: home, deadline: Date.now() + 5000 },
+    async (tx, { transactionId }) => {
+      const command = currentCommand(tx);
+      if (command.basis !== null || command.partition !== home || command.transactionId !== transactionId)
+        throw unavailable('Source deposit requires its own mechanical command');
+      const result = await measuredQuery(tx, measured, depositSql.sql, [...pin, transactionId]);
+      const row = result.rows[0];
+      if (result.rows.length !== 1 || row === undefined || typeof row.inserted !== 'boolean')
+        throw unavailable('Source-home point deposit is not current');
+      const stored = uuid(row.transaction_id, 'deposit transaction');
+      if (row.inserted) {
+        if (stored !== transactionId) throw unavailable('Source-home point deposit is not current');
+        bindSemanticProducerRoles(tx, roles);
+        recordIdentityEpochNativeCommit(tx, 'mapping');
+        return {
+          value: stored,
+          events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: home, generation: committed.jobEpoch } }],
+        };
+      }
+      if (stored === transactionId) throw unavailable('Source-home point deposit is not current');
+      return noEffect(stored);
+    },
+  );
   const stored = typeof outcome.value === 'string' ? outcome.value : '';
   const visible = await withReadTransaction(pool, async (tx) => {
     const result = await measuredQuery(tx, measured, depositRead.sql, pin);
     return result.rows.length === 1 ? result.rows[0] : undefined;
   });
-  if (visible === undefined || uuid(stored, 'deposit transaction') !== uuid(field(visible, 'transaction_id'), 'deposit transaction'))
+  if (
+    visible === undefined ||
+    uuid(stored, 'deposit transaction') !== uuid(field(visible, 'transaction_id'), 'deposit transaction')
+  )
     throw unavailable('Committed source deposit is not visible');
 }
 
@@ -280,16 +351,21 @@ export async function bindForeignMappingPointCustody(
   const route = routeOf(input.original);
   if (route === null) throw new TypeError('Invalid native point custody original');
   if (basis === undefined || partitionOf(route) === basis.controlPartition) return false;
-  const committed = await recordIdentityMappingPointControlProof(pool, measured, {
-    job: input.job,
-    scopeDigest: input.scopeDigest,
-    original: input.original,
-    terminal: basis.terminal,
-    generation: basis.generation,
-    basisVersion: basis.basisVersion,
-    controlPartition: basis.controlPartition,
-    ownerEpoch: basis.ownerEpoch,
-  }, roles);
+  const committed = await recordIdentityMappingPointControlProof(
+    pool,
+    measured,
+    {
+      job: input.job,
+      scopeDigest: input.scopeDigest,
+      original: input.original,
+      terminal: basis.terminal,
+      generation: basis.generation,
+      basisVersion: basis.basisVersion,
+      controlPartition: basis.controlPartition,
+      ownerEpoch: basis.ownerEpoch,
+    },
+    roles,
+  );
   if (committed === null) return true;
   await depositIdentityMappingPointCustody(pool, measured, committed, roles);
   return false;

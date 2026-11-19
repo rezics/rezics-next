@@ -1,10 +1,5 @@
 import type { Pool } from 'pg';
-import {
-  readAccount,
-  commandAccessContext,
-  requireCommandAdmission,
-  admitGroup,
-} from './access-port.ts';
+import { readAccount, commandAccessContext, requireCommandAdmission, admitGroup } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';

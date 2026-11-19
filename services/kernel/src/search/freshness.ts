@@ -87,11 +87,7 @@ async function physicalFreshness(pool: Pool, consumer: string, deadline: number)
   }
 }
 
-export async function readFreshness(
-  pool: Pool,
-  consumer: string,
-  context?: FreshnessReadContext,
-): Promise<Freshness> {
+export async function readFreshness(pool: Pool, consumer: string, context?: FreshnessReadContext): Promise<Freshness> {
   const deadline = observationDeadline(context);
   return beforeDeadline(physicalFreshness(pool, consumer, deadline), deadline);
 }
@@ -142,7 +138,7 @@ export function createFreshness(
       const deadline = observationDeadline(context);
       let pending: Batch;
       if (running) {
-        pending = (queued ??= batch(deadline));
+        pending = queued ??= batch(deadline);
         pending.deadline = Math.max(pending.deadline, deadline);
       } else {
         pending = batch(deadline);

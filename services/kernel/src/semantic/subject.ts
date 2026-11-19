@@ -16,8 +16,6 @@ import type { Pool, PoolClient } from 'pg';
 import {
   currentCommand,
   currentCommandResources,
-  DEFAULT_REQUEST_DEADLINE_MS,
-  runCommand,
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';

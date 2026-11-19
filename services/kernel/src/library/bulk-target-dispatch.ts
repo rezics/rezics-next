@@ -1,7 +1,7 @@
 /** Native target dispatch independent of bulk workflow registration. */
 import { isDeepStrictEqual } from 'node:util';
 import { withConnection } from '../database/pool.ts';
-import type { CommandTransaction, CommandOutcome } from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import type { BulkDependencies, TargetCommand, AttemptResult } from './bulk-contract.ts';
 import { executeCollectionBulkStatus, reconcileCollectionBulkStatus } from './collection-bulk-status.ts';
 import {

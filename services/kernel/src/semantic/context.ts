@@ -217,10 +217,7 @@ export async function readContext(
 /** Creation-snapshotted defaults on the caller's connection, with the ordinary Context availability rules.
  * Authorization and absent-Context policy remain with the caller. Reuse this snapshot across a mutation's views.
  */
-export async function readContextDefaults(
-  client: ContextQueryClient,
-  id: string,
-): Promise<ContextRecord['defaults']> {
+export async function readContextDefaults(client: ContextQueryClient, id: string): Promise<ContextRecord['defaults']> {
   if (id === CONTEXT_GLOBAL_ID) return {};
   const route = routeOf(id);
   if (route === null) return {};

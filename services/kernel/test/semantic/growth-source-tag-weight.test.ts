@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts, relationSlotId } from '../../src/semantic/item.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';

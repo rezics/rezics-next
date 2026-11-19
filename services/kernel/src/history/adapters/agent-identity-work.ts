@@ -12,16 +12,7 @@ import { withConnection } from '../../database/pool.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { WorkClient } from '../../work/client.ts';
 import { receiveMappedHistoryWork, type ScopedWorkRequest } from '../../work/history-enqueue.ts';
-import {
-  agentIdentityRetirementReadiness,
-  assertAgentIdentitySourceHandoff,
-  readAgentIdentityRetirementStage,
-  readAgentIdentitySDKFence,
-  readAgentIdentitySDKReceivingBinding,
-  readAgentIdentitySourceHandoff,
-  retireAgentIdentitySDKWork,
-  verifyAgentIdentityRetirementStage,
-} from '../application/identity.ts';
+import { assertAgentIdentitySourceHandoff, readAgentIdentitySourceHandoff } from '../application/identity.ts';
 import { guardHistoryAccounts } from '../application/records.ts';
 import {
   AGENT_IDENTITY_WORK_OWNER,

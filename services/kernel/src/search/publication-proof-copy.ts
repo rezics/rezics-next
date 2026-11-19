@@ -108,7 +108,9 @@ export async function nextWriterPublicationHome(
   from: number,
   physicalTarget: string,
 ): Promise<number> {
-  const { rows: [row] } = await tx.query<{ home: number }>(
+  const {
+    rows: [row],
+  } = await tx.query<{ home: number }>(
     `SELECT LEAST(
       COALESCE((SELECT partition_no FROM search.identity_writer
         WHERE physical_target=$1 AND partition_no >= $2 ORDER BY partition_no LIMIT 1),4096),

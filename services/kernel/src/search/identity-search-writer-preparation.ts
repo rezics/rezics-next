@@ -182,7 +182,11 @@ export function createSearchIdentityWriterPreparation(
                 );
               }
               if (change.plan) {
-                const allowance = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline);
+                const allowance = identitySourceConsumerNativeWork(
+                  pool,
+                  context.identityConsumerWork,
+                  context.deadline,
+                );
                 if (!allowance) throw unavailable('Search writer acceptance lost its Source work frame');
                 const { value: plan } = await store.readPlanPoint(
                   {
@@ -203,8 +207,11 @@ export function createSearchIdentityWriterPreparation(
                 )
                   throw unavailable('Search writer request lost its exact prepared original');
                 return advanceSearchIdentityReceivingAcceptance(
-                  pool, plan, native.transactionId,
-                  (tx, frontier, roles) => retainWriterStep(tx, pool, job, directory.scope, roles, frontier, context, 0),
+                  pool,
+                  plan,
+                  native.transactionId,
+                  (tx, frontier, roles) =>
+                    retainWriterStep(tx, pool, job, directory.scope, roles, frontier, context, 0),
                 );
               }
 

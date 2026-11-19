@@ -1,7 +1,4 @@
-import {
-  parseKnowledgeMediaSelection,
-  type KnowledgeMediaSelection,
-} from '@rezics/definitions/knowledge-media';
+import { parseKnowledgeMediaSelection, type KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
 import type { AccessClient, AccessCheck, Actor } from '../request/access.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -10,10 +7,7 @@ import { mediaParentSnapshot } from './media-parent.ts';
 import { prepareKnowledgeSubjectDisclosure } from './knowledge-subject-disclosure.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
 import type { MediaDependencies } from './media.ts';
-import {
-  knowledgeMediaReservationSelection,
-  knowledgeMediaSelection,
-} from './knowledge-media-selection.ts';
+import { knowledgeMediaReservationSelection, knowledgeMediaSelection } from './knowledge-media-selection.ts';
 
 export { claimKnowledgeMedia } from './knowledge-media-claim.ts';
 export { publishKnowledgeMedia } from './knowledge-media-publication.ts';
@@ -64,9 +58,16 @@ export async function prepareKnowledgeMediaRead(
     if (!original || actor.kind !== 'account') return null;
     const ownerRoute = routeOf(actor.accountId);
     if (ownerRoute === null || partitionOf(ownerRoute) !== partitionOf(route)) return null;
-    const owner = await accessCheck(deps.access, actor, 'account:read', { route: ownerRoute, id: actor.accountId }, {
-      pool: deps.pool, deadline,
-    });
+    const owner = await accessCheck(
+      deps.access,
+      actor,
+      'account:read',
+      { route: ownerRoute, id: actor.accountId },
+      {
+        pool: deps.pool,
+        deadline,
+      },
+    );
     const verify = async (client: AccessClient) => {
       if (!(await knowledgeMediaReservationParent(client, documentId, actor.accountId)) || !(await owner(client)))
         throw new GrantDeniedError();
@@ -79,17 +80,32 @@ export async function prepareKnowledgeMediaRead(
     return (await current()) ? { publiclyVisible: false, verify, current } : null;
   }
   const selected = parseKnowledgeMediaSelection(selection);
-  if (!selected || selected.documentId !== documentId || routeOf(selected.revisionId) !== route ||
-      (selected.representation === 'public' && routeOf(selected.publicationId) !== route) ||
-      (original && selected.representation === 'public')) return null;
-  const read = (client: AccessClient) => knowledgeMediaSelection(
-    client, route, documentId, selected.revisionId, selected.representation,
-    selected.representation === 'public' ? selected.publicationId : undefined,
-  );
+  if (
+    !selected ||
+    selected.documentId !== documentId ||
+    routeOf(selected.revisionId) !== route ||
+    (selected.representation === 'public' && routeOf(selected.publicationId) !== route) ||
+    (original && selected.representation === 'public')
+  )
+    return null;
+  const read = (client: AccessClient) =>
+    knowledgeMediaSelection(
+      client,
+      route,
+      documentId,
+      selected.revisionId,
+      selected.representation,
+      selected.representation === 'public' ? selected.publicationId : undefined,
+    );
   const initial = await mediaParentSnapshot(deps.pool, route, deadline, read);
-  if (!initial || initial.media_ids.length > 32 || !initial.media_ids.includes(mediaId) ||
-      Buffer.from(initial.body_sha256).toString('hex') !== selected.sourceSha256 ||
-      (selected.representation === 'public' && initial.publication_id !== selected.publicationId)) return null;
+  if (
+    !initial ||
+    initial.media_ids.length > 32 ||
+    !initial.media_ids.includes(mediaId) ||
+    Buffer.from(initial.body_sha256).toString('hex') !== selected.sourceSha256 ||
+    (selected.representation === 'public' && initial.publication_id !== selected.publicationId)
+  )
+    return null;
   const publiclyVisible = selected.representation === 'public';
   let owner: AccessCheck | null = null;
   let visibleSubjects = async () => true;
@@ -102,9 +118,16 @@ export async function prepareKnowledgeMediaRead(
     if (actor.kind !== 'account' || ownerId !== actor.accountId) return null;
     const ownerRoute = routeOf(ownerId);
     if (ownerRoute === null || partitionOf(ownerRoute) !== partitionOf(route)) return null;
-    owner = await accessCheck(deps.access, actor, 'account:read', { route: ownerRoute, id: ownerId }, {
-      pool: deps.pool, deadline,
-    });
+    owner = await accessCheck(
+      deps.access,
+      actor,
+      'account:read',
+      { route: ownerRoute, id: ownerId },
+      {
+        pool: deps.pool,
+        deadline,
+      },
+    );
   }
   const verify = async (client: AccessClient) => {
     const current = await read(client);

@@ -121,7 +121,10 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
       let cost = zero();
       if (Date.now() >= request.context.deadline) return { status: 'unavailable', cost };
       // The registered compiler definition, including negative/population/order keys, is the authority.
-      const resolved = await binding.readDefinition?.({ source, id: request.definition.readDefinition }, request.context);
+      const resolved = await binding.readDefinition?.(
+        { source, id: request.definition.readDefinition },
+        request.context,
+      );
       if (!resolved) return { status: 'unavailable', cost };
       cost = add(cost, resolved.cost);
       if (resolved.status !== 'resolved') return { status: resolved.status, cost };
@@ -177,7 +180,8 @@ export const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCaptur
       if (
         !head ||
         head.definition_digest !== d ||
-        (expected !== null && head.version !== expected &&
+        (expected !== null &&
+          head.version !== expected &&
           (!request.retainedCaptureId || BigInt(expected) > BigInt(head.version)))
       )
         return { status: 'changed', cost };

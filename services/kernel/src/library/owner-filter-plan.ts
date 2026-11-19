@@ -15,7 +15,6 @@ import { ProblemError } from '../http/problem-error.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { currentOwnerClauseKey } from '../search/current-filter-plan.ts';
 import type { RelationFacetMatch } from '../search/source.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';

@@ -5,7 +5,7 @@ import { statementBytes } from '../database/statement-bytes.ts';
  * native SQL, evidence, custody and dispatch stay Library-owned. `engineRequests` is zero because
  * every leaf is a SQL adapter; a nonzero value is refused rather than folded into eight-axis receipts.
  */
-import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
+import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import header from './collection-source-native-header.sql';
 import head from './collection-source-output-head.sql';
@@ -420,31 +420,52 @@ function retainedStatement() {
 }
 function frozenOriginStatement() {
   return memoizedValue(frozenOriginStatement, () =>
-    statement('frozen-origin', frozenOrigin, [65535, id, id], {
-      ...publicationRow, incarnation: text.repeat(128), epoch: epochBind, currentPosition: decimal,
-    }, {
-      nativeRows: 96,
-      nativePoints: 11,
-      relationBytes: 1024,
-    }),
+    statement(
+      'frozen-origin',
+      frozenOrigin,
+      [65535, id, id],
+      {
+        ...publicationRow,
+        incarnation: text.repeat(128),
+        epoch: epochBind,
+        currentPosition: decimal,
+      },
+      {
+        nativeRows: 96,
+        nativePoints: 11,
+        relationBytes: 1024,
+      },
+    ),
   );
 }
 function frozenOwnerLockStatement() {
   return memoizedValue(frozenOwnerLockStatement, () =>
-    statement('frozen-owner-lock', frozenOwnerLock, [65535, id], { present: 1 }, {
-      nativeRows: 16,
-      nativePoints: 2,
-      relationBytes: 64,
-    }),
+    statement(
+      'frozen-owner-lock',
+      frozenOwnerLock,
+      [65535, id],
+      { present: 1 },
+      {
+        nativeRows: 16,
+        nativePoints: 2,
+        relationBytes: 64,
+      },
+    ),
   );
 }
 function frozenSuccessorStatement() {
   return memoizedValue(frozenSuccessorStatement, () =>
-    statement('frozen-successor', frozenSuccessor, captureBinds, { present: 1 }, {
-      nativeRows: 176,
-      nativePoints: 22,
-      relationBytes: 128,
-    }),
+    statement(
+      'frozen-successor',
+      frozenSuccessor,
+      captureBinds,
+      { present: 1 },
+      {
+        nativeRows: 176,
+        nativePoints: 22,
+        relationBytes: 128,
+      },
+    ),
   );
 }
 function frozenSuccessorReadStatement() {

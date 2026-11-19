@@ -2,7 +2,6 @@
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import {
-  HOSTED_PAGE_LIMIT,
   HOSTED_PLACEMENT_LIMIT,
   InvalidHostedStructureError,
   type OrderedHostedPlacement,

@@ -41,8 +41,7 @@ const fixturePromise = createReleasedDiscoveryFixture({
               slowFieldClient = client;
               return new Promise<void>((resolve) => setTimeout(resolve, 1_200))
                 .then(() => {
-                  if (slowFieldReleased)
-                    throw new Error('A retired card snapshot cannot dispatch its field query');
+                  if (slowFieldReleased) throw new Error('A retired card snapshot cannot dispatch its field query');
                   return Reflect.apply(query, receiver, args);
                 })
                 .finally(() => completeSlowFieldQuery?.());

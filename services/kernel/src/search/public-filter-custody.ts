@@ -1,6 +1,6 @@
 import { bookBindingStep, bookCostShare, type BindingStep } from '../request/book-binding-steps.ts';
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
-import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
+import { encode, decode, requireValue } from './public-filter-codec.ts';
 import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
@@ -79,7 +79,6 @@ import {
   readSegmentReplay,
   readSegmentWindow,
   retireSegmentRows,
-  type PublicFilterPreparationSegmentEntry,
   type PublicFilterPreparationSegmentKey,
 } from './public-filter-preparation-segment.ts';
 

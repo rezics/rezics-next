@@ -234,10 +234,7 @@ async function readNativeFenceBatch(
 }
 
 /** Constructing the native observer is inert; provenance and Access I/O start only on an actual request. */
-export function createNativeContentShelfTitleProvenanceObserver(
-  pool: Pool,
-  routeKey: Uint8Array,
-) {
+export function createNativeContentShelfTitleProvenanceObserver(pool: Pool, routeKey: Uint8Array) {
   const provenance = createSemanticTitleProvenanceAdapter(pool, routeKey);
   return createContentShelfTitleProvenanceObserver(provenance, (tuples, deadline) =>
     readNativeFenceBatch(pool, tuples, deadline),

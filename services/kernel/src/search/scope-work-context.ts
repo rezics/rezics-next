@@ -15,7 +15,6 @@ import { meterMembersDefinition } from './scope-members-work-cost.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type {
   MembersPreparationWorkDefinition,
-  PreparationLocator,
   SearchLibraryScopePort,
   SearchNativeCollectionWork,
 } from './library-scope-port.ts';
@@ -23,10 +22,7 @@ import type {
   CollectionKindPreparationLocator,
   CollectionKindWorkDefinition,
 } from '../library/collection-kind-work-admission.ts';
-import type {
-  CollectionPublicationLocator,
-  CollectionPublicationWorkDefinition,
-} from '../library/collection-publication-work-admission.ts';
+import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import {
   admitCollectionKindPreparationStep,
   admitCollectionPublicationStep,

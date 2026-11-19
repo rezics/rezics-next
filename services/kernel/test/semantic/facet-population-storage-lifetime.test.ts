@@ -112,48 +112,59 @@ test('frontier append retires stalled checkout and query, then replays the durab
     if (predecessor) successors.set(predecessor, row.frontier);
     return row;
   };
-  const client = (released?: (error?: Error) => void): PoolClient => ({
-    async query(config: Query) {
-      dispatches++;
-      timeouts.push(config.query_timeout ?? 0);
-      const values = config.values ?? [];
-      if (config.text === homeSql) return { rows: [{ epoch: 3, writeState: 'active' }] };
-      if (config.text.includes('INSERT INTO semantic.facet_population_frontier')) {
-        const saved = insert(values);
-        if (holdAppend) {
-          holdAppend = false;
-          committedWinner = saved;
-          return new Promise<{ rows: Row[] }>((resolve) => { finishAppend = resolve; });
+  const client = (released?: (error?: Error) => void): PoolClient =>
+    ({
+      async query(config: Query) {
+        dispatches++;
+        timeouts.push(config.query_timeout ?? 0);
+        const values = config.values ?? [];
+        if (config.text === homeSql) return { rows: [{ epoch: 3, writeState: 'active' }] };
+        if (config.text.includes('INSERT INTO semantic.facet_population_frontier')) {
+          const saved = insert(values);
+          if (holdAppend) {
+            holdAppend = false;
+            committedWinner = saved;
+            return new Promise<{ rows: Row[] }>((resolve) => {
+              finishAppend = resolve;
+            });
+          }
+          return { rows: saved ? [saved] : [] };
         }
-        return { rows: saved ? [saved] : [] };
-      }
-      if (config.text.includes('predecessor = $2::uuid')) {
-        const frontier = successors.get(String(values[1]));
-        const row = frontier && rows.get(frontier);
-        const allowance = Number(values[2]);
-        return {
-          rows: row
-            ? [{ ...row, subjects: row.subjects.length <= allowance ? row.subjects : [], replay_keys: row.subjects.length }]
-            : [],
-        };
-      }
-      if (config.text.includes('frontier = $2::uuid')) {
-        const row = rows.get(String(values[1]));
-        return { rows: row ? [{ ...row, subjects: [] }] : [] };
-      }
-      throw new Error('Unexpected facet population SQL');
-    },
-    release(error?: Error) {
-      released?.(error);
-    },
-  }) as unknown as PoolClient;
+        if (config.text.includes('predecessor = $2::uuid')) {
+          const frontier = successors.get(String(values[1]));
+          const row = frontier && rows.get(frontier);
+          const allowance = Number(values[2]);
+          return {
+            rows: row
+              ? [
+                  {
+                    ...row,
+                    subjects: row.subjects.length <= allowance ? row.subjects : [],
+                    replay_keys: row.subjects.length,
+                  },
+                ]
+              : [],
+          };
+        }
+        if (config.text.includes('frontier = $2::uuid')) {
+          const row = rows.get(String(values[1]));
+          return { rows: row ? [{ ...row, subjects: [] }] : [] };
+        }
+        throw new Error('Unexpected facet population SQL');
+      },
+      release(error?: Error) {
+        released?.(error);
+      },
+    }) as unknown as PoolClient;
   let appendReleaseAt = 0;
   let finishAppendRelease: ((error?: Error) => void) | undefined;
   const pool = {
     connect: () => {
       checkouts++;
       if (checkouts === holdCheckoutAt)
-        return new Promise<PoolClient>((resolve) => { finishLateCheckout = resolve; });
+        return new Promise<PoolClient>((resolve) => {
+          finishLateCheckout = resolve;
+        });
       return Promise.resolve(client(checkouts === appendReleaseAt ? finishAppendRelease : undefined));
     },
   } as unknown as Pool;
@@ -163,17 +174,18 @@ test('frontier append retires stalled checkout and query, then replays the durab
     access: {} as never,
     clock: () => new Date(),
   });
-  const request = (frontier: string | null, lifetime = 250): FacetPopulationRequest => ({
-    population: 'native-population',
-    frontier,
-    inputLimit: 8,
-    capture: {
-      kind: 'population',
-      queried,
-      start: null,
-      context: { deadline: Date.now() + lifetime },
-    },
-  }) as unknown as FacetPopulationRequest;
+  const request = (frontier: string | null, lifetime = 250): FacetPopulationRequest =>
+    ({
+      population: 'native-population',
+      frontier,
+      inputLimit: 8,
+      capture: {
+        kind: 'population',
+        queried,
+        start: null,
+        context: { deadline: Date.now() + lifetime },
+      },
+    }) as unknown as FacetPopulationRequest;
 
   const root = await source.readFacetPopulationPage(request(null));
   if (root.status !== 'progress') throw new Error(`Expected a retained root, got ${root.status}`);

@@ -8,7 +8,6 @@ import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
-import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
@@ -18,7 +17,6 @@ import {
   realmSubjectRoute,
   type CandidateVersion,
   type RealmSubjectCandidate,
-  type RealmSubjectCoverage,
 } from './realm-subject-candidates.ts';
 import { createRealmSubjectCensus } from './realm-subject-census.ts';
 import type { RealmSubjectMaintenance } from './realm-subject-source.ts';

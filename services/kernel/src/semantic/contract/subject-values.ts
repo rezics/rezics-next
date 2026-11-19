@@ -1,4 +1,4 @@
-import type { Item, ItemFact, ItemFactRow, ItemMetadata } from './item-values.ts';
+import type { Item, ItemFact, ItemFactRow } from './item-values.ts';
 
 export const RELATED_SUBJECT_BATCH_LIMIT = 256;
 

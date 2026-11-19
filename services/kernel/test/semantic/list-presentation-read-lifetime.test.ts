@@ -4,11 +4,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { test, type TestContext } from 'node:test';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient, within } from '../../src/access/deadline.ts';
-import {
-  AccessUnavailableError,
-  requireAccessDeadline,
-  throwAccessUnavailable,
-} from '../../src/access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../../src/access/unavailable.ts';
 import {
   discardConnection,
   RetiredReadClientError,
@@ -22,7 +18,7 @@ import { withRequestDeadline } from '../../src/request/deadline.ts';
 // bounded transaction, deadline classification and reader orchestration remain real.
 const source = readFileSync(new URL('../../src/semantic/list-presentation.ts', import.meta.url), 'utf8');
 const start = source.indexOf('type Dependencies =');
-const end = source.indexOf("\nexport { readListPresentationFacts }");
+const end = source.indexOf('\nexport { readListPresentationFacts }');
 assert.ok(start >= 0 && end > start);
 const body = stripTypeScriptTypes(
   source
@@ -57,7 +53,10 @@ function deferred<T>() {
 }
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 const failureOf = (read: Promise<unknown>) =>
-  read.then(() => assert.fail('Expected a failed read'), (error: unknown) => error);
+  read.then(
+    () => assert.fail('Expected a failed read'),
+    (error: unknown) => error,
+  );
 function clock(t: TestContext) {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1_000 });
 }
@@ -102,7 +101,9 @@ function fixture() {
             rows:
               query.text === 'partition'
                 ? [{ writeState: 'active', position: 7n, epoch: 3 }]
-                : query.text === 'release' ? [active] : [],
+                : query.text === 'release'
+                  ? [active]
+                  : [],
           };
         },
         release(error) {
@@ -178,14 +179,28 @@ async function recover(f: ReturnType<typeof fixture>) {
   assert.equal(f.state.checkouts - before, 4);
   assert.deepEqual(f.homes.slice(-4), [0, 1, 1, 0]);
   const native = f.natives.at(-1)!;
-  assert.deepEqual(native.queries.slice(-16).map(({ text }) => text), [
-    begin, 'partition', 'release', 'COMMIT',
-    begin, 'partition', 'subjects', 'COMMIT',
-    begin, 'partition', 'subjects', 'COMMIT',
-    begin, 'partition', 'release', 'COMMIT',
-  ]);
-  for (const query of native.queries.slice(-16))
-    assert.ok(query.query_timeout! > 0 && query.query_timeout! <= 100);
+  assert.deepEqual(
+    native.queries.slice(-16).map(({ text }) => text),
+    [
+      begin,
+      'partition',
+      'release',
+      'COMMIT',
+      begin,
+      'partition',
+      'subjects',
+      'COMMIT',
+      begin,
+      'partition',
+      'subjects',
+      'COMMIT',
+      begin,
+      'partition',
+      'release',
+      'COMMIT',
+    ],
+  );
+  for (const query of native.queries.slice(-16)) assert.ok(query.query_timeout! > 0 && query.query_timeout! <= 100);
   assert.deepEqual(native.releases.slice(-4), [undefined, undefined, undefined, undefined]);
 }
 
@@ -280,7 +295,10 @@ for (const kind of ['server', 'domain'] as const) {
       assert.equal(f.state.held, false);
       assert.equal(native.releases.length, 1);
       assert.equal(native.releases[0] === undefined, cleanup === 'settled');
-      assert.equal(native.queries.some(({ text }) => text === 'ROLLBACK'), cleanup !== 'expired');
+      assert.equal(
+        native.queries.some(({ text }) => text === 'ROLLBACK'),
+        cleanup !== 'expired',
+      );
       const queries = native.queries.length;
       await recover(f);
       if (cleanup === 'stalled') {
@@ -303,6 +321,9 @@ test('list facts retire an uncertain native failure without attempting rollback'
   assert.equal(await failureOf(f.read()), cause);
   assert.equal(f.state.held, false);
   assert.deepEqual(f.natives[0]!.releases, [cause]);
-  assert.equal(f.natives[0]!.queries.some(({ text }) => text === 'ROLLBACK'), false);
+  assert.equal(
+    f.natives[0]!.queries.some(({ text }) => text === 'ROLLBACK'),
+    false,
+  );
   await recover(f);
 });

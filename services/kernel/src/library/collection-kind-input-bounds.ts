@@ -95,9 +95,7 @@ function admissionSource() {
 function definition() {
   // A 1024-byte completion attempt and bounded scalar metadata/receiving keys.
   // JSON escaping and the Source bind are prepaid, including optional misses.
-  return memoizedValue(definition, () =>
-    statement(readDefinition.sql, 8, 8, 8, 6 * (1024 + 2048), { escaped: 0 }),
-  );
+  return memoizedValue(definition, () => statement(readDefinition.sql, 8, 8, 8, 6 * (1024 + 2048), { escaped: 0 }));
 }
 function custody() {
   return memoizedValue(custody, () =>

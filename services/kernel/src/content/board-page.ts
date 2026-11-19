@@ -18,11 +18,7 @@ import {
 import type { DocumentImagePresentation } from './media-presentation.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
-import {
-  AccessUnavailableError,
-  classifyUnavailability,
-  throwAccessUnavailable,
-} from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import {
   readBoardPageActionEvidence,
   withReactionCountsAndCoverage,

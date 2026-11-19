@@ -106,24 +106,29 @@ async function notify(pool: Pool, id: string) {
   if (!row?.outcome || !row.reporter_account_id) return;
   const recipient = row.reporter_account_id;
   const route = routeOf(recipient)!;
-  await withWritableNoticeRoute(pool, route, async (client) => {
-    if (!(await notificationAllowed(client, { recipient, kind: 'moderation_decision' }))) return;
-    if (await claimNotice.run(client, { route, recipient_id: recipient, report_id: id }))
-      await writeNotices(client, [
-        {
-          recipientId: recipient,
-          noticeId: newId(route),
-          kind: 'moderation_decision',
-          actorId: null,
-          threadId: null,
-          postId: null,
-          reportId: id,
-          decisionId: row.decision_id,
-          sourceId: id,
-          createdAt: new Date(row.resolved_at!),
-        },
-      ]);
-  }, deadline);
+  await withWritableNoticeRoute(
+    pool,
+    route,
+    async (client) => {
+      if (!(await notificationAllowed(client, { recipient, kind: 'moderation_decision' }))) return;
+      if (await claimNotice.run(client, { route, recipient_id: recipient, report_id: id }))
+        await writeNotices(client, [
+          {
+            recipientId: recipient,
+            noticeId: newId(route),
+            kind: 'moderation_decision',
+            actorId: null,
+            threadId: null,
+            postId: null,
+            reportId: id,
+            decisionId: row.decision_id,
+            sourceId: id,
+            createdAt: new Date(row.resolved_at!),
+          },
+        ]);
+    },
+    deadline,
+  );
 }
 
 export async function dismissReport(deps: ReportDependencies, actor: Actor, id: string, context: RequestContext) {

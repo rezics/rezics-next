@@ -19,7 +19,12 @@ import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
-import { discardConnection, withBoundedCommandConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
+import {
+  discardConnection,
+  withBoundedCommandConnection,
+  withBoundedReadConnection,
+  withConnection,
+} from '../database/pool.ts';
 import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -706,9 +711,7 @@ async function executeCommand<T>(
     throw new TypeError('Command work association must use the original command deadline');
   // A request may have a shorter original budget than a trusted command option.
   // The long fallback only observes request context; it cannot extend a command.
-  const deadline = dispatch || publisher
-    ? declaredDeadline
-    : Math.min(declaredDeadline, deadlineFor(2_147_483_647));
+  const deadline = dispatch || publisher ? declaredDeadline : Math.min(declaredDeadline, deadlineFor(2_147_483_647));
   if (!Number.isSafeInteger(deadline)) throw new TypeError('Invalid command deadline');
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
@@ -933,12 +936,10 @@ async function executeCommand<T>(
           validateCommandHistory(tx, options.receipt?.kind, response.value, events);
           await authorization?.finalize?.(tx, attempt, evidence);
           dispatch?.checkpoint();
-          if (noEffect && state.callbacks.length > 0)
-            throw new TypeError('A no-effect command registers no work');
+          if (noEffect && state.callbacks.length > 0) throw new TypeError('A no-effect command registers no work');
           const runCallbacks = async () => {
             for (let index = 0; index < state.callbacks.length; index++) {
-              if (!state.active || Date.now() >= deadline)
-                throw new CommandUnavailableError('deadline', partition);
+              if (!state.active || Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);
               await state.callbacks[index]!(transactionId);
             }
           };

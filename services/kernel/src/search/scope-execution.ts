@@ -6,11 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions, LeafWork } from '../semantic/scope-leaf-evidence.ts';
-import {
-  readOwnerFilterCandidate,
-  readOwnerFilterCandidateClosure,
-  readScopeLeafEvidence,
-} from './native-bindings.ts';
+import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure, readScopeLeafEvidence } from './native-bindings.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
 import type { PublicFilterCost } from '../semantic/index.ts';
 import { currentOwnerClauseKey, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';

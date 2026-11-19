@@ -260,25 +260,39 @@ async function authorizeDownload(
 
     if (initial.purpose === 'knowledge-image') {
       const source = await prepareKnowledgeMediaRead(
-        dependencies, actor, mediaId, initial.container_id, context.knowledge, original, context.deadline,
+        dependencies,
+        actor,
+        mediaId,
+        initial.container_id,
+        context.knowledge,
+        original,
+        context.deadline,
       );
       if (!source) return null;
       const resource = { route: r, id: mediaId };
-      const media = await accessCheck(dependencies.access, actor, 'media:read', {
-        ...resource,
-        eligibility: createResourcePublicEligibility({
-          resource,
-          action: 'media:read',
-          async prepare() { return { media: signature(initial) }; },
-          async verify({ client }) {
-            const current = await point(client, mediaId, slot);
-            if (!current || !usable(current) || signature(current) !== signature(initial))
-              throw new GrantDeniedError();
-            // A failed source is a hard restriction, including for existing media grants.
-            return source.verify(client);
-          },
-        }),
-      }, { pool: dependencies.pool, deadline: context.deadline });
+      const media = await accessCheck(
+        dependencies.access,
+        actor,
+        'media:read',
+        {
+          ...resource,
+          eligibility: createResourcePublicEligibility({
+            resource,
+            action: 'media:read',
+            async prepare() {
+              return { media: signature(initial) };
+            },
+            async verify({ client }) {
+              const current = await point(client, mediaId, slot);
+              if (!current || !usable(current) || signature(current) !== signature(initial))
+                throw new GrantDeniedError();
+              // A failed source is a hard restriction, including for existing media grants.
+              return source.verify(client);
+            },
+          }),
+        },
+        { pool: dependencies.pool, deadline: context.deadline },
+      );
       if (!(await source.current())) return null;
       const current = await snapshot(r, async (client) => {
         const row = await point(client, mediaId, slot);

@@ -366,8 +366,7 @@ export function createSearchWorkModule(
       DBOS.registerWorkflow(
         async (input: { scopeId: string; revision: string }) => {
           let revision: string | null = input.revision;
-          for (let page = 0; page < 16 && revision; page++)
-            revision = await scopeStep(input.scopeId, revision);
+          for (let page = 0; page < 16 && revision; page++) revision = await scopeStep(input.scopeId, revision);
         },
         { name: SCOPE_PREPARATION_WORKFLOW },
       );

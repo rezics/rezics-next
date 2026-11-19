@@ -48,18 +48,17 @@ async function readAccessBasis(pool: Pool, deadline: number) {
 }
 
 /** Request-scoped current subject:read decisions on one fixed T and whole-source basis. */
-export function createNativeContentShelfTitleCurrentAccess(
-  pool: Pool,
-  resolveAccess: () => Access,
-) {
+export function createNativeContentShelfTitleCurrentAccess(pool: Pool, resolveAccess: () => Access) {
   return {
-    async begin(
-      { owner, viewer, deadline }: {
-        owner: Readonly<{ route: number; accountId: string }>;
-        viewer: AccountActor;
-        deadline: number;
-      },
-    ) {
+    async begin({
+      owner,
+      viewer,
+      deadline,
+    }: {
+      owner: Readonly<{ route: number; accountId: string }>;
+      viewer: AccountActor;
+      deadline: number;
+    }) {
       if (
         !Number.isFinite(deadline) ||
         routeOf(owner.accountId) !== owner.route ||

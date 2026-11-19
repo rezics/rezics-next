@@ -3,7 +3,6 @@ import { routeOf } from '../../src/route/route.ts';
 import type { OrderedHostedPlacement, HostedChapterTarget } from '../../src/content/hosted-chapters-model.ts';
 import {
   HostedVersionPublicationWriteError,
-  type HostedVersionPublicationValue,
   type HostedVersionPublicationIndexRoots,
   type HostedVersionPublicationOccurrence,
   type HostedVersionPublicationOccurrenceChange,
@@ -33,7 +32,6 @@ import {
   stageHostedVersionSnapshotRoots,
   type HostedVersionWrite,
 } from '../../src/content/hosted-version-store.ts';
-import { commitHostedVersionRevision } from '../../src/content/hosted-version-revision.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from './support/sql-observer.ts';
 import commitVersion from '../../src/content/hosted-version-commit.sql';

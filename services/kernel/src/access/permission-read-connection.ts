@@ -6,9 +6,7 @@ import { AccessUnavailableError, classifyUnavailability } from './unavailable.ts
 function readFailure(error: unknown): AccessUnavailableError {
   if (error instanceof AccessUnavailableError) return error;
   const reason = classifyUnavailability(error);
-  const failure = new AccessUnavailableError(
-    reason === 'deadline' || reason === 'contention' ? reason : 'overloaded',
-  );
+  const failure = new AccessUnavailableError(reason === 'deadline' || reason === 'contention' ? reason : 'overloaded');
   Object.defineProperty(failure, 'cause', { value: error, configurable: true, writable: true });
   return failure;
 }

@@ -20,7 +20,12 @@ import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
-import { FEED_PAGE_LIMIT, type FeedCollectionDiscoverySummary, type FeedItem, type FeedPage } from './contract/index.ts';
+import {
+  FEED_PAGE_LIMIT,
+  type FeedCollectionDiscoverySummary,
+  type FeedItem,
+  type FeedPage,
+} from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);

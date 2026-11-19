@@ -736,71 +736,76 @@ export function createEntryCommands(config: Dependencies) {
 
     const operationPlan = entryOperationPlan('library.entry.state-history', options, limit + 1);
     const selected = await withEntryOperation(operationPlan, () =>
-      snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
-        const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
-        if (!current) throw new LibraryNotFoundError();
-        if (!current.incarnationId && options.cursor !== undefined) throw new ProblemError('stale_cursor');
-        const epoch = await partitionEpochRead.run(
-          { query: client.query.bind(client) },
-          { partition_no: partitionOf(route) },
-        );
-        if (!current.incarnationId) {
+      snapshot(
+        actor,
+        'library_entry:read',
+        async (client, accountOwner, route) => {
+          const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+          if (!current) throw new LibraryNotFoundError();
+          if (!current.incarnationId && options.cursor !== undefined) throw new ProblemError('stale_cursor');
+          const epoch = await partitionEpochRead.run(
+            { query: client.query.bind(client) },
+            { partition_no: partitionOf(route) },
+          );
+          if (!current.incarnationId) {
+            return {
+              epoch: epoch?.epoch,
+              page: {
+                incarnationId: null,
+                currentRevision: current.revision,
+                changes: [],
+                coverage: 'unknown' as const,
+                next: null,
+              },
+            };
+          }
+          const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
+          let afterRevision: number | null = null;
+          let cursorCoverage: 'complete' | 'partial' | null = null;
+          if (options.cursor !== undefined) {
+            const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
+            if (!cursor.ok || !validStateHistoryAfter(cursor.after)) throw new ProblemError('invalid_cursor');
+            if (!epoch || cursor.epoch !== epoch.epoch) throw new ProblemError('stale_cursor');
+            afterRevision = Number(cursor.after[0]);
+            if (Number(cursor.after[1]) !== current.revision) throw new ProblemError('stale_cursor');
+            cursorCoverage = cursor.after[2] as 'complete' | 'partial';
+          }
+          const rows = await pageEntryStateChanges(client, {
+            route,
+            accountId: accountOwner.accountId,
+            subjectId,
+            incarnationId: current.incarnationId,
+            afterRevision,
+            limit: limit + 1,
+          });
+          const changes = rows.slice(0, limit);
+          const hasMore = rows.length > limit;
+          const last = changes.at(-1);
+          const coverage: 'complete' | 'partial' | 'unknown' = changes.length
+            ? changes[0]!.coverageComplete
+              ? ('complete' as const)
+              : ('partial' as const)
+            : (cursorCoverage ?? 'unknown');
+          if (hasMore && !epoch) throw new CommandUnavailableError('fenced', partitionOf(route));
           return {
             epoch: epoch?.epoch,
             page: {
-              incarnationId: null,
+              incarnationId: current.incarnationId,
               currentRevision: current.revision,
-              changes: [],
-              coverage: 'unknown' as const,
-              next: null,
+              changes: changes.map(stateChangeView),
+              coverage,
+              next:
+                hasMore && last && epoch
+                  ? encodeCursor(tokens, cursorBinding, {
+                      epoch: epoch.epoch,
+                      after: [String(last.revision), String(current.revision), coverage],
+                    })
+                  : null,
             },
           };
-        }
-        const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
-        let afterRevision: number | null = null;
-        let cursorCoverage: 'complete' | 'partial' | null = null;
-        if (options.cursor !== undefined) {
-          const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
-          if (!cursor.ok || !validStateHistoryAfter(cursor.after)) throw new ProblemError('invalid_cursor');
-          if (!epoch || cursor.epoch !== epoch.epoch) throw new ProblemError('stale_cursor');
-          afterRevision = Number(cursor.after[0]);
-          if (Number(cursor.after[1]) !== current.revision) throw new ProblemError('stale_cursor');
-          cursorCoverage = cursor.after[2] as 'complete' | 'partial';
-        }
-        const rows = await pageEntryStateChanges(client, {
-          route,
-          accountId: accountOwner.accountId,
-          subjectId,
-          incarnationId: current.incarnationId,
-          afterRevision,
-          limit: limit + 1,
-        });
-        const changes = rows.slice(0, limit);
-        const hasMore = rows.length > limit;
-        const last = changes.at(-1);
-        const coverage: 'complete' | 'partial' | 'unknown' = changes.length
-          ? changes[0]!.coverageComplete
-            ? ('complete' as const)
-            : ('partial' as const)
-          : (cursorCoverage ?? 'unknown');
-        if (hasMore && !epoch) throw new CommandUnavailableError('fenced', partitionOf(route));
-        return {
-          epoch: epoch?.epoch,
-          page: {
-            incarnationId: current.incarnationId,
-            currentRevision: current.revision,
-            changes: changes.map(stateChangeView),
-            coverage,
-            next:
-              hasMore && last && epoch
-                ? encodeCursor(tokens, cursorBinding, {
-                    epoch: epoch.epoch,
-                    after: [String(last.revision), String(current.revision), coverage],
-                  })
-                : null,
-          },
-        };
-      }, deadline),
+        },
+        deadline,
+      ),
     );
     const partition = partitionOf(requireRoute(owner.accountId));
     await withBoundedReadConnection(

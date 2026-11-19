@@ -169,7 +169,9 @@ async function committedScope(repaired: boolean) {
       )
     ).rows[0];
     if (!retained) throw new Error('Native repair receiving attempt absent');
-    await (await nativeCutoverCoordinator())(f.pool, job);
+    await (
+      await nativeCutoverCoordinator()
+    )(f.pool, job);
     const repairedObservation = await withIdentitySourceConsumerMaintenance(
       { pool: f.pool, env: {} },
       { deadline: Date.now() + 60000 },
@@ -237,8 +239,13 @@ async function enrolledOriginal(source: Awaited<ReturnType<typeof committedScope
      (route,collection_id,source_fence,identity,frontier,capture_id,committed_revision)
      VALUES($1,$2,$3,$4,$5,$6,$7)`,
     [
-      identity.route, identity.collectionId, fence, JSON.stringify(identity), JSON.stringify(frontier),
-      locator.expected.captureId, locator.expected.committedRevision.toString(),
+      identity.route,
+      identity.collectionId,
+      fence,
+      JSON.stringify(identity),
+      JSON.stringify(frontier),
+      locator.expected.captureId,
+      locator.expected.committedRevision.toString(),
     ],
   );
   await f.admin.query(
@@ -253,8 +260,15 @@ async function enrolledOriginal(source: Awaited<ReturnType<typeof committedScope
       source_generation,source_capture,origin_at,expires_at,deadline_at)
      VALUES($1,$2,$3,$4,$5,'anonymous',$6,$6,$7,$8,clock_timestamp(),to_timestamp($9::bigint/1000.0),$9::bigint)`,
     [
-      identity.route, origin, identity.accountId, identity.collectionId, preparation.preparationId,
-      root, identity.generation, token, String(deadline),
+      identity.route,
+      origin,
+      identity.accountId,
+      identity.collectionId,
+      preparation.preparationId,
+      root,
+      identity.generation,
+      token,
+      String(deadline),
     ],
   );
   await f.admin.query(
@@ -263,8 +277,17 @@ async function enrolledOriginal(source: Awaited<ReturnType<typeof committedScope
       source_generation,capture_generation,source_capture,enrollment_generation,catalogue_root)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [
-      identity.route, randomUUID(), identity.accountId, identity.collectionId, preparation.preparationId,
-      origin, identity.generation, capture.captureId, token, randomUUID(), root,
+      identity.route,
+      randomUUID(),
+      identity.accountId,
+      identity.collectionId,
+      preparation.preparationId,
+      origin,
+      identity.generation,
+      capture.captureId,
+      token,
+      randomUUID(),
+      root,
     ],
   );
   return preparation;
@@ -329,24 +352,36 @@ test('initial and repaired Kind originals resolve and hold genuine receipts on o
       expect(result.evidence.native.transactionId).not.toBe(source.capture.transactionId);
       expect(isHeldCommittedIdentityScopeReceipt(context.tx, result)).toBe(false);
       const spent = work.receipt();
-      expect(await withoutCheckout(() => resolveCommittedIdentityScopeReceipt(f.pool, {
-        locator: source.locator, context: { ...context, deadline: deadline + 1 },
-      }))).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
+      expect(
+        await withoutCheckout(() =>
+          resolveCommittedIdentityScopeReceipt(f.pool, {
+            locator: source.locator,
+            context: { ...context, deadline: deadline + 1 },
+          }),
+        ),
+      ).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
       const copy = new NativeCollectionWork({ ...allowance(), reservationId: spent.reservationId }, deadline);
-      expect(await withoutCheckout(() => resolveCommittedIdentityScopeReceipt(f.pool, {
-        locator: source.locator, context: { ...context, work: copy },
-      }))).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
+      expect(
+        await withoutCheckout(() =>
+          resolveCommittedIdentityScopeReceipt(f.pool, {
+            locator: source.locator,
+            context: { ...context, work: copy },
+          }),
+        ),
+      ).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
       expect(copy.receipt().used.statements).toBe(0);
       copy.close();
       expect(work.receipt()).toEqual(spent);
       return result;
     });
     // Only after the Source home is released do we inspect the committed native component.
-    const native = (await f.admin.query(
-      `SELECT epoch,position::text FROM semantic.identity_epoch_native_commit
+    const native = (
+      await f.admin.query(
+        `SELECT epoch,position::text FROM semantic.identity_epoch_native_commit
        WHERE partition_no=$1 AND transaction_id=$2`,
-      [resolved.evidence.native.partition, resolved.evidence.native.transactionId],
-    )).rows[0];
+        [resolved.evidence.native.partition, resolved.evidence.native.transactionId],
+      )
+    ).rows[0];
     expect(native).toEqual({
       epoch: resolved.evidence.native.epoch,
       position: resolved.evidence.native.position.toString(),
@@ -354,14 +389,23 @@ test('initial and repaired Kind originals resolve and hold genuine receipts on o
     if (source.locator.completion.kind === 'repair') {
       const { job } = source.locator.completion.receiving;
       const address = identityScopeAddress(source.locator.expected.key);
-      const completion = (await f.admin.query(
-        `SELECT c.version::text,c.seal,c.source_generation,a.revision::text
+      const completion = (
+        await f.admin.query(
+          `SELECT c.version::text,c.seal,c.source_generation,a.revision::text
          FROM semantic.identity_scope_completion c JOIN semantic.identity_scope_attempt a
          USING(partition_no,source_key,scope_id,registration,job_id,job_epoch)
          WHERE c.partition_no=$1 AND c.source_key=$2 AND c.scope_id=$3 AND c.registration=$4
            AND c.job_id=$5 AND c.job_epoch=$6 AND c.complete AND a.state='finished'`,
-        [address.partition, address.source, address.scope, source.locator.registration, job.jobId, job.epoch.toString()],
-      )).rows[0];
+          [
+            address.partition,
+            address.source,
+            address.scope,
+            source.locator.registration,
+            job.jobId,
+            job.epoch.toString(),
+          ],
+        )
+      ).rows[0];
       expect(resolved.evidence.completionRevision).toBe(BigInt(completion.revision));
       expect(resolved.evidence.completionVersion).toBe(BigInt(completion.version));
       expect(resolved.evidence.sourceGeneration).toBe(completion.source_generation);
@@ -373,9 +417,14 @@ test('initial and repaired Kind originals resolve and hold genuine receipts on o
       expect(resolved.evidence.completionRevision).toBe(source.locator.expected.committedRevision);
     }
     const spent = work.receipt();
-    expect(await withoutCheckout(() => resolveCommittedIdentityScopeReceipt(f.pool, {
-      locator: source.locator, context: escaped,
-    }))).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
+    expect(
+      await withoutCheckout(() =>
+        resolveCommittedIdentityScopeReceipt(f.pool, {
+          locator: source.locator,
+          context: escaped,
+        }),
+      ),
+    ).toMatchObject({ status: 'unavailable', reason: 'work_binding' });
     expect(work.receipt()).toEqual(spent);
 
     for (const rollback of [false, true]) {
@@ -385,13 +434,21 @@ test('initial and repaired Kind originals resolve and hold genuine receipts on o
       const holding = home(async (context) => {
         heldTx = context.tx;
         const changed = { ...resolved.evidence, completionVersion: resolved.evidence.completionVersion + 1n };
-        expect(await withoutCheckout(() => holdCommittedIdentityScopeReceipt(context.tx, f.pool, {
-          evidence: changed, context,
-        }))).toMatchObject({ status: 'unavailable', reason: 'not_current' });
+        expect(
+          await withoutCheckout(() =>
+            holdCommittedIdentityScopeReceipt(context.tx, f.pool, {
+              evidence: changed,
+              context,
+            }),
+          ),
+        ).toMatchObject({ status: 'unavailable', reason: 'not_current' });
         const before = work.receipt();
-        held = await withoutCheckout(() => holdCommittedIdentityScopeReceipt(context.tx, f.pool, {
-          evidence: resolved.evidence, context,
-        }));
+        held = await withoutCheckout(() =>
+          holdCommittedIdentityScopeReceipt(context.tx, f.pool, {
+            evidence: resolved.evidence,
+            context,
+          }),
+        );
         expect(held).toMatchObject({ status: 'held', evidence: resolved.evidence, transactionId: null });
         expect(isHeldCommittedIdentityScopeReceipt(context.tx, held)).toBe(true);
         expect(isHeldCommittedIdentityScopeReceipt(context.tx, { ...Object(held) })).toBe(false);
@@ -408,11 +465,13 @@ test('initial and repaired Kind originals resolve and hold genuine receipts on o
         try {
           await competing.query('BEGIN');
           await competing.query("SET LOCAL lock_timeout = '30ms'");
-          await expect(competing.query(
-            `SELECT transaction_id FROM semantic.identity_epoch_native_commit
+          await expect(
+            competing.query(
+              `SELECT transaction_id FROM semantic.identity_epoch_native_commit
              WHERE partition_no=$1 AND transaction_id=$2 FOR UPDATE`,
-            [resolved.evidence.native.partition, resolved.evidence.native.transactionId],
-          )).rejects.toMatchObject({ code: '55P03' });
+              [resolved.evidence.native.partition, resolved.evidence.native.transactionId],
+            ),
+          ).rejects.toMatchObject({ code: '55P03' });
         } finally {
           await competing.query('ROLLBACK');
           competing.release();

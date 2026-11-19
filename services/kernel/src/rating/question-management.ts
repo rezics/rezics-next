@@ -74,15 +74,10 @@ async function manageAdvice(deps: Dependencies, actor: Actor, realmId: string, d
     { route: routeOf(realmId)!, id: realmId },
     { pool: deps.pool, deadline },
   );
-  return withBoundedReadConnection(
-    deps.pool,
-    deadline,
-    (client) => check(deadlineClient(client, deadline)),
-    {
-      deadlineError: () => new AccessUnavailableError('deadline'),
-      isUncertainSettledQueryError: () => true,
-    },
-  );
+  return withBoundedReadConnection(deps.pool, deadline, (client) => check(deadlineClient(client, deadline)), {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    isUncertainSettledQueryError: () => true,
+  });
 }
 
 /** One Realm directory and one optional exact definition. This is an additive

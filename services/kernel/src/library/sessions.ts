@@ -53,7 +53,6 @@ import {
   resolveLibraryProfilePin,
   type LibraryProfileDescriptor,
 } from './profile.ts';
-import { readRelease } from '../semantic/definitions.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';

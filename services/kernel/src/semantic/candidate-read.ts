@@ -10,13 +10,7 @@ import { statementAudience } from './statement-disclosure.ts';
 import { readRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type Statement } from './item.ts';
-import {
-  candidateFact,
-  resolveSlot,
-  slotId,
-  slotView,
-  type Candidate,
-} from './slots.ts';
+import { candidateFact, resolveSlot, slotId, slotView, type Candidate } from './slots.ts';
 import readCandidatePage from './candidates-read-candidate-page.sql';
 import readCandidateLifecycle from './candidates-read-lifecycle.sql';
 import readCandidateOwners from './candidates-read-owners.sql';
@@ -26,13 +20,10 @@ import readRevisions from './candidates-read-revisions.sql';
 import { readLabels } from './subject.ts';
 import { contextSnapshot } from './context.ts';
 import { page } from './candidate-pagination.ts';
-import type {
-  CandidatePageOptions,
-  PageOptions,
-} from './candidate-contract.ts';
+import type { CandidatePageOptions, PageOptions } from './candidate-contract.ts';
 import { SubjectNotFoundError } from './contract/subject-errors.ts';
 
-const listed = <T>(result: T[] | T | null): T[] => result == null ? [] : Array.isArray(result) ? result : [result];
+const listed = <T>(result: T[] | T | null): T[] => (result == null ? [] : Array.isArray(result) ? result : [result]);
 
 export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
   return page(
@@ -284,11 +275,7 @@ async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOp
 /** Stage only the page's admitted main item targets, then re-read source admission,
  * audience, disclosure, candidate lifecycle and tuple fences before disclosing labels.
  */
-export async function listCandidates(
-  pool: Pool,
-  ring: KeyRing,
-  options: CandidatePageOptions,
-) {
+export async function listCandidates(pool: Pool, ring: KeyRing, options: CandidatePageOptions) {
   const first = await candidatePage(pool, ring, options);
   if (
     !options.identity ||

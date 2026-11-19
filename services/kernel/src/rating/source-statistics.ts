@@ -832,11 +832,16 @@ export function sourceStatisticRoutes(
         const requireWriter = async () => {
           const resource = root();
           const allowed = await authorize(resource);
-          await withSourceRatingReadConnection(config().pool, job.deadline, async (client) => {
-            const partition = await readPartition(client, partitionOf(resource.route));
-            if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
-            if (!(await allowed(client))) throw new GrantDeniedError();
-          }, { repeatableRead: true });
+          await withSourceRatingReadConnection(
+            config().pool,
+            job.deadline,
+            async (client) => {
+              const partition = await readPartition(client, partitionOf(resource.route));
+              if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+              if (!(await allowed(client))) throw new GrantDeniedError();
+            },
+            { repeatableRead: true },
+          );
         };
         if (query.digest !== undefined && (query.cursor !== undefined || query.history !== undefined))
           throw new ProblemError('invalid_request');

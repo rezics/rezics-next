@@ -192,7 +192,8 @@ export function createScopePreparation(
         frontier.kind === 'public' &&
         Number(record.expires_at) > Date.now() &&
         !isDeepStrictEqual(record.frontier, frontier)
-      ) return revision;
+      )
+        return revision;
     }
     if (Number(record.expires_at) <= Date.now()) return advance(record.frontier, null, 0);
     if (record.definition.ordered && record.observation) {
