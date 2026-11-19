@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { offHostFixtureParent } from '../test-support/off-host-fixture.ts';
 import { migrate, openDb } from './db.ts';
 import { nativeUnitContext } from './native-unit-context.ts';
 import {
@@ -26,8 +27,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function fixture() {
-  const temporary = join(import.meta.dir, '../../../.temp');
+function fixture(temporary = join(import.meta.dir, '../../../.temp')) {
   mkdirSync(temporary, { recursive: true });
   const path = mkdtempSync(join(temporary, 'native-unit-'));
   roots.push(path);
@@ -177,7 +177,7 @@ test('walks require a scoped identity and exact acceptance tokens from managed c
 });
 
 test('an active desktop resident hands off authority and launches only the assigned registered unit', async () => {
-  const f = fixture();
+  const f = fixture(offHostFixtureParent());
   const { worktree: mainCheckout, codexHome, stateDirectory, threadId, briefPath, id } = f.input;
   const worktree = join(f.path, 'desktop-worktree');
   const manager = randomUUID();
