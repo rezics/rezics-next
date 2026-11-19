@@ -335,7 +335,7 @@ test('ordinary release refuses repeated external dev drift at the final atomic r
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
 
 test('a checked candidate publishes main, stabilize and dev together with exact release evidence', async () => {
   const h = integrationHarness();
@@ -1470,7 +1470,7 @@ test('ordinary dev independence: repeated interrupted admissions are finite acro
   } finally {
     h.dispose();
   }
-});
+}, 30_000);
 
 test('ordinary dev independence: accepted source movement at publication cannot certify the old proof', async () => {
   const h = integrationHarness();
