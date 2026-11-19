@@ -6,9 +6,12 @@ import { emptyInventory, storyAccount } from '../src/stories/accounts-operations
 import type { AccountIdentityResult, AccountIdentitySource } from '../src/account-identity';
 import type { SecurityLoadResult } from '../src/security';
 import type { SecuritySource } from '../src/security-reconciliation';
+import type { PasswordChangePhase } from '../src/password-change-attempt';
 import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
+
+type NativeCall = Awaited<ReturnType<typeof open>>['calls'][number];
 
 function securityPage(accountId = storyAccount): SecurityLoadResult {
   const value = structuredClone(initial);
@@ -55,35 +58,37 @@ async function begin(host: HTMLElement) {
   await flush(() => button(host, m.auth_security_password_confirm())!.click());
 }
 
-function staged(calls: { body: any }[]) {
+function staged(call: NativeCall) {
   return Response.json({
-    effectRef: 'private-effect-ref',
-    key: calls[0]!.body.key,
-    subjectId: calls[0]!.body.subjectId,
+    effectRef: '00000000-0000-4000-8000-000000000003',
+    key: call.body.key,
+    subjectId: call.body.subjectId,
     purpose: 'set-password',
     digest: 'a'.repeat(64),
   });
 }
 
-async function advanceTo(
-  phase: 'stage' | 'approve' | 'apply',
-  calls: { resolve: (response: Response) => void; body: any }[],
-) {
-  if (phase === 'stage') return;
-  await flush(() => calls[0]!.resolve(staged(calls)));
-  if (phase === 'approve') return;
-  await flush(() =>
-    calls[1]!.resolve(
-      Response.json({ reference: 'private-approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
-    ),
-  );
+function approved() {
+  return Response.json({
+    reference: `${'A'.repeat(48)}.${'A'.repeat(43)}`,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
 }
 
-function lateResponse(phase: 'stage' | 'approve' | 'apply', calls: { body: any }[]) {
-  if (phase === 'stage') return staged(calls);
-  if (phase === 'approve')
-    return Response.json({ reference: 'private-approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() });
-  return Response.json({ receiptId: 'private-receipt', replayed: false });
+async function advanceTo(phase: PasswordChangePhase, calls: NativeCall[]) {
+  expect(calls.map(({ path }) => path)).toEqual(['/credential-effects/stage']);
+  if (phase === 'stage') return;
+  await flush(() => calls[0]!.resolve(staged(calls[0]!)));
+  expect(calls.map(({ path }) => path)).toEqual(['/credential-effects/stage', '/credential-effects/approve']);
+  if (phase === 'approve') return;
+  await flush(() => calls[1]!.resolve(approved()));
+  expect(calls[2]?.path).toBe('/credential-effects/apply');
+}
+
+function lateResponse(phase: PasswordChangePhase, call: NativeCall) {
+  if (phase === 'stage') return staged(call);
+  if (phase === 'approve') return approved();
+  return Response.json({ receiptId: '00000000-0000-4000-8000-000000000004', replayed: false });
 }
 
 const cases = [
@@ -98,6 +103,11 @@ test.each(cases)(
     const { host, calls } = await mount();
     await begin(host);
     await advanceTo(phase, calls);
+    expect(calls).toHaveLength(count);
+    for (const call of calls.slice(1)) {
+      expect(call.body.key).toBe(calls[0]!.body.key);
+      expect(call.body.credential).toBeUndefined();
+    }
     await flush(leave);
 
     const summary = host.querySelector('[data-password-return-status]');
@@ -119,12 +129,13 @@ test.each(cases)(
       ])
       .filter(Boolean);
     for (const value of retiredValues) expect(host.textContent).not.toContain(value);
-    expect(document.activeElement).toBe(summary);
+    expect(document.activeElement === summary).toBe(true);
 
-    await flush(() => calls[count - 1]!.resolve(lateResponse(phase, calls)));
+    await flush(() => calls[count - 1]!.resolve(lateResponse(phase, calls[0]!)));
     expect(calls).toHaveLength(count);
     expect(host.querySelector('[data-password-return-status]')?.textContent).toContain(message());
-    expect(document.activeElement).toBe(summary);
+    expect(host.textContent).not.toContain(m.auth_security_password_return_applied_after_unknown());
+    expect(document.activeElement === summary).toBe(true);
   },
 );
 
@@ -138,7 +149,7 @@ test('signed-out identity retirement keeps only generic password phase history',
   expect(host.textContent).not.toContain('retired password secret');
   expect(host.textContent).not.toContain(storyAccount);
   expect(host.querySelector('#security-new-password')).toBeNull();
-  await flush(() => calls[0]!.resolve(staged(calls)));
+  await flush(() => calls[0]!.resolve(staged(calls[0]!)));
   expect(calls).toHaveLength(1);
   expect(host.textContent).toContain(m.auth_security_password_return_stage());
 });
