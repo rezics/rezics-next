@@ -108,6 +108,8 @@ export type SourceBindingCustodyResult =
 
 export type SourceBindingGenerationResult =
   | Readonly<{
+      /** Exact Search encoding compared during a grouped registration replay. */
+      registeredDefinition?: string;
       definition: SourceBindingRetainedDefinition;
       registration: Readonly<{ partition: number; id: string }>;
       queried: PublicFilterQueriedObservation | null;
@@ -144,6 +146,11 @@ export type PublicFilterSearchBindingPort = Readonly<{
     request: Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>,
     context: PublicFilterConsumerContext,
   ): Promise<SourceBindingCustodyResult>;
+  readBookRegistrations?(
+    pool: Pool,
+    members: readonly { consumer: PublicFilterConsumer; definition: SourceBindingCustodyDefinition }[],
+    context: PublicFilterConsumerContext,
+  ): Promise<readonly SourceBindingGenerationResult[]>;
   readGenerationPublicationCustody(
     pool: Pool,
     consumer: PublicFilterConsumer,

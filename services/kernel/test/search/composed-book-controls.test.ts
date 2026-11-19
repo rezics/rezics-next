@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
+import { bookBindingStep } from '../../src/request/book-binding-steps.ts';
 import { Admission } from '../../src/http/admission.ts';
 import {
   composedBookControl,
@@ -69,5 +70,37 @@ test('parked Book controls skip unused phases, isolate misses and serialize comp
     ['seal', ['one']],
     ['seal', ['two']],
   ]);
+  expect(admission.running.normal).toBe(0);
+});
+
+test('Book references keep their own tokens across targets and competing observations with one permit', async () => {
+  const admission = new Admission({ permits: 1, reserved: 1, queue: 4 });
+  const job = { deadline: Date.now() + 5000 };
+  const tokens = ['a', 'b', 'c', 'd'];
+  const groups: string[][] = [];
+  const owner = {};
+  await runComposedPageReads(
+    tokens,
+    async (token) => {
+      await runBookCatalogueRead(admission, job, async () => {
+        const observation = token === 'c' ? 'a' : token;
+        const held = await bookBindingStep(
+          'reference',
+          owner,
+          token === 'd' ? 'other' : 'books',
+          observation,
+          job.deadline,
+          token,
+          async (members) => {
+            groups.push([...members]);
+            return members.map((member) => (member === 'b' ? null : member));
+          },
+        );
+        expect(held).toBe(token === 'b' ? null : token);
+      });
+    },
+    () => {},
+  );
+  expect(groups).toEqual([['a', 'b'], ['c'], ['d']]);
   expect(admission.running.normal).toBe(0);
 });

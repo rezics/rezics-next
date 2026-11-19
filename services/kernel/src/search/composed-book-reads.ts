@@ -1,3 +1,9 @@
+import {
+  bindingSteps,
+  withBookBindingSteps,
+  type BindingOffer,
+  type BindingStep,
+} from '../request/book-binding-steps.ts';
 import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Admission, AdmissionYield, JobContext } from '../http/admission.ts';
@@ -119,7 +125,46 @@ export function composedBookCurrent(
   return (role === 'aliasCurrent' ? aliasCurrent : releaseCurrent).offer({ owner, expected, read });
 }
 
+async function readBindings(waiting: NativeRole<BindingOffer, unknown>[], check: () => void) {
+  const replies = new Map<(typeof waiting)[number], () => void>();
+  for (const members of Map.groupBy(waiting, (v) => v.owner).values()) {
+    for (const peers of Map.groupBy(members, (v) => v.cohort).values()) {
+      const groups: (typeof peers)[] = [];
+      for (const peer of peers) {
+        const group = groups.find((g) => g.every((v) => v.key !== peer.key));
+        if (group) group.push(peer);
+        else groups.push([peer]);
+      }
+      for (const group of groups) {
+        try {
+          check();
+          const first = group.reduce((a, b) => (a.deadline <= b.deadline ? a : b));
+          const rows = await first.admit(() =>
+            first.read(
+              group.map((v) => v.input),
+              first.deadline,
+            ),
+          );
+          if (rows.length !== group.length) throw new TypeError('Incomplete Book binding');
+          group.forEach((v, i) => replies.set(v, () => v.answer.resolve(rows[i])));
+        } catch (error) {
+          for (const v of group) replies.set(v, () => v.answer.reject(error));
+        }
+      }
+    }
+  }
+  return replies;
+}
+const bindingStages = Object.fromEntries(bindingSteps.map((key) => [key, nativePhase(readBindings)])) as Record<
+  BindingStep,
+  ReturnType<typeof nativePhase<BindingOffer, unknown>>
+>;
+
 const controls = {
+  previousWindow: phase(readPageControls),
+  claim: phase(readPageControls),
+  savePit: phase(readPageControls),
+  transfer: phase(readPageControls),
   load: phase(readPageControls),
   saveReservation: phase(readPageControls),
   saveWindow: phase(readPageControls),
@@ -135,13 +180,28 @@ const starts = phase(readRole);
 const identities = phase(readBookIdentities);
 const finals = phase(readRole);
 const phases = [
+  bindingStages.definitions.stage,
+  bindingStages.registration.stage,
   cuts,
+  controls.claim,
+  bindingStages.unopened.stage,
+  bindingStages.pitOwner.stage,
+  bindingStages.beforePit.stage,
+  bindingStages.afterPit.stage,
+  bindingStages.retain.stage,
+  controls.savePit,
+  bindingStages.adopt.stage,
+  controls.transfer,
+  bindingStages.reference.stage,
+  bindingStages.restore.stage,
   controls.load,
+  controls.previousWindow,
   controls.plan,
   starts,
   controls.reserve,
   controls.saveReservation,
   controls.dispatch,
+  bindingStages.successor.stage,
   identities,
   controls.complete,
   controls.saveWindow,
@@ -152,6 +212,7 @@ const phases = [
   aliasCurrent.stage,
   controls.seal,
   finals,
+  bindingStages.release.stage,
   releaseCurrent.stage,
 ];
 
@@ -172,7 +233,11 @@ const catalogue = new AsyncLocalStorage<{ child: Child; yieldPermit: AdmissionYi
 export function runBookCatalogueRead<T>(admission: Admission, job: JobContext, run: () => Promise<T>) {
   const child = active.getStore();
   return admission.run('normal', job, (yieldPermit) =>
-    child ? catalogue.run({ child, yieldPermit, admit: (work) => admission.run('normal', job, work) }, run) : run(),
+    child
+      ? catalogue.run({ child, yieldPermit, admit: (work) => admission.run('normal', job, work) }, () =>
+          withBookBindingSteps((step, offer) => bindingStages[step].offer(offer), run),
+        )
+      : run(),
   );
 }
 

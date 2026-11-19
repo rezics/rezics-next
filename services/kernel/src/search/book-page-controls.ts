@@ -21,7 +21,31 @@ const saveObservation = control(
    WHERE (o.partition_no,o.observation)=(i.home,i.observation) AND o.consumer_work IS NOT DISTINCT FROM i.previous
      AND o.state='open' RETURNING o.observation AS id`,
 );
+const saveRegistration = control(
+  { home: 'integer', registration: 'text', work: 'text', previous: 'text', bootstrap: 'text' },
+  `UPDATE search.public_filter_registration r SET consumer_work=i.work,consumer_bootstrap=i.bootstrap FROM input i
+   WHERE (r.partition_no,r.id)=(i.home,i.registration) AND r.consumer_work IS NOT DISTINCT FROM i.previous RETURNING r.id`,
+);
 export const pageControls = {
+  previousWindow: control(
+    { home: 'integer', observation: 'text', execution: 'text' },
+    `SELECT e.observation AS id,e.consumer_window FROM input i JOIN search.public_filter_execution e
+       ON (e.partition_no,e.observation,e.id)=(i.home,i.observation,i.execution)`,
+  ),
+  claim: saveRegistration,
+  savePit: saveRegistration,
+  transfer: control(
+    { home: 'integer', registration: 'text', work: 'text', bootstrap: 'text', observation: 'text', adopted: 'text' },
+    `, claimed AS MATERIALIZED (
+       SELECT i.* FROM input i JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(i.home,i.registration)
+       WHERE r.consumer_work=i.work AND r.consumer_bootstrap=i.bootstrap ORDER BY r.id FOR UPDATE OF r),
+     moved AS (UPDATE search.public_filter_observation o SET consumer_work=i.adopted,consumer_bootstrap=i.bootstrap
+       FROM claimed i WHERE (o.partition_no,o.registration,o.observation)=(i.home,i.registration,i.observation)
+         AND o.state='open' AND o.consumer_work IS NULL RETURNING o.partition_no,o.registration)
+     UPDATE search.public_filter_registration r SET consumer_work=NULL,consumer_bootstrap=NULL FROM moved o
+     WHERE (r.partition_no,r.id)=(o.partition_no,o.registration) RETURNING r.id`,
+  ),
+
   load: control(
     { home: 'integer', observation: 'text' },
     `SELECT o.observation AS id,o.consumer_work FROM input i JOIN search.public_filter_observation o
@@ -154,7 +178,13 @@ export const pageControls = {
 };
 
 export type ControlPhase = keyof typeof pageControls;
-export type ControlRow = { id: string; rounds?: number; charged?: number; consumer_work?: string | null };
+export type ControlRow = {
+  id: string;
+  rounds?: number;
+  charged?: number;
+  consumer_window?: string | null;
+  consumer_work?: string | null;
+};
 export type PageControl = {
   phase: ControlPhase;
   pool: Pool;

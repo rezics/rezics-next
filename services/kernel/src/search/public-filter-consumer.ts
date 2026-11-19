@@ -1189,6 +1189,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   }
   type Page = {
     context: PublicFilterConsumerContext;
+    bookBinding?: boolean;
     captureWitness?: PublicFilterCaptureWitness;
     bookPopulation?: string;
     bookCut?: Pick<PublicSourceBootstrap, 'definition' | 'covered' | 'bookPopulation'>;
@@ -1255,7 +1256,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   ) {
     const meter = page.m;
     return (
-      page.bookPopulation &&
+      (page.bookPopulation || (page.bookBinding && ['claim', 'savePit', 'transfer'].includes(phase))) &&
       composedBookControl({
         phase,
         observation,
@@ -1515,7 +1516,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     registration: boolean,
     m: Meter,
     page?: Page,
-    phase?: 'saveReservation' | 'saveWindow',
+    phase?: 'claim' | 'savePit' | 'saveReservation' | 'saveWindow',
   ) {
     const encoded = encodeState(work);
     if (Buffer.byteLength(encoded) > 1024 * 1024) throw new ConsumerFailure('dependency_unavailable');
@@ -1529,7 +1530,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     ];
     const observation = q?.snapshot.observation;
     const grouped =
-      page && phase && observation && groupControl(page, phase, observation, observation, null, () => values);
+      page &&
+      phase &&
+      groupControl(
+        page,
+        phase,
+        registration ? work.registration.id : observation!,
+        registration ? work.registration.id : observation!,
+        null,
+        () => values,
+      );
     if (grouped) {
       if (!(await grouped)) throw new ConsumerFailure('source_pending');
     } else {
@@ -2070,7 +2080,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (work.bootstrap.snapshot === 'prepared') work.materializing = retained.queried;
       else work.queried = retained.queried;
       own(retained.queried, context, m);
-      encoded = await save(work, encoded, true, m);
+      encoded = await save(work, encoded, true, m, bookCut ? page : undefined, 'savePit');
     }
     if (work.materializing && !work.queried) {
       // A fresh attached cut may retain one small segment in this capture. It
@@ -2332,6 +2342,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     const q = work.queried!;
     await physical(q, m, context);
+    let transferred = false;
     if (!work.adopted && !publication) {
       // Native adopt joins the exact PIT and performs the Source CAS. The
       // Book capture has already recovered the cut before opening that PIT.
@@ -2357,7 +2368,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         return m.unavailable('observation_lost');
       work.adopted = true;
-      encoded = await save(work, encoded, true, m);
+      const transfer =
+        bookCut &&
+        page &&
+        groupControl(page, 'transfer', q.snapshot.observation, work.registration.id, null, () => [
+          work.registration.partition,
+          work.registration.id,
+          encoded,
+          work.bootstrap.id,
+          q.snapshot.observation,
+          encodeState(work),
+        ]);
+      if (transfer) {
+        if (!(await transfer)) return m.unavailable('source_pending');
+        m.cost.frontierWrites += 2;
+        transferred = true;
+      } else encoded = await save(work, encoded, true, m);
     }
     if (config.discoveryPreparation === 'repair' && !work.bootstrap.coveragePublication) {
       // Move the original work and release the registration together. A retry
@@ -2382,11 +2408,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return { status: 'preparing', repair: job, cost: m.cost };
     }
     // Transfer work to THIS immutable observation before clearing the registration's bootstrap intent.
-    await save(work, null, false, m);
-    await m.sql(
-      'UPDATE search.public_filter_registration SET consumer_work=NULL,consumer_bootstrap=NULL WHERE (partition_no,id)=($1,$2) AND consumer_work=$3',
-      [work.registration.partition, work.registration.id, encoded],
-    );
+    if (!transferred) {
+      await save(work, null, false, m);
+      await m.sql(
+        'UPDATE search.public_filter_registration SET consumer_work=NULL,consumer_bootstrap=NULL WHERE (partition_no,id)=($1,$2) AND consumer_work=$3',
+        [work.registration.partition, work.registration.id, encoded],
+      );
+    }
 
     if (publication) return { status: 'captured', queried: q, repair: job, cost: m.cost };
     if (page && bookCut) {
@@ -2473,12 +2501,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       );
       if (registered.status !== 'registered') return m.unavailable('registration_missing');
       const registration = registered.registration;
-      const old = (
-        await m.sql<{ consumer_work: string | null }>(
-          'SELECT consumer_work FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)',
-          [registration.partition, registration.id],
-        )
-      ).rows[0];
+      if (page && snapshot === 'pit' && !publication && 'bookTypeList' in canonical && canonical.bookTypeList)
+        page.bookBinding = true;
+      const old =
+        registered.consumerWork !== undefined
+          ? { consumer_work: registered.consumerWork }
+          : (
+              await m.sql<{ consumer_work: string | null }>(
+                'SELECT consumer_work FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)',
+                [registration.partition, registration.id],
+              )
+            ).rows[0];
       if (old?.consumer_work) {
         const retained = decodeState<ConsumerWork>(old.consumer_work);
         if (mixedPage)
@@ -2591,7 +2624,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         charged: 0,
         adopted: false,
       };
-      const encoded = await save(work, null, true, m);
+      const encoded = await save(work, null, true, m, page?.bookBinding ? page : undefined, 'claim');
       if (
         begun.status === 'preparing' ||
         m.enrollmentOnly ||
@@ -2693,12 +2726,22 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (prefix) {
         if (typeof prefix.execution !== 'string' || !Number.isInteger(prefix.consumed) || prefix.consumed < 0)
           throw new TypeError('Invalid retained consumed prefix');
-        const row = (
-          await m.sql<{ consumer_window: string | null }>(
-            'SELECT consumer_window FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
-            [locatorHome(q.snapshot.observation), q.snapshot.observation, prefix.execution],
-          )
-        ).rows[0];
+        const observation = q.snapshot.observation;
+        const grouped =
+          page &&
+          groupControl(page, 'previousWindow', observation, observation, null, () => [
+            locatorHome(observation),
+            observation,
+            prefix.execution,
+          ]);
+        const row = grouped
+          ? await grouped
+          : (
+              await m.sql<{ consumer_window: string | null }>(
+                'SELECT consumer_window FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
+                [locatorHome(q.snapshot.observation), q.snapshot.observation, prefix.execution],
+              )
+            ).rows[0];
         if (!row?.consumer_window) return m.unavailable('observation_lost');
         previousEncoded = row.consumer_window;
         previous = decodeState<RetainedWindow>(row.consumer_window);

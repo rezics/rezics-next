@@ -1,3 +1,4 @@
+import { bookBindingStep, bookCostShare } from '../request/book-binding-steps.ts';
 import { MAX_PAGE_READS } from '@rezics/composition';
 import { isDeepStrictEqual } from 'node:util';
 import { bookPreparationTiming } from '../search/book-preparation-timing.ts';
@@ -878,6 +879,18 @@ export async function readNativePublicFilterSourceDefinition(
   if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
   const release = await readRelease(db, row.release_digest);
   if (!release || Object.keys(release.types).length === 0) throw new BindingError('definition_missing');
+  return { definition: restoreDefinition(id, row, release, search), bytes };
+}
+type DefinitionRow = Pick<
+  NonNullable<Awaited<ReturnType<typeof readDefinition.run>>>,
+  'source_id' | 'configuration' | 'owner_epoch' | 'release_digest' | 'capture' | 'dependency_keys'
+>;
+function restoreDefinition(
+  id: string,
+  row: DefinitionRow,
+  release: PublicFilterProjectionMeaning['release'],
+  search: NativeSourceBindingPorts['search'],
+): PublicFilterSourceDefinition {
   let capture: PublicSourceCaptureInput;
   let keys: readonly PublicFilterDependencyKey[];
   const meaning = {
@@ -892,19 +905,16 @@ export async function readNativePublicFilterSourceDefinition(
   }
   if (!isDeepStrictEqual(keys, row.dependency_keys)) throw new BindingError('binding_mismatch');
   return {
-    definition: {
-      source: {
-        id: row.source_id,
-        partition: 0,
-        epoch: row.owner_epoch,
-        configuration: row.configuration,
-      },
-      readDefinition: id,
-      meaning,
-      capture,
-      dependencyKeys: keys,
+    source: {
+      id: row.source_id,
+      partition: 0,
+      epoch: row.owner_epoch,
+      configuration: row.configuration,
     },
-    bytes,
+    readDefinition: id,
+    meaning,
+    capture,
+    dependencyKeys: keys,
   };
 }
 function checkDeadline(context: PublicFilterConsumerContext): void {
@@ -1031,8 +1041,23 @@ export function createNativePublicFilterSourceBinding(
     } else if (!isDeepStrictEqual(own.meaning.release, retained.meaning.release))
       throw new BindingError('binding_mismatch');
   }
-  async function loadBootstrap(locator: string, db: Pool, knownDefinition?: PublicFilterSourceDefinition) {
-    const row = await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) });
+  function bookPopulationKey(
+    publication: string,
+    generation: string,
+    epoch: number,
+    withdrawals: string | null,
+    definition: PublicFilterSourceDefinition,
+  ) {
+    return JSON.stringify([publication, generation, epoch, withdrawals, definition.dependencyKeys]);
+  }
+  type BootstrapRow = NonNullable<Awaited<ReturnType<typeof readBootstrap.run>>>;
+  async function loadBootstrap(
+    locator: string,
+    db: Pool,
+    knownDefinition?: PublicFilterSourceDefinition,
+    captured?: BootstrapRow,
+  ) {
+    const row = captured ?? (await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) }));
     if (!row) throw new BindingError('observation_lost');
     if (knownDefinition && knownDefinition.readDefinition !== row.read_definition)
       throw new BindingError('binding_mismatch');
@@ -1052,13 +1077,13 @@ export function createNativePublicFilterSourceBinding(
       'bookTypeList' in definition.capture &&
       definition.capture.bookTypeList === true
         ? {
-            bookPopulation: JSON.stringify([
+            bookPopulation: bookPopulationKey(
               row.coverage_publication,
               row.coverage_generation,
               row.owner_epoch,
               row.withdrawal_digest,
-              definition.dependencyKeys,
-            ]),
+              definition,
+            ),
           }
         : {}),
     };
@@ -2437,10 +2462,6 @@ export function createNativePublicFilterSourceBinding(
         const keys = ports.search.deriveDependencyKeys(meaning, capture);
         const encoded = encode(capture);
         if (Buffer.byteLength(encoded) > 1048576) throw new BindingError('binding_mismatch');
-        // Caller digest equality is checked again against the actual immutable release owner.
-        const release = await readRelease(db, meaning.digest);
-        if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
-          throw new BindingError('definition_missing');
         const definitionInput = {
           route_digest: routeDigest,
           release_digest: meaning.digest,
@@ -2452,6 +2473,92 @@ export function createNativePublicFilterSourceBinding(
             ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
           ].sort(),
         };
+        if (!readOnly && 'bookTypeList' in capture && capture.bookTypeList === true) {
+          const plans = bookBindingStep(
+            'definitions',
+            binding,
+            meaning.digest,
+            encoded,
+            context.deadline,
+            { capture, meaning, definitionInput },
+            async (members, deadline) => {
+              const result = await run({ deadline }, async (cost, db) => {
+                const release = await readRelease(db, meaning.digest);
+                if (!release || !Object.keys(release.types).length) throw new BindingError('definition_missing');
+                const inputs = members.map((m) =>
+                  isDeepStrictEqual(m.meaning.release, release) ? m.definitionInput : null,
+                );
+                if (!inputs.some((i) => i !== null)) throw new BindingError('definition_missing');
+                const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
+                if (!source) throw new BindingError('owner_unavailable');
+                const rows = await db.query<{ read_definition: string; capture_digest: string }>(
+                  `WITH input AS (SELECT * FROM jsonb_to_recordset($1) i(capture_digest text,capture text,dependency_keys jsonb,coverage_keys text[])),
+                 owner AS MATERIALIZED (SELECT s.* FROM semantic.public_filter_source s JOIN core.partition p USING(partition_no)
+                   WHERE (s.partition_no,s.source_id,s.configuration)=(0,$2,$3) AND s.route_digest=$4
+                     AND s.owner_epoch=p.epoch AND p.write_state='active'),
+                 retained AS MATERIALIZED (
+                   SELECT d.read_definition,d.capture_digest FROM owner s CROSS JOIN input i JOIN semantic.public_filter_read_definition d
+                     ON d.partition_no=0 AND d.release_digest=$5 AND d.capture_digest=i.capture_digest AND d.capture=i.capture
+                       AND d.dependency_keys=i.dependency_keys AND d.coverage_keys=i.coverage_keys
+                   WHERE (d.source_id,d.configuration)=(s.source_id,s.configuration) FOR SHARE OF d),
+                 added AS (
+                   INSERT INTO semantic.public_filter_read_definition
+                     (partition_no,source_id,configuration,release_digest,capture_digest,capture,dependency_keys,coverage_keys)
+                   SELECT 0,s.source_id,s.configuration,$5,i.capture_digest,i.capture,i.dependency_keys,i.coverage_keys FROM owner s CROSS JOIN input i
+                   WHERE NOT EXISTS (SELECT 1 FROM retained r WHERE r.capture_digest=i.capture_digest) ORDER BY i.capture_digest
+                   ON CONFLICT(partition_no,source_id,configuration,release_digest,capture_digest) DO UPDATE
+                     SET coverage_keys=EXCLUDED.coverage_keys WHERE public_filter_read_definition.capture=EXCLUDED.capture
+                       AND public_filter_read_definition.dependency_keys=EXCLUDED.dependency_keys RETURNING read_definition,capture_digest)
+                 SELECT * FROM retained UNION ALL SELECT * FROM added`,
+                  [
+                    JSON.stringify(inputs.filter((i) => i !== null)),
+                    source.source_id,
+                    source.configuration,
+                    routeDigest,
+                    meaning.digest,
+                  ],
+                );
+                const ids = new Map(rows.rows.map((r) => [r.capture_digest, r.read_definition]));
+                return {
+                  cost,
+                  definitions: inputs.map((i, index) => {
+                    if (!i) return 'definition_missing' as const;
+                    const readDefinition = ids.get(i.capture_digest);
+                    if (!readDefinition) return 'configuration_changed' as const;
+                    const definition: PublicFilterSourceDefinition = {
+                      source: {
+                        id: source.source_id,
+                        partition: 0,
+                        epoch: source.owner_epoch,
+                        configuration: source.configuration,
+                      },
+                      readDefinition,
+                      meaning: members[index]!.meaning,
+                      capture: members[index]!.capture,
+                      dependencyKeys: i.dependency_keys,
+                    };
+                    freeze(definition);
+                    resolvedDefinitions.add(definition);
+                    return definition;
+                  }),
+                };
+              });
+              return members.map((_, index) => {
+                const cost = bookCostShare(result.cost, index, members.length);
+                if (!('definitions' in result)) return { ...result, cost };
+                const definition = result.definitions[index]!;
+                return typeof definition === 'string'
+                  ? fail(definition, cost)
+                  : { status: 'resolved' as const, definition, cost };
+              });
+            },
+          );
+          if (plans) return plans;
+        }
+        // Caller digest equality is checked again against the actual immutable release owner.
+        const release = await readRelease(db, meaning.digest);
+        if (!release || !isDeepStrictEqual(release, meaning.release) || Object.keys(release.types).length === 0)
+          throw new BindingError('definition_missing');
         if (readOnly) {
           const [row] = await nativeSourceQuery(db, lookupDefinition, definitionInput);
           if (!row) throw new BindingError('definition_missing');
@@ -2478,17 +2585,18 @@ export function createNativePublicFilterSourceBinding(
     join: (request, context) => joinNative(request, context),
   };
   type CaptureMember = { bootstrap: string; definition: string; request_key: string; consumer: string };
+  type BookCutReply = { bootstrap: string | null; awaiting: boolean | null; row?: BootstrapRow | undefined };
   type BookCutGroup = {
     member: CaptureMember;
     cost: BindingCost;
     capture: (members: CaptureMember[]) => Promise<
       | {
-          rows: readonly { definition: string | null; bootstrap: string | null; awaiting: boolean | null }[];
+          rows: readonly (BookCutReply & { definition: string | null })[];
           cost: BindingCost;
         }
       | PublicFilterBindingFailure
     >;
-    answer: PromiseWithResolvers<{ bootstrap: string | null; awaiting: boolean | null }>;
+    answer: PromiseWithResolvers<BookCutReply>;
   };
   async function beginRetained(
     request: Parameters<PublicFilterSourceBootstrapBinding['begin']>[0],
@@ -2498,6 +2606,7 @@ export function createNativePublicFilterSourceBinding(
     usePublishedCoverage = false,
     definition?: PublicFilterSourceDefinition,
     collect?: (item: BookCutGroup) => void,
+    bookRegistration?: Awaited<ReturnType<typeof ports.search.readGenerationPublicationCustody>>,
   ): Promise<NativePublicFilterPreparation> {
     const deadline = context.deadline;
     let capture: PublicSourceCaptureInput, consumer: PublicFilterConsumer;
@@ -2528,14 +2637,16 @@ export function createNativePublicFilterSourceBinding(
       addCost(cost, resolved.cost);
       // A new cut depends on the physical registration. Its earlier pages may have expired.
       // Recovery below the binding resolves observations by their original bootstrap.
-      const registration = await ports.search.readGenerationPublicationCustody(
-        pool,
-        consumer,
-        0,
-        { deadline },
-        undefined,
-        'registration',
-      );
+      const registration =
+        bookRegistration ??
+        (await ports.search.readGenerationPublicationCustody(
+          pool,
+          consumer,
+          0,
+          { deadline },
+          undefined,
+          'registration',
+        ));
       addCost(cost, registration.cost);
       if (!('definition' in registration)) return { ...registration, cost };
       requireSameDefinition(resolved.definition, registration.definition);
@@ -2570,8 +2681,8 @@ export function createNativePublicFilterSourceBinding(
               ))`
           : 'NULL::jsonb';
         const newId = randomUUID();
-        const attachedCut = async (id: string) => {
-          const cut = await loadBootstrap('0:' + id, db, resolved.definition);
+        const attachedCut = async (id: string, row?: BootstrapRow) => {
+          const cut = await loadBootstrap('0:' + id, db, resolved.definition, row);
           const bootstrap = cut.bootstrap;
           // A conflict can return an earlier begun cut with an uncertain PIT.
           // Only the UUID inserted by THIS invocation may take the fresh path.
@@ -2587,6 +2698,41 @@ export function createNativePublicFilterSourceBinding(
                 // Recheck under the actual Search registration claim. A competing
                 // opener can complete between cut insertion and claim acquisition.
                 return run({ deadline }, async (cost, store) => {
+                  const batch = bookBindingStep(
+                    'unopened',
+                    binding,
+                    bootstrap.consumer.physicalTarget,
+                    id,
+                    deadline,
+                    {
+                      id,
+                      registration: registration.registration.id,
+                      locator: bootstrap.id,
+                      consumer: ports.search.encodeConsumer(bootstrap.consumer),
+                      covered: ports.search.encodeState(bootstrap.covered),
+                    },
+                    async (members, until) => {
+                      const result = await run({ deadline: until }, async (shared, db) => {
+                        const rows = await db.query<{ id: string }>(
+                          `/* semantic.native-keyed:${members.length * 4}:${members.length * 9} */
+                           SELECT i.id FROM jsonb_to_recordset($1) i(id uuid,registration text,locator text,consumer text,covered text)
+                           JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,i.id)
+                           JOIN core.partition p ON p.partition_no=b.partition_no AND p.write_state='active' AND p.epoch=b.owner_epoch
+                           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(b.partition_no,i.registration)
+                           WHERE b.state='begun' AND b.queried IS NULL AND r.state='active' AND r.consumer_bootstrap=i.locator AND r.consumer=i.consumer
+                             AND NOT EXISTS (SELECT 1 FROM search.public_filter_observation o WHERE (o.partition_no,o.registration)=(0,r.id)
+                               AND o.state='open' AND o.prepared_build IS NULL AND md5(o.covered)=md5(i.covered) AND o.covered=i.covered)`,
+                          [JSON.stringify(members)],
+                        );
+                        return { ids: new Set(rows.rows.map((r) => r.id)), cost: shared };
+                      });
+                      return members.map((m, i) => {
+                        const cost = bookCostShare(result.cost, i, members.length);
+                        return 'ids' in result ? { unopened: result.ids.has(m.id), cost } : { ...result, cost };
+                      });
+                    },
+                  );
+                  if (batch) return batch;
                   const result = await store.query(
                     `/* semantic.native-keyed:4:9 */
                     SELECT b.bootstrap FROM semantic.public_filter_bootstrap b
@@ -2611,6 +2757,67 @@ export function createNativePublicFilterSourceBinding(
               adopt(queried: PublicFilterQueriedObservation) {
                 const q = structuredClone(queried);
                 return run({ deadline }, async (adoptionCost, store) => {
+                  if (q.snapshot.kind !== 'pit' || !isDeepStrictEqual(q.consumer, bootstrap.consumer))
+                    throw new BindingError('binding_mismatch');
+                  const definitionPayload = registration.registeredDefinition;
+                  const batch =
+                    definitionPayload !== undefined &&
+                    bookBindingStep(
+                      'adopt',
+                      binding,
+                      JSON.stringify([q.consumer.physicalTarget, q.consumer.incarnation, q.consumer.meaningDigest]),
+                      id,
+                      deadline,
+                      {
+                        id,
+                        registration: registration.registration.id,
+                        definition: definitionPayload,
+                        observation: q.snapshot.observation,
+                        queried: ports.search.encodeState(q),
+                        covered: ports.search.encodeState(bootstrap.covered),
+                      },
+                      async (members, until) => {
+                        const result = await run({ deadline: until }, async (shared, db) => {
+                          // Compare the retained custody bytes and install the Source adoption in the same statement.
+                          const rows = await db.query<{ id: string }>(
+                            `/* semantic.native-keyed:${members.length * 5 + 2}:${members.length * 11 + 2}:${members.length} */
+                          WITH admitted AS MATERIALIZED (
+                            SELECT i.* FROM jsonb_to_recordset($1) i(id uuid,registration text,definition text,observation text,queried text,covered text)
+                            JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,i.observation)
+                            JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+                            JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
+                            WHERE r.id=i.registration AND r.state='active' AND r.definition=i.definition AND r.physical_target=$2 AND t.incarnation=$3
+                              AND o.state='open' AND o.queried=i.queried AND o.covered=i.covered AND o.expires_at>$4
+                              AND (EXISTS (SELECT 1 FROM semantic.definition_release WHERE route=0 AND digest=$5)
+                                OR EXISTS (SELECT 1 FROM semantic.release_composite WHERE digest=$5)))
+                          UPDATE semantic.public_filter_bootstrap b SET state='adopted',queried=i.observation
+                          FROM admitted i, core.partition p WHERE (b.partition_no,b.bootstrap)=(0,i.id)
+                            AND p.partition_no=0 AND p.write_state='active' AND p.epoch=b.owner_epoch
+                            AND (b.state='begun' OR (b.state='adopted' AND b.queried=i.observation)) RETURNING b.bootstrap AS id`,
+                            [
+                              JSON.stringify(members),
+                              q.consumer.physicalTarget,
+                              q.consumer.incarnation,
+                              Date.now(),
+                              q.consumer.meaningDigest,
+                            ],
+                          );
+                          return { ids: new Set(rows.rows.map((r) => r.id)), cost: shared };
+                        });
+                        return members.map((m, i) => {
+                          const cost = bookCostShare(result.cost, i, members.length);
+                          return 'ids' in result ? { adopted: result.ids.has(m.id), cost } : { ...result, cost };
+                        });
+                      },
+                    );
+                  if (batch) {
+                    const result = await batch;
+                    addCost(adoptionCost, result.cost);
+                    if ('reason' in result) return { ...result, cost: adoptionCost };
+                    if (result.adopted)
+                      return { status: 'adopted' as const, bootstrap, queried: q, cost: adoptionCost };
+                    // Resolve a legacy payload or concurrent loss through the original custody error mapping.
+                  }
                   const retained = await ports.search.readConsumerCustody(pool, { queried: q }, { deadline });
                   addCost(adoptionCost, retained.cost);
                   if (retained.status !== 'found') return { ...retained, cost: adoptionCost };
@@ -2650,7 +2857,7 @@ export function createNativePublicFilterSourceBinding(
           // The group can spend the full bounded withdrawal proof. A failed
           // or missing attachment remains charged and proceeds to ordinary recovery.
           if (inputLimit - cost.inputKeys < 210 + 2) throw new BindingError('owner_unavailable');
-          const answer = Promise.withResolvers<{ bootstrap: string | null; awaiting: boolean | null }>();
+          const answer = Promise.withResolvers<BookCutReply>();
           collect({
             member,
             cost,
@@ -2659,14 +2866,27 @@ export function createNativePublicFilterSourceBinding(
               run({ deadline }, async (shared, store) => {
                 try {
                   const rows = await nativeSourceQuery(store, captureBookWithdrawals, { ...captureInputs, members });
-                  return { rows, cost: shared };
+                  const saved = await store.query<BootstrapRow>(
+                    `SELECT b.bootstrap::text,b.read_definition::text,b.consumer,b.snapshot_kind,b.owner_epoch,
+                       b.source_position::text,b.state,b.account_after,b.queried,b.publication_job::text,b.publication_observation,
+                       b.publication_execution,b.coverage_generation::text,b.coverage_after,b.coverage_root,b.coverage_sealed,
+                       b.coverage_publication::text, encode(sha256(convert_to(b.book_withdrawals::text,'UTF8')),'hex') AS withdrawal_digest
+                     FROM semantic.public_filter_bootstrap b JOIN core.partition p USING(partition_no)
+                     WHERE b.partition_no=0 AND b.bootstrap=ANY($1::uuid[]) AND b.owner_epoch=p.epoch AND p.write_state='active'`,
+                    [rows.flatMap((r) => (r.bootstrap ? [r.bootstrap] : []))],
+                  );
+                  const byId = new Map(saved.rows.map((r) => [r.bootstrap, r]));
+                  return {
+                    rows: rows.map((r) => ({ ...r, row: r.bootstrap ? byId.get(r.bootstrap) : undefined })),
+                    cost: shared,
+                  };
                 } catch {
                   return fail(Date.now() >= deadline ? 'deadline' : 'owner_unavailable', shared);
                 }
               }),
           });
           const captured = await answer.promise;
-          if (captured.bootstrap) return attachedCut(captured.bootstrap);
+          if (captured.bootstrap) return attachedCut(captured.bootstrap, captured.row);
           if (captured.awaiting) throw new BindingError('owner_unavailable');
         } else {
           const attached = await db.query<{ bootstrap: string }>(
@@ -3180,6 +3400,7 @@ export function createNativePublicFilterSourceBinding(
       throw new TypeError('Incompatible Book captures');
     if (inputs.length === 1)
       return [await beginRetained(first, context, undefined, first.inputLimit, true, first.definition)];
+    const registrations = await ports.search.readBookRegistrations?.(pool, inputs, context);
     const begun: Promise<NativePublicFilterPreparation>[] = [];
     let next = 0;
     // A parked member owns no checkout. Bound the registration and final cut loads on either side of the group.
@@ -3187,9 +3408,16 @@ export function createNativePublicFilterSourceBinding(
       while (next < inputs.length) {
         const i = next++,
           v = inputs[i]!;
-        begun[i] = beginRetained(v, context, undefined, v.inputLimit, true, v.definition, waits[i]!.resolve).finally(
-          () => waits[i]!.resolve(undefined),
-        );
+        begun[i] = beginRetained(
+          v,
+          context,
+          undefined,
+          v.inputLimit,
+          true,
+          v.definition,
+          waits[i]!.resolve,
+          registrations?.[i],
+        ).finally(() => waits[i]!.resolve(undefined));
         void begun[i]!.catch(() => {});
         await waits[i]!.promise;
       }
@@ -4082,7 +4310,124 @@ export function createNativePublicFilterSourceBinding(
     if (result.status !== 'account') throw new BindingError(result.reason);
     return result;
   });
-  nativeBookPageRestorations.set(bootstrapBinding, (request, context) => joinNative(request, context, 'book-page'));
+  nativeBookPageRestorations.set(bootstrapBinding, async (request, context) => {
+    const q = structuredClone(request.queried);
+    const releaseDigest = q.consumer.meaningDigest;
+    if (releaseDigest !== null && q.snapshot.kind === 'pit') {
+      const batch = bookBindingStep(
+        'restore',
+        bootstrapBinding,
+        JSON.stringify([q.consumer.physicalTarget, q.consumer.incarnation, releaseDigest]),
+        q.snapshot.observation,
+        context.deadline,
+        q,
+        async (members, deadline) => {
+          const result = await run({ deadline }, async (cost, db) => {
+            const release = await readRelease(db, releaseDigest);
+            if (!release || !Object.keys(release.types).length) throw new BindingError('definition_missing');
+            const rows = await db.query<
+              DefinitionRow & {
+                id: string;
+                bootstrap: string;
+                covered: string;
+                read_definition: string;
+                definition: string;
+                coverage_publication: string;
+                coverage_generation: string;
+                withdrawal_digest: string | null;
+              }
+            >(
+              `WITH members AS (SELECT * FROM jsonb_to_recordset($1) i(id text,queried text,consumer text))
+              SELECT i.id,b.bootstrap::text,o.covered,b.read_definition::text,r.definition,b.coverage_publication::text,b.coverage_generation::text,
+                encode(sha256(convert_to(b.book_withdrawals::text,'UTF8')),'hex') AS withdrawal_digest,
+                s.source_id::text,s.configuration::text,s.owner_epoch,d.release_digest,d.capture,d.dependency_keys
+              FROM members i JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=(0,i.id)
+              JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(0,o.registration)
+              JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(0,r.physical_target)
+              JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(0,
+                CASE WHEN o.consumer_bootstrap ~ '^0:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  THEN substring(o.consumer_bootstrap FROM 3)::uuid END)
+              JOIN semantic.public_filter_read_definition d ON (d.partition_no,d.read_definition)=(0,b.read_definition)
+              JOIN semantic.public_filter_source s ON (s.partition_no,s.source_id,s.configuration)=(0,d.source_id,d.configuration)
+              JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=b.owner_epoch AND p.epoch=s.owner_epoch
+              WHERE o.queried=i.queried AND o.state='open' AND o.expires_at>$2 AND r.state='active'
+                AND r.physical_target=$3 AND t.incarnation=$4 AND d.release_digest=$5 AND s.route_digest=$6
+                AND b.consumer=i.consumer AND b.state='adopted' AND b.queried=i.id AND b.snapshot_kind='pit'
+                AND b.coverage_publication IS NOT NULL AND b.coverage_generation IS NOT NULL`,
+              [
+                JSON.stringify(
+                  members.map((q) => ({
+                    id: q.snapshot.observation,
+                    queried: ports.search.encodeState(q),
+                    consumer: encode(q.consumer),
+                  })),
+                ),
+                Date.now(),
+                q.consumer.physicalTarget,
+                q.consumer.incarnation,
+                releaseDigest,
+                routeDigest,
+              ],
+            );
+            return { rows: new Map(rows.rows.map((r) => [r.id, r])), release, cost };
+          });
+          return members.map((queried, i) => {
+            const cost = bookCostShare(result.cost, i, members.length);
+            if (!('rows' in result)) return { ...result, cost };
+            const row = result.rows.get(queried.snapshot.observation);
+            const fallback = { status: 'recover' as const, cost };
+            if (!row) return fallback;
+            try {
+              const covered = { observation: '0:' + row.bootstrap };
+              const definition = restoreDefinition(row.read_definition, row, result.release, ports.search);
+              if (
+                !('bookTypeList' in definition.capture) ||
+                !definition.capture.bookTypeList ||
+                row.covered !== ports.search.encodeState(covered)
+              )
+                return fallback;
+              const retained = ports.search.decodeState<{ digest: string; data: SourceBindingRetainedDefinition }>(
+                row.definition,
+              );
+              if (retained.digest !== hash(ports.search.encodeState(retained.data)))
+                return fail('binding_mismatch', cost);
+              requireSameDefinition(definition, retained.data);
+              freeze(definition);
+              return {
+                status: 'joined' as const,
+                definition,
+                queried,
+                covered,
+                execution: null,
+                cost,
+                bookPopulation: bookPopulationKey(
+                  row.coverage_publication,
+                  row.coverage_generation,
+                  row.owner_epoch,
+                  row.withdrawal_digest,
+                  definition,
+                ),
+              };
+            } catch (error) {
+              if (error instanceof BindingError) return fail(error.reason, cost);
+              if (error instanceof TypeError || error instanceof RangeError) return fail('binding_mismatch', cost);
+              return fallback;
+            }
+          });
+        },
+      );
+      if (batch) {
+        const result = await batch;
+        if (result.status !== 'recover') return result;
+        const single = await joinNative({ queried: q }, context, 'book-page');
+        const cost = publicFilterBindingCost();
+        addCost(cost, result.cost);
+        addCost(cost, single.cost);
+        return { ...single, cost };
+      }
+    }
+    return joinNative({ queried: q }, context, 'book-page');
+  });
   nativeBookPreparations.set(bootstrapBinding, beginBookPages);
   nativePreparations.set(bootstrapBinding, async (input, context) => {
     if (!('bootstrap' in input))

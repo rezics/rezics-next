@@ -166,13 +166,15 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
 
   // Each list still owns its capture or retained observation. Only its opening
   // publication inputs belong to the whole native Book request.
-  const bookPublications = new WeakMap<object, ReturnType<typeof openSubjectPublication>>();
+  const bookPublications = new WeakMap<object, Map<string | undefined, ReturnType<typeof openSubjectPublication>>>();
   function subjectPublication(context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object) {
-    if (!bookPage || acceptedRelease !== undefined) return openSubjectPublication(context, acceptedRelease);
-    let opening = bookPublications.get(bookPage);
+    if (!bookPage) return openSubjectPublication(context, acceptedRelease);
+    let releases = bookPublications.get(bookPage);
+    if (!releases) bookPublications.set(bookPage, (releases = new Map()));
+    let opening = releases.get(acceptedRelease);
     if (!opening) {
-      opening = openSubjectPublication(context);
-      bookPublications.set(bookPage, opening);
+      opening = openSubjectPublication(context, acceptedRelease);
+      releases.set(acceptedRelease, opening);
     }
     return opening;
   }

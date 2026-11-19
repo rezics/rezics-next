@@ -9,6 +9,7 @@ import { compileFilter } from './filter.ts';
 import {
   decodePublicFilterNativeState,
   encodePublicFilterNativeState,
+  readBookRegistrations,
   readGenerationPublicationCustody,
   readPublicFilterConsumerCustody,
   readPublicFilterRepairSettlement,
@@ -141,6 +142,7 @@ export function createSearchSourceBindingAdapter(
     decodeState: decodePublicFilterNativeState,
     coverageStart: publicFilterCoverageStart,
     readConsumerCustody: readPublicFilterConsumerCustody,
+    readBookRegistrations,
     readGenerationPublicationCustody,
     readRepairSettlement: readPublicFilterRepairSettlement,
     withRepairAllowance: withPublicFilterRepairAllowance,

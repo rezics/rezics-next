@@ -165,6 +165,7 @@ export interface PublicFilterCustody {
   ): Promise<
     | Readonly<{
         status: 'registered';
+        consumerWork?: string | null;
         registration: CustodyRegistration;
         consumer: PublicFilterConsumer;
         cost: CustodyCost;

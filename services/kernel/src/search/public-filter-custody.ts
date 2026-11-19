@@ -1,3 +1,4 @@
+import { bookBindingStep, bookCostShare, type BindingStep } from '../request/book-binding-steps.ts';
 import { lockPublicationAdmission, readPublicationFence } from './publication-admission.ts';
 import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
 import { encodeGenerationPublicationQueried } from './generation-publication-pin.ts';
@@ -353,12 +354,18 @@ async function retainedDefinition(
   meter: Meter,
   definition: CustodyDefinition<PublicCanonicalCaptureInput>,
 ) {
+  return encodeRetainedDefinition(definition, await hasReleaseAuthority(pool, meter, definition.meaning.digest));
+}
+function encodeRetainedDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>, installed: boolean) {
   const embedded = encode({ digest: digest(definition), data: definition });
   const embedsWithinLimit = Buffer.byteLength(embedded) <= 1_048_576;
-  if (!(await hasReleaseAuthority(pool, meter, definition.meaning.digest))) {
+  if (!installed) {
     if (!embedsWithinLimit) throw new Failure('definition_missing');
     return { encoded: embedded, previous: null };
   }
+  return { encoded: encodeInstalledDefinition(definition), previous: embedsWithinLimit ? embedded : null };
+}
+function encodeInstalledDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   // Installed releases share the same immutable owner reference at every size.
   const retained: CustodyRetainedDefinition = {
     ...definition,
@@ -369,7 +376,7 @@ async function retainedDefinition(
   };
   const encoded = encode({ digest: digest(retained), data: retained });
   requireValue(Buffer.byteLength(encoded) <= 1_048_576);
-  return { encoded, previous: embedsWithinLimit ? embedded : null };
+  return encoded;
 }
 async function engine<T>(
   search: OpenSearch,
@@ -1175,6 +1182,44 @@ export function createPublicFilterCustody(
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
   }
+  function bookRows<I>(
+    step: BindingStep,
+    cohort: string,
+    key: string,
+    input: I,
+    meter: Meter,
+    read: (items: readonly I[], shared: Meter, context: PublicFilterConsumerContext) => Promise<QueryResult>,
+  ) {
+    const { context } = lifetimes.get(meter)!;
+    const batch = bookBindingStep(
+      step,
+      api,
+      cohort,
+      key,
+      context.deadline,
+      { key, input },
+      async (members, deadline) => {
+        const shared = operationCost(pool, { deadline });
+        try {
+          const result = await read(
+            members.map((m) => m.input),
+            shared,
+            { deadline },
+          );
+          const rows = new Map(result.rows.map((r) => [r.id, r]));
+          return members.map((m, i) => ({ row: rows.get(m.key), cost: bookCostShare(shared, i, members.length) }));
+        } catch (error) {
+          const failed = failure(error, shared);
+          return members.map((_, i) => ({ ...failed, cost: bookCostShare(shared, i, members.length) }));
+        }
+      },
+    );
+    return batch?.then((result) => {
+      for (const k of Object.keys(meter) as (keyof Meter)[]) meter[k] += result.cost[k];
+      if ('reason' in result) throw new Failure(result.reason);
+      return result.row;
+    });
+  }
   async function registered(value: CustodyRegistration, meter: Meter) {
     registration(value);
     const result = await sql(
@@ -1257,6 +1302,23 @@ export function createPublicFilterCustody(
     )
       throw new Failure('binding_mismatch');
   }
+  function registrationIdentity(input: Parameters<PublicFilterCustody['register']>[0], incarnation: string) {
+    const definition = input.definition;
+    const consumer: PublicFilterConsumer = {
+      physicalTarget: input.physicalTarget,
+      incarnation,
+      consumerGeneration: input.consumerGeneration,
+      projectionGeneration: input.projectionGeneration,
+      meaningDigest: definition.meaning.digest,
+      readDefinition: definition.readDefinition,
+      catalogue: canonicalDiscoveryCatalogue(input.catalogue ?? null),
+    };
+    const identity = {
+      partition: definition.source.partition,
+      id: digest({ consumer, source: definition.source.id }),
+    };
+    return { consumer, identity };
+  }
   const api: PublicFilterCustody = {
     register(request, search, context) {
       // Copy before the first await, so concurrent caller mutation never changes persisted identity.
@@ -1264,24 +1326,97 @@ export function createPublicFilterCustody(
       validateDefinition(input.definition);
       text(input.consumerGeneration);
       text(input.projectionGeneration);
-      const catalogue = canonicalDiscoveryCatalogue(input.catalogue ?? null);
+      canonicalDiscoveryCatalogue(input.catalogue ?? null);
       return run(context, async (meter, context) => {
+        const grouped =
+          'bookTypeList' in input.definition.capture &&
+          input.definition.capture.bookTypeList &&
+          bookBindingStep(
+            'registration',
+            api,
+            JSON.stringify([input.physicalTarget, input.definition.source.partition, input.definition.meaning.digest]),
+            input.definition.readDefinition,
+            context.deadline,
+            input,
+            async (inputs, deadline) => {
+              const shared = operationCost(pool, { deadline });
+              try {
+                const incarnation = await native(search, shared, { deadline }, input.physicalTarget);
+                const installed = await hasReleaseAuthority(pool, shared, input.definition.meaning.digest);
+                const members = inputs.map((item) => {
+                  const { consumer, identity } = registrationIdentity(item, incarnation);
+                  const encoded = installed
+                    ? encodeInstalledDefinition(item.definition)
+                    : encodeRetainedDefinition(item.definition, false).encoded;
+                  return {
+                    consumer,
+                    identity,
+                    row: { id: identity.id, consumer: encode(consumer), definition: encoded },
+                  };
+                });
+                const home = input.definition.source.partition;
+                const accepted = await transaction(shared, async (client) => {
+                  const fenced = (await lockCopyAdmission(client, shared, input.physicalTarget)).rowCount;
+                  if (!fenced)
+                    await sql(
+                      client,
+                      shared,
+                      'INSERT INTO search.public_filter_target VALUES ($1,$2,$3) ON CONFLICT (partition_no,physical_target) DO UPDATE SET incarnation=EXCLUDED.incarnation',
+                      [home, input.physicalTarget, incarnation],
+                    );
+                  const rows = await sql(
+                    client,
+                    shared,
+                    fenced
+                      ? `SELECT r.id,r.consumer_work FROM jsonb_to_recordset($1) i(id text,consumer text,definition text)
+                     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=($2,i.id)
+                     JOIN search.public_filter_target t USING(partition_no,physical_target)
+                     WHERE r.physical_target=$3 AND t.incarnation=$4 AND r.consumer=i.consumer
+                       AND r.definition=i.definition AND r.state='active'`
+                      : `INSERT INTO search.public_filter_registration(partition_no,id,physical_target,consumer,definition,state)
+                     SELECT $2,i.id,$3,i.consumer,i.definition,'active' FROM jsonb_to_recordset($1)
+                       i(id text,consumer text,definition text) ORDER BY i.id
+                     ON CONFLICT(partition_no,id) DO UPDATE SET id=EXCLUDED.id
+                       WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition
+                         AND public_filter_registration.state='active' RETURNING id,consumer_work`,
+                    [
+                      JSON.stringify(members.map((m) => m.row)),
+                      home,
+                      input.physicalTarget,
+                      ...(fenced ? [incarnation] : []),
+                    ],
+                  );
+                  return new Map(rows.rows.map((r) => [r.id, r.consumer_work as string | null]));
+                });
+                return members.map(({ consumer, identity }, i) => ({
+                  consumer,
+                  identity,
+                  work: accepted.get(identity.id),
+                  cost: bookCostShare(shared, i, members.length),
+                }));
+              } catch (e) {
+                const failed = failure(e, shared);
+                return inputs.map((_, i) => ({ ...failed, cost: bookCostShare(shared, i, inputs.length) }));
+              }
+            },
+          );
+        if (grouped) {
+          const result = await grouped;
+          for (const k of Object.keys(meter) as (keyof Meter)[]) meter[k] += result.cost[k];
+          if ('status' in result) return { ...result, cost: meter };
+          if (result.work !== undefined)
+            return {
+              status: 'registered' as const,
+              registration: result.identity,
+              consumer: result.consumer,
+              consumerWork: result.work,
+              cost: meter,
+            };
+          // The scalar owner handles legacy embedded definitions and reports its exact replay error.
+        }
         const incarnation = await native(search, meter, context, input.physicalTarget);
-        const definition = input.definition;
-        const consumer: PublicFilterConsumer = {
-          physicalTarget: input.physicalTarget,
-          incarnation,
-          consumerGeneration: input.consumerGeneration,
-          projectionGeneration: input.projectionGeneration,
-          meaningDigest: definition.meaning.digest,
-          readDefinition: definition.readDefinition,
-          catalogue,
-        };
-        const identity = {
-          partition: definition.source.partition,
-          id: digest({ consumer, source: definition.source.id }),
-        };
-        const retained = await retainedDefinition(pool, meter, definition);
+        const { consumer, identity } = registrationIdentity(input, incarnation);
+        const retained = await retainedDefinition(pool, meter, input.definition);
         await transaction(meter, async (client) => {
           const encodedConsumer = encode(consumer);
           if ((await lockCopyAdmission(client, meter, consumer.physicalTarget)).rowCount) {
@@ -1344,9 +1479,53 @@ export function createPublicFilterCustody(
       lifetime(input.keepAliveMs);
       text(input.covered.observation);
       return run(context, async (meter, context) => {
-        const consumer = await registered(input.registration, meter);
-        if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
-          throw new Failure('binding_mismatch');
+        const owners = bookRows(
+          'pitOwner',
+          String(input.registration.partition),
+          input.registration.id,
+          input.registration.id,
+          meter,
+          (ids, shared) =>
+            sql(
+              pool,
+              shared,
+              `SELECT r.id,r.consumer FROM search.public_filter_registration r JOIN search.public_filter_target t USING(partition_no,physical_target)
+             WHERE r.partition_no=$1 AND r.id=ANY($2::text[]) AND r.state='active'`,
+              [input.registration.partition, ids],
+            ),
+        );
+        const owner = await owners;
+        if (owners && !owner) throw new Failure('definition_missing');
+        const consumer = owner
+          ? decode<PublicFilterConsumer>(owner.consumer)
+          : await registered(input.registration, meter);
+        publicFilterCatalogue(consumer);
+        const checkTarget = async (step: 'beforePit' | 'afterPit') => {
+          const batch = bookBindingStep(
+            step,
+            search,
+            consumer.physicalTarget,
+            input.registration.id,
+            context.deadline,
+            null,
+            async (members, deadline) => {
+              const shared = operationCost(pool, { deadline });
+              try {
+                const incarnation = await native(search, shared, { deadline }, consumer.physicalTarget);
+                return members.map((_, i) => ({ incarnation, cost: bookCostShare(shared, i, members.length) }));
+              } catch (error) {
+                const failed = failure(error, shared);
+                return members.map((_, i) => ({ ...failed, cost: bookCostShare(shared, i, members.length) }));
+              }
+            },
+          );
+          if (!batch) return native(search, meter, context, consumer.physicalTarget);
+          const result = await batch;
+          for (const k of Object.keys(meter) as (keyof Meter)[]) meter[k] += result.cost[k];
+          if ('reason' in result) throw new Failure(result.reason);
+          return result.incarnation;
+        };
+        if ((await checkTarget('beforePit')) !== consumer.incarnation) throw new Failure('binding_mismatch');
         const openedAt = Date.now();
         const opened = await engine<{ pit_id: string; _shards: { failed: number } }>(
           search,
@@ -1358,8 +1537,55 @@ export function createPublicFilterCustody(
         text(opened.pit_id);
         try {
           if (opened._shards.failed) throw new Failure('observation_lost');
-          if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
-            throw new Failure('binding_mismatch');
+          if ((await checkTarget('afterPit')) !== consumer.incarnation) throw new Failure('binding_mismatch');
+          const q: PublicFilterQueriedObservation = {
+            consumer,
+            snapshot: {
+              kind: 'pit',
+              observation: `${input.registration.partition}:${randomUUID()}`,
+              pit: opened.pit_id,
+            },
+          };
+          const batch = bookRows(
+            'retain',
+            JSON.stringify([input.registration.partition, consumer.physicalTarget, consumer.incarnation]),
+            input.registration.id,
+            {
+              id: input.registration.id,
+              observation: q.snapshot.observation,
+              queried: encode(q),
+              consumer: encode(consumer),
+              covered: encode(input.covered),
+              expires: openedAt + input.keepAliveMs,
+              pit: opened.pit_id,
+              hash: digest(opened.pit_id),
+            },
+            meter,
+            (items, shared) =>
+              transaction(shared, async (client) => {
+                if ((await lockCopyAdmission(client, shared, consumer.physicalTarget)).rowCount)
+                  throw new Failure('binding_mismatch');
+                return sql(
+                  client,
+                  shared,
+                  `WITH target AS MATERIALIZED (
+                SELECT partition_no,physical_target FROM search.public_filter_target WHERE (partition_no,physical_target)=($2,$3)
+                  AND incarnation=$4 FOR NO KEY UPDATE), admitted AS MATERIALIZED (
+                SELECT r.partition_no,i.* FROM target t JOIN search.public_filter_registration r USING(partition_no,physical_target)
+                JOIN jsonb_to_recordset($1) i(id text, observation text, queried text, consumer text, covered text, expires bigint, pit text, hash text)
+                  ON i.id=r.id AND i.consumer=r.consumer WHERE r.state='active' ORDER BY r.id FOR SHARE OF r), retained AS (
+                INSERT INTO search.public_filter_observation(partition_no,observation,registration,queried,covered,expires_at,state)
+                SELECT partition_no,observation,id,queried,covered,expires,'open' FROM admitted RETURNING partition_no,observation,registration),
+                owned AS (INSERT INTO search.public_filter_pit SELECT r.partition_no,r.observation,i.hash,i.pit,'owned'
+                  FROM retained r JOIN admitted i USING(observation)) SELECT registration AS id FROM retained`,
+                  [JSON.stringify(items), input.registration.partition, consumer.physicalTarget, consumer.incarnation],
+                );
+              }),
+          );
+          if (batch) {
+            if (!(await batch)) throw new Failure('binding_mismatch');
+            return { status: 'retained' as const, queried: q, cost: meter };
+          }
           return await transaction(meter, async (client) => {
             await admitPreparationWrite(client, meter, { registration: input.registration, consumer });
             return retain(
@@ -1804,8 +2030,44 @@ export function createPublicFilterCustody(
     acquire(q, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
-      return run(context, (meter, context) =>
-        transaction(meter, async (client) => {
+      return run(context, async (meter, context) => {
+        const token = randomUUID();
+        const home = partition(input.snapshot.observation);
+        const batch =
+          input.snapshot.kind === 'pit' &&
+          bookRows(
+            'reference',
+            JSON.stringify([home, input.consumer.physicalTarget, input.consumer.incarnation]),
+            input.snapshot.observation,
+            { observation: input.snapshot.observation, queried: encode(input), token, deadline: context.deadline },
+            meter,
+            (items, shared) =>
+              transaction(shared, async (client) => {
+                await sql(client, shared, lockPublicationAdmission, [input.consumer.physicalTarget]);
+                return sql(
+                  client,
+                  shared,
+                  `WITH locked AS MATERIALIZED (
+              SELECT o.partition_no,i.observation,i.token,i.deadline FROM jsonb_to_recordset($1)
+                i(observation text,queried text,token uuid,deadline bigint)
+              JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=($2,i.observation)
+              JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+              JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
+              WHERE o.queried=i.queried AND o.state='open' AND o.expires_at>$3 AND r.state='active'
+                AND r.physical_target=$4 AND t.incarnation=$5 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
+                  WHERE partition_no=0 AND physical_target=$4 AND publication_fence IS NOT NULL)
+              ORDER BY o.observation FOR UPDATE OF o FOR SHARE OF r,t)
+              INSERT INTO search.public_filter_reference SELECT partition_no,observation,token,least(deadline,$3::bigint+300000) FROM locked
+              RETURNING observation AS id`,
+                  [JSON.stringify(items), home, Date.now(), input.consumer.physicalTarget, input.consumer.incarnation],
+                );
+              }),
+          );
+        if (batch) {
+          if (!(await batch)) throw new Failure('observation_lost');
+          return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
+        }
+        return transaction(meter, async (client) => {
           // Serialize reader enrollment with the ordinary publication admission fence.
           await sql(client, meter, lockPublicationAdmission, [input.consumer.physicalTarget]);
           const token = randomUUID();
@@ -1839,8 +2101,8 @@ export function createPublicFilterCustody(
           );
           if (!result.rowCount) throw new Failure('observation_lost');
           return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
-        }),
-      );
+        });
+      });
     },
     appendExecution(request, context) {
       const input = decode<typeof request>(encode(request));
@@ -1873,6 +2135,29 @@ export function createPublicFilterCustody(
       return run(
         context,
         async (meter) => {
+          const home = partition(use.observation);
+          const batch = bookRows('release', String(home), use.observation, use, meter, async (items, shared) => {
+            const members = JSON.stringify(items);
+            await sql(
+              pool,
+              shared,
+              `DELETE FROM search.public_filter_reference f USING jsonb_to_recordset($1) i(observation text, token uuid)
+              WHERE (f.partition_no,f.observation,f.token)=($2,i.observation,i.token)`,
+              [members, home],
+            );
+            return sql(
+              pool,
+              shared,
+              `SELECT i.observation AS id FROM jsonb_to_recordset($1) i(observation text)
+              WHERE NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
+                WHERE (f.partition_no,f.observation)=($2,i.observation) AND f.expires_at>$3)`,
+              [members, home, Date.now()],
+            );
+          });
+          if (batch) {
+            if (await batch) for (const wake of drainWaiters.get(use.observation) ?? []) wake();
+            return { status: 'released' as const, cost: meter };
+          }
           await sql(
             pool,
             meter,
@@ -1900,6 +2185,39 @@ export function createPublicFilterCustody(
         if (q.snapshot.kind !== 'pit' || input.use.observation !== q.snapshot.observation)
           throw new Failure('binding_mismatch');
         const successor = { ...q, snapshot: { ...q.snapshot, pit: input.pit } };
+        const home = partition(q.snapshot.observation);
+        const batch = bookRows(
+          'successor',
+          String(home),
+          q.snapshot.observation,
+          {
+            observation: q.snapshot.observation,
+            queried: encode(q),
+            token: input.use.token,
+            hash: digest(input.pit),
+            pit: input.pit,
+            successor: encode(successor),
+          },
+          meter,
+          (items, shared) =>
+            sql(
+              pool,
+              shared,
+              `WITH locked AS MATERIALIZED (
+            SELECT o.partition_no,i.* FROM jsonb_to_recordset($1) i(observation text,queried text,token uuid,hash text,pit text,successor text)
+            JOIN search.public_filter_observation o ON (o.partition_no,o.observation)=($2,i.observation)
+            JOIN search.public_filter_reference f ON (f.partition_no,f.observation,f.token)=(o.partition_no,i.observation,i.token)
+            WHERE o.queried=i.queried AND o.state<>'closed' AND f.expires_at>$3 ORDER BY o.observation FOR UPDATE OF o),
+            owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,hash,pit,'owned' FROM locked ON CONFLICT DO NOTHING)
+            UPDATE search.public_filter_observation o SET queried=i.successor,revision=revision+1 FROM locked i
+            WHERE (o.partition_no,o.observation)=(i.partition_no,i.observation) RETURNING o.observation AS id`,
+              [JSON.stringify(items), home, Date.now()],
+            ),
+        );
+        if (batch) {
+          if (!(await batch)) throw new Failure('observation_lost');
+          return { status: 'retained' as const, queried: successor, cost: meter };
+        }
         const result = await sql(
           pool,
           meter,
@@ -2501,6 +2819,60 @@ export async function stepRetainedTargetErasure(
     };
   }
 }
+
+export const readBookRegistrations: NonNullable<
+  import('../semantic/source-binding-port.ts').PublicFilterSearchBindingPort['readBookRegistrations']
+> = async (pool, members, context) => {
+  const shared = operationCost(pool, context);
+  try {
+    const inputs = members.map(({ consumer, definition }) => {
+      return {
+        id: digest({ consumer, source: definition.source.id }),
+        consumer: encode(consumer),
+        target: consumer.physicalTarget,
+        incarnation: consumer.incarnation,
+        definition: encodeInstalledDefinition(definition),
+      };
+    });
+    // Embedded definitions can contain the entire release. Only send that form on the legacy path.
+    const rows = await sql(
+      pool,
+      shared,
+      `SELECT r.id FROM jsonb_to_recordset($1)
+        i(id text,consumer text,target text,incarnation text,definition text)
+        JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(0,i.id) AND r.consumer=i.consumer
+          AND r.definition=i.definition AND r.physical_target=i.target AND r.state='active'
+        JOIN search.public_filter_target t ON (t.partition_no,t.physical_target,t.incarnation)=(0,i.target,i.incarnation)
+        WHERE NOT EXISTS (SELECT 1 FROM search.public_filter_registration other
+          WHERE other.partition_no=0 AND other.physical_target=i.target AND md5(other.consumer)=md5(i.consumer)
+            AND other.consumer=i.consumer AND other.state='active' AND other.id<>r.id)`,
+      [JSON.stringify(inputs)],
+    );
+    const ids = new Set(rows.rows.map((r) => r.id));
+    const results = [];
+    for (const [index, { consumer, definition }] of members.entries()) {
+      const id = inputs[index]!.id;
+      const cost = bookCostShare(shared, index, members.length);
+      if (ids.has(id))
+        results.push({
+          definition,
+          registeredDefinition: inputs[index]!.definition,
+          registration: { partition: 0, id },
+          queried: null,
+          cost,
+        });
+      else {
+        const original = await readGenerationPublicationCustody(pool, consumer, 0, context, undefined, 'registration');
+        for (const k of Object.keys(cost) as (keyof Meter)[]) cost[k] += original.cost[k];
+        results.push({ ...original, cost });
+      }
+    }
+    return results;
+  } catch (error) {
+    const failed = failure(error, shared);
+    return members.map((_, i) => ({ ...failed, cost: bookCostShare(shared, i, members.length) }));
+  }
+};
 
 /** Publication adopts existing immutable custody; it never creates observation readiness.
  * The source home and physical consumer indexes bound both lookups to one native record.
