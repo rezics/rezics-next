@@ -2,6 +2,7 @@ import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { localeChain, pickText } from '@rezics/composition';
+import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -160,7 +161,27 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
-    calls.push({ method: request.method, path: url.pathname, accept: request.headers.get('accept-language') });
+    const path = decodeURIComponent(url.pathname);
+    calls.push({ method: request.method, path, accept: request.headers.get('accept-language') });
+    if (request.method === 'GET' && path.startsWith('/v1/definitionTypes/')) {
+      const typeId = path.slice('/v1/definitionTypes/'.length);
+      const definition = release.types[typeId as keyof typeof release.types];
+      if (!definition) return json(problem(404, 'not_found'), 404);
+      const label = pickText(definition.labels, url.searchParams.get('locale') ?? 'en');
+      return json({
+        typeId,
+        label: label.text,
+        language: label.lang,
+        description: null,
+        descriptionLanguage: null,
+        definition,
+        releaseDigest: digest,
+        parents: [],
+        properties: {},
+      });
+    }
+    if (url.pathname === '/v1/feedItems' && request.method === 'GET')
+      return json(homeFeedStoryPage('en', false, 'empty'));
     if (url.pathname === '/v1/definitions/active') return json({ digest });
     if (url.pathname === `/v1/definitions/releases/${digest}`) return json({ digest, release }, 200);
     if (url.pathname === '/v1/pages:read' && request.method === 'POST') {
@@ -176,15 +197,32 @@ const fake = Bun.serve({
     }
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST')
       return json({
-        subjects: [{ id: id(701), type: book, labels: { en: 'Kokoro' } }],
-        total: { value: 1, relation: 'exact' },
+        hits: [
+          {
+            key: { owner: 'semantic', kind: book, route: 0, id: id(701) },
+            summary: {
+              kind: 'subject',
+              value: {
+                id: id(701),
+                type: book,
+                types: [book],
+                label: { value: 'Kokoro', language: 'en' },
+                creativeWork: true,
+                cover: null,
+              },
+            },
+            labels: { en: 'Kokoro' },
+          },
+        ],
+        kinds: { values: [], next: null },
+        applicability: { type: 'all', statement: 'all' },
         next: null,
         as_of: asOf,
       });
     if (url.pathname === '/v1/subjects:facets' && request.method === 'POST')
       return json({ facets: [], total: { value: 1, relation: 'exact' }, as_of: asOf });
     if (url.pathname === '/v1/subjects:suggest' && request.method === 'GET')
-      return json({ subjects: [{ id: id(701), type: book, labels: { en: 'Kokoro' } }], as_of: asOf });
+      return json({ subjects: [{ id: id(701), type: book, labels: { en: 'Kokoro' }, summary: null }], as_of: asOf });
     if (url.pathname === `/v1/collections/${collectionId}` && request.method === 'GET')
       return json({
         collection: {
@@ -326,7 +364,7 @@ test(
       await html(`/${locale}/subjects/${exact}`);
       await html(`/${locale}`);
       await html(`/${locale}/collections/${collectionId}`);
-      await html(`/${locale}/search?q=Kokoro&type=${encodeURIComponent(book)}`);
+      await html(`/${locale}/search?q=Kokoro`);
       // The shell's suggestion box asks for its page's language; a bare request falls back to the page it came from.
       expect((await fetch(`${origin}/api/search/suggestions?q=Ko&locale=${locale}`)).status).toBe(200);
       expect(
@@ -338,13 +376,19 @@ test(
       const paths = new Set(reads.map((call) => `${call.method} ${call.path}`));
       for (const expected of [
         'POST /v1/pages:read',
+        'GET /v1/feedItems',
+        `GET /v1/definitionTypes/${book}`,
+        `GET /v1/definitionTypes/${film}`,
         `GET /v1/collections/${collectionId}`,
         `GET /v1/collections/${collectionId}/members`,
         'POST /v1/subjects:search',
         'POST /v1/subjects:facets',
-        'GET /v1/subjects:suggest',
       ])
         expect(paths.has(expected), `${locale} ${expected}`).toBe(true);
+      expect(
+        reads.filter((call) => call.method === 'GET' && call.path === '/v1/subjects:suggest'),
+        locale,
+      ).toHaveLength(2);
       for (const call of reads) expect(call.accept, `${locale} ${call.method} ${call.path}`).toBe(headers[locale]!);
     }
   },
@@ -361,12 +405,13 @@ test(
       ['de', 'Book', 'Film'],
     ] as const) {
       const shelf = main(await html(`/${locale}/collections/${collectionId}`));
-      // The decorative cover's initials are not part of what the row says.
-      const rows = [...shelf.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((row) =>
-        plain(row[1]!.replace(/<span\b[^>]*font-work-title[^>]*>[^<]*<\/span>/g, '')),
-      );
-      expect(rows, locale).toEqual([`Book row ${bookName}`, `Film row ${filmName}`, 'Unnamed type row']);
-      expect(shelf).not.toMatch(/schema:|wd:Q/);
+      const availableTypes = [...shelf.matchAll(/<p data-collection-type-state="available">([^<]+)<\/p>/g)];
+      expect(
+        availableTypes.map((match) => plain(match[1]!)),
+        locale,
+      ).toEqual([bookName, filmName]);
+      expect(shelf.match(/data-collection-type-state="unavailable"/g), locale).toHaveLength(1);
+      expect(plain(shelf)).not.toMatch(/schema:|wd:Q/);
 
       const names = new Intl.DisplayNames([locale], { type: 'language' });
       const view = await shown(locale, french);
