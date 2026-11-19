@@ -18,7 +18,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One reaction slot on a thread or post. Counts render as icon chips, and React opens every kind. Choosing a kind replaces the current one; choosing it again clears it. The row updates at once and rolls back, with an announced message, when saving fails. A signed-out viewer sees read-only chips and a link to sign in. Pressed text uses ink blue.',
+          'One reaction slot on a thread or post. Counts render as icon chips, and React opens every kind. Choosing a kind replaces the current one; choosing it again clears it. The row updates at once and rolls back, with an announced message, when saving fails. A signed-out viewer sees read-only chips and a link to sign in. Pressed text uses the theme’s primary color.',
       },
     },
   },
@@ -28,6 +28,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const kindNames = ['Upvote', 'Downvote', 'Like', 'Love', 'Laugh', 'Insightful', 'Sad'] as const;
+const phoneViewport = { value: 'phone390', isRotated: false };
 
 function PendingReactions({
   initialValue,
@@ -112,10 +113,11 @@ function usedColor(element: HTMLElement, token: '--primary' | '--brand'): string
   return color;
 }
 
-async function expectInkBlue(element: HTMLElement) {
-  const text = getComputedStyle(element).color;
-  await expect(text).toBe(usedColor(element, '--primary'));
-  await expect(text).not.toBe(usedColor(element, '--brand'));
+async function expectPrimaryInk(element: HTMLElement) {
+  const primary = usedColor(element, '--primary');
+  // The toggle state updates before Mira's color transition finishes.
+  await waitFor(() => expect(getComputedStyle(element).color).toBe(primary));
+  await expect(primary).not.toBe(usedColor(element, '--brand'));
 }
 
 export const ChooseReaction: Story = {
@@ -134,17 +136,31 @@ export const ChooseReaction: Story = {
       'true',
     );
     await expect(canvas.getByRole('status', { name: '1 changes started' })).toBeVisible();
-    await expectInkBlue(canvas.getByRole('button', { name: 'Like 1' }));
-    await expectInkBlue(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ }));
+    await expectPrimaryInk(like);
+    await expectPrimaryInk(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'true');
   },
 };
 export const MenuOpen: Story = {
+  globals: { viewport: phoneViewport },
   render: () => <PendingReactions initialCounts={{ upvote: 8 }} initialValue={null} />,
   async play({ canvasElement }) {
-    const choices = await openChoices(canvasElement);
-    await expect(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ })).toBeVisible();
+    await expect(window.innerWidth).toBe(390);
+    const trigger = within(canvasElement).getByRole('button', { name: 'React' });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const choices = await settled(await screen.findByRole('dialog', { name: 'Choose a reaction' }));
+    await expect(choices.querySelector('[data-slot="bottom-sheet-body"]')).toBeInTheDocument();
+    const options = within(choices).getAllByRole('button', { pressed: false });
+    await expect(options).toHaveLength(7);
+    for (const choice of options) {
+      await expect(choice).toBeVisible();
+      await expect(choice.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 
@@ -273,11 +289,9 @@ function crowdedPhone(locale: 'de' | 'zh-Hans') {
 }
 
 async function crowdedPhoneReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  await expect(window.innerWidth).toBe(390);
   const group = canvasElement.querySelector<HTMLElement>('[data-slot="reactions"]');
   if (!group) throw new Error('The crowded phone story did not render its reactions row.');
-  const container = group.parentElement;
-  if (!container) throw new Error('The crowded phone story has no width-constrained container.');
-  await expect(group).toHaveAttribute('data-slot', 'reactions');
   const chips = [...group.querySelectorAll<HTMLElement>('[data-slot="reaction-chip"]')];
   await expect(chips).toHaveLength(7);
   const tops = new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top)));
@@ -285,22 +299,25 @@ async function crowdedPhoneReady({ canvasElement }: { canvasElement: HTMLElement
   await expect(getComputedStyle(group).flexWrap).toBe('wrap');
   const react = group.querySelector<HTMLElement>('button:not([data-slot="reaction-chip"]), a');
   if (!react) throw new Error('The crowded phone story did not render its react control.');
-  const left = container.getBoundingClientRect().left;
-  const right = container.getBoundingClientRect().right;
-  for (const node of [container, ...chips, react]) {
+  const { left, right } = group.getBoundingClientRect();
+  await expect(right).toBeLessThanOrEqual(window.innerWidth);
+  for (const node of [...chips, react]) {
     const box = node.getBoundingClientRect();
+    await expect(box.width).toBeGreaterThanOrEqual(44);
+    await expect(box.height).toBeGreaterThanOrEqual(44);
     await expect(box.left).toBeGreaterThanOrEqual(left - 1);
     await expect(box.right).toBeLessThanOrEqual(right + 1);
   }
 }
 
 export const CrowdedGerman: Story = {
+  globals: { locale: 'de', viewport: phoneViewport },
   render: () => crowdedPhone('de'),
   play: crowdedPhoneReady,
 };
 
 export const CrowdedChinese: Story = {
-  globals: { locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: phoneViewport },
   render: () => crowdedPhone('zh-Hans'),
   play: crowdedPhoneReady,
 };
@@ -348,6 +365,6 @@ export const FailedChangeRollsBack: Story = {
       'aria-pressed',
       'false',
     );
-    await expectInkBlue(canvas.getByRole('button', { name: 'Love 2' }));
+    await expectPrimaryInk(canvas.getByRole('button', { name: 'Love 2' }));
   },
 };
