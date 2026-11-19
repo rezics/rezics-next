@@ -518,7 +518,8 @@ Reproduce with the retained walk command on one admitted stack. Restore ordinary
     if (stage === 'setup' || cause === null) continue;
     const operation = remainingRequest?.path ?? cause;
     let attribution = 'Use the seed prerequisite evidence to identify the owner.';
-    if (cause.includes('Cross-media seed failed preparation{')) attribution = 'Importer owns the seed preparation step.';
+    if (cause.includes('Cross-media seed failed preparation{'))
+      attribution = 'Importer owns the seed preparation step.';
     if (operation.includes('sourceFences')) attribution = 'Existing owner: Content d66.';
     else if (operation.includes('/v1/subjects:batchWrite')) attribution = 'Existing owner: Semantic cf23.';
     const first = stage === 'seed';
@@ -1475,9 +1476,7 @@ async function walkGameReleaseCounterpart(api: string, publication: ShowcasePubl
   const vn = selectPublished(published, 'vndb', 'v2002');
   const vnRead = await currentSubject(api, vn.subjectId);
   assert.equal(vnRead.subject.id, vn.subjectId);
-  const release = published.find(
-    (row) => row.provider === 'vndb' && /^r[1-9][0-9]*$/u.test(row.sourceKey),
-  );
+  const release = published.find((row) => row.provider === 'vndb' && /^r[1-9][0-9]*$/u.test(row.sourceKey));
   assert.ok(release, 'seed published no VNDB Release');
   const releaseRead = await currentSubject(api, release.subjectId);
   assert.equal(releaseRead.subject.id, release.subjectId);

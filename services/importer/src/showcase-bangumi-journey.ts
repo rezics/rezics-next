@@ -612,9 +612,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
 
   phase = 'anonymous-browser';
   const frontends =
-    options.startFrontends === false
-      ? undefined
-      : await startSeededWalkFrontends(root, { issuer, web });
+    options.startFrontends === false ? undefined : await startSeededWalkFrontends(root, { issuer, web });
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as {
     chromium: { launch(options: { headless: boolean; env?: NodeJS.ProcessEnv }): Promise<any> };

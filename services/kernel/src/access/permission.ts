@@ -1664,16 +1664,7 @@ export function createAccess(config: PermissionConfig): Access {
         return accessCheckout(request.context.work, () =>
           withPermissionReadConnection(request.context.pool, request.context.deadline, async (client) => {
             for (const action of ['gate:collections', 'gate:any'])
-              if (
-                await authorizePreparedReadGate(
-                  root,
-                  client,
-                  action,
-                  'collection:read',
-                  GLOBAL_CONTEXT,
-                )
-              )
-                return true;
+              if (await authorizePreparedReadGate(root, client, action, 'collection:read', GLOBAL_CONTEXT)) return true;
             return false;
           }),
         );

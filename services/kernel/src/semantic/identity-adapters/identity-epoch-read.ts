@@ -527,15 +527,18 @@ async function readIdentityMappingsInSnapshot(
   }
   const locators = controlLocatorsOf(controlRows);
   const pendingRows = locators.length
-    ? (await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)]))
-        .rows.map(selectedPendingEvidence)
+    ? (
+        await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)])
+      ).rows.map(selectedPendingEvidence)
     : [];
   const currentRows = controlRows.length
-    ? (await client.query(current.sql, [
-        controlRows.map((row) => row.control_partition),
-        controlRows.map((row) => row.control_group),
-        controlRows.map((row) => row.original),
-      ])).rows as unknown as IdentityControlEvidence[]
+    ? ((
+        await client.query(current.sql, [
+          controlRows.map((row) => row.control_partition),
+          controlRows.map((row) => row.control_group),
+          controlRows.map((row) => row.original),
+        ])
+      ).rows as unknown as IdentityControlEvidence[])
     : [];
   const evidence = sortedEvidence({
     sourceOwners: nativeOwners.filter((row) => sourceHomes.has(row.partition_no)),

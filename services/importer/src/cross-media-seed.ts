@@ -984,7 +984,10 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     const sourceIndex = staffIndex++;
     const subjectId = number(row, 'subject_id');
-    if (!creditWorks.has(subjectId) && !(subjectId === personCreditWork && number(row, 'person_id') === reviewedBangumiPerson))
+    if (
+      !creditWorks.has(subjectId) &&
+      !(subjectId === personCreditWork && number(row, 'person_id') === reviewedBangumiPerson)
+    )
       continue;
     const count = (staffCounts.get(subjectId) ?? 0) + 1;
     staffCounts.set(subjectId, count);
@@ -3621,7 +3624,8 @@ async function runSeedCli(
   enter('record-planning');
   const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
     await import('./showcase-books.ts');
-  const plannedBooks = options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
+  const plannedBooks =
+    options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.includeReviewedPersonCredits ? { includeReviewedPersonCredits: true } : {}),

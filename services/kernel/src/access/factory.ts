@@ -899,15 +899,20 @@ export function createAccess(config: AccessConfig): Access {
       checks.push({ action, actor: gateActor, evidence });
     }
     requireAccessDeadline(context.deadline);
-    return withBoundedReadOnlyTransaction(context.pool, context.deadline, async (client) => {
-      const bounded = deadlineClient(client, context.deadline);
-      const pinned = atTimeClient(bounded, at);
-      for (const check of checks) {
-        requireAccessDeadline(context.deadline);
-        if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) return true;
-      }
-      return false;
-    }, { deadlineError: () => new AccessUnavailableError('deadline') });
+    return withBoundedReadOnlyTransaction(
+      context.pool,
+      context.deadline,
+      async (client) => {
+        const bounded = deadlineClient(client, context.deadline);
+        const pinned = atTimeClient(bounded, at);
+        for (const check of checks) {
+          requireAccessDeadline(context.deadline);
+          if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) return true;
+        }
+        return false;
+      },
+      { deadlineError: () => new AccessUnavailableError('deadline') },
+    );
   });
   installCommandAdmission(access, admission);
   installDurableIdentityBridge(access, {

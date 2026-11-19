@@ -62,9 +62,14 @@ export type PublicFilterProjectionMeaning = Readonly<{
 
 /** Exact descriptor shape only; the native reader still verifies its stored release and digest. */
 export function hasPublicFilterMeaningShape(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    && Reflect.ownKeys(value).length === 2
-    && Object.hasOwn(value, 'digest') && Object.hasOwn(value, 'release');
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Reflect.ownKeys(value).length === 2 &&
+    Object.hasOwn(value, 'digest') &&
+    Object.hasOwn(value, 'release')
+  );
 }
 
 export type PublicFilterProjectionRecord = Readonly<{

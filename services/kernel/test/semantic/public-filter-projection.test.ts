@@ -375,13 +375,15 @@ test('one immutable release projects each native subject type and keeps exact cu
     expect(await current(personProjection.page)).toBe(true);
     expect(await current(bookProjection.page)).toBe(true);
     const obsoleteMeaning = { ...f.meaning, type: 'schema:Book' };
-    await expect(source.readPublicFilterProjectionPage({
-      subject: book,
-      meaning: obsoleteMeaning,
-      inputLimit: 16,
-      frontier: null,
-      context: readContext(),
-    })).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      source.readPublicFilterProjectionPage({
+        subject: book,
+        meaning: obsoleteMeaning,
+        inputLimit: 16,
+        frontier: null,
+        context: readContext(),
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
     await f.post(`/v1/subjects/${person}:hide`, { reason: 'Retire the exact native projection' });
     expect(await current(personProjection.page)).toBe(false);
   } finally {

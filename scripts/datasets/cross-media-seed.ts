@@ -34,7 +34,11 @@ import {
   releasedReviewedVocabulary,
 } from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
-import { formatSeedArtifactHandoff, formatSeedError, seedTransportError } from '../../services/importer/src/seed-cli.ts';
+import {
+  formatSeedArtifactHandoff,
+  formatSeedError,
+  seedTransportError,
+} from '../../services/importer/src/seed-cli.ts';
 import {
   observeSeedPreparation,
   seedPreparationFailure,
@@ -174,7 +178,9 @@ type DevelopmentSeedOptions = {
 type ShowcaseCredentials = { accountKey: string; client: string; exportPath?: string };
 
 function seedDevelopmentImport(options: DevelopmentSeedOptions, showcaseCredentials?: ShowcaseCredentials) {
-  return observeSeedPreparation('environment', (enter) => prepareDevelopmentImport(options, enter, showcaseCredentials));
+  return observeSeedPreparation('environment', (enter) =>
+    prepareDevelopmentImport(options, enter, showcaseCredentials),
+  );
 }
 
 async function prepareDevelopmentImport(
