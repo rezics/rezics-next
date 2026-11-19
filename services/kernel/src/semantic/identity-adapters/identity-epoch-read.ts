@@ -574,21 +574,6 @@ export type HomeIdentity = Readonly<{
 export type IdentityBasis = Readonly<{ digest: string }>;
 export type BasisRead = { state: 'ready'; basis: IdentityBasis } | { state: 'not_ready' };
 
-const HOME_SQL = `SELECT p.partition_no, p.epoch, p.node, p.write_state, p.moved_to,
-  (COALESCE(g.version_sum, 0) + COALESCE(r.seq_sum, 0))::text AS generation,
-  (COALESCE(g.pending_count, 0) + CASE WHEN c.pending_job IS NOT NULL THEN 1 ELSE 0 END)::text AS pending
-FROM core.partition p
-LEFT JOIN semantic.identity_epoch_control c ON c.partition_no = p.partition_no
-LEFT JOIN (
-  SELECT partition_no, SUM(version) AS version_sum,
-    COUNT(*) FILTER (WHERE pending_job IS NOT NULL) AS pending_count
-  FROM semantic.identity_epoch_group GROUP BY partition_no
-) g ON g.partition_no = p.partition_no
-LEFT JOIN (
-  SELECT (route / 16) AS partition_no, SUM(sequence) AS seq_sum
-  FROM semantic.redirect GROUP BY route / 16
-) r ON r.partition_no = p.partition_no`;
-
 type HomeRow = {
   partition_no: number;
   epoch: number;
@@ -614,40 +599,25 @@ function homeFrom(row: HomeRow | undefined, partition: number): HomeIdentity {
 
 export async function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity> {
   if (!Number.isInteger(partition) || partition < 0 || partition >= 4096) throw new RangeError('Invalid identity home');
-  const result = await client.query<HomeRow>(`${HOME_SQL} WHERE p.partition_no = $1`, [partition]);
+  const result = await client.query<HomeRow>(
+    `SELECT partition_no,epoch,node,write_state,moved_to,generation::text,pending::text
+     FROM semantic.identity_home WHERE partition_no=$1 AND (write_state<>'active' OR control_epoch IS NOT NULL)`,
+    [partition],
+  );
   return homeFrom(result.rows[0], partition);
 }
 
-async function readIdentityHomes(client: PoolClient): Promise<readonly HomeIdentity[] | null> {
-  const result = await client.query<HomeRow>(
-    `${HOME_SQL} WHERE p.partition_no BETWEEN 0 AND 4095 ORDER BY p.partition_no`,
+async function readIdentityShards(client: PoolClient): Promise<string | null> {
+  const { rows } = await client.query<{ shard: number; ready: boolean; basis: Buffer }>(
+    `SELECT shard,active_homes=64 AND pending=0 AS ready,basis FROM semantic.identity_basis_shard ORDER BY shard`,
   );
-  if (result.rows.length !== 4096) return null;
-  const homes: HomeIdentity[] = [];
-  for (let partition = 0; partition < 4096; partition++) {
-    const row = result.rows[partition];
-    if (!row || row.partition_no !== partition || row.write_state !== 'active') return null;
-    homes.push({
-      partition,
-      epoch: row.epoch,
-      home: row.node,
-      generation: BigInt(row.generation),
-      pending: BigInt(row.pending),
-    });
+  if (rows.length !== 64) return null;
+  const hash = createHash('sha256').update('rezics.identity-basis.v2');
+  for (const [shard, row] of rows.entries()) {
+    if (row.shard !== shard || !row.ready) return null;
+    hash.update(row.basis);
   }
-  return homes;
-}
-
-function tuples(homes: readonly HomeIdentity[]): string {
-  const field = (value: string) => `${Buffer.byteLength(value, 'utf8')}:${value}`;
-  return (
-    field('rezics.identity-basis.v1') +
-    homes
-      .map((home) =>
-        [String(home.partition), String(home.epoch), home.home, home.generation.toString()].map(field).join(''),
-      )
-      .join('')
-  );
+  return hash.digest('hex');
 }
 
 async function readIdentityBasisWith(
@@ -659,19 +629,15 @@ async function readIdentityBasisWith(
   try {
     requireAccessDeadline(deadline);
     const first = await withRequestDeadline(deadline, () =>
-      capabilities.read.withReadTransaction(pool, readIdentityHomes, deadline),
+      capabilities.read.withReadTransaction(pool, readIdentityShards, deadline),
     );
     requireAccessDeadline(deadline);
     const second = await withRequestDeadline(deadline, () =>
-      capabilities.read.withReadTransaction(pool, readIdentityHomes, deadline),
+      capabilities.read.withReadTransaction(pool, readIdentityShards, deadline),
     );
     requireAccessDeadline(deadline);
-    if (!first || !second || first.some((home) => home.pending !== 0n) || second.some((home) => home.pending !== 0n))
-      return { state: 'not_ready' };
-    const encoded = tuples(first);
-    if (encoded !== tuples(second)) return { state: 'not_ready' };
-    requireAccessDeadline(deadline);
-    return { state: 'ready', basis: { digest: createHash('sha256').update(encoded, 'utf8').digest('hex') } };
+    if (first === null || first !== second) return { state: 'not_ready' };
+    return { state: 'ready', basis: { digest: first } };
   } catch (error) {
     // Cleanup can outlast the deadline after the transaction has already selected its failure.
     throwAccessUnavailable(error);

@@ -57,7 +57,7 @@ test('identity alias steps keep fixed candidate and point budgets as the native 
       await f.baseline(originals.at(-1)!);
     },
     async operation() {
-      // Both fixed-home metadata sweeps and Access preparation remain inside the shared capture.
+      // Both shard observations and Access preparation remain inside the shared capture.
       const basis = await readyBasis(readBasis, db.pool);
       const window = readyWindow(
         await group(db.pool, {
@@ -86,8 +86,8 @@ test('identity alias steps keep fixed candidate and point budgets as the native 
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
     expect(sample.cost.blocks).toBeGreaterThan(0);
-    // Mandatory home metadata is measured alongside, not subtracted as a control/background allowance.
-    expect(sample.cost.relations['semantic.identity_home']?.rows).toBeGreaterThanOrEqual(4096);
+    // Committed shard metadata is measured alongside, not subtracted as a control/background allowance.
+    expect(sample.cost.relations['semantic.identity_basis_shard']?.rows).toBeGreaterThanOrEqual(128);
     expect(sample.cost.relations['semantic.merge_member']?.sequentialScans ?? 0).toBe(0);
     expect(Object.keys(sample.relationSizes).some((name) => name.startsWith('index:'))).toBe(true);
   }

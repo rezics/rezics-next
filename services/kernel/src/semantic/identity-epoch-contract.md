@@ -351,7 +351,17 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
 | Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
-| Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, ordered P=1 custody | Complete mapping maintenance, registration handshake and native committed partition summaries; fixed participant custody still gates publication                      |
+| Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, generic home/shard basis, ordered P=1 custody | Complete scoped mapping maintenance and registration handshake; fixed participant custody still gates publication                      |
+
+The generic published identity basis uses 64 committed shards on the physical pool that owns the partition map.
+`identity_home` starts with each home's actual group-version and redirect-sequence sum. Group and redirect
+changes then advance its structural generation in their own transactions. Group claims and pending controls
+contribute independently to the pending count. Topology changes retain the native epoch, writer, state and
+move destination. Ordinary position advances have no effect. Each home updates only its shard (partition
+modulo 64). Each shard binds its initialized home tuples and committed structural changes in order.
+A read compares two ordered 64-row observations. Each requires every shard, 64 active homes with native
+controls per shard and zero pending claims. Missing or changing evidence returns preparing. Existing generic
+cursors restart once at migration to the v2 digest and again when their committed identity meaning changes.
 
 For a public Book TypeList, `public_filter_published_coverage` binds the child read definition to the active
 physical publication. Its coverage generation tracks projection and privacy work. The selected mapping reader
