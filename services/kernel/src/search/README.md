@@ -1809,6 +1809,10 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
 - Decision: execute compatible installed Book TypeLists through one native page request. Share the request's
   authority and immutable publication inputs across the lists. Read each current Subject and summary key once per
   phase, and keep the exact filter, examined frontier, cursor and withdrawal proof for every list.
+  New Subject generations sort segments by the mapped `name_sort` and `id` fields ascending, with missing keys
+  last. Book lists use this physical order for a bounded hit window and a total-hit threshold of one. First reads
+  on older layouts use preparation. Native cost checks compare a profiled replay on the same PIT with the actual
+  serving response and report the two transport byte counts separately.
 - Growth check: [growth-query](../../test/search/growth-query.test.ts), [growth-indexing](../../test/search/growth-indexing.test.ts),
   [growth-facets](../../test/search/growth-facets.test.ts) and [growth-rating-query](../../test/search/growth-rating-query.test.ts)
   record the Cost counters at three scales. Filter+source+order pages measure native iterator steps on the existing

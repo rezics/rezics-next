@@ -13,13 +13,14 @@ export type SearchRequestOptions = {
   signal?: AbortSignal;
 };
 
+/** An instrumented transport can attach iterator counts from a checked profile of the same PIT query. */
 export type OpenSearch = {
   request<T = unknown>(
     method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
     path: string,
     body?: unknown,
     options?: SearchRequestOptions,
-  ): Promise<{ status: number; body: T }>;
+  ): Promise<{ status: number; body: T; measuredIteratorSteps?: number }>;
   bulk<T = unknown>(
     lines: readonly unknown[],
     options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },

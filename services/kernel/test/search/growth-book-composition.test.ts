@@ -60,6 +60,7 @@ async function measurePage() {
       bound.accessDependencyPoints(cost.candidates),
     );
     expect(cost.engineSearches).toBeLessThanOrEqual(bound.engineSearches);
+    if (read.snapshot === 'pit' && cost.engineSearches > 0) expect(cost.engineIteratorSteps).toBeGreaterThan(0);
     candidates += cost.candidates;
     accessDependencies += cost.accessPoints + cost.dependencyPoints;
     slots += read.slots;
@@ -70,7 +71,7 @@ async function measurePage() {
   }
   expect(slots).toBe(COMPOSED_SLOTS);
   expect(outputSlots).toBe(slots);
-  expect(sample.engineSearches).toBeLessThanOrEqual(engineLimit);
+  expect(sample.engineSearches + sample.profileSearches).toBeLessThanOrEqual(engineLimit);
   return {
     candidates,
     accessDependencies,
@@ -82,6 +83,9 @@ async function measurePage() {
     responseLimit,
     engineRequestBytes: sample.requestBytes,
     engineResponseBytes: sample.responseBytes,
+    profileSearches: sample.profileSearches,
+    profileRequestBytes: sample.profileRequestBytes,
+    profileResponseBytes: sample.profileResponseBytes,
   };
 }
 
@@ -116,8 +120,12 @@ test(
         expect(cost.rows).toBeLessThanOrEqual(measured.rowLimit);
         expect(cost.blocks).toBeLessThanOrEqual(6 * measured.rowLimit);
         assert(cost.requestBytes !== undefined && cost.responseBytes !== undefined);
-        expect(cost.requestBytes + measured.engineRequestBytes).toBeLessThanOrEqual(measured.requestLimit);
-        expect(cost.responseBytes + measured.engineResponseBytes).toBeLessThanOrEqual(measured.responseLimit);
+        expect(cost.requestBytes + measured.engineRequestBytes + measured.profileRequestBytes).toBeLessThanOrEqual(
+          measured.requestLimit,
+        );
+        expect(cost.responseBytes + measured.engineResponseBytes + measured.profileResponseBytes).toBeLessThanOrEqual(
+          measured.responseLimit,
+        );
       },
       counted: {
         read: (value) => value as Awaited<ReturnType<typeof measurePage>>,
