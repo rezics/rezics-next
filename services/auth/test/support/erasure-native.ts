@@ -6,6 +6,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
 import { configureTestReceiptKeys } from '../../../kernel/test/support/receipt-keys.ts';
 import { workerTestEnv } from '../../../kernel/test/support/worker-env.ts';
+import { installNativeRoleProducer } from '../../src/erasure-coverage.ts';
 import { createAuthHost } from '../../src/index.ts';
 import type {
   AuthRestoredGeneration,
@@ -202,7 +203,10 @@ export async function nativeFixture(
     let poolRelease = ownNativePool(pool, resources, 'Auth pool');
     // Proof bindings survive executor replacement and never query a stopped host's pool.
     const proofPool = options.restartable ? await openPool() : pool;
-    if (proofPool !== pool) ownNativePool(proofPool, resources, 'Auth proof pool');
+    if (proofPool !== pool) {
+      ownNativePool(proofPool, resources, 'Auth proof pool');
+      installNativeRoleProducer(proofPool);
+    }
     const previousDatabaseUrl = process.env.DATABASE_URL;
     const restoreDatabaseUrl = resources.own('DATABASE_URL restoration', () => {
       if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;

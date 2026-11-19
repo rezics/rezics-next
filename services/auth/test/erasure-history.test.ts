@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureSource } from '@rezics/auth-contract';
 import { nativeFixture, password, scopes } from './support/erasure-native.ts';
@@ -8,6 +9,8 @@ import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts'
 import { randomUUID } from 'node:crypto';
 import { failNativeQueries } from './support/erasure-native.ts';
 import { completeCopy, finishCopyResult } from '../src/erasure-copy.ts';
+
+beforeNativeKernelTests();
 
 async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
   const until = Date.now() + timeout;
@@ -250,6 +253,7 @@ test('real default deletion transfers only its discharged native source, then er
 
 test('default recovery consumes an ordinary committed native result after caller loss and restart, without a caller retry', async () => {
   const f = await nativeFixture({ restartable: true });
+  const mutation = spyOn(f.bindings.workflowPorts, 'completeHandleTransition');
   let restore = () => {};
   try {
     const person = await f.person('lost-result');
@@ -298,6 +302,7 @@ test('default recovery consumes an ordinary committed native result after caller
       370_000,
     );
     expect(await copiesAbsent(f.pool, copy.workflow_id)).toBe(true);
+    expect(mutation).toHaveBeenCalledTimes(1);
     expect(
       (
         await f.call('/signin', {
@@ -309,6 +314,7 @@ test('default recovery consumes an ordinary committed native result after caller
       ).status,
     ).toBe(200);
   } finally {
+    mutation.mockRestore();
     restore();
     await f.close();
   }
@@ -316,6 +322,7 @@ test('default recovery consumes an ordinary committed native result after caller
 
 test('activated registration lost after native result consumption retires through default maintenance after restart', async () => {
   const f = await nativeFixture({ restartable: true });
+  const activation = spyOn(f.bindings.workflowPorts, 'activate');
   let restore = () => {};
   try {
     const key = randomUUID();
@@ -363,7 +370,9 @@ test('activated registration lost after native result consumption retires throug
       370_000,
     );
     expect(await copiesAbsent(f.pool, source.consumer_workflow_id)).toBe(true);
+    expect(activation).toHaveBeenCalledTimes(1);
   } finally {
+    activation.mockRestore();
     restore();
     await f.close();
   }
@@ -453,11 +462,11 @@ test('a lost native-consumed reply redrives from the committed source after rest
   const f = await nativeFixture({ restartable: true });
   const ports = f.bindings.trustedAccess;
   const submit = ports.recordAuthNativeConsumption!;
-  let attempts = 0;
+  const submissions: AuthErasureSource[] = [];
   let acknowledge = false;
   ports.recordAuthNativeConsumption = async (source) => {
     await submit(source);
-    attempts++;
+    submissions.push(source);
     if (!acknowledge) throw new Error('Lost native source reply');
   };
   try {
@@ -485,7 +494,8 @@ test('a lost native-consumed reply redrives from the committed source after rest
           await f.pool.query('SELECT 1 FROM auth_erasure WHERE id=$1 AND source_published_at IS NOT NULL', [source.id])
         ).rowCount,
     );
-    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(submissions.length).toBeGreaterThanOrEqual(2);
+    for (const replay of submissions.slice(1)) expect(replay).toEqual(submissions[0]!);
     expect(
       (
         await f.kernel.query('SELECT phase FROM access.auth_history_proof WHERE account_id=$1 ORDER BY phase', [
