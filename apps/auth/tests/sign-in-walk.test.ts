@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { inputByLabel } from './browser-fixture';
 
 const ROOT = resolve(import.meta.dir, '..', '..', '..');
 const WEB = process.env.REZICS_LOCAL_STACK_WEB_ORIGIN ?? 'http://127.0.0.1:3000';
@@ -277,7 +278,7 @@ async function newAccountWalk(browser: Browser) {
     await page.getByRole('link', { name: 'Create an account', exact: true }).click();
     await page.waitForURL((url) => url.origin === ISSUER && url.pathname === '/signup', { timeout: 180_000 });
     await hydrated(page);
-    await page.getByLabel('Handle', { exact: true }).fill(creds.email.split('@')[0]!);
+    await inputByLabel(page, 'Handle').fill(creds.email.split('@')[0]!);
     await page.getByLabel('Email', { exact: true }).fill(creds.email);
     await page.getByLabel('Password', { exact: true }).fill(creds.password);
     await page.getByLabel('Confirm password', { exact: true }).fill(creds.password);
