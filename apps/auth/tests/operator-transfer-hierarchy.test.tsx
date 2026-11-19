@@ -1,30 +1,8 @@
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { AccountSessionResult } from '../src/account-operations';
 import type { TransferAttempt } from '../src/operator-transfer';
-
-// Bun does not transform Start server functions. Supply their request context
-// so the production session read still uses the trusted issuer and JSON parser.
-let sessionSignal: AbortSignal | undefined;
-mock.module('@tanstack/react-start', () => ({
-  createServerOnlyFn: <T,>(handler: T) => handler,
-  createServerFn: () => ({
-    handler: (handler: () => unknown) => (options?: { signal?: AbortSignal }) => {
-      sessionSignal = options?.signal;
-      return handler();
-    },
-  }),
-}));
-mock.module('@tanstack/react-start/server', () => ({
-  getRequest: () =>
-    new Request('https://auth.test/_serverFn/session', {
-      headers: { origin: 'https://auth.test', cookie: 'auth_session=original' },
-      ...(sessionSignal ? { signal: sessionSignal } : {}),
-    }),
-  setResponseHeader() {},
-}));
-mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' } }));
 
 // Mounted production-page presentation regressions. These are not native authority evidence.
 // Reuse the installed DOM composition from turnstile-lifetime.test.tsx; no server or network.
