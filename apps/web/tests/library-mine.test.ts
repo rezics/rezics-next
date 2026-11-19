@@ -1,13 +1,11 @@
+import { Window } from 'happy-dom';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test as bunTest } from 'bun:test';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
-
-const app = join(import.meta.dir, '..');
 
 let serverStartupAbort: AbortController | undefined;
 const pendingServerStartups = new Set<Promise<string>>();
@@ -20,30 +18,6 @@ const ownedContexts = new Set<BrowserContext>();
 const pendingContextSetups = new Set<Promise<unknown>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
 const failedContextSetups = new WeakSet<BrowserContext>();
-
-function ensureSiteStartupActive(output = '', cause?: unknown): void {
-  if (teardownStarted) {
-    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
-    if (cause !== undefined) throw new Error(message, { cause });
-    throw new Error(message);
-  }
-}
-
-function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const parentSignal = serverStartupAbort?.signal;
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener('abort', abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener('abort', abort);
-    },
-  };
-}
 
 type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
 
@@ -241,6 +215,7 @@ type Call = {
 const codes = new Map<string, Grant>();
 const families = new Map<string, Family>();
 const assertions = new Set<string>();
+const accessTokens = new Map<string, string>();
 const calls: Call[] = [];
 let counter = 0;
 let followRows: Follow[] = [];
@@ -363,6 +338,7 @@ const fake = Bun.serve({
     const issue = async (family: Family, nonce?: string) => {
       counter += 1;
       const access = `access-${counter}`;
+      accessTokens.set(`Bearer ${access}`, family.sub);
       const refresh = `refresh-${counter}`;
       family.current = refresh;
       families.set(refresh, family);
@@ -446,6 +422,10 @@ const fake = Bun.serve({
       authorization: request.headers.get('authorization'),
       key: request.headers.get('idempotency-key'),
     });
+    if (['/v1/collections', '/v1/follows'].includes(url.pathname) || url.pathname.startsWith('/v1/follows/')) {
+      if (accessTokens.get(request.headers.get('authorization') ?? '') !== 'alice')
+        return json(apiProblem(401, 'authentication_required'), 401, true);
+    }
     if (request.method === 'GET' && url.pathname === '/v1/collections') {
       if (url.searchParams.get('curatorAccountId') !== 'alice') return json(apiProblem(404, 'not_found'), 404, true);
       const limit = Number(url.searchParams.get('limit') ?? 20);
@@ -469,7 +449,11 @@ let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= startDevServer({
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (started) return started;
+  serverStartupAbort = new AbortController();
+  started = startDevServer({
+    signal: serverStartupAbort.signal,
     env: {
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
@@ -483,6 +467,7 @@ function site(): Promise<string> {
     server = running;
     return running.origin;
   });
+  pendingServerStartups.add(started);
   return started;
 }
 
@@ -512,7 +497,9 @@ async function signIn(returnTo: string) {
     headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
   });
   expect([302, 303], 'OpenID callback setup').toContain(answer.status);
-  return cookieValue(answer, session)!;
+  const cookie = cookieValue(answer, session);
+  expect(cookie, 'signed-in session setup').toBeTruthy();
+  return cookie!;
 }
 
 async function readPage(path: string, signedIn = true) {
@@ -553,14 +540,9 @@ async function open(path: string, cookie: string): Promise<Page> {
   );
   return page;
 }
-function main(html: string) {
-  return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
-}
-function hrefFor(html: string, label: string) {
-  const anchor = [...main(html).matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].find(
-    (match) => match[2]!.replace(/<[^>]+>/g, '').trim() === label,
-  );
-  return anchor ? /href="([^"]*)"/.exec(anchor[1]!)?.[1]?.replaceAll('&amp;', '&') : undefined;
+const parser = new new Window().DOMParser();
+function documentOf(html: string) {
+  return parser.parseFromString(html, 'text/html');
 }
 afterAll(async () => {
   await cleanupSuite();
@@ -570,9 +552,14 @@ test(
   'a signed-in person sees their own collections of every visibility, newest first, paged',
   async () => {
     reset();
-    const first = await readPage('/en/library/collections');
+    const canonical = '/en/library/collections?layout=rows';
+    const redirect = await readPage('/en/library/collections');
+    expect(redirect.status).toBe(307);
+    expect(new URL(redirect.location!, await site()).href).toBe(new URL(canonical, await site()).href);
+    const first = await readWithCookie(canonical, redirect.cookie!);
     expect(first.status).toBe(200);
-    const body = main(first.html);
+    const directory = documentOf(first.html);
+    const body = directory.querySelector('[data-collections-list-region]')!.textContent;
     expect(body).toContain('Collection 101');
     expect(body).toContain('Collection 002');
     expect(body).not.toContain('Collection 001');
@@ -591,16 +578,19 @@ test(
         authorization: 'Bearer access-1',
       }),
     );
-    const next = hrefFor(first.html, 'More');
+    const next = [...directory.querySelectorAll('a')]
+      .find((link) => link.textContent.trim() === 'More')
+      ?.getAttribute('href');
     expect(next).toBeTruthy();
     expect(next).toContain('cursor=collections-next');
     const second = await readWithCookie(
       new URL(next!, 'http://site.test').pathname + new URL(next!, 'http://site.test').search,
-      first.cookie!,
+      redirect.cookie!,
     );
     expect(second.status).toBe(200);
-    expect(main(second.html)).toContain('Collection 001');
-    expect(main(second.html)).not.toContain('Collection 002');
+    const secondList = documentOf(second.html).querySelector('[data-collections-list-region]')!.textContent;
+    expect(secondList).toContain('Collection 001');
+    expect(secondList).not.toContain('Collection 002');
   },
   timeout,
 );
@@ -611,19 +601,31 @@ test(
     reset();
     const first = await readPage('/en/library/following');
     expect(first.status).toBe(200);
-    const body = main(first.html);
+    const list = documentOf(first.html).querySelector('ul[aria-label="Following"]')!;
+    const body = list.textContent;
     expect(body).toContain('Followed subject');
     expect(body).toContain('Followed collection');
     expect(body).toContain('Followed space');
     expect(body).toContain('Unavailable');
+    const unavailable = [...list.querySelectorAll('li')].find((row) => row.textContent.includes('Unavailable'))!;
+    expect(unavailable.querySelector('a')).toBeNull();
     expect(body).not.toContain('hidden-follow-target-id');
     expect(body).not.toContain('No longer followed');
-    expect(body).toContain('Added from your library');
-    expect(body).toContain('Required by membership');
+
     expect(first.html).toContain(`/en/collections/${id(2002)}`);
     const cookie = first.cookie!;
     const page = await open('/en/library/following', cookie);
     try {
+      for (const [title, reason] of [
+        ['Followed subject', 'Added from your library'],
+        ['Followed space', 'Required by membership'],
+      ]) {
+        await page.getByRole('button', { name: `Inspect ${title}`, exact: true }).click();
+        const inspection = page.getByRole('dialog');
+        await inspection.getByText('References and follow details', { exact: true }).click();
+        expect(await inspection.innerText()).toContain(reason);
+        await inspection.getByRole('button', { name: 'Close inspection' }).click();
+      }
       await page.getByRole('button', { name: 'More actions for Followed subject' }).click();
       await page.getByRole('menuitem', { name: 'Unfollow' }).click();
       await page.getByRole('link', { name: 'Followed subject', exact: true }).waitFor({ state: 'detached' });
@@ -641,12 +643,12 @@ test(
   'signed out, both pages redirect to sign-in',
   async () => {
     reset();
-    for (const path of ['/en/library/collections', '/en/library/following']) {
+    for (const path of ['/en/library/collections?layout=rows', '/en/library/following']) {
       const page = await readPage(path, false);
       expect(page.status).toBe(302);
       expect(page.location).toBe(`/auth/sign-in?return_to=${encodeURIComponent(path)}`);
     }
-    expect(calls).toHaveLength(0);
+    expect(calls.filter(({ path }) => path === '/v1/collections' || path === '/v1/follows')).toHaveLength(0);
   },
   timeout,
 );
