@@ -42,7 +42,7 @@ test('generated mounted inventory keeps bounded closed disclosure variants', asy
   expect(page.properties.viewer.properties.state.const).toBe('current');
   expect(page.properties.actions.properties.remove.enum).toEqual(['available', 'denied']);
   const variants = page.properties.items.items.anyOf;
-  expect(variants).toHaveLength(2);
+  expect(variants).toHaveLength(3);
   for (const variant of variants) {
     expect(variant.additionalProperties).toBe(false);
     expect(variant.properties.revision.minimum).toBe(1);
@@ -50,7 +50,7 @@ test('generated mounted inventory keeps bounded closed disclosure variants', asy
     expect(variant.properties.id.pattern).toBeString();
     expect(Object.keys(variant.properties.command.properties).sort()).toEqual(['expectedRevision', 'kind', 'watchId']);
   }
-  expect(Object.keys(variants[1].properties).sort()).toEqual([
+  expect(Object.keys(variants[2].properties).sort()).toEqual([
     'command',
     'createdAt',
     'id',

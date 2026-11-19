@@ -5,7 +5,7 @@ const contract = JSON.parse(readFileSync(new URL('../../../contracts/openapi.jso
 const inventory = contract.paths['/v1/accounts/{accountId}/watches'].get;
 const schema = inventory.responses['200'].content['application/json'].schema;
 
-test('published watch pages close both disclosure variants and retain only personal removal metadata when unavailable', () => {
+test('published watch pages distinguish available kinds and retain only personal removal metadata when unavailable', () => {
   expect(schema.additionalProperties).toBe(false);
   expect(schema.required.slice().sort()).toEqual(['actions', 'items', 'next', 'viewer']);
   expect(schema.properties.items.maxItems).toBe(20);
@@ -13,9 +13,15 @@ test('published watch pages close both disclosure variants and retain only perso
   expect(schema.properties.viewer.required.slice().sort()).toEqual(['accountId', 'state']);
   expect(schema.properties.actions.required).toEqual(['remove']);
   const variants = schema.properties.items.items.anyOf;
-  expect(variants.map((row: any) => row.properties.state.const)).toEqual(['available', 'unavailable']);
+  expect(
+    variants.map((row: any) => [row.properties.state.const, row.properties.kind.const ?? row.properties.kind.enum]),
+  ).toEqual([
+    ['available', 'thread'],
+    ['available', 'board'],
+    ['unavailable', ['thread', 'board']],
+  ]);
   for (const row of variants) expect(row.additionalProperties).toBe(false);
-  expect(Object.keys(variants[1].properties).sort()).toEqual([
+  expect(Object.keys(variants[2].properties).sort()).toEqual([
     'command',
     'createdAt',
     'id',
@@ -23,11 +29,9 @@ test('published watch pages close both disclosure variants and retain only perso
     'revision',
     'state',
   ]);
-  expect(variants[1].required.slice().sort()).toEqual(['command', 'createdAt', 'id', 'kind', 'revision', 'state']);
-  expect(variants[0].properties.kind.enum).toEqual(['thread', 'board']);
-  expect(variants[0].required).toContain('resourceId');
-  expect(variants[0].required).toContain('title');
-  expect(variants[0].required).toContain('command');
+  expect(variants[2].required.slice().sort()).toEqual(['command', 'createdAt', 'id', 'kind', 'revision', 'state']);
+  for (const row of variants.slice(0, 2))
+    expect(row.required).toEqual(expect.arrayContaining(['resourceId', 'title', 'place', 'command']));
 });
 
 test('published watch selection, removal and board CAS inputs remain explicit', () => {
