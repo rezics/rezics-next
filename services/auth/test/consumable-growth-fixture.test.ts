@@ -14,6 +14,8 @@ import { openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/suppo
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import {
   consumableGrowth,
+  expectMaintenancePage,
+  maintenanceOutputs,
   prepareMaintenanceTarget,
   protocolRows,
   protocolTables,
@@ -179,25 +181,33 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
       ? protocolRows(database, `${id}-`, 1, 1000, new Date('1990-01-01'))
       : prepareMaintenanceTarget(database, id, 'history-', 16);
   const full = website ? [1000, 1000, 1000, 1000, 1000] : [1600, 100, 1000, 1000];
+  const remaining = website ? full.map(() => 0) : [1599, 100, 0, 0];
+  async function checkTick(id: string, target = id) {
+    expect(await counts(`${target}-`)).toEqual(full);
+    await dispatch(id);
+    expect(await counts(`${target}-`)).toEqual(remaining);
+    if (website) {
+      const outputs = (await db.admin.query('SELECT output FROM dbos.operation_outputs WHERE workflow_uuid=$1', [id]))
+        .rows;
+      expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([5000]);
+    } else {
+      await expectMaintenancePage(db, target, 'history-', 16);
+      expect(await maintenanceOutputs(db, schema, id)).toMatchObject({
+        'auth.maintenance.sweepExpiredSessions': 1000,
+        'auth.maintenance.retireSigningKeys': 0,
+        'auth.maintenance.sweepExpiredVerifications': 1000,
+        'auth.maintenance.eraseDueConsents': 1,
+      });
+    }
+    expect(await counts(website ? 'live-' : 'history-')).toEqual(
+      website ? [1000, 1000, 1000, 1000, 1000] : [1000, 1000, 1000, 1000],
+    );
+    expect(await counts('backlog-')).toEqual(website ? [1000, 1000, 1000, 1000, 1000] : [0, 0, 1000, 1000]);
+  }
   const targets = consumableGrowth({
     name: 'fixture',
     setup,
-    async run(_database, _scale, id) {
-      expect(await counts(`${id}-`)).toEqual(full);
-      await dispatch(id);
-      expect(await counts(`${id}-`)).toEqual(full.map(() => 0));
-      const outputs = (
-        await db.admin.query(
-          `SELECT output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
-          [id],
-        )
-      ).rows;
-      expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual(website ? [5000] : [1000, 0, 1000, 100]);
-      expect(await counts(website ? 'live-' : 'history-')).toEqual(
-        website ? [1000, 1000, 1000, 1000, 1000] : [1000, 1000, 1000, 1000],
-      );
-      expect(await counts('backlog-')).toEqual(website ? [1000, 1000, 1000, 1000, 1000] : [0, 0, 1000, 1000]);
-    },
+    run: (_database, _scale, id) => checkTick(id),
   });
   try {
     await expect(targets.hooks.operation(db, 1, 0)).rejects.toThrow('Fresh native target required');
@@ -221,15 +231,14 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
     await setup(db, 1, replayTarget);
     await dispatch(targets.invocations[2]!.id);
     expect(await counts(`${replayTarget}-`)).toEqual(full);
-    await dispatch('fresh-after-replay');
-    expect(await counts(`${replayTarget}-`)).toEqual(full.map(() => 0));
+    await checkTick('fresh-after-replay', replayTarget);
     const completedRuns = (
       await db.admin.query(
         `SELECT count(*)::int AS n FROM ${schema}.workflow_status WHERE status='SUCCESS' AND (workflow_uuid LIKE 'fixture-%' OR workflow_uuid='fresh-after-replay')`,
       )
     ).rows[0].n;
     expect(completedRuns).toBe(11);
-    expect(await counts('fixture-')).toEqual(full.map(() => 0));
+    expect(await counts('fixture-')).toEqual(remaining.map((count) => count * targets.invocations.length));
 
     // A caller failure after native completion still consumes the entire unit.
     // Retrying either branch at the same caller index must dispatch fresh work.
@@ -238,20 +247,7 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
       name: 'retry-fixture',
       setup,
       async run(_database, _scale, id) {
-        expect(await counts(`${id}-`)).toEqual(full);
-        await dispatch(id);
-        expect(await counts(`${id}-`)).toEqual(full.map(() => 0));
-        const outputs = (
-          await db.admin.query(
-            `SELECT output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
-            [id],
-          )
-        ).rows;
-        expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual(website ? [5000] : [1000, 0, 1000, 100]);
-        expect(await counts(website ? 'live-' : 'history-')).toEqual(
-          website ? [1000, 1000, 1000, 1000, 1000] : [1000, 1000, 1000, 1000],
-        );
-        expect(await counts('backlog-')).toEqual(website ? [1000, 1000, 1000, 1000, 1000] : [0, 0, 1000, 1000]);
+        await checkTick(id);
         if (failAfterCompletion) {
           failAfterCompletion = false;
           throw new Error('Caller failed after native completion');
@@ -280,7 +276,7 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
         )
       ).rows[0].n,
     ).toBe(4);
-    expect(await counts('retry-fixture-')).toEqual(full.map(() => 0));
+    expect(await counts('retry-fixture-')).toEqual(remaining.map((count) => count * retries.invocations.length));
   } finally {
     await shutdown();
   }

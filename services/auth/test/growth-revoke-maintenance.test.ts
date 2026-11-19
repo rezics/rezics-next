@@ -22,6 +22,10 @@ import {
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import {
   consumableGrowth,
+  durableHistory,
+  expectMaintenancePage,
+  startMeasuredMaintenanceTick,
+  maintenanceOutputs,
   prepareMaintenanceTarget,
   protocolRows,
   protocolTables,
@@ -219,31 +223,6 @@ async function revokeGrowth(db: GrowthDatabase) {
     }
 }
 
-async function durableHistory(
-  db: GrowthDatabase,
-  schema: string,
-  queue: string,
-  tag: string,
-  from: number,
-  to: number,
-) {
-  await db.admin.query(
-    `WITH inserted AS (
-    INSERT INTO ${schema}.workflow_status
-      (workflow_uuid,status,name,queue_name,authenticated_roles,recovery_attempts,created_at,updated_at,inputs,queue_partition_key,serialization)
-    SELECT $1||i,'SUCCESS','history',CASE WHEN i%2=0 THEN $4 ELSE 'other-queue' END,'[]',0,i,i,'[]',
-      CASE WHEN i%2=0 THEN 'hot' ELSE 'other-'||i END,'JSON' FROM generate_series($2::int,$3::int) i
-    RETURNING workflow_uuid
-  ), inputs AS (
-    INSERT INTO ${schema}.workflow_input (workflow_uuid,inputs) SELECT workflow_uuid,'[]' FROM inserted
-  ), outputs AS (
-    INSERT INTO ${schema}.workflow_output (workflow_uuid,output,error) SELECT workflow_uuid,'null','' FROM inserted
-  ) INSERT INTO ${schema}.operation_outputs (workflow_uuid,function_id,function_name,output,error)
-    SELECT workflow_uuid,1,'history','null','' FROM inserted`,
-    [tag, from, to, queue],
-  );
-}
-
 async function completed(db: GrowthDatabase, schema: string, workflowID: string) {
   // Synchronize the fixture through the uncaptured admin pool. Repeated SDK
   // result polling would measure elapsed execution time instead of tick work.
@@ -283,35 +262,17 @@ async function maintenanceGrowth(db: GrowthDatabase) {
         async run(_database, scale, id) {
           // Dispatch the registered schedule's native workflow with a fresh
           // explicit ID. Automatic schedule IDs are background in the harness.
-          const schedule = (await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE))!;
-          expect(schedule.workflowName).toBe('auth.maintenance.tick');
-          expect(schedule.queueName).toBe(AUTH_MAINTENANCE_SCHEDULE);
-          const tick = await DBOS.enqueueWorkflowWithOptions(
-            {
-              workflowName: schedule.workflowName,
-              queueName: schedule.queueName!,
-              workflowID: id,
-            },
-            new Date(0),
-            schedule.context,
-          );
+          const tick = await startMeasuredMaintenanceTick(id);
           await completed(db, AUTH_SYSTEM_SCHEMA, tick.workflowID);
           await tick.getResult();
-          const outputs = (
-            await db.admin.query(
-              `SELECT output FROM ${AUTH_SYSTEM_SCHEMA}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
-              [tick.workflowID],
-            )
-          ).rows;
-          expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([1000, 0, 1000, 100]);
+          expect(await maintenanceOutputs(db, AUTH_SYSTEM_SCHEMA, tick.workflowID)).toMatchObject({
+            'auth.maintenance.sweepExpiredSessions': 1000,
+            'auth.maintenance.retireSigningKeys': 0,
+            'auth.maintenance.sweepExpiredVerifications': 1000,
+            'auth.maintenance.eraseDueConsents': 1,
+          });
+          await expectMaintenancePage(db, id, `${axis}-history-`, axis === 'history' ? 16 : scale);
           const tag = `${id}-%`;
-          expect(
-            (await db.admin.query('SELECT account_id FROM auth_consent WHERE account_id LIKE $1', [tag])).rowCount,
-          ).toBe(0);
-          expect(
-            (await db.admin.query('SELECT account_id FROM auth_consent_erasure WHERE account_id LIKE $1', [tag]))
-              .rowCount,
-          ).toBe(0);
           expect((await db.admin.query('SELECT id FROM session WHERE id LIKE $1', [tag])).rowCount).toBe(0);
           expect((await db.admin.query('SELECT id FROM verification WHERE id LIKE $1', [tag])).rowCount).toBe(0);
           for (const [table, key, count] of [
@@ -332,10 +293,9 @@ async function maintenanceGrowth(db: GrowthDatabase) {
       const report = await growth(db, {
         name: `due consent native maintenance tick: ${axis}`,
         scales,
-        // B=100 owners; C is fixed at 16 for history and grows with the client axis.
-        // Erasure performs 3+2C statements per owner: R/S=O(B*C),
-        // blocks O(B*C*log N). With B,C fixed only indexed blocks may grow.
-        bounds: axis === 'history' ? fixed : { rows: 'linear', blocks: 'linear', statements: 'linear' },
+        captureMode: 'cost-folded',
+        // Each tick admits one account/client page at every history and client scale.
+        bounds: fixed,
         async grow(_, scale, previous) {
           await authHistory(db, `${axis}-history-`, previous * 1000 + 1, scale * 1000);
           await durableHistory(
@@ -384,7 +344,7 @@ async function maintenanceGrowth(db: GrowthDatabase) {
       }
       for (const sample of report.samples)
         for (const cost of [sample.cost, ...sample.repetitions]) {
-          expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThanOrEqual(100);
+          expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThan(0);
           expect(cost.relations[`${AUTH_SYSTEM_SCHEMA}.operation_outputs`]!.nodes).toBeGreaterThan(0);
         }
     }
