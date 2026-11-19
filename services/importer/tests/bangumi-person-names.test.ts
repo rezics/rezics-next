@@ -87,7 +87,7 @@ test.each(['bangumi', 'bangumi_cross_media'])(
         }
         if (request.method === 'POST' && url.pathname === '/v1/media:importFromUrl') {
           portrait = (await request.json()) as MediaImportRequest;
-          expect(portrait.containerId).toBe(subjects.get(`${alias}:person:641`));
+          expect(subjects.get(`${alias}:person:641`)).toBe(portrait.containerId);
           expect(portrait.provenance).toMatchObject({ source: alias, external_id: 'person:641', field_group: 'cover' });
           return Response.json(
             { media: { id: portraitId, containerId: portrait.containerId, purpose: 'cover', state: 'reserved' } },
