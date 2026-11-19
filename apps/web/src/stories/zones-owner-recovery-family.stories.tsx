@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { ZoneFeedback } from '../features/zones/manage/feedback';
 import { ZonesRouteError } from '../features/zones/manage/route-feedback';
 import { zonesNavigation } from '../features/zones/manage/navigation';
@@ -40,7 +40,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'UNRUN: actual ZoneFeedback, nine failures with and without caller-owned retry. Review phone 390, desktop 1280, every locale/theme and RTL. Connected owner pages use their unchanged canonical fixtures. Class/DOM assertions are not measured geometry or browser proof. Growth repeats independent supplied instances at 1/8/32, never a backend failure page: constant presentation per instance and zero added IO, traversal or transport changes. Native/physical growth and original acceptance remain deferred.',
+          'ZoneFeedback renders nine failures with optional caller-owned retry. Recovery Targets checks pointer geometry, keyboard focus, and wrapping. Connected owner pages reuse their canonical fixtures. The 1/8/32 stories render independent feedback instances.',
       },
     },
   },
@@ -117,6 +117,57 @@ export const ReturnNavigation: Story = {
   },
 };
 
+export const RecoveryTargets: Story = {
+  args: { onRetry: fn() },
+  render: ({ onRetry }) => (
+    <div className="space-y-3 p-4">
+      <ZoneFeedback failure={{ kind: 'signed-out' }} locale="en" />
+      <ZoneFeedback failure={{ kind: 'unavailable' }} locale="en" />
+      <ZoneFeedback failure={{ kind: 'unavailable' }} locale="en" onRetry={onRetry} />
+      <div className="w-24" dir="rtl" lang="de">
+        <ZoneFeedback failure={{ kind: 'unavailable' }} locale="de" onRetry={onRetry} />
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const retry = canvas.getByRole('button', { name: m.zones_owner_retry({}, { locale: 'en' }) });
+    const touchTarget = matchMedia('(width < 48rem), (pointer: coarse)').matches;
+    for (const action of [...canvas.getAllByRole('link'), retry]) {
+      action.scrollIntoView({ block: 'center' });
+      const { x, y, width, height } = action.getBoundingClientRect();
+      expect(height).toBe(28);
+      const centerX = x + width / 2;
+      const centerY = y + height / 2;
+      for (const dx of touchTarget ? [-21.5, 21.5] : [0]) {
+        for (const dy of touchTarget ? [-21.5, 21.5] : [0]) {
+          const hit = action.ownerDocument.elementFromPoint(centerX + dx, centerY + dy);
+          expect(action.contains(hit), `Pointer target for ${action.textContent} at (${dx}, ${dy})`).toBe(true);
+        }
+      }
+      const unfocusedShadow = getComputedStyle(action).boxShadow;
+      await userEvent.tab();
+      expect(action).toHaveFocus();
+      expect(action.matches(':focus-visible')).toBe(true);
+      await waitFor(() => expect(getComputedStyle(action).boxShadow).not.toBe(unfocusedShadow));
+    }
+    expect(args.onRetry).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Enter}');
+    expect(args.onRetry).toHaveBeenCalledTimes(1);
+    const label = m.zones_owner_retry({}, { locale: 'de' });
+    const wrapped = canvas.getByRole('button', { name: label });
+    const wrappedBounds = wrapped.getBoundingClientRect();
+    const text = wrapped.ownerDocument.createRange();
+    text.selectNodeContents(wrapped);
+    const lines = [...text.getClientRects()];
+    expect(wrappedBounds.height).toBeGreaterThan(28);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.every(({ left, right }) => left >= wrappedBounds.left && right <= wrappedBounds.right)).toBe(true);
+    await userEvent.tab();
+    expect(wrapped).toHaveFocus();
+  },
+};
+
 function IndependentRecovery({ count = 1, rtl = false }: { count?: number; rtl?: boolean }) {
   const callbacks = useMemo(() => Array.from({ length: count }, () => fn()), [count]);
   return (
@@ -164,7 +215,9 @@ export const OwnerUncertainRetry: Story = {
     const retry = within(alert).getByRole('button', { name: m.zones_owner_retry() });
     retry.focus();
     await userEvent.keyboard('{Enter}');
-    expect(await canvas.findByText(m.zones_owner_trashed())).toBeVisible();
+    const recovered = await canvas.findByText(m.zones_owner_trashed());
+    expect(recovered).toBeVisible();
+    await waitFor(() => expect(recovered.closest('[role="status"]')).toHaveFocus());
   },
 };
 export const RouteFailure: Story = {

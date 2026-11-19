@@ -5,7 +5,7 @@ import { m } from '../../../paraglide/messages.js';
 import type { Failure } from './model';
 
 const recoveryControlClassName =
-  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center max-md:hitbox-[9px] pointer-coarse:hitbox-[9px]';
 
 export type KeyboardActivation = { generation: number };
 
