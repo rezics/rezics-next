@@ -1,6 +1,7 @@
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
+import { miraSmPointerTarget } from './catalogue-control-target';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
 import { identifierVisitHref } from './identifier-current-visit';
@@ -151,7 +152,7 @@ export function EditorialEntry({
           title={m.contribute_title({}, o)}
           backLabel={m.contribute_back({}, o)}
           trigger={
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className={miraSmPointerTarget}>
               {m.contribute_title({}, o)}
             </Button>
           }

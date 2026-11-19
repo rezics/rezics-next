@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useContributionResultFocus } from './contribution-result-focus';
 import { Button } from '@rezics/ui/shadcn/button';
+import { miraDefaultPointerTarget } from './catalogue-control-target';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
   AlertDialog,
@@ -301,11 +302,11 @@ function ContributionLifecycleLive({
                       : m.contribution_unavailable({}, o)}
             </p>
           )}
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="flex min-w-0 flex-col gap-3 max-md:gap-y-5 pointer-coarse:gap-y-5 sm:flex-row sm:flex-wrap">
             {operation && state !== 'expired' && failure !== 'denied' && (
               <Button
                 type="button"
-                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={`h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${miraDefaultPointerTarget}`}
                 variant={operation === 'delete' ? 'destructive' : 'default'}
                 data-contribution-action={pending.current ? 'retry' : operation}
                 disabled={busy}
@@ -331,7 +332,7 @@ function ContributionLifecycleLive({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={`h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${miraDefaultPointerTarget}`}
                 disabled={busy}
                 onClick={() => void refresh()}
               >
@@ -356,12 +357,14 @@ function ContributionLifecycleLive({
                   : m.contribution_confirm_restore({}, o)}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter className="min-w-0 sm:flex-wrap">
-              <AlertDialogCancel className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <AlertDialogFooter className="min-w-0 max-md:gap-y-5 pointer-coarse:gap-y-5 sm:flex-wrap">
+              <AlertDialogCancel
+                className={`h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${miraDefaultPointerTarget}`}
+              >
                 {m.candidate_cancel({}, o)}
               </AlertDialogCancel>
               <AlertDialogAction
-                className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={`h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${miraDefaultPointerTarget}`}
                 variant={confirmation?.operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy}
                 onClick={(event) => confirmation && void change(event, { kind: 'confirm', confirmation })}
