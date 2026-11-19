@@ -24,6 +24,7 @@ import {
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
+import { parseWalkSelection, reviewedWalkProbe, type WalkSelection } from './imports-walk-selection.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
 import { formatReviewedCatalogueSeedError, reviewedCatalogueProblem } from './http.ts';
@@ -143,22 +144,9 @@ export const FIRST_PUBLIC_IMPORT_ROWS = [
 
 export type FirstPublicImportRowId = (typeof FIRST_PUBLIC_IMPORT_ROWS)[number]['id'];
 
-export type WalkSelection = { scope: 'operators' | 'catalogue' | 'all'; reopenSeed: boolean };
+export { parseWalkSelection, type WalkSelection } from './imports-walk-selection.ts';
 
 const operatorRows = ['I01', 'I02', 'I04', 'I03'] as const;
-
-export function parseWalkSelection(args: readonly string[]): WalkSelection {
-  const [flag, scope, ...rest] = args;
-  const selectedScope =
-    flag === '--scope' && (scope === 'operators' || scope === 'catalogue' || scope === 'all') ? scope : undefined;
-  const flags = selectedScope ? rest : args;
-  const reopenSeed = flags.length === 1 && flags[0] === '--reopen-seed';
-  if ((flags.length > 0 && !reopenSeed) || (selectedScope === 'operators' && reopenSeed))
-    throw new Error(
-      'Usage: imports-public-journey.ts --reviewed-bootstrap | [--scope operators|catalogue|all] [--reopen-seed (catalogue or all)]',
-    );
-  return { scope: selectedScope ?? 'all', reopenSeed };
-}
 
 function isOperatorRow(id: FirstPublicImportRowId): id is (typeof operatorRows)[number] {
   return operatorRows.some((row) => row === id);
@@ -2236,9 +2224,10 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
 
 if (import.meta.main) {
   const args = Bun.argv.slice(2);
-  if (args.length === 1 && (args[0] === '--reviewed-bootstrap' || args[0] === '--reviewed-source-scheme')) {
+  const probe = reviewedWalkProbe(args);
+  if (probe) {
     try {
-      await runReviewedBootstrap(args[0] === '--reviewed-source-scheme');
+      await runReviewedBootstrap(probe === '--reviewed-source-scheme');
     } catch (error) {
       const status = error instanceof ImportTransportError ? error.status : undefined;
       console.error(

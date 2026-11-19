@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
-import { bundledWebStage } from './bundled-web-startup.ts';
+import { bundledWebStage, catalogueWebOutputEnv } from './bundled-web-startup.ts';
 import { ensureMessagesReady, prepareLiveMessages } from './messages-ready.ts';
 import { ownBunProcess } from '../tests/support/server-custody.ts';
 import {
@@ -20,9 +20,12 @@ const uiRoot = resolve(repoRoot, 'packages/ui');
 const ownStartupChild = (child: Bun.Subprocess) =>
   ownBunProcess(child, { label: 'Web startup', termGraceMs: 1_000, settleTimeoutMs: 5_000 });
 
-type LaunchPlan =
-  | { kind: 'vite' | 'app'; command: string; cwd: string; args: string[] }
-  | { kind: 'storybook'; command: string; cwd: string; args: string[] };
+type LaunchPlan = {
+  kind: 'vite' | 'app' | 'storybook' | 'catalogue-build' | 'catalogue-preview';
+  command: string;
+  cwd: string;
+  args: string[];
+};
 
 function isLoopbackHost(host: string): boolean {
   const address = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
@@ -56,6 +59,10 @@ export function storybookLaunchPlan(
 ): LaunchPlan {
   if (args[0] === '--app') {
     const forwarded = args.slice(1);
+    const buildOnly = forwarded[0] === '--build-bundled';
+    const catalogue = Boolean(env[catalogueWebOutputEnv]);
+    if (buildOnly && !catalogue) throw new Error('Catalogue Web build requires a private output directory');
+    if (buildOnly) forwarded.shift();
     const hosts = storybookHosts(forwarded);
     for (const host of hosts) {
       if (!isLoopbackHost(host)) {
@@ -64,9 +71,16 @@ export function storybookLaunchPlan(
     }
     if (hosts.length === 0) forwarded.push('--host', '127.0.0.1');
     const port = forwarded.some((arg) => arg === '--port' || arg.startsWith('--port=')) ? [] : ['--port', '3000'];
+    // Existing finite test callers of `bun run dev` still require check custody.
+    const kind = catalogue
+      ? buildOnly
+        ? 'catalogue-build'
+        : 'catalogue-preview'
+      : env.REZICS_TEST_RUNTIME === '1'
+        ? 'vite'
+        : 'app';
     return {
-      // Existing finite test callers of `bun run dev` still require check custody.
-      kind: env.REZICS_TEST_RUNTIME === '1' ? 'vite' : 'app',
+      kind,
       command: 'vite',
       cwd: roots.web,
       args: ['--config', 'vite.config.ts', ...port, '--strictPort', ...forwarded],
@@ -107,48 +121,56 @@ export function storybookLaunchPlan(
 
 /** Both Web modes prepare in disposable Bun processes; the live plugin still validates its own cache in Vite. */
 export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolean {
-  return kind === 'vite' || kind === 'app';
+  return kind === 'vite' || kind === 'app' || kind === 'catalogue-build';
 }
 
 /** Leave room for workerd and the native stack instead of sizing V8 from the whole host. */
 export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const bundledNative = kind === 'vite' && env.REZICS_TEST_RUNTIME === '1' && env.NATIVE_WEB_BUNDLED_CLIENT === '1';
-  if (kind !== 'app' && !bundledNative) return env;
+  if (kind !== 'app' && kind !== 'catalogue-build' && !bundledNative) return env;
   const options = env.NODE_OPTIONS ?? '';
   // An explicit operator heap limit remains authoritative; other Node options are retained.
   if (/(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s)/.test(options)) return env;
   // Bundled native checks compile the complete client graph in one V8 process.
-  const heapMiB = bundledNative ? 2560 : 2048;
+  const heapMiB = bundledNative || kind === 'catalogue-build' ? 2560 : 2048;
   return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=${heapMiB}`.trim() };
 }
 
 async function runBundledPreview(plan: LaunchPlan, env: NodeJS.ProcessEnv, signal: AbortSignal, traceId: string) {
   // Cloudflare places Build Output under the Vite root. Give each launch its own output and keep
   // the real source and packages at their original paths for the Worker and client builds.
-  bundledWebStage('prepare-build');
+  const buildOnly = plan.kind === 'catalogue-build';
+  const output = buildOnly || plan.kind === 'catalogue-preview' ? env[catalogueWebOutputEnv] : undefined;
   const parent = env.WEB_TEST_STATE_INSTANCE_DIR ?? resolve(repoRoot, '.temp');
-  await mkdir(parent, { recursive: true });
-  const root = await mkdtemp(resolve(parent, 'compiled-web-'));
+  if (!output) await mkdir(parent, { recursive: true });
+  const root = output ?? (await mkdtemp(resolve(parent, 'compiled-web-')));
   try {
-    for (const input of ['cloudflare.config.ts', 'scripts', 'src', 'public', 'node_modules', 'package.json']) {
-      await symlink(resolve(webRoot, input), resolve(root, input));
-    }
     const options = {
       ownChild: ownStartupChild,
       env: { ...env, NODE_ENV: 'production', NATIVE_WEB_PREVIEW_ROOT: root },
       signal,
       traceId,
     };
-    bundledWebStage('build');
-    const built = await runWebStartupChild('vite', ['build', '--config', 'vite.config.ts'], plan.cwd, options);
-    if (built !== 0) {
-      bundledWebStage('build-failed');
-      return built;
+    if (buildOnly || !output) {
+      bundledWebStage('prepare-build');
+      for (const input of ['cloudflare.config.ts', 'scripts', 'src', 'public', 'node_modules', 'package.json']) {
+        await symlink(resolve(webRoot, input), resolve(root, input));
+      }
+      if (buildOnly) {
+        // Feed the compiler the scopes validated from setup. The preview receives the real local secrets.
+        const file = resolve(root, 'website.json');
+        await writeFile(file, JSON.stringify({ WEBSITE_SCOPES: env.WEBSITE_SCOPES }), { mode: 0o600, flag: 'wx' });
+        Object.assign(options.env, { WEBSITE_CONFIGURATION_FILE: file });
+      }
+      bundledWebStage('build');
+      const built = await runWebStartupChild('vite', ['build', '--config', 'vite.config.ts'], plan.cwd, options);
+      if (built !== 0) bundledWebStage('build-failed');
+      if (buildOnly || built !== 0) return built;
     }
     bundledWebStage('preview');
     return await runWebStartupChild('vite', ['preview', ...plan.args], plan.cwd, options);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    if (!output) await rm(root, { recursive: true, force: true });
   }
 }
 
@@ -164,6 +186,23 @@ if (import.meta.main) {
       args = operatorEntry(args).args;
     }
     const plan = storybookLaunchPlan(args, startupEnv);
+    const buildOnly = plan.kind === 'catalogue-build';
+    const catalogue = buildOnly || plan.kind === 'catalogue-preview';
+    if (catalogue) {
+      const { walkStackAdmitted } = await import('../../../scripts/stack-run.ts');
+      if (
+        startupEnv.REZICS_TEST_RUNTIME === '1' ||
+        startupEnv.REZICS_WALK_IMPORT_CATALOGUE !== '1' ||
+        !walkStackAdmitted(startupEnv, repoRoot)
+      ) {
+        throw new Error('Catalogue Web build and preview require an admitted catalogue walk');
+      }
+      if (buildOnly) {
+        delete startupEnv.WEBSITE_CLIENT_KEY;
+        // The Worker config uses presence to select the native media transport's secret binding.
+        if (startupEnv.LOCAL_MEDIA_TOKEN) startupEnv.LOCAL_MEDIA_TOKEN = 'configured';
+      }
+    }
     if (plan.kind === 'app') startupEnv.WEB_VITE_CACHE_DIR ??= resolve(webRoot, '.temp/vite-live');
     webStartupLog('binding-selection', webStartupSelection(plan.kind, startupEnv), startupEnv);
     if (plan.kind === 'vite') {
@@ -176,10 +215,11 @@ if (import.meta.main) {
     let generated = 0;
     if (webServeNeedsGeneratedMessages(plan.kind)) {
       const startedAt = performance.now();
-      if (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1') bundledWebStage('prepare-messages');
+      if (buildOnly || (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1'))
+        bundledWebStage('prepare-messages');
       webStartupLog('messages-preparation-start', {}, startupEnv);
       generated =
-        plan.kind === 'app'
+        plan.kind === 'app' || buildOnly
           ? await prepareLiveMessages(webRoot, startupEnv, { signal: interruptions.signal, traceId })
           : await ensureMessagesReady(webRoot, startupEnv, { signal: interruptions.signal, traceId });
       webStartupLog(
@@ -210,7 +250,7 @@ if (import.meta.main) {
     if (generated !== 0 && !interruptions.signal.aborted) {
       console.error(`Web preparation exited ${generated} before Vite started`);
       process.exitCode = generated;
-    } else if (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1') {
+    } else if (catalogue || (plan.kind === 'vite' && startupEnv.NATIVE_WEB_BUNDLED_CLIENT === '1')) {
       process.exitCode = await runBundledPreview(
         plan,
         webServeEnvironment(plan.kind, startupEnv),

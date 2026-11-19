@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Connect, Plugin } from 'vite';
 
 export const webReadinessPath = '/en/subjects/00000000-0000-4000-8000-000000000000';
+export const catalogueWebOutputEnv = 'REZICS_WALK_WEB_OUTPUT';
 
 const stages = [
   'prepare-messages',

@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from '
 import { dirname, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
+  catalogueWalkNeedsWeb,
   developmentKeys,
   resolveFrontendProcess,
   origins,
@@ -481,6 +482,20 @@ test('a failed native opening stops persona setup and names the group, cause and
   expect(attempted).toEqual(['search']);
 });
 
+test('catalogue walks prebuild Web for mounted selections', () => {
+  const env = { REZICS_WALK_IMPORT_CATALOGUE: '1' };
+  const entry = relative(process.cwd(), resolve(root, 'services/importer/src/imports-public-journey.ts'));
+  const journey = ['bun', entry];
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'operators'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--reviewed-bootstrap'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--reviewed-source-scheme'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'catalogue'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'catalogue', '--reopen-seed'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(journey, env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(['bun', 'other.ts', '--scope', 'operators'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(journey, {})).toBe(false);
+});
+
 test('generated Web bindings preserve literal JWK JSON and the selected deployment scope artifact', async () => {
   const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/web-bindings-'));
   try {
@@ -526,12 +541,27 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
     const env = {
       REZICS_WALK_IMPORT_CATALOGUE: '1',
       REZICS_WALK_WEB_BINDINGS_SHA256: createHash('sha256').update(text).digest('hex'),
+      REZICS_WALK_WEB_OUTPUT: resolve(directory, 'compiled-web'),
     };
     // An admitted post-replay launch must work without a live database or native SQL preparation.
     const launch = await resolveFrontendProcess('web', [], true, env, webFile);
     expect(launch.environment).toMatchObject({ ...setup, AUTH_ORIGIN: origins.native, PUBLIC_ORIGIN: origins.web });
     expect(launch.environment.REZICS_WEB_CATALOGUE_LOCALE_MODULES).toBe('1');
+    expect(launch.environment.REZICS_WALK_WEB_OUTPUT).toBe(env.REZICS_WALK_WEB_OUTPUT);
     expect(launch.command).toContain('apps/web');
+    expect(launch.command).not.toContain('--build-bundled');
+    const compile = await resolveFrontendProcess('web', ['--build-bundled'], true, env, webFile);
+    expect(compile.command).toEqual([...launch.command, '--build-bundled']);
+    expect(compile.environment).toEqual(launch.environment);
+    await expect(resolveFrontendProcess('web', [], false, env, webFile)).rejects.toThrow('requires an admitted');
+    await expect(
+      resolveFrontendProcess('web', [], true, { ...env, REZICS_WALK_WEB_OUTPUT: undefined }, webFile),
+    ).rejects.toThrow('output was not prepared');
+    await writeFile(file, JSON.stringify({ WEBSITE_SCOPES: 'openid offline_access' }));
+    await expect(resolveFrontendProcess('web', [], true, env, webFile)).rejects.toThrow(
+      'WEBSITE_SCOPES differs from WEBSITE_CONFIGURATION_FILE',
+    );
+    await writeFile(file, JSON.stringify({ WEBSITE_SCOPES }));
     await privateFile(webFile, developmentBindings({ ...setup, WEBSITE_SCOPES: 'openid' }));
     await expect(resolveFrontendProcess('web', [], true, env, webFile)).rejects.toThrow('differ from walk setup');
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
@@ -580,11 +610,13 @@ test('walk Web launch uses the product Vite child and does not raise Node heap',
     PATH: '/bin',
     REZICS_TEST_RUNTIME: '1',
     REZICS_WEB_CATALOGUE_LOCALE_MODULES: '1',
+    REZICS_WALK_WEB_OUTPUT: '/private/compiled-web',
     NODE_OPTIONS: '--max-old-space-size=8192',
     AUTH_ORIGIN: 'http://127.0.0.1:20022',
   });
   expect(child.REZICS_TEST_RUNTIME).toBeUndefined();
   expect(child.REZICS_WEB_CATALOGUE_LOCALE_MODULES).toBeUndefined();
+  expect(child.REZICS_WALK_WEB_OUTPUT).toBeUndefined();
   expect(child.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
   expect(child.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
   expect(child.AUTH_ORIGIN).toBe('http://127.0.0.1:20022');
