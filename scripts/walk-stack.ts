@@ -520,7 +520,11 @@ export async function waitUntilIdentityBootstrapRemainingZero(
 }
 
 /** The variables that give one admitted stack its own names, ports and origins. */
-export function walkStackEnvironment(task: string, index: number): Record<string, string> {
+export function walkStackEnvironment(
+  task: string,
+  index: number,
+  env: Record<string, string | undefined> = {},
+): Record<string, string> {
   const names = walkStackNames(task, index);
   const ports = walkStackPorts(index);
   const origin = (port: number) => `http://127.0.0.1:${port}`;
@@ -537,7 +541,8 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(ports.kernel),
     REZICS_WALK_STACK_SLOT: String(index),
     // Seeded indexes stay on niofs; docker memory ceilings stop volume file cache filling the 6 GiB run slice.
-    OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
+    // Catalogue publication crossed the 128 MiB heap's parent breaker during indexing.
+    OPENSEARCH_JAVA_OPTS: env.REZICS_WALK_IMPORT_CATALOGUE === '1' ? '-Xms160m -Xmx160m' : '-Xms128m -Xmx128m',
     KERNEL_SEARCH_ALLOW_MMAP: '0',
     KERNEL_SEARCH_MEMORY: '768m',
     // Concurrent graph writes need room for several Postgres backends alongside the populated catalogue.
@@ -561,7 +566,7 @@ export function walkProcessEnvironment(
     if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE' && name !== 'KERNEL_WORKER_POOL_SIZE')
       merged[name] = value;
   }
-  const scoped = walkStackEnvironment(task, index);
+  const scoped = walkStackEnvironment(task, index, env);
   const deferFrontends =
     env.REZICS_WALK_FIRST_PUBLIC_WEB === '1'
       ? '0'

@@ -440,7 +440,7 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
   expect(env.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
 });
 
-test('walk selection uses one fresh published result for catalogue reads and only reopens on request', async () => {
+test('catalogue walks read the first seed, replay on request, then mount the first selection', async () => {
   const report = {
     showcase: {
       status: 'published',
@@ -463,17 +463,17 @@ test('walk selection uses one fresh published result for catalogue reads and onl
     [['--scope', 'operators'], ['operators']],
     [
       ['--scope', 'catalogue'],
-      ['seed', 'catalogue'],
+      ['seed', 'read', 'mount'],
     ],
     [
       ['--scope', 'catalogue', '--reopen-seed'],
-      ['seed', 'catalogue', 'reopen'],
+      ['seed', 'read', 'reopen', 'mount'],
     ],
     [
       ['--scope', 'all', '--reopen-seed'],
-      ['operators', 'seed', 'catalogue', 'reopen'],
+      ['operators', 'seed', 'read', 'reopen', 'mount'],
     ],
-    [[], ['operators', 'seed', 'catalogue']],
+    [[], ['operators', 'seed', 'read', 'mount']],
   ] as const) {
     const calls: string[] = [];
     const actions = {
@@ -484,18 +484,34 @@ test('walk selection uses one fresh published result for catalogue reads and onl
         calls.push('seed');
         return fresh;
       },
-      async catalogue(seed: typeof fresh) {
+      async readCatalogue(seed: typeof fresh) {
         expect(seed).toBe(fresh);
-        calls.push('catalogue');
+        calls.push('read');
       },
       async reopenSeed(seed: typeof fresh) {
         expect(seed).toBe(fresh);
         calls.push('reopen');
+        return structuredClone(fresh);
+      },
+      async mountCatalogue(seed: typeof fresh) {
+        expect(seed).toBe(fresh);
+        calls.push('mount');
       },
     };
     const selection = parseWalkSelection(args);
     await runWalkSelection(selection, actions);
     expect(calls).toEqual([...expected]);
+    if (selection.reopenSeed) {
+      calls.length = 0;
+      await runWalkSelection(selection, {
+        ...actions,
+        reopenSeed: async () => {
+          calls.push('reopen');
+          return null;
+        },
+      });
+      expect(calls).toEqual([...expected]);
+    }
     if (selection.scope === 'catalogue') {
       calls.length = 0;
       await runWalkSelection(selection, { ...actions, seed: async () => null });
