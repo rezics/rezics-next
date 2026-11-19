@@ -38,6 +38,7 @@ export function BoardSortNav({
           to="/boards/$id"
           params={{ id: boardId }}
           search={{ ...(option === 'active' ? {} : { sort: option }), ...(returnTo ? { returnTo } : {}) }}
+          activeOptions={{ exact: true }}
           aria-current={option === sort ? 'page' : undefined}
           className={cn(
             buttonVariants({ variant: option === sort ? 'secondary' : 'ghost', size: 'sm' }),
