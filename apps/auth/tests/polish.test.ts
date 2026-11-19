@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
+import { inputByLabel, navigateToHydratedAuthPage } from './browser-fixture';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -76,6 +77,7 @@ function site(): Promise<string> {
         env: {
           ...process.env,
           AUTH_ORIGIN: fake.url.origin,
+          AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
           TURNSTILE_SITE_KEY: 'polish-test-site-key',
           TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
         },
@@ -116,13 +118,13 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
     ...options,
     javaScriptEnabled: true,
   });
-  await context.addCookies([{ name: 'auth_session', value: session, url: origin }]);
+  if (path !== '/login' && path !== '/signup') {
+    await context.addCookies([{ name: 'auth_session', value: session, url: origin }]);
+  }
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    expect(response?.status(), 'the documented dev server serves the page').toBe(200);
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await navigateToHydratedAuthPage(page, `${origin}${path}`);
     return { page, origin };
   } catch (error) {
     await context.close();
@@ -153,13 +155,13 @@ test(
       const button = login.page.getByRole('button', { name: 'Sign in', exact: true });
       expect(await button.isEnabled()).toBe(true);
       await button.click();
-      const email = login.page.getByLabel('Email', { exact: true });
+      const email = inputByLabel(login.page, 'Email');
       expect(await email.getAttribute('aria-invalid')).toBe('true');
       expect(await login.page.evaluate(() => document.activeElement?.getAttribute('name'))).toBe('email');
       expect(await email.getAttribute('aria-describedby')).toBeTruthy();
 
       await email.fill('reader@example.test');
-      await login.page.getByLabel('Password', { exact: true }).fill('secret-password');
+      await inputByLabel(login.page, 'Password').fill('secret-password');
       let received!: () => void;
       const arrived = new Promise<void>((resolve) => (received = resolve));
       signInReceived = received;
@@ -181,7 +183,7 @@ test(
       const button = signup.page.getByRole('button', { name: 'Create an account', exact: true });
       expect(await button.isEnabled()).toBe(true);
       await button.click();
-      const handle = signup.page.getByLabel('Handle', { exact: true });
+      const handle = inputByLabel(signup.page, 'Handle');
       expect(await handle.getAttribute('aria-invalid')).toBe('true');
       expect(await signup.page.evaluate(() => document.activeElement?.getAttribute('name'))).toBe('handle');
       expect(await handle.getAttribute('aria-describedby')).toBeTruthy();
@@ -191,11 +193,11 @@ test(
 
     const security = await open('/security');
     try {
-      const button = security.page.getByRole('button', { name: 'Update password', exact: true });
+      const button = security.page.getByRole('button', { name: 'Review password change', exact: true });
       await button.waitFor({ state: 'visible' });
       expect(await button.isEnabled()).toBe(true);
       await button.click();
-      const password = security.page.getByLabel('New password', { exact: true });
+      const password = inputByLabel(security.page, 'New password');
       expect(await password.getAttribute('aria-invalid')).toBe('true');
       expect(await security.page.evaluate(() => document.activeElement?.getAttribute('name'))).toBe('password');
       expect(await password.getAttribute('aria-describedby')).toBeTruthy();
@@ -208,7 +210,7 @@ test(
       const button = stepUp.page.getByRole('button', { name: 'Verify your identity', exact: true });
       expect(await button.isEnabled()).toBe(true);
       await button.click();
-      const email = stepUp.page.getByLabel('Email', { exact: true });
+      const email = inputByLabel(stepUp.page, 'Email');
       expect(await email.getAttribute('aria-invalid')).toBe('true');
       expect(await stepUp.page.evaluate(() => document.activeElement?.getAttribute('name'))).toBe('email');
       expect(await email.getAttribute('aria-describedby')).toBeTruthy();
@@ -224,25 +226,26 @@ test(
   async () => {
     const pages: { page: Page; password: ReturnType<Page['getByLabel']> }[] = [];
     const login = await open('/login');
-    pages.push({ page: login.page, password: login.page.getByLabel('Password', { exact: true }) });
+    pages.push({ page: login.page, password: inputByLabel(login.page, 'Password') });
     const signup = await open('/signup');
-    pages.push({ page: signup.page, password: signup.page.getByLabel('Password', { exact: true }) });
+    pages.push({ page: signup.page, password: inputByLabel(signup.page, 'Password') });
     const security = await open('/security');
-    pages.push({ page: security.page, password: security.page.getByLabel('New password', { exact: true }) });
+    pages.push({ page: security.page, password: inputByLabel(security.page, 'New password') });
     const stepUp = await open('/step-up?return_to=%2Fsecurity');
-    pages.push({ page: stepUp.page, password: stepUp.page.getByLabel('Password', { exact: true }) });
+    pages.push({ page: stepUp.page, password: inputByLabel(stepUp.page, 'Password') });
     const recovery = await open('/recovery#account_id=polish-account&token=polish-token');
-    pages.push({ page: recovery.page, password: recovery.page.getByLabel('New password', { exact: true }) });
+    pages.push({ page: recovery.page, password: inputByLabel(recovery.page, 'New password') });
 
     try {
       for (const { page, password } of pages) {
         await password.waitFor({ state: 'visible' });
-        const show = page.getByRole('button', { name: 'Show password', exact: true });
+        const group = password.locator('xpath=ancestor::*[@data-slot="input-group"]');
+        const show = group.getByRole('button', { name: 'Show password', exact: true });
         expect(await show.count()).toBe(1);
         expect(await show.evaluate((button) => Boolean(button.closest('[data-slot="input-group"]')))).toBe(true);
         await show.click();
         expect(await password.getAttribute('type')).toBe('text');
-        expect(await page.getByRole('button', { name: 'Hide password', exact: true }).count()).toBe(1);
+        expect(await group.getByRole('button', { name: 'Hide password', exact: true }).count()).toBe(1);
       }
     } finally {
       for (const { page } of pages) await page.context().close();
@@ -256,8 +259,9 @@ test(
   async () => {
     calls.length = 0;
     const { page, origin } = await open('/security');
-    page.on('dialog', (dialog) => dialog.accept());
     try {
+      const list = page.getByRole('list', { name: 'Sessions' });
+      await list.waitFor();
       const sections = page.getByRole('heading', { level: 2 });
       expect(await sections.allTextContents()).toEqual([
         'Password',
@@ -266,7 +270,6 @@ test(
         'Organizations',
         'Delete account',
       ]);
-      const list = page.getByRole('list', { name: 'Sessions' });
       const rows = list.getByRole('listitem');
       expect(await rows.count()).toBe(4);
       const current = rows.filter({ hasText: 'Google Chrome on Linux' });
@@ -285,7 +288,11 @@ test(
       expect(await rows.filter({ hasText: 'Unknown device' }).count()).toBe(1);
       expect(await page.getByRole('button', { name: 'Revoke', exact: true }).count()).toBe(0);
       await current.getByRole('button', { name: 'Sign out Google Chrome on Linux', exact: true }).click();
-      await page.waitForURL(`${origin}/login`);
+      await page.getByRole('heading', { name: 'Review session sign-out', exact: true }).waitFor();
+      await Promise.all([
+        page.waitForURL(`${origin}/login`),
+        page.getByRole('button', { name: 'Confirm session sign-out', exact: true }).click(),
+      ]);
       expect(calls.filter((call) => call.url === '/sessions/revoke').map((call) => JSON.parse(call.body))).toEqual([
         { session_id: 'current-session' },
       ]);
@@ -332,8 +339,8 @@ test(
   async () => {
     const { page } = await open('/login');
     try {
-      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
-      await page.getByLabel('Password', { exact: true }).fill('incorrect-password');
+      await inputByLabel(page, 'Email').fill('reader@example.test');
+      await inputByLabel(page, 'Password').fill('incorrect-password');
       await Promise.all([
         page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
         page.getByRole('button', { name: 'Sign in', exact: true }).click(),

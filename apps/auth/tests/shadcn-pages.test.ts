@@ -4,16 +4,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
-import { startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
+import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+import { createFakeAuthState, startFakeAuth } from '../scripts/fake-auth';
+import { inputByLabel, navigateToHydratedAuthPage } from './browser-fixture';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const session = 'polish-current-session';
-const calls: FakeAuthRequest[] = [];
-let holdNextSignIn = false;
-let signInReceived: (() => void) | undefined;
-let releaseSignIn: (() => void) | undefined;
 
 const turnstileScript = `(() => {
   let serial = 0;
@@ -35,18 +33,8 @@ const turnstile = Bun.serve({
   },
 });
 
-const fake = startFakeAuth({
-  async onRequest(request) {
-    calls.push(request);
-    if (request.method === 'POST' && request.url === '/signin' && holdNextSignIn) {
-      holdNextSignIn = false;
-      signInReceived?.();
-      await new Promise<void>((resolve) => {
-        releaseSignIn = resolve;
-      });
-    }
-  },
-});
+const state = createFakeAuthState();
+const fake = startFakeAuth({ state });
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -78,6 +66,7 @@ function site(): Promise<string> {
         env: {
           ...process.env,
           AUTH_ORIGIN: fake.url.origin,
+          AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
           TURNSTILE_SITE_KEY: 'polish-test-site-key',
           TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
         },
@@ -118,13 +107,16 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
     ...options,
     javaScriptEnabled: true,
   });
-  await context.addCookies([{ name: 'auth_session', value: session, url: origin }]);
+  const deleteAccount = path === '/account/delete';
+  state.sessionClientId = deleteAccount ? AUTH_PAGE_OPERATION_CLIENT_ID : 'login';
+  state.sessionScopes = deleteAccount ? [...AUTH_PAGE_OPERATION_SCOPES.delete] : [];
+  if (path !== '/login' && path !== '/signup') {
+    await context.addCookies([{ name: 'auth_session', value: session, url: origin }]);
+  }
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    expect(response?.status(), 'the documented dev server serves the page').toBe(200);
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    await navigateToHydratedAuthPage(page, `${origin}${path}`);
     return { page, origin };
   } catch (error) {
     await context.close();
@@ -194,8 +186,8 @@ test(
           expect(await input.locator('xpath=ancestor::*[@data-slot="field"]').count(), path).toBeGreaterThan(0);
         }
         if (path === '/login') {
-          await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
-          await page.getByLabel('Password', { exact: true }).fill('incorrect-password');
+          await inputByLabel(page, 'Email').fill('reader@example.test');
+          await inputByLabel(page, 'Password').fill('incorrect-password');
           await page.getByRole('button', { name: 'Sign in', exact: true }).click();
           await page.getByRole('alert').waitFor();
           expect(await page.getByRole('alert').getAttribute('data-slot')).toBe('alert');
