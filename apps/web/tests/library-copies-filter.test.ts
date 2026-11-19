@@ -1,12 +1,11 @@
+import { Window } from 'happy-dom';
+import releaseRecording from '../src/kernel/recorded/definitions-release.json';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test as bunTest } from 'bun:test';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from 'playwright';
-
-const app = join(import.meta.dir, '..');
 
 let serverStartupAbort: AbortController | undefined;
 const pendingServerStartups = new Set<Promise<string>>();
@@ -19,30 +18,6 @@ const ownedContexts = new Set<BrowserContext>();
 const pendingContextSetups = new Set<Promise<unknown>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
 const failedContextSetups = new WeakSet<BrowserContext>();
-
-function ensureSiteStartupActive(output = '', cause?: unknown): void {
-  if (teardownStarted) {
-    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
-    if (cause !== undefined) throw new Error(message, { cause });
-    throw new Error(message);
-  }
-}
-
-function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const parentSignal = serverStartupAbort?.signal;
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener('abort', abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener('abort', abort);
-    },
-  };
-}
 
 type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
 
@@ -227,7 +202,8 @@ const json = (body: unknown, status = 200, problem = false) =>
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const edition = id(11);
 const hiddenSubjectId = 'unavailable-subject-should-not-appear';
-const newSubject = id(21);
+const unownedEdition = id(21);
+const hiddenEdition = id(12);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type CopyStatus = 'ordered' | 'owned' | 'lent' | 'disposed';
 type Subject = { id: string; label: string; type: string } | null;
@@ -244,17 +220,6 @@ type StoredCopy = {
   disposedOn: string | null;
   note: string | null;
 };
-type Draft = {
-  subjectId?: string;
-  status?: CopyStatus;
-  location?: string | null;
-  source?: string | null;
-  acquiredOn?: string | null;
-  disposedOn?: string | null;
-  note?: string | null;
-  revision?: number;
-};
-
 const zebra: Subject = { id: edition, label: 'Zebra story', type: 'book' };
 const copies: StoredCopy[] = [];
 let serial = 100;
@@ -290,8 +255,8 @@ function seedDefault() {
     }),
     make({
       accountId: 'blake',
-      subjectId: id(12),
-      subject: { id: id(12), label: 'Secret story', type: 'book' },
+      subjectId: edition,
+      subject: zebra,
       status: 'owned',
       location: 'Vault',
       source: 'Private',
@@ -448,6 +413,16 @@ const fake = Bun.serve({
       if (family) family.revoked = true;
       return new Response(null, { status: 200 });
     }
+    if (url.pathname === '/v1/definitions/active') return json({ digest: 'copies-filter' });
+    if (url.pathname === '/v1/definitions/releases/copies-filter')
+      return json({
+        digest: 'copies-filter',
+        release: {
+          types: { book: { library: { profileId: 'legacy-fixed-v1' } } },
+          properties: {},
+          libraryProfiles: { 'legacy-fixed-v1': releaseRecording.release.libraryProfiles['legacy-fixed-v1'] },
+        },
+      });
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
 
     const token = request.headers.get('authorization') ?? '';
@@ -468,6 +443,8 @@ const fake = Bun.serve({
     });
     // Home reads POST /v1/pages/$read with no session. Unknown routes answer 404, as posting.test.ts does,
     // so that read is a missing page rather than a 401 that fails the document.
+    if (request.method === 'GET' && url.pathname === `/v1/subjects/${unownedEdition}` && accountId === 'alice')
+      return json({ subject: { id: unownedEdition, type: 'book', labels: { en: 'Unowned story' } } });
     const copyRoute = url.pathname === '/v1/copies' || /^\/v1\/copies\/([^/]+)$/.test(url.pathname);
     if (!copyRoute) return json(problem(404, 'not_found'), 404, true);
     if (!accountId) return json(problem(401, 'unauthorized'), 401, true);
@@ -488,7 +465,7 @@ const fake = Bun.serve({
         if (!cursor.startsWith(binding)) return json(problem(400, 'invalid_cursor'), 400, true);
         offset = Number(cursor.slice(binding.length));
         if (!Number.isSafeInteger(offset) || offset < 1 || offset >= owned.length)
-          return json(problem(400, 'invalid_cursor'), 400, true);
+          return json(problem(409, 'stale_cursor'), 409, true);
       }
       const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 100);
       const page = owned.slice(offset, offset + limit);
@@ -505,7 +482,11 @@ let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= startDevServer({
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (started) return started;
+  serverStartupAbort = new AbortController();
+  started = startDevServer({
+    signal: serverStartupAbort.signal,
     env: {
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
@@ -519,6 +500,7 @@ function site(): Promise<string> {
     server = running;
     return running.origin;
   });
+  pendingServerStartups.add(started);
   return started;
 }
 
@@ -556,8 +538,7 @@ async function signIn(returnTo = '/en') {
   return { session: sessionCookie!, access: issued! };
 }
 
-async function open(path: string) {
-  const auth = await signIn(path);
+async function open(path: string, auth: Awaited<ReturnType<typeof signIn>>) {
   const origin = await site();
   const { value } = await withBrowserContext(
     {
@@ -586,6 +567,14 @@ async function open(path: string) {
   return value;
 }
 const lists = () => calls.filter((call) => call.method === 'GET' && call.path === '/v1/copies');
+const copyRows = 'li[data-slot="list-row"]:has([data-copy-edit-id])';
+const parser = new new Window().DOMParser();
+
+async function readPage(path: string, cookie: string) {
+  const response = await fetch(`${await site()}${path}`, { headers: { cookie: `${session}=${cookie}` } });
+  expect(response.status).toBe(200);
+  return parser.parseFromString(await response.text(), 'text/html');
+}
 
 afterAll(async () => {
   await cleanupSuite();
@@ -602,22 +591,34 @@ test(
   "with a subject in the URL, the copies page lists only the person's copies of that subject, paged",
   async () => {
     seedPaged();
-    const { page, access } = await open(`/en/library/copies?subjectId=${edition}`);
+    const path = `/en/library/copies?subjectId=${edition}`;
+    const auth = await signIn(path);
+    const document = await readPage(path, auth.session);
+    expect(document.querySelectorAll(`main ${copyRows}`)).toHaveLength(100);
+    expect(document.querySelector('main')!.textContent).not.toContain('Waiting');
+    expect(lists()).toHaveLength(1);
+    const { page, access } = await open(path, auth);
     try {
       const main = page.locator('main');
-      expect(await main.locator('article').count()).toBe(100);
+      await main.getByText('First copy', { exact: true }).waitFor();
+      expect(await main.locator(copyRows).count()).toBe(100);
       expect(await main.innerText()).not.toContain('Waiting');
       expect(await main.innerText()).not.toContain('Secret other copy');
+      expect(await main.innerText()).not.toContain(hiddenSubjectId);
       expect(lists().at(-1)?.authorization).toBe(`Bearer ${access}`);
       expect(new URLSearchParams(lists().at(-1)?.search).get('subjectId')).toBe(edition);
-      expect(lists().at(-1)?.limit).toBe(pageLimit);
-      await main.getByRole('link', { name: 'More', exact: true }).click();
+      expect(lists().at(-1)).toMatchObject({ view: 'FULL', limit: pageLimit });
+      const more = main.locator('a').filter({ hasText: /^More$/ });
+      expect(new URL(await more.getAttribute('href'), page.url()).searchParams.get('cursor')).toBe(
+        `alice:${edition}:100`,
+      );
+      await more.click();
       await page.waitForURL(/cursor=/);
       await main.getByText('Filtered copy 100', { exact: true }).waitFor();
-      expect(await main.locator('article').count()).toBe(2);
+      expect(await main.locator(copyRows).count()).toBe(2);
       expect(new URL(page.url()).searchParams.get('subjectId')).toBe(edition);
       expect(lists().at(-1)?.cursor).toBe(`alice:${edition}:100`);
-      expect(await main.getByRole('link', { name: 'More', exact: true }).count()).toBe(0);
+      expect(await more.count()).toBe(0);
     } finally {
       await closeContext(page.context());
     }
@@ -629,22 +630,35 @@ test(
   'the filtered list says which subject it shows and links back to all copies',
   async () => {
     reset();
-    const { page, origin } = await open(`/en/library/copies?subjectId=${edition}`);
+    const path = `/en/library/copies?subjectId=${edition}`;
+    const { page, origin } = await open(path, await signIn(path));
     try {
       const main = page.locator('main');
-      expect(await main.innerText()).toContain('Your copies of Zebra story');
-      expect(await main.getByRole('form', { name: 'Add a copy' }).getByLabel('Edition').inputValue()).toBe(edition);
-      await main.getByRole('link', { name: 'All copies', exact: true }).click();
+      await main.getByText('Your copies of Zebra story', { exact: true }).waitFor();
+      const all = main.locator('a').filter({ hasText: /^All copies$/ });
+      expect(await all.getAttribute('href')).toBe('/en/library/copies');
+      await all.click();
       await page.waitForURL(`${origin}/en/library/copies`);
       await main.getByText('Waiting', { exact: true }).waitFor();
       expect(new URLSearchParams(lists().at(-1)?.search).has('subjectId')).toBe(false);
-      for (const subjectId of [newSubject, id(12)]) {
+
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      await main.getByRole('button', { name: 'Add a copy', exact: true }).click();
+      const editor = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
+      expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(edition);
+      for (const subjectId of [unownedEdition, hiddenEdition]) {
         await page.goto(`${origin}/en/library/copies?subjectId=${subjectId}`, { waitUntil: 'networkidle' });
-        expect(await main.locator('article').count()).toBe(0);
+        await all.waitFor();
+        expect(await main.locator(copyRows).count()).toBe(0);
         expect(await main.innerText()).toContain('Your copies of this edition');
         expect(await main.innerText()).toContain('You have no copies of this edition.');
-        expect(await main.getByRole('form', { name: 'Add a copy' }).getByLabel('Edition').inputValue()).toBe(subjectId);
-        expect(await main.getByRole('link', { name: 'All copies', exact: true }).count()).toBe(1);
+        if (subjectId === unownedEdition) {
+          await main.getByRole('button', { name: 'Add a copy', exact: true }).click();
+          expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(subjectId);
+        } else {
+          expect(await main.getByRole('button', { name: 'Add a copy', exact: true }).count()).toBe(0);
+          expect(await main.innerText()).not.toContain(subjectId);
+        }
       }
     } finally {
       await closeContext(page.context());
@@ -657,17 +671,26 @@ test(
   'a stale or foreign cursor restarts the filtered list from its first page',
   async () => {
     seedPaged();
-    for (const cursor of [`alice:${edition}:9999`, 'alice:all:100', `alice:${id(12)}:100`]) {
+    const { session: cookie, access } = await signIn();
+    for (const cursor of [
+      `alice:${edition}:9999`,
+      'alice:all:100',
+      `alice:${hiddenEdition}:100`,
+      `blake:${edition}:100`,
+    ]) {
       calls.length = 0;
-      const { page } = await open(`/en/library/copies?subjectId=${edition}&cursor=${encodeURIComponent(cursor)}`);
-      try {
-        expect(await page.locator('main article').count()).toBe(100);
-        expect(await page.locator('main').innerText()).toContain('First copy');
-        const reads = lists();
-        expect(reads.map((call) => call.cursor)).toEqual([cursor, null]);
-        expect(reads.every((call) => new URLSearchParams(call.search).get('subjectId') === edition)).toBe(true);
-      } finally {
-        await closeContext(page.context());
+      const address = `/en/library/copies?subjectId=${edition}&cursor=${encodeURIComponent(cursor)}`;
+      const document = await readPage(address, cookie);
+      const main = document.querySelector('main')!;
+      const rows = main.querySelectorAll(copyRows);
+      expect(rows).toHaveLength(100);
+      expect(rows[0]!.textContent).toContain('First copy');
+      expect(main.textContent).toContain('The first page of the same Copies view is shown.');
+      const reads = lists();
+      expect(reads.map((call) => call.cursor)).toEqual([cursor, null]);
+      for (const call of reads) {
+        expect(call).toMatchObject({ authorization: `Bearer ${access}`, view: 'FULL', limit: pageLimit });
+        expect(new URLSearchParams(call.search).get('subjectId')).toBe(edition);
       }
     }
   },
