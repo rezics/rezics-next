@@ -24,6 +24,7 @@ import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { currentAuthorityOperands, startCurrentAuthorityWorker } from './support/current-authority-worker.ts';
 import type {
@@ -265,7 +266,7 @@ export async function releasePermissionFixtures(): Promise<void> {
   if (live > 0) return;
   fixture = undefined;
   for (const name of [...databases]) {
-    await admin.query(`DROP DATABASE IF EXISTS ${quote(name)} WITH (FORCE)`);
+    await dropTestDatabase(admin, name);
     databases.delete(name);
   }
 }
@@ -1004,7 +1005,7 @@ export async function createPermissionDriver(): Promise<PermissionDriver> {
         world = undefined;
         for (const name of [kernelName, authName]) {
           if (!databases.has(name)) continue;
-          await admin.query(`DROP DATABASE IF EXISTS ${quote(name)} WITH (FORCE)`);
+          await dropTestDatabase(admin, name);
           databases.delete(name);
         }
         live -= 1;

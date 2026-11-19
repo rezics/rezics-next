@@ -12,6 +12,7 @@ import type {
 import { createKernel } from '../../src/http/kernel.ts';
 import { createKernelRuntimeDefaults } from '../../src/server.ts';
 import { createPersonas } from '../support/personas.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { registerTestClient, type TestKernel } from '../support/test-kernel.ts';
 import { nativeFixture, cookies, password, issuer } from './native-account-bindings-fixture.ts';
 import {
@@ -157,7 +158,7 @@ export async function createViewerActionsDriver(): Promise<NativeViewerActionsDr
         await db?.close();
       } finally {
         try {
-          if (created) await admin.query(`DROP DATABASE ${quote(name)} WITH (FORCE)`);
+          if (created) await dropTestDatabase(admin, name);
         } finally {
           await admin.end();
         }
