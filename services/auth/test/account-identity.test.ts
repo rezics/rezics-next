@@ -46,6 +46,13 @@ async function signin(accountId = person) {
     .join('; ');
 }
 
+async function stageReadRevocation() {
+  await database.query(
+    "INSERT INTO auth_consent (account_id,client_id,scopes,pending_scopes,pending_reference) VALUES ($1,$2,ARRAY['read'],ARRAY[]::text[],$3)",
+    [person, clientId, randomUUID()],
+  );
+}
+
 beforeAll(async () => {
   fixture = testDatabase();
   database = new Pool({ connectionString: fixture.url, max: 4 });
@@ -126,7 +133,9 @@ test('native identity fails closed for historical non-UUID IDs before disclosure
 
 test('default Auth handler reads only the current native login email, without synthetic name or verification claims', async () => {
   const cookie = await signin();
-  await database.query('UPDATE "user" SET name=\'Synthetic default\',"emailVerified"=false WHERE id=$1', [person]);
+  await expect(
+    database.query('UPDATE "user" SET name=\'Synthetic default\' WHERE id=$1', [person]),
+  ).rejects.toMatchObject({ code: '23514', constraint: 'inert_profile' });
   const before = identityReads;
   const response = await request(cookie);
   expect(response.status).toBe(200);
@@ -146,9 +155,9 @@ test('default Auth handler reads only the current native login email, without sy
   ]);
 });
 
-test('a native owner without email stays handleless even when its synthetic name looks recognizable', async () => {
+test('a native owner without email stays handleless', async () => {
   const cookie = await signin();
-  await database.query('UPDATE "user" SET email=NULL,name=\'not-a-real-login@example.test\' WHERE id=$1', [person]);
+  await database.query('UPDATE "user" SET email=NULL WHERE id=$1', [person]);
   expect(await (await request(cookie)).json()).toEqual({ account_id: person, email: null });
 });
 
@@ -206,10 +215,7 @@ test('current account, floor, native client and consent admission cannot be repl
   await database.query('UPDATE auth_client SET disabled=true WHERE client_id=$1', [clientId]);
   expect((await request(cookie)).status).toBe(401);
   await database.query('UPDATE auth_client SET disabled=false WHERE client_id=$1', [clientId]);
-  await database.query(
-    "INSERT INTO auth_consent (account_id,client_id,scopes,pending_scopes) VALUES ($1,$2,ARRAY['read'],ARRAY[]::text[])",
-    [person, clientId],
-  );
+  await stageReadRevocation();
   expect((await request(cookie)).status).toBe(401);
 });
 
@@ -244,12 +250,7 @@ test('late native identity results are withheld after revocation, proof changes,
     async () => {
       await database.query('UPDATE auth_client SET disabled=true WHERE client_id=$1', [clientId]);
     },
-    async () => {
-      await database.query(
-        "INSERT INTO auth_consent (account_id,client_id,scopes,pending_scopes) VALUES ($1,$2,ARRAY['read'],ARRAY[]::text[])",
-        [person, clientId],
-      );
-    },
+    stageReadRevocation,
     async () => {
       unavailable = true;
     },
