@@ -19,6 +19,7 @@ import type {
   KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { checkoutNativeRoleTransaction } from './erasure-coverage.ts';
 
 export const KIND_CONSENT_PAGE_SIZE = 100;
 
@@ -359,8 +360,11 @@ async function withTransaction<T>(
   signal?: AbortSignal,
   trace?: EnrollmentTrace,
 ): Promise<T> {
-  const connection = await connectByDeadline(database, deadline, signal);
+  const { connection, producer } = trace
+    ? { connection: await connectByDeadline(database, deadline, signal), producer: false }
+    : await checkoutNativeRoleTransaction(database);
   let released = false;
+  let rollbackFailure: Error | undefined;
   const expire = () => {
     if (released) return;
     released = true;
@@ -377,6 +381,12 @@ async function withTransaction<T>(
   try {
     checkDeadline();
     await enrollmentQuery(connection, trace, 'control', 'BEGIN');
+    if (producer) {
+      // Release the connection as soon as this writer transaction ends.
+      await connection.query(
+        "SELECT set_config('auth.native_role_producer','1',true),set_config('auth.native_phase_producer','3',true)",
+      );
+    }
     if (deadline !== undefined) {
       checkDeadline();
       const remaining = Math.max(1, deadline - Date.now());
@@ -393,12 +403,15 @@ async function withTransaction<T>(
     await enrollmentQuery(connection, trace, 'control', 'COMMIT');
     return result;
   } catch (error) {
-    if (!released) await enrollmentQuery(connection, trace, 'control', 'ROLLBACK').catch(() => {});
+    if (!released)
+      await enrollmentQuery(connection, trace, 'control', 'ROLLBACK').catch((failure: Error) => {
+        rollbackFailure = failure;
+      });
     throw error;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', expire);
-    if (!released) connection.release();
+    if (!released) connection.release(rollbackFailure);
   }
 }
 

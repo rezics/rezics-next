@@ -22,6 +22,10 @@ type Progress = {
   completed_count: number;
 };
 
+type LockedProgress = Progress & { locator: string };
+const reductionProgress = 'SELECT *,ctid::text AS locator FROM auth_client_reduction_progress WHERE operation_id=$1';
+const lockOpenReductionProgress = `${reductionProgress} AND NOT completed FOR UPDATE`;
+
 type ReductionOwner = { clientId: string; operationId: string; accountId: string };
 
 // Keep the exact consent tuple stable until the cursor update commits.
@@ -30,8 +34,7 @@ const lockReductionOwner =
 
 async function advanceReductionOwner(
   connection: PoolClient,
-  row: Progress,
-  input: ReductionOwner,
+  row: LockedProgress,
   ownerOrdinal: string | null,
   deny: () => never,
 ) {
@@ -39,13 +42,14 @@ async function advanceReductionOwner(
   // page/finish verifies the empty ordinal interval before accepting its boundary.
   if (ownerOrdinal === null) return;
   if (BigInt(ownerOrdinal) <= BigInt(row.after_ordinal)) return;
+  // The progress tuple is already locked in this transaction.
   const advanced = await connection.query(
     `UPDATE auth_client_reduction_progress SET after_ordinal=$2,completed_count=completed_count+1
-     WHERE operation_id=$1 AND $2::bigint=(
+     WHERE ctid=$1::tid AND $2::bigint=(
        SELECT traversal_ordinal FROM auth_consent WHERE client_id=$3 AND traversal_ordinal>$4
        ORDER BY traversal_ordinal LIMIT 1
      )`,
-    [input.operationId, ownerOrdinal, input.clientId, row.after_ordinal],
+    [row.locator, ownerOrdinal, row.client_id, row.after_ordinal],
   );
   if (!advanced.rowCount) deny();
 }
@@ -88,18 +92,13 @@ export async function completeDeletedClientReductionOwner(
     await connection.query('BEGIN');
     await requireErasureCursorVersion(connection, AUTH_CURSOR_VERSION, input.clientId);
     if (obligationId) await admitNativeReduction(connection, input.clientId, input.operationId, obligationId);
-    const row = (
-      await connection.query<Progress>(
-        'SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1 FOR UPDATE',
-        [input.operationId],
-      )
-    ).rows[0];
-    if (!row || row.client_id !== input.clientId || row.completed) deny();
+    const row = (await connection.query<LockedProgress>(lockOpenReductionProgress, [input.operationId])).rows[0];
+    if (!row || row.client_id !== input.clientId) deny();
     const owner = await connection.query<{ traversal_ordinal: string }>(lockReductionOwner, [
       input.clientId,
       input.accountId,
     ]);
-    await advanceReductionOwner(connection, row, input, owner.rows[0]?.traversal_ordinal ?? null, deny);
+    await advanceReductionOwner(connection, row, owner.rows[0]?.traversal_ordinal ?? null, deny);
     await connection.query('COMMIT');
     return true;
   } catch (error) {
@@ -313,10 +312,15 @@ export function clientAuthority(
       connection.release(rollbackFailure);
     }
   }
-  async function progress(connection: PoolClient, clientId: string, operationId: string): Promise<Progress> {
+  async function progress(
+    connection: PoolClient,
+    clientId: string,
+    operationId: string,
+    activeOnly = false,
+  ): Promise<LockedProgress> {
     const row = (
-      await connection.query<Progress>(
-        'SELECT * FROM auth_client_reduction_progress WHERE operation_id=$1 FOR UPDATE',
+      await connection.query<LockedProgress>(
+        activeOnly ? lockOpenReductionProgress : `${reductionProgress} FOR UPDATE`,
         [operationId],
       )
     ).rows[0];
@@ -429,9 +433,9 @@ export function clientAuthority(
     async clientReductionPage(input) {
       bounded(input.limit);
       return transaction(input.clientId, async (connection) => {
-        const row = await progress(connection, input.clientId, input.operationId);
+        const row = await progress(connection, input.clientId, input.operationId, true);
         const after = input.after === '' ? '0' : input.after;
-        if (!/^(0|[1-9][0-9]*)$/.test(after) || row.completed) deny();
+        if (!/^(0|[1-9][0-9]*)$/.test(after)) deny();
         if (row.consumer_version === 1 && row.page_after === after && row.page_count !== null) {
           // The workflow can replay this step after some owners committed.
           // Keep the original boundary and acknowledgement counts on replay.
@@ -514,8 +518,7 @@ export function clientAuthority(
     async completeClientReductionOwner(input) {
       const current = await access.readFencedAccount(input.accountId);
       await transaction(input.clientId, async (connection) => {
-        const row = await progress(connection, input.clientId, input.operationId);
-        if (row.completed) deny();
+        const row = await progress(connection, input.clientId, input.operationId, true);
         const receipt = input.barrier;
         if (current && (current.accountId !== input.accountId || !current.fenced)) deny();
         const deletedOwner = !current || current.state === 'deleted';
@@ -552,7 +555,7 @@ export function clientAuthority(
           ]);
           if (!scheduled.rowCount) deny();
         }
-        await advanceReductionOwner(connection, row, input, owner.traversal_ordinal, deny);
+        await advanceReductionOwner(connection, row, owner.traversal_ordinal, deny);
       });
     },
     async finishClientReduction(input) {
