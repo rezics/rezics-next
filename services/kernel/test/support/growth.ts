@@ -1132,6 +1132,20 @@ function captureRunFailureEvidence(
     backends.push(backend);
   }
   return {
+    ...(process.env.GROWTH_PROFILE && isCostFoldedCapture(captureResult)
+      ? {
+          largestForegroundReads: captureResult.foregroundOccurrences
+            .toSorted((left, right) => right.rows - left.rows || right.blocks - left.blocks)
+            .slice(0, 16)
+            .map(({ index, rows, blocks, node }) => ({
+              index,
+              rows,
+              blocks,
+              node,
+              statement: captureResult.statements[index]?.replace(/\s+/g, ' ').slice(0, 220),
+            })),
+        }
+      : {}),
     capture: captureResult,
     nativeCaptures: run.nativeCaptures,
     writes,
