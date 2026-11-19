@@ -256,19 +256,18 @@ test('late native identity results are withheld after revocation, proof changes,
       unavailable = true;
     },
   ];
-  for (const change of cases) {
+  for (const [index, change] of cases.entries()) {
     accounts.get(person)!.authnEpoch = 1;
     unavailable = false;
     await database.query('UPDATE auth_client SET disabled=false WHERE client_id=$1', [clientId]);
     await database.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [person, clientId]);
     const cookie = await signin();
-    let changed = false;
-    afterIdentityRead = async () => {
-      await change();
-      changed = true;
-    };
+    const observation: { mutation?: Promise<void> } = {};
+    afterIdentityRead = () => (observation.mutation = change());
     const response = await request(cookie);
-    expect(changed).toBe(true);
+    if (!observation.mutation)
+      throw new Error(`Mutation ${index + 1} did not reach the identity read (HTTP ${response.status})`);
+    await observation.mutation;
     expect([401, 503]).toContain(response.status);
     const body = await response.text();
     expect(body).not.toContain(email);
