@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { PublicFilterSourceBinding } from '../semantic/index.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from '../semantic/index.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { TextNode } from './text.ts';
 import type { KernelClock } from '../clock.ts';
@@ -23,6 +23,12 @@ export type PublicFilterConsumerCaptureInput = Readonly<SearchPlan & {
     text: TextNode | undefined;
     /** Requested public slots, independent of derived native batch size. Legacy callers default to size. */
     pageSize?: number;
+    /** Full native catalogue publication includes the fixed text/order coverage scope. */
+    catalogueCoverage?: true;
+    /** Enroll the physical name_sort field on new catalogue publications. */
+    catalogueNameSort?: true;
+    /** Exact public Book type/name page, without advanced Search projections. */
+    bookTypeList?: true;
 }>;
 /** Prefix is its own canonical semantic input, never a TextNode or caller DSL. */
 export type PublicSuggestionCaptureInput = Readonly<{
@@ -125,8 +131,8 @@ export interface PublicFilterConsumerOperations {
     }>, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerStatus>;
     /** Releases only this retained observation/PIT, after in-flight operations drain. Idempotent. */
     closeObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
-    /** Drains this factory's work/resources; does not close supplied pools, Source or OpenSearch. */
-    close(): Promise<void>;
+    /** A runtime retiring its shared factory supplies the deadline for native disposal. */
+    close(context?: PublicFilterConsumerContext): Promise<void>;
 }
 /** Full same-factory view; legacy Subject consumers need only the original operations. */
 export interface PublicDiscoveryConsumerOperations extends PublicFilterConsumerOperations {
@@ -142,7 +148,10 @@ export type PublicFilterConsumerOperationsFactory = (config: Readonly<{
     source: PublicFilterSource;
     creditSearch?: CreditSearchSource;
     binding: PublicFilterSourceBinding;
-    registry?: DiscoveryRegistry;
+    registry?: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
+    discoveryAccess?: import('../request/access.ts').Access;
+    discoveryTarget?: import('./account-discovery.ts').DiscoveryTarget;
+    discoveryPreparation?: 'enrollment' | 'repair';
     search: OpenSearch;
     clock: KernelClock;
     context: PublicFilterConsumerContext;

@@ -1,4 +1,5 @@
 import type { AccessWorkAccounting } from '../access/work.ts';
+import type { ReadMemberViewerFacts } from './contract/builtin-presentation.ts';
 import { type BuiltinCollectionView } from './builtin-runtime.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import type { ContributionAttribution } from '../access/public-identity.ts';
@@ -10,7 +11,7 @@ import { type CollectionMemberQuery } from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import { type CollectionPreview } from './collection-preview.ts';
 import { type PreviewPreparationDependencies } from './collection-preview-work.ts';
-import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './viewer-personal-actions.ts';
 type CuratorPageOptions = {
     curatorAccountId: string | null;
     cursor?: string | null;
@@ -186,18 +187,20 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
-    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<import("../search/service-contract.ts").SavedCatalogueMembersPage | {
+    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number, readViewerFacts?: ReadMemberViewerFacts, beforeGeneralPage?: () => Promise<void>) => Promise<import("../search/service-contract.ts").SavedCatalogueMembersPage | {
+        preparing: true;
+    } | {
         members: MemberView[];
         next: string | null;
-    } | {
-        preparing: true;
     }>;
     withViewerFacts: <T extends {
         members: readonly {
             subjectId: string;
             id?: string;
         }[];
-    }>(viewer: Actor, result: T, deadline?: number, revalidate?: () => Promise<void>) => Promise<T>;
+    }>(viewer: Actor, result: T, deadline?: number, revalidate?: () => Promise<void>) => Promise<T & {
+        viewerFacts?: ViewerPersonalActionsPage;
+    }>;
     observeMemberSource: (viewer: Actor, id: string, deadline: number) => Promise<() => Promise<void>>;
     readSitemapCollection: (collectionId: string, deadline: number) => Promise<{
         id: string;

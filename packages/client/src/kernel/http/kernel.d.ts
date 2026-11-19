@@ -95,6 +95,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Trusted owner for the original funded frame around each complete private loan HTTP operation. */
     loanHttpWork?: import('../library/loan-operation-bounds.ts').LoanHttpWorkOwner;
     discovery?: import('../search/discovery-service.ts').DiscoverySearch;
+    feedDiscovery?: import('../search/index.ts').DiscoveryFeedSearch;
     /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
     reports?: {
         anonymousVerifier?: TurnstileVerifier;

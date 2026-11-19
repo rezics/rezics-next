@@ -1,6 +1,8 @@
 import type { Access, AccessCheck, AccessContext, AccessExplicitCheck, ActionCatalogue, Actor, PrepareReadDecisionsInput, PreparedAccessCheckInvocation, PreparedAccessCheckWork, ReadDecisions, Resource, ResourcePage } from '../request/access.ts';
 export { AuthenticationError } from './contract/authentication.ts';
 export type * from '../request/access.ts';
+/** Keep the immutable actor that carries native authentication evidence. */
+export declare function snapshotReadActor(actor: Actor): Actor;
 /** Reject malformed pages synchronously, before any database or actor read. */
 export declare function resourcePage(page: ResourcePage): ResourcePage;
 /** Validate the bounded catalogue before reading any authority dependency. */

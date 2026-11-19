@@ -66,6 +66,18 @@ export declare function createFeedActivityStore(deps: {
         activities: readonly ActivityRef[];
         next: string | null;
     }>>;
+    readFollowingActivity(accountId: string, ids: readonly string[], boundary: string, deadline: number): Promise<Readonly<{
+        id: string;
+        source: Readonly<{
+            partition: number;
+            epoch: number;
+            position: string;
+            eventIndex: number;
+        }>;
+        occurredAt: string;
+        target: FeedActivityTarget;
+        object: FeedActivityObject;
+    }>[]>;
     recordTargetActivity(activity: ActivityRef, deadline: number): Promise<void>;
     applyFollowingActivity(input: {
         accountId: string;

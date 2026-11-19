@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { WorkContext } from '../work/registry.ts';
 import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import { type LibraryScopeEffectSeal } from '../library/identity-scope-effects.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { NativePublicOutputApplication } from '../library/contract/native-public-output.ts';
@@ -28,6 +29,11 @@ type FrozenLibrarySource = {
     ownerEpoch: number;
     deadline: number;
 };
+export declare function libraryScopeSourceKey(identity: Pick<NativeSourceIdentity, 'route' | 'collectionId' | 'incarnation' | 'scope'>, binding: {
+    accountId: string;
+} | Pick<Extract<NativeSourceIdentity, {
+    scope: 'public_output';
+}>, 'outputGeneration' | 'activation'>): string;
 /** Incarnation identifies the Source; per-effect receiving hints never create a second Source registry. */
 export declare function identityScopeAddress(key: S.IdentityScopeKey): {
     partition: number;

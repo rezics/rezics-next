@@ -17,8 +17,10 @@ export declare const identityErasureRolePairSql = "SELECT l.account_id::text,l.r
 export declare function identityErasureRoles(pool: import('pg').Pool, jobId: string, options?: Readonly<{
     preferSingleRole: boolean;
 }>): Promise<SemanticCopyRole[]>;
-/** Typed provenance travels with actual admission input and commits in the receiving source transaction. */
-export declare function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonly SemanticCopyRole[]): void;
+/** Bind roles to this source transaction. Other captures can also inherit them through the native origin. */
+export declare function bindSemanticProducerRoles(tx: CommandTransaction, roles: readonly SemanticCopyRole[], options?: Readonly<{
+    exposeCaptureOrigin: boolean;
+}>): void;
 /** Bind a Source receipt to this executor's real fence. A deferred native constraint
  * checks the same-transaction write basis after the executor appends its commit.
  */

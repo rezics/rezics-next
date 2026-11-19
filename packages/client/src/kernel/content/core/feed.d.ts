@@ -41,6 +41,7 @@ export declare function mergeFeedLanes(input: Readonly<{
 }>;
 export declare function advanceFeedFrontier(input: Readonly<{
     position: FeedPosition;
+    loaded: FeedPosition;
     lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
     offsets: Record<FeedLane, number>;
     turn: number;

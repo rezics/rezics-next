@@ -16,9 +16,13 @@ export declare function createBuiltinRuntime(config: Omit<OwnerQueryDependencies
     members: (actor: import("./contract/actors.ts").LibraryActor, id: string, options?: import("./contract/builtin-presentation.ts").BuiltinMemberOptions<{
         filter: import("@rezics/filter").FilterDocument;
         releaseDigest: string;
+        admission?: import("./owner-filter.ts").CollectionMemberAdmission;
+        pageWork?: ReturnType<typeof import("./builtin-runtime-query.ts").ownerQueryWork>;
     }>) => Promise<{
         members: import("./builtin-runtime.ts").DynamicMemberView[];
         next: string | null;
+    } | {
+        preparing: true;
     }>;
     sourceVersion: (actor: import("./adapters/authorization.ts").Actor, source: import("./builtin-runtime.ts").BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
 };

@@ -38,28 +38,38 @@ export type CanonicalSourceRawKey = Readonly<{
 }>;
 export declare const CANONICAL_SOURCE_SQL: Readonly<{
     scope: "SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision\n  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3";
+    headGeneration: "SELECT g.generation::text,g.basis,g.source_exhausted,g.state,\n        g.query_capture_id::text,g.query_capture_revision::text\n      FROM library.canonical_source_head h JOIN library.canonical_source_generation g USING (route,collection_id,generation)\n      WHERE h.route=$1 AND h.collection_id=$2";
     predecessorScope: "SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision\n  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence<>$3 ORDER BY source_fence LIMIT 1";
     head: "SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2";
-    generation: "SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3";
+    generation: "SELECT query_capture_id::text,query_capture_revision::text,generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3";
     workingGeneration: "SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND state='working' FOR UPDATE";
     generationLock: "SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3 FOR UPDATE";
-    sourceLock: "SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3 AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE";
+    sourceLock: "WITH stored AS MATERIALIZED (SELECT source_generation::text AS generation FROM library.collection\n      WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3\n        AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE),\n    logical AS MATERIALIZED (SELECT generation::text FROM library.logical_everything_source\n      WHERE route=$1 AND collection_id=$2 AND account_id=$3 AND incarnation=$4 FOR UPDATE)\n    SELECT * FROM stored UNION ALL SELECT * FROM logical";
     factLock: "SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE";
     abandon: "UPDATE library.canonical_source_generation SET state='abandoned' WHERE route=$1 AND collection_id=$2 AND generation=$3";
     retainedGenerations: "SELECT generation FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 ORDER BY generation LIMIT 2";
-    insertGeneration: "INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver) VALUES($1,$2,$3,$4::jsonb,$5)";
+    insertGeneration: "INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver,logical_owner_id) VALUES($1,$2,$3,$4::jsonb,$5,$6)";
     seek: "SELECT canonical_subject_id::text AS subject FROM library.canonical_source_reference\n     WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id>COALESCE($4::uuid,'00000000-0000-0000-0000-000000000000')\n     ORDER BY canonical_subject_id,stored_subject_id,driver,fact_id LIMIT 1";
     group: "SELECT stored_subject_id::text AS original,driver,fact_id::text AS fact FROM library.canonical_source_reference\n     WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id=$4\n       AND (stored_subject_id,driver,fact_id)>(COALESCE($5::uuid,'00000000-0000-0000-0000-000000000000'),COALESCE($6::smallint,-1),COALESCE($7::uuid,'00000000-0000-0000-0000-000000000000'))\n     ORDER BY stored_subject_id,driver,fact_id LIMIT $8";
     insertReference: "INSERT INTO library.canonical_source_reference(route,collection_id,generation,canonical_subject_id,stored_subject_id,driver,fact_id)\n        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING";
     updateFrontier: "UPDATE library.canonical_source_generation SET driver=$4,after_subject=$5,after_fact=$6,source_exhausted=$7,version=version+1\n      WHERE route=$1 AND collection_id=$2 AND generation=$3";
-    completeGeneration: "UPDATE library.canonical_source_generation SET state='complete' WHERE route=$1 AND collection_id=$2 AND generation=$3";
+    completeGeneration: "UPDATE library.canonical_source_generation SET state='complete',query_capture_id=$4,query_capture_revision=$5 WHERE route=$1 AND collection_id=$2 AND generation=$3";
     publishHead: "INSERT INTO library.canonical_source_head(route,collection_id,generation) VALUES($1,$2,$3)\n      ON CONFLICT(route,collection_id) DO UPDATE SET generation=EXCLUDED.generation";
     retainedScopes: "SELECT source_fence FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 ORDER BY source_fence LIMIT 2";
-    insertScope: "INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING";
+    insertScope: "INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity,logical_owner_id) VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING";
     updateScopeFrontier: "UPDATE library.canonical_source_scope SET frontier=$4::jsonb\n        WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id";
 }>;
 export declare function CANONICAL_SOURCE_STATEMENTS(): Readonly<{
     scope: Readonly<{
+        name: string;
+        sql: string;
+        requestBytes: number;
+        resultBytes: number;
+        rows: number;
+        raw: boolean;
+        bound: CanonicalSourceSqlBound;
+    }>;
+    headGeneration: Readonly<{
         name: string;
         sql: string;
         requestBytes: number;
@@ -273,6 +283,15 @@ export declare function CANONICAL_SOURCE_DECLARATION(observations?: LibrarySeman
     }>;
     statements: Readonly<{
         scope: Readonly<{
+            name: string;
+            sql: string;
+            requestBytes: number;
+            resultBytes: number;
+            rows: number;
+            raw: boolean;
+            bound: CanonicalSourceSqlBound;
+        }>;
+        headGeneration: Readonly<{
             name: string;
             sql: string;
             requestBytes: number;

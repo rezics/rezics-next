@@ -255,6 +255,7 @@ export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;
 export type {
   OwnCountedVoteAccountObservation,
   OwnCountedVoteIdentity,
+  OwnCountedVoteMeasurement,
   OwnCountedVoteObservation,
   OwnCountedVotePrepareResult,
   OwnCountedVotePreparedTarget,

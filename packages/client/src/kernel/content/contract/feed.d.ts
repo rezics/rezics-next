@@ -380,6 +380,11 @@ export type FeedLaneLoad = Readonly<{
     next: string | null | false;
     asOf?: string;
     fingerprint?: string;
+    retainedDiscovery?: Readonly<{
+        current(ids: readonly string[]): Promise<readonly FeedLaneCandidate[]>;
+        finish(): Promise<void>;
+        close(): Promise<void>;
+    }>;
 }>;
 export type FeedSpaceSession = Readonly<{
     spaceId: string;
@@ -409,6 +414,7 @@ export type FeedFollowingPort = Readonly<{
     page(input: {
         actor: FeedAccountActor;
         limit: number;
+        selectedActivityIds?: readonly string[];
         languages: readonly string[];
         kind?: string;
         boundary: string;
@@ -441,6 +447,7 @@ export type FeedFinishResult = {
     error?: unknown;
     reactionsAsOf?: FeedReactionFreshness | null;
 };
+export type FeedPersonalActionsPublication = (admitted: readonly FeedItem[]) => Promise<ViewerPersonalActionsPage>;
 export type FeedFinishPort = Readonly<{
     beginConversation(items: FeedItem[], deadline: number): Promise<Pick<FeedFinishResult, 'rewind' | 'error'>>;
     confirmConversation(items: FeedItem[], deadline: number): Promise<FeedFinishResult>;
@@ -454,10 +461,7 @@ export type FeedFinishPort = Readonly<{
     subjectReactions(items: FeedItem[], actor: FeedActor, deadline: number): Promise<FeedFinishResult>;
     followSupport(items: FeedItem[], actor: FeedActor, deadline: number): Promise<FeedFinishResult>;
     viewerFollows?(items: readonly FeedItem[], actor: FeedAccountActor, deadline: number): Promise<FeedViewerFollows | undefined>;
-    personalActions(items: FeedItem[], actor: FeedActor, languages: readonly string[], deadline: number, reopen: () => Promise<FeedItem[]>): Promise<{
-        items: FeedItem[];
-        viewerPersonalActions?: ViewerPersonalActionsPage;
-    }>;
+    preparePersonalActions(items: readonly FeedItem[], actor: FeedAccountActor, languages: readonly string[], deadline: number): Promise<FeedPersonalActionsPublication | undefined>;
     reopenSelected(items: FeedItem[], actor: FeedActor, query: FeedReadQuery, languages: readonly string[], deadline: number): Promise<FeedItem[]>;
 }>;
 export type FeedApplicationPorts = Readonly<{

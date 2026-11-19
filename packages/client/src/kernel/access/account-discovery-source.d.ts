@@ -41,15 +41,18 @@ export type AccountDiscoveryRepairObservation = Readonly<{
     account: Awaited<ReturnType<AccountDiscoverySource['read']>>['accounts'][number] | null;
     binding: Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer B> ? B | null : never;
 }>;
-/** Release every owner read before the next phase and revalidate both the local
- * native head and the exact current-handle/claim cursor after foreign reads.
- * Missing/fenced rows are retained as keyed deletion inputs, never Subjects.
- */
+/** A retained keyed receipt can survive changes elsewhere in its Account or claim home. */
+export declare function retainedAccountDiscoveryRepairCurrent(original: AccountDiscoveryRepairObservation, current: AccountDiscoveryRepairObservation): boolean;
+/** Compare two native Account/claim snapshots under the same caller deadline. */
+export declare function readAccountDiscoveryRepairObservations(pool: Pool, ids: readonly string[], context: Readonly<{
+    deadline: number;
+}>): Promise<ReadonlyMap<string, AccountDiscoveryRepairObservation>>;
+/** Keep the same native proof for ordinary single-key repair. */
 export declare function readAccountDiscoveryRepairObservation(pool: Pool, id: string, context: Readonly<{
     deadline: number;
 }>): Promise<AccountDiscoveryRepairObservation>;
 /** Current owner hydration; linked Subject disclosure is exclusively Semantic's. */
 export declare function readAccountDiscoverySummaries(deps: SummaryReaderDependencies, ids: readonly string[], options?: {
     languages?: readonly string[];
-    context?: boolean;
+    context?: boolean | 'verified-agent';
 }): Promise<Map<string, AccountDiscoverySummary | null>>;

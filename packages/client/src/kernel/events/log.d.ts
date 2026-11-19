@@ -79,4 +79,6 @@ export declare function projectBatch(pool: Pool, options: {
     apply: (envelopes: readonly Envelope[]) => Promise<void>;
     envelopes?: number;
     observe?: (progress: ProjectionProgress) => void;
+    /** Recognize a validated batch with no apply effects for this consumer. */
+    noEffects?: (envelopes: readonly Envelope[]) => boolean;
 }): Promise<BatchResult>;

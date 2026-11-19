@@ -71,6 +71,7 @@ export type IdentityScopeRegistrationResult = IdentityScopeFailure | Readonly<{
     work: IdentityScopeWork;
 }> | Readonly<{
     status: 'pending';
+    progressTransaction?: string;
     work: IdentityScopeWork;
 }>;
 export type IdentityScopeArmInput = Readonly<{

@@ -1,3 +1,4 @@
+import { type BatchWriteFailureStage } from '@rezics/definitions/bulk';
 import { PROBLEM_TYPE_BASE, type FieldError } from '../../http/problem.ts';
 export declare const BULK_WRITE_ROUTE = "/v1/subjects:batchWrite";
 declare const TRANSACTION_PHASES: readonly ['before_command', 'command_overhead', 'time_mint', 'access_prepare', 'gate_wait', 'transaction_pool_wait', 'transaction_body', 'commit', 'writable_wait', 'contention_pause', 'request_completion'];
@@ -17,6 +18,10 @@ export type BulkWriteProblemBody = {
     partition?: number;
     phase?: BulkWriteTransactionPhase;
     contention_retries?: number;
+    command_index?: number;
+    failure_stage?: BatchWriteFailureStage;
+    sqlstate?: string;
+    constraint_name?: string;
     redirect?: {
         from: string;
         to: string;
@@ -50,6 +55,7 @@ export declare function bulkWriteCommandProblem(error: unknown, options: {
     requestId: string;
     commandIndex: number;
     op: string | undefined;
+    failureStage?: BatchWriteFailureStage;
 }): Promise<{
     status: number;
     problem: BulkWriteProblemBody;

@@ -5,8 +5,8 @@ type RevisionKey = Readonly<{
     at: string;
     id: string;
 }>;
-/** A native disclosure retains its original observations and prepared Access
- * checks. Revalidation must not adopt newly changed source rows as a baseline.
+/** A native disclosure retains its original observations. Revalidation prepares
+ * current Access evidence for those observations.
  */
 export type HistoryPostObservation = Readonly<{
     initial: Anchored<PostEntry | null>;

@@ -1,4 +1,5 @@
 import { type Pool, type PoolClient } from 'pg';
+import { MEDIA_QUEUE } from '../work/queues.ts';
 import type { Relay } from './relays.ts';
 import { type CloudEvent, type Envelope, type ProjectionProgress } from './log.ts';
 export { DBOS_SCHEMA } from '../work/client.ts';
@@ -8,6 +9,7 @@ export type Effect = {
     name: string;
     types: string[];
     delivery?: undefined;
+    queue?: typeof MEDIA_QUEUE;
     run(event: CloudEvent): Promise<void>;
     admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
@@ -16,6 +18,8 @@ export type NativeEffect = {
     types: string[];
     delivery: 'native';
     admit(client: PoolClient, event: CloudEvent): Promise<void>;
+    /** Handles durable generic deliveries queued before this consumer moved to native admission. */
+    run?: Effect['run'];
 };
 type RegisteredEffect = Effect | NativeEffect;
 type RegisteredEffects = {

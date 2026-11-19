@@ -28,6 +28,8 @@ export type PublicIdentitySourceCaptureProducer = Readonly<{
     capturePage(request: Readonly<{
         definition: PublicFilterSourceDefinition;
         frontier: string | null;
+        /** A retained structural consumer resumes the committed head; registration reads the complete native key set. */
+        retainedCaptureId?: string;
         inputLimit: number;
         context: PublicFilterReadContext;
     }>): Promise<PublicIdentitySourceCapturePage>;
@@ -49,6 +51,6 @@ export declare function verifyPublicIdentitySourceCaptureLocator(tx: CommandTran
 export declare function lockPublicIdentityOutputCaptureDisposition(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext<Pool, AuthoritativeTime>): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }> | import("../library/native-public-output-contract.ts").LockedPublicOutputDisposition>;
 export {};

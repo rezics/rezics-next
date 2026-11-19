@@ -2,11 +2,13 @@
 export declare const WORK_APPLICATION = "rezics-kernel";
 export declare const DBOS_SCHEMA = "dbos";
 export declare const LOCATOR_EFFECTS_QUEUE = "locator-effects";
-export declare const WORK_QUEUE_NAMES: readonly ['governance', 'effects', 'locator-effects', 'workflows', 'delivery', 'import', 'maintenance'];
+export declare const MEDIA_QUEUE = "media";
+export declare const WORK_QUEUE_NAMES: readonly ['governance', 'effects', 'locator-effects', "media", 'workflows', 'delivery', 'import', 'maintenance'];
 export type WorkQueueName = (typeof WORK_QUEUE_NAMES)[number];
 export type WorkQueueOptions = Readonly<{
     workerConcurrency?: number;
     partitionConcurrency?: number;
+    minPollingIntervalMs?: number;
 }>;
 export type WorkPool = object;
 export type WorkQueryResult<T = Record<string, unknown>> = {
@@ -130,6 +132,7 @@ export type WorkEffect = Readonly<{
     name: string;
     types: string[];
     delivery?: 'native';
+    queue?: typeof MEDIA_QUEUE;
     run?: (event: unknown) => Promise<void>;
     admit?: (client: WorkQueryClient, event: unknown) => Promise<void>;
 }>;

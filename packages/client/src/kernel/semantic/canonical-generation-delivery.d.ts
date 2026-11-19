@@ -10,6 +10,7 @@ export type CanonicalGenerationDelivery = Readonly<{
 export type CanonicalGenerationPageRequest = Readonly<{
     after: number | null;
     limit: number;
+    unannouncedOnly?: true;
 }>;
 export type CanonicalGenerationReceiver = (tx: CommandTransaction, generation: CanonicalGenerationDelivery, event: CloudEvent) => Promise<Readonly<{
     partition: number;
@@ -32,8 +33,11 @@ export declare function readCanonicalGenerationDeliveryPage(pool: Pool, input: C
  * supply it. The native log retains the keyset continuation, so there is no second cursor table.
  * Replays may coalesce to a newer generation, but never reset Rating's existing rebuild cursor.
  *
- * Literal page cost: one <=200-row inventory seek, <=200 single-home commands (one keyed
- * counter read each), and at most one continuation command. No Subject or Rating rows are read.
+ * The source emits at most 32 native homes per turn before handing off the next page.
+ * This bounds how many relay homes a single recovery wake can place ahead of ordinary traffic.
+ * Literal page cost: one <=32-row inventory seek, <=32 single-home commands (one keyed
+ * conditional counter update each), and at most one continuation command. Independent
+ * home commands run in groups of four, and the continuation waits for the entire page.
  */
 export declare function resumeCanonicalGenerationDelivery(pool: Pool, input?: CanonicalGenerationPageRequest): Promise<void>;
 /** Run one receiving page under the native home command. A full page commits a continuation
@@ -42,6 +46,7 @@ export declare function resumeCanonicalGenerationDelivery(pool: Pool, input?: Ca
  */
 export declare function deliverCanonicalGenerationEvent(pool: Pool, event: CloudEvent, receive: CanonicalGenerationReceiver): Promise<void>;
 /** Existing mutation events are wake hints, never evidence of complete canonical coverage.
+ * Context directory changes leave the canonical home counters alone.
  * Mechanical delivery/locator events are excluded to avoid a notification feedback loop.
  * Startup always revisits the retained counters, recovering missing or exhausted deliveries.
  */

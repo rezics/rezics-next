@@ -123,6 +123,8 @@ export type RetainedRelationFacetPage = Readonly<{
 export interface SubjectSource {
     /** Unknown ids are omitted. Every id must route to `partition`. */
     read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+    /** Exact current name projection for installed Book TypeLists. Null requests full Source hydration. */
+    readBookCandidateNames?(ids: readonly string[]): Promise<ReadonlyMap<number, SubjectSnapshot> | null>;
     /** Index-only complete input. Ordinary reader observations must not pay for creator projection. */
     readForIndex?(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
     /** Exact current native support for one bounded credited-name projection. */
@@ -132,6 +134,10 @@ export interface SubjectSource {
         position: bigint;
         count: number;
     }>;
+    countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+        position: bigint;
+        count: number;
+    }>>;
     /**
      * Match membership in full adopted Global relations, applying current source fences and moderation.
      * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;

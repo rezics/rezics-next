@@ -29,7 +29,7 @@ export { OwnerCurrentRestartRequired } from '../operation-outcomes.ts';
 export declare function readOwnerBatches<T>(ids: readonly string[], read: (ids: readonly string[]) => Promise<ReadonlyMap<string, T>>): Promise<Map<string, T>>;
 export declare function ownerSummaryUnchanged(kind: DiscoveryOwnerKind, before: DiscoveryOwnerMetadataSummary, after: DiscoveryOwnerMetadataSummary | undefined): boolean;
 export declare function revalidateOwnerCurrentSummaries<Candidate>(ports: OwnerCurrentPorts, accepted: readonly (OwnerCurrentAccepted<Candidate> | undefined)[], context: DiscoveryReadContext): Promise<readonly (OwnerCurrentAccepted<Candidate> | undefined)[]>;
-export declare function readOwnerCandidates(ports: OwnerDisclosurePorts, candidates: readonly DiscoveryOwnerCandidate[], context: DiscoveryReadContext): Promise<({
+export declare function readOwnerCandidates(ports: Pick<OwnerDisclosurePorts, 'ownerKey' | 'readCurrent'>, candidates: readonly DiscoveryOwnerCandidate[], context: DiscoveryReadContext): Promise<({
     candidate: {
         sourcePosition: string;
         revision: string;

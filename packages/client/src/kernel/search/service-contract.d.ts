@@ -8,7 +8,7 @@ import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages
 import type { SearchDisclosureApplication } from './disclosure-application.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
-import type { SearchFreshness } from './search-context.ts';
+import type { SearchObservation, SearchFreshness } from './search-context.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { SearchPlan } from './query.ts';
 import type { PublicRatingSource } from './rating-source.ts';
@@ -84,7 +84,15 @@ export type PublicSearchPage = {
     as_of: string;
     freshness?: SearchFreshness;
 };
+/** Shared only by the compatible native TypeLists of one admitted page. */
+export type BookPagePublication = {
+    identityEpoch?: Promise<string>;
+    generation?: Promise<number>;
+    sortFormat?: Promise<number | null>;
+    observation?: Promise<SearchObservation>;
+};
 export type PublicSearchReadContext = Readonly<{
+    bookPage?: BookPagePublication;
     deadline: number;
     /** The verified request context used only by the service-bound native Scope. */
     scope?: LeafOptions;

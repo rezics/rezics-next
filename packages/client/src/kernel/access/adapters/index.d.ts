@@ -4,7 +4,7 @@ export { bindCollectionListFilter, COLLECTION_AUTHORIZATION_MEMBERSHIPS, collect
 /** Producer entry used by process composition; consumers depend on their own ports. */
 export { readAccount } from '../account-data.ts';
 export { classifyUnavailability } from '../unavailable.ts';
-export { enrollAccountDiscoveryHome } from '../account-discovery-reduction.ts';
+export { accountDiscoveryEnrollmentGroupSize, accountDiscoveryEnrollmentProbeInputs, enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes, } from '../account-discovery-reduction.ts';
 export type { AccountDiscoveryEnrollment } from '../account-discovery-reduction.ts';
 export { accessCheck } from '../../request/access.ts';
 export { agentIdentityMaintenance, bindAgentIdentityMaintenance } from './bind.ts';

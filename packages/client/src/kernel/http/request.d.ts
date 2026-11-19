@@ -2,6 +2,7 @@ export { idempotencyKeyOf } from './idempotency-key.ts';
 export { requestDigest, anonymousCommandTarget, anonymousRequestDigest } from '../command/request.ts';
 import type { ActionCatalogue } from '../request/access.ts';
 export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
+export type { Admission, AdmissionYield, JobContext } from './admission.ts';
 export type MountedRoute = {
     method: string;
     path: string;

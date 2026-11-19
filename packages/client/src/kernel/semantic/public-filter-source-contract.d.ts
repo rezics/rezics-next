@@ -118,6 +118,17 @@ export type PublicFilterProjectionRetirement = Readonly<{
     generation: string;
     partition: number;
 }>;
+export type PublicFilterSubjectIdentityRequest = Readonly<{
+    subjects: readonly string[];
+    meaning: PublicFilterProjectionMeaning;
+    inputLimit: number;
+    context: PublicFilterReadContext;
+}>;
+export type PublicFilterSubjectIdentities = Readonly<{
+    status: 'observed';
+    rows: readonly Pick<PublicFilterProjectionObservation, 'subject' | 'terminal' | 'partition' | 'securityRevision' | 'currentRelease'>[];
+    cost: PublicFilterCost;
+}> | Unready | Unavailable;
 type Unready = Readonly<{
     status: 'unready';
     retirement?: PublicFilterProjectionRetirement;
@@ -295,6 +306,9 @@ export type PrivacyReductionObservation = Readonly<{
 /** Native Semantic source, composed additively with the existing subjectSource. */
 export type PublicFilterSource = Readonly<{
     readPublicFilterProjectionPage(request: PublicFilterProjectionRequest): Promise<PublicFilterProjectionPage>;
+    readPublicFilterSubjectIdentities?(request: PublicFilterSubjectIdentityRequest): Promise<PublicFilterSubjectIdentities>;
+    /** First windows at one release. Each keeps its input allowance, redirect chain and readiness. */
+    readPublicFilterSubjectIdentityWindows?(requests: readonly PublicFilterSubjectIdentityRequest[]): Promise<readonly PublicFilterSubjectIdentities[]>;
     readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
     readPrivacyReductionPage(request: PrivacyReductionLogRequest): Promise<PrivacyReductionLogPage>;
 }>;

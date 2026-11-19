@@ -16,7 +16,7 @@ export type { CommittedOperationalWork, OperationalEpisode, OperationalMembersBi
 export type { HistoryComposition, HistoryExecutionPort, HistoryWorkModule } from './ports.ts';
 export type { HistoryOwnerCoverage, HistoryOwnerCoverageResult, HistoryReceivingContext, HistoryReceivingDependencies, HistoryReceivingReceipt, ZoneHistoryConsumerObservation, } from './receiving-types.ts';
 export type { RecordHistoryPurgeResult, SharedHistoryResult } from './record-types.ts';
-export { COMMAND_HISTORY_KINDS, preferenceSubjectScope, recordHistorySourceKey, unionHistoryScope, } from './record-vocabulary.ts';
+export { COMMAND_HISTORY_KINDS, MAX_HISTORY_PAYLOAD_BYTES, preferenceSubjectScope, recordHistorySourceKey, unionHistoryScope, } from './record-vocabulary.ts';
 export type { CommandHistoryKind, CommandHistoryScopes, RecordHistorySourceReference } from './record-vocabulary.ts';
 export { HISTORY_PRODUCER_FAMILIES, HistoryRegistry, nativeHistoryProducerFamily } from './registry.ts';
 export type { HistoryArtifact, HistoryBarrier, HistoryFamilyDefinition, HistoryFamilySource, HistoryOwner, HistoryProducerFamily, HistoryReadiness, } from './registry.ts';

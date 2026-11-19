@@ -69,4 +69,4 @@ export declare function createOrdinaryCollectionPageSource(dependencies: {
     access: Access;
     clock?: KernelClock;
     semanticObservations?: LibrarySemanticObservationCapability;
-}): CollectionSource;
+}, publishedEverythingPage?: boolean): CollectionSource;

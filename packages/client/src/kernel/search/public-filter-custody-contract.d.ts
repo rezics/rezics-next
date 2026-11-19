@@ -41,6 +41,7 @@ export type CustodyExecution = Readonly<{
     ownRows: readonly Readonly<{
         original: string;
         terminal: string;
+        metadataKind?: 'collection' | 'review' | 'space';
     }>[];
 }>;
 /** Durable bounded lease: the producer must release in finally, including failed native work. */
@@ -131,6 +132,7 @@ export type RetainedRepairSettlement = Readonly<{
     fence: Readonly<{
         transaction: string;
         incarnation: string;
+        allocation?: string;
         writeAlias: string;
         sourceEpoch: number;
         refresh: unknown;
@@ -145,6 +147,7 @@ export interface PublicFilterCustody {
         catalogue?: KindCataloguePin | null;
     }>, search: OpenSearch, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'registered';
+        consumerWork?: string | null;
         registration: CustodyRegistration;
         consumer: PublicFilterConsumer;
         cost: CustodyCost;

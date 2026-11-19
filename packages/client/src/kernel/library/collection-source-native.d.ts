@@ -79,7 +79,7 @@ type Header = Ref & {
     visibility: 'private' | 'unlisted' | 'public';
     membershipKind: 'curated' | 'dynamic';
     revision: number;
-    createdAt: string;
+    createdAt: string | null;
     sourceGeneration: string;
     builtinKind: 'everything' | 'state' | 'liked' | null;
     releaseDigest: string | null;
@@ -140,6 +140,10 @@ type ProbeEvidence = {
 export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
+/** Keep the original native release pointer and the owner population on the same statement snapshot. */
+export declare function everythingEntryWindowSQL(): string;
+export declare function openEverythingEntryWindowSQL(): string;
+export declare function collectionsOpeningValues(at: string): unknown[];
 import type { CollectionOutputPublication } from './collection-source-output.ts';
 import { type BuiltinCollectionKey } from './builtin-identity.ts';
 export type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
@@ -156,7 +160,7 @@ export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref
         visibility: 'private' | 'unlisted' | 'public';
         membershipKind: 'curated' | 'dynamic';
         revision: number;
-        createdAt: string;
+        createdAt: string | null;
         sourceGeneration: string;
         builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
@@ -188,7 +192,7 @@ export declare function readNativeCollectionMetadata(pool: Pool, ref: Ref, optio
         visibility: 'private' | 'unlisted' | 'public';
         membershipKind: 'curated' | 'dynamic';
         revision: number;
-        createdAt: string;
+        createdAt: string | null;
         sourceGeneration: string;
         builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
@@ -218,7 +222,7 @@ export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Re
         visibility: 'private' | 'unlisted' | 'public';
         membershipKind: 'curated' | 'dynamic';
         revision: number;
-        createdAt: string;
+        createdAt: string | null;
         sourceGeneration: string;
         builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
@@ -247,6 +251,7 @@ export declare function readNativeLogicalBuiltinBinding(pool: Pool, input: Optio
     actor: Actor;
     at: AuthoritativeTime;
     collectionId: string;
+    ordinaryPage?: boolean;
 }): Promise<({
     binding: null;
 } | {
@@ -287,7 +292,6 @@ export declare function authorizeNativeCollectionMetadata(pool: Pool, metadata: 
     at: AuthoritativeTime;
 }): Promise<{
     authorized: boolean;
-} & {
     work: WorkReceipt;
 }>;
 /** Reduce a COMPLETE bounded canonical group supplied by the admitted Source, never a caller alias hint.
@@ -295,8 +299,12 @@ export declare function authorizeNativeCollectionMetadata(pool: Pool, metadata: 
  */
 export declare function readNativeCollectionStateGroup(pool: Pool, metadata: NativeCollectionMetadata, input: Options & {
     originals: readonly string[];
-}): Promise<{
-    result: boolean | 'not_proven';
+}): Promise<({
+    result: true;
+    originalSubjectId: string;
+} | {
+    result: false | 'not_proven';
+}) & {
     work: WorkReceipt;
 }>;
 /** Internal raw data only: deletion episodes advance the same native ordinal frontier as live occurrences. */

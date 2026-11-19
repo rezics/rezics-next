@@ -13,6 +13,7 @@ export { AccessUnavailableError } from './unavailable.ts';
 export { createContentEditionBuyerFact, type ContentEditionBenefit, type ContentEditionBuyerFact, type ContentEditionBuyerFactInput, type ContentEditionBuyerFactReader, } from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
+export { accessEvidenceDeadline } from './evidence-deadline.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';

@@ -1,5 +1,5 @@
 import type { SubjectSummary, SubjectSummaryObservation } from './contract/index.ts';
-import type { SummaryDependencies, SummaryReaderDependencies } from './subject-reading-application.ts';
+import type { SummaryDependencies, SummaryObservationOptions, SummaryReaderDependencies } from './subject-reading-application.ts';
 export type { CoverCredit, CoverSummary, RelatedSubjectSummary, SubjectSummary, SummarySources, SummaryCoverState, SubjectSummaryObservation, } from './contract/index.ts';
 export type { SummaryDependencies, SummaryReaderDependencies };
 export { summaryAuthorization } from './subject-reading-application.ts';
@@ -8,7 +8,4 @@ export declare function readSubjectSummaries(deps: SummaryDependencies | Summary
     languages?: readonly string[];
 }): Promise<Map<string, SubjectSummary | null>>;
 /** Ordinary projection plus source anchors for composed native readers. */
-export declare function readSubjectSummaryObservation(deps: SummaryReaderDependencies, ids: readonly string[], options?: {
-    languages?: readonly string[];
-    displayFallback?: boolean;
-}): Promise<SubjectSummaryObservation>;
+export declare function readSubjectSummaryObservation(deps: SummaryReaderDependencies, ids: readonly string[], options?: SummaryObservationOptions): Promise<SubjectSummaryObservation>;

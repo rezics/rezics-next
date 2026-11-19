@@ -4,7 +4,7 @@ import type { PublicFilterSource } from '../semantic/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { type MixedDiscoveryRequest } from './discovery-request.ts';
-import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryOwnerRegistry, DiscoveryKey } from './discovery.ts';
+import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryOwnerRegistry, DiscoveryUnionHit, DiscoveryKey } from './discovery.ts';
 import type { DiscoverySearch } from './discovery-api.ts';
 import type { IndexedSubject, RelationFacetMatch } from './source.ts';
 import type { PublicFilterConsumerJob, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
@@ -14,6 +14,7 @@ export type { DiscoverySearch } from './discovery-api.ts';
 export type RetainedDiscoveryRead = Readonly<{
     search(): Promise<DiscoveryPage>;
     currentPrimaryCandidates(keys: readonly DiscoveryKey[]): Promise<readonly boolean[]>;
+    currentSelectedCandidates(keys: readonly DiscoveryUnionHit['key'][]): Promise<readonly (DiscoveryUnionHit | undefined)[]>;
     finish(): Promise<void>;
     close(): Promise<void>;
 }>;

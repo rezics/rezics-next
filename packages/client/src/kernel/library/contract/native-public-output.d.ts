@@ -142,6 +142,13 @@ export type NativePublicOutputApplication<Tx, PoolLike, Time> = Readonly<{
         binding: NativePublicOutputBinding;
         work: WorkReceipt;
     }>>;
+    /** Check an account-free successor on the caller's repeatable-read page snapshot. */
+    readNativeFrozenCollectionOutputSuccessor(snapshot: Tx, binding: NativePublicOutputBinding, context: PublicOutputWork & Readonly<{
+        pool: PoolLike;
+    }>): Promise<PublicOutputRefusal | Readonly<{
+        status: 'current';
+        work: WorkReceipt;
+    }>>;
     transferNativePublicCollectionOutputHold(tx: Tx, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext<PoolLike, Time>): Promise<PublicOutputRefusal | Readonly<{
         status: 'transferred';
         successorHoldId: string;

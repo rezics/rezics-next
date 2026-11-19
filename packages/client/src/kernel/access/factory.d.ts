@@ -1,5 +1,5 @@
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
-import type { Access, AccessConfig as KernelAccessConfig, ActionCatalogue } from '../request/access.ts';
+import type { Access, AccessConfig as KernelAccessConfig, AccountActor, AccessContext, ActionCatalogue } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export type AccessConfig = KernelAccessConfig & {
     auth?: AuthenticationConfig;
@@ -14,6 +14,12 @@ export declare function accessActionCatalogue(declared: ActionCatalogue): Map<st
     authority?: 'own-account';
     'x-resource-types'?: readonly string[];
 }>;
+/** Only the Access instance that authenticated this bearer can bind its current account point. */
+export declare function privateSubjectBearer(access: Access, actor: AccountActor, pool: AccessContext['pool']): Readonly<{
+    deadline: number;
+    accountVersion: string;
+    floor: string;
+}> | null;
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
  * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),

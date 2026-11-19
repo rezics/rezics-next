@@ -209,812 +209,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                     headers: unknown;
                     response: {
                         200: {
-                            subjects: {
-                                id: string;
-                                type: string;
-                                kind: string;
-                                base: {
-                                    id: string;
-                                    kind: string;
-                                    kindLabel: {
-                                        value: string;
-                                        language: string;
-                                    };
-                                    title: {
-                                        value: string;
-                                        language: string;
-                                    } | null;
-                                    image: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                        aspect: {
-                                            width: number;
-                                            height: number;
-                                        };
-                                    } | null;
-                                    url: {
-                                        id: string;
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                    };
-                                };
-                                labels: Record<string, string>;
-                                summary: {
-                                    id: string;
-                                    type: string;
-                                    types: string[];
-                                    label: {
-                                        value: string;
-                                        language: string;
-                                    } | null;
-                                    creativeWork: boolean;
-                                    cover: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                    } | null;
-                                } | null;
-                                matchEvidence: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                                descriptions?: Record<string, string>;
-                                facts?: Record<string, ({
-                                    kind: "item";
-                                    id: string;
-                                    labels: Record<string, string>;
-                                } | {
-                                    kind: "time";
-                                    year: number;
-                                    month?: number;
-                                    day?: number;
-                                } | {
-                                    kind: "quantity";
-                                    amount: number;
-                                    unit: string;
-                                } | {
-                                    kind: "code";
-                                    value: string;
-                                })[]>;
-                                figure: {
-                                    questionId: string;
-                                    populationId: string;
-                                    scale: {
-                                        min: number;
-                                        max: number;
-                                        displayStep: number;
-                                    };
-                                    count: number;
-                                    state: "insufficient_data" | "ready" | "updating";
-                                    mean: number | null;
-                                    score: number | null;
-                                };
-                            }[];
-                            kinds?: {
-                                values: {
-                                    value: string;
-                                    label: {
-                                        value: string;
-                                        language: string;
-                                    };
-                                    icon: string | null;
-                                    count?: {
-                                        value: number;
-                                        exact: boolean;
-                                    };
-                                }[];
-                                next: string | null;
-                            };
-                            next: string | null;
-                            as_of: string;
-                            freshness?: {
-                                state: "catching-up" | "current" | "unavailable";
-                            };
-                            emptyRecovery?: {
-                                status: "preparing" | "ready" | "unavailable";
-                                alternatives: {
-                                    query: string;
-                                    label: string;
-                                }[];
-                                actions: ({
-                                    kind: "edit-query";
-                                } | {
-                                    kind: "remove-type";
-                                } | {
-                                    kind: "remove-kind";
-                                    value: string;
-                                } | {
-                                    kind: "remove-facet";
-                                    property: string;
-                                    value: string;
-                                } | {
-                                    kind: "remove-range";
-                                    property: string;
-                                })[];
-                            };
-                        } | {
-                            status: "preparing" | "ready";
-                            groups: ({
-                                kind: "work";
-                                id: string;
-                                work: {
-                                    id: string;
-                                    type: string;
-                                    kind: string;
-                                    base: {
-                                        id: string;
-                                        kind: string;
-                                        kindLabel: {
-                                            value: string;
-                                            language: string;
-                                        };
-                                        title: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        image: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                            aspect: {
-                                                width: number;
-                                                height: number;
-                                            };
-                                        } | null;
-                                        url: {
-                                            id: string;
-                                            label: {
-                                                value: string;
-                                                language: string;
-                                            } | null;
-                                        };
-                                    };
-                                    labels: Record<string, string>;
-                                    summary: {
-                                        id: string;
-                                        type: string;
-                                        types: string[];
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        creativeWork: boolean;
-                                        cover: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                        } | null;
-                                    } | null;
-                                    descriptions?: Record<string, string>;
-                                    facts?: Record<string, ({
-                                        kind: "item";
-                                        id: string;
-                                        labels: Record<string, string>;
-                                    } | {
-                                        kind: "time";
-                                        year: number;
-                                        month?: number;
-                                        day?: number;
-                                    } | {
-                                        kind: "quantity";
-                                        amount: number;
-                                        unit: string;
-                                    } | {
-                                        kind: "code";
-                                        value: string;
-                                    })[]>;
-                                    figure: {
-                                        questionId: string;
-                                        populationId: string;
-                                        scale: {
-                                            min: number;
-                                            max: number;
-                                            displayStep: number;
-                                        };
-                                        count: number;
-                                        state: "insufficient_data" | "ready" | "updating";
-                                        mean: number | null;
-                                        score: number | null;
-                                    };
-                                    matchEvidence?: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
-                                };
-                                releases: {
-                                    id: string;
-                                    type: string;
-                                    kind: string;
-                                    base: {
-                                        id: string;
-                                        kind: string;
-                                        kindLabel: {
-                                            value: string;
-                                            language: string;
-                                        };
-                                        title: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        image: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                            aspect: {
-                                                width: number;
-                                                height: number;
-                                            };
-                                        } | null;
-                                        url: {
-                                            id: string;
-                                            label: {
-                                                value: string;
-                                                language: string;
-                                            } | null;
-                                        };
-                                    };
-                                    labels: Record<string, string>;
-                                    summary: {
-                                        id: string;
-                                        type: string;
-                                        types: string[];
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        creativeWork: boolean;
-                                        cover: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                        } | null;
-                                    } | null;
-                                    descriptions?: Record<string, string>;
-                                    facts?: Record<string, ({
-                                        kind: "item";
-                                        id: string;
-                                        labels: Record<string, string>;
-                                    } | {
-                                        kind: "time";
-                                        year: number;
-                                        month?: number;
-                                        day?: number;
-                                    } | {
-                                        kind: "quantity";
-                                        amount: number;
-                                        unit: string;
-                                    } | {
-                                        kind: "code";
-                                        value: string;
-                                    })[]>;
-                                    figure: {
-                                        questionId: string;
-                                        populationId: string;
-                                        scale: {
-                                            min: number;
-                                            max: number;
-                                            displayStep: number;
-                                        };
-                                        count: number;
-                                        state: "insufficient_data" | "ready" | "updating";
-                                        mean: number | null;
-                                        score: number | null;
-                                    };
-                                    matchEvidence?: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
-                                }[];
-                                next: string | null;
-                            } | {
-                                kind: "release";
-                                id: string;
-                                release: {
-                                    id: string;
-                                    type: string;
-                                    kind: string;
-                                    base: {
-                                        id: string;
-                                        kind: string;
-                                        kindLabel: {
-                                            value: string;
-                                            language: string;
-                                        };
-                                        title: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        image: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                            aspect: {
-                                                width: number;
-                                                height: number;
-                                            };
-                                        } | null;
-                                        url: {
-                                            id: string;
-                                            label: {
-                                                value: string;
-                                                language: string;
-                                            } | null;
-                                        };
-                                    };
-                                    labels: Record<string, string>;
-                                    summary: {
-                                        id: string;
-                                        type: string;
-                                        types: string[];
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                        creativeWork: boolean;
-                                        cover: {
-                                            media: string;
-                                            width: number;
-                                            height: number;
-                                            placeholder: {
-                                                thumbhash: string;
-                                                color: string;
-                                            };
-                                            variants: {
-                                                format: "avif" | "webp";
-                                                width: number;
-                                            }[];
-                                            focalPoint: {
-                                                x: number;
-                                                y: number;
-                                            } | null;
-                                            credit: {
-                                                rightsHolder: string;
-                                                via: {
-                                                    name: string;
-                                                    url: string;
-                                                };
-                                                license: string;
-                                                obligations: string[];
-                                            };
-                                        } | null;
-                                    } | null;
-                                    descriptions?: Record<string, string>;
-                                    facts?: Record<string, ({
-                                        kind: "item";
-                                        id: string;
-                                        labels: Record<string, string>;
-                                    } | {
-                                        kind: "time";
-                                        year: number;
-                                        month?: number;
-                                        day?: number;
-                                    } | {
-                                        kind: "quantity";
-                                        amount: number;
-                                        unit: string;
-                                    } | {
-                                        kind: "code";
-                                        value: string;
-                                    })[]>;
-                                    figure: {
-                                        questionId: string;
-                                        populationId: string;
-                                        scale: {
-                                            min: number;
-                                            max: number;
-                                            displayStep: number;
-                                        };
-                                        count: number;
-                                        state: "insufficient_data" | "ready" | "updating";
-                                        mean: number | null;
-                                        score: number | null;
-                                    };
-                                    matchEvidence?: {
-                                        state: "absent";
-                                    } | {
-                                        state: "unsupported";
-                                    } | {
-                                        state: "unavailable";
-                                    } | {
-                                        state: "current";
-                                        source: {
-                                            id: string;
-                                            revision: number;
-                                        };
-                                        query: string;
-                                        reasons: {
-                                            field: "alias" | "description" | "title";
-                                            language: string;
-                                            text: string;
-                                            spans: {
-                                                start: number;
-                                                end: number;
-                                            }[];
-                                        }[];
-                                    };
-                                };
-                                workLink: "conflicting" | "missing" | "unavailable" | "unknown" | "unproven";
-                            })[];
-                            next: string | null;
-                            as_of: string;
-                        } | {
-                            status: "preparing" | "ready";
-                            children: {
-                                id: string;
-                                type: string;
-                                kind: string;
-                                base: {
-                                    id: string;
-                                    kind: string;
-                                    kindLabel: {
-                                        value: string;
-                                        language: string;
-                                    };
-                                    title: {
-                                        value: string;
-                                        language: string;
-                                    } | null;
-                                    image: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                        aspect: {
-                                            width: number;
-                                            height: number;
-                                        };
-                                    } | null;
-                                    url: {
-                                        id: string;
-                                        label: {
-                                            value: string;
-                                            language: string;
-                                        } | null;
-                                    };
-                                };
-                                labels: Record<string, string>;
-                                summary: {
-                                    id: string;
-                                    type: string;
-                                    types: string[];
-                                    label: {
-                                        value: string;
-                                        language: string;
-                                    } | null;
-                                    creativeWork: boolean;
-                                    cover: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                    } | null;
-                                } | null;
-                                descriptions?: Record<string, string>;
-                                facts?: Record<string, ({
-                                    kind: "item";
-                                    id: string;
-                                    labels: Record<string, string>;
-                                } | {
-                                    kind: "time";
-                                    year: number;
-                                    month?: number;
-                                    day?: number;
-                                } | {
-                                    kind: "quantity";
-                                    amount: number;
-                                    unit: string;
-                                } | {
-                                    kind: "code";
-                                    value: string;
-                                })[]>;
-                                figure: {
-                                    questionId: string;
-                                    populationId: string;
-                                    scale: {
-                                        min: number;
-                                        max: number;
-                                        displayStep: number;
-                                    };
-                                    count: number;
-                                    state: "insufficient_data" | "ready" | "updating";
-                                    mean: number | null;
-                                    score: number | null;
-                                };
-                                matchEvidence?: {
-                                    state: "absent";
-                                } | {
-                                    state: "unsupported";
-                                } | {
-                                    state: "unavailable";
-                                } | {
-                                    state: "current";
-                                    source: {
-                                        id: string;
-                                        revision: number;
-                                    };
-                                    query: string;
-                                    reasons: {
-                                        field: "alias" | "description" | "title";
-                                        language: string;
-                                        text: string;
-                                        spans: {
-                                            start: number;
-                                            end: number;
-                                        }[];
-                                    }[];
-                                };
-                            }[];
-                            next: string | null;
-                            as_of: string;
-                        } | {
-                            viewer: "anonymous" | "signed-in";
-                            action: "allowed" | "disabled" | "unavailable";
-                            reason: "oversized" | "private_context" | "ready" | "unavailable" | "unsupported";
-                            document: {
-                                text: string;
-                                filter: string | null;
-                                languages: string[];
-                                sort: string | null;
-                                textField?: "credited_creator";
-                                creditQualifiers?: {
-                                    property: string;
-                                    value: string;
-                                }[];
-                                spoilerThreshold?: number;
-                            } | null;
-                            parameters: string | null;
-                            selections: {
-                                value: string;
-                                language: string;
-                            }[];
-                        } | {
                             spaceEntries?: {
                                 reader: string | null;
                                 rows: {
@@ -2038,6 +1232,812 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                     property: string;
                                 })[];
                             };
+                        } | {
+                            subjects: {
+                                id: string;
+                                type: string;
+                                kind: string;
+                                base: {
+                                    id: string;
+                                    kind: string;
+                                    kindLabel: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    title: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    image: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                        aspect: {
+                                            width: number;
+                                            height: number;
+                                        };
+                                    } | null;
+                                    url: {
+                                        id: string;
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                    };
+                                };
+                                labels: Record<string, string>;
+                                summary: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                                descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                    month?: number;
+                                    day?: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
+                                figure: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                            }[];
+                            kinds?: {
+                                values: {
+                                    value: string;
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    icon: string | null;
+                                    count?: {
+                                        value: number;
+                                        exact: boolean;
+                                    };
+                                }[];
+                                next: string | null;
+                            };
+                            next: string | null;
+                            as_of: string;
+                            freshness?: {
+                                state: "catching-up" | "current" | "unavailable";
+                            };
+                            emptyRecovery?: {
+                                status: "preparing" | "ready" | "unavailable";
+                                alternatives: {
+                                    query: string;
+                                    label: string;
+                                }[];
+                                actions: ({
+                                    kind: "edit-query";
+                                } | {
+                                    kind: "remove-type";
+                                } | {
+                                    kind: "remove-kind";
+                                    value: string;
+                                } | {
+                                    kind: "remove-facet";
+                                    property: string;
+                                    value: string;
+                                } | {
+                                    kind: "remove-range";
+                                    property: string;
+                                })[];
+                            };
+                        } | {
+                            status: "preparing" | "ready";
+                            groups: ({
+                                kind: "work";
+                                id: string;
+                                work: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                };
+                                releases: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                }[];
+                                next: string | null;
+                            } | {
+                                kind: "release";
+                                id: string;
+                                release: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                    matchEvidence?: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                };
+                                workLink: "conflicting" | "missing" | "unavailable" | "unknown" | "unproven";
+                            })[];
+                            next: string | null;
+                            as_of: string;
+                        } | {
+                            status: "preparing" | "ready";
+                            children: {
+                                id: string;
+                                type: string;
+                                kind: string;
+                                base: {
+                                    id: string;
+                                    kind: string;
+                                    kindLabel: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    title: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    image: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                        aspect: {
+                                            width: number;
+                                            height: number;
+                                        };
+                                    } | null;
+                                    url: {
+                                        id: string;
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                    };
+                                };
+                                labels: Record<string, string>;
+                                summary: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
+                                descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                    month?: number;
+                                    day?: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
+                                figure: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                                matchEvidence?: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                            }[];
+                            next: string | null;
+                            as_of: string;
+                        } | {
+                            viewer: "anonymous" | "signed-in";
+                            action: "allowed" | "disabled" | "unavailable";
+                            reason: "oversized" | "private_context" | "ready" | "unavailable" | "unsupported";
+                            document: {
+                                text: string;
+                                filter: string | null;
+                                languages: string[];
+                                sort: string | null;
+                                textField?: "credited_creator";
+                                creditQualifiers?: {
+                                    property: string;
+                                    value: string;
+                                }[];
+                                spoilerThreshold?: number;
+                            } | null;
+                            parameters: string | null;
+                            selections: {
+                                value: string;
+                                language: string;
+                            }[];
                         };
                         400: Response | {
                             type: unknown;

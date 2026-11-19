@@ -24,6 +24,10 @@ export type BoundedReadLifetimeOptions = Readonly<{
 }>;
 type Checkout = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
 type Discard = (client: PoolClient, error: Error) => void;
+export declare function isPostgresServerError(error: unknown): error is {
+    code: string;
+    severity: 'ERROR';
+};
 /** Native serialization and deadlock errors confirm rollback, including at COMMIT. */
 export declare function isPostgresTransactionAbort(error: unknown): boolean;
 /** Apply one deadline to checkout, native queries, callback work and transaction cleanup. */

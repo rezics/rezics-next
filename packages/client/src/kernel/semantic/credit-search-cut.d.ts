@@ -29,6 +29,7 @@ export type WorkHeader = {
 };
 export type WorkCut = Readonly<{
     work: WorkHeader;
+    epoch: number;
     generation: string;
     ready: boolean;
 }>;
@@ -38,7 +39,7 @@ export declare const utf8Bytes: (value: unknown) => number;
 export declare const isRecord: (value: unknown) => value is Record<string, unknown>;
 export declare function digestOf(value: unknown): string;
 /** Work header plus search canonical generation. Creator names live in nameRevision; paging stays stable. */
-export declare function observationOf(cut: WorkCut): string;
+export declare function observationOf(cut: WorkCut, scope?: 'catalogue' | 'empty-selection'): string;
 export declare function selectedCursorOf(row: {
     property: string;
     slot_id: string;

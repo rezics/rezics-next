@@ -4,6 +4,8 @@ import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef, ContentImportedFieldGroup } from './contract/domain-ports.ts';
 import type { SubjectComponent } from './contract/subject-values.ts';
+import type { SubjectSummaryObservation } from './contract/summaries.ts';
+export type { SubjectSummaryObservation } from './contract/summaries.ts';
 import type { SubjectReadingAuthorizationPort, SubjectReadingNativePort, SubjectReadingFenceTuple, SubjectReadingFence } from './contract/index.ts';
 import type { ContextRecord } from './context.ts';
 import { type Access, type AccessCheck, type AccessClient, type Actor } from '../request/access.ts';
@@ -65,6 +67,7 @@ export type SubjectReadOptions = {
     authorize?: SummaryDependencies['authorize'];
     prepareSummaryBatch?: () => Promise<SubjectSummaryBatchAuthorizer>;
     seen?: readonly SubjectComponent[];
+    observeMissingCheckpoint?: boolean;
     deadline?: number;
     prepareAuthorization?: () => Promise<AccessCheck>;
     prepareAuthorize?: (id: string) => Promise<AccessCheck>;
@@ -95,6 +98,7 @@ export type SubjectReadingPageRequest = {
     runNative: <T>(read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>) => Promise<T>;
     readAs: <T>(read: () => Promise<T>) => Promise<T>;
     seen: readonly SubjectComponent[];
+    observeMissingCheckpoint?: boolean;
     selectedSynopsis?: SelectedSynopsisInput;
     reviewIdentity?: ReviewedPersonSource;
     includeViewerActions?: boolean;
@@ -197,21 +201,13 @@ export type SummaryReaderDependencies = {
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
 export type SubjectSummaryBatchAuthorizer = (client: AccessClient, ids: readonly string[]) => Promise<ReadonlyMap<string, boolean>>;
-type SummarySources = readonly Readonly<{
-    partition: number;
-    epoch: number;
-    position: bigint;
-}>[];
 export type SummaryCoverState = 'available' | 'absent' | 'concealed';
-/** Internal composition, never a browser-supplied witness or a cached allow.
- * Each component is an independent native home position, as in Subject reads.
- */
-export type SubjectSummaryObservation = Readonly<{
-    summaries: ReadonlyMap<string, SubjectSummary | null>;
-    covers: ReadonlyMap<string, SummaryCoverState>;
-    components: SummarySources;
-    current: () => Promise<boolean>;
-}>;
+export type SummaryObservationOptions = {
+    languages?: readonly string[];
+    displayFallback?: boolean;
+    /** Reproject all originals and compare exact native witnesses if their home positions advance. */
+    exactSubjectCurrentness?: boolean;
+};
 /** Preserve the callable related-read adapter, and expose preparation to the batch owner.
  * Preparation never runs while the final snapshot is checked out. Only the returned
  * native checks execute on that snapshot; no allow decision is retained.
@@ -240,10 +236,7 @@ export type SubjectCorrectionActionsInput = {
 export type SubjectReadingApplication = Readonly<{
     readSubject(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>, context: string, routeKey: Uint8Array, options?: SubjectReadOptions): Promise<SubjectReadResult | null>;
     readSubjectSummaries: SubjectSummaryReader;
-    readSubjectSummaryObservation: (deps: SummaryReaderDependencies, ids: readonly string[], options?: {
-        languages?: readonly string[];
-        displayFallback?: boolean;
-    }) => Promise<SubjectSummaryObservation>;
+    readSubjectSummaryObservation: (deps: SummaryReaderDependencies, ids: readonly string[], options?: SummaryObservationOptions) => Promise<SubjectSummaryObservation>;
     readSubjectCorrectionActions(input: SubjectCorrectionActionsInput): Promise<SubjectCorrectionActions>;
     readRelated(db: Pool | PoolClient, ids: readonly string[]): ReturnType<typeof readRelatedNative>;
     loadRelated(client: object, ids: readonly string[]): ReturnType<typeof loadRelated>;

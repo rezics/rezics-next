@@ -86,16 +86,26 @@ export type ReviewDiscoveryCount = Readonly<{
 }>;
 export type ReviewDiscoverySource = Readonly<{
     read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
+    /** Exact current positions for requests with no Review identities. */
+    readEmptyPositions?(partitions: readonly number[], options?: Readonly<{
+        omitChanged?: boolean;
+    }>): Promise<ReadonlyMap<number, bigint>>;
+    /** Coherent terminal first pages for homes with no raw Review candidates. */
+    readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
     hydrate(partition: number, ids: readonly string[]): Promise<ReviewDiscoveryHydration>;
     count(partition: number): Promise<ReviewDiscoveryCount>;
     page(partition: number, after: ReviewDiscoveryPageKey | null, limit: number, cut?: bigint): Promise<ReviewDiscoveryPage | ReviewDiscoveryIncompletePage>;
+    /** Scheduling hint from Content's lifecycle fence. A false observation grants no coverage. */
+    populationInvalidationPending?(): Promise<boolean>;
     /** Coherent native population pages; legacy `page` keys cannot carry this coverage proof. */
     pageWithCut?(partition: number, after: ReviewDiscoveryPageKey | ReviewDiscoveryContinuation | null, limit: number): Promise<ReviewDiscoveryPopulationPage>;
 }>;
 /** Additional native maintenance ports. Search's legacy Count remains compatible;
  * candidate installation does not grant it anonymous eligibility coverage. */
 export type NativeReviewDiscoverySource = ReviewDiscoverySource & Readonly<{
+    populationInvalidationPending: NonNullable<ReviewDiscoverySource['populationInvalidationPending']>;
     pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
+    readEmptyPositions: NonNullable<ReviewDiscoverySource['readEmptyPositions']>;
     maintainCensus(partition: number): Promise<ReviewCensusStep>;
     censusCoverage(partition: number): Promise<ReviewCensusCoverage>;
 }>;
@@ -113,8 +123,9 @@ export declare const REVIEW_DISCOVERY_BOUNDS: Readonly<{
 export declare class ReviewDiscoverySourceError extends Error {
     readonly state: 'changed' | 'unavailable' | 'preparing';
     readonly missing: string;
+    readonly observation?: 'keyed-output' | 'empty-position' | undefined;
     readonly code: 'review_discovery_unavailable';
-    constructor(state: 'changed' | 'unavailable' | 'preparing', missing: string);
+    constructor(state: 'changed' | 'unavailable' | 'preparing', missing: string, observation?: 'keyed-output' | 'empty-position' | undefined);
 }
 /** Public-only producer. Search owns the document union, writer, and query integration. */
 export declare function createReviewDiscoverySource(dependencies: ContentReadDependencies, makeAnonymousContext: () => ReadContext): NativeReviewDiscoverySource;

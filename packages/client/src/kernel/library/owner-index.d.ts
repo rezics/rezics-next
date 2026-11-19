@@ -22,10 +22,29 @@ export type OwnerIndexFrontier = Readonly<{
     subject: string | null;
     fact: string | null;
 }>;
+/** Independent native sources which can contribute a member to Everything. */
+export declare function readOwnerFactPresence(client: Client, accountId: string): Promise<{
+    entry: boolean;
+    personal: boolean;
+    session: boolean;
+    copy: boolean;
+    label: boolean;
+}>;
+/** The physical assignment can outlive its parent. Only the settled directory can exclude every such label.
+ * All native family probes and the directory checks run on the caller's same owner snapshot.
+ */
+export declare function isOwnerEverythingEmpty(client: Client, accountId: string): Promise<boolean>;
 /** Pure native reads: absent control is unbuilt, never an empty/ready owner. */
 export declare function readOwnerIndexFrontier(client: Client, accountId: string): Promise<OwnerIndexFrontier | null>;
+export type OwnerIndexWorkFrontier = Readonly<{
+    phase: OwnerIndexPhase | 'personal' | 'label-repair';
+    subject: string | null;
+    fact: string | null;
+}>;
+/** Older owner directories need one additional pass even if their family bootstrap already completed. */
+export declare function readOwnerIndexWorkFrontier(client: Client, accountId: string): Promise<OwnerIndexWorkFrontier | null>;
 /** At most 100 examined native facts. The caller supplies the real fenced Core operational transaction. */
-export declare function stepOwnerIndex(tx: OperationalTransaction, accountId: string): Promise<OwnerIndexFrontier>;
+export declare function stepOwnerIndex(tx: OperationalTransaction, accountId: string): Promise<OwnerIndexWorkFrontier>;
 /** One structural ORIGINAL seek; this is not canonical membership, disclosure or a useful public page. */
 export declare function readOwnerOriginalPrefix(client: Client, accountId: string, after: string | null, limit: number): Promise<string[]>;
 /** Native independent supports. Label parent liveness is checked even if directory cleanup is delayed. */

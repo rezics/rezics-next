@@ -62,9 +62,13 @@ export declare function createNativeLibraryPresentation(ports: NativeLibraryPres
         members: (actor: import("./authorization.ts").LibraryActor, id: string, options?: import("../contract/builtin-presentation.ts").BuiltinMemberOptions<{
             filter: import("@rezics/filter").FilterDocument;
             releaseDigest: string;
+            admission?: import("../owner-filter.ts").CollectionMemberAdmission;
+            pageWork?: ReturnType<typeof import("../builtin-runtime-query.ts").ownerQueryWork>;
         }>) => Promise<{
             members: import("./builtin-runtime.ts").DynamicMemberView[];
             next: string | null;
+        } | {
+            preparing: true;
         }>;
         sourceVersion: (actor: Actor, source: import("./builtin-runtime.ts").BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
     };
@@ -104,10 +108,10 @@ export declare function createNativeLibraryPresentation(ports: NativeLibraryPres
         limit?: number;
         languages?: readonly string[];
     }, deadline: number): Promise<import("../../search/service-contract.ts").SavedCatalogueMembersPage | {
+        preparing: true;
+    } | {
         members: import("../collection-reads.ts").MemberView[];
         next: string | null;
-    } | {
-        preparing: true;
     }>;
     fullView<T>(deps: LibraryPresentationDependencies, actor: Actor, view: string | undefined, body: T, options: {
         deadline: number;

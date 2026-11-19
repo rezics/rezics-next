@@ -6,6 +6,7 @@ import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } fro
 import type { SearchWriterPublicationGuard } from './writer-guard.ts';
 import type { DiscoveryRegistry } from './discovery.ts';
 import { type OpenSearch } from './opensearch.ts';
+import type { CreditSearchSource } from './credit-search.ts';
 export type GenerationPublicationJob = Readonly<{
     consumer: PublicFilterConsumer;
     job: string;
@@ -22,6 +23,7 @@ export type SearchGenerationPublication = Readonly<{
         status: 'progress' | 'reconciled';
         job: GenerationPublicationJob;
         cost: SearchPublicFilterCost;
+        sourceAdvanced?: boolean;
     } | PublicFilterConsumerUnavailable>;
     activate(job: GenerationPublicationJob, context: PublicFilterConsumerContext): Promise<{
         status: 'activated';
@@ -37,7 +39,7 @@ export type SearchGenerationPublication = Readonly<{
         cost: SearchPublicFilterCost;
         next?: 'step' | 'activate';
         advanced?: boolean;
-        enrollmentAdvanced?: boolean;
+        sourceAdvanced?: boolean;
     } | PublicFilterConsumerUnavailable>;
     close(): Promise<void>;
 }>;
@@ -51,6 +53,7 @@ export type SearchGenerationPublicationConfig = Readonly<{
     clock: KernelClock;
     meaning: SearchPublicFilterProjectionMeaning;
     writerGuard: SearchWriterPublicationGuard;
+    creditSearch?: CreditSearchSource;
     registry?: DiscoveryRegistry;
 }>;
 /** Preserve released projection metadata when publishing the durable activation timestamp. */

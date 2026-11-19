@@ -1662,6 +1662,7 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly "com.rezics.semantic.canonical-generation.continuation.v1": Type.TObject<{
         after: Type.TInteger;
         limit: Type.TInteger;
+        unannouncedOnly: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly "com.rezics.semantic.identity-scope.retirement.v1": Type.TObject<{
         sourceKey: Type.TString;
@@ -1723,7 +1724,7 @@ export declare function EVENT_TYPES(): Readonly<{
     readonly 'com.rezics.semantic.erasure.locator-scheduled.v1': Type.TObject<{
         position: Type.TString;
     }>;
-    readonly 'com.rezics.semantic.erasure.locator-advanced.v1': Type.TObject<{
+    readonly "com.rezics.semantic.erasure.locator-advanced.v1": Type.TObject<{
         position: Type.TString;
     }>;
     readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{

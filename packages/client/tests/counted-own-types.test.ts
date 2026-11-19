@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import type {
+  OwnCountedVoteMeasurement,
   OwnCountedVoteObservation,
   OwnCountedVotePreparation,
   OwnCountedVotePrepareResult,
@@ -17,7 +18,7 @@ type Assert<T extends true> = T;
 const prepare: Assert<
   Equal<
     OwnCountedVoteReader['prepare'],
-    (request: OwnCountedVoteRequest, deadline: number) => Promise<OwnCountedVotePrepareResult>
+    (request: OwnCountedVoteRequest<string>, deadline: number) => Promise<OwnCountedVotePrepareResult>
   >
 > = true;
 const read: Assert<
@@ -25,22 +26,26 @@ const read: Assert<
     OwnCountedVoteReader['read'],
     (
       client: Pick<PoolClient, 'query'>,
-      request: OwnCountedVoteRequest,
+      request: OwnCountedVoteRequest<string>,
       preparation: OwnCountedVotePreparation,
     ) => Promise<OwnCountedVoteReadResult>
   >
 > = true;
-const finish: Assert<
-  Equal<
-    OwnCountedVoteReader['finish'],
-    (
-      request: OwnCountedVoteRequest,
-      preparation: OwnCountedVotePreparation,
-      result: OwnCountedVoteReadResult,
-      deadline: number,
-    ) => Promise<OwnCountedVoteResult>
-  >
-> = true;
+type Finish = {
+  (
+    request: OwnCountedVoteRequest,
+    preparation: OwnCountedVotePreparation,
+    result: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult>;
+  (
+    request: OwnCountedVoteRequest<string>,
+    preparation: OwnCountedVotePreparation,
+    result: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult<OwnCountedVoteMeasurement>>;
+};
+const finish: Assert<Equal<OwnCountedVoteReader['finish'], Finish>> = true;
 const states: Assert<Equal<OwnCountedVoteObservation['state'], 'counted' | 'clear' | 'absent' | 'unavailable'>> = true;
 
 test('public counted reader signatures and observation states typecheck through installed declarations', () => {

@@ -57,5 +57,27 @@ export type LeafRequest = Readonly<{
 }>;
 export type LeafOptions = ScopeEvidenceReader<Access, Actor, AuthoritativeTime, ScopeWorkContext>;
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
+type LeafReadinessReason = 'subject-anchor' | 'subject-access' | 'release-definition' | 'selection-progress' | 'candidate-row' | 'candidate-provenance';
 /** Native selected evidence only; matching remains the shared Search pure matcher. */
 export declare function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence>;
+/** A finite owner population buys Subject Access separately from raw statement keys. An account's
+ * native inverse/denial probes must never consume or enlarge the selected statement window.
+ */
+export declare function readCataloguePointEvidence(pool: Pool, request: LeafRequest, options: Extract<LeafOptions, {
+    actor: Actor;
+}> & {
+    actor: Extract<Actor, {
+        kind: 'account';
+    }>;
+}, authorizationBudget: LeafWork): Promise<{
+    evidence: LeafEvidence;
+    authorization: Readonly<{
+        keys: number;
+        points: number;
+        witnesses: number;
+        rows: number;
+        bytes: number;
+        emptySeeks: number;
+    }>;
+    readinessReason: "work-budget" | LeafReadinessReason | undefined;
+}>;

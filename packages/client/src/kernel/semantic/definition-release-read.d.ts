@@ -6,6 +6,8 @@ import { type CommandTransaction } from '../command/command.ts';
 export declare function readRelease(pool: Pool | CommandTransaction, digest: string, options?: {
     composed?: boolean;
 }): Promise<Release | null>;
+/** Observe each base digest on the caller's snapshot. Only uncached immutable bodies cross the wire. */
+export declare function readBaseReleases(db: Db, digests: readonly string[]): Promise<Map<string, Release | null>>;
 export declare function activeRelease(pool: Pool | CommandTransaction, mode?: 'native'): Promise<{
     digest: string;
     head: number;
@@ -16,6 +18,8 @@ type Layer = {
     release: Release;
 };
 type Db = Pool | CommandTransaction;
+/** Identify the immutable body already digest-checked by the Definitions owner. This grants no current read. */
+export declare function hasVerifiedReleaseDigest(release: Release, digest: string): boolean;
 /** Compatibility cache probe. Current Context custody requires the asynchronous native read below. */
 export declare function composedRelease(_digest: string): Release | null;
 export declare function contextRoute(context: string): number | null;

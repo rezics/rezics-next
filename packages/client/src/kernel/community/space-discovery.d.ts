@@ -60,6 +60,8 @@ export interface SpaceDiscoverySource {
     /** Producer seam for an authoritative owner's exact current tuple witness. */
     publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
+    readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+    readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
     /** Internal generation census of retained native candidates, including ineligible identities. */
     count(partition: number): Promise<Readonly<{
         partition: number;

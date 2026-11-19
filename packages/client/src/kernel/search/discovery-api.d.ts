@@ -83,11 +83,20 @@ export type AccountPage = AccountSnapshot & {
 /** Accounts' native partition source. Its count is generation evidence, never query or kind-count evidence. */
 export interface AccountDiscoverySource {
     read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
+    readHomes?(homes: readonly Readonly<{
+        partition: number;
+        ids: readonly string[];
+    }>[]): Promise<readonly AccountSnapshot[]>;
     count(partition: number): Promise<{
         partition: number;
         position: bigint;
         count: number;
     }>;
+    countPartitions?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+        position: bigint;
+        count: number;
+    }>>;
+    readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
     page(partition: number, after: AccountPageKey | null, limit: number): Promise<AccountSnapshot & {
         next: AccountPageKey | null;
     }>;
@@ -380,7 +389,11 @@ export type DiscoveryMetadataRecord = Readonly<{
 export type DiscoveryMetadataProducer = Readonly<{
     kind: DiscoveryMetadataKind;
     owner: 'commerce' | 'content';
-    readiness(): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
+    /** Native status-only readiness contributes no page capability witness. Turn admission and the actual native cut still apply. */
+    pageCapabilityWitness?: 'none';
+    /** True defers selection only. A scheduled page still has to prove its native cut. */
+    populationInvalidationPending?(): Promise<boolean>;
+    readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
     page(partition: number, after: Readonly<{
         route: number;
         id: string;
@@ -402,6 +415,17 @@ export type DiscoveryMetadataProducer = Readonly<{
         records: readonly DiscoveryMetadataRecord[];
     }>>;
     position(partition: number): Promise<bigint>;
+    /** Exact position observations for requests without identities. An omitted home has no stable cut. */
+    readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+    readEmptyStamps?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+        epoch: number;
+        position: bigint;
+    }>>;
+    /** Native first pages with no raw candidates. Omitted homes require the normal page reader. */
+    readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+        epoch?: number;
+        position: bigint;
+    }>>;
 }>;
 export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
 /** One composed set is consumed by the live query registry and the default population worker. */
@@ -414,5 +438,13 @@ export type DiscoveryProducerEntry = Readonly<{
 }>;
 /** Public operation used by Content Home; the service owns admission and current disclosure. */
 export type DiscoverySearch = (principal: 'anonymous' | `account:${string}`, request: MixedDiscoveryRequest, context: DiscoveryReadContext) => Promise<DiscoveryPage>;
+/** The native Home composition publishes the same retained execution after its owner reads. */
+export type DiscoveryFeedRead = Readonly<{
+    page: DiscoveryPage;
+    current(keys: readonly DiscoveryUnionHit['key'][]): Promise<readonly (DiscoveryUnionHit | undefined)[]>;
+    finish(): Promise<void>;
+    close(): Promise<void>;
+}>;
+export type DiscoveryFeedSearch = (...args: Parameters<DiscoverySearch>) => Promise<DiscoveryFeedRead>;
 /** Subject-scoped current public Knowledge, separate from the mixed catalogue representation. */
 export type { KnowledgeDiscoveryRequest, KnowledgeDiscoveryPage } from './knowledge-discovery.ts';

@@ -5,11 +5,13 @@ import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } fro
 import { type CommandTransaction } from '../command/command.ts';
 import type { StoredSource } from './identity-receiving-native-internal.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
+import repairWriter from './public-filter-custody-repair-writer.sql.d.ts';
 import { type IndexAction, type SubjectDocument } from './document.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
-import { type DiscoveryProjection, type DiscoveryRepairEffect } from './account-discovery.ts';
+import { readDiscoveryWriterPhysicalTarget, type DiscoveryProjection, type DiscoveryRepairEffect } from './account-discovery.ts';
 import type { SearchNativePublicationCompletionReader, SearchPublicFilterCost } from './semantic-source-port.ts';
+import type { GenerationPublicationPin } from './generation-publication-pin.ts';
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
     locator: string;
@@ -46,6 +48,17 @@ export type DiscoveryRepairWriterReceipt = Readonly<{
 export type PublicFilterRepairWriterReceipt = SearchRepairWriterReceipt | DiscoveryRepairWriterReceipt;
 export declare function isDiscoveryRepairWriterReceipt(receipt: PublicFilterRepairWriterReceipt): receipt is DiscoveryRepairWriterReceipt;
 export declare const repairWriterPosition: (receipt: PublicFilterRepairWriterReceipt) => bigint;
+export type RetainedSearchRepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>>;
+/** A publication may repair a strictly newer ordinary settlement, using its exact native row as a CAS. */
+export type SupersededSearchRepair = Readonly<{
+    receipt: SearchRepairWriterReceipt;
+    writer: RetainedSearchRepairWriter;
+}>;
+export declare function inspectSearchRepairWriter(index: string, original: SearchRepairWriterReceipt, writer: RetainedSearchRepairWriter | null | undefined): {
+    current: SearchRepairWriterReceipt;
+} | {
+    superseded: SupersededSearchRepair;
+} | undefined;
 export declare const decodeSearchRepairWriterReceipt: (value: string) => SearchRepairWriterReceipt;
 export declare function decodeSearchIdentityWriterAction(value: string, source: StoredSource): IndexAction;
 /** Search-visible keyed readback; absence alone never recovers an uncertain delete. */
@@ -56,6 +69,23 @@ export declare function validateSearchRepairWriterEvidence(index: string, receip
 }): void;
 /** Recheck retained evidence and lock the actual existing writer through the reader boundary. */
 export declare function verifySearchRepairWriterReceipt(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: SearchRepairWriterReceipt): Promise<void>;
+type RepairGate = Readonly<{
+    consumer: string;
+    incarnation: string;
+    owner_epoch: number;
+    write_alias: string;
+    closed_token: string | null;
+}>;
+type RepairOwner = Readonly<{
+    write_state: string;
+    epoch: number;
+    position: bigint | string;
+}>;
+type RepairWriter = NonNullable<Awaited<ReturnType<typeof repairWriter.run>>> & {
+    repair_account?: string | null;
+};
+/** Checks the rows already locked by the reopened native settlement transaction. */
+export declare function assertRetainedRepairWriterFence(receipt: DiscoveryRepairWriterReceipt, gate: RepairGate | undefined, writer: RepairWriter | undefined, owner: RepairOwner | undefined): void;
 /** Dispatch by original physical family; no mixed receipt is accepted by the Subject verifier. */
 export declare function validatePublicFilterRepairWriterEvidence(index: string, receipt: PublicFilterRepairWriterReceipt): void;
 export declare function readPublicFilterRepairPhysicalTarget(db: Pick<Pool, 'query'>, search: OpenSearch, index: string): Promise<Readonly<{
@@ -63,6 +93,9 @@ export declare function readPublicFilterRepairPhysicalTarget(db: Pick<Pool, 'que
     writeAlias: string;
 }>>;
 export declare function verifyPublicFilterRepairWriterReceipt(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: PublicFilterRepairWriterReceipt): Promise<void>;
+export declare function verifyDiscoveryRepairWriterReceipts(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipts: readonly DiscoveryRepairWriterReceipt[]): Promise<void>;
+/** Read the exact physical winners after native receipt and writer checks. */
+export declare function verifyDiscoveryRepairWinners(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, target: Awaited<ReturnType<typeof readDiscoveryWriterPhysicalTarget>>, receipts: readonly DiscoveryRepairWriterReceipt[]): Promise<void>;
 /** Uses the existing native writer enrollment, dispatch and settlement rows, with the actual
  * mixed projection as the only body/version producer. An interrupted attempt replays its retained actions;
  * no copy flag, current ACK or engine conflict is a repair receipt.
@@ -151,8 +184,8 @@ export type SearchIdentityWriterAdmission = Readonly<{
 export type SearchWriterNativeCustody = SearchWriterGuard & Readonly<{
     /** Retained native repair, using the ordinary Source, serializer and writer enrollment. */
     repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext): Promise<SearchRepairWriterReceipt>;
-    /** No caller body/version or saved positive can be submitted. */
-    write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
+    /** Re-enter ordinary dispatch with the exact superseding native row still present. */
+    renewPublicationRepair(input: SupersededSearchRepair, context: PublicFilterConsumerContext): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
     observeIdentityPreparation(tx: CommandTransaction, job: IdentityJobRef, original: string, allocation: Readonly<{
         incarnation: string;
@@ -222,6 +255,7 @@ export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
         cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
 }>;
+export declare function nativeSourceForHeldPublication(result: object): GenerationPublicationPin | undefined;
 export declare function bindSearchWriterPublicationReader(guard: SearchWriterPublicationGuard, reader: SearchNativePublicationCompletionReader): void;
 /** Read current native projection bodies with the external versions actually settled by this writer.
  * A later writer-custody command advances the home head without changing those external versions.

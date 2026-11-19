@@ -75,6 +75,7 @@ export interface CanonicalSourceRef {
     readonly collectionId: string;
 }
 export interface CanonicalCall extends CanonicalSourceRef {
+    readonly ownerAccountId?: string;
     readonly deadline: number;
     readonly allowance: CanonicalAllowance;
     /** The same installed Semantic owner capability is carried through nested reads. */
@@ -110,7 +111,7 @@ export interface CanonicalGroupProgress {
 }
 export type CanonicalNotReady = {
     readonly state: 'not_ready';
-    readonly reason: 'source' | 'identity' | 'unbuilt' | 'incomplete' | 'stale' | 'allowance';
+    readonly reason: 'source' | 'identity' | 'unbuilt' | 'incomplete' | 'registration_pending' | 'stale' | 'allowance';
     readonly work: CanonicalWork;
 };
 export type CanonicalAuthorityRead = CanonicalNotReady | {
@@ -121,6 +122,10 @@ export type CanonicalAuthorityRead = CanonicalNotReady | {
 };
 export type CanonicalReadyRead = CanonicalNotReady | {
     readonly state: 'ready';
+    readonly queryCapture?: Readonly<{
+        id: string;
+        revision: string;
+    }>;
     readonly basis: CanonicalBasis;
     readonly generation: string;
     readonly work: CanonicalWork;
@@ -165,8 +170,9 @@ export type CanonicalPublication = CanonicalNotReady | {
     readonly work: CanonicalWork;
 };
 import type { WorkContext } from '../work/registry.ts';
+import { CollectionSourceLedger } from './collection-native-work.ts';
 import { type NativeSourceIdentity } from './native-source-custody.ts';
-import { type NativeCollectionMetadata } from './collection-source-native.ts';
+import { type NativeCollectionMetadata, type NativeLogicalBuiltinBinding } from './collection-source-native.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { type CommandTransaction } from '../command/command.ts';
 export declare const CANONICAL_SOURCE_WORKFLOW = "library.canonicalSource";
@@ -185,6 +191,44 @@ export declare function initializeCanonicalCollectionSource(tx: CommandTransacti
     allowance: WorkAllowance;
 }>): Promise<NativeSourceIdentity | null>;
 export declare function observeCanonicalSource(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead>;
+/** The actor-bound logical lookup has admitted the account and gate. Join the worker's
+ * publication to the current fact head, then repeat Semantic's actual scope revalidation. */
+export declare function readPublishedEverythingState(pool: Pool, binding: NativeLogicalBuiltinBinding, l: CollectionSourceLedger, observations: LibrarySemanticObservationCapability): Promise<{
+    metadata: Readonly<{
+        route: number;
+        collectionId: string;
+    } & {
+        curatorAccountId: string | null;
+        state: 'active' | 'deleted';
+        visibility: 'private' | 'unlisted' | 'public';
+        membershipKind: 'curated' | 'dynamic';
+        revision: number;
+        createdAt: string | null;
+        sourceGeneration: string;
+        builtinKind: 'everything' | 'state' | 'liked' | null;
+        releaseDigest: string | null;
+        profileId: string | null;
+        stateSetId: string | null;
+        stateId: string | null;
+        ruleRevision?: string | null;
+        ruleReleaseDigest?: string | null;
+        ruleSource?: 'owner' | 'catalogue' | null;
+        ruleReady?: boolean;
+    } & {
+        incarnation: string;
+        stamp: ListingStamp;
+        factFence: string | null;
+        authority: 'curated' | 'private_builtin' | 'activated_output' | 'unavailable_output';
+        outputGeneration: string | null;
+        outputPublication: import("./collection-source-output.ts").CollectionOutputPublication | null;
+    }>;
+    basis: CanonicalBasis;
+    generation: string;
+    queryCapture: {
+        id: string;
+        revision: string;
+    };
+} | null>;
 export declare function readCanonicalSourceState(pool: Pool, input: CanonicalCall): Promise<CanonicalReadyRead>;
 export declare function seekCanonicalSourceGroup(pool: Pool, input: CanonicalBoundCall & {
     generation: string;
@@ -201,4 +245,4 @@ export declare function publishCanonicalSourceRepair(pool: Pool, input: Canonica
     repair: CanonicalRepair;
 }): Promise<CanonicalPublication>;
 /** Bounded native population capture precedes canonical mapping; source originals include rejects/order inputs. */
-export declare function advanceCanonicalSourceCapture(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead>;
+export declare function advanceCanonicalSourceCapture(pool: Pool, input: CanonicalCall, continueRegistration?: boolean): Promise<CanonicalAuthorityRead>;

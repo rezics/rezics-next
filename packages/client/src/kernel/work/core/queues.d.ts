@@ -7,9 +7,15 @@ export declare const WORK_QUEUES: Readonly<{
     effects: Readonly<{
         workerConcurrency: 8;
         partitionConcurrency: 1;
+        minPollingIntervalMs: 250;
     }>;
     "locator-effects": Readonly<{
         workerConcurrency: 8;
+        partitionConcurrency: 1;
+        minPollingIntervalMs: 250;
+    }>;
+    media: Readonly<{
+        workerConcurrency: 2;
         partitionConcurrency: 1;
     }>;
     workflows: Readonly<{

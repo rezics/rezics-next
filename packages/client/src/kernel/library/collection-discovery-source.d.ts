@@ -84,6 +84,10 @@ export type CollectionDiscoveryCensus = Readonly<{
     reason: 'native_collection_population_evidence_unavailable';
 }>;
 export type CollectionDiscoverySource = Readonly<{
+    /** Unfiltered empty-key observations in request order, including unavailable homes. */
+    readEmpty?(partitions: readonly number[]): Promise<readonly CollectionDiscoverySnapshot[]>;
+    /** Only homes whose first unfiltered raw page is empty at the returned stamp. */
+    readEmptyFirstPages?(partitions: readonly number[]): Promise<readonly CollectionDiscoveryPosition[]>;
     read(partition: number, ids: readonly CollectionDiscoveryKey[], query?: CollectionDiscoveryQuery, context?: CollectionDiscoveryReadContext): Promise<CollectionDiscoverySnapshot>;
     page(partition: number, after: CollectionDiscoveryKey | null, limit: number, query?: CollectionDiscoveryQuery, context?: CollectionDiscoveryReadContext): Promise<CollectionDiscoveryPage>;
     count(partition: number): Promise<CollectionDiscoveryCensus>;

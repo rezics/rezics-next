@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { Access, AccessCheck, Actor, Resource } from '../access/index.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import type { AccountDiscoveryEnrollment, enrollAccountDiscoveryHome } from '../access/adapters/index.ts';
+import type { AccountDiscoveryEnrollment, enrollAccountDiscoveryHome, enrollNewAccountDiscoveryHomes } from '../access/adapters/index.ts';
 import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicSuggestionCaptureInput } from '../search/index.ts';
 import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning, PublicFilterSource, PublicFilterSourceFactory } from './public-filter-source-contract.ts';
 export type SourceBindingCaptureInput = PublicFilterConsumerCaptureInput | PublicCanonicalCaptureInput | PublicSuggestionCaptureInput;
@@ -59,6 +59,7 @@ export type SourceBindingCustodyExecution = Readonly<{
     ownRows: readonly Readonly<{
         original: string;
         terminal: string;
+        metadataKind?: 'collection' | 'review' | 'space';
     }>[];
 }>;
 export type SourceBindingCustodyResult = Readonly<{
@@ -70,6 +71,8 @@ export type SourceBindingCustodyResult = Readonly<{
     cost: PublicFilterCost;
 }> | SourceBindingFailure;
 export type SourceBindingGenerationResult = Readonly<{
+    /** Exact Search encoding compared during a grouped registration replay. */
+    registeredDefinition?: string;
     definition: SourceBindingRetainedDefinition;
     registration: Readonly<{
         partition: number;
@@ -103,17 +106,30 @@ export type PublicFilterSearchBindingPort = Readonly<{
         queried: PublicFilterQueriedObservation;
         execution?: string;
     }>, context: PublicFilterConsumerContext): Promise<SourceBindingCustodyResult>;
-    readGenerationPublicationCustody(pool: Pool, consumer: PublicFilterConsumer, sourceHome: number | undefined, context: PublicFilterConsumerContext, observation?: string): Promise<SourceBindingGenerationResult>;
+    readBookRegistrations?(pool: Pool, members: readonly {
+        consumer: PublicFilterConsumer;
+        definition: SourceBindingCustodyDefinition;
+    }[], context: PublicFilterConsumerContext): Promise<readonly SourceBindingGenerationResult[]>;
+    readGenerationPublicationCustody(pool: Pool, consumer: PublicFilterConsumer, sourceHome: number | undefined, context: PublicFilterConsumerContext, observation?: string, recovery?: 'registration' | Readonly<{
+        bootstrap: PrivacyReductionStart;
+        snapshot: 'pit' | 'prepared';
+    }>): Promise<SourceBindingGenerationResult>;
     readRepairSettlement(pool: Pool, request: Readonly<{
         queried: PublicFilterQueriedObservation;
         execution: string;
     }>, context: PublicFilterConsumerContext): Promise<SourceBindingSettlementResult>;
-    withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>): Promise<T>;
+    withRepairAllowance<T>(spent: PublicFilterCost, work: () => Promise<T>, maintenance?: boolean): Promise<T>;
 }>;
 /** Access supplies current Account repair inputs, authorization and deadline classification. */
 export type PublicFilterAccessBindingPort = Readonly<{
+    readAccountRepairs(pool: Pool, ids: readonly string[], context: PublicFilterConsumerContext): Promise<ReadonlyMap<string, AccountDiscoveryRepairObservation>>;
     readAccountRepair(pool: Pool, id: string, context: PublicFilterConsumerContext): Promise<AccountDiscoveryRepairObservation>;
     enrollAccountHome(pool: Pool, input: Parameters<typeof enrollAccountDiscoveryHome>[1], context: PublicFilterConsumerContext): Promise<AccountDiscoveryEnrollment>;
+    readonly newAccountEnrollment?: Readonly<{
+        groupSize: number;
+        probeInputsPerHome: number;
+        enroll: typeof enrollNewAccountDiscoveryHomes;
+    }>;
     classifyUnavailability(error: unknown): string | undefined;
     requireDeadline(deadline: number): void;
     isUnavailable(error: unknown): boolean;

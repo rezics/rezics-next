@@ -4,6 +4,7 @@ export type CollectionPublicationFrontier = Readonly<{
     after: string | null;
     pending: Readonly<{
         subject: string;
+        originalSubjectId?: string;
         coveredThrough: string;
         lastInPage: boolean;
         sourceExhausted: boolean;

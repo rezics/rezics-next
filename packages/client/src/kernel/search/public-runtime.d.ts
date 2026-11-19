@@ -3,6 +3,8 @@ import type { SearchHit } from './query.ts';
 import { type RetainedUsefulPage } from './useful-page.ts';
 import type { Pool } from 'pg';
 import type { DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryProducerEntry } from './discovery-api.ts';
+import { type DiscoveryTarget } from './account-discovery.ts';
 import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
@@ -21,6 +23,7 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     prefix: string;
     clock: KernelClock;
     creditSearch?: CreditSearchSource;
+    discoveryProducers?: DiscoveryProducerEntry;
     /** Composition-bound Access observation; omitted fixtures keep throwing through. */
     facetAccess?: FacetAccessObservationPort;
 }>;
@@ -30,15 +33,16 @@ export type BoundPublicRequest = Readonly<{
 }>;
 export type DefaultPublicFilterRuntime = Readonly<{
     /** Pins the active mixed physical allocation; retained roots must still address that allocation. */
-    openDiscovery(registry: DiscoveryRegistry, digest: string, context: PublicFilterConsumerContext, queried?: PublicFilterQueriedObservation): Promise<PublicDiscoveryConsumerOperations>;
+    openDiscovery(registry: DiscoveryRegistry, scope: DiscoveryTarget, digest: string, context: PublicFilterConsumerContext, queried?: PublicFilterQueriedObservation, enrollmentOnly?: boolean): Promise<PublicDiscoveryConsumerOperations>;
+    prepareDefaultHome(target: DiscoveryTarget, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerJob | undefined>;
     publication: SearchGenerationPublication;
     preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;
         snapshot: 'pit' | 'prepared';
-    }>, context: PublicFilterConsumerContext, acceptedRelease?: string): Promise<BoundPublicRequest>;
+    }>, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<BoundPublicRequest>;
     /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
-    resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, acceptedRelease?: string): Promise<PublicFilterConsumerOperations>;
+    resumeRequest(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object): Promise<PublicFilterConsumerOperations>;
     bindSuggestion(request: PublicSuggestionCaptureInput, context: PublicFilterConsumerContext): Promise<Readonly<{
         operations: PublicSuggestionOperations;
         capture: PublicFilterConsumerCapture;
@@ -48,7 +52,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
     privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
     /** Trusted native facet composition; omitted generation or meaning stays closed. */
     facetProvider(context?: PublicFilterConsumerContext): Promise<FacetDiscoveryProvider | undefined>;
-    close(): Promise<void>;
+    close(context?: PublicFilterConsumerContext): Promise<void>;
 }>;
 /** Trusted default composition. Neither Source nor Actor nor physical identity is injectable. */
 export declare function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRuntimeConfig): DefaultPublicFilterRuntime;

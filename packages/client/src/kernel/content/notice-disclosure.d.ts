@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { type NoticePostReference } from './reads.ts';
 export type NoticeCandidate = Readonly<{
     notice_id: string;
     kind: 'reply' | 'mention' | 'thread_watch' | 'board_activity' | 'moderation_decision';
@@ -45,6 +46,7 @@ export type NoticeProjection = Readonly<{
     actor: NoticeActor;
     actorId: string | null;
     target: NoticeTarget;
+    decisionTarget?: NoticePostReference;
     summary: string;
     open: NoticeOpenAction;
     decisionId: string | null;

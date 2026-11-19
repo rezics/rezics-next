@@ -1,5 +1,5 @@
 export { AuthenticationError } from './authentication-error.ts';
-export { accessCheck, accessExplicitCheck, prepareReadDecisions, resourcePage, validReadDecisionActions, installPreparedAccessCheckWork, nativePreparedAccessCheckWork, } from '../access/check.ts';
+export { accessCheck, accessExplicitCheck, prepareReadDecisions, snapshotReadActor, resourcePage, validReadDecisionActions, installPreparedAccessCheckWork, nativePreparedAccessCheckWork, } from '../access/check.ts';
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { AuthenticatedContentBenefit, ContentEditionBuyerFactReader, ContentPostBuyerFactReader } from '../access/authenticated-benefit.ts';
 import type { Pool, PoolClient } from 'pg';

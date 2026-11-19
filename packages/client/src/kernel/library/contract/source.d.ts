@@ -109,6 +109,11 @@ export interface CollectionSourceObservation {
 export declare const preparedSource: unique symbol;
 /** Not an allow capability. Ordinary operations reauthorize actor/source/required subject anchors. */
 export interface PreparedCollectionSource {
+    /** Structural id-order population for a private logical Everything. Published by its owner worker. */
+    readonly queryCapture?: Readonly<{
+        id: string;
+        revision: string;
+    }>;
     readonly [preparedSource]: true;
     readonly observation: CollectionSourceObservation;
 }
@@ -116,6 +121,7 @@ export declare const nativeEvidence: unique symbol;
 /** Owner evidence reference; no public DTO/debug serialization. Not a fake Search Hit. */
 export type CollectionSourceEvidence = {
     readonly [nativeEvidence]: true;
+    readonly originalSubjectId?: string;
 };
 export interface CanonicalCollectionCandidate {
     readonly subjectId: string;

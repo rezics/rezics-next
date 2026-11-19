@@ -1,10 +1,11 @@
+import type { CollectionMemberAdmission } from '../owner-filter.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { Pool } from 'pg';
 import type { NativeLibraryPresentationPorts } from './presentation.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import { type BuiltinCollectionKey } from '../builtin-identity.ts';
 import type { CollectionKind } from '../collection-kind.ts';
-import type { OwnerQueryDependencies } from '../builtin-runtime-query.ts';
+import { ownerQueryWork, type OwnerQueryDependencies } from '../builtin-runtime-query.ts';
 import type { FilterDocument } from '@rezics/filter';
 export type BuiltinCollectionView = {
     id: string;
@@ -40,9 +41,13 @@ export declare function createNativeBuiltinRuntime(ports: NativeLibraryPresentat
     members: (actor: import("./authorization.ts").LibraryActor, id: string, options?: import("../contract/builtin-presentation.ts").BuiltinMemberOptions<{
         filter: FilterDocument;
         releaseDigest: string;
+        admission?: CollectionMemberAdmission;
+        pageWork?: ReturnType<typeof ownerQueryWork>;
     }>) => Promise<{
         members: DynamicMemberView[];
         next: string | null;
+    } | {
+        preparing: true;
     }>;
     sourceVersion: (actor: Actor, source: BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
 };

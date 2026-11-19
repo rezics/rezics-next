@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import { type OpenSearch } from './opensearch.ts';
-import { type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
+import { type AnyDiscoveryIndexAction, type DiscoveryDocumentKey, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
 import { type AccountDiscoverySource, type AccountFrontier, type AccountPage, type AccountSnapshot } from './discovery.ts';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
 import type { ReviewDiscoveryRefresh } from '../content/index.ts';
@@ -30,6 +30,7 @@ export declare function readDiscoveryCensus(subjects: SubjectSource, accounts: A
 export declare function nativeDiscoveryRegistry(pool: Pool, routeKey: Uint8Array, subjects: SubjectSource, options?: {
     release?: Release;
     languages?: readonly string[];
+    accountContext?: true | 'verified-agent';
     ownerAdapters?: DiscoveryOwnerAdapterSlots;
     accounts?: AccountDiscoverySource;
     omittedKinds?: readonly DiscoveryOmittedKind[];
@@ -60,9 +61,9 @@ export declare function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'quer
     allocation: string;
     writeAlias: string;
 }>;
-export type DiscoveryRepairEffect = Readonly<{
-    key: DiscoveryKey;
-    action: DiscoveryIndexAction;
+type DiscoveryWriteEffect<Action extends AnyDiscoveryIndexAction, Key extends DiscoveryDocumentKey> = Readonly<{
+    key: Key;
+    action: Action;
     winner: unknown;
     evidence: Readonly<{
         kind: 'bulk';
@@ -72,6 +73,7 @@ export type DiscoveryRepairEffect = Readonly<{
         refresh: unknown;
     }>;
 }>;
+export type DiscoveryRepairEffect = DiscoveryWriteEffect<DiscoveryIndexAction, DiscoveryKey>;
 /** Search visibility belongs to the exact keyed winner; copy settlement is insufficient. */
 export declare function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: AnyDiscoveryIndexAction): Promise<unknown>;
 /** The original search-visible winner remains part of the retained native repair provenance. */
@@ -106,8 +108,8 @@ export declare function createDiscoveryProjection(options: {
     prepareReviews: (refresh: ReviewDiscoveryRefresh, ids: readonly string[], context?: DiscoveryProjectionContext) => Promise<SecondScopeDiscoveryIndexAction[]>;
     applyReviews: (actions: readonly SecondScopeDiscoveryIndexAction[], held: HeldDiscoveryTarget) => Promise<void>;
     applyNativeActions: (actions: readonly AnyDiscoveryIndexAction[]) => Promise<Readonly<{
-        key: DiscoveryKey;
-        action: DiscoveryIndexAction;
+        key: DiscoveryDocumentKey;
+        action: AnyDiscoveryIndexAction;
         winner: unknown;
         evidence: Readonly<{
             kind: 'bulk';
@@ -137,8 +139,8 @@ export declare function createDiscoveryProjection(options: {
         actions: SecondScopeDiscoveryIndexAction[];
     }>;
     projectOwner: (kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) => Promise<Readonly<{
-        key: DiscoveryKey;
-        action: DiscoveryIndexAction;
+        key: DiscoveryDocumentKey;
+        action: AnyDiscoveryIndexAction;
         winner: unknown;
         evidence: Readonly<{
             kind: 'bulk';
@@ -152,7 +154,9 @@ export declare function createDiscoveryProjection(options: {
     metadataProducers: Readonly<Partial<Record<import("./discovery-api.ts").DiscoveryOwnerKind, Readonly<{
         kind: DiscoveryMetadataKind;
         owner: 'commerce' | 'content';
-        readiness(): Promise<'ready' | 'preparing' | 'unavailable' | import("../community/space-discovery-dependencies.ts").SpaceDiscoveryDependencyReadiness>;
+        pageCapabilityWitness?: 'none';
+        populationInvalidationPending?(): Promise<boolean>;
+        readiness(purpose?: 'population'): Promise<'ready' | 'preparing' | 'unavailable' | import("../community/space-discovery-dependencies.ts").SpaceDiscoveryDependencyReadiness>;
         page(partition: number, after: Readonly<{
             route: number;
             id: string;
@@ -174,6 +178,15 @@ export declare function createDiscoveryProjection(options: {
             records: readonly import("./discovery-api.ts").DiscoveryMetadataRecord[];
         }>>;
         position(partition: number): Promise<bigint>;
+        readEmptyPositions?(partitions: readonly number[]): Promise<ReadonlyMap<number, bigint>>;
+        readEmptyStamps?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+            epoch: number;
+            position: bigint;
+        }>>;
+        readEmptyFirstPages?(partitions: readonly number[]): Promise<ReadonlyMap<number, {
+            epoch?: number;
+            position: bigint;
+        }>>;
     }>>>>;
     registry: DiscoveryRegistry;
     target: DiscoveryTarget;

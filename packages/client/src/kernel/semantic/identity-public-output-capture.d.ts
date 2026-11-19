@@ -250,12 +250,12 @@ export declare function lockPublicIdentityOutputCaptureCurrent(tx: CommandTransa
         bindingDigest: string;
     }>;
     committedRevision: bigint;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
 export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selection: T.PublicIdentityOutputCapture | IdentityScopeKey, options: T.PublicIdentityOutputWork, nativeOutput: NativePublicOutputPort): Promise<{
     status: "current" | "retained";
@@ -284,23 +284,24 @@ export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selec
         bindingDigest: string;
     }>;
     committedRevision: bigint;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
 export type PublicOutputOriginalKey = Readonly<{
     terminal: string;
     original: string;
 }>;
-/** One selected COMPLETE output and its committed canonical seal, current under the native hold through commit. */
+/** One selected COMPLETE output and its committed canonical seal. */
 export declare function readSelectedPublicIdentityOutput(pool: Pool, selection: {
     collectionId: string;
     sourceGeneration: string;
     after: PublicOutputOriginalKey | null;
     limit: number;
+    accountFree: boolean;
 }, options: T.PublicIdentityOutputWork, nativeOutput: NativePublicOutputPort): Promise<{
     status: 'ready';
     generation: string;
@@ -311,12 +312,12 @@ export declare function readSelectedPublicIdentityOutput(pool: Pool, selection: 
         original: string;
     }>[];
     more: boolean;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
     reason?: never;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
 /** Original pre-arm receipts invalidate even a stale retained output; they never grant fresh eligibility. */
 export declare function receivePublicIdentityOutputCapturePrearm(pool: Pool, selection: import('./identity-epoch-prearm-contract.ts').IdentityPrearmTicketLocator, options: T.PublicIdentityOutputWork, cancellation?: IdentityNativeReceipt): Promise<{
@@ -327,11 +328,11 @@ export declare function receivePublicIdentityOutputCapturePrearm(pool: Pool, sel
         position: bigint;
         transactionId: string;
     }>;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
 export {};

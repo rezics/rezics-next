@@ -25,14 +25,7 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead & Readonl
     receipt: string | null;
     complete: boolean;
 }>;
-/** Enrol one bounded page of the immutable compiler closure in its writer home.
- * Account writers and enrollment take population -> Source head -> enrollment.
- * No registration-home transaction is held across this operation. The original
- * baseline is sealed only after the complete key closure is enrolled. A partial
- * key frontier is never an admitted baseline; sealed receipts are immutable.
- */
-export declare function enrollAccountDiscoveryHome(pool: Pool, input: Readonly<{
-    partition: number;
+type EnrollmentInput = Readonly<{
     bootstrap: string;
     registration: Readonly<{
         partition: number;
@@ -40,8 +33,27 @@ export declare function enrollAccountDiscoveryHome(pool: Pool, input: Readonly<{
     }>;
     readDefinition: string;
     keys: readonly string[];
-    accounts: boolean;
     keyLimit: number;
+}>;
+/** Enrol one bounded page of the immutable compiler closure in its writer home.
+ * Account writers and enrollment take population -> Source head -> enrollment.
+ * No registration-home transaction is held across this operation. The original
+ * baseline is sealed only after the complete key closure is enrolled. A partial
+ * key frontier is never an admitted baseline; sealed receipts are immutable.
+ */
+export declare function enrollAccountDiscoveryHome(pool: Pool, input: EnrollmentInput & Readonly<{
+    partition: number;
+    accounts: boolean;
 }>, context: Readonly<{
     deadline: number;
 }>): Promise<AccountDiscoveryEnrollment>;
+export declare const accountDiscoveryEnrollmentGroupSize = 16;
+export declare const accountDiscoveryEnrollmentProbeInputs = 8;
+/** Enroll complete new mixed homes under their native writer locks. Existing
+ * pins or receipts leave the group untouched for the retained single-home path.
+ */
+export declare function enrollNewAccountDiscoveryHomes(pool: Pool, input: EnrollmentInput & Readonly<{
+    partitions: readonly number[];
+}>, context: Readonly<{
+    deadline: number;
+}>): Promise<readonly AccountDiscoveryEnrollment[] | null>;

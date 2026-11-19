@@ -2,7 +2,7 @@ import { type Pool, type PoolClient } from 'pg';
 import { type BoundedReadLifetimeOptions } from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
-export { BoundedReadDeadlineError, RetiredReadClientError, type NativeReadQueryConfig, } from './bounded-read-lifetime.ts';
+export { BoundedReadDeadlineError, isPostgresTransactionAbort, RetiredReadClientError, type NativeReadQueryConfig, } from './bounded-read-lifetime.ts';
 export declare const KERNEL_POOL_MAX = 10;
 export declare function readPoolAcquireTimeoutMillis(env?: NodeJS.ProcessEnv): number;
 export declare class NestedPoolCheckoutError extends Error {
@@ -19,6 +19,8 @@ export type QueryAccounting = Readonly<{
     connection<T>(dispatch: () => Promise<T>): Promise<T>;
 }>;
 export declare function withQueryAccounting<T>(accounting: QueryAccounting, run: () => Promise<T>): Promise<T>;
+/** An owner with its own query meter returns its measured cost to the caller. */
+export declare function withoutQueryAccounting<T>(run: () => Promise<T>): Promise<T>;
 export declare function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T>;
 type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction'>;
 /** Opt in to one finite physical checkout for native read work. */

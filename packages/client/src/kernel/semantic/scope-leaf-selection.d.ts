@@ -74,7 +74,8 @@ export declare class LeafNativeWork {
     readonly deadline: number;
     private reserved;
     readonly accounting: AccessWorkAccounting;
-    constructor(budget: AccessWork, deadline: number);
+    readonly authorization: AccessWorkAccounting;
+    constructor(budget: AccessWork, deadline: number, authorization?: AccessWorkAccounting);
     remaining(axis: keyof AccessWork): number;
     usage(): AccessWork;
     /** All counts describe explicit native plans: exact probes, <=33 compact
@@ -155,5 +156,7 @@ export type SourceStatementRow = {
     release: string;
     ordinal: number;
 };
+type StatementDefinition = Pick<Release['properties'][string], 'datatype'> & Partial<Pick<Release['properties'][string], 'value' | 'qualifiers' | 'units'>>;
 export declare function indexedStatement(row: SourceStatementRow, release: Release): IndexedStatement | null;
-export declare function normalizeSourceStatement(property: string, body: unknown, properties: Release['properties']): IndexedStatement | null;
+export declare function normalizeSourceStatement(property: string, body: unknown, properties: Readonly<Record<string, StatementDefinition>>): IndexedStatement | null;
+export {};

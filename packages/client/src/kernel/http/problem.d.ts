@@ -1,4 +1,5 @@
 export { PROBLEM_TYPE_BASE, PROBLEMS, ProblemError, type ProblemCode, type FieldErrorCode, type FieldError, } from './problem-error.ts';
+import type { WalkCommitCause } from '@rezics/definitions/bulk';
 export { issuePointers } from '@rezics/definitions/validate';
 export { problemSchema } from './problem-schema.ts';
 /** Enter only after the command returned its committed outcome. A failed response
@@ -11,6 +12,7 @@ export declare function logInternalError(options: {
     route?: string | undefined;
     cause: unknown;
     commandIndex?: number | undefined;
+    commitCause?: WalkCommitCause;
     event?: 'internal_error' | 'dependency_unavailable';
 }): void;
 export declare function logDeadlineExceeded(context: {
@@ -18,9 +20,11 @@ export declare function logDeadlineExceeded(context: {
     id: string;
     route?: string | undefined;
 }): void;
+export declare function isImportCatalogueWalk(): boolean;
 export declare function problemResponse(error: unknown, context: {
     method: string;
     id: string;
     action?: string;
     route?: string | undefined;
+    observeWalkSubject?: boolean;
 }): Response;

@@ -1,9 +1,10 @@
 import type { Pool } from 'pg';
-import type { Effect } from '../events/effects.ts';
+import type { Effect, NativeEffect } from '../events/effects.ts';
 import type { Access } from '../request/access.ts';
 import { type WorkClient } from '../work/client.ts';
 import { type CanonicalGenerationReceiver } from '../semantic/canonical-generation-delivery.ts';
 import type { RealmSubjectIdentityMapping } from './contract/index.ts';
+export declare function createUrlImportEffect(pool: Pool, client: WorkClient): NativeEffect & Pick<Effect, 'run'>;
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
 export declare function contentEffects(pool: Pool, client: WorkClient, readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>, receiveCanonicalGeneration?: CanonicalGenerationReceiver): Effect[];

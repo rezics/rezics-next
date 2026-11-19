@@ -51,6 +51,16 @@ export declare class DiscoveryProducerCoverageError extends Error {
         duplicateKinds: readonly string[];
     });
 }
+/** A fresh Review observation could not establish its frontier. Signed continuation failures retire separately. */
+export declare class DiscoveryReviewFrontierError extends DiscoveryProducerCoverageError {
+    readonly cause?: Error | undefined;
+    constructor(cause?: Error | undefined);
+}
+/** Content has unfinished lifecycle work that can affect any Review home. */
+export declare class DiscoveryReviewInvalidationPendingError extends DiscoveryProducerCoverageError {
+    readonly cause?: Error | undefined;
+    constructor(cause?: Error | undefined);
+}
 /** A signed owner continuation was invalidated; never retry its retired cut forever. */
 export declare class DiscoveryPopulationCutChangedError extends DiscoveryProducerCoverageError {
     constructor(kind: import('./discovery-api.ts').DiscoveryMetadataKind);

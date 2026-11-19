@@ -1,6 +1,6 @@
 import { type SubjectSummary } from '../../semantic/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
-import type { Resource, AccessCheck } from '../../request/access.ts';
+import { type Access, type AccessCheck, type Actor, type Resource } from '../../request/access.ts';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
 import type { PublicSearchPage } from '../service-contract.ts';
@@ -401,7 +401,14 @@ export declare function createCatalogueResponseAdapter({ pool, routeKey }: {
             type: string;
             labels: Record<string, string>;
         }[];
-    }>(page: T, authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined, deadline?: number) => Promise<Omit<T, 'subjects'> & {
+    }>(page: T, authorize: (resource: Resource) => Promise<AccessCheck>, languages?: readonly string[], active?: Awaited<ReturnType<typeof activeRelease>> | undefined, options?: {
+        deadline?: number;
+        authority?: {
+            access: Access;
+            actor: Actor;
+        };
+        bookPage?: object;
+    }) => Promise<Omit<T, 'subjects'> & {
         subjects: (T['subjects'][number] & {
             summary: SubjectSummary | null;
         })[];

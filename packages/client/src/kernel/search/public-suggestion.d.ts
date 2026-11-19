@@ -10,7 +10,7 @@ export interface PublicSuggestionOperations {
         execution?: string;
     }>, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerStatus>;
     closeObservation(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<void>;
-    close(): Promise<void>;
+    close(context?: PublicFilterConsumerContext): Promise<void>;
 }
 /** Prefix uses the ordinary capture registry, native Source binding and execution custody.
  * The factory cannot turn an absent binding into an empty successful suggestion response.

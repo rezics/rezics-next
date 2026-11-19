@@ -1,6 +1,6 @@
 import { type CollectionCurator } from './collection-discovery-context.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
-import type { Actor } from '../request/access.ts';
+import { type Actor } from '../request/access.ts';
 import { type PresentationDependencies } from './collection-presentation.ts';
 import type { PublicCollectionDiscoverySummary } from './contract/index.ts';
 import type { CollectionDiscoveryQuery, CollectionDiscoveryRecency, CollectionPresentationKind } from './collection-discovery-source.ts';
