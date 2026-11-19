@@ -11,25 +11,19 @@ function setChecks(h: ReturnType<typeof integrationHarness>, checks: Integration
   (h.settings as typeof h.settings & { integrationChecks: IntegrationCheck[] }).integrationChecks = checks;
 }
 
-function markTask(h: ReturnType<typeof integrationHarness>, taskId: string, values: { target?: string }): void {
-  h.store.updateTask({ taskId, attempt: 0 }, (task) => {
-    if (values.target === 'stabilize') task.brief.target = 'stabilize';
-  });
-}
-
 test('the dev lane batches eligible dev entries without worker-side affected results', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     git(h.root, 'branch', 'stabilize', 'main');
     h.settings.integration.batchSize = 2;
-    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
+    const stabilizeCheck = ['sh', '-c', 'test -f stabilize.ts'];
+    setChecks(h, [{ paths: ['stabilize.ts'], command: stabilizeCheck }]);
     const first = h.dispatch('dev-a.ts');
     const affected = h.dispatch('affected.ts');
     const second = h.dispatch('dev-b.ts');
     const controlPlane = h.dispatch('tools/goal/cp.ts', [], ['true'], 'control-plane', 'main');
-    const stabilize = h.dispatch('stabilize.ts');
-    markTask(h, stabilize.id, { target: 'stabilize' });
+    const stabilize = h.dispatch('stabilize.ts', [], ['true'], 'fixture', 'stabilize');
     await h.start(first);
     await h.start(affected);
     await h.start(second);
@@ -51,8 +45,7 @@ test('the dev lane batches eligible dev entries without worker-side affected res
     const controlPlaneLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)!.logPath, 'utf8');
     const stabilizeLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === stabilize.id)!.logPath, 'utf8');
     expect(controlPlaneLog).toContain('Control-plane checks on');
-    expect(controlPlaneLog).not.toContain('Batch integration check on');
-    expect(stabilizeLog).not.toContain('Batch integration check on');
+    expect(stabilizeLog).toContain(`(${stabilizeCheck.join(' ')}: passed`);
   } finally {
     h.dispose();
   }
@@ -64,16 +57,13 @@ test('the dev batch fills in eligible queue order when prioritized entries lead 
     h.ensureDev();
     git(h.root, 'branch', 'stabilize', 'main');
     h.settings.integration.batchSize = 3;
-    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
-
     const controlPlane = h.dispatch('tools/goal/cp-leading.ts', [], ['true'], 'control-plane', 'main');
-    const stabilize = h.dispatch('stabilize-leading.ts');
+    const stabilize = h.dispatch('stabilize-leading.ts', [], ['true'], 'fixture', 'stabilize');
     const first = h.dispatch('dev-first.ts');
     const affected = h.dispatch('affected-middle.ts');
     const second = h.dispatch('dev-second.ts');
     const third = h.dispatch('dev-third.ts');
     const fourth = h.dispatch('dev-fourth.ts');
-    markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(controlPlane);
     await h.start(stabilize);
     await h.start(first);
@@ -84,23 +74,12 @@ test('the dev batch fills in eligible queue order when prioritized entries lead 
 
     await h.train(async () => ({ passed: true, output: '', timedOut: false }));
 
-    const dev = [first, second, third, fourth];
-    expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ taskId }) => taskId)).toEqual(
-      dev.map(({ id }) => id),
-    );
-    expect(dev.map(({ id }) => h.outcomes.find(({ taskId }) => taskId === id)?.passed)).toEqual([
-      true,
-      true,
-      true,
-      true,
-    ]);
-    expect(h.outcomes.find(({ taskId }) => taskId === affected.id)?.passed).toBe(true);
-    expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ passed }) => passed)).toEqual([
-      true,
-      true,
-      true,
-      true,
-    ]);
+    const dev = [first, affected, second, third, fourth];
+    const landed = h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId));
+    expect(landed.map(({ taskId, passed }) => [taskId, passed])).toEqual(dev.map(({ id }) => [id, true]));
+    expect(new Set(landed.slice(0, 3).map(({ mergedCommit }) => mergedCommit)).size).toBe(1);
+    expect(new Set(landed.slice(3).map(({ mergedCommit }) => mergedCommit)).size).toBe(1);
+    expect(landed[3]?.mergedCommit).not.toBe(landed[0]?.mergedCommit);
   } finally {
     h.dispose();
   }
@@ -110,7 +89,6 @@ test('up to the batch size of queued landings rebase in order and fast-forward w
   const h = integrationHarness();
   try {
     h.ensureDev();
-    h.settings.integration.devPrelandingTypecheck = true;
     let typechecks = 0;
     const first = h.dispatch('first.ts');
     const second = h.dispatch('second.ts');
@@ -123,7 +101,7 @@ test('up to the batch size of queued landings rebase in order and fast-forward w
     });
 
     expect(h.settings.integration.batchSize).toBe(4);
-    expect(typechecks).toBe(1);
+    expect(typechecks).toBe(0);
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
       [first.id, true],
       [second.id, true],
@@ -147,17 +125,22 @@ test('a failed batch check reports its responsible member and leaves the passing
     await h.start(failing);
     const base = h.head('dev');
 
-    await h.train(async (_command, cwd) =>
+    const check = async (_command: string[], cwd: string) =>
       existsSync(join(cwd, 'broken.ts'))
         ? { passed: false, output: 'broken.ts:1:1: error TS2304: AssertionError: broken member', timedOut: false }
-        : { passed: true, output: '', timedOut: false },
-    );
+        : { passed: true, output: '', timedOut: false };
+    await h.train(check, false);
 
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([[failing.id, false]]);
     expect(h.outcomes[0]?.firstFailure?.assertion).toContain('AssertionError: broken member');
     expect(h.head('dev')).toBe(base);
     expect(h.queue.next()?.request.taskId).toBe(passing.id);
     expect(() => git(h.root, 'show', 'dev:passing.ts')).toThrow();
+    expect(() => git(h.root, 'show', 'dev:broken.ts')).toThrow();
+
+    await h.train(check, false);
+    expect(h.outcomes.slice(1)).toMatchObject([{ taskId: passing.id, passed: true }]);
+    expect(h.head('dev')).toBe(h.outcomes[1]!.mergedCommit!);
     expect(() => git(h.root, 'show', 'dev:broken.ts')).toThrow();
   } finally {
     h.dispose();
@@ -169,7 +152,8 @@ test('a member that conflicts with an earlier batch member is deferred past it, 
   try {
     h.ensureDev();
     const first = h.dispatch('shared.txt');
-    const conflict = h.dispatch('shared.txt');
+    const conflict = h.dispatch('shared.txt', [], ['true'], 'conflicting-change');
+    expect(conflict.id).not.toBe(first.id);
     writeFileSync(
       join(conflict.worktree, '.temp/worker-plan.json'),
       JSON.stringify({ file: 'shared.txt', content: 'conflicting change' }),
@@ -200,9 +184,9 @@ test('a landing that conflicts with dev itself, first in its batch, gets a rebas
   const h = integrationHarness();
   try {
     h.ensureDev();
-    setChecks(h, [{ paths: ['**'], command: ['true'] }]);
     const first = h.dispatch('shared.txt');
-    const conflict = h.dispatch('shared.txt');
+    const conflict = h.dispatch('shared.txt', [], ['true'], 'conflicting-change');
+    expect(conflict.id).not.toBe(first.id);
     writeFileSync(
       join(conflict.worktree, '.temp/worker-plan.json'),
       JSON.stringify({ file: 'shared.txt', content: 'conflicting change' }),
@@ -359,7 +343,7 @@ test('legacy dev integration checks do not gate landing outcomes', async () => {
   }
 });
 
-test('batch size one keeps prelanding checks one at a time', async () => {
+test('batch size one runs the opt-in compiler guard for each landing', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
