@@ -1,6 +1,17 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+
+const storiesByFile = {
+  'shadcn-dialog.stories.tsx': [
+    'Long Form Workflow',
+    'Nested Scroll Compatibility',
+    'Full Screen Cover Compatibility',
+    'Without Close Icon',
+  ],
+  'shadcn-sheet.stories.tsx': ['Default', 'Sides', 'Top', 'Bottom', 'Long Form Scroll', 'Sidebar Compatibility'],
+  'shadcn-alert-dialog.stories.tsx': ['Default', 'Confirm With Media', 'Long And Cjk Text'],
+};
 
 test('mounted Base UI modal workflows keep long forms, confirmations and every sheet side reachable', async () => {
   const root = join(import.meta.dir, '..');
@@ -15,9 +26,7 @@ test('mounted Base UI modal workflows keep long forms, confirmations and every s
         'x',
         'vitest',
         'run',
-        'src/components/shadcn-dialog.stories.tsx',
-        'src/components/shadcn-sheet.stories.tsx',
-        'src/components/shadcn-alert-dialog.stories.tsx',
+        ...Object.keys(storiesByFile).map((file) => `src/components/${file}`),
         '--reporter=json',
         `--outputFile=${report}`,
       ],
@@ -30,29 +39,25 @@ test('mounted Base UI modal workflows keep long forms, confirmations and every s
     ]);
     expect(existsSync(report), `${stdout}\n${stderr}`).toBe(true);
     const result = JSON.parse(readFileSync(report, 'utf8')) as {
-      testResults: { assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
+      testResults: {
+        name: string;
+        assertionResults: { status: string; title: string; failureMessages: string[] }[];
+      }[];
     };
-    const outcomes = result.testResults.flatMap((file) => file.assertionResults);
+    const failures = result.testResults.flatMap(({ name, assertionResults }) =>
+      assertionResults
+        .filter(({ status }) => status !== 'passed')
+        .map(({ title, status, failureMessages }) => `${basename(name)} / ${title}: ${failureMessages[0] ?? status}`),
+    );
+    expect(failures).toEqual([]);
     expect(code, `${stdout}\n${stderr}`).toBe(0);
-    for (const title of [
-      'LongFormWorkflow',
-      'LongFormScroll',
-      'NestedScrollCompatibility',
-      'FullScreenCoverCompatibility',
-      'MobileSidebarCompatibility',
-      'Default',
-      'Sides',
-      'Top',
-      'Bottom',
-      'WithoutCloseIcon',
-      'ConfirmWithMedia',
-      'LongAndCjkText',
-    ])
-      expect(
-        outcomes.some((outcome) => outcome.title.includes(title) && outcome.status === 'passed'),
-        `${title}: ${outcomes.find((outcome) => outcome.title.includes(title))?.failureMessages[0] ?? 'missing story result'}`,
-      ).toBe(true);
-    expect(outcomes.filter((outcome) => outcome.status !== 'passed')).toEqual([]);
+    const outcomesByFile = new Map(result.testResults.map((file) => [basename(file.name), file.assertionResults]));
+    for (const [file, titles] of Object.entries(storiesByFile)) {
+      const outcomes = outcomesByFile.get(file) ?? [];
+      for (const title of titles) {
+        expect(outcomes.find((outcome) => outcome.title === title)?.status, `${file} / ${title}`).toBe('passed');
+      }
+    }
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

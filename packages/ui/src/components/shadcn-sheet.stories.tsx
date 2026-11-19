@@ -197,6 +197,7 @@ const LongSheetForm = () => (
 
 export const LongFormScroll: Story = {
   render: () => <LongSheetForm />,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Edit filters' }));
     const sheet = await settled(await screen.findByRole('dialog', { name: 'Edit collection filters' }));
@@ -268,17 +269,12 @@ const MobileSidebar = () => (
 
 export const SidebarCompatibility: Story = {
   render: () => <MobileSidebar />,
+  parameters: {
+    viewport: { options: { shortPhone: { name: 'Short phone', styles: { width: '390px', height: '500px' } } } },
+  },
+  globals: { viewport: { value: 'shortPhone', isRotated: false } },
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Toggle Sidebar' });
-    if (!window.matchMedia('(max-width: 767px)').matches) {
-      const sidebar = canvasElement.querySelector<HTMLElement>('[data-slot="sidebar"]')!;
-      await userEvent.click(trigger);
-      await waitFor(() => expect(sidebar.closest('[data-state]')).toHaveAttribute('data-state', 'collapsed'));
-      await userEvent.click(trigger);
-      await waitFor(() => expect(sidebar.closest('[data-state]')).toHaveAttribute('data-state', 'expanded'));
-      await expect(within(sidebar).getByRole('link', { name: 'Help and support' })).toBeVisible();
-      return;
-    }
     await userEvent.click(trigger);
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Sidebar' }));
     expectWithinViewport(dialog);
