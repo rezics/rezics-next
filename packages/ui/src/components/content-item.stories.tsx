@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { EllipsisIcon, RotateCwIcon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { Button } from '../shadcn/button.tsx';
-import { settled, withSurface } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from '../test/focus.ts';
 import { ContentItem } from './content-item.tsx';
 import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 
@@ -125,13 +126,14 @@ export const Composed: Story = {
     await expect(canvas.getByRole('checkbox', { name: 'Keep edition note private' })).toBeChecked();
     await expect(canvas.getByText('Selection callbacks: 2')).toBeVisible();
     await expect(canvas.getByRole('checkbox', { name: 'Select book' })).not.toBeChecked();
-    await userEvent.click(canvas.getByRole('button', { name: 'Reading' }));
-    await expect(
-      within(await settled(await screen.findByRole('menu'))).getByRole('menuitemradio', {
-        name: 'Completed',
-      }),
-    ).toBeVisible();
+    const statusTrigger = canvas.getByRole('button', { name: 'Reading' });
+    await userEvent.click(statusTrigger);
+    const menu = await settled(await screen.findByRole('menu'));
+    await expect(within(menu).getByRole('menuitemradio', { name: 'Completed' })).toBeVisible();
+    await waitForFocus(menu);
     await userEvent.keyboard('{Escape}');
+    await dismissed(menu);
+    await expect(statusTrigger).toHaveFocus();
   },
 };
 

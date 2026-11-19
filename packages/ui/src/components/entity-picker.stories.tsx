@@ -111,25 +111,34 @@ export const Selected: Story = {
   },
 };
 
-const slowSearch = fakeSearch({ delay: 60_000 });
+const slowSearch: EntityPickerSearch = (query, signal) => {
+  if (query === 'three') return fakeSearch()(query, signal);
+  return new Promise((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+};
 
 export const SlowSearch: Story = {
   args: {
     multiple: true,
     defaultValue: odd.slice(0, 1),
-    search: (query, signal) => (query === 'three' ? fakeSearch()(query, signal) : slowSearch(query, signal)),
+    search: slowSearch,
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const input = canvas.getByRole('combobox', { name: 'Subject' });
     await userEvent.type(input, 'three');
     await enabled(/The Three-Body Problem/);
-    await userEvent.type(input, 'x');
-    await expect(await screen.findByText('Searching…')).toBeVisible();
-    await expect(screen.getByRole('option', { name: /The Three-Body Problem/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    await settled(await screen.findByRole('listbox', { name: 'Subject' }));
+    await expect(input).toHaveFocus();
+    await userEvent.keyboard('x');
+    await waitFor(() => {
+      expect(input).toHaveValue('threex');
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('Searching…');
+      expect(status).toBeVisible();
+      expect(screen.getByRole('option', { name: /The Three-Body Problem/ })).toHaveAttribute('aria-disabled', 'true');
+    });
     const selected = canvas.getByRole('list', { name: 'Selected' });
     await expect(selected).toHaveTextContent(odd[0]!.title);
     await expect(within(selected).getByRole('button', { name: `Remove ${odd[0]!.title}` })).toBeEnabled();

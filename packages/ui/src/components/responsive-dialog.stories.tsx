@@ -6,6 +6,7 @@ import { Field, FieldLabel } from '../shadcn/field';
 import { Input } from '../shadcn/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../shadcn/select';
 import { Textarea } from '../shadcn/textarea';
+import { settled } from '../stories/support';
 import { ResponsiveDialog } from './responsive-dialog';
 
 const kindItems = [{ value: 'print', label: 'Print' }];
@@ -186,10 +187,14 @@ export const LongCopyForm: Story = {
   render: () => <LongCopyEditor />,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Edit Copy' }));
-    const dialog = await within(document.body).findByRole('dialog', { name: 'Edit Copy' });
+    const dialog = await settled(await within(document.body).findByRole('dialog', { name: 'Edit Copy' }));
     const note = within(dialog).getByRole('textbox', { name: 'Note' });
+    note.scrollIntoView({ block: 'center' });
     await userEvent.click(note);
     await expect(note).toHaveFocus();
-    await expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeVisible();
+    const save = within(dialog).getByRole('button', { name: 'Save changes' });
+    await expect(save).toBeVisible();
+    const { left, top, width, height } = save.getBoundingClientRect();
+    await expect(save.contains(document.elementFromPoint(left + width / 2, top + height / 2))).toBe(true);
   },
 };
