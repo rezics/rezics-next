@@ -512,20 +512,48 @@ test('workspaces are grouped by measured duration, longest first', () => {
   ).toEqual(defaultWorkspaces.map(({ directory }) => directory).sort());
 });
 
-test("the gate writes a JSON result with each workspace's outcome, failing files, load-sensitive tests, duration and host", async () => {
-  const { env, dir } = scenario();
+test.each(['matching', 'stale'] as const)('Gate checkpoints with a %s manifest', async (manifest) => {
+  const { env, dir, events } = scenario();
   delete env.KERNEL_CHECK_REMOTE;
   env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
   env.REMOTE_CHECK_HOST = 'check-fixture';
-  const fixture = join(dir, 'checkout');
-  mkdirSync(fixture);
+  env.REZICS_CHECK_RUN = 'fixture-check-run';
+  env.GATE_CONCURRENCY = '1';
+  const fixture = candidateCheckout(dir);
+  const pinned = join(fixture, 'node_modules/.bin/bun');
+  rmSync(pinned);
+  symlinkSync(join(root, 'gate-bin/bun'), pinned);
   fixtureWorkspace(fixture, 'apps/a-plain', '@fixture/plain', 'bun test && bun run after-tests');
   fixtureWorkspace(fixture, 'services/b-lane', '@fixture/lane', 'bun scripts/check.ts');
   delete env.GATE_RESULT_FILE;
 
-  const code = await runLocalGate([], fixture, env);
-  expect(code).toBe(1);
-  const file = JSON.parse(readFileSync(join(fixture, '.temp/gate/result.json'), 'utf8')) as {
+  const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: fixture }).stdout.toString().trim();
+  const sourceSha256 = 'a'.repeat(64);
+  const manifestDirectory = join(fixture, '.temp/check-host');
+  mkdirSync(manifestDirectory, { recursive: true });
+  writeFileSync(
+    join(manifestDirectory, `source-manifest-${env.REZICS_CHECK_RUN}.json`),
+    JSON.stringify({ head: manifest === 'matching' ? revision : '0'.repeat(revision.length), sourceSha256 }),
+  );
+
+  const resultPath = join(fixture, '.temp/gate/result.json');
+  const progress: unknown[] = [];
+  const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
+    const prefix = 'check-fixture: [gate-workspace] ';
+    if (String(text).startsWith(prefix)) {
+      expect(existsSync(resultPath)).toBe(false);
+      progress.push(JSON.parse(String(text).slice(prefix.length)));
+      expect(events().filter((event) => event.kind === 'check')).toHaveLength(progress.length);
+    }
+    return true;
+  });
+  try {
+    expect(await runLocalGate(['--workspaces', 'apps/a-plain', 'services/b-lane'], fixture, env)).toBe(1);
+  } finally {
+    output.mockRestore();
+  }
+
+  const file = JSON.parse(readFileSync(resultPath, 'utf8')) as {
     workspaces: Array<{
       name: string;
       directory: string;
@@ -553,6 +581,21 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
     passed: false,
     failingFiles: ['test/b-lane.test.ts'],
   });
+  const source = manifest === 'matching' ? { revision, sourceSha256 } : { baseRevision: revision };
+  const identity = { run: env.REZICS_CHECK_RUN, ...source };
+  expect(progress).toEqual([
+    {
+      ...file.workspaces[0],
+      ...identity,
+      attempt: 1,
+      result: 'retry-pending',
+      passed: false,
+      exitCode: 1,
+      durationSeconds: expect.any(Number),
+    },
+    { ...file.workspaces[1], ...identity, attempt: 1, result: 'failed', exitCode: 1 },
+    { ...file.workspaces[0], ...identity, attempt: 2, result: 'passed', exitCode: 0 },
+  ]);
 });
 
 test('Web file completion reaches the caller while the Gate workspace is still running', async () => {
