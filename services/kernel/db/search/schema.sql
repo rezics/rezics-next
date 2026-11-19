@@ -51,6 +51,48 @@ END $$;
 
 
 --
+-- Name: capture_freshness_position(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.capture_freshness_position() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_consumer text := '';
+  new_consumer text := '';
+  emptied boolean;
+BEGIN
+  IF TG_TABLE_NAME = 'consumer_checkpoint' THEN
+    old_consumer := OLD.consumer;
+    new_consumer := NEW.consumer;
+    IF NOT (coalesce(starts_with(old_consumer, 'search_'), false)
+         OR coalesce(starts_with(new_consumer, 'search_'), false)) THEN RETURN NULL; END IF;
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND (old_consumer, OLD.partition_no, OLD.position)
+      IS NOT DISTINCT FROM (new_consumer, NEW.partition_no, NEW.position) THEN RETURN NULL; END IF;
+
+  IF TG_OP <> 'INSERT' AND OLD.position > 0 AND (old_consumer = '' OR starts_with(old_consumer, 'search_'))
+      AND (TG_OP = 'DELETE' OR NEW.position = 0
+           OR (old_consumer, OLD.partition_no) IS DISTINCT FROM (new_consumer, NEW.partition_no)) THEN
+    UPDATE search.freshness_positions SET positions = positions - OLD.partition_no::text
+      WHERE consumer = old_consumer AND shard = OLD.partition_no / 64
+      RETURNING positions = '{}'::jsonb INTO emptied;
+    IF emptied THEN
+      DELETE FROM search.freshness_positions WHERE consumer = old_consumer AND shard = OLD.partition_no / 64;
+    END IF;
+  END IF;
+  IF TG_OP <> 'DELETE' AND NEW.position > 0 AND (new_consumer = '' OR starts_with(new_consumer, 'search_')) THEN
+    INSERT INTO search.freshness_positions AS retained (consumer, shard, positions)
+      VALUES (new_consumer, NEW.partition_no / 64, jsonb_build_object(NEW.partition_no, NEW.position))
+      ON CONFLICT (consumer, shard) DO UPDATE SET positions = retained.positions || EXCLUDED.positions;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: enqueue_identity_receiving_scope(); Type: FUNCTION; Schema: search; Owner: -
 --
 
@@ -529,6 +571,20 @@ BEGIN
 END $$;
 
 
+--
+-- Name: truncate_freshness_positions(); Type: FUNCTION; Schema: search; Owner: -
+--
+
+CREATE FUNCTION search.truncate_freshness_positions() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM search.freshness_positions WHERE (consumer = '') = (TG_TABLE_NAME = 'partition');
+  RETURN NULL;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -789,6 +845,20 @@ CREATE TABLE search.facet_value (
     contributor_terminal text NOT NULL,
     target_original text,
     target_terminal text
+);
+
+
+--
+-- Name: freshness_positions; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.freshness_positions (
+    consumer text NOT NULL,
+    shard integer NOT NULL,
+    positions jsonb NOT NULL,
+    CONSTRAINT freshness_positions_consumer_check CHECK (((consumer = ''::text) OR starts_with(consumer, 'search_'::text))),
+    CONSTRAINT freshness_positions_positions_check CHECK ((jsonb_typeof(positions) = 'object'::text)),
+    CONSTRAINT freshness_positions_shard_check CHECK ((shard >= 0))
 );
 
 
@@ -1924,6 +1994,14 @@ ALTER TABLE ONLY search.facet_stage
 
 ALTER TABLE ONLY search.facet_value
     ADD CONSTRAINT facet_value_pkey PRIMARY KEY (partition_no, definition, generation, value);
+
+
+--
+-- Name: freshness_positions freshness_positions_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.freshness_positions
+    ADD CONSTRAINT freshness_positions_pkey PRIMARY KEY (consumer, shard);
 
 
 --

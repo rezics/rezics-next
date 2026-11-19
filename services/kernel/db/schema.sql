@@ -3637,6 +3637,42 @@ CREATE TRIGGER follow_count_source_topology AFTER INSERT ON core.partition FOR E
 
 
 --
+-- Name: consumer_checkpoint freshness_position; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_position AFTER INSERT OR DELETE OR UPDATE OF consumer, partition_no, "position" ON core.consumer_checkpoint FOR EACH ROW EXECUTE FUNCTION search.capture_freshness_position();
+
+ALTER TABLE core.consumer_checkpoint ENABLE ALWAYS TRIGGER freshness_position;
+
+
+--
+-- Name: partition freshness_position; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_position AFTER INSERT OR DELETE OR UPDATE OF partition_no, "position" ON core.partition FOR EACH ROW EXECUTE FUNCTION search.capture_freshness_position();
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER freshness_position;
+
+
+--
+-- Name: consumer_checkpoint freshness_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_truncate AFTER TRUNCATE ON core.consumer_checkpoint FOR EACH STATEMENT EXECUTE FUNCTION search.truncate_freshness_positions();
+
+ALTER TABLE core.consumer_checkpoint ENABLE ALWAYS TRIGGER freshness_truncate;
+
+
+--
+-- Name: partition freshness_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER freshness_truncate AFTER TRUNCATE ON core.partition FOR EACH STATEMENT EXECUTE FUNCTION search.truncate_freshness_positions();
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER freshness_truncate;
+
+
+--
 -- Name: history_locator history_agent_identity_locator_guard; Type: TRIGGER; Schema: core; Owner: -
 --
 

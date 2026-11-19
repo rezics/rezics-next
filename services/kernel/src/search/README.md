@@ -1620,16 +1620,22 @@ population completeness, or expand the existing preview's disclosure guarantees.
 
 ### Freshness
 
-- Touches: `freshness.sql` left-joins all partition heads to one consumer's checkpoints; each behind partition
-  probes exactly `(partition_no,checkpoint+1,event_seq=0)` in outbox for its timestamp, then aggregates min/count.
-  One statement per read; each `current()` call is answered from a read that began after the call, at most one read
-  runs per reader and calls made while it runs share the next read. Rebuild polls default 500 ms until caught
-  up/deadline (default 1 hour). Grow H/N/P with C and lagging partitions fixed.
-- Bound: Constant 4,096 heads plus <= C checkpoints and <= 4,096 timestamp rows; indexed blocks
-  `O(4096*(L(P)+L(H)))`, one statement, no H scan. The consumer-leading checkpoint index keeps the checkpoint
-  lookup bounded. Behind without a retained next envelope fails. Statements per
-  process and generation are at most `min(request rate, 1 / statement time)`. Polling repeats per interval, not per
-  change.
+- One statement compares the shared committed outbox heads with the queried generation's checkpoints.
+  `search.freshness_positions` stores positive native bigint positions in groups of 64 homes. A missing home
+  starts at zero. Equal groups need no home expansion. For each behind home in a differing group, the reader
+  seeks exactly `(home, checkpoint + 1, event_seq = 0)` in the live outbox. It returns the behind count and
+  minimum retained timestamp. A positive count with no retained timestamp fails. Other consumers of this
+  reader use their native checkpoints directly for positive heads.
+- Each head write changes one shared group. A Search checkpoint changes only that consumer's group. A key
+  move also clears the previous slot, and clearing a group's last slot removes its row. Backfill runs under
+  both source write locks. Triggers follow native changes in the same transaction, including replica-mode
+  writes and truncation. Outbox retention and timestamp changes need no summary updates.
+- Bound: up to 64 head groups and 64 checkpoint groups for the named Search generation, up to 64 scalar
+  positions per differing group, and one indexed envelope seek per behind home. At fixed group and lag counts,
+  checkpoint history, unrelated generations and retained outbox history add only logarithmic index work.
+  Each `current()` call receives a read started after the call. At most one read runs per reader, with waiting
+  callers sharing the next read under their own deadlines. Rebuild polls default to 500 ms until caught up or
+  the deadline (default one hour).
 - Growth check: [test/search/freshness.test.ts](../../test/search/freshness.test.ts): “the reader answers each call
   from a read that began after the call”; SQL: [test/search/growth-query.test.ts](../../test/search/growth-query.test.ts):
   “Freshness stays within its bound as H grows” (rows/blocks, also P/N).

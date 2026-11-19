@@ -7,7 +7,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 const rowsPerScale = 500;
-const consumer = 'growth_search_freshness';
+const consumer = 'search_growth_subjects_g1';
 const baseConsumerPrefix = 'growth_search_freshness_base_';
 const allConsumerPrefix = 'growth_search_freshness_all_';
 const anchorConsumerPrefix = 'growth_search_freshness_local_';
