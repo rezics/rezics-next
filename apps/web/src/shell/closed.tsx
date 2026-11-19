@@ -10,7 +10,7 @@ import { sessionQuery } from '../session/query';
 import { isDependencyUnavailableError, isSessionUnavailableError, isPreparingReadError } from '../session/unavailable';
 import { SessionUnavailablePrompt } from '../session/private-page';
 import { DependencyUnavailablePage } from './dependency-recovery/page';
-import { recoveryOwnerIsCurrent, type RecoveryOwner } from './dependency-recovery/retry-owner';
+import { pendingRouteRetries, recoveryOwnerIsCurrent, type RecoveryOwner } from './dependency-recovery/retry-owner';
 
 export function closedPageHead(context: HeadContext) {
   return pageHead({ robots: 'noindex' }, context);
@@ -47,45 +47,54 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
   const client = router.options.context.queryClient;
   const observation = browserObservation(client);
   async function retry() {
-    if (active.current || !policy.allowed || waiting || policy.deferred) return;
+    if (active.current || pendingRouteRetries.get(router)?.current() || !policy.allowed || waiting || policy.deferred)
+      return;
     active.current = true;
-    let owner: RecoveryOwner = { visit: router.state.location.state.key, reader: observation.getSnapshot() };
-    const currentVisit = () => mounted.current && router.state.location.state.key === owner.visit;
+    let owner: RecoveryOwner = { visit: router.latestLocation.state.key, reader: observation.getSnapshot() };
+    let leftVisit = false;
+    const stopNavigation = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      if (toLocation.state.key !== owner.visit) leftVisit = true;
+    });
+    const currentVisit = () => !leftVisit && router.latestLocation.state.key === owner.visit;
     const current = () =>
       recoveryOwnerIsCurrent(
         owner,
-        { visit: router.state.location.state.key, reader: observation.getSnapshot() },
-        mounted.current,
+        { visit: router.latestLocation.state.key, reader: observation.getSnapshot() },
+        !leftVisit,
       );
     const hadPageFocus = Boolean(
       document.querySelector<HTMLElement>('[data-route-state]')?.contains(document.activeElement),
     );
     setRetrying(true);
     setRetryFailed(false);
+    const pending = { current, content: errorContent(error, { onRetry: retry, retrying: true }) };
     try {
       if (isSessionUnavailableError(error)) {
         await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
-        if (!currentVisit()) return;
+        if (!mounted.current || !currentVisit()) return;
         // This explicit retry adopts the newly read session incarnation before the private loader runs.
         owner = { visit: owner.visit, reader: observation.getSnapshot() };
       }
       // Invalidation reruns the original bounded loader; reset alone only rerenders its failed match.
+      pendingRouteRetries.set(router, pending);
       await router.invalidate({ sync: true });
       if (!current()) return;
-      if (router.state.matches.some((match) => match.status === 'error' || match.status === 'notFound'))
-        setRetryFailed(true);
-      else {
-        reset?.();
-        if (hadPageFocus) document.getElementById('main-content')?.focus({ preventScroll: true });
+      if (router.state.matches.some((match) => match.status === 'error' || match.status === 'notFound')) {
+        if (mounted.current) setRetryFailed(true);
+      } else {
+        if (mounted.current) reset?.();
+        if (hadPageFocus && (mounted.current || document.activeElement === document.body))
+          document.getElementById('main-content')?.focus({ preventScroll: true });
       }
     } catch {
-      if (current()) setRetryFailed(true);
+      if (current() && mounted.current) setRetryFailed(true);
     } finally {
+      stopNavigation();
+      if (pendingRouteRetries.get(router) === pending) pendingRouteRetries.delete(router);
       active.current = false;
       if (mounted.current) setRetrying(false);
     }
   }
-  if (isPlatformClosedError(error)) return <ClosedPage />;
   const recovery = !policy.allowed
     ? m.route_retry_unavailable()
     : policy.deferred
@@ -93,13 +102,22 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
       : waiting
         ? m.route_retry_after({ seconds: policy.delay })
         : undefined;
-  const retryProps = {
+  return errorContent(error, {
     onRetry: policy.allowed && !policy.deferred ? retry : undefined,
     retrying,
     retryDisabled: waiting,
     retryFailed,
     ...(recovery ? { recovery } : {}),
-  };
+  });
+}
+
+function errorContent(
+  error: unknown,
+  retryProps: Pick<Parameters<typeof RouteState>[0], 'onRetry' | 'retrying' | 'retryDisabled' | 'retryFailed'> & {
+    recovery?: string;
+  },
+) {
+  if (isPlatformClosedError(error)) return <ClosedPage />;
   if (
     error &&
     typeof error === 'object' &&

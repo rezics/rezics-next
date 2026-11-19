@@ -1,6 +1,7 @@
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from './page-heading';
+import { pendingRouteRetries } from './dependency-recovery/retry-owner';
 
 export type PendingLayout = 'page' | 'feed' | 'detail' | 'form';
 
@@ -110,8 +111,15 @@ export function RouteLoading({ layout = 'page' }: { layout?: PendingLayout }) {
 }
 
 function RouterPendingPage() {
-  const layout = useRouterState({ select: (state) => pendingLayout(state.matches) });
-  return <RouteLoading layout={layout} />;
+  const router = useRouter();
+  const pending = useRouterState({
+    select: (state) => {
+      const retry = pendingRouteRetries.get(router);
+      return retry?.current() ? retry.content : pendingLayout(state.matches);
+    },
+    structuralSharing: false,
+  });
+  return typeof pending === 'string' ? <RouteLoading layout={pending} /> : pending;
 }
 
 export function PendingPage() {
