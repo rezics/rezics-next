@@ -608,13 +608,17 @@ test(
       expect(lists().at(-1)?.authorization).toBe(`Bearer ${access}`);
       expect(new URLSearchParams(lists().at(-1)?.search).get('subjectId')).toBe(edition);
       expect(lists().at(-1)).toMatchObject({ view: 'FULL', limit: pageLimit });
-      await main.getByRole('link', { name: 'More', exact: true }).click();
+      const more = main.locator('a').filter({ hasText: /^More$/ });
+      expect(new URL(await more.getAttribute('href'), page.url()).searchParams.get('cursor')).toBe(
+        `alice:${edition}:100`,
+      );
+      await more.click();
       await page.waitForURL(/cursor=/);
       await main.getByText('Filtered copy 100', { exact: true }).waitFor();
       expect(await main.locator(copyRows).count()).toBe(2);
       expect(new URL(page.url()).searchParams.get('subjectId')).toBe(edition);
       expect(lists().at(-1)?.cursor).toBe(`alice:${edition}:100`);
-      expect(await main.getByRole('link', { name: 'More', exact: true }).count()).toBe(0);
+      expect(await more.count()).toBe(0);
     } finally {
       await closeContext(page.context());
     }
@@ -631,7 +635,9 @@ test(
     try {
       const main = page.locator('main');
       await main.getByText('Your copies of Zebra story', { exact: true }).waitFor();
-      await main.getByRole('link', { name: 'All copies', exact: true }).click();
+      const all = main.locator('a').filter({ hasText: /^All copies$/ });
+      expect(await all.getAttribute('href')).toBe('/en/library/copies');
+      await all.click();
       await page.waitForURL(`${origin}/en/library/copies`);
       await main.getByText('Waiting', { exact: true }).waitFor();
       expect(new URLSearchParams(lists().at(-1)?.search).has('subjectId')).toBe(false);
@@ -642,7 +648,7 @@ test(
       expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(edition);
       for (const subjectId of [unownedEdition, hiddenEdition]) {
         await page.goto(`${origin}/en/library/copies?subjectId=${subjectId}`, { waitUntil: 'networkidle' });
-        await main.getByRole('link', { name: 'All copies', exact: true }).waitFor();
+        await all.waitFor();
         expect(await main.locator(copyRows).count()).toBe(0);
         expect(await main.innerText()).toContain('Your copies of this edition');
         expect(await main.innerText()).toContain('You have no copies of this edition.');

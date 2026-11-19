@@ -205,8 +205,6 @@ const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')
 const stamp = '2026-04-02T15:04:05.000Z';
 const reloadedStamp = '2026-05-01T00:00:00.000Z';
 const coverMedia = id(9001);
-const messages = (locale: string) =>
-  Bun.file(join(app, 'messages', `${locale}.json`)).json() as Promise<Record<string, string>>;
 
 // The documented cover summary of a subject read: the image, its placeholder and its variants.
 const coverSummary = {
@@ -769,17 +767,18 @@ test(
       expect(text(row)).not.toContain('Remove');
     }
     const chinese = await readPage('/zh-Hans/library?layout=list', cookie);
-    const own = await messages('zh-Hans');
-    expect(text(withTitle(items(chinese.html, shelfRows), 'Zebra story'))).toContain('书籍');
-    expect(text(withTitle(items(chinese.html, shelfRows), 'Zebra story'))).toContain(own.library_state_completed!);
+    const localized = text(withTitle(items(chinese.html, shelfRows), 'Zebra story'));
+    expect(localized).toContain('书籍');
+    expect(localized).toContain('已完成');
 
     const browserPage = await open('/en/library?layout=list', cookie);
     try {
       const row = browserPage.locator(shelfRows).filter({ hasText: 'Zebra story' });
+      await row.waitFor();
       expect(await row.count()).toBe(1);
-      // One compact row.
-      expect((await row.boundingBox())!.height).toBeLessThan(120);
-      expect(await row.locator('[data-slot="cover"]').count()).toBe(1);
+      const cover = row.locator('[data-slot="cover"]');
+      expect(await cover.count()).toBe(1);
+      expect((await row.boundingBox())!.height - (await cover.boundingBox())!.height).toBeLessThanOrEqual(40);
       expect(await row.getByRole('button', { name: 'Save' }).count()).toBe(0);
 
       // The item menu holds the other actions: copies, reading progress and removal.
@@ -887,7 +886,8 @@ test(
     expect(sessions).toHaveLength(1);
     expectImage(sessions[0]!);
     expect(text(sessions[0]!)).toContain('Book');
-    expect(sessions[0]).toContain(`href="/en/library/progress/${sessionId}"`);
+    expect(sessions[0]).toContain(`data-progress-session-id="${sessionId}"`);
+    expect(sessions[0]).not.toContain('data-slot="list-row-link"');
 
     const sessionPage = await readPage(`/en/library/progress/${sessionId}`, cookie);
     expect(sessionPage.status).toBe(200);
@@ -900,7 +900,7 @@ test(
     expect(covers(log)).toBe(0);
     expect(text(log)).not.toContain('Zebra story');
     expect(text(log)).toContain('Ada Lovelace @ada');
-    expect(log).toContain(`href="/en/logs/${publishedLog.id}"`);
+    expect(log).not.toContain('data-slot="list-row-link"');
 
     const progressPageChinese = await readPage(`/zh-Hans/library/progress?subjectId=${zebra.id}`, cookie);
     expect(text(items(progressPageChinese.html, progressRows)[0]!)).toContain('书籍');
@@ -916,7 +916,7 @@ test(
     expect(text(withTitle(followed, 'Zebra story'))).toContain('Book');
     expect(covers(withTitle(followed, 'Apple story'))).toBe(0);
     expect(covers(withTitle(followed, 'Night shelf'))).toBe(0);
-    expect(withTitle(followed, 'Night shelf')).toContain(`href="/en/collections/${shelfId}"`);
+    expect(withTitle(followed, 'Night shelf')).not.toContain('data-slot="list-row-link"');
     const hiddenFollow = withTitle(followed, 'Unavailable');
     expect(covers(hiddenFollow)).toBe(0);
     expect(hiddenFollow).not.toContain('data-slot="list-row-link"');
