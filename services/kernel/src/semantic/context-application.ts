@@ -144,7 +144,7 @@ export function createContextApplication(port: ContextAccessPort): ContextApplic
     read: (pool, id, authorize) => readContext(pool, id, authorize, port),
     snapshot: (pool, id) => contextSnapshot(pool, id, port),
     publicEligibility: (resource) => publicContextEligibility(resource, port),
-    enrollRoleProvenance: (tx, input) => enrollContextRoleProvenance(tx, input, port),
+    enrollRoleProvenance: enrollContextRoleProvenance,
     stepDirectory: (pool, home, clock) => stepContextDirectory(pool, home, clock, port),
     populateDirectory: (pool, clock, steps) => populateContextDirectory(pool, clock, steps, port),
     directoryEffect: (pool, clock) => contextDirectoryEffect(pool, clock, port),

@@ -1,21 +1,30 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
+import type { PublicJwks } from '@rezics/auth';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readBatch } from '../../src/events/log.ts';
 
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
+const { WEBSITE_CLIENT_ID } = await import('@rezics/auth');
+const { grantCommand } = await import('../../src/access/grant-command.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../src/access/bootstrap-governance.ts');
 const { createDelegationCommands } = await import('../../src/access/delegation-commands.ts');
 const { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } =
   await import('../../src/access/lifecycle.ts');
 const { createMembershipInverseCommands } = await import('../../src/access/membership-inverse.ts');
+const { createRealmMembershipReconciler } = await import('../../src/access/realm-membership-transition-legacy.ts');
+const { advancePendingContextRoleProvenance, readContextRoleProvenance } =
+  await import('../../src/access/shared-history-context.ts');
+const { withErasureOperationalClient } = await import('../../src/access/erasure-operational-client.ts');
+const { createRealmMembership } = await import('../../src/community/membership.ts');
+const { createRealmMembershipWorkPorts } = await import('../community/membership-fixture.ts');
 const { createSuspensionCommands } = await import('../../src/access/suspension.ts');
 const { createReinstatementCommands } = await import('../../src/access/reinstatement.ts');
 const { createRateTierCommands } = await import('../../src/access/rate-tier.ts');
@@ -53,6 +62,12 @@ const catalogueScopes = [
   'account:renew_cleanup',
   'exposure:open',
   'exposure:close',
+  'context:create',
+  'context:read',
+  'space:create',
+  'space:manage',
+  'realm:create',
+  'realm:join',
 ];
 let f: Awaited<ReturnType<typeof nativeFixture>>;
 let publication: Awaited<ReturnType<typeof startAccountIdentityPublication>> | undefined;
@@ -124,6 +139,35 @@ async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${name} failed: ${message}`, { cause: error });
   }
+}
+
+async function confirmWebsiteLogout(session: Headers) {
+  const { service } = f.host;
+  const pair = await generateKeyPair('ES256', { extractable: true });
+  await service.internal.registerWebsiteClient({
+    publicJwks: {
+      keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'catalogue-website', alg: 'ES256', use: 'sig' }],
+    } as PublicJwks,
+    redirectUris: [`${issuer}/website/callback`],
+    postLogoutRedirectUris: [`${issuer}/`],
+    scopes: ['openid', 'offline_access', 'media:complete'],
+  });
+  const logout = new URL('/logout', issuer);
+  logout.searchParams.set('client_id', WEBSITE_CLIENT_ID);
+  logout.searchParams.set('post_logout_redirect_uri', `${issuer}/`);
+  const confirmation = await service.handler(
+    new Request(logout, { headers: { cookie: session.get('cookie')!, accept: 'text/html' } }),
+  );
+  expect(confirmation.status, await confirmation.clone().text()).toBe(200);
+  const response = await service.handler(
+    new Request(`${issuer}/logout/confirm`, {
+      method: 'POST',
+      headers: { origin: issuer, cookie: `${session.get('cookie')}; ${cookies(confirmation).get('cookie')}` },
+      body: new URLSearchParams({ action: 'confirm' }),
+    }),
+  );
+  expect(response.status, await response.clone().text()).toBe(302);
+  expect(response.headers.get('location')).toBe(`${issuer}/`);
 }
 
 test('real access commands cover every registered event and the log reader accepts them', async () => {
@@ -761,28 +805,35 @@ test('real access commands cover every registered event and the log reader accep
   await step('initialize account agent', () =>
     ensureAccountAgent(pool, { account: governor.accountId, kind: 'person', name: 'Catalogue', language: 'en' }),
   );
-  const catalogueSubject = await step('create catalogue subject', async () => {
-    const service = f.host.service;
-    const kernel = testKernel({
-      pool,
-      auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
-      writeRate: createWriteRateLimiter({ secret: 'access-event-catalogue-native-write-rate-secret' }),
-    });
+  const service = f.host.service;
+  const kernel = testKernel({
+    pool,
+    auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+    writeRate: createWriteRateLimiter({ secret: 'access-event-catalogue-native-write-rate-secret' }),
+  });
+  async function postKernel<T>(path: string, body: object): Promise<T> {
     const response = await kernel.handle(
-      new Request('https://kernel.test/v1/subjects', {
+      new Request(`https://kernel.test${path}`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${bearer}`,
           'content-type': 'application/json',
           'idempotency-key': JSON.stringify(key()),
         },
-        body: JSON.stringify({ type: 'schema:Person', labels: { en: 'Catalogue Person' } }),
+        body: JSON.stringify(body),
       }),
     );
     if (response.status !== 201) throw new Error(`${response.status} ${await response.text()}`);
-    const { subject } = (await response.json()) as { subject: { id: string } };
-    return subject.id;
-  });
+    return (await response.json()) as T;
+  }
+  const {
+    subject: { id: catalogueSubject },
+  } = await step('create catalogue subject', () =>
+    postKernel<{ subject: { id: string } }>('/v1/subjects', {
+      type: 'schema:Person',
+      labels: { en: 'Catalogue Person' },
+    }),
+  );
   const verification = createAgentVerificationCommands({ pool, access: f.access, clock: () => new Date() });
   const verificationRequest = async (label: string) =>
     verification.request(await grantContext(), {
@@ -831,6 +882,64 @@ test('real access commands cover every registered event and the log reader accep
   await step('verification reversal workflow', async () => {
     const reversal = await verification.release(await grantContext(), { accountId: governor.accountId, key: key() });
     await runAccountIdentityReversal(pool, workClient, reversal.value);
+  });
+
+  const { context } = await step('create Context', () =>
+    postKernel<{ context: { id: string } }>('/v1/contexts', { labels: { en: 'Catalogue Context' } }),
+  );
+  await step('publish and reconcile Realm membership', async () => {
+    const { space } = await postKernel<{ space: { spaceId: string } }>('/v1/spaces', { title: 'Catalogue Space' });
+    const { realm } = await postKernel<{ realm: { realmId: string } }>('/v1/realms', {
+      spaceId: space.spaceId,
+      contextId: context.id,
+      title: 'Catalogue Realm',
+      visibility: 'public',
+    });
+    const accountId = reinstater.accountId;
+    const principal = { kind: 'realm', id: realm.realmId } as const;
+    const input = {
+      kind: 'membership',
+      principal,
+      memberAccountId: accountId,
+      role: 'member',
+      authorization: reinstaterToken,
+    } as const;
+    const membership = createRealmMembership({
+      pool,
+      access: kernel.testAccess,
+      clock: () => new Date(),
+      deadlineNow: Date.now,
+    });
+    const ports = createRealmMembershipWorkPorts(pool, testRouteKey(), membership);
+    const request = await ports.authorize(input.authorization, input);
+    const { value: reservation } = await ports.reserve({ accountId, principal, key: key() });
+    await ports.publish(request, input, reservation, key());
+    await ports.finalize!(reservation, key());
+    // Recreate the old writer's stable hold from the committed inverse, as in the legacy growth fixture.
+    const held = await pool.query(
+      `INSERT INTO access.lifecycle_coordination (route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+       SELECT route,account_id,reservation_id,group_id,'membership',transaction_id FROM access.membership_inverse
+       WHERE route=$1 AND account_id=$2 AND kind='realm' AND group_id=$3`,
+      [routeOf(accountId), accountId, realm.realmId],
+    );
+    expect(held.rowCount).toBe(1);
+    const reconciler = createRealmMembershipReconciler({
+      pool,
+      keys: f.referenceKeys,
+      barrierId: 'catalogue-stopped-old-writers',
+      authority: membership.authority,
+      certify: membership.certifyLegacy,
+    });
+    expect(await reconciler.page({ accountId })).toMatchObject({
+      completed: true,
+      items: [{ realmId: realm.realmId, state: 'published' }],
+    });
+  });
+
+  await step('advance website floor on logout', async () => {
+    const before = (await accountOf(reinstater.accountId)).minimumAuthnEpoch;
+    await confirmWebsiteLogout(cookies(reinstaterSignin));
+    expect((await accountOf(reinstater.accountId)).minimumAuthnEpoch).toBe(before + 1n);
   });
 
   const publicJwk = {
@@ -891,6 +1000,72 @@ test('real access commands cover every registered event and the log reader accep
     );
   });
 
+  // The identity workflows have settled. Drive the pending occurrence once without racing the worker.
+  await publication!.stop();
+  await step('redrive pending Context role provenance', async () => {
+    const resource = { route: routeOf(context.id)!, id: context.id };
+    const accountId = reinstater.accountId;
+    const partition = partitionOf(resource.route);
+    const input = {
+      resource,
+      subject: { kind: 'account', id: accountId },
+      role: 'semantic.context.owner',
+      valid: '(,)',
+    };
+    const signin = await f.request('/signin', {
+      email: 'catalogue_governor@ordinary.test',
+      password,
+      client_id: 'catalogue-client',
+      scope: catalogueScopes,
+    });
+    expect(signin.status, await signin.clone().text()).toBe(200);
+    const token = await f.request('/token', {}, cookies(signin));
+    expect(token.status, await token.clone().text()).toBe(200);
+    const { access_token: freshBearer } = (await token.json()) as { access_token: string };
+    const deadline = Date.now() + 20_000;
+    const access = kernel.testAccess;
+    const actor = await access.authenticate(freshBearer, { pool, deadline });
+    const grant = await grantCommand(
+      { pool, access },
+      { pool, actor, deadline },
+      {
+        resource,
+        actions: ['access:grant'],
+        kind: 'access.role-grant.create',
+        key: key(),
+        input,
+        denied: () => new Error('Context fixture grant denied'),
+        zoneGrantTarget: { subjectAccountId: accountId, addsGrant: true },
+      },
+      async (tx, transactionId) => {
+        await tx.query(
+          `INSERT INTO access.resource_role_grant
+           (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+           VALUES($1,$2,'identity',$3,'',$4,$5,$6)`,
+          [resource.route, resource.id, accountId, input.role, input.valid, transactionId],
+        );
+        // Force delivery before the command fence to leave the native occurrence pending.
+        await tx.query('SET CONSTRAINTS access.resource_role_provenance_deliver IMMEDIATE');
+        return input;
+      },
+    );
+    const [pending] = await readContextRoleProvenance(pool, { resource, accountId });
+    expect(pending).toMatchObject({
+      delivery: 'pending',
+      contextKey: null,
+      sourceTransaction: grant.transactionId,
+      grantTransaction: grant.transactionId,
+    });
+    const after = { route: resource.route, occurrence: (BigInt(pending!.occurrence) - 1n).toString() };
+    const progress = await withErasureOperationalClient(pool, (client) =>
+      advancePendingContextRoleProvenance({ pool, client }, { partition, after }),
+    );
+    expect(progress).toMatchObject({ attempted: 1, pending: 0 });
+    expect(await readContextRoleProvenance(pool, { resource, accountId })).toMatchObject([
+      { ...pending, delivery: 'delivered', contextKey: expect.stringMatching(/^[1-9][0-9]*$/) },
+    ]);
+  });
+
   const seen = new Set<string>();
   const partitions = await pool.query<{ partition_no: number }>(
     'SELECT partition_no FROM core.partition WHERE position > 0 ORDER BY partition_no',
@@ -921,4 +1096,4 @@ test('real access commands cover every registered event and the log reader accep
   }
   const missing = Object.keys(ACCESS_EVENTS()).filter((type) => !seen.has(type));
   expect(missing).toEqual([]);
-}, 60_000);
+}, 120_000);

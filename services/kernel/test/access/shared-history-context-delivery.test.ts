@@ -8,7 +8,8 @@ import {
 } from '../../src/access/shared-history-context.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createWorkClient } from '../../src/work/client.ts';
+import { openErasureOperationalClient } from '../../src/access/erasure-operational-client.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 import { HistoryRegistry } from '../../src/history/contract/registry.ts';
 import { admitSharedHistory } from '../../src/access/shared-history.ts';
@@ -23,7 +24,8 @@ import {
 
 const f = await createDeletionFixture();
 const single = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 1 });
-let client: Awaited<ReturnType<typeof createWorkClient>>;
+configureTestReceiptKeys(single);
+let client: Awaited<ReturnType<typeof openErasureOperationalClient>>;
 const basis = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',
   clientId: 'internal-access',
@@ -31,13 +33,18 @@ const basis = {
 };
 beforeAll(async () => {
   await f.setup();
-  client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
+  client = await openErasureOperationalClient(single);
 });
 afterAll(async () => {
   await client?.close();
   await single.end();
   await f.close();
 });
+async function ownerProvenance(resource: { route: number; id: string }) {
+  const rows = await readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.owner });
+  return rows.filter((row) => row.side === 'creator' || row.grantRole === 'semantic.context.owner');
+}
+
 async function create() {
   const response = await f.call(
     'POST',
@@ -120,8 +127,8 @@ test('Changed selected native cursor refuses before affected dispatch and failed
 
 test('deferred native creator NEW and OLD delivery shares actual Source enrollment and preserves former grant provenance', async () => {
   const resource = await create();
-  const created = await readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.owner });
-  expect(created.map((row) => row.side).sort()).toEqual(['creator', 'new']);
+  const created = await ownerProvenance(resource);
+  expect(new Set(created.map((row) => row.side))).toEqual(new Set(['creator', 'new']));
   const original = created.find((row) => row.side === 'new')!;
   const role = {
     resource,
@@ -137,7 +144,7 @@ test('deferred native creator NEW and OLD delivery shares actual Source enrollme
     201,
   );
   f.status(await f.call('POST', '/v1/roleGrants:revoke', 'owner', role), 200);
-  const historical = await readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.owner });
+  const historical = await ownerProvenance(resource);
   const former = historical.find((row) => row.side === 'former')!;
   expect(former.grantTransaction).toBe(original.grantTransaction);
   expect(former.sourceTransaction).not.toBe(original.sourceTransaction);
@@ -205,7 +212,7 @@ test('released bounded redrive enrolls pending native input under its real platf
     expect(input).toHaveLength(1);
     expect(input[0]!.delivery).toBe('pending');
     expect(input[0]!.contextKey).toBeNull();
-    return { value: null, events: [{ type: 'com.rezics.access.context-role-delivery-advanced.v1', data: {} }] };
+    return { value: null, events: [{ type: 'com.rezics.fixture.created.v1', data: {} }] };
   });
   const pending = (await readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.editor }))[0]!;
   const after = { route: resource.route, occurrence: (BigInt(pending.occurrence) - 1n).toString() };
@@ -219,9 +226,11 @@ test('released bounded redrive enrolls pending native input under its real platf
   const proof = (
     await f.admin.query(
       `SELECT e.enrollment_transaction::text,e.source_transaction::text,p.xmin=e.xmin AS same_transaction,
-       b.xmin=e.xmin AS same_command
+       b.xmin=e.xmin AND s.xmin=e.xmin AS same_command,o.type AS event_type
      FROM access.resource_role_provenance p JOIN semantic.context_role_enrollment e USING(route,occurrence)
      JOIN editorial.write_basis b ON b.partition_no=e.route/16 AND b.transaction_id=e.enrollment_transaction
+     JOIN semantic.erasure_source_commit s ON s.partition_no=b.partition_no AND s.transaction_id=b.transaction_id
+     JOIN core.outbox o ON o.partition_no=b.partition_no AND o.position=b.position AND o.event_seq=0
      WHERE p.route=$1 AND p.occurrence=$2`,
       [resource.route, pending.occurrence],
     )
@@ -230,6 +239,7 @@ test('released bounded redrive enrolls pending native input under its real platf
   expect(proof.enrollment_transaction).not.toBe(sourceTransaction);
   expect(proof.same_transaction).toBe(true);
   expect(proof.same_command).toBe(true);
+  expect(proof.event_type).toBe('com.rezics.access.context-role-delivery-advanced.v1');
   await drive(); // restarting selection cannot duplicate the Source receipt or lose input
   expect(await readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.editor })).toEqual([delivered]);
 });

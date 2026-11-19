@@ -11,11 +11,7 @@ import { prepareReadDecisions, type Access, type AccessClient, type Actor } from
 import { ProblemError } from '../../http/problem-error.ts';
 import { withReadTransaction } from '../read.ts';
 import { refreshSemanticErasureSourceRecord } from '../account-erasure.ts';
-import {
-  readSemanticSourceDisposition,
-  recordSemanticSourceCommit,
-  recordSemanticSourceDisposition,
-} from '../erasure-producer.ts';
+import { readSemanticSourceDisposition, recordSemanticSourceDisposition } from '../erasure-producer.ts';
 import type {
   ContextAccessHandle,
   ContextAccessPort,
@@ -100,7 +96,6 @@ export function nativeContextAccess(): ContextAccessPort {
       refreshErasureSourceRecord: refreshSemanticErasureSourceRecord,
       readSourceDisposition: readSemanticSourceDisposition,
       recordSourceDisposition: recordSemanticSourceDisposition,
-      recordSourceCommit: recordSemanticSourceCommit,
     }),
   );
 }
