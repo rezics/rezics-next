@@ -376,6 +376,8 @@ index and admitted tracked, modified, deleted and untracked source, then transpo
 `remote-check`. It does not borrow the trusted driver's checkout or candidate `node_modules`, caches or `.temp`.
 Web and Auth generated inputs are prepared from the frozen candidate after the remote frozen install. Declared return
 paths are cleared before transfer, bounded and checked on return, and restored only from the terminal physical run.
+When source work continues during a check, give the check its own detached candidate worktree and keep that worktree
+at the submitted revision through artifact settlement.
 Native Web host preparation includes the [Kernel SQL analysis action](../../services/kernel/README.md#development-database).
 Its compiler work belongs to preparation. Runtime migrations, schema compatibility checks, actor registration and
 Auth, Kernel and Worker startup belong to the native fixture's existing setup budget.
