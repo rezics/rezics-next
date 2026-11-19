@@ -87,12 +87,17 @@ afterAll(() => {
 
 test('pure root and web typechecks, compiler tools, and explicit small unit selections stay local', () => {
   const root = fixture();
+  writeFileSync(
+    join(root, 'packages/util/test/status.test.ts'),
+    "import { test } from 'bun:test';\ntest('status', () => { process.exitCode = 7; });\n",
+  );
   const cases: string[][] = [
     ['bun', 'run', 'typecheck'],
     ['bun', '--cwd', 'apps/web', 'run', 'typecheck'],
     ['bun', 'run', '--cwd', 'apps/web', 'typecheck'],
     ['bun', 'check', '--no-script', '-p', 'packages/util/tsconfig.json'],
     ['bun', 'test', 'packages/util/test/unit.test.ts'],
+    ['bun', 'test', 'packages/util/test/status.test.ts'],
     ['bun', 'run', '--cwd', 'packages/util', 'unit'],
     ['env', 'MODE=small', 'bun', 'run', '--cwd', 'packages/util', 'unit'],
   ];
@@ -131,6 +136,7 @@ test('discovery, preload, shell, native-stack, browser, server, database, and un
     expect(classifyCheck(['bun', 'test', `packages/util/test/${name}`], root).placement, name).toBe('remote');
   }
   const suspiciousTests: Array<[string, string]> = [
+    ['exit.test.ts', "import { test } from 'bun:test';\ntest('exit', () => process.exit(7));\n"],
     ['server-call.test.ts', 'Bun.serve({ fetch() { return new Response(); } });\n'],
     ['dynamic-import.test.ts', 'const dependency = "playwright"; await import(dependency);\n'],
     ['process-test.test.ts', "import { spawnSync } from 'node:child_process';\nvoid spawnSync;\n"],

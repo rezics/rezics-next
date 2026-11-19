@@ -485,7 +485,7 @@ function smallUnitFile(root: string, file: string, seen: Set<string>): boolean {
     return false;
   }
   if (
-    /\b(?:Bun\.(?:serve|spawn|spawnSync|listen|sql|file|write|connect)|Deno\.(?:serve|Command|connect|listen)|process\.(?:dlopen|binding|kill|exit|abort)|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+(?:Worker|WebSocket|EventSource)\s*\()/.test(
+    /\b(?:Bun\.(?:serve|spawn|spawnSync|listen|sql|file|write|connect)|Deno\.(?:serve|Command|connect|listen)|process\.(?:dlopen|binding|kill|exit|abort)\b|chromium\.launch|firefox\.launch|webkit\.launch|createServer\s*\(|fetch\s*\(|new\s+(?:Worker|WebSocket|EventSource)\s*\()/.test(
       source,
     )
   )

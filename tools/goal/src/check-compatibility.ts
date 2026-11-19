@@ -390,25 +390,6 @@ function readWorkerRecord(root: string, id: string, contract: CheckCompatibility
   }
 }
 
-function writeChildCode(gatePath?: string, exitCode = 0, runtimeProofPath?: string): string {
-  const proof = runtimeProofPath
-    ? `await import('node:fs').then(fs => fs.writeFileSync(${JSON.stringify(runtimeProofPath)}, JSON.stringify({ version: Bun.version, revision: Bun.revision, executable: process.execPath })));\n`
-    : '';
-  if (gatePath) {
-    return (
-      proof +
-      [
-        `const fs = await import('node:fs');`,
-        `const gate = ${JSON.stringify(gatePath)};`,
-        // A fixture release handshake, not a production polling interval.
-        `while (!fs.existsSync(gate)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);`,
-        `process.exit(${exitCode});`,
-      ].join('\n')
-    );
-  }
-  return proof + `process.exit(${exitCode});`;
-}
-
 function commandResultCheck(
   checks: CompatibilityCheck[],
   field: string,
@@ -470,18 +451,24 @@ function startWorkerCheck(
   scratchRoot: string,
   exitCode: number,
   contract: CheckCompatibilityContract,
-  waitForRelease: boolean,
+  keepRunning: boolean,
   pinnedRuntime = false,
   policy = defaultPolicy.nativeCommands,
-): { id?: string; childArgv: string[]; recordArgv: string[]; gatePath?: string } {
-  const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
-  if (gatePath) rmSync(gatePath, { force: true });
-  const code = writeChildCode(
-    gatePath,
-    exitCode,
-    pinnedRuntime ? join(scratchRoot, `child-runtime-${exitCode}.json`) : undefined,
-  );
-  const childArgv = [pinnedRuntime ? 'bun' : process.execPath, '-e', code];
+): { id?: string; childArgv: string[]; recordArgv: string[] } {
+  // Use a bounded unit test so the actual placement policy can prove this child runs locally.
+  const fixture = `./compatibility-child-${exitCode}.test.ts`;
+  const source = [
+    "import { test } from 'bun:test';",
+    "test('check lifecycle child', async () => {",
+    ...(keepRunning ? ['  await new Promise((resolve) => setTimeout(resolve, 2000));'] : []),
+    ...(pinnedRuntime
+      ? ['  console.log("compatibility child runtime", JSON.stringify({ version: Bun.version, revision: Bun.revision, executable: process.execPath }));']
+      : []),
+    `  process.exitCode = ${exitCode};`,
+    '});',
+  ].join('\n');
+  writeFileSync(join(scratchRoot, fixture), source);
+  const childArgv = [pinnedRuntime ? 'bun' : process.execPath, 'test', fixture];
   const startArgs = [...contract.workerCheck.startArgv.slice(0, -1), '--local', ...childArgv];
   const command = [process.execPath, workerScript, ...startArgs];
   const env: NodeJS.ProcessEnv = {
@@ -507,7 +494,7 @@ function startWorkerCheck(
   const validId = ids.length === 1 && UUID.test(id ?? '');
   commandResultCheck(
     checks,
-    waitForRelease ? 'workerCheck.start' : 'workerCheck.failureStart',
+    keepRunning ? 'workerCheck.start' : 'workerCheck.failureStart',
     command,
     result,
     result.status === 0 && validId,
@@ -521,7 +508,6 @@ function startWorkerCheck(
     ...(validId ? { id } : {}),
     childArgv,
     recordArgv: ['--local', ...childArgv],
-    ...(gatePath ? { gatePath } : {}),
   };
 }
 
@@ -553,10 +539,7 @@ function checkWorkerCheckLifecycle(
   );
 
   const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime, policy);
-  if (!pending.id) {
-    if (pending.gatePath) writeFileSync(pending.gatePath, 'release after malformed start output\n');
-    return;
-  }
+  if (!pending.id) return;
   const running = readWorkerRecord(scratchRoot, pending.id, contract);
   const startCommand = [
     process.execPath,
@@ -577,8 +560,6 @@ function checkWorkerCheckLifecycle(
     contract,
     true,
   );
-  const gatePath = pending.gatePath!;
-  writeFileSync(gatePath, 'continue\n');
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? pending.id! : part));
   const waitCommand = [process.execPath, workerScript, ...waitArgs];
   const pendingWait = run(waitCommand, scratchRoot, process.env, policy);
@@ -658,10 +639,20 @@ function checkWorkerCheckLifecycle(
     const pin = (JSON.parse(readFileSync(join(scriptsRoot, 'package.json'), 'utf8')) as { packageManager: string })
       .packageManager;
     const artifact = contract.workerCheck.bun.artifacts[pin]!;
-    for (const exitCode of [0, 7]) {
-      const proofPath = join(scratchRoot, `child-runtime-${exitCode}.json`);
+    for (const [exitCode, record] of [[0, pendingRecord], [7, failureRecord]] as const) {
+      let proofPath = scratchRoot;
       try {
-        const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as {
+        const log = record?.log;
+        const logPrefix = contract.workerCheck.logPathPrefix;
+        if (
+          typeof log !== 'string' ||
+          !log.startsWith(logPrefix) ||
+          basename(log) !== log.slice(logPrefix.lastIndexOf('/') + 1)
+        ) throw new Error('Missing or invalid worker log path');
+        proofPath = join(scratchRoot, log);
+        const entry = readFileSync(proofPath, 'utf8').match(/^compatibility child runtime (.+)$/m)?.[1];
+        if (!entry) throw new Error('Missing worker runtime evidence in the child log');
+        const proof = JSON.parse(entry) as {
           version?: string;
           revision?: string;
           executable?: string;

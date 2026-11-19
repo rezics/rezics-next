@@ -168,20 +168,16 @@ test('incompatible worker result fields and missing remote options identify the 
   try {
     const root = scriptsRoot(directory, {
       'scripts/worker-check.ts': (source) => {
-        const writer = `function writeRecord(record: CheckRecord): void {
-  const file = recordPath(record.cwd, record.id);
-  writeAtomicJson(file, record);
-}`;
+        const localRecord = 'writeAtomicJson(file, record);';
+        const writer = [
+          'function writeRecord(record: CheckRecord): void {',
+          '  const file = recordPath(record.cwd, record.id);',
+          '  if (record.physicalRun === undefined) {',
+          `    ${localRecord}`,
+        ].join('\n');
         if (source.split(writer).length !== 2)
-          throw new Error('Could not identify the unique worker-check result serialization boundary.');
-        // Corrupt every serialized consumer result, including custody-populated fields, while retaining physical records.
-        return source.replace(
-          writer,
-          writer.replace(
-            'writeAtomicJson(file, record);',
-            'writeAtomicJson(file, { ...record, runnerHost: undefined });',
-          ),
-        );
+          throw new Error('Could not identify the local worker-check result serialization boundary.');
+        return source.replace(writer, writer.replace(localRecord, 'writeAtomicJson(file, { ...record, runnerHost: undefined });'));
       },
       'scripts/remote-check.ts': (source) => {
         const incompatible = source.replace("if (flag === '--returns') {", "if (flag === '--returns-incompatible') {");
