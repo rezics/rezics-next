@@ -10,6 +10,18 @@ activation unless the maintainer explicitly requests that work. Existing code, a
 unfinished contract does not authorize continuation. Collaborating Goals apply the same status to dependent work;
 released portions of a mixed system retain their own scope. Opening a gate requires a separate explicit decision.
 
+## Release sequence
+
+1. On the release candidate, complete the ordinary seed, import representative first-public data, and finish the
+   large seed. Confirm the retained environment can serve the imported and seeded data.
+2. Use that environment for browser verification and visual fixes. Recheck affected pages against the same data.
+   The [Web qualification rules](development/verification.md#web-release-qualification) own check selection.
+3. Pin the resulting candidate, finish release qualification, promote it, and confirm the promoted revision.
+   Target two hours from the start of this closeout. Data import, seeding, and browser review and its fixes belong
+   to the preceding phases.
+
+## Public systems
+
 | System                                                                                    | Owner                                                                | First public scope                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Book library and hosted novels                                                            | content, web; semantic (bibliography), commerce (personal Library)   | In: the book library is the first product; book discovery/catalogue, personal Library, complete books and hosted-novel management, publication and reading are required at launch. Release requires both [Content native API acceptance](goals/content.md#acceptance) and [Web mounted author/reader acceptance](goals/web.md#acceptance).                                                                                                                |

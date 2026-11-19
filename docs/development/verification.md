@@ -36,6 +36,24 @@ remain, but receive no further workflow effort. Play functions prove behaviour; 
 snapshots support review by eye. The development publication is `https://storybook.rezics.com`.
 [Web recording and screenshot procedures](../../apps/web/README.md#storybook-and-page-recordings) own the commands.
 
+## Web release qualification
+
+Maintain browser scripts, Storybook play tests, recorded fixtures and accessibility checks as development quality
+checks. Run the affected checks when changing a page, shared interaction or browser integration. Retain applicable
+passing evidence for release. Review the running product in the browser with representative seeded data and fix
+visual and interaction defects before release closeout. Follow the [first-public sequence](../scope.md#release-sequence)
+for its data preparation and review.
+
+Full Web release acceptance excludes browser scripts and Storybook suites, including when the root release gate
+selects Web. Select the production build and startup, relevant static and unit checks, and only the critical
+integration paths through real HTTP and native APIs. Existing browser evidence and seeded visual review satisfy
+the interface checks through their own phase. Use the development Web check for its full test suite.
+
+Prepare generated inputs once for each matching set of source, configuration and toolchain inputs. Reuse backend
+contract artifacts and Web message and route output across compatible checks. Build the release artifact before
+starting the native services that will serve the seeded review. Start the review with that artifact and retain the
+seeded store for subsequent Web fixes.
+
 ## Check selection and failures
 
 Dev's floor, in order: development continues, and dev runs, so problems can be debugged. A broken dev never holds
