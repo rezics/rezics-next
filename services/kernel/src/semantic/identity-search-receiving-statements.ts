@@ -49,8 +49,9 @@ import readPublicFigures from '../rating/public-figures-read.sql';
 import {
   readCanonicalStatementCountSql,
   readCanonicalStatementPresenceSql,
-  SEARCH_INDEX_STATEMENT_KEYS,
+  readWideCanonicalStatementCountSql,
 } from './identity-search-index-statements.ts';
+import { SEARCH_INDEX_SMALL_WINDOW, SEARCH_INDEX_STATEMENT_KEYS } from './contract/identity-search-statement-bounds.ts';
 import { readSearchCanonicalGenerationSql } from './search-source.ts';
 import composedReleaseRead from './composite-read.sql';
 import contextOwnerRead from './context-read-creator.sql';
@@ -105,10 +106,11 @@ function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
         [activeReleaseRead.sql, [1, 1, 1, 1024, 1]],
         [readListingCounts.sql, [1, 1, 1, 1024, 1]],
         [readPublicFigures.sql, [1, 1, 1, 2048, 1]],
+        [readCanonicalStatementCountSql, [SEARCH_INDEX_SMALL_WINDOW + 1, SEARCH_INDEX_SMALL_WINDOW + 1, 1, 1024, 1]],
         [readCanonicalStatementPresenceSql, [1, 1, 1, 512, 1]],
         [readCreatorTermBudgetSql, [1, 1, 1, 512, 1]],
         [
-          readCanonicalStatementCountSql,
+          readWideCanonicalStatementCountSql,
           [SEARCH_INDEX_STATEMENT_KEYS + 1, SEARCH_INDEX_STATEMENT_KEYS + 1, 1, 1024, 1],
         ],
         [readSearchCanonicalGenerationSql, [1, 1, 1, 512, 1]],

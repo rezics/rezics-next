@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import { catalogueWalkRouteKey } from '../../../../scripts/walk-stack.ts';
 import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
-import { publishReviewedPersonMerge } from '../../../importer/src/showcase-person-identity.ts';
+import {
+  publishReviewedPersonMerge,
+  readCombinedPersonCredits,
+} from '../../../importer/src/showcase-person-identity.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -35,20 +38,18 @@ test('a reviewed Person pair merges once through the native contract and both or
     routeKey,
   });
   const directory = await mkdtemp(join(tmpdir(), 'identity-person-merge-native-'));
-  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
   const prefix = 'reviewed-' + randomUUID().replaceAll('-', '');
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   try {
-    worker = await startWorker(
-      { databaseUrl: runtime.database.url, poolSize: 8, handleSignals: false },
-      (modules) => modules.filter(({ name }) => name === 'semantic' || name === 'search'),
-      {
-        ...importWorkerEnvironment(runtime.identity),
-        DATABASE_URL: runtime.database.url,
-        OPENSEARCH_URL: searchUrl,
-        KERNEL_SEARCH_PREFIX: prefix,
-      },
-    );
+    worker = await startWorker({ databaseUrl: runtime.database.url, poolSize: 10, handleSignals: false }, undefined, {
+      ...importWorkerEnvironment(runtime.identity),
+      STRIPE_SECRET_KEY: undefined,
+      DATABASE_URL: runtime.database.url,
+      OPENSEARCH_URL: searchUrl,
+      KERNEL_SEARCH_PREFIX: prefix,
+    });
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const editor = await openApiObserver(runtime, { reviewedMerge: true });
     const publicClient = createPublicBulkClient({
@@ -63,7 +64,16 @@ test('a reviewed Person pair merges once through the native contract and both or
       source: 'bangumi',
       key: 'person:1916',
       revision: 'native-bangumi',
-      payload: { id: 1916, type: 1, name: '麻枝准', summary: 'Source biography' },
+      payload: {
+        id: 1916,
+        type: 1,
+        name: '麻枝准',
+        name_cn: '麻枝准',
+        birth_year: 1975,
+        birth_mon: 1,
+        birth_day: 3,
+        summary: 'Source biography',
+      },
     });
     plan.entities.vndb.push({
       source: 'vndb',
@@ -109,6 +119,49 @@ test('a reviewed Person pair merges once through the native contract and both or
     expect(claimRoutes).toEqual([11075, 11072]);
     expect(subjects.map(routeOf)).toEqual(claimRoutes);
     expect(claimRoutes.map(partitionOf)).toEqual([692, 692]);
+    const survivorRead = await publicClient.readSubject(subjects[0]!);
+    expect(survivorRead.subject.statements?.['schema:name']).toHaveLength(2);
+    expect(survivorRead.subject.statements?.['schema:birthDate']).toHaveLength(1);
+    const works = [
+      {
+        type: 'schema:TVSeries',
+        externalId: '1851',
+        label: 'Angel Beats!',
+        citation: 'https://bgm.tv/subject/1851#/subject-persons/1851/1916/position',
+      },
+      {
+        type: 'wd:Q689445',
+        externalId: 'v4',
+        label: 'CLANNAD',
+        citation: 'https://vndb.org/v4#/vn_staff/v4/386/scenario',
+      },
+    ];
+    const creditedWorks: { externalId: string; boundSubjectId: string }[] = [];
+    for (const [i, work] of works.entries()) {
+      const response = await runtime.request(
+        '/v1/subjects',
+        {
+          type: work.type,
+          labels: { en: work.label },
+          statements: {
+            'schema:author': [
+              {
+                property: { id: 'schema:author' },
+                value: { type: 'value', content: subjects[i] },
+                references: [
+                  { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: work.citation } }] },
+                ],
+              },
+            ],
+          },
+        },
+        runtime.bulk.bearer,
+        randomUUID(),
+      );
+      const created = (await response.json()) as { subject: { id: string } };
+      expect(response.status, JSON.stringify(created)).toBe(201);
+      creditedWorks.push({ externalId: work.externalId, boundSubjectId: created.subject.id });
+    }
     const endpoints = [];
     for (const [index, source] of sources.entries()) {
       const subject = subjects[index]!;
@@ -131,16 +184,41 @@ test('a reviewed Person pair merges once through the native contract and both or
     expect(await closed.json()).toMatchObject({ code: 'platform_closed', effect_status: 'not_applied' });
     await grant(['subject:merge', 'gate:subject_identity']);
 
-    const merge = () =>
+    const merge = (polls?: number) =>
       publishReviewedPersonMerge({
+        ...(polls === undefined ? {} : { polls }),
         pair: pair.sources,
         transport: runtime.importTransport,
         readPublic: (id) => publicClient.readSubject(id),
         journal,
       });
+    const admitted = await merge(1);
+    expect(admitted.state).toBe('pending');
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
     const published = await merge();
+    if (published.state === 'pending') {
+      const id = published.operation;
+      const last = await runtime.database.admin.query(
+        `SELECT function_name, error::jsonb->'json'->>'message' AS error, output::jsonb->'json'->>'state' AS state
+        FROM dbos.operation_outputs WHERE workflow_uuid LIKE $1 ORDER BY completed_at_epoch_ms DESC LIMIT 1`,
+        ['semantic:identity:' + id + ':%'],
+      );
+      throw new Error(`Operation ${id} remained pending at ${JSON.stringify(last.rows)}`);
+    }
     expect(published.state).toBe('published');
     if (published.state !== 'published') throw new Error('Expected the native merge to publish');
+    expect(admitted).toEqual({ state: 'pending', operation: published.operation });
+    const acks = await runtime.database.admin.query(
+      `SELECT step FROM semantic.identity_epoch_ack WHERE partition_no=$1 AND job_id=$2
+       AND progress->>'state'='complete' ORDER BY step`,
+      [partitionOf(routeOf(published.operation)!), published.operation],
+    );
+    expect(acks.rows.map(({ step }) => step)).toEqual([
+      'library-private-follow-counts',
+      'mapping',
+      'search-canonical-index',
+    ]);
     expect(published.identities.map((entry) => entry.currentSubjectId)).toEqual([
       published.survivor,
       published.survivor,
@@ -152,6 +230,24 @@ test('a reviewed Person pair merges once through the native contract and both or
     expect([published.survivor, published.redirected].sort()).toEqual(
       pair.sources.map((source) => source.boundSubjectId).sort(),
     );
+    const combined = await readCombinedPersonCredits({
+      canonicalPersonId: published.survivor,
+      originals: published.identities.map(({ boundSubjectId, identity }) => ({
+        boundPersonId: boundSubjectId,
+        personExternalId: identity.externalId,
+      })),
+      works: creditedWorks,
+      readPublic: (id) => publicClient.readSubject(id),
+    });
+    expect(combined).toMatchObject({
+      credits: works.map((work, i) => ({
+        workExternalId: work.externalId,
+        canonicalPersonId: published.survivor,
+        boundPersonId: subjects[i],
+        property: 'schema:author',
+        citations: [work.citation],
+      })),
+    });
     const redirect = await runtime.request(`/v1/subjects/${published.redirected}`);
     expect([redirect.status, redirect.headers.get('location')]).toEqual([308, `/v1/subjects/${published.survivor}`]);
     // A reopened run replays the journaled intent: the admitted operation is not sent again.

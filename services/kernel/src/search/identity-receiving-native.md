@@ -228,8 +228,11 @@ reading one active term head and its complete fact slot. Each owned turn commits
 of the terms read so far. The native reader recovers the cursor from the preceding slot's indexed key and
 requires that head to remain current. An empty next seek closes term traversal. The continuation keeps term
 text in Source custody. Assembly replays the committed term work, requires the same complete digest, and uses
-the ordinary document serializer and installed name normalizer. An indexed seek bounds the complete active
-selection. The writer uses ordinary statement disclosure, imported-source fences and release normalization for
+the ordinary document serializer and installed name normalizer. The writer probes four selected values and one lookahead before opening the wider window.
+Five to eight selected values share a 64 KiB body allowance divided evenly among the keys.
+The independent writer turn reserves the additional selection, provenance and source-fence points.
+A public first-page read waits while the original's identity group holds its build. A resumed writer
+rebuilds a superseded generation and traverses its terms again before preparing the action. The writer uses ordinary statement disclosure, imported-source fences and release normalization for
 descriptive fields. For outgoing relation facets, it also checks Global acceptance and the current public
 original and terminal identities using the ordinary relation projection. Foreign owner state is checked in the
 same native snapshot. Credited names reuse those observations and verify the creator's released mapping and

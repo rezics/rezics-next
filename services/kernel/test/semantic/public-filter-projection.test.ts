@@ -4,7 +4,7 @@ import identityPoints from '../../src/semantic/public-filter-identity-points.sql
 import identityFloors from '../../src/semantic/public-filter-identity-floors.sql';
 import { withQueryAccounting } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
-import { lockProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
+import { lockReleasedProjectionBuildForRetirementSql } from '../../src/semantic/public-filter-projection-build-control.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -110,7 +110,7 @@ test('concurrent first pages for one Book complete across a native serialization
       {
         connection: (dispatch) => dispatch(),
         async query(sql, _values, dispatch) {
-          if (sql === lockProjectionBuildForRetirementSql) {
+          if (sql === lockReleasedProjectionBuildForRetirementSql) {
             if (++attempts === 2) snapshots.resolve();
             await snapshots.promise;
           }
