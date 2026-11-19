@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
+import { checkoutNativeRoleTransaction } from './erasure-coverage.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createKindConsentParticipant } from './kind-consent.ts';
@@ -23,40 +24,30 @@ type Progress = {
 
 type ReductionOwner = { clientId: string; operationId: string; accountId: string };
 
+// Keep the exact consent tuple stable until the cursor update commits.
+const lockReductionOwner =
+  'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 AND account_id=$2 FOR KEY SHARE';
+
 async function advanceReductionOwner(
   connection: PoolClient,
   row: Progress,
   input: ReductionOwner,
+  ownerOrdinal: string | null,
   deny: () => never,
-  allowMissing = false,
 ) {
-  const owner = (
-    await connection.query<{ traversal_ordinal: string }>(
-      // Keep the native binding stable through acknowledgement. Requiring the
-      // heap tuple also prevents an index-only scan of every ordinal for a client.
-      'SELECT traversal_ordinal FROM auth_consent WHERE client_id=$1 AND account_id=$2 FOR KEY SHARE',
-      [input.clientId, input.accountId],
-    )
-  ).rows[0];
   // A removed native row has no surviving identity-to-ordinal binding. The next
   // page/finish verifies the empty ordinal interval before accepting its boundary.
-  if (!owner) {
-    if (!allowMissing) deny();
-    return;
-  }
-  if (BigInt(owner.traversal_ordinal) <= BigInt(row.after_ordinal)) return;
-  const next = (
-    await connection.query<{ account_id: string }>(
-      `SELECT account_id FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
-       ORDER BY traversal_ordinal LIMIT 1`,
-      [input.clientId, row.after_ordinal],
-    )
-  ).rows[0];
-  if (next?.account_id !== input.accountId) deny();
-  await connection.query(
-    'UPDATE auth_client_reduction_progress SET after_ordinal=$2,completed_count=completed_count+1 WHERE operation_id=$1',
-    [input.operationId, owner.traversal_ordinal],
+  if (ownerOrdinal === null) return;
+  if (BigInt(ownerOrdinal) <= BigInt(row.after_ordinal)) return;
+  const advanced = await connection.query(
+    `UPDATE auth_client_reduction_progress SET after_ordinal=$2,completed_count=completed_count+1
+     WHERE operation_id=$1 AND $2::bigint=(
+       SELECT traversal_ordinal FROM auth_consent WHERE client_id=$3 AND traversal_ordinal>$4
+       ORDER BY traversal_ordinal LIMIT 1
+     )`,
+    [input.operationId, ownerOrdinal, input.clientId, row.after_ordinal],
   );
+  if (!advanced.rowCount) deny();
 }
 
 async function admitNativeReduction(
@@ -104,7 +95,11 @@ export async function completeDeletedClientReductionOwner(
       )
     ).rows[0];
     if (!row || row.client_id !== input.clientId || row.completed) deny();
-    await advanceReductionOwner(connection, row, input, deny, true);
+    const owner = await connection.query<{ traversal_ordinal: string }>(lockReductionOwner, [
+      input.clientId,
+      input.accountId,
+    ]);
+    await advanceReductionOwner(connection, row, input, owner.rows[0]?.traversal_ordinal ?? null, deny);
     await connection.query('COMMIT');
     return true;
   } catch (error) {
@@ -288,22 +283,34 @@ export function clientAuthority(
     }
   }
   async function transaction<T>(clientId: string, action: (connection: PoolClient) => Promise<T>): Promise<T> {
-    const connection = await pool.connect();
+    const { connection, producer } = await checkoutNativeRoleTransaction(pool);
+    let rollbackFailure: Error | undefined;
     try {
       await connection.query('BEGIN');
-      await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
-      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['auth-kind-consent-frontier']);
-      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${clientId}`]);
+      // Take the frontier before the client lock. Local settings expire with this transaction.
+      await connection.query(
+        `WITH frontier AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(hashtextextended('auth-kind-consent-frontier',0))
+         )
+         SELECT pg_advisory_xact_lock(hashtextextended($1,0)),
+           set_config('auth.cursor_worker','2',true),
+           CASE WHEN $2 THEN set_config('auth.native_role_producer','1',true) END,
+           CASE WHEN $2 THEN set_config('auth.native_phase_producer','3',true) END
+         FROM frontier`,
+        [`auth-client:${clientId}`, producer],
+      );
       const native = nativeReduction.getStore();
       if (native) await admitNativeReduction(connection, clientId, native.operationId, native.obligationId);
       const value = await action(connection);
       await connection.query('COMMIT');
       return value;
     } catch (error) {
-      await connection.query('ROLLBACK');
+      await connection.query('ROLLBACK').catch((failure: Error) => {
+        rollbackFailure = failure;
+      });
       throw error;
     } finally {
-      connection.release();
+      connection.release(rollbackFailure);
     }
   }
   async function progress(connection: PoolClient, clientId: string, operationId: string): Promise<Progress> {
@@ -511,23 +518,7 @@ export function clientAuthority(
         if (row.completed) deny();
         const receipt = input.barrier;
         if (current && (current.accountId !== input.accountId || !current.fenced)) deny();
-        const consent = await connection.query(
-          'SELECT account_id FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-          [input.accountId, input.clientId],
-        );
-        let deletedOwner = current?.state === 'deleted';
-        if (!current) {
-          if (consent.rowCount) {
-            const scheduled = await connection.query(
-              'SELECT account_id FROM auth_consent_erasure WHERE account_id=$1',
-              [input.accountId],
-            );
-            if (!scheduled.rowCount) deny();
-          }
-          // An erased owner's last consent may already have been removed, which
-          // also clears the due marker before this owner step is replayed.
-          deletedOwner = true;
-        }
+        const deletedOwner = !current || current.state === 'deleted';
         if (
           !deletedOwner &&
           (receipt.accountId !== input.accountId ||
@@ -537,22 +528,31 @@ export function clientAuthority(
             current!.authnEpoch < receipt.minimumAuthnEpoch)
         )
           deny();
-        if (!deletedOwner) {
-          const saved = (
-            await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
-              'SELECT account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt WHERE receipt_id=$1',
-              [receipt.receiptId],
-            )
-          ).rows[0]!;
-          if (
-            !saved ||
-            saved.account_id !== input.accountId ||
-            saved.purpose !== 'client-reduction' ||
-            saved.minimum_authn_epoch !== receipt.minimumAuthnEpoch
+        const owner = (
+          await connection.query<{ traversal_ordinal: string | null; has_receipt: boolean | null }>(
+            `SELECT (${lockReductionOwner}) AS traversal_ordinal,
+             CASE WHEN NOT $3 THEN EXISTS (
+               SELECT 1 FROM auth_effect_receipt WHERE receipt_id=$4 AND account_id=$2
+               AND purpose='client-reduction' AND minimum_authn_epoch=$5::bigint
+             ) END AS has_receipt`,
+            [
+              input.clientId,
+              input.accountId,
+              deletedOwner,
+              deletedOwner ? null : receipt.receiptId,
+              deletedOwner ? null : receipt.minimumAuthnEpoch,
+            ],
           )
-            deny();
+        ).rows[0]!;
+        if (!deletedOwner && !owner.has_receipt) deny();
+        // Removing the last consent can also remove the due marker before replay.
+        if (!current && owner.traversal_ordinal !== null) {
+          const scheduled = await connection.query('SELECT 1 FROM auth_consent_erasure WHERE account_id=$1', [
+            input.accountId,
+          ]);
+          if (!scheduled.rowCount) deny();
         }
-        await advanceReductionOwner(connection, row, input, deny, deletedOwner || !consent.rowCount);
+        await advanceReductionOwner(connection, row, input, owner.traversal_ordinal, deny);
       });
     },
     async finishClientReduction(input) {
@@ -742,33 +742,29 @@ export function clientAuthority(
     // Proof checks Access before releasing authority. Bound eager cleanup;
     // retained native rows cannot turn reduction into a history sweep.
     await transaction(`cleanup:${accountId}`, async (connection) => {
-      const prior = (
+      const saved = (
         await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
-          'SELECT account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt WHERE receipt_id=$1',
-          [barrier.receiptId],
+          `WITH prior AS MATERIALIZED (
+             SELECT account_id,purpose,minimum_authn_epoch FROM auth_effect_receipt WHERE receipt_id=$1
+           ), deleted AS (
+             DELETE FROM session WHERE id=ANY(ARRAY(
+               SELECT id FROM session WHERE "userId"=$2 AND NOT EXISTS (SELECT FROM prior) LIMIT ${nativePage ? 1 : 100}
+             ))
+           ), recorded AS (
+             INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch)
+             SELECT $1,$2,'client-reduction',$3 WHERE NOT EXISTS (SELECT FROM prior)
+             RETURNING account_id,purpose,minimum_authn_epoch
+           )
+           SELECT * FROM prior UNION ALL SELECT * FROM recorded`,
+          [barrier.receiptId, accountId, barrier.minimumAuthnEpoch],
         )
-      ).rows[0];
-      if (prior) {
-        if (
-          prior.account_id !== accountId ||
-          prior.purpose !== 'client-reduction' ||
-          prior.minimum_authn_epoch !== barrier.minimumAuthnEpoch
-        )
-          deny();
-        return;
-      }
-      const sessions = (
-        await connection.query<{ id: string }>(
-          `SELECT id FROM session WHERE "userId"=$1 LIMIT ${nativePage ? 1 : 100}`,
-          [accountId],
-        )
-      ).rows.map((row) => row.id);
-      if (sessions.length) await connection.query('DELETE FROM session WHERE id=ANY($1::text[])', [sessions]);
-      await connection.query(
-        `INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch)
-        VALUES ($1,$2,'client-reduction',$3)`,
-        [barrier.receiptId, accountId, barrier.minimumAuthnEpoch],
-      );
+      ).rows[0]!;
+      if (
+        saved.account_id !== accountId ||
+        saved.purpose !== 'client-reduction' ||
+        saved.minimum_authn_epoch !== barrier.minimumAuthnEpoch
+      )
+        deny();
     });
   }
   return {

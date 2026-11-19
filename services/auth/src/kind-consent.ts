@@ -686,8 +686,8 @@ export function createKindConsentParticipant(input: {
       if (conflict.rowCount) return null;
       await change.admit?.(connection);
       const frontier = (
-        await connection.query<{ frontier: string }>(
-          `SELECT COALESCE(max(enrollment_seq),0)::text AS frontier
+        await connection.query<{ frontier: string | null }>(
+          `SELECT max(enrollment_seq)::text AS frontier
            FROM auth_kind_consent_dependency
            WHERE active AND ($1::boolean OR (client_id=$2 AND ($3::text IS NULL OR account_id=$3)))`,
           [change.kind === 'restore', change.clientId, change.accountId ?? null],
@@ -696,8 +696,9 @@ export function createKindConsentParticipant(input: {
       const transition = (
         await connection.query<Transition>(
           `INSERT INTO auth_kind_consent_transition
-            (transition_key,transition_kind,client_id,account_id,target,frontier_seq)
-           VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING *`,
+            (transition_key,transition_kind,client_id,account_id,target,frontier_seq,state)
+           VALUES ($1,$2,$3,$4,$5::jsonb,COALESCE($6::bigint,0),
+             CASE WHEN $6 IS NULL THEN 'ready' ELSE 'pending' END) RETURNING *`,
           [
             change.transitionKey,
             change.kind,
@@ -925,10 +926,10 @@ export function createKindConsentParticipant(input: {
           .digest('hex')}`;
         return writer.change({ ...change, transitionKey: replayKey });
       }
-      const advanced =
-        transition.state === 'pending'
-          ? await transitionPage(transition.transition_id)
-          : changeResult('applied', transition.transition_id);
+      // A frontier with no dependencies is ready when created. Existing pending
+      // transitions still advance through the receipt-bearing page.
+      if (transition.state === 'ready') return applyReady(change, transition);
+      const advanced = await transitionPage(transition.transition_id);
       const current = (
         await database.query<Transition>('SELECT * FROM auth_kind_consent_transition WHERE transition_id=$1', [
           transition.transition_id,
