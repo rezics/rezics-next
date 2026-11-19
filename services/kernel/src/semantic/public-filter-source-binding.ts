@@ -2866,18 +2866,13 @@ export function createNativePublicFilterSourceBinding(
               run({ deadline }, async (shared, store) => {
                 try {
                   const rows = await nativeSourceQuery(store, captureBookWithdrawals, { ...captureInputs, members });
-                  const saved = await store.query<BootstrapRow>(
-                    `SELECT b.bootstrap::text,b.read_definition::text,b.consumer,b.snapshot_kind,b.owner_epoch,
-                       b.source_position::text,b.state,b.account_after,b.queried,b.publication_job::text,b.publication_observation,
-                       b.publication_execution,b.coverage_generation::text,b.coverage_after,b.coverage_root,b.coverage_sealed,
-                       b.coverage_publication::text, encode(sha256(convert_to(b.book_withdrawals::text,'UTF8')),'hex') AS withdrawal_digest
-                     FROM semantic.public_filter_bootstrap b JOIN core.partition p USING(partition_no)
-                     WHERE b.partition_no=0 AND b.bootstrap=ANY($1::uuid[]) AND b.owner_epoch=p.epoch AND p.write_state='active'`,
-                    [rows.flatMap((r) => (r.bootstrap ? [r.bootstrap] : []))],
-                  );
-                  const byId = new Map(saved.rows.map((r) => [r.bootstrap, r]));
                   return {
-                    rows: rows.map((r) => ({ ...r, row: r.bootstrap ? byId.get(r.bootstrap) : undefined })),
+                    rows: rows.map(({ definition, bootstrap, awaiting, retained }) => ({
+                      definition,
+                      bootstrap,
+                      awaiting,
+                      row: bootstrap ? (retained as BootstrapRow) : undefined,
+                    })),
                     cost: shared,
                   };
                 } catch {
@@ -2927,11 +2922,11 @@ export function createNativePublicFilterSourceBinding(
           );
           if (attached.rows[0]) return attachedCut(attached.rows[0].bootstrap);
           if (bookList) {
-            // Reserve the bounded visibility proof and the final bootstrap lookup before dispatch.
+            // Reserve the bounded visibility proof and the returned bootstrap before dispatch.
             if (inputLimit - cost.inputKeys < 210 + 2) throw new BindingError('owner_unavailable');
             const result = await nativeSourceQuery(db, captureBookWithdrawals, { ...captureInputs, members: [member] });
             const withdrawal = result[0];
-            if (withdrawal?.bootstrap) return attachedCut(withdrawal.bootstrap);
+            if (withdrawal?.bootstrap) return attachedCut(withdrawal.bootstrap, withdrawal.retained as BootstrapRow);
             if (withdrawal?.awaiting) throw new BindingError('owner_unavailable');
           }
         }

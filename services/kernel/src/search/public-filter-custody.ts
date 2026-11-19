@@ -1356,14 +1356,18 @@ export function createPublicFilterCustody(
                 });
                 const home = input.definition.source.partition;
                 const accepted = await transaction(shared, async (client) => {
-                  const fenced = (await lockCopyAdmission(client, shared, input.physicalTarget)).rowCount;
-                  if (!fenced)
-                    await sql(
-                      client,
-                      shared,
-                      'INSERT INTO search.public_filter_target VALUES ($1,$2,$3) ON CONFLICT (partition_no,physical_target) DO UPDATE SET incarnation=EXCLUDED.incarnation',
-                      [home, input.physicalTarget, incarnation],
-                    );
+                  // Take a fresh statement snapshot after waiting for publication.
+                  await sql(client, shared, lockPublicationAdmission, [input.physicalTarget]);
+                  const target = await sql(
+                    client,
+                    shared,
+                    `INSERT INTO search.public_filter_target(partition_no,physical_target,incarnation)
+                     SELECT $1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
+                       WHERE partition_no=0 AND physical_target=$2 AND publication_fence IS NOT NULL)
+                     ON CONFLICT (partition_no,physical_target) DO UPDATE SET incarnation=EXCLUDED.incarnation`,
+                    [home, input.physicalTarget, incarnation],
+                  );
+                  const fenced = !target.rowCount;
                   const rows = await sql(
                     client,
                     shared,
@@ -1563,14 +1567,15 @@ export function createPublicFilterCustody(
             meter,
             (items, shared) =>
               transaction(shared, async (client) => {
-                if ((await lockCopyAdmission(client, shared, consumer.physicalTarget)).rowCount)
-                  throw new Failure('binding_mismatch');
+                await sql(client, shared, lockPublicationAdmission, [consumer.physicalTarget]);
                 return sql(
                   client,
                   shared,
                   `WITH target AS MATERIALIZED (
                 SELECT partition_no,physical_target FROM search.public_filter_target WHERE (partition_no,physical_target)=($2,$3)
-                  AND incarnation=$4 FOR NO KEY UPDATE), admitted AS MATERIALIZED (
+                  AND incarnation=$4 AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate
+                    WHERE partition_no=0 AND physical_target=$3 AND publication_fence IS NOT NULL)
+                FOR NO KEY UPDATE), admitted AS MATERIALIZED (
                 SELECT r.partition_no,i.* FROM target t JOIN search.public_filter_registration r USING(partition_no,physical_target)
                 JOIN jsonb_to_recordset($1) i(id text, observation text, queried text, consumer text, covered text, expires bigint, pit text, hash text)
                   ON i.id=r.id AND i.consumer=r.consumer WHERE r.state='active' ORDER BY r.id FOR SHARE OF r), retained AS (
@@ -2138,13 +2143,15 @@ export function createPublicFilterCustody(
           const home = partition(use.observation);
           const batch = bookRows('release', String(home), use.observation, use, meter, async (items, shared) => {
             const members = JSON.stringify(items);
-            await sql(
+            const deleted = await sql(
               pool,
               shared,
               `DELETE FROM search.public_filter_reference f USING jsonb_to_recordset($1) i(observation text, token uuid)
               WHERE (f.partition_no,f.observation,f.token)=($2,i.observation,i.token)`,
               [members, home],
             );
+            // Only a local closer can use the signal. A new closer reads durable leases itself.
+            if (!items.some((item) => drainWaiters.has(item.observation))) return deleted;
             return sql(
               pool,
               shared,
@@ -2164,6 +2171,7 @@ export function createPublicFilterCustody(
             'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)',
             [partition(use.observation), use.observation, use.token],
           );
+          if (!drainWaiters.has(use.observation)) return { status: 'released' as const, cost: meter };
           const active = await sql(
             pool,
             meter,

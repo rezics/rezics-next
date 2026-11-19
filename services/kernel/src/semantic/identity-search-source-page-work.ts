@@ -129,26 +129,21 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
               : permissionWork;
         },
       }),
-      declare(relatedVisibility.sql, [String(maxHome), '{65535,65535}', `{${maxId},${maxId}}`], (values) => {
-        const [home, rawRoutes, rawSubjects] = values;
+      declare(relatedVisibility.sql, ['{65535,65535}', `{${maxId},${maxId}}`], (values) => {
+        const [rawRoutes, rawSubjects] = values;
         const routes = textArray(rawRoutes);
         const subjects = textArray(rawSubjects);
         if (
-          values.length !== 3 ||
-          typeof home !== 'string' ||
-          !/^(0|[1-9][0-9]{0,3})$/.test(home) ||
-          !partition(Number(home)) ||
+          values.length !== 2 ||
           !routes ||
           !subjects ||
           subjects.length < 1 ||
           subjects.length > 2 ||
           routes.length !== subjects.length ||
-          subjects.some(
-            (id, index) =>
-              !uuid(id) ||
-              String(routeOf(id)) !== routes[index] ||
-              Math.floor(Number(routes[index]) / 16) !== Number(home),
-          )
+          subjects.some((id, index) => {
+            const route = routeOf(id);
+            return route === null || String(route) !== routes[index];
+          })
         )
           return undefined;
         return Object.freeze({

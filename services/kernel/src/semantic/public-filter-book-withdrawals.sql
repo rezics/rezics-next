@@ -91,9 +91,13 @@ WITH input AS (
     AND NOT EXISTS(SELECT 1 FROM semantic.public_filter_privacy_head WHERE population_fenced)
   ORDER BY m.definition
   ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
-  DO UPDATE SET request_key=EXCLUDED.request_key RETURNING bootstrap,read_definition
+  DO UPDATE SET request_key=EXCLUDED.request_key
+  RETURNING bootstrap::text,read_definition::text,consumer,snapshot_kind,owner_epoch,source_position::text,
+    state,account_after,queried,publication_job::text,publication_observation,publication_execution,
+    coverage_generation::text,coverage_after,coverage_root,coverage_sealed,coverage_publication::text,
+    encode(sha256(convert_to(book_withdrawals::text,'UTF8')),'hex') AS withdrawal_digest
 )
-SELECT m.definition::text,c.bootstrap::text,
+SELECT m.definition::text,c.bootstrap,to_jsonb(c) AS retained,
   EXISTS(SELECT 1 FROM pending WHERE input_key='["scope","subject"]')
     OR EXISTS(SELECT 1 FROM budget WHERE steps=(SELECT count(*) FROM reductions)) AS awaiting
-FROM members m LEFT JOIN captured c ON c.read_definition=m.definition;
+FROM members m LEFT JOIN captured c ON c.read_definition=m.definition::text;

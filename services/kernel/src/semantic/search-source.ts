@@ -483,16 +483,13 @@ export async function prepareRetainedIdentitySourceProjections(
       // The completed builds prove the current public visibility floor on this same snapshot.
       const publicSubjects = new Map(visibleIds.map((id) => [id, true]));
       const unproven = checks.filter(({ frontier }) => !frontier);
-      const homes = new Set(unproven.map(({ route }) => partitionOf(route)));
-      for (const partition of homes) {
-        const members = unproven.filter(({ route }) => partitionOf(route) === partition);
-        const states = (await nativeSourceQuery(tx, readRelatedStates, {
-          partition_no: partition,
-          routes: members.map(({ route }) => route),
-          subject_ids: members.map(({ id }) => id),
-        })) as { id: string; visibility: string | null }[];
+      if (unproven.length) {
+        const states = await nativeSourceQuery(tx, readRelatedStates, {
+          routes: unproven.map(({ route }) => route),
+          subject_ids: unproven.map(({ id }) => id),
+        });
         for (const { id, visibility } of states)
-          if (visibility !== null) publicSubjects.set(id, visibility === 'visible');
+          if (id !== null && visibility !== null) publicSubjects.set(id, visibility === 'visible');
       }
       const ids = checks.map(({ id }) => id);
       if (ids.some((id) => !publicSubjects.has(id))) return null;

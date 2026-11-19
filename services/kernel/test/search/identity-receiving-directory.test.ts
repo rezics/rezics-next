@@ -844,9 +844,8 @@ test.each([
       } else if (nativePermission && sql === relatedVisibility.sql) {
         expect(bothVisible).toBe(true);
         visibilityFloorReads++;
-        const ids = [first, terminal].filter((id) => String(values[2]).includes(id));
-        const home = Number(values[0]);
-        expect(ids).toEqual([first, terminal].filter((id) => (id === first ? writerHome : terminalHome) === home));
+        const ids = [first, terminal].filter((id) => String(values[1]).includes(id));
+        expect(values[0]).toBe('{' + ids.map((id) => (id === first ? writerHome : terminalHome) << 4).join(',') + '}');
         expect(ids.length).toBeGreaterThan(0);
         rows = ids.map((id) => [id, 'visible']);
       } else if (nativePermission && sql === permissionFormula['~standard'].query.text) {
