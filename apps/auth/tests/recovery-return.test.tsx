@@ -76,7 +76,7 @@ test('cached completion drops credentials, aborts reads, rejects late writes and
       });
     }) as typeof fetch;
     await flush(() => transition('pageshow'));
-    expect(page.host.textContent).toContain('Checking current recovery advice');
+    expect(page.host.textContent).toContain(m.auth_recovery_advice_loading());
     expect(button(page.host, 'Request a new recovery link')!.disabled).toBe(true);
     await flush(() => transition('pagehide'));
     expect(readSignal!.aborted).toBe(true);

@@ -172,7 +172,7 @@ test('same-client scope changes, invalid queries, Back/Forward, locale and cache
     await v.answer(review('b'));
     await v.click('Decline');
     expect(v.notices()).toHaveLength(1);
-    expect(v.notices()[0]!.textContent).toContain('Review declined');
+    expect(v.notices()[0]!.textContent).toContain('Access declined. This sends no approval.');
     expect(v.calls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
   } finally {
     overwriteGetLocale(() => 'en');
