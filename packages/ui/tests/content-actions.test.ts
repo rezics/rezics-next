@@ -35,6 +35,7 @@ test('the content actions menu opens a report dialog with reasons, required deta
     expect(outcomes).toEqual([
       'Details Required: passed',
       'Menu Keyboard: passed',
+      'Menu Open: passed',
       'Owner Actions: passed',
       'Report Reasons: passed',
       'Submit States: passed',

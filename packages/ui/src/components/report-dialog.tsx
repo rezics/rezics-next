@@ -1,5 +1,14 @@
 import { LoaderCircleIcon } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   Dialog,
@@ -60,6 +69,7 @@ export interface ReportDialogProps {
   verification?: ReactNode;
   maxDetails?: number;
   labels?: Partial<ReportDialogLabels>;
+  finalFocus?: ComponentProps<typeof DialogContent>['finalFocus'];
 }
 
 const reasons: { value: ReportReason; label: keyof ReportDialogLabels; description: keyof ReportDialogLabels }[] = [
@@ -82,6 +92,7 @@ export function ReportDialog({
   verification,
   maxDetails = 2000,
   labels: labelOverrides,
+  finalFocus,
 }: ReportDialogProps) {
   const labels = { ...reportDialogLabels, ...labelOverrides };
   const detailsLimit = Number.isFinite(maxDetails) && maxDetails >= 0 ? Math.floor(maxDetails) : 2000;
@@ -209,7 +220,11 @@ export function ReportDialog({
       }}
       open={open}
     >
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" showCloseButton={false}>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
+        finalFocus={finalFocus}
+        showCloseButton={false}
+      >
         <DialogHeader>
           <DialogTitle>{labels.title}</DialogTitle>
           <DialogDescription>{labels.description}</DialogDescription>
