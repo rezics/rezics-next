@@ -2,7 +2,6 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Importer } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -79,9 +78,6 @@ function fake() {
     },
   };
 }
-function directory() {
-  return mkdtempSync(join(tmpdir(), 'importer-local-'));
-}
 // Attribute nested calls to the outer synchronous entry point so the totals count
 // each SQL execution once. Actual SQL, returned rows and EQP come from the probe.
 function instrument(importer: Importer, probe: ReturnType<typeof createSqliteProbe>) {
@@ -129,7 +125,8 @@ function instrument(importer: Importer, probe: ReturnType<typeof createSqlitePro
 }
 
 test('actual coordinator fixed work searches same-source keys/history at three scales; command width is a separate bounded axis', async () => {
-  const dir = directory(),
+  // Seed full same-source history through the native coordinator without disk flush latency.
+  const dir = mkdtempSync('/dev/shm/importer-reconciliation-growth-'),
     f = fake();
   let probe!: ReturnType<typeof createSqliteProbe>;
   const importer = new Importer({

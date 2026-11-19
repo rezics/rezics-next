@@ -322,7 +322,7 @@ async function readCurrentSubject(
 }
 
 /** A viewer read with no account token or review context attached. */
-export function createPublicBulkClient(options: { origin: string; fetch?: typeof fetch }): PublicBulkClient {
+export function createPublicBulkClient(options: Parameters<typeof createBoundedPublicSubjectGet>[0]): PublicBulkClient {
   const origin = new URL(options.origin);
   const read = createBoundedPublicSubjectGet(options);
   const readAfterWrite = createBoundedPublicSubjectGet(options, true);
