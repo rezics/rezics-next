@@ -130,11 +130,7 @@ function LongCopyEditor() {
             <legend className="font-medium">Optional Copy details</legend>
             <Field className="min-w-0">
               <FieldLabel htmlFor="copy-location">Location</FieldLabel>
-              <Input
-                id="copy-location"
-                value={location}
-                onChange={(event) => setLocation(event.currentTarget.value)}
-              />
+              <Input id="copy-location" value={location} onChange={(event) => setLocation(event.currentTarget.value)} />
             </Field>
             <Field className="min-w-0">
               <FieldLabel htmlFor="copy-source">Source</FieldLabel>

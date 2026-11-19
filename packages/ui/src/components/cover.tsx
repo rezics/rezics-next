@@ -163,10 +163,7 @@ export function Cover({
 
   const frame = (
     <div
-      className={cn(
-        '@container relative max-w-full shrink-0',
-        className,
-      )}
+      className={cn('@container relative max-w-full shrink-0', className)}
       data-slot="cover"
       data-state={state}
       data-ratio={frameRatio}

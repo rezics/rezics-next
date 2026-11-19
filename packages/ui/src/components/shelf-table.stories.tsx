@@ -116,10 +116,7 @@ function WorkflowFilters() {
         <FieldLabel htmlFor="workflow-filter-status" className="min-w-0 whitespace-normal break-words">
           Filter by language and translated publication status
         </FieldLabel>
-        <NativeSelect
-          id="workflow-filter-status"
-          className="w-full min-w-0 max-w-full"
-        >
+        <NativeSelect id="workflow-filter-status" className="w-full min-w-0 max-w-full">
           <NativeSelectOption value="all">All languages and statuses</NativeSelectOption>
           <NativeSelectOption value="localized">Localized status with a very long translated name</NativeSelectOption>
         </NativeSelect>

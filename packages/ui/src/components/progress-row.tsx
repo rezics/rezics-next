@@ -6,13 +6,7 @@ export function ProgressRow({ value, label, menu }: { value: number | null; labe
   return (
     <div data-slot="progress-row" className="flex min-w-0 items-center gap-2">
       {menu}
-      {value != null && (
-        <Progress
-          value={value * 100}
-          aria-label={label}
-          className="min-w-0 flex-1"
-        />
-      )}
+      {value != null && <Progress value={value * 100} aria-label={label} className="min-w-0 flex-1" />}
       <span className="shrink-0 tabular-nums">{label}</span>
     </div>
   );

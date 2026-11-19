@@ -674,9 +674,7 @@ export function RatingInput(props: RatingInputProps) {
         </div>
         <Slider
           className={
-            units === null
-              ? '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted'
-              : undefined
+            units === null ? '**:data-[slot=slider-range]:opacity-0 **:data-[slot=slider-thumb]:bg-muted' : undefined
           }
           disabled={props.disabled}
           key={visit.id}

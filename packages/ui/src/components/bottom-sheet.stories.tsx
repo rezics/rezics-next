@@ -21,13 +21,7 @@ function Example({ kind, locale = 'en' }: { kind: Kind; locale?: 'en' | 'ja' }) 
         open={open}
         onOpenChange={setOpen}
         title={locale === 'ja' ? 'フィルター' : 'Filters'}
-        before={
-          kind === 'back' ? (
-            <Button variant="ghost">
-              {locale === 'ja' ? '戻る' : 'Back'}
-            </Button>
-          ) : undefined
-        }
+        before={kind === 'back' ? <Button variant="ghost">{locale === 'ja' ? '戻る' : 'Back'}</Button> : undefined}
       >
         {kind === 'tall' ? (
           <div className="space-y-4">

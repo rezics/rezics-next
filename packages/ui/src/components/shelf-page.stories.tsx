@@ -132,7 +132,9 @@ function Page({ initial = 'all' }: { initial?: string }) {
     </main>
   );
 }
-const meta = { title: 'Data Display/Shelf Page', component: Page, decorators: [withSurface] } satisfies Meta<typeof Page>;
+const meta = { title: 'Data Display/Shelf Page', component: Page, decorators: [withSurface] } satisfies Meta<
+  typeof Page
+>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Overview: Story = {

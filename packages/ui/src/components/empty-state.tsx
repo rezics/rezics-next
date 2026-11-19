@@ -34,10 +34,7 @@ export function EmptyState({
       data-slot="empty-state"
       data-density={density}
       data-tone={tone}
-      className={cn(
-        density === 'page' ? 'min-h-72 px-5 py-9 sm:px-10 sm:py-12' : 'gap-3 px-4 py-5 sm:px-6',
-        className,
-      )}
+      className={cn(density === 'page' ? 'min-h-72 px-5 py-9 sm:px-10 sm:py-12' : 'gap-3 px-4 py-5 sm:px-6', className)}
     >
       <EmptyHeader className="w-full max-w-lg gap-3">
         {icon ? (
@@ -58,9 +55,7 @@ export function EmptyState({
         </div>
       </EmptyHeader>
       {actions ? (
-        <EmptyContent className="max-w-lg flex-row flex-wrap justify-center gap-2">
-          {actions}
-        </EmptyContent>
+        <EmptyContent className="max-w-lg flex-row flex-wrap justify-center gap-2">{actions}</EmptyContent>
       ) : null}
     </Empty>
   );

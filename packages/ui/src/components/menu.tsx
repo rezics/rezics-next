@@ -142,9 +142,7 @@ function EntryLabel({ label, current }: { label: string; current?: boolean }) {
       <span data-slot="menu-entry-label" className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">
         {label}
       </span>
-      {current && (
-        <MapPinIcon data-slot="menu-current-indicator" aria-hidden="true" className="ms-auto shrink-0" />
-      )}
+      {current && <MapPinIcon data-slot="menu-current-indicator" aria-hidden="true" className="ms-auto shrink-0" />}
     </>
   );
 }
@@ -514,7 +512,11 @@ export function Menu({
                         className="min-w-0 gap-0"
                       >
                         {entry.options.map((option) => (
-                          <Field key={option.value} orientation="horizontal" className="min-h-7 min-w-0 items-center px-2">
+                          <Field
+                            key={option.value}
+                            orientation="horizontal"
+                            className="min-h-7 min-w-0 items-center px-2"
+                          >
                             <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
                             <FieldLabel
                               htmlFor={`${radioName}-${index}-${option.value}`}

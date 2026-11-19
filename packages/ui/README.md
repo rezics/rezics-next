@@ -380,8 +380,8 @@ The complete behavior folder is `Data Display/List Presentation`, with attached 
 interaction and suitability reveal. Hand off every same ID below for **both phone 390 and desktop 1280**, with
 `en`/`zh-Hans` locale globals and light/dark theme globals. Width, locale and theme are not separate behavior states.
 
-| State         | Story ID                                      |
-| ------------- | --------------------------------------------- |
+| State         | Story ID                                        |
+| ------------- | ----------------------------------------------- |
 | Book          | `data-display-list-presentation--book`          |
 | Video         | `data-display-list-presentation--video`         |
 | Anime         | `data-display-list-presentation--anime`         |

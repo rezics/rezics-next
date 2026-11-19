@@ -294,12 +294,7 @@ export function MemberReadingDetail({
         <h3 id={titleId} className="min-w-0 text-lg font-semibold">
           {title}
         </h3>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-auto min-h-7 max-w-full whitespace-normal"
-          onClick={close}
-        >
+        <Button type="button" variant="ghost" className="h-auto min-h-7 max-w-full whitespace-normal" onClick={close}>
           {closeLabel}
         </Button>
       </div>
