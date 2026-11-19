@@ -21,7 +21,7 @@ creationFixture();
 const initial = session('organization');
 const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
 const createdId = '20000000-0000-7000-8000-000000000002';
-const acknowledged = 'received the native acknowledgement';
+const acknowledged = 'received confirmation that the organization was created';
 const unknown = 'creation result is still unknown';
 
 async function begin() {
@@ -64,7 +64,9 @@ test('acknowledgement precedes final advice; read recovery, dismissal and cached
   await acknowledge(page);
   expect(page.reads).toHaveLength(1);
   expect(page.host.textContent).toContain(acknowledged);
-  expect(page.host.textContent).toContain('Checking current organization creation advice');
+  expect(page.host.textContent).toContain(
+    'Checking whether you can create an organization. This check does not send a request.',
+  );
   expect(page.host.textContent).not.toContain(unknown);
   privateGone(page.host);
   expect(page.input.value).toBe('');
@@ -72,13 +74,13 @@ test('acknowledgement precedes final advice; read recovery, dismissal and cached
   expect(readPendingOrganizationHandle()).toBe('');
   await flush(() => page.reads[0]!(Response.json({}, { status: 503 })));
   expect(page.host.textContent).toContain(acknowledged);
-  expect(button(page.host, 'Check current advice')).toBeDefined();
+  expect(button(page.host, 'Check current status')).toBeDefined();
   expect(document.activeElement).toBe(page.host.querySelector('[data-organization-create-return]'));
-  await flush(() => button(page.host, 'Check current advice')!.click());
+  await flush(() => button(page.host, 'Check current status')!.click());
   privateGone(page.host);
   expect(page.reads).toHaveLength(2);
   await flush(() => page.reads[1]!(Response.json(body)));
-  expect(page.host.textContent).toContain('Current session advice is available again');
+  expect(page.host.textContent).toContain('Session guidance is available again');
   privateGone(page.host);
   await flush(() => button(page.host, 'Hide explanation')!.click());
   expect(page.host.textContent).not.toContain(acknowledged);

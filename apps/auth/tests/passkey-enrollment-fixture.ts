@@ -2,7 +2,7 @@
 export function enrollmentOptionsFixture() {
   return {
     challenge: 'a'.repeat(42) + 'A',
-    rp: { id: 'auth.test', name: 'REZICS' },
+    rp: { id: 'rezics.com', name: 'REZICS' },
     user: { id: 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE', name: 'reader', displayName: 'Reader' },
     pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })),
     timeout: 60000,
