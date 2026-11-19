@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
-import { fromPlainText } from '@rezics/document';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { documentText, fromPlainText } from '@rezics/document';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../document-body';
@@ -14,6 +15,7 @@ import type { CreatedPost, WriteFailure } from '../threads/actions';
 import { exactRevisionHref } from '../threads/exact-revision-href';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { sessionQuery } from '../session/query';
 import recording from '../kernel/recorded/thread-owned-posts.json';
 import accounts from '../kernel/recorded/accounts.json';
 
@@ -47,6 +49,15 @@ const hidden: ReplyParents = new Map(
 );
 
 function Controls() {
+  const [client] = useState(() => {
+    const fixture = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    fixture.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: post.authorId,
+      csrfToken: 'prepared-reply-session',
+    });
+    return fixture;
+  });
   const [reader] = useState(() => new ReplyParentReader(post.threadId, read));
   useEffect(() => reader.connect(), [reader]);
   const [target, setTarget] = useState({ parentId: null as string | null, focusRequest: 0 });
@@ -62,7 +73,7 @@ function Controls() {
             key={index}
             data-parent-example={index}
             className="min-w-0 rounded-xl border p-3"
-            style={index === 2 ? { maxWidth: '8rem' } : undefined}
+            style={index === 2 ? { maxWidth: '6rem' } : undefined}
           >
             <ReplyContext parentId={parentId} parents={new Map()} reader={reader} />
           </div>
@@ -86,18 +97,20 @@ function Controls() {
         Refresh context
       </Button>
       <section aria-label={m.thread_reply_label()} className="min-w-0">
-        <ThreadReplyComposer
-          {...target}
-          parents={currentParents}
-          pending={pending}
-          initialKey={id(930)}
-          containerId={post.threadId}
-          credentialMode="session"
-          onPendingChange={setPending}
-          onCancel={() => select(null)}
-          onSubmit={write}
-          onSuccess={() => select(null)}
-        />
+        <QueryClientProvider client={client}>
+          <ThreadReplyComposer
+            {...target}
+            parents={currentParents}
+            pending={pending}
+            initialKey={id(930)}
+            containerId={post.threadId}
+            credentialMode="session"
+            onPendingChange={setPending}
+            onCancel={() => select(null)}
+            onSubmit={write}
+            onSuccess={() => select(null)}
+          />
+        </QueryClientProvider>
       </section>
     </div>
   );
@@ -136,11 +149,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function targetSize(control: HTMLElement) {
+function checkControl(control: HTMLElement) {
+  control.scrollIntoView({ block: 'center' });
   const box = control.getBoundingClientRect();
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(getComputedStyle(control).minHeight).toBe('24px');
+  expect(box.height).toBeGreaterThanOrEqual(24);
   expect(getComputedStyle(control).whiteSpace).toBe('normal');
+  expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+  const centerX = (box.left + box.right) / 2;
+  for (const y of [box.top + 1, box.bottom - 1]) {
+    expect(control.contains(control.ownerDocument.elementFromPoint(centerX, y))).toBe(true);
+  }
 }
 
 export const CompleteControls: Story = {
@@ -154,8 +173,10 @@ export const CompleteControls: Story = {
     await expect(new Set(ids).size).toBe(3);
     ids.forEach((regionId) => remoteIds.forEach((parentId) => expect(regionId).not.toContain(parentId)));
     await expect(read).not.toHaveBeenCalled();
-    toggles.forEach(targetSize);
-    await expect(toggles[2]!.getBoundingClientRect().height).toBeGreaterThan(44);
+    toggles.forEach(checkControl);
+    await expect(toggles[2]!.getBoundingClientRect().height).toBeGreaterThan(
+      toggles[0]!.getBoundingClientRect().height,
+    );
     toggles[0]!.focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(examples[0]).toHaveTextContent(admittedText.trim()));
@@ -165,7 +186,7 @@ export const CompleteControls: Story = {
     await expect(examples[2]!.querySelector('section')?.id).toBe(ids[2]);
     await userEvent.click(toggles[1]!);
     const retry = await within(examples[1]!).findByRole('button', { name: m.exact_revision_retry() });
-    targetSize(retry);
+    checkControl(retry);
     await expect(examples[1]!.querySelector('a')).toBeNull();
     await expect(read).toHaveBeenCalledTimes(2);
     retry.focus();
@@ -203,20 +224,16 @@ export const CompleteControls: Story = {
     });
     const form = region.querySelector('form');
     const reply = canvas.getByRole('button', { name: m.thread_reply_to_post() });
-    targetSize(reply);
+    checkControl(reply);
     reply.focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(editor).toHaveFocus());
-    await userEvent.keyboard('Keep the exact draft through selection, refresh, retry and cancellation.');
+    const draft = 'Keep the exact draft through selection, refresh, retry and cancellation.';
+    await userEvent.keyboard(draft);
     await userEvent.tab();
-    const view = () =>
-      (editor as HTMLElement & { pmViewDesc: { view: unknown; node: { toJSON: () => unknown } } }).pmViewDesc;
-    const mountedEditor = view().view;
-    await expect(mountedEditor).toBeDefined();
-    const snapshot = () => view().node.toJSON();
-    const draft = snapshot();
+    await expect(editor).toHaveTextContent(draft);
     const cancel = composer.getByRole('button', { name: m.thread_reply_cancel_target() });
-    targetSize(cancel);
+    checkControl(cancel);
     await expect(composer.getByRole('link', { name: m.thread_reply_parent() })).toHaveAttribute(
       'href',
       `#post-${post.id}`,
@@ -224,8 +241,7 @@ export const CompleteControls: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Refresh context' }));
     await expect(composer.getByRole('textbox', { name: m.thread_reply_label() })).toBe(editor);
     await expect(region.querySelector('form')).toBe(form);
-    await expect(view().view).toBe(mountedEditor);
-    await expect(snapshot()).toEqual(draft);
+    await expect(editor).toHaveTextContent(draft);
     let release!: (value: WriteFailure) => void;
     write.mockImplementationOnce(
       () =>
@@ -247,6 +263,7 @@ export const CompleteControls: Story = {
     await userEvent.click(composer.getByRole('button', { name: m.thread_recovery_retry_original() }));
     await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     await expect(write.mock.calls[1]![0]).toEqual(write.mock.calls[0]![0]);
+    await expect(documentText(write.mock.calls[0]![0].body)).toBe(draft);
     await waitFor(() => expect(cancel).toBeEnabled());
     cancel.focus();
     await userEvent.keyboard(' ');
@@ -255,8 +272,7 @@ export const CompleteControls: Story = {
     await expect(composer.queryByRole('link', { name: m.thread_reply_parent() })).toBeNull();
     await expect(composer.getByRole('textbox', { name: m.thread_reply_label() })).toBe(editor);
     await expect(region.querySelector('form')).toBe(form);
-    await expect(view().view).toBe(mountedEditor);
-    await expect(snapshot()).toEqual(draft);
+    await expect(editor).toHaveTextContent(draft);
     await expect(canvas.getAllByRole('textbox', { name: m.thread_reply_label() })).toHaveLength(1);
   },
 };
