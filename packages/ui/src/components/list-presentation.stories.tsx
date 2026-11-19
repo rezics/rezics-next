@@ -6,6 +6,7 @@ import { CoverCard, CoverGrid } from './cover-card.tsx';
 import { MemberListRow, MemberReadingDetail, MemberReadingItem } from './list-presentation.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from '../test/focus.ts';
 
 const book: CoverSubject = { id: 'list-book', title: 'The Little Prince', types: ['schema:Book'] };
 const movie: CoverSubject = { id: 'list-movie', title: 'The Red Turtle', types: ['schema:Movie'] };
@@ -186,6 +187,7 @@ export const Mixed: Story = {
       await expect(screen.getByRole('menuitem', { name: 'Inspect menu' })).toBeVisible();
       await userEvent.keyboard('{Escape}');
     }
+    await waitForFocus(trigger);
     await expect(trigger).toHaveFocus();
   },
 };

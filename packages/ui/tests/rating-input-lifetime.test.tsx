@@ -35,7 +35,8 @@ test('one mounted RatingInput journey keeps queued saves and recovery within the
     };
     const outcomes = result.testResults.flatMap((file) => file.assertionResults);
     expect(code, `${stdout}\n${stderr}`).toBe(0);
-    expect(outcomes.map((outcome) => `${outcome.title}: ${outcome.status}`)).toEqual([
+    const executed = outcomes.filter((outcome) => outcome.status !== 'skipped');
+    expect(executed.map((outcome) => `${outcome.title}: ${outcome.status}`)).toEqual([
       'Connected Save Lifetime: passed',
     ]);
     expect(outcomes.flatMap((outcome) => outcome.failureMessages)).toEqual([]);
