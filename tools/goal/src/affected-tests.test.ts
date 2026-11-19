@@ -9,6 +9,8 @@ import {
 } from './affected-tests.ts';
 import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
+import { createVerifierChecks, projectVerifierLandings } from './dev-verifier-plan.ts';
+import { git } from './merge.ts';
 import { failingTestFiles } from './merge-train.ts';
 import { settle } from './settle.ts';
 import { integrationHarness, temporaryDirectory } from './test-support.ts';
@@ -119,6 +121,17 @@ test('release impact stops at tested consumers, type-only implementation edges a
 });
 
 type Harness = ReturnType<typeof integrationHarness>;
+function stabilizeHarness() {
+  const h = integrationHarness();
+  h.ensureDev();
+  git(h.root, 'branch', 'stabilize', 'dev');
+  return {
+    ...h,
+    dispatch: (file: string) => h.dispatch(file, [], ['true'], 'fixture', 'stabilize'),
+    advanceBase: (file: string, content = file) => h.advanceBranch('stabilize', file, content),
+  };
+}
+
 const command = (script: string) => ['bun', '-e', script];
 const lines = (file: string) => (existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean) : []);
 function failureCheck(h: Harness, file: string, output: string, shared = false) {
@@ -135,36 +148,37 @@ function failureCheck(h: Harness, file: string, output: string, shared = false) 
   return { runs, argv };
 }
 
-test('workers defer configured affected checks until landing', async () => {
+test('dev lands source and leaves the affected check in the independent verifier plan', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const runs = join(h.settings.stateDirectory, 'affected-runs');
-    const { argv } = failureCheck(h, 'absent', 'unused');
-    h.settings.affectedTests = [
-      { paths: ['**'], command: command(`require('node:fs').appendFileSync(${JSON.stringify(runs)}, 'run\\n')`) },
-    ];
+    const base = h.head();
+    const { runs, argv } = failureCheck(h, 'absent', 'unused');
+    h.settings.verifierChecks = [{ paths: ['feature'], command: argv }];
     const task = h.dispatch('feature');
     await h.start(task);
     expect(lines(runs)).toHaveLength(0);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     expect(h.queue.next()!.request.affectedTests).toBeUndefined();
-    await h.train(undefined, false);
-    expect(lines(runs)).toHaveLength(1);
+    await h.train();
+    expect(lines(runs)).toHaveLength(0);
     expect(h.outcomes[0]!.passed).toBe(true);
-    void argv;
+    const landed = h.head();
+    expect(landed).toBe(h.head(task.branch));
+    expect(h.store.task(task.id).state).toBe('integrated');
+    const history = projectVerifierLandings(h.root, h.store, base, landed);
+    expect(createVerifierChecks(h.settings, history)).toContainEqual({ command: argv, closure: ['feature'] });
   } finally {
     h.dispose();
   }
 }, 60_000);
 
-test('a landing whose affected tests fail where its base passes is refused with the failing test files named; a failure the base shares does not refuse it', async () => {
+test('stabilize refuses introduced affected failures and names their files, but allows shared failures', async () => {
   for (const shared of [false, true]) {
-    const h = integrationHarness();
+    const h = stabilizeHarness();
     try {
-      h.ensureDev();
-      h.advanceDev('test/access.test.ts');
-      h.advanceDev('test/gates.test.ts');
+      h.advanceBase('test/access.test.ts');
+      const base = h.advanceBase('test/gates.test.ts');
       const { runs, argv } = failureCheck(
         h,
         'broken',
@@ -173,16 +187,15 @@ test('a landing whose affected tests fail where its base passes is refused with 
       );
       const task = h.dispatch('broken');
       await h.start(task);
-      const dev = h.head();
       expect(lines(runs)).toHaveLength(0);
       await h.train(undefined, false);
       expect(lines(runs)).toHaveLength(2);
       expect(h.outcomes[0]!.passed).toBe(shared);
       if (shared) {
-        expect(h.head()).toBe(h.head(task.branch));
+        expect(h.head('stabilize')).toBe(h.head(task.branch));
         expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Base already shares');
       } else {
-        expect(h.head()).toBe(dev);
+        expect(h.head('stabilize')).toBe(base);
         expect(h.outcomes[0]!.stage).toBe('gate');
         expect(h.outcomes[0]!.failedCommand).toEqual(argv);
         expect(h.outcomes[0]!.failsOnMain).toBe(false);
@@ -191,7 +204,7 @@ test('a landing whose affected tests fail where its base passes is refused with 
       }
       const observations = lines(runs).map((line) => JSON.parse(line));
       expect(observations).toHaveLength(2);
-      expect(observations[0].affected).toBe(task.base);
+      expect(observations[0].affected).toBe(base);
       expect(observations[1].affected).toBe('');
       expect(observations[1].cwd).not.toBe(task.worktree);
       expect(existsSync(observations[1].cwd)).toBe(false);
@@ -201,28 +214,26 @@ test('a landing whose affected tests fail where its base passes is refused with 
   }
 });
 
-test('an attempt with no configured affected-test command lands as before', async () => {
-  const h = integrationHarness();
+test('stabilize lands with no configured affected check', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     h.settings.affectedTests = [];
     const task = h.dispatch('accepted');
     await h.start(task);
     expect(h.queue.next()!.request.affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
-    expect(h.head()).toBe(h.head(task.branch));
+    expect(h.head('stabilize')).toBe(h.head(task.branch));
   } finally {
     h.dispose();
   }
 }, 60_000);
 
-test('new failing files are refused even when the base already fails other tests, and a base result is reused', async () => {
-  const h = integrationHarness();
+test('stabilize refuses only the new failing file when the base already fails another test', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('test/shared.test.ts');
-    h.advanceDev('test/new.test.ts');
+    h.advanceBase('test/shared.test.ts');
+    h.advanceBase('test/new.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       const fs = require('node:fs');
@@ -249,10 +260,9 @@ test('new failing files are refused even when the base already fails other tests
 }, 60_000);
 
 test('the base runs only the files that failed on the branch, and the same files reuse its result', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('test/new.test.ts');
+    h.advanceBase('test/new.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       const fs = require('node:fs');
@@ -269,7 +279,7 @@ test('the base runs only the files that failed on the branch, and the same files
     }
     expect(h.outcomes.map((outcome) => outcome.passed)).toEqual([false, false]);
     const calls = lines(runs).map((line) => JSON.parse(line) as string[]);
-    // Two attempt checks with no files named, and one baseline on the unchanged dev head naming the failed file.
+    // Two candidate checks without explicit files and one baseline scoped to the failed file.
     expect(calls.filter((args) => args.includes('test/new.test.ts'))).toHaveLength(1);
     expect(calls).toHaveLength(3);
   } finally {
@@ -278,9 +288,8 @@ test('the base runs only the files that failed on the branch, and the same files
 }, 60_000);
 
 test('a failure that names no test file is refused with its output and runs no baseline on the base', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       const fs = require('node:fs');
@@ -306,9 +315,8 @@ test('a failure that names no test file is refused with its output and runs no b
 }, 60_000);
 
 test('a check-host transport failure is retried once, then lands unverified with a log note', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     h.settings.affectedTests = [
       {
@@ -334,28 +342,22 @@ test('a check-host transport failure is retried once, then lands unverified with
 }, 60_000);
 
 test('kernel database storage exhaustion is recorded unverified without failing files', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const failureLine =
       'kernel check: environment failure: database storage full (SQLSTATE 53100) on check-host; 0 of 100 bytes free';
-    const checkScript = [
-      `require("node:fs").appendFileSync(${JSON.stringify(runs)}, "run\\n");`,
-      `console.error(${JSON.stringify(failureLine)});`,
-      'process.exit(75);',
-    ].join(' ');
-    const packageJson = JSON.stringify(
-      { name: 'fixture', private: true, scripts: { check: `bun -e '${checkScript}'` } },
-      null,
-      2,
-    );
-    h.settings.affectedTests = [{ paths: ['**'], command: ['bun', 'run', 'check'] }];
-    const task = h.dispatch('package.json', [], ['true']);
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: 'package.json', content: packageJson }),
-    );
+    h.settings.affectedTests = [
+      {
+        paths: ['**'],
+        command: command(`
+      require('node:fs').appendFileSync(${JSON.stringify(runs)}, 'run\\n');
+      console.error(${JSON.stringify(failureLine)});
+      process.exit(75);
+    `),
+      },
+    ];
+    const task = h.dispatch('feature');
     await h.start(task);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
@@ -368,10 +370,9 @@ test('kernel database storage exhaustion is recorded unverified without failing 
 }, 60_000);
 
 test('the base receives only failing files present there, and branch-added failures are introduced', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('test/shared.test.ts');
+    h.advanceBase('test/shared.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const sharedFailure = 'Kernel tests failed for 1 file(s):\ntest/shared.test.ts';
     const branchFailures = 'Kernel tests failed for 2 file(s):\ntest/added.test.ts\ntest/shared.test.ts';
@@ -400,9 +401,8 @@ test('the base receives only failing files present there, and branch-added failu
 }, 60_000);
 
 test('when every failing file is absent from the base, no base check runs and the added file is refused', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     const argv = command(`
       require('node:fs').appendFileSync(${JSON.stringify(runs)}, process.cwd() + '\\n');
@@ -421,10 +421,9 @@ test('when every failing file is absent from the base, no base check runs and th
   }
 }, 60_000);
 
-test('a successful transport retry records the verified result without stale failure output', async () => {
-  const h = integrationHarness();
+test('a successful transport retry records a passed affected check', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const mark = join(h.settings.stateDirectory, 'retried');
     h.settings.affectedTests = [
       {
@@ -444,15 +443,19 @@ test('a successful transport retry records the verified result without stale fai
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
+    const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
+    expect(log).toContain('Check-host transport failed; retrying once');
+    expect(log).toContain('passed after retry');
+    expect(log).toContain('Affected test: passed');
+    expect(h.outcomes[0]!.firstFailure).toBeUndefined();
   } finally {
     h.dispose();
   }
 }, 60_000);
 
 test('an unplaceable affected selection is recorded unverified from its announcement', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const announcement = 'Affected mode: unverified, 0 of 4 test files selected (services/kernel/scripts/check.ts)';
     h.settings.affectedTests = [{ paths: ['**'], command: command(`console.log(${JSON.stringify(announcement)})`) }];
     const task = h.dispatch('feature');
@@ -460,6 +463,9 @@ test('an unplaceable affected selection is recorded unverified from its announce
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).affectedTests).toBeUndefined();
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
+    const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
+    expect(log).toContain(announcement);
+    expect(log).toContain('Affected test unverified (landing allowed)');
   } finally {
     h.dispose();
   }
@@ -493,10 +499,9 @@ test('failed-file extraction ignores passing headings and stack traces and norma
   ).toEqual(['test/a.spec.ts', 'test/z.test.ts']);
 });
 
-test('passed affected checks never add a train run, and the train still checks its candidate', async () => {
-  const h = integrationHarness();
+test('stabilize runs a passing affected check once and keeps its candidate integration check', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const { runs } = failureCheck(h, 'absent', 'unused');
     const settings = h.settings as typeof h.settings & { integrationChecks: { paths: string[]; command: string[] }[] };
     settings.integrationChecks = [{ paths: ['**'], command: ['sh', '-c', 'test -f feature'] }];
@@ -506,16 +511,16 @@ test('passed affected checks never add a train run, and the train still checks i
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(true);
     expect(lines(runs)).toHaveLength(1);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('(sh -c test -f feature: passed');
   } finally {
     h.dispose();
   }
 }, 60_000);
 
 test('an unavailable baseline is retried once and permits landing with a note', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('test/feature.test.ts');
+    h.advanceBase('test/feature.test.ts');
     const runs = join(h.settings.stateDirectory, 'affected-runs');
     h.settings.affectedTests = [
       {
@@ -549,7 +554,7 @@ test('the final failed-file summary excludes an earlier lane failure that passed
   ).toEqual(['test/remaining.test.ts']);
 });
 
-test('settlement recovery reuses recorded checks after an interrupted landing request', async () => {
+test('settlement recovery re-enqueues dev source after an interrupted landing request', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -569,8 +574,9 @@ test('settlement recovery reuses recorded checks after an interrupted landing re
     expect(lines(runs)).toHaveLength(0);
     expect(h.queue.next()!.request.affectedTests).toBeUndefined();
     await h.train(undefined, false);
-    expect(lines(runs)).toHaveLength(1);
+    expect(lines(runs)).toHaveLength(0);
     expect(h.outcomes[0]!.passed).toBe(true);
+    expect(h.head()).toBe(h.head(task.branch));
   } finally {
     h.dispose();
   }
@@ -585,11 +591,10 @@ test('plain Bun reporter failures retain their file while passing files are igno
 });
 
 test('a fresh local baseline installs the tools its check needs', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('test/feature.test.ts');
-    h.advanceDev(
+    h.advanceBase('test/feature.test.ts');
+    h.advanceBase(
       'package.json',
       JSON.stringify({
         name: 'fixture',
@@ -597,13 +602,17 @@ test('a fresh local baseline installs the tools its check needs', async () => {
         scripts: { postinstall: 'mkdir -p .temp && touch .temp/installed' },
       }),
     );
+    const runs = join(h.settings.stateDirectory, 'affected-runs');
     h.settings.affectedTests = [
       {
         paths: ['**'],
         command: command(`
       const fs = require('node:fs');
-      if (!fs.existsSync('.temp/installed')) { console.error('error: dependencies not installed'); process.exit(1); }
-      if (fs.existsSync('feature')) { console.error('Kernel tests failed for 1 file(s):\\ntest/feature.test.ts'); process.exit(1); }
+      const installed = fs.existsSync('.temp/installed');
+      const candidate = fs.existsSync('feature');
+      fs.appendFileSync(${JSON.stringify(runs)}, JSON.stringify({ candidate, installed }) + '\\n');
+      if (!installed) { console.error('error: dependencies not installed'); process.exit(1); }
+      if (candidate) { console.error('Kernel tests failed for 1 file(s):\\ntest/feature.test.ts'); process.exit(1); }
     `),
       },
     ];
@@ -612,7 +621,10 @@ test('a fresh local baseline installs the tools its check needs', async () => {
     await h.train(undefined, false);
     expect(h.outcomes[0]!.passed).toBe(false);
     expect(h.outcomes[0]!.firstFailure!.assertion).toContain('test/feature.test.ts');
-    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('$ bun install --frozen-lockfile');
+    expect(lines(runs).map((line) => JSON.parse(line))).toEqual([
+      { candidate: true, installed: true },
+      { candidate: false, installed: true },
+    ]);
   } finally {
     h.dispose();
   }
