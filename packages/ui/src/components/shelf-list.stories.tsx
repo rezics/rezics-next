@@ -37,7 +37,7 @@ export const Entries: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const first = canvas.getByRole('heading', { name: subject.title }).closest('li')!;
-    await expect(within(first).getByText('A. Author')).toBeVisible();
+    await expect(within(first).getByText('A. Author · Book')).toBeVisible();
     await expect(first.querySelectorAll('[data-slot="shelf-list-row-state"]')).toHaveLength(1);
     await expect(first.querySelectorAll('[data-slot="shelf-list-row-status"]')).toHaveLength(1);
     await expect(first.querySelectorAll('[data-slot="shelf-list-row-progress"]')).toHaveLength(1);
@@ -61,8 +61,8 @@ export const MenusOpen: Story = {
     const canvas = within(canvasElement);
     const first = canvas.getByRole('heading', { name: subject.title }).closest('li')!;
     const unknown = canvas.getByRole('heading', { name: 'A title with unknown progress' }).closest('li')!;
-    await expect(within(first).getByText('A. Author')).toBeVisible();
-    await expect(within(canvas.getByRole('list')).getByText('Studio')).toBeVisible();
+    await expect(within(first).getByText('A. Author · Book')).toBeVisible();
+    await expect(within(unknown).getByText('Studio · Video game')).toBeVisible();
     await expect(first.querySelectorAll('[data-slot="shelf-list-row-state"]')).toHaveLength(1);
     await expect(first.querySelectorAll('[data-slot="shelf-list-row-progress"]')).toHaveLength(1);
     await expect(within(unknown).getByText('Progress unknown')).toBeVisible();
