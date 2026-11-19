@@ -4,6 +4,7 @@ import { decodeJwt, importJWK, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
 import { readEditableAccountProfile, type AccountProfileEditing } from '../../src/access/account-edit-profile.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { testKernel, type TestKernel } from '../support/test-kernel.ts';
@@ -77,12 +78,21 @@ async function grant(subject: string, action: string, accountId: string) {
   );
 }
 
+async function spentWriteUnits(accountId: string): Promise<number> {
+  const { rows } = await pool.query<{ units: number }>(
+    "SELECT COALESCE(sum(count), 0)::int AS units FROM access.write_rate_counter WHERE account_id=$1 AND family='write'",
+    [accountId],
+  );
+  return rows[0]!.units;
+}
+
 beforeAll(async () => {
   scopes.push('account:update', 'account:delegate');
   await bootstrapRelease(pool, bundledRelease);
   auth = await nativeFixture(pool);
   kernel = testKernel({
     pool,
+    writeRate: createWriteRateLimiter({ secret: 'editable-profile-test-write-rate-secret', overrides: '{}' }),
     auth: {
       issuer,
       audience: 'https://ordinary.api.test',
@@ -115,8 +125,10 @@ test('a handleless owner reads and reloads editable source fields without consum
     ).status,
   ).toBe(200);
   const before = await pool.query('SELECT count(*)::int AS count FROM core.receipt');
+  expect(await spentWriteUnits(owner.accountId)).toBe(1);
   const read = await call(owner.accountId, owner.bearer);
   expect(read.status).toBe(200);
+  expect(await spentWriteUnits(owner.accountId)).toBe(1);
   expect(read.headers.get('cache-control')).toBe('private, no-store');
   expect(read.body).toEqual({
     profile: {
@@ -162,8 +174,10 @@ test('the current operator reads a managed target with management scope and an e
       })
     ).status,
   ).toBe(200);
+  expect(await spentWriteUnits(other.accountId)).toBe(1);
   const read = await call(bot.accountId, other.bearer);
   expect(read.status).toBe(200);
+  expect(await spentWriteUnits(other.accountId)).toBe(1);
   expect(read.body.profile).toMatchObject({ id: bot.accountId, displayName: 'Managed', publicViews: { posts: false } });
   expect(read.body.editing).toEqual(expectedEditing(other.accountId, bot.accountId));
   expect((await call(bot.accountId, await signed(other.bearer, { scope: 'account:update' }))).status).toBe(403);
