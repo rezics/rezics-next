@@ -45,7 +45,7 @@ function normalizedKey(
   name: string,
   tokens: readonly { token: string; position: number; startOffset: number; endOffset: number }[],
 ): string {
-  // The installed normalizer emits no token for an empty input. That is the exact empty key, not a missing result.
+  // The analysis adapter represents an empty input with an empty token list.
   if (name.length === 0 && tokens.length === 0) return '';
   if (tokens.length !== 1) throw new TypeError('OpenSearch name_key must return exactly one token per input');
   const token = tokens[0]!;

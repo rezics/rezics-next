@@ -31,7 +31,7 @@ function unavailable(message = 'OpenSearch analysis is malformed'): never {
   throw new SearchUnavailableError(message);
 }
 
-function readToken(value: unknown): EngineToken {
+function readToken(value: unknown, allowEmptyNameKey: boolean): EngineToken {
   if (
     !record(value) ||
     typeof value.token !== 'string' ||
@@ -41,7 +41,8 @@ function readToken(value: unknown): EngineToken {
     !Number.isSafeInteger(value.start_offset) ||
     (value.start_offset as number) < 0 ||
     !Number.isSafeInteger(value.end_offset) ||
-    (value.end_offset as number) <= (value.start_offset as number)
+    (value.end_offset as number) < (value.start_offset as number) ||
+    (value.end_offset === value.start_offset && (!allowEmptyNameKey || value.token !== ''))
   )
     unavailable();
   return {
@@ -60,6 +61,21 @@ export function sourceSpan(text: string, token: EngineToken): string {
   return span;
 }
 
+function checkedToken(text: string, token: EngineToken, normalizer?: string): EngineToken | undefined {
+  if (
+    normalizer === NAME_KEY_NORMALIZER &&
+    token.token === '' &&
+    token.startOffset === text.length &&
+    token.endOffset === text.length
+  ) {
+    // The native char filter can consume the whole value and emit a zero-width key at its end.
+    if (text.length === 0) return;
+    token = { ...token, startOffset: 0 };
+  }
+  sourceSpan(text, token);
+  return token;
+}
+
 /**
  * Analyze against an installed generation, or the node-level `_analyze` API when `index` is omitted.
  * Tokens keep native offsets so callers can bind folded matches back to exact source text.
@@ -70,8 +86,11 @@ export async function analyzeInstalled(
   index: string | undefined,
   request: EngineAnalyzeRequest,
 ): Promise<readonly EngineToken[]> {
-  const tokens = await readAnalysisTokens(search, index, request);
-  for (const token of tokens) sourceSpan(request.text, token);
+  const tokens: EngineToken[] = [];
+  for (const token of await readAnalysisTokens(search, index, request)) {
+    const checked = checkedToken(request.text, token, request.normalizer);
+    if (checked) tokens.push(checked);
+  }
   return tokens;
 }
 
@@ -111,8 +130,8 @@ export async function analyzeInstalledMany(
       startOffset: token.startOffset - base,
       endOffset: token.endOffset - base,
     };
-    sourceSpan(text, local);
-    values[valueIndex]!.push(local);
+    const checked = checkedToken(text, local, request.normalizer);
+    if (checked) values[valueIndex]!.push(checked);
   }
   return values.map((group) => {
     const firstPosition = group.reduce((first, token) => Math.min(first, token.position), Number.MAX_SAFE_INTEGER);
@@ -152,7 +171,7 @@ async function readAnalysisTokens(
     response.body.tokens.length > ENGINE_ANALYSIS_LIMITS.tokens
   )
     unavailable();
-  const tokens = response.body.tokens.map(readToken);
+  const tokens = response.body.tokens.map((token) => readToken(token, request.normalizer === NAME_KEY_NORMALIZER));
   // These installed text analyzers omit empty terms. Accepting one makes every name match an empty prefix.
   // Keep normalizers separate: removing an ignorable character can legitimately produce an empty key.
   if (

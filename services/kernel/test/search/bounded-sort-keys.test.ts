@@ -39,17 +39,25 @@ function actionsFor(subjects: IndexedSubject[]): IndexAction[] {
   );
 }
 
-async function nativeKey(index: string, text: string): Promise<string> {
+async function nativeTokens(index: string, text: string): Promise<Token[]> {
   const { body } = await search.request<Analysis>('POST', `/${index}/_analyze`, {
     normalizer: 'name_key',
     text,
   });
+  return body.tokens;
+}
+
+async function nativeKey(index: string, text: string): Promise<string> {
+  const tokens = await nativeTokens(index, text);
   if (text.length === 0) {
-    expect(body.tokens).toEqual([]);
+    if (tokens.length > 0) {
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0]).toMatchObject({ token: '', position: 0, start_offset: 0, end_offset: 0 });
+    }
     return '';
   }
-  expect(body.tokens).toHaveLength(1);
-  return body.tokens[0]!.token;
+  expect(tokens).toHaveLength(1);
+  return tokens[0]!.token;
 }
 
 // A transparent observer: all successful normalization comes from the real target index.
@@ -192,9 +200,10 @@ test('native normalization bounds complete name sort values on writes while pres
     expect(observed.bulks()).toBe(0);
     expect(observed.requests.flatMap(({ texts }) => texts).sort()).toEqual([...new Set(names)].sort());
     for (const { texts, tokens } of observed.requests) {
-      const keys = await Promise.all(texts.map((text) => nativeKey(index, text)));
-      // Empty input has no native token; ignorable input may still have one token whose exact key is empty.
-      expect(tokens.map(({ token }) => token)).toEqual(keys.filter((_, n) => texts[n] !== ''));
+      const singleValueTokens = await Promise.all(texts.map((text) => nativeTokens(index, text)));
+      expect(tokens.map(({ token }) => token)).toEqual(
+        singleValueTokens.flatMap((values) => values.map(({ token }) => token)),
+      );
     }
 
     const bulk = await search.bulk<{ errors: boolean }>(bulkLines(index, prepared), {
@@ -251,9 +260,8 @@ test('native normalization bounds complete name sort values on writes while pres
     );
     const native = new Map<string, string>();
     for (const { texts, tokens } of batches.requests) {
-      const keys = await Promise.all(texts.map((text) => nativeKey(index, text)));
-      expect(tokens.map(({ token }) => token)).toEqual(keys);
-      texts.forEach((text, n) => native.set(text, keys[n]!));
+      for (const text of texts) native.set(text, await nativeKey(index, text));
+      expect(tokens.map(({ token }) => token)).toEqual(texts.map((text) => native.get(text)));
     }
     for (const [n, action] of bounded.entries()) {
       const original = manyBefore[n]!;
