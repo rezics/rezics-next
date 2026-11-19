@@ -37,6 +37,8 @@ function run(pkg: string, command: string[], env: Record<string, string | undefi
 test('only isolated server consumers join the shared browser group', () => {
   expect(usesSharedBrowserServer('tests/scaffold.test.ts')).toBe(true);
   expect(usesSharedBrowserServer('tests/hydration.test.ts')).toBe(true);
+  expect(usesSharedBrowserServer('tests/checkout.test.ts')).toBe(false);
+  expect(usesSharedBrowserServer('tests/page-stories.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/post-editing.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/record-script.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/native/stack.host.test.ts')).toBe(false);
@@ -256,7 +258,8 @@ for (const pkg of packages) {
 
   test(`${pkg} runs its tests through the isolation script, in its check too`, async () => {
     const { scripts } = await Bun.file(join(root, pkg, 'package.json')).json();
-    expect(scripts.test).toBe('bun scripts/isolated.ts bun test');
+    const entry = pkg === 'apps/web' ? 'bun scripts/check-placement.ts -- ' : '';
+    expect(scripts.test).toBe(`${entry}bun scripts/isolated.ts bun test`);
     expect(scripts.check).toContain('bun run test');
     expect(` ${scripts.check} `).not.toMatch(/[\s&;]bun test[\s&;]/);
   });

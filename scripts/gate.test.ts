@@ -220,6 +220,19 @@ if (args[0] === 'install') {
   const events = readFileSync(dir + '/log.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map((line) => JSON.parse(line));
   const attempt = events.filter((event) => event.kind === 'check' && event.workspace === workspace).length + 1;
   log({ kind: 'check', workspace, attempt });
+  if (workspace === 'web') {
+    console.log('[web-file] {"file":"tests/first.test.ts","result":"passed"}');
+    for (let n = 0; n < 100; n++) {
+      try {
+        readFileSync(dir + '/progress-observed');
+        log({ kind: 'observed-before-exit' });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    process.exit(1);
+  }
   if (workspace === 'auth') {
     const write = (stream, text) => new Promise((resolve) => stream.write(text, resolve));
     await write(process.stdout, 'Auth checks started\\n');
@@ -540,6 +553,24 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
     passed: false,
     failingFiles: ['test/b-lane.test.ts'],
   });
+});
+
+test('Web file completion reaches the caller while the Gate workspace is still running', async () => {
+  const { env, dir, events } = scenario();
+  env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
+  const fixture = join(dir, 'checkout');
+  fixtureWorkspace(fixture, 'apps/web', '@rezics/web', 'bun scripts/check.ts');
+  const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
+    if (String(text).includes('[web-file]')) writeFileSync(join(dir, 'progress-observed'), '');
+    return true;
+  });
+  try {
+    expect(await runLocalGate(['--workspaces', 'apps/web'], fixture, env)).toBe(1);
+  } finally {
+    output.mockRestore();
+  }
+  expect(events().filter((event) => event.kind === 'observed-before-exit')).toHaveLength(1);
+  expect(JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')).workspaces[0].passed).toBe(false);
 });
 
 test('a noisy Auth Pages check retains its native failure and middle report entries within a bounded log', async () => {

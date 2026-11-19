@@ -598,7 +598,7 @@ async function run(
 // DOM assertion can print a large object graph before the runner prints its file summary.
 const workspaceExcerptBytes = 64 * 1024;
 
-async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>) {
+async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void) {
   const head = Buffer.allocUnsafe(workspaceExcerptBytes);
   const tail = Buffer.allocUnsafe(workspaceExcerptBytes);
   let bytes = 0;
@@ -623,6 +623,7 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>) {
   }
 
   function readLine(line: string) {
+    onLine?.(line);
     const trimmed = line.trim();
     if (remainingFiles && trimmed) {
       remember(files, trimmed);
@@ -714,7 +715,9 @@ async function checkWorkspace(
   });
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
-    readWorkspaceOutput(child.stdout),
+    readWorkspaceOutput(child.stdout, (line) => {
+      if (workspace.directory === 'apps/web' && line.startsWith('[web-file] ')) writeOutput(`${line}\n`, 'stdout', env);
+    }),
     readWorkspaceOutput(child.stderr),
   ]);
   const durationMs = performance.now() - startedAt;

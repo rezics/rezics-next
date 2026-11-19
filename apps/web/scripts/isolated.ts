@@ -90,7 +90,17 @@ function isHostLaneTest(file: string): boolean {
 }
 
 export function usesSharedBrowserServer(file: string): boolean {
-  return !isHostLaneTest(file) && commandNeedsSharedDevServer(['bun', 'test', file]);
+  // These Gate files borrow the default Worker bindings. Other files own their
+  // fixtures (including private Vite bindings and Storybook) or need no server.
+  return [
+    'tests/hydration.test.ts',
+    'tests/scaffold.test.ts',
+    'tests/shared-web-dev-server.test.ts',
+    'tests/shell-frame.test.ts',
+    'tests/shell-polish.test.ts',
+    'tests/shell.test.ts',
+    'tests/subject-polish.test.ts',
+  ].includes(file.replace(/^\.\//, ''));
 }
 
 function listTestFiles(directory: string, parent = ''): string[] {
@@ -105,7 +115,8 @@ function listTestFiles(directory: string, parent = ''): string[] {
 }
 
 async function main(): Promise<void> {
-  const rawCommand = process.argv.slice(2);
+  const gateFile = process.argv[2] === '--check-file';
+  const rawCommand = process.argv.slice(gateFile ? 3 : 2);
   const existingContext = readWebTestSelectionContext();
   const routed = rawCommand.length === 1 && rawCommand[0] === '--routed-selection';
   if (routed && !existingContext) throw new Error('--routed-selection requires the placed Web test selection context');
@@ -135,6 +146,7 @@ async function main(): Promise<void> {
   const routedCommand = selection
     ? ['bun', 'scripts/isolated.ts', '--routed-selection']
     : ['bun', 'scripts/isolated.ts', ...command];
+  if (gateFile) routedCommand.splice(2, 0, '--check-file');
   const stackEnvironment = selection ? writeWebTestSelectionContext(selection) : process.env;
 
   process.exitCode = await stackRun(
@@ -184,7 +196,9 @@ async function main(): Promise<void> {
         let interrupted = false;
         for (const run of commands) {
           const privateNetwork = isolated && run.isolate;
-          const wrapShared = commandNeedsSharedDevServer(run.args);
+          const wrapShared =
+            commandNeedsSharedDevServer(run.args) &&
+            (!gateFile || !!selection?.selectedFiles.some(usesSharedBrowserServer));
           const args = wrapShared ? ['bun', 'scripts/with-dev-server.ts', '--', ...run.args] : run.args;
           const invocation = privateNetwork && !wrapShared ? privateNetworkCommand(args) : args;
           if (linux && run.isolate && !privateNetwork) {
