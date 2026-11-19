@@ -14,12 +14,18 @@ import type { EditorWorkbenchLabels } from './editor-workbench-labels.ts';
 import { useLayoutEffect, useRef } from 'react';
 import { observeCommandActiveDescendants } from './editor-command-aria.ts';
 
-const shortcutKeyLabels: Record<string, string> = { Ctrl: 'Ctrl', Alt: 'Alt', Meta: 'Meta', Shift: 'Shift' };
+const shortcutKeyLabels: Record<string, string> = {
+  Ctrl: 'Ctrl',
+  Alt: 'Alt',
+  Meta: 'Meta',
+  Shift: 'Shift',
+  Mod: 'Ctrl',
+};
+const macShortcutKeyLabels: Record<string, string> = { Ctrl: '⌃', Alt: '⌥', Meta: '⌘', Shift: '⇧', Mod: '⌘' };
 
 function shortcutLabel(chord: string): string {
   const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
-  const keys = mac ? { Ctrl: '⌃', Alt: '⌥', Meta: '⌘', Shift: '⇧', Mod: '⌘' } : { ...shortcutKeyLabels, Mod: 'Ctrl' };
-  const labels: Record<string, string> = keys;
+  const labels = mac ? macShortcutKeyLabels : shortcutKeyLabels;
   return chord
     .split('-')
     .map((key) => labels[key] ?? (key.length === 1 ? key.toUpperCase() : key))

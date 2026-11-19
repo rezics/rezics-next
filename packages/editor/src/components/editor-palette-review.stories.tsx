@@ -68,15 +68,15 @@ type Story = StoryObj<typeof meta>;
 
 export const LongLocalizedCommands: Story = {
   name: 'Long localized commands',
-  render: () => <PaletteReview commands={localizedCommands} />,
+  args: { commands: localizedCommands },
 };
 
 export const DisabledCommands: Story = {
   name: 'Disabled commands',
-  render: () => <PaletteReview commands={disabledCommands} />,
+  args: { commands: disabledCommands },
 };
 
 export const EmptyResults: Story = {
   name: 'Empty results',
-  render: () => <PaletteReview commands={[]} />,
+  args: { commands: [] },
 };

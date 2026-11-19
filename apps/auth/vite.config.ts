@@ -35,7 +35,7 @@ export default defineConfig(async (context) => {
       allowedHosts: ['rezics.com'],
       // The finite test runtime serves a fixed catalogue. Rewriting its generated files can
       // queue a Worker entry reload per message while the browser waits for the login document.
-      watch: process.env.REZICS_TEST_RUNTIME === '1' ? { ignored: `${generatedMessages}/**` } : undefined,
+      ...(process.env.REZICS_TEST_RUNTIME === '1' ? { watch: { ignored: `${generatedMessages}/**` } } : {}),
     },
     optimizeDeps: {
       // Discover lazy route dependencies before a person starts entering credentials.
