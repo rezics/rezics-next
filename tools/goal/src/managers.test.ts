@@ -1,18 +1,30 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { historicalManager } from '../test-support/historical-manager.ts';
 import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { userMessageTurn } from './manager-session-transport.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, readManagerOperationalStatus, resolveGoalManager, type ManagerSpec } from './managers.ts';
+import {
+  ManagerSessions,
+  readManagerOperationalStatus,
+  resolveGoalManager,
+  type ManagedManagerState,
+  type ManagerSpec,
+} from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { authenticatedManager } from './priority-authority.ts';
 import type { ProcessIdentity } from './process.ts';
+import { renderManagerOpening } from './prompts.ts';
 import { temporaryDirectory } from './test-support.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
+
+const launchRetired = new Error('Managed manager launches are retired; use unit register for an execution unit');
 
 async function setup(
   policy?: ControlPolicy,
@@ -63,6 +75,10 @@ async function setup(
       unregister(manager: string) {
         removed.push(manager);
       },
+      rebindIfStale(manager: string, argv: string[]) {
+        windows.push({ manager, argv });
+        return true;
+      },
     },
     checkCompletion: async () => ({
       passed: passing,
@@ -99,6 +115,40 @@ async function setup(
     await client.request('test/notify', notification);
     await managers.flush();
   };
+  async function persistSession(overrides: Partial<ManagedManagerState> = {}) {
+    const startedAt = services.now();
+    const session = { ...spec, status: 'running', startedAt, threadId: randomUUID(), ...overrides } as const;
+    if (session.engine === 'claude' || !session.threadId)
+      return historicalManager(db, temporary.path, { turns: 0, ...session });
+
+    // Recreate the provider side of the persisted session in the fake daemon. The fake turn advances its sequence.
+    const { goal } = await client.request('thread/goal/set', {
+      threadId: session.threadId,
+      origin: 'user',
+      objective: session.objective,
+      status: 'active',
+      tokenBudget: session.budget,
+    });
+    const threadId = session.threadId;
+    const { turn } = await client.request<{ turn: { id: string } }>('turn/start', { threadId, input: [] });
+    await managers.flush();
+    return historicalManager(db, temporary.path, {
+      ...session,
+      activeTurnId: turn.id,
+      countedTurn: turn.id,
+      turnStartedAt: startedAt,
+      turnDisposition: { threadId, turnId: turn.id, at: startedAt, status: 'inProgress', intent: 'work' },
+      goalState: goal,
+    });
+  }
+  async function recoverSession(overrides?: Partial<ManagedManagerState>) {
+    const session = await persistSession(overrides);
+    const previousErrors = errors.length;
+    await managers.recover();
+    await managers.flush();
+    expect(errors.slice(previousErrors)).toEqual([]);
+    return session;
+  }
   return {
     ...temporary,
     db,
@@ -114,6 +164,8 @@ async function setup(
     spec,
     requests,
     notify,
+    persistSession,
+    recoverSession,
     get connections() {
       return connections;
     },
@@ -127,9 +179,13 @@ async function setup(
       now += ms;
     },
     async close() {
-      await managers.close();
-      db.close();
-      temporary.close();
+      try {
+        await managers.close();
+      } finally {
+        await client.close();
+        db.close();
+        temporary.close();
+      }
     },
   };
 }
@@ -174,32 +230,34 @@ async function waitForTurnInterrupt(s: Awaited<ReturnType<typeof setup>>, thread
   throw new Error('A late native Goal turn was not interrupted during idle parking');
 }
 
-test('manager startup follows installed protocol and two managers share one app-server per pool', async () => {
+test('historical manager recovery resumes both recorded threads through one app-server per pool', async () => {
   const s = await setup();
   try {
-    const first = await s.managers.start(s.spec);
+    const first = await s.persistSession();
+    const second = await s.persistSession({ id: 'second' });
+    const before = s.requests().length;
+    await s.managers.recover();
     await s.managers.flush();
-    const requests = s.requests().filter((r) => r.id && r.method !== 'initialize');
-    expect(requests.slice(0, 3).map((r) => r.method)).toEqual(['thread/start', 'thread/goal/set', 'turn/start']);
-    expect(requests[0].params).toEqual({
-      approvalPolicy: 'never',
-      sandbox: 'danger-full-access',
-      cwd: s.path,
-      model: 'gpt-6.1-sol',
-      config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 },
-    });
-    expect(requests[1].params).toEqual({
-      threadId: 'thread-1',
-      origin: 'user',
-      objective: s.spec.objective,
-      status: 'active',
-      tokenBudget: 40000,
-    });
-    expect(first.threadId).toBe('thread-1');
-    expect(first.activeTurnId).toBe('turn-1');
-    expect(s.managers.get(s.spec.id).turns).toBe(1);
-    await s.managers.start({ ...s.spec, id: 'second' });
+    const requests = s.requests().slice(before);
+    expect(requests.filter((r) => r.method === 'thread/resume').map((r) => r.params)).toEqual(
+      [first, second].map((state) => ({
+        approvalPolicy: 'never',
+        sandbox: 'danger-full-access',
+        threadId: state.threadId,
+        model: 'gpt-6.1-sol',
+        config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 },
+      })),
+    );
+    expect(requests.filter((r) => ['thread/start', 'thread/goal/set', 'turn/start'].includes(r.method))).toEqual([]);
+    for (const state of [first, second])
+      expect(s.managers.get(state.id)).toMatchObject({
+        threadId: state.threadId,
+        activeTurnId: state.activeTurnId,
+        turns: 1,
+        goalState: { objective: state.objective, status: 'active', tokenBudget: state.budget },
+      });
     expect(s.connections).toBe(1);
+    expect(s.errors).toEqual([]);
   } finally {
     await s.close();
   }
@@ -209,8 +267,8 @@ test('a manager model override applies to its next turn on the same thread only'
   let model: string | undefined;
   const s = await setup(undefined, { codexManagerModel: (id) => (id === 'manager' ? model : undefined) });
   try {
-    const original = await s.managers.start(s.spec);
-    const peer = await s.managers.start({ ...s.spec, id: 'peer' });
+    const original = await s.recoverSession();
+    const peer = await s.recoverSession({ ...s.spec, id: 'peer' });
     await s.notify({
       method: 'turn/completed',
       params: { threadId: original.threadId, turn: { id: original.activeTurnId, status: 'completed' } },
@@ -218,6 +276,12 @@ test('a manager model override applies to its next turn on the same thread only'
     model = 'gpt-6-astra';
     s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Continue implementing the same scope' });
     await s.managers.wake(s.spec.id);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: peer.threadId, turn: { id: peer.activeTurnId, status: 'completed' } },
+    });
+    s.inbox.deliver({ managerId: peer.id, kind: 'instruction', summary: 'Continue the peer scope' });
+    await s.managers.wake(peer.id);
     await s.managers.flush();
     const starts = s.requests().filter((request) => request.method === 'turn/start');
     expect(starts.filter((r) => r.params.threadId === original.threadId).at(-1)?.params).toMatchObject({
@@ -226,7 +290,7 @@ test('a manager model override applies to its next turn on the same thread only'
     });
     expect(starts.filter((r) => r.params.threadId === peer.threadId).at(-1)?.params.model).toBe('gpt-6.1-sol');
     expect(s.managers.get(s.spec.id).threadId).toBe(original.threadId);
-    expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(2);
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toEqual([]);
   } finally {
     await s.close();
   }
@@ -236,7 +300,7 @@ test('sets the configured model before a native Goal wake can start a turn', asy
   let model: string | undefined;
   const s = await setup(undefined, { autoStartGoalOnActive: true, codexManagerModel: () => model });
   try {
-    const original = await s.managers.start(s.spec);
+    const original = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: original.threadId, turn: { id: original.activeTurnId, status: 'completed' } },
@@ -266,7 +330,7 @@ test('the Codex viewer resumes the thread on the remote endpoint without permiss
   const s = await setup();
   try {
     Object.defineProperty(s.client, 'endpoint', { value: 'ws://127.0.0.1:10001' });
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const argv = s.windows[0]?.argv ?? [];
     expect(argv).toContain('resume');
     expect(argv).toContain(manager.threadId!);
@@ -281,7 +345,7 @@ test('the Codex viewer resumes the thread on the remote endpoint without permiss
 test('delivery steers an active turn with expectedTurnId and starts an idle turn', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Resolve the conflict' });
     await s.managers.wake(s.spec.id);
@@ -306,7 +370,7 @@ test('delivery steers an active turn with expectedTurnId and starts an idle turn
 test('an oversized legacy diagnostic reaches the existing turn only as an inbox pointer', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     const diagnostic = 'R'.repeat(1_100_000);
     const taskId = 'task-with-retained-proof';
@@ -334,7 +398,7 @@ test('an oversized legacy diagnostic reaches the existing turn only as an inbox 
 test('a steer racing a completed turn rejoins and starts a turn without losing the event', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     // The server finishes just before delivery, while the persisted manager still names that turn.
     await s.client.request('turn/interrupt', { threadId: manager.threadId, turnId: manager.activeTurnId });
@@ -354,7 +418,7 @@ test('a steer racing a completed turn rejoins and starts a turn without losing t
 test('recorded-only outcomes never wake a manager and notifications track goal usage', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     for (const kind of ['gate-passed', 'merged', 'environment-rerun', 'automatic-consultation'])
       s.inbox.record(manager.id, { kind });
@@ -378,12 +442,12 @@ test('recorded-only outcomes never wake a manager and notifications track goal u
   }
 });
 
-test('turn and wall-clock limits replace the session without waking the supermanager', async () => {
+test('turn and wall-clock limits pause the old thread and report the retired renewal', async () => {
   for (const reason of ['turns', 'wall']) {
     const s = await setup();
     try {
       const spec = { ...s.spec, limits: { turns: 1, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
-      const state = await s.managers.start(spec);
+      const state = await s.recoverSession(spec);
       await s.managers.flush();
       const openingTurnId = s.managers.get(state.id).activeTurnId!;
       if (reason === 'wall') s.advance(spec.limits.wallMs + 1);
@@ -409,10 +473,15 @@ test('turn and wall-clock limits replace the session without waking the superman
       }
       await s.managers.flush();
       const renewed = s.managers.get(state.id);
-      expect(renewed.status).toBe('running');
-      expect(renewed.threadId).not.toBe(state.threadId);
-      expect(renewed.history?.map((entry) => entry.threadId)).toEqual([state.threadId]);
-      expect(s.inbox.pending('supervisor')).toHaveLength(0);
+      expect(renewed).toMatchObject({
+        status: 'renewal-failed',
+        activeTurnId: null,
+        history: [{ threadId: state.threadId, status: 'paused' }],
+        renewalAttempts: [{ at: expect.any(Number), error: launchRetired.message }],
+      });
+      expect(s.inbox.pending('supervisor').map(({ event }) => [event.kind, event.summary])).toEqual([
+        ['blocker', `Manager ${state.id} renewal failed: ${launchRetired.message}`],
+      ]);
       expect(
         s
           .requests()
@@ -421,7 +490,13 @@ test('turn and wall-clock limits replace the session without waking the superman
               r.method === 'thread/goal/set' && r.params.threadId === state.threadId && r.params.status === 'paused',
           ),
       ).toBe(true);
-      expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(2);
+      expect(s.removed).toContain(state.id);
+      expect(
+        s
+          .requests()
+          .filter((r) => r.method === 'turn/start')
+          .map((r) => r.params.threadId),
+      ).toEqual(reason === 'turns' ? [state.threadId, state.threadId] : [state.threadId]);
     } finally {
       await s.close();
     }
@@ -432,7 +507,7 @@ test("A manager whose wall-clock renewal fails is reported to the supermanager a
   const s = await setup();
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
-    const state = await s.managers.start(spec);
+    const state = await s.recoverSession(spec);
     await s.managers.flush();
     s.services.windows.register = () => {
       throw new Error('Missing termspaces session: rezics-agents\nrest of the stack');
@@ -456,11 +531,11 @@ test("A manager whose wall-clock renewal fails is reported to the supermanager a
   }
 });
 
-test("The host retries a failed renewal on a bounded schedule until it succeeds, and each retry outcome is visible in the manager's state.", async () => {
+test('a scheduled historical renewal retry records its retirement error alongside the first failure', async () => {
   const s = await setup({ ...defaultPolicy, manager: { ...defaultPolicy.manager, renewalRetryMs: 200 } });
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
-    const state = await s.managers.start(spec);
+    const state = await s.recoverSession(spec);
     await s.managers.flush();
     s.services.windows.register = () => {
       throw new Error('Missing termspaces session: rezics-agents');
@@ -471,22 +546,28 @@ test("The host retries a failed renewal on a bounded schedule until it succeeds,
       params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
     });
     await s.managers.flush();
-    expect(s.managers.get(state.id).status).toBe('renewal-failed');
+    const failed = s.managers.get(state.id);
+    expect(failed).toMatchObject({
+      status: 'renewal-failed',
+      nextRenewalRetryAt: s.services.now() + 200,
+      renewalAttempts: [{ at: expect.any(Number), error: 'Missing termspaces session: rezics-agents' }],
+    });
     s.services.windows.register = (manager: string, argv: string[]) => {
       s.windows.push({ manager, argv });
       return '@1';
     };
     const deadline = Date.now() + 1500;
-    while (s.managers.get(state.id).status !== 'running' && Date.now() < deadline) await Bun.sleep(10);
+    while ((s.managers.get(state.id).renewalAttempts?.length ?? 0) < 2 && Date.now() < deadline) await Bun.sleep(10);
     await s.managers.flush();
     const renewed = s.managers.get(state.id);
-    expect(renewed.status).toBe('running');
-    expect(renewed.threadId).not.toBe(state.threadId);
+    expect(renewed.status).toBe('renewal-failed');
+    expect(renewed.activeTurnId).toBeNull();
+    expect(renewed.history?.map((entry) => entry.threadId)).toEqual([state.threadId]);
     expect(renewed.renewalAttempts).toEqual([
       { at: expect.any(Number), error: 'Missing termspaces session: rezics-agents' },
-      { at: expect.any(Number) },
+      { at: expect.any(Number), error: launchRetired.message },
     ]);
-    expect(renewed.nextRenewalRetryAt).toBeUndefined();
+    expect(renewed.nextRenewalRetryAt).toBe(s.services.now() + 200);
   } finally {
     await s.close();
   }
@@ -496,7 +577,7 @@ test('turns without a decision pause the manager and notify the supermanager', a
   const s = await setup();
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
-    const state = await s.managers.start(spec);
+    const state = await s.recoverSession(spec);
     await s.managers.flush();
     await s.notify({
       method: 'turn/completed',
@@ -523,7 +604,7 @@ test('turns without a decision pause the manager and notify the supermanager', a
 test('a control-plane decision prevents the turn from counting as empty', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.noteCommand(manager.id);
     await s.notify({
       method: 'turn/completed',
@@ -539,7 +620,7 @@ test('a control-plane decision resets the consecutive empty-turn count', async (
   const s = await setup();
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
-    const manager = await s.managers.start(spec);
+    const manager = await s.recoverSession(spec);
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -578,7 +659,7 @@ test('a control-plane decision resets the consecutive empty-turn count', async (
 test('completion is checked, unmet evidence is delivered, and only a validated goal stops', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     await s.notify({
       method: 'thread/goal/updated',
@@ -601,37 +682,10 @@ test('completion is checked, unmet evidence is delivered, and only a validated g
   }
 });
 
-test('Claude manager opens the requested CLI and counts turns through hooks', async () => {
+test('historical Claude manager counts turns through hooks without connecting to Codex', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
-    const argv = s.windows[0]!.argv;
-    expect(argv).toContain('claude-opus-5-5');
-    expect(argv).toContain('--autocompact');
-    expect(argv).toContain('300000');
-    expect(argv.join(' ')).not.toContain('inbox wait');
-    expect(argv).toContain('--settings');
-    expect(readFileSync(argv.at(-1)!.split(' ')[1]!, 'utf8')).toContain('inbox wait manager');
-    expect(argv.slice(argv.indexOf('--session-id'), argv.indexOf('--session-id') + 2)).toEqual([
-      '--session-id',
-      manager.threadId!,
-    ]);
-    expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual([
-      '--permission-mode',
-      'bypassPermissions',
-    ]);
-    expect(argv.some((arg) => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(true);
-    const defaults = await setup();
-    try {
-      await defaults.managers.start({
-        ...defaults.spec,
-        engine: 'claude',
-        pool: { ...defaults.spec.pool, codexHome: join(homedir(), '.claude') },
-      });
-      expect(defaults.windows[0]!.argv.some((arg) => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(false);
-    } finally {
-      await defaults.close();
-    }
+    const manager = await s.recoverSession({ engine: 'claude' });
     expect(s.connections).toBe(0);
     await s.managers.claudeTurn(manager.id, true);
     await s.managers.noteCommand(manager.id);
@@ -647,35 +701,59 @@ test('Claude manager opens the requested CLI and counts turns through hooks', as
   }
 });
 
-test('a Claude manager whose session exited is resumed in its window when an event arrives', async () => {
-  const s = await setup();
-  try {
-    const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
-    const resumed: string[][] = [];
-    let alive = true;
-    Object.assign(s.services.windows, {
-      alive: () => alive,
-      respawn: (_id: string, argv: string[]) => {
-        resumed.push(argv);
-      },
-    });
-    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake Claude' });
-    await s.managers.wake(manager.id);
-    expect(resumed).toHaveLength(0);
-    alive = false;
-    await s.managers.wake(manager.id);
-    const argv = resumed[0]!;
-    expect(argv.slice(argv.indexOf('--resume'), argv.indexOf('--resume') + 2)).toEqual(['--resume', manager.threadId!]);
-    expect(argv).toContain('--settings');
-  } finally {
-    await s.close();
-  }
-});
+test.each(['custom config', 'default config'])(
+  'a historical Claude manager with %s resumes its exited session when an event arrives',
+  async (config) => {
+    const s = await setup();
+    try {
+      const codexHome = config === 'default config' ? join(homedir(), '.claude') : s.spec.pool.codexHome;
+      const manager = await s.recoverSession({ engine: 'claude', pool: { ...s.spec.pool, codexHome } });
+      const resumed: string[][] = [];
+      let alive = true;
+      Object.assign(s.services.windows, {
+        alive: () => alive,
+        respawn: (_id: string, argv: string[]) => {
+          resumed.push(argv);
+        },
+      });
+      s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake Claude' });
+      await s.managers.wake(manager.id);
+      expect(resumed).toHaveLength(0);
+      alive = false;
+      await s.managers.wake(manager.id);
+      const argv = resumed[0]!;
+      expect(argv.slice(argv.indexOf('--resume'), argv.indexOf('--resume') + 2)).toEqual([
+        '--resume',
+        manager.threadId!,
+      ]);
+      expect(argv).toContain('claude-opus-5-5');
+      expect(argv).not.toContain('--session-id');
+      expect(argv.slice(argv.indexOf('--autocompact'), argv.indexOf('--autocompact') + 2)).toEqual([
+        '--autocompact',
+        '300000',
+      ]);
+      expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual([
+        '--permission-mode',
+        'bypassPermissions',
+      ]);
+      expect(argv.filter((arg) => arg.startsWith('CLAUDE_CONFIG_DIR='))).toEqual(
+        config === 'custom config' ? [`CLAUDE_CONFIG_DIR=${codexHome}`] : [],
+      );
+      expect(argv).toContain('--settings');
+      expect(JSON.parse(argv[argv.indexOf('--settings') + 1]!).hooks).toEqual({
+        UserPromptSubmit: [{ hooks: [{ type: 'command', command: "'goal' 'manager' 'turn-start' 'manager'" }] }],
+        Stop: [{ hooks: [{ type: 'command', command: "'goal' 'manager' 'turn-end' 'manager'" }] }],
+      });
+    } finally {
+      await s.close();
+    }
+  },
+);
 
 test('a live Claude manager that ended its turn is woken by a prompt typed into its window, once per event', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
+    const manager = await s.recoverSession({ ...s.spec, engine: 'claude' });
     const prompts: string[] = [];
     Object.assign(s.services.windows, {
       alive: () => true,
@@ -711,7 +789,7 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
 test('idle Goals stay parked; a concurrent inbox wake is retained through pool refusal and delivered once', async () => {
   const s = await setup(undefined, { autoStartGoalOnActive: true, lateStartGoalOnPause: true });
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const threadId = manager.threadId!;
     const requestsBeforeInitialCompletion = s.requests().length;
     await s.notify({
@@ -856,7 +934,7 @@ test('a recovered manager subscribes before native inbox activation and parks wh
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const threadId = manager.threadId!;
     await s.notify({
       method: 'turn/completed',
@@ -915,7 +993,7 @@ test('current interrupted and failed work turns stay visible and surface only re
   for (const terminal of ['interrupted', 'failed'] as const) {
     const s = await setup();
     try {
-      const manager = await s.managers.start(s.spec);
+      const manager = await s.recoverSession();
       const threadId = manager.threadId!;
       const turnId = manager.activeTurnId!;
       s.inbox.record(manager.id, { kind: 'merged' });
@@ -977,7 +1055,7 @@ test('current interrupted and failed work turns stay visible and surface only re
 test('a blocked running Goal accepts one admitted inbox turn without reactivation', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const threadId = manager.threadId!;
     await s.notify({
       method: 'turn/completed',
@@ -1050,7 +1128,7 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const threadId = manager.threadId!;
     await s.notify({
       method: 'turn/completed',
@@ -1063,8 +1141,9 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
     const turnId = s.managers.get(manager.id).activeTurnId!;
     s.client.close = () => {};
     await s.managers.close();
+    // Make the fake provider return the exact terminal turn on resume while the host is disconnected.
     await s.client.request('test/notify', {
-      method: 'turn/completed',
+      method: 'turn/started',
       params: { threadId, turn: { id: turnId, status: 'completed' } },
     });
     const before = s.requests().length;
@@ -1076,6 +1155,7 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
       activeTurnId: null,
       waitingForInbox: false,
       goalState: { status: 'blocked' },
+      turnDisposition: { threadId, turnId, status: 'completed', intent: 'work' },
     });
     expect(
       s
@@ -1090,12 +1170,12 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
   }
 });
 
-test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
+test('inbox decisions wake the same thread once across host recovery and preserve objective, budget and usage', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
   try {
-    const state = await s.managers.start(s.spec);
+    const state = await s.recoverSession();
     await s.managers.flush();
     await s.notify({
       method: 'turn/completed',
@@ -1167,7 +1247,7 @@ test('Inbox decisions wake the existing thread once before and after host recove
       threadId: state.threadId,
       input: [{ text: 'Committed while the host was down' }],
     });
-    expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toEqual([]);
     expect(s.requests().some((r) => r.method === 'thread/goal/get')).toBe(true);
     expect(s.inbox.notifications(state.id)).toHaveLength(0);
     await recovered.recover();
@@ -1186,72 +1266,57 @@ test('Inbox decisions wake the existing thread once before and after host recove
     expect(recovered.get(state.id).usage).toEqual({ total: { totalTokens: 900 } });
   } finally {
     await recovered?.close();
-    closeTransport();
+    await closeTransport();
     await s.close();
   }
 });
 
-test('the wall-clock deadline renews a sleeping manager without waiting for a notification', async () => {
+test('the wall-clock deadline handles a sleeping historical manager without a notification', async () => {
   const s = await setup();
   try {
     s.services.now = Date.now;
-    const state = await s.managers.start({ ...s.spec, limits: { ...s.spec.limits, wallMs: 80 } });
+    const state = await s.recoverSession({ limits: { ...s.spec.limits, wallMs: 150 } });
     const deadline = Date.now() + 1500;
-    while (!s.managers.get(state.id).history?.length && Date.now() < deadline) await Bun.sleep(10);
-    expect(s.managers.get(state.id).history?.[0]?.threadId).toBe(state.threadId);
-    expect(s.inbox.pending('supervisor')).toHaveLength(0);
+    while (s.managers.get(state.id).status !== 'renewal-failed' && Date.now() < deadline) await Bun.sleep(10);
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'renewal-failed',
+      activeTurnId: null,
+      history: [{ threadId: state.threadId, status: 'paused' }],
+      renewalAttempts: [{ error: launchRetired.message }],
+    });
+    expect(s.inbox.pending('supervisor').map(({ event }) => event.kind)).toEqual(['blocker']);
   } finally {
     await s.close();
   }
 });
 
-test('a manager whose start failed before its session existed can start again', async () => {
+test('recovery pauses an incomplete historical start that has no provider thread', async () => {
   const s = await setup();
   try {
-    let fail = true;
-    const connect = s.services.connect;
-    s.services.connect = async () => {
-      if (fail) throw new Error('initialize timed out');
-      return connect();
-    };
-    await expect(s.managers.start(s.spec)).rejects.toThrow('initialize timed out');
-    expect(s.managers.get(s.spec.id)).toMatchObject({ status: 'paused' });
-    expect(s.managers.get(s.spec.id).threadId ?? null).toBeNull();
-    fail = false;
-    expect((await s.managers.start(s.spec)).status).toBe('running');
+    const state = await s.recoverSession({ status: 'starting', threadId: null });
+    expect(s.managers.get(state.id)).toMatchObject({ status: 'paused', threadId: null });
+    expect(s.connections).toBe(0);
+    expect(s.windows).toEqual([]);
+    expect(s.requests().filter((r) => r.method === 'thread/start' || r.method === 'turn/start')).toEqual([]);
   } finally {
     await s.close();
   }
 });
 
-test('a Codex manager opening ends idle turns instead of sleeping and names its backlog and message limits', async () => {
-  const s = await setup();
-  try {
-    await s.managers.start(s.spec);
-    const opening = s.requests().find((r) => r.method === 'turn/start')?.params.input[0]?.text as string;
-    const normalizedOpening = opening.replace(/\s+/g, ' ');
-    expect(normalizedOpening).not.toContain('use clock.sleep inside the active turn');
-    expect(normalizedOpening).toContain('finish with a normal response and no tool call');
-    expect(normalizedOpening).toContain('Do not read or wait on inbox, sleep, or poll workers/checks to look for work');
-    expect(normalizedOpening).toContain('The controller resumes this thread on the next inbox event');
-    expect(normalizedOpening).toContain('Read and acknowledge delivered inbox events');
-    expect(normalizedOpening).toContain(`next briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
-    expect(normalizedOpening).toContain('Turn worker results and conflicts into decisions');
-    expect(normalizedOpening).toContain('at most 60 words each');
-    expect(normalizedOpening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
-    expect(normalizedOpening).toContain('Read your brief and continuation once per session');
-    expect(normalizedOpening).toContain('CONTINUATION.md under 8,000 characters, replaced, not appended');
-    expect(normalizedOpening).toContain('Within an hour, handle stopped work in order');
-    expect(s.managers.get(s.spec.id).promptManifest?.overBudget).toEqual([]);
-  } finally {
-    await s.close();
-  }
+test('the historical manager opening rejects a retired launch', () => {
+  expect(() =>
+    renderManagerOpening({
+      spec: { id: 'manager', goal: 'refactor', brief: 'Manage this scope', cwd: import.meta.dir, engine: 'codex' },
+      backlogPath: join(import.meta.dir, 'refactor'),
+      command: 'goal',
+    }),
+  ).toThrow(launchRetired);
 });
 
 test('a parked manager accepts a same-thread operator UserMessage after turn/started and reparks on completion', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -1328,7 +1393,7 @@ test('reload preserves a native Goal harness continuation without classifying it
   const closeTransport = s.client.close.bind(s.client);
   let recovered: ManagerSessions | undefined;
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     const threadId = manager.threadId!;
     await s.notify({
       method: 'turn/completed',
@@ -1385,7 +1450,7 @@ test('reload preserves a native Goal harness continuation without classifying it
       waitingForInbox: false,
       turnDisposition: { threadId, turnId: 'harness-turn', status: 'inProgress', intent: 'work' },
     });
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toEqual([]);
     expect(s.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1);
     expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
     expect(
@@ -1405,7 +1470,7 @@ test('reload preserves a native Goal harness continuation without classifying it
 test('an eventless automatic turn is interrupted after the item-ordering window', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -1451,7 +1516,7 @@ test('an eventless automatic turn is interrupted after the item-ordering window'
 test('a delayed UserMessage notification is recovered from the exact turn item list before interrupt', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -1512,7 +1577,7 @@ test('a delayed UserMessage notification is recovered from the exact turn item l
 test('a real manager stop cancels the pending parked-turn decision and keeps stop intent', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -1554,7 +1619,7 @@ test('a real manager stop cancels the pending parked-turn decision and keeps sto
 test('an event for an idle manager whose thread is not loaded rejoins the thread and starts a new turn', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.notify({
       method: 'turn/completed',
       params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
@@ -1578,7 +1643,7 @@ test('an event for an idle manager whose thread is not loaded rejoins the thread
 test('more than ten clock.sleep calls in an hour raise one alarm and one correction', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     const sleep = (index: number) =>
       s.notify({
@@ -1617,7 +1682,7 @@ test('a turn in which the manager writes or returns a backlog brief is not an em
   const s = await setup();
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
-    const state = await s.managers.start(spec);
+    const state = await s.recoverSession(spec);
     await s.managers.flush();
     const backlog = join(s.path, 'state', 'backlog', 'refactor');
     mkdirSync(join(backlog, 'failed'), { recursive: true });
@@ -1671,13 +1736,24 @@ test('a turn in which the manager writes or returns a backlog brief is not an em
   }
 });
 
-test('startup saves the thread before a later provider request fails', async () => {
+test('recovery retains an incomplete historical start thread when the provider pause fails', async () => {
   const s = await setup();
   try {
+    const state = await s.persistSession({ status: 'starting' });
     writeFileSync(s.failFile, JSON.stringify({ method: 'thread/goal/set' }));
-    await expect(s.managers.start(s.spec)).rejects.toThrow('Thread not loaded');
-    expect(s.managers.get(s.spec.id)).toMatchObject({ status: 'paused', threadId: 'thread-1' });
-    expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(1);
+    await s.managers.recover();
+    expect(s.errors.map((error) => (error as Error).message)).toEqual(['Thread not loaded']);
+    expect(s.managers.get(state.id)).toMatchObject({ status: 'paused', threadId: state.threadId });
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toEqual([]);
+    await s.managers.stop(state.id);
+    await s.managers.flush();
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'paused',
+      threadId: state.threadId,
+      activeTurnId: null,
+      turnDisposition: { turnId: state.activeTurnId, status: 'interrupted', intent: 'controller-stop' },
+    });
+    expect(s.removed).toContain(state.id);
   } finally {
     await s.close();
   }
@@ -1686,7 +1762,7 @@ test('startup saves the thread before a later provider request fails', async () 
 test('a notification from a retired thread does not change the current session', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     await s.managers.flush();
     await s.notify({
       method: 'turn/completed',
@@ -1714,20 +1790,30 @@ test('a notification from a retired thread does not change the current session',
   }
 });
 
-test('a failed connection is evicted so the next start reconnects', async () => {
+test('a failed connection is evicted so recovery reconnects the same historical session', async () => {
   const s = await setup();
   try {
+    const state = await s.persistSession();
     let attempts = 0;
-    const connect = s.services.connect!;
+    const connect = s.services.connect;
     s.services.connect = async () => {
       attempts++;
       if (attempts === 1) throw new Error('connect failed');
       return connect();
     };
-    await expect(s.managers.start(s.spec)).rejects.toThrow('connect failed');
-    expect(s.managers.get(s.spec.id)).toMatchObject({ status: 'paused', threadId: null });
-    expect((await s.managers.start(s.spec)).status).toBe('running');
+    await s.managers.recover();
+    expect(s.errors).toEqual([new Error('connect failed')]);
+    expect(s.managers.get(state.id)).toEqual(state);
+    await s.managers.recover();
+    await s.managers.flush();
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'running',
+      threadId: state.threadId,
+      activeTurnId: state.activeTurnId,
+    });
     expect(attempts).toBe(2);
+    expect(s.errors).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toEqual([]);
   } finally {
     await s.close();
   }
@@ -1744,7 +1830,7 @@ test('one ownership callback fires per process identity', async () => {
       if (server.identity) onStart?.(server.identity);
       return server;
     };
-    await s.managers.start(s.spec);
+    await s.recoverSession();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toEqual(s.client.identity);
   } finally {
@@ -1755,7 +1841,7 @@ test('one ownership callback fires per process identity', async () => {
 test('pause falls back to resume then interrupt when the active turn is gone', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     writeFileSync(s.failFile, JSON.stringify({ method: 'turn/interrupt' }));
     await s.managers.stop(manager.id);
     const methods = s
@@ -1783,7 +1869,7 @@ test('pause falls back to resume then interrupt when the active turn is gone', a
   }
 });
 
-test('manager assign moves a Goal onto another running manager without restarting its tasks', async () => {
+test('internal historical assignment moves a Goal and its records without restarting tasks', async () => {
   const s = await setup();
   try {
     mkdirSync(join(s.path, 'docs', 'goals'), { recursive: true });
@@ -1793,8 +1879,11 @@ test('manager assign moves a Goal onto another running manager without restartin
     writeFileSync(join(s.path, 'docs', 'goals', 'commerce.md'), 'Commerce goal brief\n');
     writeFileSync(join(s.path, '.temp', 'goal', 'refactor', 'CONTINUATION.md'), 'Refactor continuation\n');
     writeFileSync(join(s.path, '.temp', 'goal', 'commerce', 'CONTINUATION.md'), 'Commerce continuation\n');
-    const source = await s.managers.start(s.spec);
-    const dest = await s.managers.start({ ...s.spec, id: 'other', goal: 'commerce', objective: 'Finish commerce' });
+    const source = await s.recoverSession();
+    const dest = await s.recoverSession({ ...s.spec, id: 'other', goal: 'commerce', objective: 'Finish commerce' });
+    const sourceActor = { GOAL_MANAGER: source.id, CODEX_THREAD_ID: source.threadId! };
+    const destActor = { GOAL_MANAGER: dest.id, CODEX_THREAD_ID: dest.threadId! };
+    expect(authenticatedManager(s.db, sourceActor)).toEqual({ id: source.id, sessionId: sourceActor.CODEX_THREAD_ID });
     await s.notify({
       method: 'turn/completed',
       params: { threadId: dest.threadId, turn: { id: dest.activeTurnId, status: 'completed' } },
@@ -1858,6 +1947,8 @@ test('manager assign moves a Goal onto another running manager without restartin
     expect(moved).toEqual({ goal: 'refactor', from: source.id, to: dest.id, goals: ['commerce', 'refactor'] });
     expect(s.managers.get(source.id).status).toBe('paused');
     expect(s.removed).toContain(source.id);
+    expect(authenticatedManager(s.db, sourceActor)).toBeUndefined();
+    expect(authenticatedManager(s.db, destActor)).toEqual({ id: dest.id, sessionId: destActor.CODEX_THREAD_ID });
     expect(s.managers.get(dest.id)).toMatchObject({
       status: 'running',
       threadId: dest.threadId,
@@ -1924,14 +2015,14 @@ test('manager assign moves a Goal onto another running manager without restartin
   }
 });
 
-test('assigning a Goal to its own manager or to a manager that is not running is refused', async () => {
+test('internal historical assignment refuses the current owner and a non-running destination', async () => {
   const s = await setup();
   try {
-    const source = await s.managers.start(s.spec);
+    const source = await s.recoverSession();
     await expect(s.managers.assign('refactor', source.id)).rejects.toThrow(
       'Goal refactor is already owned by manager manager',
     );
-    const dest = await s.managers.start({ ...s.spec, id: 'other', goal: 'commerce' });
+    const dest = await s.recoverSession({ ...s.spec, id: 'other', goal: 'commerce' });
     await s.managers.stop(dest.id);
     await expect(s.managers.assign('refactor', dest.id)).rejects.toThrow(
       'Manager other is not a running managed manager',
@@ -1947,7 +2038,7 @@ test('assigning a Goal to its own manager or to a manager that is not running is
 test('close flushes a pending wake and ignores later notifications', async () => {
   const s = await setup();
   try {
-    const manager = await s.managers.start(s.spec);
+    const manager = await s.recoverSession();
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Finish before close' });
     const waking = s.managers.wake(manager.id);
     await s.managers.close();
@@ -1967,21 +2058,28 @@ test('close flushes a pending wake and ignores later notifications', async () =>
   }
 });
 
-test('manager renewal preserves an empty assignment and transfer repairs a duplicate paused claim', async () => {
+test('a failed historical renewal preserves an empty assignment', async () => {
+  const s = await setup();
+  try {
+    const state = await s.persistSession({ status: 'paused', goals: [] });
+    await expect(s.managers.renew(state.id, s.spec)).rejects.toThrow(launchRetired);
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'paused',
+      goals: [],
+      activeTurnId: null,
+      history: [{ threadId: state.threadId, goals: [] }],
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test('internal historical assignment repairs a duplicate paused claim', async () => {
   const s = await setup();
   try {
     const goal = s.spec.goal;
-    const source = await s.managers.start({ ...s.spec, goals: [goal, 'other-goal'] });
-    const destination = { ...s.spec, id: 'destination', goals: [] };
-    await s.managers.start(destination);
-    await s.managers.stop(destination.id);
-    const renewed = await s.managers.renew(destination.id, destination);
-    expect(renewed).toMatchObject({ status: 'running', goals: [] });
-    await s.managers.stop(source.id);
-    // Reproduce the ownership row left by the previous renewal code.
-    s.db
-      .query("UPDATE manager_sessions SET state=json_set(state, '$.goals', json(?)) WHERE id=?")
-      .run(JSON.stringify([goal]), destination.id);
+    const source = historicalManager(s.db, s.path, { ...s.spec, status: 'paused', goals: [goal, 'other-goal'] });
+    const destination = await s.recoverSession({ id: 'destination', goals: [goal] });
     const moved = await s.managers.assign(goal, destination.id);
     expect(moved).toEqual({ goal, from: source.id, to: destination.id, goals: [goal] });
     expect(s.managers.get(source.id)).toMatchObject({ status: 'paused', goals: ['other-goal'] });
