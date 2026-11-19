@@ -6,7 +6,7 @@ import {
 } from './agent-verification-identity-retention.ts';
 export { readAccountIdentityTechnicalSource };
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
-import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { cappedDeadlineFor, deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 /** Access-owned source history. These helpers are internal to the native identity bridge. */
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -53,6 +53,8 @@ export {
   ACCOUNT_IDENTITY_SOURCE_DECLARATION,
   ACCOUNT_IDENTITY_TECHNICAL_FALLBACK_DECLARATION,
 } from './agent-verification-identity-work.ts';
+
+const ACCOUNT_IDENTITY_PUBLICATION_BUDGET_MS = 5_000;
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type Source = {
@@ -468,7 +470,7 @@ export async function loadAccountIdentitySource(pool: Pool, receipt: AccountRece
 
 /** One bounded delivery/probe invocation. The original DBOS workflow owns durable sleeps/redrive. */
 export function deliverAccountIdentity(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
-  return withRequestDeadline(Math.min(deadlineFor(5000), Date.now() + 5000), () =>
+  return withRequestDeadline(cappedDeadlineFor(ACCOUNT_IDENTITY_PUBLICATION_BUDGET_MS), () =>
     deliverAccountIdentityBounded(pool, receipt),
   );
 }
@@ -588,7 +590,7 @@ const publishedUndos = new WeakSet<object>();
 
 /** Effects-free publication probe; retained history and unrelated jobs are never scanned. */
 export function probeAccountIdentityPublication(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
-  return withRequestDeadline(Math.min(deadlineFor(5000), Date.now() + 5000), () =>
+  return withRequestDeadline(cappedDeadlineFor(ACCOUNT_IDENTITY_PUBLICATION_BUDGET_MS), () =>
     probeAccountIdentityPublicationBounded(pool, receipt),
   );
 }

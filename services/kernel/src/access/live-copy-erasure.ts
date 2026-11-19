@@ -4,10 +4,13 @@ import type { Pool, PoolClient } from 'pg';
 import { withReadTransaction } from '../semantic/read.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import { withErasureOperationalClient } from './erasure-operational-client.ts';
+import { cappedDeadlineFor } from '../request/deadline.ts';
 import { readLiveCopyLineage } from './live-copy-lineage.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import type { LiveCopyRole } from './live-copy.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
+
+const LIVE_COPY_MINIMIZATION_RETRY_BUDGET_MS = 5_000;
 
 type Client = Pick<PoolClient, 'query'>;
 /** The actual source effects-admission transaction enrolls its own disposable intents.
@@ -311,7 +314,7 @@ export async function minimizeLiveCopyInventory(
           return done;
         },
       );
-    const deadline = Date.now() + 5000;
+    const deadline = cappedDeadlineFor(LIVE_COPY_MINIMIZATION_RETRY_BUDGET_MS);
     while (Date.now() < deadline) {
       try {
         return await metadata();

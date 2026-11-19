@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { WorkContext } from '../work/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { Pool } from 'pg';
-import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { cappedDeadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { type IdentitySourceConsumerCustody } from '../semantic/identity-source-consumer-custody.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import {
@@ -64,6 +64,8 @@ import {
   MAX_AGENT_IDENTITY_SOURCE_KEYS,
   agentIdentitySourceKey,
 } from '../history/contract/index.ts';
+
+const AGENT_IDENTITY_RETENTION_STEP_BUDGET_MS = 5_000;
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 // Failure bookkeeping only; all positive authority comes from durable locked native rows.
@@ -733,7 +735,7 @@ export function minimizeAgentIdentityRetention(
 ): Promise<readonly AgentIdentityRetentionResult[]> {
   const partition = validateInput(input);
   const fixed = structuredClone(input);
-  const deadline = Math.min(deadlineFor(5000), Date.now() + 5000);
+  const deadline = cappedDeadlineFor(AGENT_IDENTITY_RETENTION_STEP_BUDGET_MS);
   const pending = (gap: AgentIdentityRetentionPending['gap']) =>
     fixed.keys.map((key) =>
       Object.freeze({

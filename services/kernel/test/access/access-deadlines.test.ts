@@ -6,7 +6,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
 import { defineRateLimit } from '../../src/http/rate-limit.ts';
-import { deadlineFor, withRequestDeadline } from '../../src/request/deadline.ts';
+import { cappedDeadlineFor, deadlineFor, withRequestDeadline } from '../../src/request/deadline.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -57,6 +57,19 @@ test('background work uses its named job deadline settings', () => {
   expect(source('committed-continuations.ts')).toContain('deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS)');
   expect(source('bootstrap-governance.ts')).toContain('deadlineFor(BOOTSTRAP_GOVERNANCE_DEADLINE_MS)');
   expect(source('bootstrap-governance.ts')).toContain('BOOTSTRAP_GOVERNANCE_DEADLINE_MS = 10_000');
+});
+
+test('local Access budgets cap active callers and start fresh after the caller ends', async () => {
+  const deadline = () => cappedDeadlineFor(5_000, () => 10_000);
+  expect(deadline()).toBe(15_000);
+  expect(withRequestDeadline(20_000, deadline)).toBe(15_000);
+  expect(withRequestDeadline(12_000, deadline)).toBe(12_000);
+  expect(withRequestDeadline(9_000, deadline)).toBe(9_000);
+
+  const startBackground = Promise.withResolvers<void>();
+  const { background } = withRequestDeadline(12_000, () => ({ background: startBackground.promise.then(deadline) }));
+  startBackground.resolve();
+  expect(await background).toBe(15_000);
 });
 
 test('evidence deadlines use the shared one-second real-time window and caller cap', () => {
