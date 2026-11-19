@@ -1,5 +1,6 @@
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { withReadTransaction } from './read.ts';
+import { identityJobPartition, type IdentityJobRef } from './identity-adapters/identity-epoch-contract.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 
@@ -88,6 +89,19 @@ export function bindSemanticProducerRoles(
       roles.map((r) => r.account_id),
       roles.map((r) => r.role),
     ]);
+  });
+}
+
+/** Fixed Search steps on the job home inherit the admission's provenance. Foreign steps
+ * carry the job roles on their own source transaction. Both still bind roles for native records.
+ */
+export function bindSearchIdentityJobRoles(
+  tx: CommandTransaction,
+  job: IdentityJobRef,
+  roles: readonly SemanticCopyRole[],
+): void {
+  bindSemanticProducerRoles(tx, roles, {
+    exposeCaptureOrigin: currentCommand(tx).partition !== identityJobPartition(job),
   });
 }
 

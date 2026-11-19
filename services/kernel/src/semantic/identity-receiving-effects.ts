@@ -22,7 +22,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
-import { identityErasureRoles, bindSemanticProducerRoles } from './erasure-producer.ts';
+import { identityErasureRoles, bindSearchIdentityJobRoles, bindSemanticProducerRoles } from './erasure-producer.ts';
 import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
 import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
@@ -426,6 +426,15 @@ export async function prepareIdentityReceivingEffect(
   return acceptReceivingBinding(pool, binding);
 }
 
+function bindReceivingRoles(
+  tx: CommandTransaction,
+  binding: NativeIdentityReceivingBinding,
+  roles: Awaited<ReturnType<typeof identityErasureRoles>>,
+) {
+  if (binding.step === 'search-canonical-index') bindSearchIdentityJobRoles(tx, binding.job, roles);
+  else bindSemanticProducerRoles(tx, roles);
+}
+
 async function retainReceivingBindingPlan(
   pool: Pool,
   binding: NativeIdentityReceivingBinding,
@@ -455,7 +464,7 @@ async function retainReceivingBindingPlan(
       source.disposition === 'OLD' ? 'remove' : source.disposition === 'handoff' ? 'pending-fence' : 'add',
     ]);
     if (expected.rowCount !== 1) throw stale();
-    bindSemanticProducerRoles(tx, roles);
+    bindReceivingRoles(tx, binding, roles);
     recordIdentityEpochNativeCommit(tx, 'identity-receiving-plan');
     registerCommandCallback(tx, async (id) => {
       const inserted = await tx.query(receivingStatements.insertPlan, [
@@ -531,7 +540,7 @@ async function acceptPreparedReceivingBinding(
           ? await searchNativeCall(tx, 'readAndHold', binding)
           : (await holdSource(tx, binding.source, 'readAndHold'), null);
       if (nativeHold && binding.step === 'search-canonical-index') validateSearchHold(binding, nativeHold);
-      bindSemanticProducerRoles(tx, roles);
+      bindReceivingRoles(tx, binding, roles);
       recordIdentityEpochNativeCommit(tx, 'identity-receiving-record');
       registerCommandCallback(tx, async (id) => {
         const inserted = await tx.query(receivingStatements.insertAccepted, [
@@ -863,9 +872,7 @@ export async function applySearchIdentityReceivingEffect(
   if (!frontier) throw stale();
   // The receiving effect names the application as its own source. A colocated fixed step names
   // the exact job admission, which already carries the job roles resolved for this application.
-  bindSemanticProducerRoles(tx, roles, {
-    exposeCaptureOrigin: effect.receipt.partition !== identityJobPartition(effect.job),
-  });
+  bindSearchIdentityJobRoles(tx, effect.job, roles);
   await writeReceivingApplication(tx, effect, record, frontier);
   return { frontier, receipt: null, scopeDigest: record.scopeDigest };
 }
@@ -959,7 +966,7 @@ async function acknowledgeReceivingControl(
       native.position.toString(),
       native.transactionId,
     ]);
-    bindSemanticProducerRoles(tx, roles);
+    bindReceivingRoles(tx, record, roles);
     recordIdentityEpochNativeCommit(tx, 'identity-receiving-custody');
     registerCommandCallback(tx, async (id) => {
       await tx.query(receivingStatements.insertCustody, [home, effect.job.jobId, effect.effectKey, id]);
@@ -1039,7 +1046,7 @@ async function releaseReceivingCustody(
       });
       if (released.status !== 'released') throw unavailable(`Native Source releaseHold: ${released.reason}`);
     }
-    bindSemanticProducerRoles(tx, roles);
+    bindReceivingRoles(tx, local, roles);
     return { value: null, events: [wake(local)] };
   });
 }

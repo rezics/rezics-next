@@ -10,7 +10,7 @@ import type {
   IdentityStepProgress,
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
+import { bindSearchIdentityJobRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
@@ -318,7 +318,7 @@ export function createSearchIdentityEpochParticipant(options: {
                 ? requestSearchIdentityWriter(directory, change.original, change.terminal)
                 : { after: ['directory', directory.count], segment: 0 };
               const state = change ? ('more' as const) : ('complete' as const);
-              bindSemanticProducerRoles(tx, roles);
+              bindSearchIdentityJobRoles(tx, ref, roles);
               recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
               registerCommandCallback(tx, async (id) => {
                 const inserted = await tx.query(change ? stepSql.sql : completeSql.sql, [
@@ -377,7 +377,7 @@ export function createSearchIdentityEpochParticipant(options: {
               { partition: identityJobPartition(ref), deadline, clock: configuration.clock },
               async (tx) => {
                 await requireCurrentSearchIdentityDirectory(tx, ref, directory);
-                bindSemanticProducerRoles(tx, roles);
+                bindSearchIdentityJobRoles(tx, ref, roles);
                 recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
                 registerCommandCallback(tx, async (id) => {
                   const inserted = await tx.query(stepSql.sql, [
@@ -453,12 +453,12 @@ export function createSearchIdentityEpochParticipant(options: {
             }
           : (await readSearchIdentityOriginalPlan(pool, ref, change, configuration, deadline))?.selection;
         if (!selection) throw unavailable('Retained Search plan disappeared');
-        const roles = await identityErasureRoles(pool, ref.jobId, { preferSingleRole: true });
         let applied: IdentityNativeReceipt;
         if (dispatch) {
           if (!dispatch.applied) throw unavailable('Released scope lost its applied receipt');
           applied = dispatch.applied;
         } else {
+          const roles = await identityErasureRoles(pool, ref.jobId, { preferSingleRole: true });
           const effect = await prepareSearchIdentityReceivingEffect(pool, selection);
           await applySearchIdentityWriterStep(
             configuration,
@@ -494,7 +494,7 @@ export function createSearchIdentityEpochParticipant(options: {
               directory.scope,
             ]);
             if (retired.rowCount !== 1) throw unavailable('Search scope progress lost exact committed control custody');
-            bindSemanticProducerRoles(tx, roles);
+            // Only the job-home step is captured here. Its trigger uses the original job admission.
             recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
             registerCommandCallback(tx, async (id) => {
               const inserted = await tx.query(stepSql.sql, [

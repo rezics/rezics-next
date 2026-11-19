@@ -9,7 +9,7 @@ import {
 } from '../command/command.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
+import { bindSearchIdentityJobRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identitySourceConsumerNativeWork } from '../semantic/identity-source-consumer-maintenance.ts';
 import {
@@ -177,12 +177,87 @@ export function applySearchIdentityWriterStep(
   });
 }
 
-export async function advanceSearchIdentityDispatch(
+type DispatchRequest = Readonly<{ planId: string; holdId: string; original: string; terminal: string }>;
+
+async function readSearchIdentityDispatch(
+  configuration: SearchReceivingConfiguration,
+  job: IdentityJobRef,
+  request: DispatchRequest,
+  scope: string,
+  deadline: number,
+) {
+  const { pool, index } = configuration;
+  const basis = await readSearchIdentityDispatchBasis(
+    pool,
+    job,
+    {
+      original: request.original,
+      terminal: request.terminal,
+      native: { partition: subjectPartition(request.original), planId: request.planId },
+    },
+    scope,
+    index,
+    deadline,
+  );
+  if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
+    throw unavailable('Search writer dispatch request no longer names the accepted hold');
+  const reconcile =
+    basis.state === 'applied' && !basis.released
+      ? await prepareSearchIdentityReceivingReconciliation(
+          pool,
+          searchIdentityDispatchEffect(
+            job,
+            {
+              original: basis.source.original,
+              effectKey: basis.effect_key,
+              native: basis.source.locator,
+            },
+            basis,
+          ),
+        )
+      : null;
+  return {
+    basis,
+    roles: basis.state === null || basis.state === 'visible' ? await identityErasureRoles(pool, job.jobId) : [],
+    reconcile,
+  };
+}
+
+/** Resolve the request inside the directory snapshot. Run its guarded writes only after release. */
+export async function prepareSearchIdentityDispatch(
   configuration: SearchReceivingConfiguration,
   writer: SearchWriterNativeCustody,
   store: ReturnType<typeof createSearchIdentityReceivingNativeStore>,
   job: IdentityJobRef,
-  request: Readonly<{ planId: string; holdId: string; original: string; terminal: string }>,
+  request: DispatchRequest,
+  scope: string,
+  context: ReturnType<typeof searchIdentityWorkContext>,
+  engine: OpenSearch,
+  outsideSource: <T>(body: () => T) => T,
+) {
+  const observation = await readSearchIdentityDispatch(configuration, job, request, scope, context.deadline);
+  return () =>
+    advanceSearchIdentityDispatch(
+      configuration,
+      writer,
+      store,
+      job,
+      request,
+      observation,
+      scope,
+      context,
+      engine,
+      outsideSource,
+    );
+}
+
+async function advanceSearchIdentityDispatch(
+  configuration: SearchReceivingConfiguration,
+  writer: SearchWriterNativeCustody,
+  store: ReturnType<typeof createSearchIdentityReceivingNativeStore>,
+  job: IdentityJobRef,
+  request: DispatchRequest,
+  observation: Awaited<ReturnType<typeof readSearchIdentityDispatch>>,
   scope: string,
   context: ReturnType<typeof searchIdentityWorkContext>,
   engine: OpenSearch,
@@ -190,46 +265,7 @@ export async function advanceSearchIdentityDispatch(
 ) {
   const { pool, index, clock } = configuration;
   const { deadline } = context;
-  const { basis, roles, reconcile } = await withReadTransaction(
-    pool,
-    async () => {
-      const basis = await readSearchIdentityDispatchBasis(
-        pool,
-        job,
-        {
-          original: request.original,
-          terminal: request.terminal,
-          native: { partition: subjectPartition(request.original), planId: request.planId },
-        },
-        scope,
-        index,
-        deadline,
-      );
-      if (!basis || basis.hold_id !== request.holdId || basis.source.consumer !== configuration.consumer)
-        throw unavailable('Search writer dispatch request no longer names the accepted hold');
-      const reconcile =
-        basis.state === 'applied' && !basis.released
-          ? await prepareSearchIdentityReceivingReconciliation(
-              pool,
-              searchIdentityDispatchEffect(
-                job,
-                {
-                  original: basis.source.original,
-                  effectKey: basis.effect_key,
-                  native: basis.source.locator,
-                },
-                basis,
-              ),
-            )
-          : null;
-      return {
-        basis,
-        roles: basis.state === null || basis.state === 'visible' ? await identityErasureRoles(pool, job.jobId) : [],
-        reconcile,
-      };
-    },
-    deadline,
-  );
+  const { basis, roles, reconcile } = observation;
   if (reconcile) return reconcile();
   const { source, action_digest: actionDigest, action_bytes: actionBytes } = basis;
   const selection: SearchIdentityReceivingSelection = {
@@ -316,7 +352,7 @@ export async function advanceSearchIdentityDispatch(
         action,
         response.bulk,
       );
-      bindSemanticProducerRoles(tx, retained.roles);
+      bindSearchIdentityJobRoles(tx, job, retained.roles);
       await store.recordVisible(tx, selection.native, request.holdId, response.operation_id, remaining(), bytes);
       return { value: null, events: searchIdentityWriterChanged() };
     });
@@ -355,7 +391,7 @@ export async function advanceSearchIdentityDispatch(
     )
       throw unavailable('Canonical Search Source changed before dispatch');
     await writer.dispatchIdentityAction(tx, job, source, token);
-    bindSemanticProducerRoles(tx, roles);
+    bindSearchIdentityJobRoles(tx, job, roles);
     await store.recordDispatch(tx, selection.native, basis.hold_id, operationId, remaining(), basis.action_bytes);
     return { value: action, events: searchIdentityWriterChanged() };
   });

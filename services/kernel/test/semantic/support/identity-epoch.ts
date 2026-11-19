@@ -209,7 +209,7 @@ export async function nativeEpochStore(): Promise<IdentityEpochStore> {
   );
   const module = await import(path.href);
   expect(module.identityEpochStore).toBeDefined();
-  return module.identityEpochStore as IdentityEpochStore;
+  return module.identityEpochStore();
 }
 export async function nativeMappingStep(): Promise<IdentityEpochStep> {
   const path = new URL('../../../src/semantic/identity-epoch-mapping.ts', import.meta.url);

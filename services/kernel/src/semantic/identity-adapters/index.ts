@@ -696,6 +696,8 @@ export function createIdentityEpochStore(capabilities: NativeIdentityCapabilitie
             if (canonicalize(previous.progress) !== canonicalize(JSON.parse(json()(progress)))) throw invalidReceipt();
             return cmd().noEffect(decodeProgress(previous.progress));
           }
+          // A published job can replay only its exact previously committed acknowledgement.
+          if (job.state !== 'pending') throw invalidReceipt();
           await tx.query(storeInsertAck.sql, [
             identityJobPartition(receipt.job),
             receipt.job.jobId,

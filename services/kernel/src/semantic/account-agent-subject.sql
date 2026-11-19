@@ -6,12 +6,14 @@ SELECT subject.subject_id::text AS id,
        latest.revision,
        subject.current_release AS release,
        COALESCE(labels.label_values, '{}'::jsonb) AS labels,
-       redirect.target::text AS redirect
+       redirect.target::text AS redirect,
+       CASE WHEN redirect.recorded_transaction_id = latest.recorded_transaction_id
+            THEN latest.verification_receipt_id END AS redirect_receipt
 FROM input
 JOIN semantic.subject AS subject
   ON subject.route = input.route AND subject.subject_id = input.subject_id
 JOIN LATERAL (
-  SELECT revision
+  SELECT revision, recorded_transaction_id, verification_receipt_id
   FROM semantic.revision
   WHERE route = input.route AND subject_id = input.subject_id
   ORDER BY revision DESC
@@ -27,7 +29,7 @@ LEFT JOIN LATERAL (
   ) AS current_labels
 ) AS labels ON true
 LEFT JOIN LATERAL (
-  SELECT target
+  SELECT target, recorded_transaction_id
   FROM semantic.redirect
   WHERE route = input.route AND subject_id = input.subject_id
   ORDER BY sequence DESC
