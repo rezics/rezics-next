@@ -31,7 +31,7 @@ test('selection and item menu interactions work in the browser', async () => {
       .flatMap((file) => file.assertionResults)
       .map((a) => `${a.title}: ${a.status} ${a.failureMessages[0]?.split('\n')[0] ?? ''}`.trim())
       .sort();
-    expect(outcomes).toEqual(['Item Menu: passed', 'Selection: passed']);
+    expect(outcomes).toEqual(['Compact Selection: passed', 'Item Menu: passed', 'Selection: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

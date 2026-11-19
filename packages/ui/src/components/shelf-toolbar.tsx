@@ -1,5 +1,6 @@
-import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useIsMobile } from '../hooks/use-mobile.ts';
+import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
@@ -11,6 +12,9 @@ import { LayoutSelect } from './layout-select.tsx';
 type Option = { value: string; label: string };
 type Layout = 'grid' | 'list' | 'table';
 type Density = 'small' | 'medium' | 'large';
+const sortTriggerClassName = 'w-full min-w-0 max-w-full whitespace-normal data-[size=default]:h-auto';
+const sortOptionClassName =
+  'pr-7 [&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal';
 
 /** A navigable status strip; shadcn has no link-based shelf navigation. */
 export function ShelfTabs({
@@ -135,8 +139,12 @@ type Props = {
 /** Shelf controls combine shadcn primitives; the registry has no shelf toolbar. */
 export function ShelfToolbar(p: Props) {
   const { labels: l } = p;
+  const isMobile = useIsMobile();
   const sortId = useId();
   const directionId = useId();
+  const layoutOptions = (isMobile ? (['grid', 'list'] as const) : (['grid', 'list', 'table'] as const)).map(
+    (value) => ({ value, label: l[value] }),
+  );
   const sortOptions = p.sorts;
   const directionOptions = [
     { value: 'asc', label: l.ascending },
@@ -163,14 +171,14 @@ export function ShelfToolbar(p: Props) {
             id={sortId}
             aria-labelledby={`${sortId}-label`}
             size="default"
-            className="w-full min-w-0 max-w-full"
+            className={sortTriggerClassName}
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
             <SelectGroup>
-              {sortOptions.map(({ value, label, ...itemProps }) => (
-                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+              {sortOptions.map(({ value, label }) => (
+                <SelectItem key={value} value={value} className={sortOptionClassName}>
                   {label}
                 </SelectItem>
               ))}
@@ -197,14 +205,14 @@ export function ShelfToolbar(p: Props) {
             id={directionId}
             aria-labelledby={`${directionId}-label`}
             size="default"
-            className="w-full min-w-0 max-w-full"
+            className={sortTriggerClassName}
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
             <SelectGroup>
-              {directionOptions.map(({ value, label, ...itemProps }) => (
-                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+              {directionOptions.map(({ value, label }) => (
+                <SelectItem key={value} value={value} className={sortOptionClassName}>
                   {label}
                 </SelectItem>
               ))}
@@ -276,6 +284,7 @@ export function ShelfToolbar(p: Props) {
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Menu
           title={l.view}
+          entries={[]}
           trigger={
             <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left sm:hidden">
               {l.view} {badge}
@@ -309,6 +318,7 @@ export function ShelfToolbar(p: Props) {
         <div className="hidden min-w-0 items-center gap-2 sm:flex">
           <Menu
             title={l.sort}
+            entries={[]}
             trigger={
               <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
                 {l.sort}
@@ -318,6 +328,7 @@ export function ShelfToolbar(p: Props) {
           />
           <Menu
             title={l.filter}
+            entries={[]}
             trigger={
               <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
                 {l.filter} {badge}
@@ -325,18 +336,10 @@ export function ShelfToolbar(p: Props) {
             }
             content={filter}
           />
-          <LayoutSelect
-            label={l.layout}
-            value={p.layout}
-            options={(['grid', 'list', 'table'] as const).map((value) => ({
-              value,
-              label: l[value],
-              ...(value === 'table' ? { className: 'hidden md:block' } : {}),
-            }))}
-            onValueChange={p.onLayoutChange}
-          />
+          <LayoutSelect label={l.layout} value={p.layout} options={layoutOptions} onValueChange={p.onLayoutChange} />
           <Menu
             title={l.display}
+            entries={[]}
             trigger={
               <Button variant="outline" className="min-w-0 max-w-full whitespace-normal break-words text-left">
                 {l.display}

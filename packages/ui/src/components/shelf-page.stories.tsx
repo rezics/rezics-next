@@ -146,8 +146,9 @@ export const MenuOpen: Story = {
   render: () => <Page />,
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
-    await expect(await screen.findByRole('dialog', { name: 'Sort' })).toBeVisible();
-    await expect(screen.getByRole('combobox')).toBeVisible();
+    const sort = await screen.findByRole('dialog', { name: 'Sort' });
+    await expect(within(sort).getByRole('combobox', { name: labels.sort })).toBeVisible();
+    await expect(within(sort).getByRole('combobox', { name: labels.direction })).toBeVisible();
   },
 };
 export const InProgress: Story = { args: { initial: 'progress' } };

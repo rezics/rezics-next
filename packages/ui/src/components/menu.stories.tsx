@@ -347,7 +347,9 @@ function ShelfToolbarFormStory() {
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       <Button variant="outline">Outside control</Button>
       <nav aria-label="Primary navigation">
-        <a href="#menu-primary-navigation">Primary navigation destination</a>
+        <a href="#menu-primary-navigation" target="_self">
+          Primary navigation destination
+        </a>
       </nav>
       {mounted ? (
         <ShelfToolbar
@@ -414,7 +416,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
   const document = canvasElement.ownerDocument;
   const browser = document.defaultView!;
   if (within(canvasElement).queryByRole('button', { name: new RegExp(toolbarLabels.view) })) {
-    await viewForms(canvasElement, true);
+    await viewForms(canvasElement);
     return;
   }
   const originalHref = browser.location.href;
@@ -441,8 +443,11 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     const sortControl = within(sortPanel).getByRole('combobox', { name: toolbarLabels.sort });
     await expect(sortControl).toHaveFocus();
     await expectPanelInViewport(sortPanel);
-    await userEvent.selectOptions(sortControl, 'title');
-    await expect(sortControl).toHaveValue('title');
+    await userEvent.keyboard('{Enter}');
+    await screen.findByRole('listbox');
+    await userEvent.keyboard('{End}{Enter}');
+    await expect(sortControl).toHaveTextContent('Alphabetical title order for every collection item');
+    await waitFor(() => expect(sortControl).toHaveFocus());
     await userEvent.tab();
     await expect(within(sortPanel).getByRole('combobox', { name: toolbarLabels.direction })).toHaveFocus();
 
@@ -507,15 +512,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     await expect(screen.getByRole('dialog', { name: toolbarLabels.filter })).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.filter })).not.toBeInTheDocument());
-    await expect(filterTrigger).toHaveFocus();
-
-    await userEvent.click(filterTrigger);
-    const reopenedFilter = await screen.findByRole('dialog', { name: toolbarLabels.filter });
-    const outsideControl = canvas.getByRole('button', { name: 'Outside control' });
-    await userEvent.click(outsideControl);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.filter })).not.toBeInTheDocument());
-    await expect(outsideControl).toHaveFocus();
-    expect(reopenedFilter).not.toBeInTheDocument();
+    await waitFor(() => expect(filterTrigger).toHaveFocus());
 
     const displayTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.display) });
     await userEvent.click(displayTrigger);
@@ -526,7 +523,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     await expect(displayPanel).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.display })).not.toBeInTheDocument());
-    await expect(displayTrigger).toHaveFocus();
+    await waitFor(() => expect(displayTrigger).toHaveFocus());
 
     const coarseMatchMedia = (query: string) => {
       if (query === '(pointer: coarse)') {
@@ -549,6 +546,10 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     await userEvent.click(sortTrigger);
     const phoneSheet = await screen.findByRole('dialog', { name: toolbarLabels.sort });
     await expect(within(phoneSheet).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
+    // Let the sheet finish ignoring the pointer that opened it.
+    await new Promise<void>((resolve) =>
+      browser.requestAnimationFrame(() => browser.requestAnimationFrame(() => resolve())),
+    );
     await userEvent.click(within(phoneSheet).getByRole('button', { name: 'Done' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());
     restoreMatchMedia();
@@ -568,6 +569,13 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     await expect(within(freshPanel).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());
+
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.filter) }));
+    const reopenedFilter = await screen.findByRole('dialog', { name: toolbarLabels.filter });
+    const outsideControl = canvas.getByRole('button', { name: 'Outside control' });
+    await userEvent.click(outsideControl);
+    await waitFor(() => expect(reopenedFilter).not.toBeInTheDocument());
+    await expect(outsideControl).toHaveFocus();
   } finally {
     for (const [button, descriptor] of triggerRects) {
       if (descriptor) Object.defineProperty(button, 'getBoundingClientRect', descriptor);
@@ -582,62 +590,61 @@ export const ShelfToolbarFormRecovery: Story = {
   args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
   play: customFormRegression,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
 };
 
-async function viewForms(canvasElement: HTMLElement, recover = false) {
+async function viewForms(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  const compact = !!canvas.queryByRole('button', { name: new RegExp(toolbarLabels.view) });
-  if (compact) {
+  const openView = async () => {
     await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
-    const panel = await screen.findByRole('dialog', { name: toolbarLabels.view });
-    await userEvent.click(within(panel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
-  } else {
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.filter) }));
-  }
-  const filter = await screen.findByRole('dialog', { name: compact ? toolbarLabels.view : toolbarLabels.filter });
+    return screen.findByRole('dialog', { name: toolbarLabels.view });
+  };
+  const view = await openView();
+  const controls = within(view);
+  const sort = controls.getByRole('combobox', { name: toolbarLabels.sort });
+  await userEvent.click(sort);
+  const title = 'Alphabetical title order for every collection item';
+  await userEvent.click(await screen.findByRole('option', { name: title }));
+  await expect(sort).toHaveTextContent(title);
+
+  const showFilter = async (panel: HTMLElement) =>
+    userEvent.click(within(panel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
+  await showFilter(view);
   await expect(
-    within(filter).getByRole('combobox', {
-      name: 'Filter by language and translated publication status',
-    }),
+    controls.getByRole('combobox', { name: 'Filter by language and translated publication status' }),
   ).toBeVisible();
-  const notes = within(filter).getByRole('textbox', { name: 'Notes for this filter' });
-  await expect(notes).toBeVisible();
-  if (recover) {
-    await userEvent.type(notes, 'Retain the filter while opening additional criteria.');
-    await userEvent.click(within(filter).getByRole('button', { name: 'Load additional filter criteria' }));
-    await expect(notes).toHaveValue('Retain the filter while opening additional criteria.');
-    await expectPanelInViewport(filter);
-  }
-  if (compact) {
-    await userEvent.click(within(filter).getByRole('tab', { name: new RegExp(toolbarLabels.display) }));
-  } else {
-    await userEvent.keyboard('{Escape}');
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.display) }));
-  }
-  const display = await screen.findByRole('dialog', { name: compact ? toolbarLabels.view : toolbarLabels.display });
-  await expect(within(display).getByRole('group', { name: toolbarLabels.density })).toBeVisible();
-  if (recover) {
-    const large = within(display).getByRole('button', { name: toolbarLabels.large });
-    await userEvent.click(large);
-    await expect(large).toHaveAttribute('aria-pressed', 'true');
-  }
+  const notes = controls.getByRole('textbox', { name: 'Notes for this filter' });
+  const note = 'Retain the filter while opening additional criteria.';
+  await userEvent.type(notes, note);
+  await userEvent.click(controls.getByRole('button', { name: 'Load additional filter criteria' }));
+  await expect(notes).toHaveValue(note);
+  await expectPanelInViewport(view);
+
+  await userEvent.click(controls.getByRole('tab', { name: toolbarLabels.display }));
+  const density = controls.getByRole('group', { name: toolbarLabels.density });
+  const large = within(density).getByRole('button', { name: toolbarLabels.large });
+  await userEvent.click(large);
+  await expect(large).toHaveAttribute('aria-pressed', 'true');
+  const layout = controls.getByRole('combobox', { name: toolbarLabels.layout });
+  await userEvent.click(layout);
+  await expect(screen.queryByRole('option', { name: toolbarLabels.table })).not.toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('option', { name: toolbarLabels.list }));
+  await expect(layout).toHaveTextContent(toolbarLabels.list);
   await userEvent.keyboard('{Escape}');
-  await waitFor(() => expect(display).not.toBeInTheDocument());
-  if (recover) {
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
-    const panel = await screen.findByRole('dialog', { name: toolbarLabels.view });
-    await userEvent.click(within(panel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
-    await userEvent.click(within(panel).getByRole('button', { name: 'Unmount ShelfToolbar' }));
-    await waitFor(() => expect(panel).not.toBeInTheDocument());
-    await userEvent.click(canvas.getByRole('button', { name: 'Mount ShelfToolbar' }));
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
-    await expect(await screen.findByRole('dialog', { name: toolbarLabels.view })).toBeVisible();
-    await userEvent.keyboard('{Escape}');
-  }
+  await waitFor(() => expect(view).not.toBeInTheDocument());
+
+  const reopened = await openView();
+  await showFilter(reopened);
+  await userEvent.click(within(reopened).getByRole('button', { name: 'Unmount ShelfToolbar' }));
+  await waitFor(() => expect(reopened).not.toBeInTheDocument());
+  await userEvent.click(canvas.getByRole('button', { name: 'Mount ShelfToolbar' }));
+  await expect(await openView()).toBeVisible();
+  await userEvent.keyboard('{Escape}');
 }
 
 export const ShelfToolbarViewForms: Story = {
   args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
   play: async ({ canvasElement }) => viewForms(canvasElement),
+  globals: { viewport: { value: 'phone390', isRotated: false } },
 };

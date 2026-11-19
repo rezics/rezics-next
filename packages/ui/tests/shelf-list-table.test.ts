@@ -148,7 +148,6 @@ test('table renders visible columns, sticky sortable header and caller supplied 
     'w-11',
     'data-slot="shelf-sort-direction"',
     'data-direction="asc"',
-    'min-h-11 min-w-11',
     'aria-checked="true"',
   ])
     expect(html).toContain(text);

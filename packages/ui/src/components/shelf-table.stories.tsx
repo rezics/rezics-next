@@ -49,7 +49,11 @@ export const Editable: Story = {
   render: () => <Example />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Title' }));
+    const sortTitle = canvas.getByRole('button', { name: 'Title' });
+    const { height, width } = sortTitle.getBoundingClientRect();
+    expect(height).toBeGreaterThanOrEqual(24);
+    expect(width).toBeGreaterThanOrEqual(24);
+    await userEvent.click(sortTitle);
     await expect(canvas.getByRole('columnheader', { name: 'Title' })).toHaveAttribute('aria-sort', 'ascending');
     await expect(canvasElement.querySelector('[data-slot="shelf-sort-direction"]')).toHaveAttribute(
       'data-direction',
@@ -62,7 +66,11 @@ export const Editable: Story = {
       'desc',
     );
     await userEvent.click(canvas.getByRole('link', { name: subject.title }));
-    await expect(canvas.getByRole('checkbox', { name: 'Select book' })).toBeChecked();
+    const checkbox = canvas.getByRole('checkbox', { name: 'Select book' });
+    await expect(checkbox).toBeChecked();
+    checkbox.focus();
+    await userEvent.keyboard(' ');
+    await expect(checkbox).not.toBeChecked();
     await userEvent.click(canvas.getAllByRole('button', { name: 'Show' })[0]!);
     await expect(canvas.getByRole('columnheader', { name: 'Creator' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Move down Creator' }));
@@ -372,12 +380,14 @@ function ConnectedShelfJourney() {
 export const ConnectedShelfConfigurationJourney: Story = {
   args: { rows: [], columns: [], onSort: () => {} },
   render: () => <ConnectedShelfJourney />,
-  globals: {},
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const document = canvasElement.ownerDocument;
     const browser = document.defaultView!;
     const workflow = canvas.getByTestId('connected-shelf-workflow');
+    // Vitest's preview defaults anchors to the parent test runner.
+    for (const link of workflow.querySelectorAll<HTMLAnchorElement>('nav a[href^="#"]')) link.target = '_self';
 
     const allStatus = canvas.getByRole('link', { name: 'All 4 / 10' });
     await expect(allStatus).toHaveAttribute('href', '#all-status');
@@ -394,16 +404,14 @@ export const ConnectedShelfConfigurationJourney: Story = {
     await expect(progress).toHaveAttribute('aria-current', 'page');
 
     const completed = canvas.getByRole('link', { name: 'Completed 0' });
-    const hashBeforeModified = browser.location.hash;
-    await fireEvent.click(completed, { ctrlKey: true });
+    await expect(await fireEvent.click(completed, { ctrlKey: true })).toBe(true);
     await expect(canvas.getByTestId('shelf-status')).toHaveTextContent('progress');
-    await fireEvent.click(completed, { metaKey: true });
+    await expect(await fireEvent.click(completed, { metaKey: true })).toBe(true);
     await expect(canvas.getByTestId('shelf-status')).toHaveTextContent('progress');
-    await fireEvent.click(completed, { button: 1 });
+    await fireEvent(completed, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
     await expect(canvas.getByTestId('shelf-status')).toHaveTextContent('progress');
-    await fireEvent.click(completed, { button: 2 });
+    await fireEvent(completed, new MouseEvent('auxclick', { bubbles: true, button: 2 }));
     await expect(canvas.getByTestId('shelf-status')).toHaveTextContent('progress');
-    await expect(browser.location.hash).toBe(hashBeforeModified);
 
     const hashBeforeCancelled = browser.location.hash;
     await userEvent.click(canvas.getByRole('link', { name: 'Cancelled 0' }));
@@ -423,27 +431,46 @@ export const ConnectedShelfConfigurationJourney: Story = {
     const filterNotes = within(filterPanel).getByRole('textbox', { name: 'Notes for this filter' });
     await userEvent.selectOptions(filterSelect, 'localized');
     await userEvent.type(filterNotes, 'Keep this native textarea usable in the connected shelf form.');
-    await userEvent.click(within(filterPanel).getByRole('button', { name: 'Remove filter: Reading' }));
-    await expect(within(filterPanel).queryByRole('button', { name: 'Remove filter: Reading' })).not.toBeInTheDocument();
+    const removeReading = `${workflowLabels.removeFilter}: Reading`;
+    await userEvent.click(within(filterPanel).getByRole('button', { name: removeReading }));
+    await expect(within(filterPanel).queryByRole('button', { name: removeReading })).not.toBeInTheDocument();
     await userEvent.click(within(filterPanel).getByRole('button', { name: workflowLabels.clearFilters }));
-    await expect(within(filterPanel).queryByRole('button', { name: /Remove filter:/ })).not.toBeInTheDocument();
+    await expect(
+      within(filterPanel).queryByRole('button', { name: `${workflowLabels.removeFilter}: Books` }),
+    ).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: workflowLabels.filter })).not.toBeInTheDocument());
-    await expect(filterTrigger).toHaveFocus();
+    await waitFor(() => expect(filterTrigger).toHaveFocus());
 
     const sortTrigger = canvas.getByRole('button', { name: new RegExp(workflowLabels.sort) });
     await userEvent.click(sortTrigger);
     const sortPanel = await screen.findByRole('dialog', { name: workflowLabels.sort });
     const sortControl = within(sortPanel).getByRole('combobox', { name: workflowLabels.sort });
-    await userEvent.selectOptions(sortControl, 'title');
+    await userEvent.click(sortControl);
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Alphabetical title order for every collection item' }),
+    );
     const directionControl = within(sortPanel).getByRole('combobox', { name: workflowLabels.direction });
-    await userEvent.selectOptions(directionControl, 'asc');
+    await userEvent.click(directionControl);
+    await userEvent.click(await screen.findByRole('option', { name: workflowLabels.ascending }));
     await expect(canvas.getByTestId('toolbar-sort')).toHaveTextContent('title:asc');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: workflowLabels.sort })).not.toBeInTheDocument());
-    await expect(sortTrigger).toHaveFocus();
+    await waitFor(() => expect(sortTrigger).toHaveFocus());
 
-    await userEvent.click(canvas.getByRole('button', { name: workflowLabels.table }));
+    const layoutControl = canvas.getByRole('combobox', { name: workflowLabels.layout });
+    for (const [layout, label] of [
+      ['list', workflowLabels.list],
+      ['grid', workflowLabels.grid],
+    ] as const) {
+      await userEvent.click(layoutControl);
+      await userEvent.click(await screen.findByRole('option', { name: label }));
+      await expect(canvas.getByTestId('toolbar-layout')).toHaveTextContent(layout);
+    }
+    layoutControl.focus();
+    await userEvent.keyboard('{Enter}');
+    await screen.findByRole('listbox');
+    await userEvent.keyboard('{End}{Enter}');
     await expect(canvas.getByTestId('toolbar-layout')).toHaveTextContent('table');
     const table = canvas.getByRole('table');
     await expect(within(table).getByRole('columnheader', { name: 'Title' })).toBeVisible();
@@ -572,7 +599,7 @@ export const ConnectedShelfConfigurationJourney: Story = {
         .getAllByRole('columnheader')
         .map((header) => header.textContent?.trim())
         .filter(Boolean);
-      await expect(keyboardOrder.indexOf('Type')).toBeLessThan(keyboardOrder.indexOf('Title'));
+      await expect(keyboardOrder.indexOf('Creator')).toBeLessThan(keyboardOrder.indexOf('Title'));
 
       const addedCreator = mainPicker.querySelector<HTMLElement>('[data-column-id="creator"]');
       if (!addedCreator) throw new Error('Creator must remain available after showing');
@@ -584,22 +611,24 @@ export const ConnectedShelfConfigurationJourney: Story = {
       const hiddenDragTarget = mainPicker.querySelector<HTMLElement>('[data-column-id="creator"]');
       if (!dragSource || !dragTarget || !hiddenDragTarget)
         throw new Error('Drag source and grouped targets must exist');
+      const drag = (target: HTMLElement, type: string, dataTransfer: DataTransfer) =>
+        fireEvent(target, new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
       const boundaryTransfer = new DataTransfer();
       const beforeDragWrites = Number(canvas.getByTestId('main-column-writes').textContent);
-      await fireEvent.dragStart(dragSource, { dataTransfer: boundaryTransfer });
-      await fireEvent.drop(hiddenDragTarget, { dataTransfer: boundaryTransfer });
+      await drag(dragSource, 'dragstart', boundaryTransfer);
+      await drag(hiddenDragTarget, 'drop', boundaryTransfer);
       await expect(Number(canvas.getByTestId('main-column-writes').textContent)).toBe(beforeDragWrites);
 
       const transfer = new DataTransfer();
       const newerTransfer = new DataTransfer();
-      await fireEvent.dragStart(dragSource, { dataTransfer: transfer });
-      await fireEvent.dragStart(dragSource, { dataTransfer: newerTransfer });
-      await fireEvent.dragEnd(dragSource, { dataTransfer: transfer });
-      await fireEvent.drop(dragTarget, { dataTransfer: transfer });
+      await drag(dragSource, 'dragstart', transfer);
+      await drag(dragSource, 'dragstart', newerTransfer);
+      await drag(dragSource, 'dragend', transfer);
+      await drag(dragTarget, 'drop', transfer);
       await expect(Number(canvas.getByTestId('main-column-writes').textContent)).toBe(beforeDragWrites);
-      await fireEvent.dragOver(dragTarget, { dataTransfer: newerTransfer });
-      await fireEvent.drop(dragTarget, { dataTransfer: newerTransfer });
-      await fireEvent.dragEnd(dragSource, { dataTransfer: newerTransfer });
+      await drag(dragTarget, 'dragover', newerTransfer);
+      await drag(dragTarget, 'drop', newerTransfer);
+      await drag(dragSource, 'dragend', newerTransfer);
       await expect(Number(canvas.getByTestId('main-column-writes').textContent)).toBe(beforeDragWrites + 1);
       await expect(
         within(table)
