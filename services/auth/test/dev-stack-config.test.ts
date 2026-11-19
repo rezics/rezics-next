@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from '
 import { dirname, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
+  catalogueWalkNeedsWeb,
   developmentKeys,
   resolveFrontendProcess,
   origins,
@@ -479,6 +480,20 @@ test('a failed native opening stops persona setup and names the group, cause and
       'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
   );
   expect(attempted).toEqual(['search']);
+});
+
+test('catalogue walks prebuild Web for mounted selections', () => {
+  const env = { REZICS_WALK_IMPORT_CATALOGUE: '1' };
+  const entry = relative(process.cwd(), resolve(root, 'services/importer/src/imports-public-journey.ts'));
+  const journey = ['bun', entry];
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'operators'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--reviewed-bootstrap'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--reviewed-source-scheme'], env)).toBe(false);
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'catalogue'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb([...journey, '--scope', 'catalogue', '--reopen-seed'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(journey, env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(['bun', 'other.ts', '--scope', 'operators'], env)).toBe(true);
+  expect(catalogueWalkNeedsWeb(journey, {})).toBe(false);
 });
 
 test('generated Web bindings preserve literal JWK JSON and the selected deployment scope artifact', async () => {

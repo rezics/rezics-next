@@ -1,7 +1,7 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
@@ -17,6 +17,7 @@ import {
   createAccountTokenProvider,
   SHOWCASE_IMPORTER_SCOPES,
 } from '../../importer/src/credentials.ts';
+import { parseWalkSelection, reviewedWalkProbe } from '../../importer/src/imports-walk-selection.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
@@ -273,6 +274,20 @@ const showcaseClient = localClientIds.showcase;
 
 function importCatalogueWalk(env = process.env): boolean {
   return env.REZICS_WALK_IMPORT_CATALOGUE === '1';
+}
+
+export function catalogueWalkNeedsWeb(command: readonly string[], env = process.env): boolean {
+  if (!importCatalogueWalk(env)) return false;
+  const [executable, ...script] = command;
+  const [entry, ...args] = script[0] === 'run' ? script.slice(1) : script;
+  if (
+    !executable ||
+    (basename(executable) !== 'bun' && executable !== process.execPath) ||
+    !entry ||
+    resolve(entry) !== resolve(root, 'services/importer/src/imports-public-journey.ts')
+  )
+    return true; // Other catalogue consumers may mount Web.
+  return !reviewedWalkProbe(args) && parseWalkSelection(args).scope !== 'operators';
 }
 
 function ordinaryAuthWalk(): boolean {
@@ -1839,6 +1854,7 @@ export async function runWalk(
     throw new Error(
       'Usage: bun services/auth/scripts/dev-stack.ts walk [--import-catalogue|--first-public-web] -- <command...>',
     );
+  const prebuildCatalogueWeb = catalogueWalkNeedsWeb(command);
   const controller = new AbortController();
   let current: ReturnType<typeof Bun.spawn> | undefined;
   let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
@@ -1894,6 +1910,8 @@ export async function runWalk(
       slot = await admitWalkStack(task, process.env, root, controller.signal, blocked, portsAvailable);
       const names = walkStackNames(task, slot.index!);
       const env = walkProcessEnvironment(task, slot.index!);
+      delete env[catalogueWebDigest];
+      delete env[catalogueWebOutputEnv];
       const ports = walkStackPorts(slot.index!);
       let starting: ReturnType<typeof Bun.spawn> | undefined;
       let walkFailure: unknown;
@@ -1932,7 +1950,7 @@ export async function runWalk(
             }
             if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
           }
-          if (importCatalogueWalk()) {
+          if (prebuildCatalogueWeb) {
             controller.signal.throwIfAborted();
             env[catalogueWebDigest] = webBindingsDigest(await readFile(webVarsFile, 'utf8'));
             webOutput = await mkdtemp(resolve(root, '.temp/compiled-catalogue-web-'));
