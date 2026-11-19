@@ -41,6 +41,9 @@ import {
   fixtureProcessOwnershipAdapter,
 } from './fixture-process-ownership.ts';
 
+// The timing runner still cleans up at test-process exit. Its Bun subprocesses must be able
+// to hand off detached workers and checks before the fixture exercises their recovery.
+delete process.env.BUN_FEATURE_FLAG_NO_ORPHANS;
 installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
 
 const FIXTURE_TERM_GRACE_MS = 300;
