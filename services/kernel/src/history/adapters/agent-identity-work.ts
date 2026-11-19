@@ -194,6 +194,7 @@ export async function enqueueAgentIdentityVerification(
       ).rows.length === 1,
   );
   const handoff = sourceExists ? await readAgentIdentitySourceHandoff(pool, receipt) : null;
+  if (sourceExists && !handoff) throw accountIdentityUnavailable('original SDK source association unavailable');
   const custodyId = decision.custody_id ?? handoff?.custodyId ?? randomUUID();
   if (handoff && handoff.custodyId !== custodyId) throw accountIdentityUnavailable('conflicting original SDK custody');
   const accounts = agentIdentityAccounts(decision.account_id, decision.requested_by, decision.decided_by);

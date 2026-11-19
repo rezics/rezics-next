@@ -130,7 +130,7 @@ function receiving(row: Receiver): IdentityNativeReceipt {
     transactionId: row.receiving_transaction_id,
   });
 }
-function sameReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolean {
+export function sameAccountIdentityNativeReceipt(a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolean {
   return (
     a.partition === b.partition &&
     a.epoch === b.epoch &&
@@ -214,7 +214,7 @@ async function decodeTechnicalSource(tx: CommandTransaction, receipt: AccountRec
  */
 function matchesTechnical(reference: IdentitySourceConsumerReference, source: AccountIdentitySource): boolean {
   return (
-    sameReceipt(reference.source, source) &&
+    sameAccountIdentityNativeReceipt(reference.source, source) &&
     reference.sourceDigest === source.digest &&
     normalized(reference.receipt) === normalized(source.input.receipt)
   );
@@ -327,7 +327,7 @@ export async function verifyTechnicalSource(
     matchesTechnical(reference, source) &&
     row.accepted_job_id === reference.job.jobId &&
     BigInt(row.accepted_job_epoch) === reference.job.epoch &&
-    sameReceipt(receiving(row), native);
+    sameAccountIdentityNativeReceipt(receiving(row), native);
   // A false post-write observation must never let Source commit only its terminal half.
   if (!valid && wroteTechnical.has(tx)) throw accountIdentityUnavailable('technical receiver mismatch after write');
   return valid;

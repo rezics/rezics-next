@@ -37,6 +37,7 @@ type AgentSubjectRow = {
   release: string;
   labels: Record<string, string>;
   redirect: string | null;
+  redirect_receipt: string | null;
 };
 
 function listed<T>(result: T[] | T | null): T[] {
@@ -370,24 +371,29 @@ export async function verifyAccountAgent(
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
   if (routeOf(options.catalogue) === null || options.catalogue === agentId) throw new AccountAgentVerificationError();
-  const node = await readAgentSubject(pool, agentId);
-  const catalogue = await readAgentSubject(pool, options.catalogue);
-  const before = await accountAgentForNode(pool, agentId);
-  if (!node || !catalogue || catalogue.redirect || !before || before.account !== account || before.agent_id !== agentId)
-    throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
-  if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
-    throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
-  if (node.type !== catalogue.type)
-    throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
-  if (before.verified) {
-    if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
-      throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
-  } else if (
-    node.redirect ||
-    before.subject !== agentId ||
-    (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
-  )
-    throw new AccountAgentVerificationError('The catalogue subject is already linked or the account agent is merged');
+  await withReadTransaction(pool, async (tx) => {
+    const node = await readAgentSubject(tx, agentId);
+    const catalogue = await readAgentSubject(tx, options.catalogue);
+    if (!node || !catalogue || catalogue.redirect)
+      throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
+    if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
+      throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
+    if (node.type !== catalogue.type)
+      throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
+    const current = node.redirect ? (await currentSubject(tx, node.redirect)).row.id : agentId;
+    const links = await accountAgentsForSubjects(tx, [current, catalogue.id]);
+    const before = links.get(current);
+    // The original home has committed this receipt's redirect and removed its backlink.
+    // Its destination home may still be pending when the same delivery resumes.
+    if (!before && node.redirect === catalogue.id && node.redirect_receipt === options.receipt) return;
+    if (!before || before.subject !== current || before.account !== account || before.agent_id !== agentId)
+      throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
+    if (before.verified) {
+      if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
+        throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
+    } else if (node.redirect || before.subject !== agentId || links.has(catalogue.id))
+      throw new AccountAgentVerificationError('The catalogue subject is already linked or the account agent is merged');
+  });
   const { deliverAccountIdentity, loadAccountIdentitySource, accountIdentityUnavailable } =
     await import('../access/agent-verification-identity.ts');
   const receipt = { kind: 'account-agent.verify' as const, account, receipt: options.receipt };
@@ -399,6 +405,7 @@ export async function verifyAccountAgent(
   if (
     !mapping?.verified ||
     mapping.account !== account ||
+    mapping.agent_id !== agentId ||
     mapping.subject !== options.catalogue ||
     mapping.receipt_id !== options.receipt
   )

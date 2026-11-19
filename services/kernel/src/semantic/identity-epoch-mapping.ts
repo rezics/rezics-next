@@ -1594,6 +1594,26 @@ async function apply(
   }
   if (plan.action === 'member-remove') {
     await claimPoint();
+    if (
+      saved.receipt.kind === 'account-agent.unverify' &&
+      saved.intent.kind === 'unmerge' &&
+      change.original === saved.intent.original
+    ) {
+      const removed = await query(
+        tx,
+        measured,
+        `DELETE FROM semantic.account_agent_subject WHERE route=$1 AND subject_id=$2 AND account_id=$3
+           AND agent_id=$4 AND verified AND receipt_id=$5`,
+        [
+          routed(change.previousTerminal),
+          change.previousTerminal,
+          saved.receipt.account,
+          change.original,
+          saved.intent.verificationReceipt,
+        ],
+      );
+      if (removed.rowCount !== 1) throw stale();
+    }
     await query(tx, measured, `DELETE FROM semantic.merge_member WHERE route=$1 AND subject_id=$2 AND member_id=$3`, [
       routed(change.previousTerminal),
       change.previousTerminal,
@@ -1609,6 +1629,29 @@ async function apply(
   }
   if (plan.action === 'member-add') {
     await claimPoint();
+    const { receipt, intent } = saved;
+    const verifying =
+      receipt.kind === 'account-agent.verify' && intent.kind === 'merge' && change.original === intent.redirected;
+    const reversing =
+      receipt.kind === 'account-agent.unverify' && intent.kind === 'unmerge' && change.original === intent.original;
+    if (verifying || reversing) {
+      const installed = await query(
+        tx,
+        measured,
+        `INSERT INTO semantic.account_agent_subject(route,subject_id,account_route,account_id,agent_id,verified,receipt_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+        [
+          routed(change.terminal),
+          change.terminal,
+          routed(receipt.account),
+          receipt.account,
+          change.original,
+          verifying,
+          verifying ? receipt.receipt : null,
+        ],
+      );
+      if (installed.rowCount !== 1) throw stale();
+    }
     if (change.original !== change.terminal)
       await query(
         tx,

@@ -176,6 +176,8 @@ import receivingJob from '../../src/semantic/identity-epoch-store-receiving-job.
 import receivingLookup from '../../src/semantic/identity-epoch-store-receiving-lookup.sql';
 import receivingPlan from '../../src/semantic/identity-epoch-store-receiving-plan.sql';
 import receivingProgress from '../../src/semantic/identity-search-receiving-progress-insert.sql';
+import receivingProgressObserve from '../../src/semantic/identity-search-receiving-progress-observe.sql';
+import receivingPredecessor from '../../src/semantic/identity-search-receiving-predecessor.sql';
 import receivingProgressRead from '../../src/semantic/identity-search-receiving-progress-read.sql';
 import receivingProgressAdvance from '../../src/semantic/identity-search-receiving-progress-advance.sql';
 import receivingProgressRelease from '../../src/semantic/identity-search-receiving-progress-release.sql';
@@ -677,7 +679,7 @@ test.each([
         rows = [{ scope_digest: directoryScope, state: 'complete', frontier: saved!.frontier, work: saved!.work }];
       } else if (completeMerge && sql === ackJob.sql) {
         expect(values).toEqual([jobId, savedJob.epoch, jobHome]);
-        rows = [{ scope_digest: directoryScope }];
+        rows = [{ scope_digest: directoryScope, state: 'pending' }];
       } else if (completeMerge && sql === missingEffect.sql) {
         expect(values).toEqual([jobId, 'search-canonical-index', jobHome]);
         expect(retiredOriginals.filter((item) => item.jobId === jobId).map(({ original }) => original)).toEqual([
@@ -1494,8 +1496,15 @@ test.each([
         sql === receivingStatements.acceptedReplay
       )
         rows = [];
-      else if (sql === receivingProgressRead.sql) rows = [{ ...receivingContinuation }];
-      else if (sql === planSql.copies.sql || sql === planSql.copy.sql) {
+      else if (sql === receivingProgressRead.sql || sql === receivingProgressObserve.sql) {
+        expect(readOnly).toBe(sql === receivingProgressObserve.sql);
+        rows = [{ ...receivingContinuation }];
+      } else if (sql === receivingPredecessor.sql) {
+        expect(readOnly).toBe(true);
+        expect(values).toEqual([writerHome, retainedPlan!.source.locator.planId, jobId, savedJob.epoch, selected]);
+        // This driver keeps the Search predecessor and starts each original with an empty common gate.
+        rows = [];
+      } else if (sql === planSql.copies.sql || sql === planSql.copy.sql) {
         const selected = sql === planSql.copy.sql ? values[2] === 0 : Number(values[2]) < 0;
         rows =
           copyLocator && selected
@@ -1566,7 +1575,7 @@ test.each([
       else if (sql === receivingStatements.insertCustody) {
         if (foreignCapture) {
           expect(values[0]).toBe(jobHome);
-          expect(values[3]).toBe(captureNativeTransaction);
+          expect(values[3]).toBe(captureRoleTransaction);
           captureQueue.push({
             store: 'identity_epoch_receiving_custody',
             partition: jobHome,
@@ -1711,7 +1720,7 @@ test.each([
       else if (sql === receivingStatements.insertPlan) {
         if (foreignCapture) {
           expect(values[0]).toBe(jobHome);
-          expect(values[6]).toBe(captureNativeTransaction);
+          expect(values[6]).toBe(captureRoleTransaction);
           captureQueue.push({
             store: 'identity_epoch_receiving_plan',
             partition: jobHome,
@@ -1752,7 +1761,7 @@ test.each([
       } else if (sql === receivingStatements.insertAccepted) {
         if (foreignCapture) {
           expect(values[0]).toBe(writerHome);
-          expect(values[10]).toBe(captureNativeTransaction);
+          expect(values[10]).toBe(captureRoleTransaction);
           captureQueue.push({
             store: 'identity_epoch_receiving_record',
             partition: writerHome,
@@ -1830,11 +1839,7 @@ test.each([
           ...(completeMerge && values[0] === jobHome && { position: String(controlPosition + 1), work, jobId }),
         };
         if (foreignCapture) {
-          const sameHomeCheckpoint =
-            values[0] === writerHome &&
-            writerHome === jobHome &&
-            ['search-writer-admitted', 'search-writer-support', selected].includes(String(writing.frontier.after[0]));
-          expect(captureNativeTransaction).toBe(sameHomeCheckpoint ? null : writing.transactionId);
+          expect(captureNativeTransaction).toBe(values[0] === jobHome ? null : writing.transactionId);
           captureQueue.push({
             store: 'identity_epoch_step',
             partition: Number(values[0]),
@@ -1848,11 +1853,7 @@ test.each([
         rows = [];
       } else if (foreignCapture && sql.startsWith('INSERT INTO semantic.erasure_source_role')) {
         if (values[0] === writerHome || values[0] === jobHome) {
-          expect(values.slice(1)).toEqual([
-            captureNativeTransaction ?? writingOperation?.applied_transaction_id,
-            [actorId],
-            ['actor'],
-          ]);
+          expect(values.slice(2)).toEqual([[actorId], ['actor']]);
           captureRoleTransaction = String(values[1]);
           captureRole = { account_id: actorId!, role: 'actor' };
         }
@@ -1955,6 +1956,12 @@ test.each([
       else if (sql === commandNoEffect['~standard'].query.text) rows = [['1', nativePosition()]];
       else if (sql === commandFence['~standard'].query.text) {
         const partition = Number(values[commandFence.params.indexOf('partition_no')]);
+        if (captureRoleTransaction) {
+          const transaction = values[commandFence.params.indexOf('transaction_id')];
+          assert(typeof transaction === 'string');
+          expect(captureRoleTransaction).toBe(transaction);
+          expect(captureNativeTransaction).toBe(partition === jobHome ? null : transaction);
+        }
         const position =
           completeMerge && partition === jobHome
             ? String(++controlPosition)

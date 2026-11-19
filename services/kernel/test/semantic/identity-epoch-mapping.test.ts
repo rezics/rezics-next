@@ -146,6 +146,26 @@ test('account-agent verify mapping drains from original Access source for linked
     expect(job!.mapping!.state).toBe('complete');
     expect(job!.receipt).toEqual(input.receipt);
     expect(job!.state).not.toBe('published');
+    const backlink = await f.admin.query(
+      `SELECT route, subject_id, agent_id, verified, receipt_id FROM semantic.account_agent_subject WHERE account_id=$1`,
+      [input.account],
+    );
+    expect(backlink.rows).toEqual([
+      {
+        route: routeOf(intent.survivor),
+        subject_id: intent.survivor,
+        agent_id: intent.redirected,
+        verified: true,
+        receipt_id: input.receipt.receipt,
+      },
+    ]);
+    const merge = await f.admin.query(
+      `SELECT r.verification_receipt_id, d.target FROM semantic.revision r JOIN semantic.redirect d
+       USING(route,subject_id,recorded_transaction_id)
+       WHERE r.route=$1 AND r.subject_id=$2 ORDER BY d.sequence DESC LIMIT 1`,
+      [sourceRoute, intent.redirected],
+    );
+    expect(merge.rows).toEqual([{ verification_receipt_id: input.receipt.receipt, target: intent.survivor }]);
     const retained = await f.nativeSource(intent.redirected);
     expect(retained.closure_state).toBe('withdrawn');
     expect(retained.registration).toBe(native.registration);

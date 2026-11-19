@@ -34,7 +34,10 @@ export {
   ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,
   ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION,
 } from './agent-verification-identity-work.ts';
-import { readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
+import {
+  readAccountIdentityTechnicalSource,
+  sameAccountIdentityNativeReceipt,
+} from './agent-verification-identity-retention.ts';
 import type { AgentVerificationReversal } from './agent-verification.ts';
 import insertTechnical from './agent-verification-identity-technical-insert.sql';
 import readTechnical from './agent-verification-identity-technical-read.sql';
@@ -53,7 +56,6 @@ const native = (source: AccountIdentitySource): IdentityNativeReceipt => ({
   position: source.position,
   transactionId: source.transactionId,
 });
-const sameNative = (a: IdentityNativeReceipt, b: IdentityNativeReceipt): boolean => normalized(a) === normalized(b);
 const staged = new WeakSet<object>();
 
 type Bound = Readonly<{
@@ -268,15 +270,16 @@ async function receive(tx: CommandTransaction, entry: Bound): Promise<IdentityNa
     registerCommandCallback(tx, async (id) => {
       await tx.query("SELECT set_config('access.identity_technical_transaction',$1,true)", [id]);
       const current = await readAccountIdentityTechnicalSource(tx, receipt);
-      if (!current || !sameNative(current, source) || current.digest !== source.digest)
+      if (!current || !sameAccountIdentityNativeReceipt(current, source) || current.digest !== source.digest)
         throw accountIdentityUnavailable('reversal receiver finalization changed');
     });
   }
   const current = await readAccountIdentityTechnicalSource(tx, receipt);
   if (
     !current ||
-    !sameNative(current, source) ||
+    !sameAccountIdentityNativeReceipt(current, source) ||
     current.digest !== source.digest ||
+    current.workflowId !== source.workflowId ||
     normalized(current.input) !== normalized(source.input)
   )
     throw accountIdentityUnavailable('reversal receiver mismatch');
@@ -503,5 +506,7 @@ export async function verifyAccountIdentityReversalSettlement(
   const data = (proof as Proof | null)?.[locator];
   if (!data || data.reference !== normalized(reference)) return false;
   const result = await settlementFor(tx, reference);
-  return !!result && sameNative(result.terminal, data.terminal) && result.snapshot === data.snapshot;
+  return (
+    !!result && sameAccountIdentityNativeReceipt(result.terminal, data.terminal) && result.snapshot === data.snapshot
+  );
 }

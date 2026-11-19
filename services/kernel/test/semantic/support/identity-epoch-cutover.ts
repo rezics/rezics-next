@@ -1,4 +1,5 @@
-import { expect } from 'bun:test';
+import { expect, spyOn } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { migrate } from '../../../scripts/database.ts';
@@ -10,6 +11,12 @@ import {
   readAgentVerificationWorkflowRequest,
   recordPendingAgentVerification,
 } from '../../../src/access/agent-verification.ts';
+import { registerAgentVerificationWork } from '../../../src/access/agent-verification-work.ts';
+import { IdentityEpochStoreError } from '../../../src/semantic/contract/index.ts';
+import type { WorkClient } from '../../../src/work/client.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
+import { createIdentityRegistrar } from '../../support/identity-registration.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import { createRealAccess } from '../real-access.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
@@ -270,13 +277,21 @@ export async function afterSourceRelease<T>(
 }
 
 /** Real Access request, decision and pending command; no caller-created verification receipt. */
-export async function approvedVerification(f: EpochFixture, catalogue: string) {
+export async function approvedVerification(f: EpochFixture, catalogue: string, options?: { registerActors: boolean }) {
   const accounts = { person: newId(0x9c10), staff: newId(0x9c20) };
   const actions = ['account:update', 'account:verify_agent'];
-  const real = await createRealAccess(f.admin, accounts, actions);
+  if (options?.registerActors) {
+    const registrar = createIdentityRegistrar(f.pool, Buffer.from(workerTestEnv().KERNEL_ROUTE_KEY!, 'base64url'));
+    await registrar.registerActor('reviewedperson', accounts.person);
+    await registrar.registerActor('reviewstaff', accounts.staff);
+  }
+  const real = await createRealAccess(f.admin, accounts, actions, {
+    registered: options?.registerActors ? ['person', 'staff'] : [],
+  });
   const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
   await bootstrapGovernance(f.pool, accounts.staff);
-  await real.grant({ route: routeOf(accounts.person)!, id: accounts.person }, 'person', 'account:update');
+  if (!options?.registerActors)
+    await real.grant({ route: routeOf(accounts.person)!, id: accounts.person }, 'person', 'account:update');
   await real.grant(PLATFORM_RESOURCE, 'staff', 'account:verify_agent');
   const clock = () => new Date();
   const commands = createAgentVerificationCommands({ pool: f.pool, access, clock });
@@ -302,62 +317,95 @@ export async function approvedVerification(f: EpochFixture, catalogue: string) {
   return { account: accounts.person, workflow, commands, context, clock };
 }
 
-/** Pause AFTER a real native account-subject read, while its caller is in flight. Move ONLY our
- * control owner to unavailable. This tests the required retryable path, not a fabricated cutover ACK.
- * A future all-home handoff driver must additionally exercise the final source barrier/guard itself.
- */
-export async function withInFlightControlMove<T>(f: EpochFixture, operation: () => Promise<T>) {
-  const { AsyncLocalStorage } = await import('node:async_hooks');
-  const context = new AsyncLocalStorage<boolean>();
-  const reached = Promise.withResolvers<void>();
-  const proceed = Promise.withResolvers<void>();
-  let paused = false;
-  const wrapped = new Map<pg.PoolClient, pg.PoolClient['query']>();
-  const acquire = (client: pg.PoolClient) => {
-    if (!context.getStore() || wrapped.has(client)) return;
-    const query = client.query;
-    wrapped.set(client, query);
-    client.query = new Proxy(query, {
-      apply(target, self, args: unknown[]) {
-        const input = args[0];
-        const sql = typeof input === 'string' ? input : ((input as { text?: string })?.text ?? '');
-        const result = Reflect.apply(target, self, args);
-        if (context.getStore() && !paused && /JOIN semantic\.subject AS subject/i.test(sql)) {
-          paused = true;
-          return Promise.resolve(result).then(async (value) => {
-            reached.resolve();
-            await proceed.promise;
-            return value;
-          });
-        }
-        return result;
+/** Move the persisted control owner halfway through the receipt read, before either direction can publish. */
+export async function expectAgentIdentityHandoffPending<Args extends unknown[]>(
+  f: EpochFixture,
+  client: WorkClient,
+  controlledSubject: string,
+  workflowStep: 'accounts.agent-verification.merge' | 'accounts.agent-verification-reversal.unmerge',
+  operation: (...args: Args) => Promise<void>,
+  ...args: Args
+) {
+  const owner = await f.admin.query<{ control_partition: number }>(
+    'SELECT control_partition FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2',
+    [routeOf(controlledSubject), controlledSubject],
+  );
+  if (owner.rows.length !== 1) throw new Error('Missing native control owner for account-agent handoff');
+  const partition = owner.rows[0]!.control_partition;
+
+  // Capture the registered Access step body. The executor below runs the real workflows for publication.
+  let attempt: ((...args: Args) => Promise<unknown>) | undefined;
+  const step = spyOn(DBOS, 'registerStep').mockImplementation(((
+    body: (...args: Args) => Promise<unknown>,
+    options?: { name?: string },
+  ) => {
+    if (options?.name === workflowStep) attempt = body;
+    return body;
+  }) as typeof DBOS.registerStep);
+  const workflow = spyOn(DBOS, 'registerWorkflow').mockImplementation(((body: unknown) => body) as never);
+  try {
+    registerAgentVerificationWork({
+      pool: f.pool,
+      client,
+      queues: WORK_QUEUES,
+      env: workerTestEnv(),
+      clock: () => new Date(),
+      addEffects() {},
+      addService() {
+        throw new Error('Unexpected service registration');
+      },
+      getAuthorization() {
+        throw new Error('Unexpected worker authorization');
       },
     });
-  };
-  f.pool.on('acquire', acquire);
-  const result = context.run(true, operation).then(
-    (value) => ({ state: 'success' as const, value }),
-    (error: unknown) => ({ state: 'unavailable' as const, error }),
-  );
+  } finally {
+    workflow.mockRestore();
+    step.mockRestore();
+  }
+  if (!attempt) throw new Error(`Access did not register ${workflowStep}`);
+
   let moved = false;
   try {
-    expect(
-      await Promise.race([reached.promise.then(() => 'native-read' as const), result.then(() => 'ended' as const)]),
-      'in-flight schedule must reach actual owner SQL',
-    ).toBe('native-read');
-    // The existing fixed control home is Global (partition 0); source accounts are deliberately elsewhere.
-    await f.admin.query(
-      "UPDATE core.partition SET write_state='moved',moved_to='cutover-test-node' WHERE partition_no=0",
+    const error = await duringNativeSQL(
+      f,
+      /FROM access\.agent_identity_intent i\b/i,
+      () =>
+        operation(...args).then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      async () => {
+        const changed = await f.admin.query(
+          `UPDATE core.partition SET write_state='moved',moved_to='cutover-test-node'
+           WHERE partition_no=$1 AND write_state='active' AND moved_to IS NULL`,
+          [partition],
+        );
+        moved = changed.rowCount === 1;
+        expect(moved, 'the native control owner moved while the receipt read was in flight').toBe(true);
+      },
     );
-    moved = true;
-    proceed.resolve();
-    return await result;
+    if (error === undefined) throw new Error('Account identity callback succeeded while its control owner was moved');
+    const ownerFailure = {
+      class: error instanceof Error ? error.constructor.name : typeof error,
+      code: typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined,
+      detail: (error instanceof Error ? error.message : String(error)).slice(0, 512),
+    };
+    console.info('Native account identity handoff', JSON.stringify({ workflowStep, partition, ...ownerFailure }));
+    expect(error).toBeInstanceOf(IdentityEpochStoreError);
+    expect(ownerFailure.code).toBe('identity_epoch_unavailable');
+    expect(ownerFailure.detail).not.toBe('');
+    expect(await attempt(...args)).toEqual({
+      ok: false,
+      pending: true,
+      problem: { type: ownerFailure.code, detail: ownerFailure.detail },
+    });
   } finally {
-    proceed.resolve();
-    await result;
-    if (moved) await f.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=0");
-    f.pool.off('acquire', acquire);
-    for (const [client, query] of wrapped) client.query = query;
+    if (moved) {
+      await f.admin.query(
+        "UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1 AND moved_to='cutover-test-node'",
+        [partition],
+      );
+    }
   }
 }
 

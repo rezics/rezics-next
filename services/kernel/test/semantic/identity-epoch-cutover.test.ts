@@ -1,13 +1,24 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { classifyUnavailability } from '../../src/access/unavailable.ts';
-import {
-  completeAgentVerification,
-  mergeVerifiedAgent,
-  unmergeVerifiedAgent,
-} from '../../src/access/agent-verification.ts';
-import { runCommand } from '../../src/command/command.ts';
-import { newId, PARTITIONS } from '../../src/route/route.ts';
+import { afterAll, expect, test } from 'bun:test';
+import { probeAccountIdentityPublication } from '../../src/access/agent-verification-identity.ts';
+import { mergeVerifiedAgent, unmergeVerifiedAgent } from '../../src/access/agent-verification.ts';
+import { noEffect, runCommand } from '../../src/command/command.ts';
+import { newId, PARTITIONS, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
+import { identityJobPartition } from '../../src/semantic/identity-epoch-store.ts';
+import {
+  type AccountIdentityPublicationReceipt,
+  publishAccountIdentity,
+  runAccountIdentityReversal,
+  runAccountIdentityVerification,
+} from '../support/account-identity-publication.ts';
+import { startAccountIdentityPublication } from '../support/identity-work-process.ts';
+import {
+  enqueueAgentIdentityReversal,
+  enqueueAgentIdentityVerification,
+  readAgentIdentitySourceHandoff,
+} from '../../src/history/application/index.ts';
+import { subjectIndexName } from '../../src/search/indices.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { nativeEpochStore, nativeMappingStep, seedLegacyGroup, home, release } from './support/identity-epoch.ts';
 import {
   afterSourceRelease,
@@ -16,22 +27,23 @@ import {
   birthAt,
   crossHomeLegacy,
   cutoverFixture,
+  expectAgentIdentityHandoffPending,
   ordinaryAdmission,
-  withInFlightControlMove,
   withoutOwner,
 } from './support/identity-epoch-cutover.ts';
 
 const fixtures: Awaited<ReturnType<typeof cutoverFixture>>[] = [];
-beforeAll(async () => {
-  // Independent native databases: a pending-only proof must not poison a later schedule or fake publication.
-  for (let i = 0; i < 4; i++) fixtures.push(await cutoverFixture());
-}, 60_000);
+async function freshCutover() {
+  const fixture = await cutoverFixture();
+  fixtures.push(fixture);
+  return fixture;
+}
 afterAll(async () => {
   for (const f of fixtures) await f.close();
 }, 30_000);
 
 test('native identity cutover covers all homes and lower key births without fake readiness', async () => {
-  const f = fixtures[0]!;
+  const f = await freshCutover();
   const root = (await f.create('Selected endpoint', 0x5d10)).subject.id;
   const unselected = await crossHomeLegacy(f, root, 0xc710);
   const topology = await f.admin.query('SELECT partition_no FROM core.partition ORDER BY partition_no');
@@ -68,7 +80,7 @@ test('native identity cutover covers all homes and lower key births without fake
 });
 
 test('retained immutable group inputs admit exact capped pending work before participant publication', async () => {
-  const f = fixtures[1]!;
+  const f = await freshCutover();
   const a = (await f.create()).subject.id;
   const b = (await f.create()).subject.id;
   const c = (await f.create()).subject.id;
@@ -109,7 +121,7 @@ test('retained immutable group inputs admit exact capped pending work before par
 });
 
 test('released mapping observes pending once and coherently revalidates epoch', async () => {
-  const f = fixtures[2]!;
+  const f = await freshCutover();
   const original = (await f.create()).subject.id;
   const terminal = (await f.create('New terminal', 0x6d10)).subject.id;
   const unrelated = (await f.create('Unrelated self', 0x7d10)).subject.id;
@@ -158,79 +170,235 @@ test('released mapping observes pending once and coherently revalidates epoch', 
   });
 });
 
-test('native handoff preserves in flight verification and reversal for durable redrive', async () => {
-  const f = fixtures[3]!;
-  const catalogue = (await f.create('Reviewed person')).subject.id;
-  const approved = await approvedVerification(f, catalogue);
-  const { account, workflow } = approved;
-  const agent = await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
-  const receipt = workflow.receiptId;
-  // Owner-produced immutable decision is persisted before the actual durable-step callback starts.
-  const inFlight = await withInFlightControlMove(f, () => mergeVerifiedAgent(f.pool, workflow));
-  expect(inFlight.state, 'NO early successful callback while native control/publication is unavailable').toBe(
-    'unavailable',
-  );
-  if (inFlight.state !== 'unavailable') throw new Error('Unpublished verification returned early success');
-  expect(classifyUnavailability(inFlight.error), 'handoff is retryable, never failed/denied review').toBeDefined();
-  const savedPending = await f.admin.query(
-    'SELECT pending_agent_receipt_id, pending_agent_subject_id, agent_verified FROM access.account WHERE account_id=$1',
-    [account],
-  );
-  expect(savedPending.rows).toEqual([
-    { pending_agent_receipt_id: receipt, pending_agent_subject_id: catalogue, agent_verified: false },
-  ]);
-  // The existing step is redriven with the exact decision receipt after owner availability returns.
-  await mergeVerifiedAgent(f.pool, workflow);
-  const verified = await verifyAccountAgent(f.pool, { account, catalogue, receipt });
-  expect(Object.keys(verified).sort()).toEqual(['component', 'redirected', 'revision', 'subject', 'survivor']);
-  expect(verified.subject.id).toBe(catalogue);
-  expect(verified.redirected).toBe(agent.subject.id);
-  const store = await nativeEpochStore();
-  const verification = await store.findJob(f.pool, { kind: 'account-agent.verify', account, receipt });
-  expect(verification?.state, 'unchanged successful DTO requires actual publication').toBe('published');
-  expect(verification?.mapping?.state).toBe('complete');
-  for (const name of ['search-canonical-index', 'library-private-follow-counts'] as const)
-    expect(verification?.participants[name]?.state).toBe('complete');
-  const replay = await verifyAccountAgent(f.pool, { account, catalogue, receipt });
-  expect(replay.subject.id).toBe(catalogue);
-  expect((await store.findJob(f.pool, { kind: 'account-agent.verify', account, receipt }))?.ref).toEqual(
-    verification?.ref,
-  );
-  // Account completion uses its actual consuming callback ONLY after the published Semantic success above.
-  await completeAgentVerification(f.pool, workflow, approved.clock);
-  const reversedDecision = await approved.commands.release(await approved.context('person'), {
-    accountId: account,
-    key: crypto.randomUUID(),
+async function startCutoverPublication(f: Awaited<ReturnType<typeof cutoverFixture>>) {
+  const openSearchUrl = process.env.OPENSEARCH_URL;
+  if (!openSearchUrl) throw new Error('Native account identity cutover requires OpenSearch');
+  const searchPrefix = `cutover-${crypto.randomUUID()}-`;
+  const runtime = await startAccountIdentityPublication({
+    databaseUrl: f.pool.options.connectionString!,
+    routeKey: workerTestEnv().KERNEL_ROUTE_KEY!,
+    searchPrefix,
+    openSearchUrl,
   });
-  expect(reversedDecision.value.verificationReceiptId).toBe(receipt);
-  const reversing = await withInFlightControlMove(f, () => unmergeVerifiedAgent(f.pool, reversedDecision.value));
-  expect(reversing.state, 'NO early reversal success during unavailable handoff').toBe('unavailable');
-  if (reversing.state !== 'unavailable') throw new Error('Unpublished reversal returned early success');
-  expect(classifyUnavailability(reversing.error)).toBeDefined();
-  const reversalReceipt = reversedDecision.value.receiptId;
-  expect(
-    (await f.admin.query('SELECT pending_agent_receipt_id FROM access.account WHERE account_id=$1', [account])).rows,
-  ).toEqual([{ pending_agent_receipt_id: reversalReceipt }]);
-  await unmergeVerifiedAgent(f.pool, reversedDecision.value);
-  const reversed = await unverifyAccountAgent(f.pool, { account, receipt: reversalReceipt });
-  expect(reversed.subject.id).toBe(agent.subject.id);
-  const reversal = await store.findJob(f.pool, { kind: 'account-agent.unverify', account, receipt: reversalReceipt });
-  expect(reversal?.state).toBe('published');
-  expect(reversal?.intent).toMatchObject({
-    kind: 'unmerge',
-    original: agent.subject.id,
-    undoJob: verification?.ref,
-    verificationReceipt: receipt,
-  });
-  expect((await unverifyAccountAgent(f.pool, { account, receipt: reversalReceipt })).subject.id).toBe(agent.subject.id);
-  expect(
-    (await store.findJob(f.pool, { kind: 'account-agent.unverify', account, receipt: reversalReceipt }))?.ref,
-  ).toEqual(reversal?.ref);
-});
+  return { ...runtime, index: subjectIndexName(searchPrefix, 1) };
+}
 
-// Additive schedules: the four preceding acceptance cases and their assertions remain unchanged.
+async function waitForOrdinaryWriter(
+  f: Awaited<ReturnType<typeof cutoverFixture>>,
+  index: string,
+  subject: string,
+  position: bigint,
+) {
+  const until = Date.now() + 15_000;
+  for (;;) {
+    const result = await f.admin.query(
+      `SELECT 1 FROM search.identity_writer w
+         JOIN search.identity_writer_gate g USING (partition_no, physical_target, incarnation, owner_epoch)
+         JOIN core.consumer_checkpoint c ON c.partition_no=w.partition_no AND c.consumer=g.consumer
+        WHERE w.partition_no=$1 AND w.physical_target=$2 AND w.original_id=$3
+          AND w.writer_token IS NULL AND w.dispatch_state='settled' AND w.visible_position IS NOT NULL
+          AND c.position >= $4 AND w.source_position >= $4`,
+      [home(subject), index, subject, position.toString()],
+    );
+    if (result.rowCount === 1) return;
+    if (Date.now() >= until) throw new Error(`Search writer did not settle before the handoff for ${subject}`);
+    await Bun.sleep(50);
+  }
+}
+
+async function finishCutoverWork(
+  client: Awaited<ReturnType<typeof startCutoverPublication>>['workClient'],
+  workflowId: string,
+  completion: Promise<void>,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const finished = await Promise.race([
+      completion.then(() => true),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), 90_000);
+      }),
+    ]);
+    if (finished) return;
+    try {
+      const steps = await client.listWorkflowSteps(workflowId, { limit: 32 });
+      const recent = steps?.findLast((step) => step.name.startsWith('accounts.agent-verification'));
+      const problem = (recent?.output as { problem?: { type: string; detail: string } } | null)?.problem;
+      const observed = [recent?.name, problem?.type, problem?.detail ?? recent?.error?.message]
+        .filter(Boolean)
+        .join(' ')
+        .slice(0, 640);
+      throw new Error(`Native account identity workflow did not complete within 90 seconds. ${observed}`);
+    } finally {
+      await client.cancelWorkflow(workflowId);
+      await completion.catch(() => {});
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readPublishedAgentIdentity(
+  f: Awaited<ReturnType<typeof cutoverFixture>>,
+  receipt: AccountIdentityPublicationReceipt,
+) {
+  const job = await probeAccountIdentityPublication(f.pool, receipt);
+  const store = await nativeEpochStore();
+  return (
+    await runCommand(f.pool, { partition: identityJobPartition(job) }, async (tx) =>
+      noEffect(await store.readJob(tx, job)),
+    )
+  ).value;
+}
+
+test('account-agent publication retains the original decision through verification and reversal', async () => {
+  const f = await freshCutover();
+  const publication = await startCutoverPublication(f);
+  try {
+    const birth = await f.create('Reviewed person');
+    const catalogue = birth.subject.id;
+    await waitForOrdinaryWriter(f, publication.index, catalogue, birth.component.position);
+    const approved = await approvedVerification(f, catalogue, { registerActors: true });
+    const { account, workflow } = approved;
+    const agent = await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
+    const receipt = workflow.receiptId;
+    const savedPending = await f.admin.query(
+      'SELECT pending_agent_receipt_id, pending_agent_subject_id, agent_verified FROM access.account WHERE account_id=$1',
+      [account],
+    );
+    expect(savedPending.rows).toEqual([
+      { pending_agent_receipt_id: receipt, pending_agent_subject_id: catalogue, agent_verified: false },
+    ]);
+    await finishCutoverWork(
+      publication.workClient,
+      `accounts.agent-verification:${workflow.id}:${receipt}`,
+      runAccountIdentityVerification(f.pool, publication.workClient, workflow.id, receipt),
+    );
+    await publishAccountIdentity(f.pool, { kind: 'account-agent.verify', account, receipt }, 15_000);
+    const verified = await verifyAccountAgent(f.pool, { account, catalogue, receipt });
+    expect(Object.keys(verified).sort()).toEqual(['component', 'redirected', 'revision', 'subject', 'survivor']);
+    expect(verified.subject.id).toBe(catalogue);
+    expect(verified.redirected).toBe(agent.subject.id);
+    const verificationReceipt = { kind: 'account-agent.verify', account, receipt } as const;
+    const verification = await readPublishedAgentIdentity(f, verificationReceipt);
+    if (!verification) throw new Error('Missing published verification job');
+    expect(verification.state, 'unchanged successful DTO requires actual publication').toBe('published');
+    expect(verification.mapping?.state).toBe('complete');
+    for (const name of ['search-canonical-index', 'library-private-follow-counts'] as const)
+      expect(verification.participants[name]?.state).toBe('complete');
+    const replay = await verifyAccountAgent(f.pool, { account, catalogue, receipt });
+    expect(replay.subject.id).toBe(catalogue);
+    expect(await probeAccountIdentityPublication(f.pool, verificationReceipt)).toEqual(verification.ref);
+    const backlink = await f.admin.query(
+      'SELECT route, subject_id, agent_id, verified, receipt_id FROM semantic.account_agent_subject WHERE account_id=$1',
+      [account],
+    );
+    expect(backlink.rows).toEqual([
+      {
+        route: routeOf(catalogue),
+        subject_id: catalogue,
+        agent_id: agent.subject.id,
+        verified: true,
+        receipt_id: receipt,
+      },
+    ]);
+    const reversedDecision = await approved.commands.release(await approved.context('person'), {
+      accountId: account,
+      key: crypto.randomUUID(),
+    });
+    expect(reversedDecision.value.verificationReceiptId).toBe(receipt);
+    const reversalReceipt = reversedDecision.value.receiptId;
+    expect(
+      (await f.admin.query('SELECT pending_agent_receipt_id FROM access.account WHERE account_id=$1', [account])).rows,
+    ).toEqual([{ pending_agent_receipt_id: reversalReceipt }]);
+    await finishCutoverWork(
+      publication.workClient,
+      `accounts.agent-verification-reversal:${account}:${reversalReceipt}`,
+      runAccountIdentityReversal(f.pool, publication.workClient, reversedDecision.value),
+    );
+    await publishAccountIdentity(f.pool, { kind: 'account-agent.unverify', account, receipt: reversalReceipt }, 15_000);
+    const reversed = await unverifyAccountAgent(f.pool, { account, receipt: reversalReceipt });
+    expect(reversed.subject.id).toBe(agent.subject.id);
+    const restored = await f.admin.query(
+      `SELECT a.subject_id, a.verified, a.receipt_id, r.verification_receipt_id, r.revoked_survivor_id
+         FROM semantic.account_agent_subject a JOIN semantic.revision r USING (route,subject_id)
+         WHERE a.account_id=$1 AND r.revocation_receipt_id=$2`,
+      [account, reversalReceipt],
+    );
+    expect(restored.rows).toEqual([
+      {
+        subject_id: agent.subject.id,
+        verified: false,
+        receipt_id: null,
+        verification_receipt_id: receipt,
+        revoked_survivor_id: catalogue,
+      },
+    ]);
+    const reversalSource = { kind: 'account-agent.unverify', account, receipt: reversalReceipt } as const;
+    const reversal = await readPublishedAgentIdentity(f, reversalSource);
+    if (!reversal) throw new Error('Missing published reversal job');
+    expect(reversal.state).toBe('published');
+    expect(reversal.mapping?.state).toBe('complete');
+    for (const name of ['search-canonical-index', 'library-private-follow-counts'] as const)
+      expect(reversal.participants[name]?.state).toBe('complete');
+    expect(reversal.intent).toMatchObject({
+      kind: 'unmerge',
+      original: agent.subject.id,
+      undoJob: verification.ref,
+      verificationReceipt: receipt,
+    });
+    expect((await unverifyAccountAgent(f.pool, { account, receipt: reversalReceipt })).subject.id).toBe(
+      agent.subject.id,
+    );
+    expect(await probeAccountIdentityPublication(f.pool, reversalSource)).toEqual(reversal.ref);
+  } finally {
+    await publication.stop();
+  }
+}, 240_000);
+
+test('a moved control retains the pending approval and refuses a replacement SDK custody', async () => {
+  await isolatedCutover(async (f) => {
+    const publication = await startCutoverPublication(f);
+    try {
+      const birth = await f.create('Moved control');
+      const catalogue = birth.subject.id;
+      await waitForOrdinaryWriter(f, publication.index, catalogue, birth.component.position);
+      const { account, workflow } = await approvedVerification(f, catalogue, { registerActors: true });
+      await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
+      const receipt = { kind: 'account-agent.verify', account, receipt: workflow.receiptId } as const;
+      const original = await readAgentIdentitySourceHandoff(f.pool, receipt);
+      if (!original) throw new Error('Missing original History source before control move');
+      await expectAgentIdentityHandoffPending(
+        f,
+        publication.workClient,
+        catalogue,
+        'accounts.agent-verification.merge',
+        (request, receiptId) => mergeVerifiedAgent(f.pool, { ...request, receiptId }),
+        workflow,
+        workflow.receiptId,
+      );
+      const saved = await f.admin.query(
+        'SELECT pending_agent_receipt_id, pending_agent_subject_id, agent_verified FROM access.account WHERE account_id=$1',
+        [account],
+      );
+      expect(saved.rows).toEqual([
+        { pending_agent_receipt_id: workflow.receiptId, pending_agent_subject_id: catalogue, agent_verified: false },
+      ]);
+      // Restoring the route advances the History family generation again.
+      await expect(
+        enqueueAgentIdentityVerification(f.pool, publication.workClient, workflow.id, workflow.receiptId),
+      ).rejects.toMatchObject({
+        code: 'identity_epoch_unavailable',
+        message: 'Accounts source: original SDK source association unavailable',
+      });
+      expect(await publication.workClient.getWorkflow(original.source.workflowId)).toBeFalsy();
+    } finally {
+      await publication.stop();
+    }
+  });
+}, 240_000);
+
 import { duringNativeSQL, libraryCutoverInput, nativeCutoverCoordinator } from './support/identity-epoch-cutover.ts';
-import { noEffect } from '../../src/command/command.ts';
 
 async function isolatedCutover(work: (f: Awaited<ReturnType<typeof cutoverFixture>>) => Promise<void>) {
   const f = await cutoverFixture();
@@ -669,49 +837,50 @@ test('split repoint and overlapping input replay retain exact originals and expl
 
 test('reversal independently remains in flight across unavailable handoff without clearing its durable intent', async () => {
   await isolatedCutover(async (f) => {
-    const catalogue = (await f.create('Independent reversal catalogue')).subject.id;
-    const approved = await approvedVerification(f, catalogue);
-    const { account, workflow } = approved;
-    await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
-    await mergeVerifiedAgent(f.pool, workflow);
-    const store = await nativeEpochStore();
-    const verification = await store.findJob(f.pool, {
-      kind: 'account-agent.verify',
-      account,
-      receipt: workflow.receiptId,
-    });
-    expect(verification?.state).toBe('published');
-    await completeAgentVerification(f.pool, workflow, approved.clock);
-    const decision = await approved.commands.release(await approved.context('person'), {
-      accountId: account,
-      key: crypto.randomUUID(),
-    });
-    const inFlight = await withInFlightControlMove(f, () => unmergeVerifiedAgent(f.pool, decision.value));
-    expect(inFlight.state).toBe('unavailable');
-    if (inFlight.state !== 'unavailable') throw new Error('Reversal escaped its publication barrier');
-    expect(classifyUnavailability(inFlight.error)).toBeDefined();
-    expect(
-      (await f.admin.query('SELECT pending_agent_receipt_id FROM access.account WHERE account_id=$1', [account])).rows,
-    ).toEqual([{ pending_agent_receipt_id: decision.value.receiptId }]);
-    await unmergeVerifiedAgent(f.pool, decision.value);
-    const reversal = await store.findJob(f.pool, {
-      kind: 'account-agent.unverify',
-      account,
-      receipt: decision.value.receiptId,
-    });
-    expect(reversal?.state).toBe('published');
-    expect(reversal?.intent).toMatchObject({
-      kind: 'unmerge',
-      undoJob: verification?.ref,
-      verificationReceipt: workflow.receiptId,
-    });
-    await unmergeVerifiedAgent(f.pool, decision.value);
-    expect(
-      (await store.findJob(f.pool, { kind: 'account-agent.unverify', account, receipt: decision.value.receiptId }))
-        ?.ref,
-    ).toEqual(reversal?.ref);
+    const publication = await startCutoverPublication(f);
+    try {
+      const birth = await f.create('Independent reversal catalogue');
+      const catalogue = birth.subject.id;
+      await waitForOrdinaryWriter(f, publication.index, catalogue, birth.component.position);
+      const approved = await approvedVerification(f, catalogue, { registerActors: true });
+      const { account, workflow } = approved;
+      const agent = await ensureAccountAgent(f.pool, { account, kind: 'person', name: null });
+      await finishCutoverWork(
+        publication.workClient,
+        `accounts.agent-verification:${workflow.id}:${workflow.receiptId}`,
+        runAccountIdentityVerification(f.pool, publication.workClient, workflow.id, workflow.receiptId),
+      );
+      const verification = await readPublishedAgentIdentity(f, {
+        kind: 'account-agent.verify',
+        account,
+        receipt: workflow.receiptId,
+      });
+      expect(verification?.state).toBe('published');
+      const decision = await approved.commands.release(await approved.context('person'), {
+        accountId: account,
+        key: crypto.randomUUID(),
+      });
+      await expectAgentIdentityHandoffPending(
+        f,
+        publication.workClient,
+        agent.subject.id,
+        'accounts.agent-verification-reversal.unmerge',
+        (input) => unmergeVerifiedAgent(f.pool, input),
+        decision.value,
+      );
+      expect(
+        (await f.admin.query('SELECT pending_agent_receipt_id FROM access.account WHERE account_id=$1', [account]))
+          .rows,
+      ).toEqual([{ pending_agent_receipt_id: decision.value.receiptId }]);
+      await expect(enqueueAgentIdentityReversal(f.pool, publication.workClient, decision.value)).rejects.toMatchObject({
+        code: 'identity_epoch_unavailable',
+        message: 'Accounts source: original reversal SDK source association unavailable',
+      });
+    } finally {
+      await publication.stop();
+    }
   });
-});
+}, 240_000);
 
 test('source export survives failed control custody and exact native redelivery leaves a newer lower key pending', async () => {
   await isolatedCutover(async (f) => {

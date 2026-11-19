@@ -10,7 +10,7 @@ import {
 import { subjectListingSource } from '../library/listing-counts.ts';
 import type { SearchCurrentnessPort } from '../semantic/contract/domain-ports.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
-import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
+import { bindSearchIdentityJobRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
@@ -52,7 +52,7 @@ import { readSearchIdentityOriginalPlan, searchIdentityWriterEffectKey } from '.
 import { subjectPartition } from './source.ts';
 import { createSearchWriterGuard, type SearchIdentityWriterAdmission } from './writer-guard.ts';
 import { createSearchIdentityWriterSupport } from './identity-search-writer-support.ts';
-import { advanceSearchIdentityDispatch } from './identity-search-writer-dispatch.ts';
+import { prepareSearchIdentityDispatch } from './identity-search-writer-dispatch.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { prepareCanonicalIdentityDocument } from './identity-search-writer-document.ts';
 
@@ -68,7 +68,7 @@ function retainWriterStep(
   context: ReturnType<typeof searchIdentityWorkContext>,
   engineRequests: number,
 ) {
-  if (roles) bindSemanticProducerRoles(tx, roles);
+  if (roles) bindSearchIdentityJobRoles(tx, job, roles);
   recordIdentityEpochNativeCommit(tx, 'search-canonical-index');
   registerCommandCallback(tx, async (id) => {
     const result = await tx.query(stepSql.sql, [
@@ -149,39 +149,43 @@ export function createSearchIdentityWriterPreparation(
             await (
               await installed
             ).run(context, async () => {
-              const directory = await withReadTransaction(
+              const { directory, change, dispatch } = await withReadTransaction(
                 pool,
-                (tx) => readSearchIdentityDirectory(tx, job),
-                context.deadline,
-              );
-              const change = directory.writerRequest;
-              if (
-                !change ||
-                native.partition !== change.native.partition ||
-                native.transactionId !== change.native.transactionId ||
-                native.epoch !== change.native.epoch ||
-                native.position !== change.native.position
-              )
-                throw unavailable('Search writer request is no longer the retained current step');
+                async (tx) => {
+                  const directory = await readSearchIdentityDirectory(tx, job);
+                  const change = directory.writerRequest;
+                  if (
+                    !change ||
+                    native.partition !== change.native.partition ||
+                    native.transactionId !== change.native.transactionId ||
+                    native.epoch !== change.native.epoch ||
+                    native.position !== change.native.position
+                  )
+                    throw unavailable('Search writer request is no longer the retained current step');
 
-              if (change.plan?.holdId) {
-                return advanceSearchIdentityDispatch(
-                  configuration,
-                  writer,
-                  store,
-                  job,
-                  {
+                  if (!change.plan?.holdId) return { directory, change, dispatch: null };
+                  const request = {
                     planId: change.plan.planId,
                     holdId: change.plan.holdId,
                     original: change.original,
                     terminal: change.terminal,
-                  },
-                  directory.scope,
-                  context,
-                  turn.search(configuration.search),
-                  outsideSource,
-                );
-              }
+                  };
+                  const dispatch = await prepareSearchIdentityDispatch(
+                    configuration,
+                    writer,
+                    store,
+                    job,
+                    request,
+                    directory.scope,
+                    context,
+                    turn.search(configuration.search),
+                    outsideSource,
+                  );
+                  return { directory, change, dispatch };
+                },
+                context.deadline,
+              );
+              if (dispatch) return dispatch();
               if (change.plan) {
                 const allowance = identitySourceConsumerNativeWork(
                   pool,
@@ -322,7 +326,7 @@ export function createSearchIdentityWriterPreparation(
                         disposition,
                         native: locator,
                       };
-                      bindSemanticProducerRoles(tx, roles);
+                      bindSearchIdentityJobRoles(tx, job, roles);
                       const allowance = identitySourceConsumerNativeWork(
                         pool,
                         context.identityConsumerWork,
