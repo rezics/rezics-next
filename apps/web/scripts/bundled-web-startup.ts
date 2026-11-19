@@ -4,6 +4,11 @@ import type { Connect, Plugin } from 'vite';
 
 export const webReadinessPath = '/en/subjects/00000000-0000-4000-8000-000000000000';
 export const catalogueWebOutputEnv = 'REZICS_WALK_WEB_OUTPUT';
+export const releaseWebOutputEnv = 'REZICS_RELEASE_WEB_OUTPUT';
+
+export function releaseWebOutput(env: NodeJS.ProcessEnv): string | undefined {
+  if (env.REZICS_TEST_RUNTIME === '1' && env.NATIVE_WEB_BUNDLED_CLIENT === '1') return env[releaseWebOutputEnv];
+}
 
 const stages = [
   'prepare-messages',

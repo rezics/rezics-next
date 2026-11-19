@@ -36,6 +36,8 @@ import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { withCommandPhase } from '../../../services/kernel/scripts/command-phases.ts';
 import { compilePreparedWebPrograms } from './typecheck.ts';
 import { ensureMessagesReady } from './messages-ready.ts';
+import { releaseWebOutputEnv } from './bundled-web-startup.ts';
+import { nativeViteEnvironment } from '../tests/native/vite-environment.ts';
 import {
   admitWebHostTestCommand,
   isWebHostTestFile,
@@ -778,19 +780,40 @@ async function runWebReleaseCheck(env: NodeJS.ProcessEnv): Promise<void> {
   await runWebSelectedChecks([
     () => runWebTypecheck(env),
     () => runTests(releaseUnitFiles, env, 'bun run test'),
-    // The fixture builds the production Worker and client with its owned native bindings, then
-    // starts workerd on the emitted artifact and probes real HTTP against Auth, Kernel and Search.
-    () =>
-      withCommandPhase(
-        'web-release-http',
-        () =>
-          runCommand('production Worker build and HTTP', 'bun', webReleaseHostCommand().slice(1), {
-            ...env,
-            NATIVE_WEB_BUNDLED_CLIENT: '1',
-          }),
-        env,
-      ),
+    () => runWebReleaseHttp(env),
   ]);
+}
+
+async function runWebReleaseHttp(env: NodeJS.ProcessEnv): Promise<void> {
+  const outputParent = join(root, '.temp');
+  mkdirSync(outputParent, { recursive: true });
+  const output = mkdtempSync(join(outputParent, 'compiled-release-web-'));
+  try {
+    const releaseEnv = {
+      ...env,
+      NATIVE_WEB_BUNDLED_CLIENT: '1',
+      [releaseWebOutputEnv]: output,
+    };
+    // Finish bundling before the native fixtures start. Each preview supplies its own bindings to workerd.
+    await withCommandPhase(
+      'web-release-build',
+      () =>
+        runCommand(
+          'production Worker build',
+          'bun',
+          ['run', 'dev', '--build-bundled'],
+          nativeViteEnvironment({ ...releaseEnv, REZICS_TEST_RUNTIME: '1' }),
+        ),
+      env,
+    );
+    await withCommandPhase(
+      'web-release-http',
+      () => runCommand('production Worker HTTP', 'bun', webReleaseHostCommand().slice(1), releaseEnv),
+      env,
+    );
+  } finally {
+    rmSync(output, { recursive: true, force: true });
+  }
 }
 
 function testScriptArgument(args: string[]): string {
