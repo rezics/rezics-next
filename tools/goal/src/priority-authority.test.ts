@@ -92,7 +92,8 @@ test('foreign and revoked priority grants fail closed', async () => {
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const foreignTask = h.tasks.dispatch(h.briefFile);
+    const foreignTask = h.tasks.dispatch(h.writeBrief('Produce the separate result with no priority grant.'));
+    expect(foreignTask.id).not.toBe(task.id);
     const owner = task.brief.manager;
     addManager(h.store.db, owner, 'owner-session', 'supermanager');
     addManager(h.store.db, 'supermanager', 'super-session', 'root');

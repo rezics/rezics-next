@@ -313,8 +313,9 @@ test('batch rebases capture the cumulative target after earlier members change i
     h.ensureDev();
     h.settings.integration.batchSize = 2;
     const file = 'shared-storybook-entry.txt';
-    const firstTask = h.dispatch(file, [], ['true'], 'fixture');
-    const secondTask = h.dispatch(file, [], ['true'], 'fixture');
+    const firstTask = h.dispatch(file, [], ['true'], 'fixture', undefined, 'Add the first worker Storybook entry.');
+    const secondTask = h.dispatch(file, [], ['true'], 'fixture', undefined, 'Add the second worker Storybook entry.');
+    expect(secondTask.id).not.toBe(firstTask.id);
     writePlan(firstTask.worktree, file, 'first worker Storybook entry\n');
     writePlan(secondTask.worktree, file, 'second worker Storybook entry\n');
     installNoProgressWorker(h);

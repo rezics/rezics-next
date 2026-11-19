@@ -8,7 +8,8 @@ test('retry --brief on a held task replaces its brief and keeps it held until de
   const h = harness();
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.writeBrief('Produce the dependent result.'));
+    expect(task.id).not.toBe(dependency.id);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
@@ -41,7 +42,8 @@ test('retry --brief amends a held task whose retry is already pending and keeps 
   const h = harness();
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.writeBrief('Produce the dependent result.'));
+    expect(task.id).not.toBe(dependency.id);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
     h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
@@ -77,7 +79,8 @@ test('retry --brief amends a held task whose attempt waits for checks', async ()
   const h = harness();
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.writeBrief('Produce the dependent result.'));
+    expect(task.id).not.toBe(dependency.id);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
     h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
@@ -107,7 +110,8 @@ test('a stopped task retried while a dependency is unmet is held instead of star
   const h = harness();
   try {
     const dependency = h.tasks.dispatch(h.briefFile);
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.writeBrief('Produce the dependent result.'));
+    expect(task.id).not.toBe(dependency.id);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
     h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {

@@ -126,9 +126,10 @@ test('a finished orphan settles while an adopted orphan before it is still runni
   const workers: Awaited<ReturnType<typeof h.tasks.retry>>[] = [];
   try {
     // Recovery visits attempts in task id order; the running one comes first, so following in turn would block.
-    const tasks = [h.tasks.dispatch(h.briefFile), h.tasks.dispatch(h.briefFile)].toSorted((a, b) =>
-      a.id.localeCompare(b.id),
-    );
+    const first = h.tasks.dispatch(h.briefFile);
+    const second = h.tasks.dispatch(h.writeBrief('Produce the separate result for the second recovery candidate.'));
+    expect(second.id).not.toBe(first.id);
+    const tasks = [first, second].toSorted((a, b) => a.id.localeCompare(b.id));
     const running = tasks[0]!,
       finished = tasks[1]!;
     for (const task of [running, finished]) {

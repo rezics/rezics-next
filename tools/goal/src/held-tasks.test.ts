@@ -100,10 +100,12 @@ test('a brief held after a merged task is ready at once', () => {
 test('a stopped task held by a reshape starts when a later reshape drops the unmet dependency', async () => {
   const h = harness();
   try {
-    writeFileSync(h.briefFile, markdown.replace('command: [bun, test]', 'command: ["true"]'));
+    const template = markdown.replace('command: [bun, test]', 'command: ["true"]');
+    writeFileSync(h.briefFile, template);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     const blocker = h.tasks.dispatch(h.briefFile);
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.writeBrief('Produce the result whose dependencies will be reshaped.', template));
+    expect(task.id).not.toBe(blocker.id);
     await job.start(task.id);
     await h.tasks.stop(task.id);
     const heldBrief = join(h.root, '.temp/goal/held.md');
@@ -342,22 +344,25 @@ test('an authenticated current-generation reshape can replace a stopped source e
   const h = harness();
   try {
     const stopped = h.tasks.dispatch(h.briefFile);
+    const replacement = h.tasks.dispatch(h.writeBrief('Integrate the replacement HTTP source.'));
+    expect(replacement.id).not.toBe(stopped.id);
     writeFileSync(join(stopped.worktree, 'unlanded-http-source.ts'), 'export const route = "/book";\n');
     git(stopped.worktree, 'add', 'unlanded-http-source.ts');
     git(stopped.worktree, 'commit', '-m', 'Retain stopped HTTP source');
     await h.tasks.stop(stopped.id);
 
-    const waitingBrief = join(h.root, '.temp/goal/waiting-source.md');
-    writeFileSync(
-      waitingBrief,
-      markdown.replace('waiting: []', `waiting: []\nafter: [${stopped.id}]\nafterSource: [${stopped.id}]`),
+    const waitingTemplate = markdown.replace(
+      'waiting: []',
+      `waiting: []\nafter: [${stopped.id}]\nafterSource: [${stopped.id}]`,
     );
-    const consumer = h.tasks.dispatch(waitingBrief);
+    const consumer = h.tasks.dispatch(h.writeBrief('Amend the consumer before its first start.', waitingTemplate));
     expect(consumer.state).toBe('held');
-    const retryConsumer = h.tasks.dispatch(waitingBrief);
+    const retryConsumer = h.tasks.dispatch(
+      h.writeBrief('Retry the consumer with replacement source.', waitingTemplate),
+    );
+    expect(new Set([stopped.id, replacement.id, consumer.id, retryConsumer.id]).size).toBe(4);
     expect(retryConsumer.state).toBe('held');
 
-    const replacement = h.tasks.dispatch(h.briefFile);
     writeFileSync(join(replacement.worktree, 'integrated-http-source.ts'), 'export const route = "/book";\n');
     git(replacement.worktree, 'add', 'integrated-http-source.ts');
     git(replacement.worktree, 'commit', '-m', 'Integrate replacement HTTP source');

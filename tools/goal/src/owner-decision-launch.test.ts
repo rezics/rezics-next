@@ -99,8 +99,9 @@ test('accepted successor decisions require the owning session and an exact integ
   try {
     owner(h);
     const source = h.tasks.dispatch(h.briefFile);
+    const successor = h.tasks.dispatch(h.writeBrief('Integrate the preserved source in a successor task.'));
+    expect(successor.id).not.toBe(source.id);
     const sourceAttempt = next(h, source);
-    const successor = h.tasks.dispatch(h.briefFile);
     const commit = 'c'.repeat(40);
     h.store.updateTask({ taskId: successor.id, attempt: 0 }, (current) => {
       current.state = 'integrated';
