@@ -1,11 +1,12 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { authenticator, passkeyDatabase, passkeyFixture, cookies } from './passkeys.test.ts';
-import { checkGrowth, GrowthBoundError, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, GrowthBoundError } from '../../kernel/test/support/growth.ts';
 
 for (const path of ['signin', 'list'] as const)
   test(`passkey ${path} remains bounded as unrelated credentials and own consumed effects grow at 1x/8x/64x`, async () => {
     const database = passkeyDatabase();
-    const db = await openGrowthDatabase(database.url);
+    const db = await openAuthGrowthDatabase(database.url);
     try {
       const f = await passkeyFixture({ pool: db.openPool({ max: 3 }), kernelPool: db.pool, url: db.url });
       const person = await f.person();
@@ -70,7 +71,7 @@ for (const path of ['signin', 'list'] as const)
 for (const path of ['registration options', 'verified registration', 'registration replay', 'removal'] as const) {
   const scenario = async () => {
     const database = passkeyDatabase();
-    const db = await openGrowthDatabase(database.url);
+    const db = await openAuthGrowthDatabase(database.url);
     try {
       const f = await passkeyFixture({ pool: db.openPool({ max: 3 }), kernelPool: db.pool, url: db.url });
       const person = await f.person();

@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
@@ -5,13 +6,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { createAuthService, type AuthService } from '../src/index.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 let fixture: ReturnType<typeof testDatabase>;
 let db: GrowthDatabase;
@@ -22,7 +17,7 @@ const secret = 'growth-verification-secret-at-least-32-bytes';
 
 beforeAll(async () => {
   fixture = testDatabase();
-  db = await openGrowthDatabase(fixture.url);
+  db = await openAuthGrowthDatabase(fixture.url);
   const options: BetterAuthOptions = betterAuthOptions(db.pool, issuer, secret);
   context = await betterAuth(options).$context;
   const keys = await generateKeyPair('ES256', { extractable: true });

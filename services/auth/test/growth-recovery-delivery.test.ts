@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
@@ -6,7 +7,7 @@ import { testDatabase } from '../scripts/database.ts';
 import { runPlacedTests } from '../scripts/placed-tests.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
-import { capture, checkGrowth, costOf, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf } from '../../kernel/test/support/growth.ts';
 
 // Native production admission is decided at module load; keep the actual limiter.
 if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
@@ -21,7 +22,7 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
 } else {
   test('checkGrowth captures full native failed recovery start at 1/8/64 with duplicate identifier and owner history', async () => {
     const fixture = testDatabase();
-    const db = await openGrowthDatabase(fixture.url);
+    const db = await openAuthGrowthDatabase(fixture.url);
     try {
       const issuer = 'https://delivery.growth.test';
       const account: AccessAccount = {

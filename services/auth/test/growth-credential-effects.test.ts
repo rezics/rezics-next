@@ -1,13 +1,14 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { testDatabase } from '../scripts/database.ts';
 import { credentialFixture } from './credential-effects.test.ts';
-import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth } from '../../kernel/test/support/growth.ts';
 
 for (const series of ['old-effects', 'unrelated-owners'] as const)
   for (const destructive of [false, true])
     test(`credential effect growth stays fixed at 1x/8x/64x: ${series}, ${destructive ? 'remove-key with 64 sessions' : 'add-key'}`, async () => {
       const fixture = testDatabase();
-      const db = await openGrowthDatabase(fixture.url);
+      const db = await openAuthGrowthDatabase(fixture.url);
       try {
         const f = await credentialFixture(db.pool);
         const warmupSubject = 'robot-warmup';

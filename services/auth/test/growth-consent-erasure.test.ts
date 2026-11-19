@@ -1,16 +1,10 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Population,
-  type Row,
-} from '../../kernel/test/support/growth.ts';
+import { checkGrowth, seed, type GrowthDatabase, type Population, type Row } from '../../kernel/test/support/growth.ts';
 
 const instant = new Date('2026-01-01T00:00:00.000Z');
 const future = new Date('2099-01-01T00:00:00.000Z');
@@ -95,7 +89,7 @@ async function expectErased(current: GrowthDatabase, owners: string[]) {
 
 test('consent erasure scheduling stays bounded as unrelated erasure rows and consents grow', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   try {
     const auth = await makeAuth(db.pool);
     await auth.internal.registerClient({ clientId: 'schedule-growth-client', firstParty: false, scopes: ['read'] });
@@ -142,7 +136,7 @@ test('consent erasure scheduling stays bounded as unrelated erasure rows and con
 
 test('one fixed consent erasure batch stays bounded as live consent and future schedules grow', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   try {
     const auth = await makeAuth(db.pool);
     const clients = ['maintenance-growth-client-a', 'maintenance-growth-client-b'];

@@ -1,8 +1,9 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { nativeErasurePage } from '../src/erasure-native.ts';
 import { failNativeQueries, nativeFixture, scopes } from './support/erasure-native.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, seed, type Population } from '../../kernel/test/support/growth.ts';
 
 for (const axis of ['stages', 'effects', 'histories'] as const) {
   test(`a real held credential consumer page counts its terminal proof, producer fence, cleanup and checkpoint as unrelated native ${axis} grows`, async () => {
@@ -49,7 +50,7 @@ for (const axis of ['stages', 'effects', 'histories'] as const) {
       throw error;
     }
     restore();
-    const db = await openGrowthDatabase(f.fixture.url);
+    const db = await openAuthGrowthDatabase(f.fixture.url);
     const population: Population = {
       name: `native-consumer-${axis}`,
       hotPartition: 0,

@@ -1,9 +1,10 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, WEBSITE_CLIENT_ID, type AuthService } from '../src/index.ts';
-import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 let fixture: ReturnType<typeof testDatabase>;
 let db: GrowthDatabase;
@@ -21,7 +22,7 @@ const kinds = [
 beforeAll(async () => {
   // This file owns its migrated database; it never shares another suite's rows.
   fixture = testDatabase();
-  db = await openGrowthDatabase(fixture.url);
+  db = await openAuthGrowthDatabase(fixture.url);
   const keys = await generateKeyPair('ES256', { extractable: true });
   const key = { ...(await exportJWK(keys.privateKey)), kid: 'retention-signing', alg: 'ES256' };
   service = await createAuthService({

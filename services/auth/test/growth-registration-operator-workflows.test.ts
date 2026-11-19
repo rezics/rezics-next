@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, spyOn, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
@@ -8,14 +9,7 @@ import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workfl
 import { AUTH_WORKFLOW_APPLICATION } from '../src/retention.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { consumableGrowth } from './support/consumable-growth.ts';
-import {
-  capture,
-  checkGrowth,
-  GrowthBoundError,
-  openGrowthDatabase,
-  seed,
-  type Population,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, GrowthBoundError, seed, type Population } from '../../kernel/test/support/growth.ts';
 
 const issuer = 'https://growth-workflows.auth.test';
 const password = 'native workflow growth password';
@@ -26,7 +20,7 @@ const repetitions = 2;
 
 async function fixture() {
   const database = testDatabase();
-  const db = await openGrowthDatabase(database.url);
+  const db = await openAuthGrowthDatabase(database.url);
   const accounts = new Map<string, AccessAccount>();
   const openings = new Map<string, EffectAuthorization>();
   const released = new Set<string>();

@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -12,13 +13,7 @@ import {
   type PublicJwks,
 } from '../src/index.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import {
-  capture,
-  checkGrowth,
-  GrowthBoundError,
-  openGrowthDatabase,
-  type GrowthCheck,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, GrowthBoundError, type GrowthCheck } from '../../kernel/test/support/growth.ts';
 
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const population = 512;
@@ -30,7 +25,7 @@ type Tokens = { refresh_token: string; access_token: string; id_token: string };
 
 async function fixture() {
   const postgres = testDatabase();
-  const db = await openGrowthDatabase(postgres.url);
+  const db = await openAuthGrowthDatabase(postgres.url);
   const accounts = new Map<string, AccessAccount>();
   const invalidations: string[] = [];
   let dispatch: (request: Request) => Promise<Response>;
