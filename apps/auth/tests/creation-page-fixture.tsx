@@ -142,7 +142,10 @@ export async function open(page: ReactNode, sessionBody: object) {
       );
     if (requestPath === '/account-management/automated/operator') {
       const { operatorAccountId } = JSON.parse(String(init?.body));
-      const saved = JSON.parse(window.sessionStorage.getItem('rezics.automated-create.attempt') ?? 'null');
+      const saved =
+        operatorAccountId === null
+          ? null
+          : JSON.parse(window.sessionStorage.getItem('rezics.automated-create.attempt') ?? 'null');
       if (operatorAccountId === null || saved?.operator.id === operatorAccountId) {
         const session = sessionBody as { account_id: string; client_id: string; scope: string[] };
         const ordinary =
