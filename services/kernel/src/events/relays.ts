@@ -84,7 +84,7 @@ export function startRelays(
           return;
         }
         // Release the slot at this scan's captured head or the next batch boundary
-        // after new read demand. The next ordinary scan resumes its committed checkpoint.
+        // when a priority turn is waiting. A later scan resumes the committed checkpoint.
         if (priority.size > 0) return;
         if (singleBatch || result.status === 'busy' || result.envelopes === 0 || result.position >= through) return;
       }
@@ -110,8 +110,8 @@ export function startRelays(
       queue.set(relay, partitions);
       const row = next.value;
       if (inFlight.has(key(relay, row.partition_no))) continue;
-      // A read can bring work forward by one batch. Oldest-first dispatch keeps
-      // moving even when every scan finds more reads waiting.
+      // Priority work can bring a home forward by one batch. Oldest-first dispatch
+      // keeps moving even when every scan finds more priority work waiting.
       preferPriority = !urgent;
       void run(relay, row.partition_no, BigInt(row.position), urgent).then(dispatch);
     }

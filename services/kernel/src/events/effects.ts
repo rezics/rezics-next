@@ -3,11 +3,13 @@ import pg, { type Pool, type PoolClient } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
 import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { LOCATOR_EFFECTS_QUEUE, MEDIA_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
 import { projectBatch, type CloudEvent, type Envelope, type ProjectionProgress } from './log.ts';
+import scanIdentityAdmission from './scan-identity-admission.sql';
 import {
   associateIdentityFxOriginal,
   isIdentityOriginalEffect,
@@ -39,6 +41,7 @@ type RegisteredEffect = Effect | NativeEffect;
 type RegisteredEffects = {
   enqueue(envelopes: readonly Envelope[]): Promise<void>;
   admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
+  scanPriority?: NonNullable<Relay['scanPriority']>;
 };
 const identityOriginalPreparations = new WeakMap<
   RegisteredEffects,
@@ -169,6 +172,12 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
 
   const registered: RegisteredEffects = {
     ...(admit === undefined ? {} : { admit }),
+    ...(effects.some(
+      (effect) =>
+        effect.delivery !== 'native' && effect.queue === 'governance' && effect.types.includes(IDENTITY_EPOCH_ADMITTED),
+    ) && {
+      scanPriority: (client: PoolClient) => scanIdentityAdmission.run(client, { consumer: EFFECTS_CONSUMER }),
+    }),
     async enqueue(envelopes) {
       // Direct enqueuers converge on the same durable original too.
       await prepareIdentityOriginals(envelopes);
@@ -344,6 +353,7 @@ export function effectsRelay(
     });
   return {
     consumer: EFFECTS_CONSUMER,
+    ...(effects.scanPriority && { scanPriority: effects.scanPriority }),
     run(partition) {
       if (partition !== probe?.partition || !observe) return relayEffects(pool, effects, partition);
       return relayEffects(pool, effects, partition, observe).catch((error: unknown) => {
