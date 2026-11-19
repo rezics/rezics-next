@@ -150,7 +150,13 @@ export async function runTestTimings(
   const tests = fileResults.flatMap((file) => parseTestTimings(file.file, file.output));
   const failed = fileResults.filter((file) => file.status !== 0);
   const failures = failed.length
-    ? `${failed.length} file(s) failed:\n${failed.map((file) => `${file.file}\n${file.output.trimEnd()}`).join('\n\n')}\n\n`
+    ? [
+        `${failed.length} file(s) failed:`,
+        ...failed.map(({ file }) => file),
+        ...failed.map(({ file, output }) => `\n${file}\n${output.trimEnd()}`),
+        '',
+        '',
+      ].join('\n')
     : '';
   const output = failures + formatTimings(fileResults, tests, totalMs);
   return { status: failed.length ? 1 : 0, output, files: fileResults, tests, totalMs };
