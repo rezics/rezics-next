@@ -102,6 +102,21 @@ test('walk Stripe fixture bindings stay loopback HTTP with HTTPS Checkout return
   });
 });
 
+test('only the admitted import catalogue gets more Search heap within its existing container ceiling', () => {
+  for (const [flags, heap] of [
+    [{ REZICS_WALK_IMPORT_CATALOGUE: '1', REZICS_WALK_DEFER_FRONTENDS: '0' }, '160m'],
+    [{ REZICS_WALK_FIRST_PUBLIC_WEB: '1' }, '128m'],
+    [{}, '128m'],
+  ] as const) {
+    const env = walkProcessEnvironment('walk-profile', 1, flags);
+    const args = searchRunArgs('fixture', env);
+    expect(args).toContain(`OPENSEARCH_JAVA_OPTS=-Xms${heap} -Xmx${heap}`);
+    expect(args).toContain('node.store.allow_mmap=false');
+    expect(args[args.indexOf('--memory') + 1]).toBe('768m');
+    expect(args[args.indexOf('--memory-swap') + 1]).toBe('768m');
+  }
+});
+
 test('issuer JWKS URL keeps the public issuer origin and normalizes one trailing slash', () => {
   expect(issuerJwksUrl('http://127.0.0.1:4201/')).toBe('http://127.0.0.1:4201/.well-known/jwks.json');
 });

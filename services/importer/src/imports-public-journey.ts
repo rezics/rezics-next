@@ -172,16 +172,19 @@ export async function runWalkSelection<Seed>(
   actions: {
     operators(): Promise<void>;
     seed(): Promise<Seed | null>;
-    catalogue(seed: Seed): Promise<void>;
-    reopenSeed(seed: Seed): Promise<void>;
+    readCatalogue(seed: Seed): Promise<void>;
+    reopenSeed(seed: Seed): Promise<Seed | null>;
+    mountCatalogue(seed: Seed): Promise<void>;
   },
 ): Promise<void> {
   if (selection.scope !== 'catalogue') await actions.operators();
   if (selection.scope === 'operators') return;
   const fresh = await actions.seed();
   if (fresh === null) return;
-  await actions.catalogue(fresh);
+  await actions.readCatalogue(fresh);
+  // Replay records its own result. The mounted selection still belongs to the first seed.
   if (selection.reopenSeed) await actions.reopenSeed(fresh);
+  await actions.mountCatalogue(fresh);
 }
 
 export type WalkRowResult = {
@@ -2012,10 +2015,9 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
     }
   };
 
-  const catalogue = async ({ report: seeded, publication: published }: PublishedWalkSeed) => {
+  const readCatalogue = async ({ report: seeded, publication: published }: PublishedWalkSeed) => {
     await recordStage('catalogue-readback');
-    const origins = stackOrigins();
-    const api = origins.kernel;
+    const api = stackOrigins().kernel;
 
     rows.push(
       await walkRow('I05', async () => {
@@ -2098,7 +2100,9 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
         };
       }),
     );
+  };
 
+  const mountCatalogue = async ({ report: seeded }: PublishedWalkSeed) => {
     const browserVisits: JourneyMountedVisit[] = [];
     const nativeRows = rows
       .map((row, index) => ({ row, index }))
@@ -2159,10 +2163,9 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
         }
         return seeded;
       },
-      catalogue,
-      async reopenSeed(first) {
-        await runSeed('seed-reopen', first);
-      },
+      readCatalogue,
+      reopenSeed: (first) => runSeed('seed-reopen', first),
+      mountCatalogue,
     });
   }
   await recordStage('complete');
