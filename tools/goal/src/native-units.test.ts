@@ -18,6 +18,7 @@ import { walkStackLogPath } from '../../../scripts/walk-stack.ts';
 import { runIntegration, type IntegrationRuntime } from './integration-cli.ts';
 import { registerResidentSupermanager } from './managers.ts';
 import { runNativeUnitCommand } from './native-unit-command.ts';
+import { loadSettings } from './settings.ts';
 import type { Settings } from './types.ts';
 
 const roots: string[] = [];
@@ -182,22 +183,46 @@ test('an active desktop resident hands off authority and launches only the assig
   const manager = randomUUID();
   const former = randomUUID();
   const supermanager = 'supermanager';
-  const pools = [{ name: 'codex', cli: 'codex', configDirectory: codexHome }] as Settings['pools'];
-  const runtime = {
+  const defaults = loadSettings({ cwd: mainCheckout, env: {} });
+  const settings: Settings = {
+    ...defaults,
+    stateDirectory,
+    integration: { ...defaults.integration, supermanager },
+    pools: [
+      {
+        name: 'codex',
+        cli: 'codex',
+        classes: [],
+        configDirectory: codexHome,
+        command: 'codex',
+        allowanceKey: 'fixture',
+        policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 1_000 },
+      },
+    ],
+  };
+  const unexpected = (): never => {
+    throw new Error('Desktop registration must not run a managed service');
+  };
+  const runtime: IntegrationRuntime = {
     db: f.db,
     mainCheckout,
     supermanager,
-    pools,
-    managerServices: {},
-    integration: { supermanager },
+    pools: settings.pools,
     stateDirectory,
+    worktreeRoot: settings.worktreeRoot,
+    managerSocket: settings.integration.managerSocket,
+    fence: { assertCurrent: unexpected, commitMerge: unexpected },
+    sink: { onGateOutcome: unexpected },
+    landing: unexpected,
+    manager: unexpected,
+    managerServices: {
+      windows: { register: unexpected, unregister: unexpected },
+      checkCompletion: unexpected,
+      command: [],
+    },
   };
-  const settings = runtime as Settings;
   const replace = (previous: string) =>
-    runIntegration(
-      ['manager', 'register-supermanager', '--desktop', 'codex', '--replace-session', previous],
-      runtime as IntegrationRuntime,
-    );
+    runIntegration(['manager', 'register-supermanager', '--desktop', 'codex', '--replace-session', previous], runtime);
   const register = (thread: string) =>
     runNativeUnitCommand(
       [

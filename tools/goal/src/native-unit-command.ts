@@ -31,10 +31,11 @@ function unitCaller(db: Database, settings: Settings, unit?: NativeUnit, desktop
     try {
       const seen = new Set<string>();
       while (current && seen.size < 16 && !seen.has(current)) {
-        if (current === unit.threadId) return;
-        seen.add(current);
+        const candidate = current;
+        if (candidate === unit.threadId) return;
+        seen.add(candidate);
         const thread = databaseStage(native, 'unit caller ancestry lookup', () =>
-          native.query('SELECT source FROM threads WHERE id=?').get(current),
+          native.query('SELECT source FROM threads WHERE id=?').get(candidate),
         ) as { source: string } | null;
         try {
           current = JSON.parse(thread?.source ?? 'null')?.subagent?.thread_spawn?.parent_thread_id;
