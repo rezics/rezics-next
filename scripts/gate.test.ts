@@ -220,9 +220,9 @@ if (args[0] === 'install') {
   const events = readFileSync(dir + '/log.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map((line) => JSON.parse(line));
   const attempt = events.filter((event) => event.kind === 'check' && event.workspace === workspace).length + 1;
   log({ kind: 'check', workspace, attempt });
-  if (workspace === 'web') {
-    log({ kind: 'web-command', args });
-    console.log('[web-file] {"file":"tests/first.test.ts","result":"passed"}');
+  if (workspace === 'web' || process.cwd().endsWith('/services/auth')) {
+    log({ kind: 'progress-command', args });
+    console.log('[' + workspace + '-file] {"file":"tests/first.test.ts","result":"passed"}');
     for (let n = 0; n < 100; n++) {
       try {
         readFileSync(dir + '/progress-observed');
@@ -599,31 +599,34 @@ test.each(['matching', 'stale'] as const)('Gate checkpoints with a %s manifest',
   ]);
 });
 
-test('the Gate selects Web release qualification and streams file completion before it exits', async () => {
+test.each([
+  ['apps/web', 'web', 'check:release'],
+  ['services/auth', 'auth', 'check'],
+])('the Gate selects and streams %s file completion before it exits', async (workspace, prefix, command) => {
   const { env, dir, events } = scenario();
   env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
   const fixture = join(dir, 'checkout');
-  const web = join(fixture, 'apps/web');
-  mkdirSync(web, { recursive: true });
+  const directory = join(fixture, workspace);
+  mkdirSync(directory, { recursive: true });
   writeFileSync(
-    join(web, 'package.json'),
+    join(directory, 'package.json'),
     JSON.stringify({
-      name: '@rezics/web',
+      name: `@rezics/${prefix}`,
       scripts: { check: 'dev-check', 'check:release': 'bun scripts/check.ts --release' },
     }),
   );
   const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
-    if (String(text).includes('[web-file]')) writeFileSync(join(dir, 'progress-observed'), '');
+    if (String(text).includes(`[${prefix}-file]`)) writeFileSync(join(dir, 'progress-observed'), '');
     return true;
   });
   try {
-    expect(await runLocalGate(['--workspaces', 'apps/web'], fixture, env)).toBe(1);
+    expect(await runLocalGate(['--workspaces', workspace], fixture, env)).toBe(1);
   } finally {
     output.mockRestore();
   }
   expect(events().filter((event) => event.kind === 'observed-before-exit')).toHaveLength(1);
-  expect(events().filter((event) => event.kind === 'web-command')).toEqual([
-    { kind: 'web-command', args: ['run', 'check:release'] },
+  expect(events().filter((event) => event.kind === 'progress-command')).toEqual([
+    { kind: 'progress-command', args: ['run', command] },
   ]);
   expect(JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')).workspaces[0].passed).toBe(false);
 });

@@ -1,8 +1,9 @@
-import { realpathSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
+import type { CandidateSourceManifest } from '../../../scripts/check-source.ts';
 import { capture, runLaneSuite } from '../../../scripts/test-lanes.ts';
 import { betterAuthSchemaOptions } from '../src/better-auth.ts';
 import {
@@ -138,6 +139,30 @@ export async function runAuthCheckStages(stages: readonly CheckStage[]): Promise
   if (issues.length) throw new Error(`Auth check results:\n${issues.join('\n')}`);
 }
 
+function authFileProgressSource(directory: string, run: string | undefined) {
+  const fileDigests = new Map<string, string>();
+  let source: { run: string; revision?: string; sourceSha256?: string } | undefined;
+  if (run && /^[a-zA-Z0-9-]+$/.test(run)) {
+    source = { run };
+    try {
+      const path = resolve(directory, '../../.temp/check-host', `source-manifest-${run}.json`);
+      const manifest = JSON.parse(readFileSync(path, 'utf8')) as CandidateSourceManifest;
+      if (/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.head) && /^[a-f0-9]{64}$/.test(manifest.sourceSha256)) {
+        source = { run, revision: manifest.head, sourceSha256: manifest.sourceSha256 };
+        const prefix = 'services/auth/';
+        for (const entry of Array.isArray(manifest.entries) ? manifest.entries : []) {
+          if (entry?.kind === 'file' && entry.path.startsWith(prefix) && /^[a-f0-9]{64}$/.test(entry.sha256)) {
+            fileDigests.set(entry.path.slice(prefix.length), entry.sha256);
+          }
+        }
+      }
+    } catch {
+      // A direct check can report progress without a prepared source manifest.
+    }
+  }
+  return (file: string) => ({ ...source, fileSha256: fileDigests.get(file) });
+}
+
 if (import.meta.main) {
   const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const originalArgs = process.argv.slice(2);
@@ -231,6 +256,7 @@ if (import.meta.main) {
           name: 'native test files',
           after: [template],
           run: async () => {
+            const progressSource = authFileProgressSource(directory, process.env.REZICS_CHECK_RUN);
             const { failed } = await runLaneSuite({
               service: 'auth',
               directory,
@@ -249,6 +275,16 @@ if (import.meta.main) {
                   DATABASE_URL: url,
                   AUTH_TEST_DATABASE_URL: url,
                 };
+              },
+              onFileComplete: (outcome, timing, retry) => {
+                const progress = {
+                  ...progressSource(outcome.file),
+                  file: outcome.file,
+                  attempt: retry === 'complete' ? 2 : 1,
+                  result: retry === 'pending' ? 'retry-pending' : outcome.error ? 'failed' : 'passed',
+                  seconds: timing.wall,
+                };
+                process.stdout.write(`[auth-file] ${JSON.stringify(progress)}\n`);
               },
             });
             if (failed.length) throw new Error(`${failed.length} file(s) failed:\n${failed.join('\n')}`);
