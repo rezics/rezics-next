@@ -47,10 +47,11 @@ async function signin(accountId = person) {
 }
 
 async function stageReadRevocation() {
-  await database.query(
-    "INSERT INTO auth_consent (account_id,client_id,scopes,pending_scopes,pending_reference) VALUES ($1,$2,ARRAY['read'],ARRAY[]::text[],$3)",
+  const pending = await database.query(
+    'UPDATE auth_consent SET pending_scopes=ARRAY[]::text[],pending_reference=$3 WHERE account_id=$1 AND client_id=$2',
     [person, clientId, randomUUID()],
   );
+  expect(pending.rowCount).toBe(1);
 }
 
 beforeAll(async () => {
@@ -261,8 +262,13 @@ test('late native identity results are withheld after revocation, proof changes,
     await database.query('UPDATE auth_client SET disabled=false WHERE client_id=$1', [clientId]);
     await database.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [person, clientId]);
     const cookie = await signin();
-    afterIdentityRead = change;
+    let changed = false;
+    afterIdentityRead = async () => {
+      await change();
+      changed = true;
+    };
     const response = await request(cookie);
+    expect(changed).toBe(true);
     expect([401, 503]).toContain(response.status);
     const body = await response.text();
     expect(body).not.toContain(email);
