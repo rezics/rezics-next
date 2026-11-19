@@ -1158,7 +1158,9 @@ async function sendLegacyDecision(
   document: Record<string, unknown>,
   owner = OWNER,
 ): Promise<number> {
-  writeJson(join(fixture.stateDirectory, path), document);
+  const decisionPath = join(fixture.stateDirectory, path);
+  writeJson(decisionPath, document);
+  const digest = evidenceHash(readFileSync(decisionPath, 'utf8'));
   expect(
     await invoke(
       fixture,
@@ -1167,7 +1169,7 @@ async function sendLegacyDecision(
         'send',
         OPERATIONS,
         'decision',
-        'Retained original custody evidence',
+        `Retained original custody evidence ${path} ${digest}`,
         '--document',
         `.temp/goal/${path}`,
       ],
@@ -1384,14 +1386,20 @@ test('Legacy receiving supports operations-owned records without owner impersona
       records: [],
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(wrongNamespace)])).toBe(1);
-    const mismatch = await sendVersionedOriginal(fixture, 'workflow-pid', 'publisher', {
-      workflowPid: 910014,
-      process: processFixtureIdentity(910013),
-      state: 'terminal',
-      exitCode: 0,
-    });
+    const mismatch = await sendVersionedOriginal(
+      fixture,
+      'workflow-pid',
+      'publisher',
+      {
+        workflowPid: 910014,
+        process: processFixtureIdentity(910013),
+        state: 'terminal',
+        exitCode: 0,
+      },
+      OPERATIONS,
+    );
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(mismatch)])).toBe(1);
-    const unauthenticated = await sendVersionedOriginal(fixture, 'no-session', 'capture', { identity: null });
+    const unauthenticated = await sendVersionedOriginal(fixture, 'no-session', 'capture', { identity: null }, OPERATIONS);
     const db = openDb(fixture.dbPath);
     try {
       const inbox = db.query('SELECT event FROM manager_inbox WHERE id=?').get(unauthenticated) as { event: string };
