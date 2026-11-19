@@ -110,7 +110,13 @@ test('creating an operated actor uses existing native approved createAutomated w
   ).toEqual([{ kind: 'actor', state: 'active', handle: operation.handle, operator_account_id: human.accountId }]);
   expect(await f.bindings.trustedAccess.readAccount(result.accountId)).toMatchObject({ automated: true });
   expect((await f.authPool.query('SELECT id FROM session WHERE "userId"=$1', [result.accountId])).rowCount).toBe(0);
-  expect((await f.authPool.query('SELECT id FROM account WHERE "userId"=$1', [result.accountId])).rowCount).toBe(0);
+  expect(
+    (
+      await f.authPool.query('SELECT "accountId","providerId",password FROM account WHERE "userId"=$1', [
+        result.accountId,
+      ])
+    ).rows,
+  ).toEqual([{ accountId: result.accountId, providerId: 'credential', password: null }]);
   const request = (
     await f.authPool.query(
       "SELECT request FROM auth_workflow_request WHERE request->>'kind'='automated' AND request->>'operationKey'=$1",
