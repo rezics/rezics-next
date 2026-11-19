@@ -377,7 +377,8 @@ async function inspectReadingExamples(canvasElement: HTMLElement, layout: 'list'
     const opener = openers[index]!;
     const subject = readingExamples[index]!.subject;
     if (subject) {
-      const titleLink = within(item).getByRole('link', { name: subject.title, exact: true });
+      const titleLink = within(item).getByRole('link', { name: subject.title });
+      await expect(titleLink).toHaveAccessibleName(subject.title);
       const title =
         layout === 'grid' ? titleLink : item.querySelector<HTMLElement>('[data-slot="member-list-row-title"]')!;
       title.scrollIntoView({ block: 'center' });
