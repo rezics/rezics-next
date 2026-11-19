@@ -258,7 +258,8 @@ for (const pkg of packages) {
 
   test(`${pkg} runs its tests through the isolation script, in its check too`, async () => {
     const { scripts } = await Bun.file(join(root, pkg, 'package.json')).json();
-    expect(scripts.test).toBe('bun scripts/isolated.ts bun test');
+    const entry = pkg === 'apps/web' ? 'bun scripts/check-placement.ts -- ' : '';
+    expect(scripts.test).toBe(`${entry}bun scripts/isolated.ts bun test`);
     expect(scripts.check).toContain('bun run test');
     expect(` ${scripts.check} `).not.toMatch(/[\s&;]bun test[\s&;]/);
   });
