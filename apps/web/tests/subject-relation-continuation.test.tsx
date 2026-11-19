@@ -1,23 +1,29 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { act } from 'react';
 import { chromium, type Browser, type Page } from 'playwright';
-import { cleanupAll, ownBunProcess, type ProcessCustody } from './support/server-custody.ts';
+import { cleanupAll, ownNodeProcess, type ProcessCustody } from './support/server-custody.ts';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 
 // Authored for controller execution. This exercises the real PageStory route/composition and its local page fixtures.
 describe('Browser relation continuation', () => {
-  let child: ReturnType<typeof Bun.spawn> | undefined;
   let storybookCustody: ProcessCustody | undefined;
+  let storybookConfig: string | undefined;
   let browser: Browser | undefined;
   let origin: string;
   afterAll(async () => {
-    await cleanupAll([
-      { label: 'Subject continuation browser', run: () => browser?.close(), timeoutMs: 5000 },
-      { label: 'Subject continuation Storybook group', run: () => storybookCustody?.close(), timeoutMs: 7000 },
-    ]);
+    try {
+      await cleanupAll([
+        { label: 'Subject continuation browser', run: () => browser?.close(), timeoutMs: 5000 },
+        { label: 'Subject continuation Storybook group', run: () => storybookCustody?.close(), timeoutMs: 7000 },
+      ]);
+    } finally {
+      if (storybookConfig) await rm(storybookConfig, { recursive: true, force: true });
+    }
   });
   beforeAll(async () => {
     const port = await new Promise<number>((resolve, reject) => {
@@ -29,14 +35,48 @@ describe('Browser relation continuation', () => {
       });
     });
     origin = `http://127.0.0.1:${port}`;
-    child = Bun.spawn(['bun', 'run', 'storybook', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
-      cwd: join(import.meta.dir, '..'),
-      detached: true,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const custody = (storybookCustody = ownBunProcess(child, { label: 'Subject continuation Storybook' }));
-    const deadline = Date.now() + 150_000;
+    const app = join(import.meta.dir, '..');
+    const temporary = join(app, '.temp');
+    await mkdir(temporary, { recursive: true });
+    storybookConfig = await mkdtemp(join(temporary, 'subject-continuation-'));
+    // Keep the real Vite transforms and preview while indexing only the story under test.
+    await writeFile(
+      join(storybookConfig, 'main.ts'),
+      `import { resolve } from 'node:path';
+import config from '../../.storybook/main.ts';
+const asset = (path) => resolve(import.meta.dirname, '../../.storybook', path);
+export default {
+  ...config,
+  stories: ['../../src/stories/subject-relations.stories.tsx'],
+  addons: [],
+  refs: {},
+  features: { ...config.features, componentsManifest: false },
+  typescript: { reactDocgen: false },
+  staticDirs: config.staticDirs.map((dir) =>
+    typeof dir === 'string' ? asset(dir) : { ...dir, from: asset(dir.from) }
+  ),
+  async viteFinal(input, options) {
+    const vite = await config.viteFinal({ ...input, root: asset('..') }, options);
+    // The auth message compiler is for auth stories, which this preview does not index.
+    const [, authMessages] = vite.plugins.filter((plugin) => plugin?.name === 'unplugin-paraglide-js');
+    return { ...vite, plugins: vite.plugins.filter((plugin) => plugin !== authMessages) };
+  },
+};
+`,
+    );
+    await writeFile(join(storybookConfig, 'preview.ts'), "export { default } from '../../.storybook/preview.tsx';\n");
+    const child = spawn(
+      join(app, 'node_modules/.bin/storybook'),
+      ['dev', '--ci', '--preview-only', '--config-dir', storybookConfig, '--host', '127.0.0.1', '--port', String(port)],
+      {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, CI: '1' },
+      },
+    );
+    const custody = (storybookCustody = ownNodeProcess(child, { label: 'Subject continuation Storybook' }));
+    const deadline = Date.now() + 240_000;
     for (;;) {
       if (child.exitCode !== null)
         throw new Error(`Storybook exited with ${child.exitCode}:\n${custody.diagnostics()}`);
@@ -47,7 +87,7 @@ describe('Browser relation continuation', () => {
       await Bun.sleep(500);
     }
     browser = await chromium.launch();
-  }, 180_000);
+  }, 260_000);
 
   async function holdContinuation(page: Page) {
     await page.evaluate(() => {
@@ -82,6 +122,11 @@ describe('Browser relation continuation', () => {
 
   test('Make independent Subject relation continuation usable with keyboard and assistive technology', async () => {
     const page = await browser!.newPage({ viewport: { width: 390, height: 844 } });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
     try {
       const url = `${origin}/iframe.html?id=pages-subjects-subject-relations--continuation&viewMode=story&globals=locale:en;theme:light`;
       await page.goto(url);
@@ -89,55 +134,73 @@ describe('Browser relation continuation', () => {
       const other = page.locator('[data-slot="relation-stream"][data-node="adaptations"]');
       const more = first.locator('[data-slot="continue-group"]');
       const otherMore = other.locator('[data-slot="continue-group"]');
-      await more.waitFor();
-      expect(await first.getByRole('status').textContent()).toBe('');
-      expect(await other.getByRole('status').textContent()).toBe('');
+      const firstStatus = first.locator('#side-stories-status');
+      const otherStatus = other.locator('#adaptations-status');
+      await more.waitFor({ timeout: 60_000 });
+      expect(await firstStatus.textContent()).toBe('');
+      expect(await otherStatus.textContent()).toBe('');
       expect(await more.getAttribute('href')).toContain('node=side-stories&cursor=accessible-next');
       expect(await more.getAttribute('aria-describedby')).toBe('side-stories-status');
       expect(await first.getAttribute('aria-live')).toBeNull();
-      await more.evaluate((link) => link.scrollIntoView({ block: 'center' }));
+      await more.evaluate((link) => link.scrollIntoView({ block: 'center', behavior: 'instant' }));
       const target = await more.evaluate((link) => {
         const { left, top, width, height } = link.getBoundingClientRect();
         const x = left + width / 2;
         const y = top + height / 2;
-        const hits = [-21.5, 0, 21.5].every((dx) =>
-          [-21.5, 0, 21.5].every((dy) => link.contains(document.elementFromPoint(x + dx, y + dy))),
+        const misses = [-21.5, 0, 21.5].flatMap((dx) =>
+          [-21.5, 0, 21.5].flatMap((dy) => {
+            const hit = document.elementFromPoint(x + dx, y + dy);
+            return link.contains(hit) ? [] : [{ dx, dy, hit: hit?.outerHTML.slice(0, 140) }];
+          }),
         );
-        return { height, hits };
+        const overlay = document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.window');
+        return { height, misses, ...(overlay ? { overlay: overlay.textContent?.slice(0, 1000) } : {}) };
       });
-      expect(target).toEqual({ height: 28, hits: true });
+      expect(target).toMatchObject({ height: 28, misses: [] });
 
       await page.evaluate(() => {
         const state = window as typeof window & { continuationReads?: unknown[] };
         state.continuationReads = [];
         const original = window.fetch;
+        let failFirstContinuation = true;
         window.fetch = (async (input, init) => {
           const request = new Request(input instanceof Request ? input.clone() : input, init);
           if (new URL(request.url).pathname === '/v1/pages:read' && request.method === 'POST') {
             const body = await request.clone().json();
-            if (body.continuation) state.continuationReads!.push(body.continuation);
+            if (body.continuation) {
+              state.continuationReads!.push(body.continuation);
+              if (failFirstContinuation) {
+                failFirstContinuation = false;
+                await original(input, init);
+                return Response.json({ code: 'rate_limited' }, { status: 429 });
+              }
+            }
           }
           return original(input, init);
         }) as typeof fetch;
       });
       await more.focus();
       await page.keyboard.press('Enter');
+      const retry = first.getByRole('link', { name: 'Retry', exact: true });
+      await retry.waitFor();
+      expect(await first.getByRole('alert').isVisible()).toBe(true);
+      expect(await retry.evaluate((element) => element === document.activeElement)).toBe(true);
+      expect(await retry.getAttribute('href')).toContain('node=side-stories&cursor=accessible-next');
+      await page.keyboard.press('Enter');
       await first.getByRole('link', { name: 'Side story added', exact: true }).waitFor();
       await page.waitForFunction(() =>
-        document.querySelector('#side-stories-status')?.textContent?.includes('Visible items in Side stories: 1'),
+        document.querySelector('#side-stories-status')?.textContent?.includes('Visible items in Side stories: 2'),
       );
       expect(await more.evaluate((element) => element === document.activeElement)).toBe(true);
-      expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(1);
-      expect(await first.getByRole('status').textContent()).toBe(
-        'Visible items in Side stories: 1. You can load more.',
-      );
-      expect(await first.getByRole('status').getAttribute('aria-live')).toBe('polite');
-      expect(await first.getByRole('status').textContent()).not.toContain('Side story added');
+      expect(await first.getByRole('link', { name: /^Side story (first|added)$/ }).allTextContents()).toEqual([
+        'Side story first',
+        'Side story added',
+      ]);
+      expect(await firstStatus.textContent()).toBe('Visible items in Side stories: 2. You can load more.');
+      expect(await firstStatus.getAttribute('aria-live')).toBe('polite');
+      expect(await firstStatus.textContent()).not.toContain('Side story added');
       expect(await first.textContent()).not.toContain('Withheld title');
-      expect(await other.getByRole('status').textContent()).toBe('');
-      expect(
-        await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads),
-      ).toEqual([{ node: 'side-stories', cursor: 'accessible-next' }]);
+      expect(await otherStatus.textContent()).toBe('');
 
       // A successful empty page reports zero and stays continuable, independently of the populated stream.
       await otherMore.focus();
@@ -161,7 +224,7 @@ describe('Browser relation continuation', () => {
       await page.keyboard.press('Enter');
       const end = first.locator('[data-slot="relation-stream-end"]');
       await end.waitFor();
-      expect(await first.getByRole('status').textContent()).toBe('Visible items in Side stories: 1. End of this list.');
+      expect(await firstStatus.textContent()).toBe('Visible items in Side stories: 1. End of this list.');
       expect(await more.count()).toBe(0);
       expect(await end.evaluate((element) => element === document.activeElement)).toBe(true);
       expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(1);
@@ -169,6 +232,7 @@ describe('Browser relation continuation', () => {
       expect(
         await page.evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads),
       ).toEqual([
+        { node: 'side-stories', cursor: 'accessible-next' },
         { node: 'side-stories', cursor: 'accessible-next' },
         { node: 'adaptations', cursor: 'accessible-next' },
         { node: 'adaptations', cursor: 'accessible-end' },
@@ -179,7 +243,7 @@ describe('Browser relation continuation', () => {
       await page.goto(url);
       await more.waitFor();
       await holdContinuation(page);
-      await more.evaluate((link) => link.scrollIntoView({ block: 'center' }));
+      await more.evaluate((link) => link.scrollIntoView({ block: 'center', behavior: 'instant' }));
       const { x, y, width } = (await more.boundingBox())!;
       await page.mouse.click(x + width / 2, y - 6);
       await held(page);
@@ -199,10 +263,27 @@ describe('Browser relation continuation', () => {
       await page.evaluate(
         () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
       );
-      expect(await first.getByRole('status').textContent()).toBe('');
+      expect(await firstStatus.textContent()).toBe('');
       expect(await first.getByRole('link', { name: 'Side story added', exact: true }).count()).toBe(0);
       expect(await otherMore.evaluate((element) => element === document.activeElement)).toBe(true);
       expect(await first.locator('[data-slot="relation-stream-end"]').count()).toBe(0);
+    } catch (error) {
+      const preview = await page
+        .locator('body')
+        .innerText()
+        .then(
+          (text) => text.slice(0, 1000),
+          () => '',
+        );
+      const reads = await page
+        .evaluate(() => (window as typeof window & { continuationReads?: unknown[] }).continuationReads)
+        .catch(() => undefined);
+      throw new Error(
+        `Subject continuation failed.\n${preview}\nReads: ${JSON.stringify(reads)}\n${errors.slice(-8).join('\n')}`,
+        {
+          cause: error,
+        },
+      );
     } finally {
       await page.close();
     }

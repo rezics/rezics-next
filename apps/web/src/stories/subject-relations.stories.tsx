@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { pageContext, type SubjectPageData } from '../features/pages/subject';
+import { continuationSubject } from '../kernel/fake/view-continuation';
 import subjectRecording from '../kernel/recorded/subject.json';
 import { PageStory, pageReady } from './page';
 import { subjectViewHref } from '../subject/subject-href';
@@ -31,6 +32,8 @@ export const SignedOut: Story = {
   render: () => <PageStory visitor="Signed Out" path={path} />,
 };
 
+const continuationPath = subjectViewHref(continuationSubject, 'en', 'relations').replace(/^\/en/, '');
+
 /** Simulated pages on the actual default composition; these fixtures make no native authority claim. */
 function continuationFixture() {
   const original = globalThis.fetch;
@@ -43,20 +46,17 @@ function continuationFixture() {
       target?: { subject?: string; view?: string };
       continuation?: { node: string; cursor: string };
     };
+    if (supplied.target?.subject !== continuationSubject.id || supplied.target.view !== 'relations')
+      return original(input, init);
     const response = await original(input, init);
-    if (
-      supplied.target?.subject !== subjectRecording.subject.id ||
-      (supplied.target.view !== undefined && !['overview', 'relations'].includes(supplied.target.view)) ||
-      !response.ok
-    )
-      return response;
+    if (!response.ok) return response;
     const page = (await response.json()) as SubjectPageData;
     const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
     for (const node of ['side-stories', 'adaptations']) {
+      if (supplied.continuation && supplied.continuation.node !== node) continue;
       const key = plan.nodes[node];
       const read = key && plan.reads[key];
       if (!key || !read || read.kind !== 'links') throw new Error(`Expected the default ${node} relation stream.`);
-      if (supplied.continuation && supplied.continuation.node !== node) continue;
       const later = supplied.continuation?.cursor === 'accessible-next';
       const last = supplied.continuation?.cursor === 'accessible-end';
       const row = (added: boolean) => ({
@@ -88,12 +88,20 @@ function continuationFixture() {
   };
 }
 
+function ContinuationPage() {
+  return <PageStory visitor="Signed Out" path={continuationPath} prepareFixture={continuationFixture} />;
+}
+
 async function continueSideStories(context: { canvasElement: HTMLElement }, exhausted = false) {
   await pageReady(context);
-  const stream = context.canvasElement.querySelector<HTMLElement>('[data-node="side-stories"]');
-  if (!stream) throw new Error('Expected the default side-stories stream.');
-  const more = stream.querySelector<HTMLAnchorElement>('[data-slot="continue-group"]');
-  if (!more) throw new Error('Expected a native continuation anchor.');
+  const more = await waitFor(() => {
+    const anchor = context.canvasElement.querySelector<HTMLAnchorElement>(
+      '[data-node="side-stories"] [data-slot="continue-group"]',
+    );
+    if (!anchor) throw new Error('Expected a native side-stories continuation anchor.');
+    return anchor;
+  });
+  const stream = more.closest<HTMLElement>('[data-node="side-stories"]')!;
   more.focus();
   await userEvent.keyboard('{Enter}');
   await within(stream).findByRole('link', { name: 'Side story added' });
@@ -108,19 +116,16 @@ async function continueSideStories(context: { canvasElement: HTMLElement }, exha
 
 export const Continuation: Story = {
   name: 'Continuation available',
-  beforeEach: continuationFixture,
   play: pageReady,
-  render: () => <PageStory visitor="Signed Out" path={path} />,
+  render: ContinuationPage,
 };
 export const Continued: Story = {
   name: 'Continued',
-  beforeEach: continuationFixture,
   play: (context) => continueSideStories(context),
-  render: () => <PageStory visitor="Signed Out" path={path} />,
+  render: ContinuationPage,
 };
 export const Exhausted: Story = {
   name: 'Exhausted',
-  beforeEach: continuationFixture,
   play: (context) => continueSideStories(context, true),
-  render: () => <PageStory visitor="Signed Out" path={path} />,
+  render: ContinuationPage,
 };
