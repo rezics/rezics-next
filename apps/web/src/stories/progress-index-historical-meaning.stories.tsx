@@ -5,6 +5,7 @@ import type { ProgressIndex } from '../library/progress-reads';
 import recorded from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { expectCompactMiraTarget } from './mira-control-target';
 import { PatternStory } from './page';
 
 const meta = {
@@ -131,6 +132,8 @@ export const KnownUnitUnchanged: Story = {
     expect(canvasElement.querySelector('details')).toBeNull();
     expect(canvas.queryByText(m.library_progress_index_reader_history_unavailable())).not.toBeInTheDocument();
     expect(canvas.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25');
+    const menu = canvas.getByRole('button', { name: m.library_collection_actions() });
+    expectCompactMiraTarget(menu, 24, true);
   },
 };
 
@@ -142,25 +145,29 @@ export const LongPaginationLabels: Story = {
     const nav = await canvas.findByRole('navigation', { name: m.library_progress_index_reader_pagination() });
     const first = within(nav).getByRole('link', { name: m.library_collections_first_page() });
     const more = within(nav).getByRole('link', { name: m.library_progress_more() });
+    expectCompactMiraTarget(first, 28);
+    expectCompactMiraTarget(more, 28);
     for (const [index, link] of [first, more].entries()) {
       const destination = new URL(link.getAttribute('href')!, window.location.origin);
       expect(destination.pathname).toBe(`/${getLocale()}/library/progress`);
       expect(destination.searchParams.get('subjectId')).toBe(source.subjectId);
       expect(destination.searchParams.get('cursor')).toBe(index ? next : null);
       // Stress the actual anchor using the active locale's label, without a second renderer or destination.
-      link.textContent = Array(12).fill(link.textContent).join(' ');
-      const box = link.getBoundingClientRect();
-      expect(box.height).toBeGreaterThanOrEqual(44);
-      expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);
+      link.textContent = Array(64).fill(link.textContent).join(' ');
+      const bounds = link.getBoundingClientRect();
+      expect(bounds.height).toBeGreaterThan(28);
       const range = document.createRange();
       range.selectNodeContents(link);
       expect(range.getClientRects().length).toBeGreaterThan(1);
+      const label = range.getBoundingClientRect();
+      expect(label.left).toBeGreaterThanOrEqual(bounds.left);
+      expect(label.right).toBeLessThanOrEqual(bounds.right);
     }
     expect(nav.scrollWidth).toBeLessThanOrEqual(nav.clientWidth);
     first.focus();
     await userEvent.tab();
     expect(more).toHaveFocus();
     expect(more.matches(':focus-visible')).toBe(true);
-    expect(Number.parseFloat(getComputedStyle(more).outlineWidth)).toBeGreaterThan(0);
+    expect(getComputedStyle(more).boxShadow).not.toBe('none');
   },
 };

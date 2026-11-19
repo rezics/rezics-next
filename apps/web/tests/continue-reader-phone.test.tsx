@@ -285,7 +285,10 @@ test('retry uses the current callback, withholds pending data and retires late r
   const ui = await mount({ initial, read: oldRead, scope: 'old-cursor', destination: true });
   expect(ui.host.querySelector('[role="alert"]')?.textContent).toBe(m.library_continue_unavailable());
   const button = retry(ui.host);
-  targetPolicy(button);
+  expect(button.classList.contains('min-h-6')).toBe(true);
+  expect(button.classList.contains('focus-visible:ring-2')).toBe(true);
+  expect(button.classList.contains('max-md:hitbox-[11px]')).toBe(true);
+  expect(button.classList.contains('pointer-coarse:hitbox-[11px]')).toBe(true);
   expect(button.classList.contains('h-auto')).toBe(true);
   expect(button.classList.contains('whitespace-normal')).toBe(true);
   await ui.show({ initial, read: currentRead, scope: 'old-cursor', destination: true });
