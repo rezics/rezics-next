@@ -974,10 +974,9 @@ test(
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('80');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
-      const alert = page.getByRole('dialog').getByRole('alert');
-      await alert.waitFor();
-      expect(await alert.innerText()).toContain('older version');
-      expect(await alert.innerText()).toContain('still here');
+      const conflict = page.getByRole('dialog').getByRole('alert').filter({ hasText: 'older version' });
+      await conflict.waitFor();
+      expect(await conflict.innerText()).toContain('still here');
       expect(await page.getByRole('textbox', { name: 'Amount', exact: true }).inputValue()).toBe('80');
       expect(await page.locator('main').innerText()).toContain('50 / 200 pages');
       expect(await page.locator('main').innerText()).not.toContain('80 / 200 pages');
@@ -1020,9 +1019,7 @@ test(
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill([...batch, 'ep-101'].join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
-      const alert = page.getByRole('dialog').getByRole('alert');
-      await alert.waitFor();
-      expect(await alert.innerText()).toContain('100');
+      await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'at most 100 units' }).waitFor();
       expect(await page.getByRole('textbox', { name: 'Add units', exact: true }).inputValue()).toContain('ep-101');
       expect(writesFor(':record')).toHaveLength(before);
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
