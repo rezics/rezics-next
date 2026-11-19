@@ -115,16 +115,14 @@ async function recoverySegment(
 /** Observe only this job's native control home, releasing the snapshot before another command or engine. */
 async function readNext(pool: Pool, ref: IdentityJobRef): Promise<Next> {
   return withReadTransaction(pool, async (tx) => {
-    const job = await identityEpochStore().readJob(tx, ref);
-    if (!job) throw unavailable('Native identity job or its current owner is unavailable');
-    const row = (await tx.query(control.sql, [identityJobPartition(ref)])).rows[0];
-    if (!row) throw unavailable('Native identity control is unavailable');
+    const row = (await tx.query(control.sql, [identityJobPartition(ref), ref.jobId, String(ref.epoch)])).rows[0];
+    if (!row) throw unavailable('Native identity job, control or current owner is unavailable');
     const next = identityEpochNext({
       job: ref,
-      jobState: job.state,
-      mappingComplete: job.mapping?.state === 'complete',
-      searchComplete: job.participants['search-canonical-index']?.state === 'complete',
-      libraryComplete: job.participants['library-private-follow-counts']?.state === 'complete',
+      jobState: row.state,
+      mappingComplete: row.mapping_complete,
+      searchComplete: row.search_complete,
+      libraryComplete: row.library_complete,
       control: {
         publishedEpoch: BigInt(row.published_epoch),
         pendingJob: row.pending_job,
@@ -217,7 +215,9 @@ export function registerIdentityEpochCoordinator(
   const prepareSearchWriter = DBOS.registerStep(
     async (request: ReceiptLocator) => {
       if (!prepareCanonicalWriter) throw unavailable('Canonical Search writer preparation is unavailable');
-      return prepareCanonicalWriter(context.pool, nativeReceipt(request));
+      const writer = await prepareCanonicalWriter(context.pool, nativeReceipt(request));
+      // Older durable results have no continuation hint and replay their original producer call.
+      return { ...writer, resumeRequest: writer.state === 'progress' };
     },
     { name: `${workflowName}.prepareSearchWriter`, ...COMMAND_STEP_RETRIES },
   );
@@ -255,9 +255,12 @@ export function registerIdentityEpochCoordinator(
     async (job: JobLocator, segment: number = 0) => {
       let previous: ReceiptLocator | null = null;
       let previousWriter: string | null = null;
+      type ProducerPage = Awaited<ReturnType<typeof produce>>;
+      let writerPage: ProducerPage | null = null;
       let released = false;
       for (let page = 0; page < IDENTITY_EPOCH_SEGMENT_PAGES; page++) {
         const next = await read(job);
+        if (next !== 'search-canonical-index') writerPage = null;
         if (next === 'cancelled') return { nextSegment: null };
         if (next === 'published') {
           // Publication releases the reservation, bridges and Source holds through the owning admission path.
@@ -273,7 +276,9 @@ export function registerIdentityEpochCoordinator(
         } else if (next === 'publish') {
           await publish(job);
         } else {
-          const result = await produce(job, next);
+          // Every turn reads current control. The writer independently proves the producer's exact
+          // request before advancing one native page. A new segment always starts with the producer.
+          const result: ProducerPage = writerPage ?? (await produce(job, next));
           if (result.writerRequested) {
             const writer = await prepareSearchWriter(result.receipt);
             if (writer.state !== 'prepared' && writer.state !== 'progress')
@@ -281,12 +286,14 @@ export function registerIdentityEpochCoordinator(
             if (writer.state === 'progress') {
               if (writer.transactionId === previousWriter) throw noProgress();
               previousWriter = writer.transactionId;
+              writerPage = writer.resumeRequest ? result : null;
               continue;
             }
           }
           if (previous && JSON.stringify(previous) === JSON.stringify(result.receipt)) throw noProgress();
           previous = result.receipt;
           previousWriter = null;
+          writerPage = null;
           if (result.state === 'complete') await reconcile(result.receipt);
         }
       }

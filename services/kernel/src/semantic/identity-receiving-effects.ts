@@ -1746,8 +1746,8 @@ export async function prepareSearchIdentityReceivingReconciliation(pool: Pool, e
       return { state: 'progress', transactionId: custody.transactionId } as const;
     }
     const custody = receipt(home, retained.transaction_id, retained.epoch, retained.position);
-    const released = await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
-    return { state: 'progress', transactionId: released.transactionId } as const;
+    await releaseReceivingCustody(pool, effect, record, native, custody, roles, progress);
+    return { state: 'prepared' } as const;
   };
 }
 

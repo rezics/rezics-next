@@ -2624,7 +2624,8 @@ test.each([
               releaseOwnerAdvanced = false;
               lateReleaseCheck = false;
             }
-            expectWriterProgress(await prepare(pool, request), receivingContinuation.released_transaction_id);
+            expect(await prepare(pool, request)).toEqual({ state: 'prepared' });
+            expect(receivingContinuation.released_transaction_id).toEqual(expect.any(String));
             expect(receivingContinuation.state).toBe('released');
             expect(hold?.released_transaction_id).toBe(receivingContinuation.released_transaction_id);
             const retired = await directoryStep();
