@@ -4,7 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gateRunner, processGroupRunner } from './merge.ts';
-import { landingAffectedChecks } from './merge-train.ts';
+import { landingAffectedChecks, runIntegrationChecks } from './merge-train.ts';
+import { inspectProcessSnapshot } from './process.ts';
+import { temporaryDirectory } from './test-support.ts';
 
 const alive = (pid: number) => {
   try {
@@ -32,20 +34,34 @@ async function until(condition: () => boolean) {
   expect(condition()).toBe(true);
 }
 
-test('a landing command cannot leave a background child alive after its leader exits', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-process-group-'));
+test.each([
+  ['redirected output', '>/dev/null 2>&1'],
+  ['inherited output', ''],
+])('a landing command reaps its background child after its leader exits with %s', async (_label, redirect) => {
+  const directory = temporaryDirectory();
   try {
-    const pidFile = join(directory, 'child.pid');
-    const runner = gateRunner(10_000);
+    const statFile = join(directory.path, 'child.stat');
+    const runner = gateRunner(2_000);
     const result = await runner(
-      ['sh', '-c', `sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; exit 0`],
-      directory,
-      join(directory, 'command.log'),
+      [
+        'sh',
+        '-c',
+        `sleep 30 ${redirect} & IFS= read -r stat < "/proc/$!/stat" && printf '%s\\n' "$stat" > '${statFile}'`,
+      ],
+      directory.path,
+      join(directory.path, 'command.log'),
     );
     expect(result.passed).toBe(true);
-    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+    expect(result.commandExitCode).toBe(0);
+    const stat = readFileSync(statFile, 'utf8');
+    const pid = Number(stat.slice(0, stat.indexOf(' ')));
+    const start = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
+    expect(pid).toBeGreaterThan(1);
+    expect(start).toMatch(/^\d+$/);
+    const current = inspectProcessSnapshot(pid, '/proc');
+    expect(current !== null && current.identity.start === start && !current.dead).toBe(false);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    directory.close();
   }
 });
 
@@ -53,7 +69,7 @@ test('an affected check uses a process group too, and timeout kills its child', 
   const directory = mkdtempSync(join(tmpdir(), 'goal-process-group-timeout-'));
   try {
     const pidFile = join(directory, 'child.pid');
-    const runner = processGroupRunner(100);
+    const runner = processGroupRunner(500);
     const result = await runner(
       ['sh', '-c', `sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`],
       directory,
@@ -61,6 +77,7 @@ test('an affected check uses a process group too, and timeout kills its child', 
     );
     expect(result.timedOut).toBe(true);
     expect(result.passed).toBe(false);
+    expect(result.output).not.toContain('Command process group cleanup could not be proven');
     await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -75,10 +92,11 @@ test('stopping the train kills its active command group', async () => {
     const moduleUrl = new URL('./merge.ts', import.meta.url).href;
     const script = `import { processGroupRunner } from ${JSON.stringify(moduleUrl)}; await processGroupRunner()(['sh','-c',${JSON.stringify(`sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`)}],${JSON.stringify(directory)},${JSON.stringify(join(directory, 'command.log'))});`;
     train = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
+    const closed = new Promise<void>((resolve) => train!.once('close', () => resolve()));
     await until(() => train!.pid !== undefined && existsSync(pidFile));
     const childPid = Number(readFileSync(pidFile, 'utf8').trim());
     train.kill('SIGTERM');
-    await new Promise<void>((resolve) => train!.once('close', () => resolve()));
+    await closed;
     await expectStopped(childPid);
   } finally {
     train?.kill('SIGKILL');
@@ -95,9 +113,6 @@ test('train fixtures opt out of repository affected and sibling defaults', () =>
     ]),
   ).toEqual([{ paths: ['services/kernel/**'], command: ['test-command'] }]);
 });
-
-import { temporaryDirectory } from './test-support.ts';
-import { runIntegrationChecks } from './merge-train.ts';
 
 test('owned cancellation settles the selected gate group and leaves another lane group alive', async () => {
   const directory = temporaryDirectory();

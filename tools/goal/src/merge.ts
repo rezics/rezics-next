@@ -1,13 +1,19 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { processIdentity } from '../../../scripts/check-custody.ts';
 import { readCompilerSettlement, compilerSettlementFailure } from '../../../scripts/compiler-settlement.ts';
 import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import { createVerifierPhaseChannel, type VerifierPhaseChannelBinding } from './dev-verifier-phase-channel.ts';
 import type { FirstFailure } from './contracts.ts';
+import {
+  checkedProcessGroup,
+  inspectProcessSnapshot,
+  isEmptyProcessGroupUnconfirmed,
+  signalProcessIdentity,
+  type ProcessIdentity,
+} from './process.ts';
 import {
   checkResultKey,
   reusableCommand,
@@ -15,22 +21,6 @@ import {
   type CheckResult,
   type CheckResults,
 } from './check-results.ts';
-
-/** Attach cancellation to this spawned group without replacing the runner's normal terminal cleanup. */
-function cancelOwnedCommand(child: ChildProcess, signal: AbortSignal | undefined): void {
-  if (!signal) return;
-  const cancel = () => {
-    if (child.pid === undefined) return;
-    try {
-      process.kill(-child.pid, 'SIGKILL');
-    } catch {}
-  };
-  const detach = () => signal.removeEventListener('abort', cancel);
-  child.once('error', detach);
-  child.once('close', detach);
-  signal.addEventListener('abort', cancel, { once: true });
-  if (signal.aborted) cancel();
-}
 
 export function git(cwd: string, ...args: string[]): string {
   return policyGit(cwd, args);
@@ -227,7 +217,13 @@ export function processGroupRunner(
           })
         : spawn(argv[0]!, argv.slice(1), { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] as const });
       const pid = child.pid;
-      const localIdentity = pid === undefined ? null : processIdentity(pid);
+      let localIdentity: ProcessIdentity | undefined;
+      if (pid !== undefined) {
+        try {
+          // A short command can already be a zombie when spawn returns. Its birth identity still binds the group.
+          localIdentity = inspectProcessSnapshot(pid, '/proc')?.identity;
+        } catch {}
+      }
       let output = '';
       let compilerExitCode: number | undefined;
       let timedOut = false;
@@ -236,39 +232,53 @@ export function processGroupRunner(
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       let timeoutGeneration = 0;
       let stopPromise: Promise<boolean> | undefined;
-      const signalGroup = (signal: NodeJS.Signals) => {
-        if (pid === undefined) return;
-        try {
-          process.kill(-pid, signal);
-        } catch {}
-      };
-      const groupAlive = () => {
-        if (pid === undefined) return false;
+      const signal = options?.signal;
+      const liveMembers = () => {
+        if (pid === undefined) return [];
+        // The common path can skip scanning procfs. A group that exists may consist entirely of zombies.
         try {
           process.kill(-pid, 0);
-          return true;
         } catch (error) {
-          return (error as NodeJS.ErrnoException).code === 'EPERM';
+          if ((error as NodeJS.ErrnoException).code === 'ESRCH') return [];
+          throw error;
+        }
+        if (!localIdentity) throw new Error('command birth identity is unavailable');
+        try {
+          return checkedProcessGroup(localIdentity);
+        } catch (error) {
+          // A scan can race with exit and reaping. Retry an inconclusive observation within the cleanup budget.
+          if (isEmptyProcessGroupUnconfirmed(error, pid)) return undefined;
+          throw error;
         }
       };
-      const stopGroup = (graceMs = policy.terminationGraceMs): Promise<boolean> => {
-        if (stopPromise) return stopPromise;
-        stopPromise = (async () => {
-          if (!groupAlive()) return true;
-          signalGroup('SIGTERM');
-          const deadline = Date.now() + graceMs;
-          while (groupAlive() && Date.now() < deadline)
-            await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
-          if (groupAlive()) {
-            signalGroup('SIGKILL');
-            const killDeadline = Date.now() + policy.killGraceMs;
-            while (groupAlive() && Date.now() < killDeadline)
-              await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
+      const stopMembers = async (name: 'SIGTERM' | 'SIGKILL', graceMs: number) => {
+        const deadline = Date.now() + graceMs;
+        const signalled = new Set<string>();
+        for (;;) {
+          const members = liveMembers();
+          if (members?.length === 0) return true;
+          for (const member of members ?? []) {
+            if (name === 'SIGTERM' && signal?.aborted) return false;
+            const birth = `${member.pid}:${member.start}`;
+            if (signalled.has(birth)) continue;
+            await signalProcessIdentity(member, name);
+            signalled.add(birth);
           }
-          return !groupAlive();
-        })();
-        return stopPromise;
+          if (name === 'SIGTERM' && signal?.aborted) return false;
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) return liveMembers()?.length === 0;
+          await Bun.sleep(Math.min(policy.pollMs, remaining));
+        }
       };
+      const stopGroup = () =>
+        (stopPromise ??= (async () => {
+          if (!signal?.aborted && (await stopMembers('SIGTERM', policy.terminationGraceMs))) return true;
+          return stopMembers('SIGKILL', policy.killGraceMs);
+        })().catch((error: unknown) => {
+          output += `Command process group inspection or signalling failed: ${String(error)}\n`;
+          return false;
+        }));
+      const cancel = () => void stopGroup();
       setTimeoutDeadline = (deadline) => {
         timeoutGeneration++;
         const generation = timeoutGeneration;
@@ -303,7 +313,14 @@ export function processGroupRunner(
       const receiptStream = phaseChannel ? child.stdio[3] : undefined;
       if (phaseChannel && receiptStream && typeof receiptStream !== 'number')
         receiptStream.on('data', (chunk: Buffer) => phaseChannel.receive(chunk.toString()));
-      cancelOwnedCommand(child, options?.signal);
+      signal?.addEventListener('abort', cancel, { once: true });
+      if (signal?.aborted) cancel();
+      child.once('exit', () => {
+        setTimeoutDeadline(undefined);
+        setTimeoutDeadline = () => {};
+        // Descendants can hold stdout, stderr or the receipt pipe open after the leader exits.
+        void stopGroup();
+      });
       const cleanup = async () => {
         try {
           phaseReceipt = phaseChannel?.finish();
@@ -347,6 +364,7 @@ export function processGroupRunner(
             }
           }
         } finally {
+          signal?.removeEventListener('abort', cancel);
           if (pid !== undefined) activeCommandGroups.delete(pid);
           finishCleanup();
         }
