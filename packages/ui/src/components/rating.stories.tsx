@@ -173,10 +173,12 @@ export const ImportedScoresLabelled: Story = {
     await expect(within(imported).getByText(/never combined/i)).toBeVisible();
     const rows = within(within(imported).getByRole('list', { name: 'Imported scores' })).getAllByRole('listitem');
     await expect(rows).toHaveLength(2);
-    await expect(rows[0]!).toHaveTextContent('VNDB');
-    await expect(rows[0]!).toHaveTextContent(metaText(['7.94 out of 10', '4,512 ratings', 'as of Oct 1, 2026']));
-    await expect(rows[1]!).toHaveTextContent('Bangumi');
-    await expect(rows[1]!).toHaveTextContent(metaText(['8.1 out of 10', '25,883 ratings']));
+    await expect(rows[0]!.textContent).toBe(
+      `VNDB${metaText(['7.94 out of 10', '4,512 ratings', 'as of Oct 1, 2026'])}`,
+    );
+    await expect(rows[1]!.textContent).toBe(
+      `Bangumi${metaText(['8.1 out of 10', '25,883 ratings', 'as of Sep 28, 2026'])}`,
+    );
     // Imported figures stay out of the native list and the native headline.
     const native = region.querySelector('[data-slot="rating-populations"]') as HTMLElement;
     await expect(native).not.toHaveTextContent('VNDB');
@@ -612,18 +614,24 @@ export const ConnectedSaveLifetime: Story = {
     const expectCalls = async (...expected: string[]) => waitFor(() => expect(callLines()).toEqual(expected));
     const output = (region: HTMLElement) => region.querySelector('[data-slot="rating-value"]') as HTMLElement;
     const slider = (region: HTMLElement) => within(region).getByRole('slider');
+    const expectBusy = (busy: boolean) =>
+      waitFor(() =>
+        expect(primary.querySelector('[data-slot="rating-input"]')).toHaveAttribute('aria-busy', String(busy)),
+      );
+    const saveError = 'Échec de l’enregistrement.';
     const finish = async (id: number, result: 'Resolve' | 'Reject' = 'Resolve') =>
       userEvent.click(canvas.getByRole('button', { name: `${result} save ${id}` }));
 
     await expect(canvas.getByRole('slider', { name: 'Your rating Not rated' })).toBeVisible();
     await expect(output(primary)).toHaveTextContent('Not rated');
     await expect(within(primary).getByRole('button', { name: 'Clear rating' })).toBeDisabled();
+    await expectBusy(false);
 
     slider(primary).focus();
     await userEvent.keyboard('{End}');
     await expectCalls('1|callback-0|20|pending');
     await expect(output(primary)).toHaveTextContent('10 out of 10');
-    await expect(primary).toHaveAttribute('aria-busy', 'true');
+    await expectBusy(true);
     await userEvent.keyboard('{ArrowLeft}');
     await expect(output(primary)).toHaveTextContent('9.5 out of 10');
     await expect(callLines()).toHaveLength(1);
@@ -648,7 +656,7 @@ export const ConnectedSaveLifetime: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Echo 8.5' }));
     await finish(3);
     await expectCalls('1|callback-0|20|resolved', '2|callback-0|19|resolved', '3|callback-1|17|resolved');
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
     await expect(output(primary)).toHaveTextContent('8,5 sur 10');
 
     await userEvent.click(within(primary).getByRole('button', { name: 'Effacer' }));
@@ -661,7 +669,7 @@ export const ConnectedSaveLifetime: Story = {
     await expect(output(primary)).toHaveTextContent('Non noté');
     await expect(within(primary).getByRole('button', { name: 'Effacer' })).toBeDisabled();
     await finish(4);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
     await userEvent.click(canvas.getByRole('button', { name: 'Echo clear' }));
 
     await userEvent.click(canvas.getByRole('button', { name: 'Set controlled 7' }));
@@ -683,7 +691,7 @@ export const ConnectedSaveLifetime: Story = {
       '4|callback-1|null|resolved',
       '5|callback-1|15|rejected',
     );
-    await waitFor(() => expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.'));
+    await expect(await within(primary).findByText(saveError)).toHaveAttribute('role', 'status');
     await waitFor(() => expect(output(primary)).toHaveTextContent('7 sur 10'));
     slider(primary).focus();
     await userEvent.keyboard('{ArrowRight}');
@@ -695,9 +703,9 @@ export const ConnectedSaveLifetime: Story = {
       '5|callback-1|15|rejected',
       '6|callback-1|15|pending',
     );
-    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
+    await expect(within(primary).queryByText(saveError)).not.toBeInTheDocument();
     await finish(6);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
     await userEvent.click(canvas.getByRole('button', { name: 'Echo 7.5' }));
 
     const pointerControl = slider(primary).closest('[data-slot="slider"]')?.querySelector('[data-slot="slider-track"]')
@@ -742,7 +750,7 @@ export const ConnectedSaveLifetime: Story = {
     const retiredSlider = slider(primary);
     const retiredClear = within(primary).getByRole('button', { name: 'Effacer' });
     await userEvent.click(canvas.getByRole('button', { name: 'Disable input' }));
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
     await expect(slider(primary)).toBeDisabled();
     await expect(retiredSlider.isConnected).toBe(false);
     await userEvent.click(canvas.getByRole('button', { name: 'Enable input' }));
@@ -773,11 +781,11 @@ export const ConnectedSaveLifetime: Story = {
       '7|callback-1|16|rejected',
       '8|callback-1|16|pending',
     );
-    await waitFor(() => expect(primary).toHaveAttribute('aria-busy', 'true'));
+    await expectBusy(true);
     await waitFor(() => expect(output(primary)).toHaveTextContent('8 sur 10'));
-    await waitFor(() => expect(within(primary).queryByRole('status')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(primary).queryByText(saveError)).not.toBeInTheDocument());
     await finish(8);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
 
     slider(primary).focus();
     await userEvent.keyboard('{End}');
@@ -795,7 +803,7 @@ export const ConnectedSaveLifetime: Story = {
     await userEvent.keyboard('{ArrowLeft}');
     const oldScaleSlider = slider(primary);
     await userEvent.click(canvas.getByRole('button', { name: 'Use scale B' }));
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
     await expect(output(primary)).toHaveTextContent('7,5 sur 12');
     await userEvent.click(canvas.getByRole('button', { name: 'Use scale A' }));
     await expect(output(primary)).toHaveTextContent('7,5 sur 10');
@@ -803,7 +811,7 @@ export const ConnectedSaveLifetime: Story = {
     await expect(callLines()).toHaveLength(9);
     await finish(9);
     await expect(callLines()).toHaveLength(9);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
 
     slider(primary).focus();
     await userEvent.keyboard('{End}');
@@ -820,7 +828,7 @@ export const ConnectedSaveLifetime: Story = {
       '10|callback-1|20|pending',
     );
     await finish(10);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
 
     slider(primary).focus();
     await userEvent.keyboard('{ArrowLeft}');
@@ -878,10 +886,10 @@ export const ConnectedSaveLifetime: Story = {
       '11|callback-1|19|resolved',
       '12|callback-1|20|pending',
     );
-    await expect(primary).toHaveAttribute('aria-busy', 'true');
+    await expectBusy(true);
     await expect(output(primary)).toHaveTextContent('10 sur 10');
-    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
+    await expect(within(primary).queryByText(saveError)).not.toBeInTheDocument();
     await finish(12);
-    await expect(primary).toHaveAttribute('aria-busy', 'false');
+    await expectBusy(false);
   },
 };

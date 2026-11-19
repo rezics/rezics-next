@@ -3,7 +3,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Slider } from '@rezics/ui/shadcn/slider';
 import { cn } from '../utils.ts';
-import { MetaLine } from './meta-line.tsx';
+import { MetaLine, metaText } from './meta-line.tsx';
 
 const useSafeLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -118,7 +118,7 @@ export const ratingLabels: RatingLabels = {
   showFewer: 'Show fewer',
   imported: 'Imported scores',
   importedNote: 'From other sites on their own scales. Never combined with the figures above.',
-  importedLine: '{score} out of {max} · {count} ratings · as of {date}',
+  importedLine: metaText(['{score} out of {max}', '{count} ratings', 'as of {date}']),
   own: 'Your rating',
   ownHint: 'Only you can see this.',
 };
