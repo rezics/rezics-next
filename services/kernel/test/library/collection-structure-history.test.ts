@@ -38,6 +38,7 @@ async function add(collectionId: string, subjectId: string, note: string) {
 async function history(collectionId: string) {
   const response = await f.send(owner.bearer, 'GET', `/v1/collections/${collectionId}/structure-history`);
   expect(response.status, await response.clone().text()).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
   return response.json() as Promise<{
     changes: {
       address: string;
@@ -50,6 +51,28 @@ async function history(collectionId: string) {
     coverage: { historyBeforeTracking: string; hasPrunedGaps: boolean };
   }>;
 }
+
+test('structure history requires current Collection update authority', async () => {
+  const collection = await make();
+  const member = await add(collection.id, await f.createSubject('game'), 'private note');
+  const page = await history(collection.id);
+  expect(page.changes).toHaveLength(1);
+
+  const collectionPath = `/v1/collections/${collection.id}`;
+  const historyPath = `${collectionPath}/structure-history`;
+  const comparePath = `${historyPath}/compare?addresses=${encodeURIComponent(page.changes[0]!.address)}`;
+  const compare = await f.send(owner.bearer, 'GET', comparePath);
+  expect(compare.status, await compare.clone().text()).toBe(200);
+  expect(compare.headers.get('cache-control')).toBe('private, no-store');
+  expect(await compare.json()).toMatchObject({ status: 'ready', changes: [{ occurrenceId: member.id }] });
+
+  const reader = await f.refresh({ ...owner, actor: { ...owner.actor, scopes: ['collection:read'] } });
+  expect((await f.send(reader.bearer, 'GET', collectionPath)).status).toBe(200);
+  for (const path of [historyPath, comparePath]) {
+    const denied = await f.send(reader.bearer, 'GET', path);
+    expect(denied.status, await denied.text()).toBe(404);
+  }
+});
 
 test('private history journals actual occurrence edits once and preserves truthful coverage', async () => {
   const collection = await make();

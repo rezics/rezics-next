@@ -662,7 +662,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     (structureHistory ??= createCollectionStructureHistory({
       pool,
       tokens,
-      current: (actor, collectionId, deadline) => read().readCollection(actor, collectionId, deadline),
+      requireAuthority: (actor, collectionId, deadline) =>
+        read().requireCollectionStructureHistoryAuthority(actor, collectionId, deadline),
     }));
   async function written(value: Collection, actor: Actor, deadline: number, includeOwnerManagement = false) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
