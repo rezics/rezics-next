@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '../src/bundled.ts';
 
-// Credits, characters, series membership, genres and keywords. A type may omit
-// one of these only when its facet list is already at the per-type limit.
+// Credits, characters, series membership, genres and keywords used to browse launch works.
 const reverseLookupFacets = [
   'schema:author',
   'schema:illustrator',
@@ -22,7 +21,18 @@ const reverseLookupFacets = [
   'schema:keywords',
 ];
 
-const facetLimit = 16;
+// These records describe files, published music editions and individual recordings.
+const relatedRecordFacets: Record<string, string[]> = {
+  'schema:MediaObject': [],
+  'schema:MusicRelease': [
+    'schema:releaseOf',
+    'schema:datePublished',
+    'wdt:P437',
+    'schema:recordLabel',
+    'schema:inLanguage',
+  ],
+  'schema:MusicRecording': ['schema:byArtist', 'schema:datePublished', 'schema:duration', 'schema:inLanguage'],
+};
 
 // A release, edition or episode points at its work with one of these properties.
 const workLinks = ['schema:exampleOfWork', 'schema:isPartOf', 'schema:partOfSeason'];
@@ -31,6 +41,10 @@ test('every launch work type registers its credits, characters, series, genres a
   const omissions: string[] = [];
   for (const [key, type] of Object.entries(bundledRelease.types)) {
     if (!type.bases.includes('schema:CreativeWork')) continue;
+    if (relatedRecordFacets[key]) {
+      expect(type.facets, key).toEqual(relatedRecordFacets[key]!);
+      continue;
+    }
     const missing = reverseLookupFacets.filter((property) => {
       // An edition's genre, keywords and series belong to its work. Readers reach the edition through exampleOfWork.
       if (
@@ -41,7 +55,9 @@ test('every launch work type registers its credits, characters, series, genres a
       return type.properties.includes(property) && !type.facets.includes(property);
     });
     if (missing.length === 0) continue;
-    if (type.facets.length !== facetLimit) omissions.push(`${key} (${type.facets.length}): ${missing.join(', ')}`);
+    // Game retained its sixteen browse facets when the comparative Work facet was added.
+    const browseFacets = type.facets.filter((facet) => facet !== 'rezics:stylisticallyComparableTo');
+    if (browseFacets.length !== 16) omissions.push(`${key} (${type.facets.length}): ${missing.join(', ')}`);
   }
   expect(omissions).toEqual([]);
 });

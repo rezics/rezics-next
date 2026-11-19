@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { UI_LOCALES, platformRegistry, validateZoneStarter } from '@rezics/composition';
 import { bundledRelease } from '../src/bundled.ts';
 
@@ -60,8 +60,6 @@ test("every Zone starter is valid against the platform registry and the release'
   }
 });
 
-const SHARED_SCHEMAS = ['classification', 'core', 'rezics', 'works'];
-
 function typeListTypes(value: unknown, found: unknown[] = []): unknown[] {
   if (Array.isArray(value)) {
     for (const entry of value) typeListTypes(entry, found);
@@ -76,13 +74,12 @@ function typeListTypes(value: unknown, found: unknown[] = []): unknown[] {
 }
 
 test('every launch vertical ships Context settings, saved filters and a Zone starter', () => {
-  const schemas = readdirSync(new URL('../catalogue', import.meta.url))
-    .filter((name) => name.endsWith('.yaml'))
-    .map((name) => name.slice(0, -'.yaml'.length))
-    .sort();
-  const verticals = schemas.filter((name) => !SHARED_SCHEMAS.includes(name));
-  expect(verticals).toEqual([...VERTICALS].sort());
-  expect(verticals).toEqual(['anime', 'book', 'character', 'game', 'manga', 'recipe', 'series', 'visual-novel']);
+  // Contexts select the launch verticals. Other catalogue modules can contribute vocabulary.
+  expect(Object.keys(bundledRelease.contexts ?? {}).sort()).toEqual([...VERTICALS].sort());
+  for (const group of VERTICALS) {
+    const schema = Bun.YAML.parse(read(`catalogue/${group}.yaml`)) as { name: string };
+    expect(schema.name).toBe(group);
+  }
 });
 
 test("every Zone starter home lists its vertical's works", () => {

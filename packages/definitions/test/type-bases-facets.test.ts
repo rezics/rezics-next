@@ -158,7 +158,7 @@ test('facets outside the type, of an unfilterable datatype, repeated or over the
     true,
   );
 
-  const names = Array.from({ length: 17 }, (_, index) => `facet${index}`);
+  const names = Array.from({ length: 18 }, (_, index) => `facet${index}`);
   const overLimit = await facetViolations(
     { Bad: { class_uri: 'ex:Bad', slots: names, annotations: { facets: names.join(' ') } } },
     Object.fromEntries(
@@ -168,5 +168,5 @@ test('facets outside the type, of an unfilterable datatype, repeated or over the
       ]),
     ),
   );
-  expect(overLimit.some((violation) => violation.message.includes('facet16'))).toBe(true);
+  expect(overLimit.some((violation) => violation.code === 'limit' && violation.message.includes('facet17'))).toBe(true);
 });

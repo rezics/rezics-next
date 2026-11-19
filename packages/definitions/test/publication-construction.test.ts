@@ -65,6 +65,8 @@ for (const member of ['bases', 'mappings', 'qualifiers']) {
       expect(row.counts.duplicateVisits, row.name).toBe(entries);
       expect(row.counts.duplicateProbes, row.name).toBe(entries);
       expect(row.counts.duplicateAppends, row.name).toBeGreaterThanOrEqual(entries);
+      expect(row.counts.hashNodes, row.name).toBeGreaterThanOrEqual(entries);
+      expect(row.counts.hashBytes, row.name).toBeGreaterThanOrEqual(entries);
       const linearAllowance = 8 * (row.shape.nodes + row.shape.edges);
       for (const count of [
         row.counts.duplicateVisits,

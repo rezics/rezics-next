@@ -22,7 +22,14 @@ import manifest from '../fixtures/definition-historical-construction.json';
 
 const root = resolve(import.meta.dir, '../../../..');
 const helperPath = 'packages/definitions/test/support/construction-archive.ts';
-const dependencies = ['canonicalize', 'typebox', 'recheck', 'recheck-historical'];
+const dependencies = [
+  '@neverblink/linkml',
+  '@noble/hashes',
+  'canonicalize',
+  'typebox',
+  'recheck',
+  'recheck-historical',
+];
 const inside = (directory: string, path: string) => {
   const name = relative(directory, path);
   return name !== '..' && !name.startsWith('../') && !isAbsolute(name);
@@ -81,9 +88,11 @@ export function createConstructionArchive() {
       cpSync(join(root, path), destination, { recursive: true, dereference: true });
     }
     const installed = join(directory, 'packages/definitions/node_modules');
-    mkdirSync(installed, { recursive: true });
-    for (const name of dependencies)
-      symlinkSync(realpathSync(join(root, 'packages/definitions/node_modules', name)), join(installed, name));
+    for (const name of dependencies) {
+      const destination = join(installed, name);
+      mkdirSync(dirname(destination), { recursive: true });
+      symlinkSync(realpathSync(join(root, 'packages/definitions/node_modules', name)), destination);
+    }
     mkdirSync(join(directory, 'node_modules/@rezics'), { recursive: true });
     symlinkSync(join(directory, 'packages/filter'), join(directory, 'node_modules/@rezics/filter'));
     const denied = join(directory, 'bin');

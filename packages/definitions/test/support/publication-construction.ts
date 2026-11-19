@@ -264,22 +264,15 @@ async function probe(): Promise<Evidence> {
       `selectedFacets.some((facets) => { ${counter}.facetProbes++; return facets.has(property); })`,
     );
     copy('filter', filterPath, filter, join(directory, 'filter.ts'));
-    let definitions = imports(read(definitionsPath), dirname(definitionsPath));
-    definitions = definitions.replace(
-      Bun.resolveSync('@rezics/filter', dirname(definitionsPath)),
-      join(directory, 'filter.ts'),
-    );
-    definitions = definitions.replace(
-      Bun.resolveSync('typebox/schema', dirname(definitionsPath)),
-      join(directory, 'typebox/build/schema/index.mjs'),
-    );
     const constructionPath = join(root, 'packages/definitions/src/publication-construction.ts');
     let construction = imports(read(constructionPath), dirname(constructionPath));
-    construction = construction.replace(
+    construction = replaceOnce(
+      construction,
       Bun.resolveSync('typebox/value', dirname(constructionPath)),
       join(directory, 'typebox/build/value/index.mjs'),
     );
-    construction = construction.replace(
+    construction = replaceOnce(
+      construction,
       Bun.resolveSync('typebox/schema', dirname(constructionPath)),
       join(directory, 'typebox/build/schema/index.mjs'),
     );
@@ -302,7 +295,6 @@ async function probe(): Promise<Evidence> {
           seen.add(hash);`,
     );
     copy('construction', constructionPath, construction, join(directory, 'construction.ts'));
-    definitions = definitions.replace(constructionPath, join(directory, 'construction.ts'));
     const hashingPath = join(typeboxPath, 'build/system/hashing/hash.mjs');
     let hashing = read(hashingPath);
     hashing = replaceOnce(
@@ -322,7 +314,24 @@ async function probe(): Promise<Evidence> {
     );
     chmodSync(join(directory, 'typebox/build/system/hashing/hash.mjs'), 0o600);
     copy('hashing', hashingPath, hashing, join(directory, 'typebox/build/system/hashing/hash.mjs'));
-    copy('definitions', definitionsPath, definitions, join(directory, 'definitions.ts'));
+    // Follow the native entry through its host-bound compiler. Each measured edge must
+    // exist so a moved validator cannot silently bypass the counters.
+    const validationPath = join(root, 'packages/definitions/src/compiler/release-validation.ts');
+    const applicationPath = join(root, 'packages/definitions/src/compiler/application.ts');
+    const hostPath = join(root, 'packages/definitions/src/adapters/compiler-host.ts');
+    function copyWithDependencies(name: string, path: string, edges: Record<string, string>) {
+      let source = imports(read(path), dirname(path));
+      for (const [original, instrumented] of Object.entries(edges))
+        source = replaceOnce(source, original, join(directory, instrumented));
+      copy(name, path, source, join(directory, `${name}.ts`));
+    }
+    copyWithDependencies('validation', validationPath, { [constructionPath]: 'construction.ts' });
+    copyWithDependencies('application', applicationPath, { [validationPath]: 'validation.ts' });
+    copyWithDependencies('host', hostPath, {
+      [Bun.resolveSync('@rezics/filter', dirname(hostPath))]: 'filter.ts',
+      [applicationPath]: 'application.ts',
+    });
+    copyWithDependencies('definitions', definitionsPath, { [hostPath]: 'host.ts' });
     const measured = (await import(join(directory, 'definitions.ts'))) as typeof import('../../src/index.ts');
     const measuredFilter = (await import(
       join(directory, 'filter.ts')

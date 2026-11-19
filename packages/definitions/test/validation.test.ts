@@ -111,10 +111,11 @@ test('bases are CURIEs and facets are registered facetable properties', () => {
   duplicate.types['ex:T']!.facets = ['ex:p', 'ex:p'];
   expect(validateRelease(duplicate)).toEqual([{ pointer: '/types/ex:T/facets', code: 'invalid' }]);
 
-  const crowded = fixture();
+  const crowded = fixture('quantity');
   for (let index = 0; index < 17; index++) {
-    const key = `ex:p${index}`;
-    crowded.properties[key] = { ...crowded.properties['ex:p']!, iri: `https://example.org/p${index}` };
+    const name = `p${String(index).padStart(2, '0')}`;
+    const key = `ex:${name}`;
+    crowded.properties[key] = { ...crowded.properties['ex:p']!, iri: `https://example.org/${name}` };
     crowded.types['ex:T']!.properties.push(key);
     crowded.types['ex:T']!.facets.push(key);
   }
