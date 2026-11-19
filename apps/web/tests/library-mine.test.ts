@@ -540,7 +540,8 @@ async function open(path: string, cookie: string): Promise<Page> {
   );
   return page;
 }
-const parser = new new Window().DOMParser();
+const htmlWindow = new Window();
+const parser = new htmlWindow.DOMParser();
 function documentOf(html: string) {
   return parser.parseFromString(html, 'text/html');
 }
@@ -567,7 +568,6 @@ test(
     expect(body).toContain('Private');
     expect(body).toContain('Public');
     expect(body).toContain('Unlisted');
-    expect(first.html).toContain('/en/collections/new');
     expect(calls).toContainEqual(
       expect.objectContaining({
         method: 'GET',
@@ -578,19 +578,16 @@ test(
         authorization: 'Bearer access-1',
       }),
     );
-    const next = [...directory.querySelectorAll('a')]
-      .find((link) => link.textContent.trim() === 'More')
-      ?.getAttribute('href');
-    expect(next).toBeTruthy();
-    expect(next).toContain('cursor=collections-next');
-    const second = await readWithCookie(
-      new URL(next!, 'http://site.test').pathname + new URL(next!, 'http://site.test').search,
-      redirect.cookie!,
-    );
-    expect(second.status).toBe(200);
-    const secondList = documentOf(second.html).querySelector('[data-collections-list-region]')!.textContent;
-    expect(secondList).toContain('Collection 001');
-    expect(secondList).not.toContain('Collection 002');
+    const page = await open(canonical, redirect.cookie!);
+    const create = page.locator('a[href="/en/collections/new"]').first();
+    await create.waitFor();
+    const next = page.getByRole('link', { name: 'More', exact: true });
+    expect(await next.getAttribute('href')).toContain('cursor=collections-next');
+    await next.click();
+    await page.waitForURL((url) => url.searchParams.get('cursor') === 'collections-next');
+    const secondList = page.locator('[data-collections-list-region]');
+    await secondList.getByText('Collection 001', { exact: true }).waitFor();
+    expect(await secondList.innerText()).not.toContain('Collection 002');
   },
   timeout,
 );
@@ -609,13 +606,15 @@ test(
     expect(body).toContain('Unavailable');
     const unavailable = [...list.querySelectorAll('li')].find((row) => row.textContent.includes('Unavailable'))!;
     expect(unavailable.querySelector('a')).toBeNull();
-    expect(body).not.toContain('hidden-follow-target-id');
+    expect(first.html).not.toContain('hidden-follow-target-id');
     expect(body).not.toContain('No longer followed');
 
-    expect(first.html).toContain(`/en/collections/${id(2002)}`);
     const cookie = first.cookie!;
     const page = await open('/en/library/following', cookie);
     try {
+      const collection = page.getByRole('link', { name: 'Followed collection', exact: true });
+      await collection.waitFor();
+      expect(await collection.getAttribute('href')).toBe(`/en/collections/${id(2002)}`);
       for (const [title, reason] of [
         ['Followed subject', 'Added from your library'],
         ['Followed space', 'Required by membership'],
@@ -632,6 +631,17 @@ test(
       expect(calls.some((call) => call.method === 'DELETE' && call.path === `/v1/follows/${id(2001)}`)).toBe(true);
       const deletion = calls.find((call) => call.method === 'DELETE')!;
       expect(deletion.key).toMatch(/^[0-9a-f-]{36}$/i);
+      const hiddenRow = page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('button', { name: 'Inspect Unavailable', exact: true }) });
+      expect(await hiddenRow.getByRole('link').count()).toBe(0);
+      await hiddenRow.getByRole('button', { name: 'More actions for Unavailable' }).click();
+      await page.getByRole('menuitem', { name: 'Unfollow' }).click();
+      await hiddenRow.waitFor({ state: 'detached' });
+      expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual([
+        `/v1/follows/${id(2001)}`,
+        '/v1/follows/hidden-follow-target-id',
+      ]);
     } finally {
       await closeContext(page.context());
     }

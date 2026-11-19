@@ -774,8 +774,10 @@ async function open(path: string): Promise<{ page: Page; access: string }> {
         },
       ]);
       const page = await context.newPage();
+      page.on('pageerror', (error) => console.error('Progress browser error:', error.message));
       await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
       await hydrated(page);
+      if (path.includes('/progress/')) await waitForSession(page);
       return { page, access: auth.access };
     },
   );
@@ -783,6 +785,19 @@ async function open(path: string): Promise<{ page: Page; access: string }> {
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+}
+async function waitForSession(page: Page) {
+  try {
+    await page.locator('main [data-progress-state]').waitFor({ timeout: 15_000 });
+  } catch (error) {
+    const reads = calls.filter((call) => call.method === 'GET').map(({ path, view }) => [path, view]);
+    throw new Error(
+      `Progress detail at ${new URL(page.url()).pathname}: ${await page.locator('main').innerText()}
+Reads: ${JSON.stringify(reads)}
+${server?.diagnostics().slice(-2800)}`,
+      { cause: error },
+    );
+  }
 }
 afterAll(async () => {
   await cleanupSuite();
@@ -851,6 +866,7 @@ test(
 
       await chooseMode(page, 'Amount', 'page', '240');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const amountId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(creates()[0]).toMatchObject({
         body: { subjectId, mode: 'scalar_amount', unit: 'page', total: '240' },
@@ -868,6 +884,7 @@ test(
       await openStartForm(page);
       await chooseMode(page, 'Reading place', 'chapter');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const cursorId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(cursorId).not.toBe(amountId);
       expect(creates()[1]?.body).toEqual({ subjectId, mode: 'cursor_position', unit: 'chapter' });
@@ -883,6 +900,7 @@ test(
       await openStartForm(page);
       await chooseMode(page, 'Completed units', 'episode');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const unitsId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(unitsId).not.toBe(amountId);
       expect(unitsId).not.toBe(cursorId);
