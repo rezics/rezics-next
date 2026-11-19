@@ -1,10 +1,11 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AuthServiceOptions } from '../src/index.ts';
 import { createSigner } from '../src/signing.ts';
-import { capture, checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth } from '../../kernel/test/support/growth.ts';
 
 function expectIndex(plans: readonly unknown[], expected: string): void {
   let found = false;
@@ -25,7 +26,7 @@ function expectIndex(plans: readonly unknown[], expected: string): void {
 
 test('signing loading and refreshed JWKS stay bounded as retired history and unrelated Auth rows grow', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   try {
     const key = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),

@@ -1,9 +1,10 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { nativeErasurePage } from '../src/erasure-native.ts';
 import { failNativeQueries, nativeFixture, scopes } from './support/erasure-native.ts';
 import { consumableGrowth } from './support/consumable-growth.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 type Selected = { obligationId: string; clientId: string; ownerId: string };
 
@@ -49,7 +50,7 @@ for (const axis of ['clients', 'resource-links', 'encrypted-stages'] as const) {
       // exist. Closing our executor does not stop any other attempt's process.
       await f.host.workflows.close();
       restore();
-      db = await openGrowthDatabase(f.fixture.url);
+      db = await openAuthGrowthDatabase(f.fixture.url);
       let cursor = 0;
       const physical = consumableGrowth({
         name: `metadata-${axis}`,

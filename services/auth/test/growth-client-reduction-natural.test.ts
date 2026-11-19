@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -135,7 +136,7 @@ test('empty relations cost zero touched rows rather than failing on plan node na
 
 test('three scale native growth remains within derived affected-owner bound', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   try {
     const auth = await service(db);
     await auth.internal.registerClient({ clientId: 'unrelated', firstParty: false, scopes: ['read', 'write'] });

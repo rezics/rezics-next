@@ -1,16 +1,11 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, createBarrierProofVerifier, type AuthService } from '../src/index.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 async function grow(db: GrowthDatabase, scale: number, previous: number) {
   const range = [previous * 1024 + 1, scale * 1024];
@@ -91,7 +86,7 @@ async function seedCleanupSweepState(db: GrowthDatabase, scale: number) {
 for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
   test(`native ${kind} remains bounded across same-account consumed history and unrelated owners`, async () => {
     const fixture = testDatabase();
-    const db = await openGrowthDatabase(fixture.url);
+    const db = await openAuthGrowthDatabase(fixture.url);
     try {
       const issuer = 'https://growth.recovery.test';
       const password = 'sufficiently long native growth password';

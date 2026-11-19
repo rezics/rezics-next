@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
@@ -6,7 +7,7 @@ import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, seed, type Population } from '../../kernel/test/support/growth.ts';
 
 // Both dimensions use this single deterministic seed, with distinct client IDs.
 const population = (name: string, client: string, affected: boolean): Population => ({
@@ -34,7 +35,7 @@ const population = (name: string, client: string, affected: boolean): Population
 
 test('checkGrowth measures actual path at three scales for unrelated A, affected C, and the complete DBOS workflow', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   let workflows: ReturnType<typeof createAccountWorkflows> | undefined;
   let system: Pool | undefined;
   try {

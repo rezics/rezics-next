@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
@@ -5,13 +6,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, createBarrierProofVerifier, type AuthService, type BarrierProof } from '../src/index.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 // One seed grows same-owner proof/consent/recovery history and unrelated owners
 // together. The real measured source is prepared by authenticated Auth handlers.
@@ -137,7 +132,7 @@ async function seedSweepWarmup(db: GrowthDatabase, name: string, count: number) 
 for (const kind of ['consent', 'recovery', 'sweep'] as const) {
   test(`checkGrowth bounds actual ${kind} at 1x/8x/64x same-owner and unrelated history`, async () => {
     const fixture = testDatabase();
-    const db = await openGrowthDatabase(fixture.url);
+    const db = await openAuthGrowthDatabase(fixture.url);
     try {
       const verifier = createBarrierProofVerifier({ database: db.pool });
       const issuer = 'https://growth.barrier.test';

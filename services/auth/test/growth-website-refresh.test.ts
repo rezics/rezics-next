@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
@@ -5,7 +6,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, WEBSITE_CLIENT_ID, type AccessAccount, type AuthService } from '../src/index.ts';
 import type { PublicJwks } from '../src/index.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 const issuer = 'https://refresh-growth.auth.test';
 const audience = 'https://refresh-growth.api.test';
@@ -30,7 +31,7 @@ let warmupFamily = '';
 beforeAll(async () => {
   // This file owns its migrated database and issuer deployment.
   fixture = testDatabase();
-  db = await openGrowthDatabase(fixture.url);
+  db = await openAuthGrowthDatabase(fixture.url);
   const signing = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)) };
   clientKey = await generateKeyPair('ES256', { extractable: true });
   service = await createAuthService({

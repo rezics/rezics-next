@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { consumableGrowth } from './support/consumable-growth.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -11,13 +12,7 @@ import {
   type ProvisioningAuthorization,
   type ProvisioningEvidenceReference,
 } from '../src/index.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 let fixture: ReturnType<typeof testDatabase>;
 let db: GrowthDatabase;
@@ -44,7 +39,7 @@ function input(id: string) {
 }
 beforeAll(async () => {
   fixture = testDatabase();
-  db = await openGrowthDatabase(fixture.url);
+  db = await openAuthGrowthDatabase(fixture.url);
   const pair = await generateKeyPair('ES256', { extractable: true });
   const key = { ...(await exportJWK(pair.privateKey)), kid: 'provisioning-growth', alg: 'ES256' };
   signingKeys = { activeKid: key.kid, privateKeys: [key] };

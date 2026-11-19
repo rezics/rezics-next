@@ -1,8 +1,9 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
-import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { checkGrowth } from '../../kernel/test/support/growth.ts';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 
@@ -17,7 +18,7 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
     // The check database is shared by parallel files. Signing and page reads need a private server.
     const fixture = testDatabase();
     const url = fixture.url;
-    const db = await openGrowthDatabase(url);
+    const db = await openAuthGrowthDatabase(url);
     try {
       const prefix = randomUUID();
       const person: AccessAccount = {

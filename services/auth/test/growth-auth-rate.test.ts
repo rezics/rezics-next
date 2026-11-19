@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
@@ -5,13 +6,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount, type AuthService } from '../src/index.ts';
 import { attemptStatement, withAuthTransport } from '../src/rate-limit.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 // Better Auth resolves production enablement at module load. Use a fresh graph,
 // without importing the frozen native security suite or replacing native policy.
@@ -58,7 +53,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   beforeAll(async () => {
     // Always our own migrated database, even when a full-module fixture is set.
     fixture = testDatabase();
-    db = await openGrowthDatabase(fixture.url);
+    db = await openAuthGrowthDatabase(fixture.url);
     const pair = await generateKeyPair('ES256', { extractable: true });
     const key = { ...(await exportJWK(pair.privateKey)), kid: 'rate-growth', alg: 'ES256' };
     const options = {

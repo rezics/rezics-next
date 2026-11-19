@@ -1,3 +1,4 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
@@ -5,11 +6,11 @@ import { testDatabase } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { newId, routeOf } from '../../kernel/src/route/route.ts';
 import { createAuthService, type AccessAccount, type AuthService, type SessionProof } from '../src/index.ts';
-import { capture, checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth } from '../../kernel/test/support/growth.ts';
 
 test('checkGrowth live proof signing uses constant native evidence at 1x/8x/64x; copies reject before I/O', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   const issuer = 'https://growth-proof.auth.test';
   const humanId = newId(0x92a0);
   const robotId = newId(0x92b0);

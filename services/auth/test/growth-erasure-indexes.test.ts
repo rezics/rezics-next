@@ -1,17 +1,10 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
-import {
-  capture,
-  checkGrowth,
-  costOf,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Row,
-} from '../../kernel/test/support/growth.ts';
+import { capture, checkGrowth, costOf, seed, type GrowthDatabase, type Row } from '../../kernel/test/support/growth.ts';
 
 // Other suites can remove an exited fixture between the shared helper's list and inspect.
 // Retry only that cleanup race; database creation, migration and operation failures still fail.
@@ -144,7 +137,7 @@ test('checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed 
   const fixture = isolatedDatabase();
   let db: GrowthDatabase | undefined;
   try {
-    db = await openGrowthDatabase(fixture.url);
+    db = await openAuthGrowthDatabase(fixture.url);
     const database = db;
     const key = await generateKeyPair('ES256', { extractable: true });
     const jwk = { ...(await exportJWK(key.privateKey)), kid: 'growth-erasure-signing', alg: 'ES256' };

@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
 import {
   createAuthHost,
   createAuthService,
@@ -199,6 +200,7 @@ test('host start registers the login client once and leaves an existing login un
     const product2 = new Pool({ connectionString: database.url });
     const system2 = new Pool({ connectionString: database.url, max: 8 });
     pools.push(product2, system2);
+    installNativeRoleProducer(product2);
     await product2.query(`UPDATE auth_client SET scopes=$1 WHERE client_id='login'`, [['read']]);
     const again = await createAuthHost({
       ...hostOptions,

@@ -1,10 +1,11 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
-import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth } from '../../kernel/test/support/growth.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 
 const issuer = 'https://session-point.auth.test';
@@ -244,7 +245,7 @@ test('native owner mismatch and concurrent state changes never turn a bounded po
 
 test('native session revoke examines a fixed exact session neighborhood as the same owner expired and unrelated sessions grow at the original scales', async () => {
   const fixture = testDatabase();
-  const db = await openGrowthDatabase(fixture.url);
+  const db = await openAuthGrowthDatabase(fixture.url);
   try {
     const f = await nativeAuth(db.pool, db.admin);
     let selected: { caller: string; id: string; owner: string };

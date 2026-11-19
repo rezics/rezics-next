@@ -1,9 +1,10 @@
+import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { derivedId, newId, partitionOf } from '../../kernel/src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../../kernel/test/support/growth.ts';
+import { checkGrowth, seed, type Population, type Row } from '../../kernel/test/support/growth.ts';
 import { testDatabase } from '../scripts/database.ts';
 import {
   createAuthService,
@@ -58,7 +59,7 @@ async function applyCredentialEffect(
 }
 
 async function setup(name: string, axes: readonly Axis[]) {
-  const db = await openGrowthDatabase(owned.url);
+  const db = await openAuthGrowthDatabase(owned.url);
   const namespace = newId(route);
   const id = (name: string, placement = route) => derivedId(namespace, name, placement);
   const human = id('human');
