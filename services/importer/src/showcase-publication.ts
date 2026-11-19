@@ -6,6 +6,7 @@ import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts'
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { ImportTransportError, importCommandPages, type ReviewedSubjectRead } from './import-client.ts';
+import { MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
   proposalIdentity,
@@ -36,6 +37,7 @@ import {
   admitSelectedSynopsisSupport,
   publicRelationPageSize,
   selectedSynopsisQueryFromPublic,
+  SUBJECT_NOT_READY_TYPE,
 } from './public-bulk-client.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, isBookSeriesSourceTuple } from './source-registry.ts';
 import {
@@ -2004,19 +2006,30 @@ async function publishShowcasePhases(
   }
 
   const publicSubjects = new Map<string, Promise<ReviewedSubjectRead | null>>();
+  let finalPublicReadback = false;
   const publicVocabularyEvidenceCache = new Map<string, Promise<CurrentEvidenceState>>();
   const dependencyEvidenceByCandidate = new Map<string, CurrentEvidenceState>();
   const publicRead = (id: string): Promise<ReviewedSubjectRead | null> => {
     const cached = publicSubjects.get(id);
     if (cached) return cached;
     const pending = (async () => {
+      const signal = finalPublicReadback ? AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS) : undefined;
       try {
         return await input.publicClient.readSubject(
           id,
-          undefined,
+          signal,
           vocabularyById.has(id) ? 'after-create' : 'after-adoption',
         );
-      } catch {
+      } catch (error) {
+        // An ordinary 503 has no projection retry. Observe once more within the same final read budget.
+        if (
+          signal &&
+          !signal.aborted &&
+          error instanceof ImportTransportError &&
+          error.status === 503 &&
+          error.type !== SUBJECT_NOT_READY_TYPE
+        )
+          return input.publicClient.readSubject(id, signal).catch(() => null);
         return null;
       }
     })();
@@ -2951,6 +2964,7 @@ async function publishShowcasePhases(
   // Adoption-phase reads establish prerequisites. Start final evidence from the post-adoption state,
   // including endpoints whose earlier read was unavailable.
   publicSubjects.clear();
+  finalPublicReadback = true;
   const published: {
     provider: 'bangumi' | 'vndb';
     sourceKey: string;

@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { createImportTransport, type ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   crossMediaAliases,
@@ -26,7 +27,8 @@ import {
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
-import { relationSlot } from '../src/showcase-current-reads.ts';
+import { relationSlot, type ServedVariantReview } from '../src/showcase-current-reads.ts';
+import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import { seedBatchRemainingRequest } from '../src/seed-remaining-request.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -58,6 +60,10 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
   const metadata = sourceRecordMetadataFixture();
+  const mediaId = randomUUID();
+  const sha256 = 'a'.repeat(64);
+  let mediaRequest: MediaImportRequest;
+  const mediaIdentity = () => ({ id: mediaId, containerId: mediaRequest.containerId, purpose: 'cover' as const });
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
       if (provider === 'bangumi' && table === 'subject') {
@@ -117,6 +123,9 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     if (!subject) throw new Error('Missing fixture subject');
     return {
       subject: { ...subject, statements: structuredClone(subject.statements) },
+      ...(subject.statements['schema:image']?.length
+        ? { summary: { cover: { media: mediaId, variants: [{ format: 'avif', width: 320 }] } } }
+        : {}),
     } as unknown as ReviewedSubjectRead;
   };
   const basePort = {
@@ -128,6 +137,24 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     async clearSourceStatistic() {},
     async readReviewedSubject(id: string) {
       return read(id);
+    },
+    async requestMedia(bytes: string) {
+      mediaRequest = JSON.parse(bytes) as MediaImportRequest;
+      return { status: 202, body: { media: { ...mediaIdentity(), state: 'reserved' } } };
+    },
+    async mediaStatus(id: string) {
+      expect(id).toBe(mediaId);
+      const { credit, provenance } = mediaRequest;
+      const media = {
+        ...mediaIdentity(),
+        state: 'available',
+        byteCount: 32,
+        mediaType: 'image/png',
+        sha256,
+        credit,
+        provenance,
+      };
+      return { status: 200, body: { media } };
     },
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
       return {
@@ -167,9 +194,21 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     const property = `${id}\0${slot.property}`;
     return slot.target === undefined ? property : `${property}\0${slot.target}\0${slot.key ?? ''}`;
   };
-  const review: ShowcaseReviewPort = {
+  const review: ShowcaseReviewPort & ServedVariantReview = {
     fence: basePort.fence,
     readReviewedSubject: async (id) => read(id),
+    async authorizeMediaVariant(id, variant) {
+      expect([id, variant]).toEqual([mediaId, 'avif-320']);
+      return {
+        allowed: true,
+        key: 'media/served-avif-320',
+        sha256,
+        mediaType: 'image/avif',
+        byteCount: 32,
+        publicCache: false,
+        cacheControl: 'private, no-cache',
+      };
+    },
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
       const key = slotKey(id, query);
@@ -230,10 +269,18 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     },
   };
   let schemeProjectionPending = true;
+  let publicationPhase: string | undefined;
+  let directorReadFailures: number[] = [];
+  let directorReadCount = 0;
   const publicClient = createPublicBulkClient({
     origin: 'https://fixture.test',
     fetch: (async (input) => {
       const id = new URL(String(input)).pathname.split('/').at(-1)!;
+      if (publicationPhase === 'public-readback' && subjects.get(id)?.sourceExternalId === 'person:11') {
+        directorReadCount++;
+        const status = directorReadFailures.shift();
+        if (status) return Response.json({}, { status });
+      }
       if (schemeProjectionPending && subjects.get(id)?.sourceExternalId === 'vocabulary:bangumi.staff') {
         schemeProjectionPending = false;
         return Response.json(
@@ -246,7 +293,20 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   });
   let resolution: BangumiCreditVocabularyResolution | undefined;
   try {
-    const plan = await planCrossMediaSeed(tables);
+    const sourcePlan = await planCrossMediaSeed(tables);
+    const plan = await acquireBangumiCoverSources(
+      { ...sourcePlan, creatorImageKeys: ['person:11'] },
+      {
+        journal,
+        fetch: (async (input) => {
+          const [, , kind, key] = new URL(String(input)).pathname.split('/');
+          const id = Number(key);
+          const url = 'https://lain.bgm.tv/pic/crt/l/11.jpg';
+          const images = kind === 'persons' && id === 11 ? { large: url, medium: url, small: url, grid: url } : null;
+          return Response.json({ id, type: id === 15 ? 2 : 1, name: 'Fixture', images });
+        }) as typeof fetch,
+      },
+    );
     const preparation = createBangumiCreditPreparation();
     const result = await seedCrossMedia(
       plan,
@@ -291,15 +351,20 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     result.creditRoles = currentRoles.roles;
     result.creditVocabularyRequirements = currentRoles.requirements;
     result.status = result.creditGaps.length ? 'imported-with-gaps' : result.status;
-    const publication = await publishShowcase({
-      plan,
-      result,
-      aliases: crossMediaAliases,
-      journal,
-      review,
-      publicClient,
-      vocabularyRequirements: result.creditVocabularyRequirements,
-    });
+    const publish = () =>
+      publishShowcase({
+        plan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        vocabularyRequirements: currentRoles.requirements,
+        onProgress(line) {
+          publicationPhase = /\bphase=([\w-]+)/.exec(line)?.[1] ?? publicationPhase;
+        },
+      });
+    const publication = await publish();
     function publishedBangumiId(key: string): string {
       const record = publication.published.find((row) => row.provider === 'bangumi' && row.sourceKey === key);
       if (!record) throw new Error(`Missing published Bangumi Subject for ${key}`);
@@ -313,6 +378,44 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     const characterId = publishedBangumiId('character:21');
     const authorId = publishedBangumiId('person:14');
     const publisherId = publishedBangumiId('person:15');
+    const director = publication.published.find((record) => record.subjectId === directorId);
+    expect(director?.assertions.some((assertion) => assertion.property === 'wdt:P6298')).toBe(true);
+    expect(
+      director?.assertions.some((assertion) => assertion.property === 'schema:image'),
+      JSON.stringify({
+        media: result.mediaOutcomes.find((item) => item.externalId === 'person:11'),
+        omissions: publication.omissions.filter((item) => item.sourceKey === 'person:11'),
+      }),
+    ).toBe(true);
+    const directorMedia = (result: typeof publication) =>
+      result.manifest.media.find((item) => item.sourceKey === 'person:11');
+    expect(directorMedia(publication)?.readHandoff).toMatchObject({ subjectId: directorId, value: mediaId });
+    directorReadCount = 0;
+    directorReadFailures = [503];
+    const replay = await publish();
+    expect(
+      directorMedia(replay)?.readHandoff,
+      replay.omissions
+        .filter((item) => item.sourceKey === 'person:11')
+        .map((item) => item.code)
+        .join(', '),
+    ).toEqual(directorMedia(publication)?.readHandoff);
+    expect(directorReadCount).toBe(2);
+    expect(replay.published).toEqual(publication.published);
+    expect(replay.omissions).toEqual(publication.omissions);
+    expect(directorMedia(replay)).toEqual(directorMedia(publication));
+
+    for (const statuses of [[503, 503], [403]]) {
+      directorReadCount = 0;
+      directorReadFailures = [...statuses];
+      const blocked = await publish();
+      expect(directorReadCount).toBe(statuses.length);
+      expect(blocked.published.some((record) => record.subjectId === directorId)).toBe(false);
+      for (const code of ['public-view-unavailable', 'cover-not-public']) {
+        expect(blocked.omissions).toContainEqual({ provider: 'bangumi', sourceKey: 'person:11', code });
+      }
+      expect(directorMedia(blocked)?.readHandoff).toBeUndefined();
+    }
     const work = (await publicClient.readSubject(workId)).subject as {
       statements: Record<string, readonly BatchStatement[]>;
     };
