@@ -13,6 +13,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { sourceDigest } from '@rezics/conversion/support';
 import {
   WALK_COMMIT_CAUSES,
   WALK_GRAPH_SQL_FUNCTIONS,
@@ -42,7 +43,7 @@ import {
 import { importCorrelationId } from './import-fetch.ts';
 import { ImportSession } from './import-session.ts';
 import { BindingInspectionStore } from './binding-inspection-store.ts';
-import { sameStatementProvenance } from './statement-provenance.ts';
+import { sameStatementProvenance, statementProvenance } from './statement-provenance.ts';
 import {
   admitSelectedSynopsisSupport,
   createPublicBulkClient,
@@ -1389,7 +1390,7 @@ export function publishedWalkSeed(reportValue: unknown) {
   const report = reportValue as unknown as CrossMediaSeedReport;
   const publication = report.showcase!;
   selectJourneyWorks(publication.published);
-  return { report, publication };
+  return { report, publication, sourceDigests };
 }
 
 export function assertCurrentOperatorFact(
@@ -1458,25 +1459,73 @@ function assertCurrentValues(label: string, expected: readonly string[], current
   for (const value of expected) assert.ok(current.includes(value), `${label} is missing current value ${value}`);
 }
 
-function samePublishedIdentities(publication: ShowcasePublicationResult): string[] {
-  return publication.published
-    .map((row) => `${row.provider}\0${row.sourceKey}\0${row.nativeType}\0${row.subjectId}`)
-    .sort();
-}
-
+type PublishedSeedRow = ShowcasePublicationResult['published'][number];
 type PublishedWalkSeed = ReturnType<typeof publishedWalkSeed>;
 
+function publishedSeedBindings(publication: ShowcasePublicationResult) {
+  return Map.groupBy(
+    publication.published,
+    (row) => `${row.provider}\0${row.sourceKey}\0${row.nativeType}\0${row.subjectId}`,
+  );
+}
+
+function publishedSeedReaderSubject(row: PublishedSeedRow, merge: CrossMediaSeedReport['personMerge']): string {
+  // The first publication can record the original route before the reviewed merge finishes.
+  const canonical =
+    merge?.state === 'published'
+      ? merge.identities.find(
+          ({ boundSubjectId, identity }) =>
+            boundSubjectId === row.subjectId &&
+            identity.source === row.provider &&
+            identity.externalId === row.sourceKey,
+        )?.currentSubjectId
+      : undefined;
+  const routeSubject = /^\/subjects\/([^/]+)(?:\/|$)/u.exec(row.readerRoute)?.[1];
+  assert.ok(
+    routeSubject && (routeSubject === row.subjectId || routeSubject === canonical),
+    `${row.provider}:${row.sourceKey} published an unexpected reader Subject in ${row.readerRoute}`,
+  );
+  return canonical ?? row.subjectId;
+}
+
+function publishedSeedFacts(row: PublishedSeedRow): string[] {
+  return row.assertions.map(({ property, citations, rights, target, adoption, readback }) => {
+    const digest = sourceDigest({
+      citations: [...(citations ?? [])].sort(),
+      ...(rights ? { rights } : {}),
+      ...(target ? { target } : {}),
+      adoptionRank: adoption.rank,
+      readbackRank: (readback as { rank: string }).rank,
+      statement: statementProvenance(readback),
+    });
+    return `${property} ${digest}`;
+  });
+}
+
 export function assertUnchangedSeedReopen(first: PublishedWalkSeed, reopened: PublishedWalkSeed): void {
-  assert.equal(
-    reopened.publication.manifest.digest,
-    first.publication.manifest.digest,
-    'unchanged seed reopen changed its manifest',
-  );
+  assert.deepEqual(reopened.sourceDigests, first.sourceDigests, 'seed reopen changed its source snapshots');
+  const original = publishedSeedBindings(first.publication);
+  const current = publishedSeedBindings(reopened.publication);
   assert.deepEqual(
-    samePublishedIdentities(reopened.publication),
-    samePublishedIdentities(first.publication),
-    'unchanged seed reopen changed its published Subject IDs or their provenance',
+    [...current.keys()].sort(),
+    [...original.keys()].sort(),
+    'unchanged seed reopen changed its published Subject IDs or source bindings',
   );
+  for (const [binding, rows] of original) {
+    const next = current.get(binding)!;
+    const row = rows[0]!;
+    const source = `${row.provider}:${row.sourceKey}`;
+    assert.deepEqual(
+      next.map((row) => publishedSeedReaderSubject(row, reopened.report.personMerge)).sort(),
+      rows.map((row) => publishedSeedReaderSubject(row, first.report.personMerge)).sort(),
+      `unchanged seed reopen changed the public reader Subject for ${source}`,
+    );
+    assert.deepEqual(
+      next.flatMap(publishedSeedFacts).sort(),
+      rows.flatMap(publishedSeedFacts).sort(),
+      `unchanged seed reopen changed public facts or provenance for ${source}`,
+    );
+  }
 }
 
 async function walkGameReleaseCounterpart(api: string, publication: ShowcasePublicationResult) {
