@@ -4,8 +4,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
-import fixtures from '../src/kernel/fixtures.json';
+import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read.ts';
+import { sessionQueryKey } from '../src/reader/lifetime/contract.ts';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { waitForPersonalRead } from './session-token';
 
@@ -16,7 +16,7 @@ const session = '__Host-rezics_session';
 const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
-const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
+const scopes = ['follow:list', 'library_entry:list', 'progress_session:list', 'subject:search'];
 const locales = ['en', 'ja'] as const;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -65,56 +65,91 @@ const json = (body: unknown, status = 200, problem = false) =>
   });
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-type EntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
-type Entry = {
-  subjectId: string;
-  state: EntryState;
-  revision: number;
-  createdAt: string;
-  updatedAt: string;
-  subject: { id: string; label: string; type: string };
+type ContinueItem = Extract<FeedItem, { source: 'continue' }>;
+type Entry = Pick<ContinueItem['continue'], 'state' | 'lastActivityAt'> & {
+  subject: ContinueItem['summary'];
 };
 const stampAt = (minute: number) => new Date(Date.UTC(2026, 3, 2, 0, minute)).toISOString();
-function entry(n: number, state: EntryState, minute: number, label: string): Entry {
-  const updatedAt = stampAt(minute);
+function entry(n: number, state: Entry['state'], minute: number, label: string): Entry {
   return {
-    subjectId: id(n),
     state,
-    revision: 1,
-    createdAt: updatedAt,
-    updatedAt,
-    subject: { id: id(n), label, type: 'book' },
+    lastActivityAt: stampAt(minute),
+    subject: {
+      id: id(n),
+      type: 'book',
+      types: ['book'],
+      label: { value: label, language: 'en' },
+      creativeWork: true,
+      cover: null,
+    },
   };
 }
-// Stored out of order: the home page relies on the kernel's most-recently-updated-first order, not its own.
+
 function showcase(): Entry[] {
   return [
-    entry(21, 'in_progress', 10, 'Middle read'),
+    entry(21, 'in_progress', 10, 'Oldest read'),
     entry(22, 'planned', 50, 'Only planned'),
     entry(23, 'in_progress', 30, 'Newest read'),
     entry(24, 'completed', 40, 'Already finished'),
-    entry(25, 'in_progress', 20, 'Older read'),
+    entry(25, 'in_progress', 20, 'Middle read'),
   ];
 }
 function crowded(): Entry[] {
   return Array.from({ length: 9 }, (_, index) => entry(100 + index, 'in_progress', index + 1, `Crowded ${index + 1}`));
 }
 
+const discoverySubject = entry(10, null, 0, 'Public discovery').subject;
+const discovery: FeedItem = {
+  id: `semantic:${discoverySubject.id}`,
+  source: 'discovery',
+  key: { owner: 'semantic', kind: 'book', route: 402, id: discoverySubject.id },
+  occurredAt: null,
+  summary: discoverySubject,
+  destination: { kind: 'subject', id: discoverySubject.id, title: 'Public discovery' },
+};
+
+function continueItem({ subject, state, lastActivityAt }: Entry): ContinueItem {
+  const subjectId = subject.id;
+  return {
+    id: `continue:${subjectId}`,
+    source: 'continue',
+    key: { owner: 'semantic', kind: subject.type, route: 402, id: subjectId },
+    occurredAt: lastActivityAt,
+    summary: subject,
+    destination: { kind: 'subject', id: subjectId, title: subject.label?.value ?? null },
+    continue: {
+      subjectId,
+      state,
+      lastActivityAt,
+      subject,
+      activeProgressSession:
+        subjectId === id(23)
+          ? {
+              id: id(230),
+              subjectId,
+              versionSubjectId: null,
+              mode: 'cursor_position',
+              unit: 'page',
+              total: null,
+              amount: null,
+              locator: 'Chapter 3',
+              position: null,
+              completedUnitCount: 0,
+              state: 'active',
+              revision: 1,
+              startedAt: lastActivityAt,
+              completedAt: null,
+            }
+          : null,
+    },
+  };
+}
+
 let entries = showcase();
 let failContinue = false;
-let continueOperationExposed = true;
-type Call = {
-  method: string;
-  path: string;
-  view: string | null;
-  limit: string | null;
-  state: string | null;
-  authorization: string | null;
-};
-const calls: Call[] = [];
-const browserReads: { method: string; path: string }[] = [];
-const headerReads: { method: string; path: string }[] = [];
-const pageFake = createFakeKernelFetch(fixtures as never);
+let continueAdmitted = true;
+const kernelReads: { method: string; path: string; query: string; authorization: string | null }[] = [];
+const continueSelections: string[][] = [];
 
 function problem(status: number, code: string) {
   return {
@@ -128,12 +163,11 @@ function problem(status: number, code: string) {
   };
 }
 function reset(next = showcase()) {
-  calls.length = 0;
-  browserReads.length = 0;
+  kernelReads.length = 0;
+  continueSelections.length = 0;
   entries = next;
   failContinue = false;
-  continueOperationExposed = true;
-  headerReads.length = 0;
+  continueAdmitted = true;
 }
 
 // OpenID provider copied from library-entries.test.ts; the home page sends the website's access token.
@@ -144,11 +178,7 @@ const fake = Bun.serve({
     const url = new URL(request.url);
     if (url.pathname === '/v1/platform/exposure')
       return json({
-        admitted: [
-          'personal_library',
-          'reading_progress',
-          ...(continueOperationExposed ? ['library_continue.list'] : []),
-        ],
+        admitted: ['feed_item.list', ...(continueAdmitted ? ['personal_library', 'reading_progress'] : [])],
       });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
@@ -262,68 +292,34 @@ const fake = Bun.serve({
       return new Response(null, { status: 200 });
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
-      const input = (await request.clone().json()) as { reads?: Record<string, { kind: string; id: string }> };
-      if (input.reads) {
-        browserReads.push({ method: request.method, path: url.pathname });
-        headerReads.push({ method: request.method, path: url.pathname });
-        const reads = Object.fromEntries(
-          Object.entries(input.reads).map(([key, descriptor]) => {
-            const item = entries.find((candidate) => candidate.subjectId === descriptor.id);
-            return [key, item ? { status: 200, body: { subject: item.subject } } : { status: 404 }];
-          }),
-        );
-        return json({ reads });
-      }
-      browserReads.push({ method: request.method, path: url.pathname });
-      return pageFake(request);
-    }
-    if (request.method === 'GET' && url.pathname === '/v1/progressSessions') {
-      browserReads.push({ method: request.method, path: url.pathname });
-      return json({ progressSessions: [], next: null });
-    }
-    if (request.method === 'GET' && url.pathname === '/v1/libraryEntries') {
-      browserReads.push({ method: request.method, path: url.pathname });
-      calls.push({
-        method: request.method,
-        path: url.pathname,
-        view: url.searchParams.get('view'),
-        limit: url.searchParams.get('limit'),
-        state: url.searchParams.get('state'),
-        authorization: request.headers.get('authorization'),
-      });
-      const listed = entries.filter((item) => item.state === 'in_progress').slice(0, 6);
-      return json({ libraryEntries: listed, next: null });
-    }
-    if (url.pathname !== '/v1/libraryContinue' || request.method !== 'GET')
-      return json(problem(404, 'not_found'), 404, true);
-    browserReads.push({ method: request.method, path: url.pathname });
-    calls.push({
-      method: request.method,
-      path: url.pathname,
-      view: null,
-      limit: url.searchParams.get('limit'),
-      state: null,
-      authorization: request.headers.get('authorization'),
-    });
-    if (!request.headers.get('authorization')?.startsWith('Bearer '))
-      return json(problem(401, 'authentication_required'), 401, true);
-    if (failContinue) return json(problem(503, 'service_unavailable'), 503, true);
-    const rawLimit = Number(url.searchParams.get('limit') ?? 20);
-    const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 100 ? rawLimit : 20;
-    const listed = entries
-      .filter((item) => item.state === 'in_progress')
-      .sort((left, right) => (left.updatedAt < right.updatedAt ? 1 : -1))
-      .slice(0, limit);
+    const authorization = request.headers.get('authorization');
+    kernelReads.push({ method: request.method, path: url.pathname, query: url.search, authorization });
+    if (request.method !== 'GET' || url.pathname !== '/v1/feedItems') return json(problem(404, 'not_found'), 404, true);
+    if (authorization && !accessTokens.some((token) => authorization === `Bearer ${token}`))
+      return json(problem(401, 'invalid_credentials'), 401, true);
+    const personal = authorization !== null;
+    if (personal && !continueAdmitted) return json(problem(403, 'platform_closed'), 403, true);
+
+    // Model the native Home response at the HTTP boundary, including its bounded Continue lane.
+    const continued =
+      personal && !failContinue
+        ? entries
+            .filter((item) => item.state === 'in_progress')
+            .sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt))
+            .slice(0, 6)
+            .map(continueItem)
+        : [];
+    if (personal) continueSelections.push(continued.map((item) => item.continue.subjectId));
     return json({
-      subjects: listed.map((item) => ({
-        subjectId: item.subjectId,
-        state: item.state,
-        lastActivityAt: item.updatedAt,
-        activeProgressSession: null,
-      })),
+      feedItems: [...continued.slice(0, 1), discovery, ...continued.slice(1)],
       next: null,
-    });
+      asOf: stampAt(60),
+      sources: {
+        discovery: 'ready',
+        following: personal ? 'ready' : 'not_requested',
+        continue: !personal ? 'not_requested' : failContinue ? 'unavailable' : 'ready',
+      },
+    } satisfies FeedPage);
   },
 });
 
@@ -516,6 +512,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+let browser: Promise<Browser> | undefined;
 const browsers = new Set<Browser>();
 const contexts = new Set<BrowserContext>();
 const browserClosures = new WeakMap<Browser, Promise<void>>();
@@ -569,12 +566,13 @@ function site(): Promise<string> {
 
 function launchBrowser(): Promise<Browser> {
   suiteLifetime.assertActive('Home Continue browser launch');
-  return suiteLifetime.acquire(
+  browser ??= suiteLifetime.acquire(
     'Home Continue browser launch',
     () => chromium.launch(),
     (browser) => browsers.add(browser),
     closeBrowser,
   );
+  return browser;
 }
 
 function createContext(browser: Browser, options: Parameters<Browser['newContext']>[0], label: string) {
@@ -634,17 +632,22 @@ const alice = async () => {
   return aliceCookie;
 };
 
-async function readPage(path: string, cookie?: string) {
-  let browser: Browser | undefined;
+async function readHome(
+  locale: string,
+  options: { cookie?: string; width?: number; result?: 'ready' | 'closed'; continued?: 'ready' | 'unavailable' } = {},
+) {
   let context: BrowserContext | undefined;
   return suiteLifetime.run('Home Continue page setup', async () =>
     withCleanup(async () => {
       const origin = await site();
       suiteLifetime.assertActive('Home Continue page browser launch');
-      browser = await launchBrowser();
-      suiteLifetime.assertActive('Home Continue page context setup');
-      context = await createContext(browser, {}, 'Home Continue page context acquisition');
-      suiteLifetime.assertActive('Home Continue page context acquisition completion');
+      const sharedBrowser = await launchBrowser();
+      const { cookie, width = 1280, result = 'ready', continued = 'ready' } = options;
+      context = await createContext(
+        sharedBrowser,
+        { viewport: { width, height: 844 }, hasTouch: width < 768 },
+        'Home Continue page context acquisition',
+      );
       if (cookie) {
         await context.addCookies([
           { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
@@ -653,163 +656,88 @@ async function readPage(path: string, cookie?: string) {
       }
       const page = await context.newPage();
       suiteLifetime.assertActive('Home Continue page creation');
-      const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      const response = await page.goto(`${origin}/${locale}`, { waitUntil: 'domcontentloaded' });
       suiteLifetime.assertActive('Home Continue page navigation');
-      await page.locator('[data-session-slot]').waitFor();
+      await waitForPersonalRead(page, [...sessionQueryKey]);
       suiteLifetime.assertActive('Home Continue session readiness');
-      if (cookie) await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-      suiteLifetime.assertActive('Home Continue personal readiness');
+      const feed = page.locator(
+        `[data-home-feed-mounted="true"][data-home-feed-state="${result}"][aria-busy="false"]` +
+          (cookie && result === 'ready' ? `[data-feed-source-state~="continue:${continued}"]` : ''),
+      );
+      await feed.waitFor();
       await page.waitForLoadState('networkidle');
-      suiteLifetime.assertActive('Home Continue final network readiness');
-      const html = await page.content();
-      suiteLifetime.assertActive('Home Continue page snapshot');
-      return { status: response!.status(), html };
+      suiteLifetime.assertActive('Home Continue feed readiness');
+      const items = await feed.locator('[data-feed-source]').evaluateAll((items) =>
+        items.map((item) => {
+          const title = item.querySelector('[data-content-item-slot="title"]');
+          const state = item.querySelector('[data-content-item-slot="state"]');
+          const subject = item.querySelector('[data-slot="list-row-link"]');
+          const resume = item.querySelector<HTMLAnchorElement>('a[href*="/library/progress"]');
+          const bounds = item.getBoundingClientRect();
+          const resumeBounds = resume?.getBoundingClientRect();
+          return {
+            source: item.getAttribute('data-feed-source'),
+            title: title?.textContent?.trim(),
+            subject: subject?.getAttribute('href'),
+            state: state?.textContent?.trim(),
+            resume: resume?.getAttribute('href'),
+            resumeLabel: resume?.textContent?.trim(),
+            resumeHeight: resumeBounds?.height,
+            top: bounds.top,
+            bottom: bounds.bottom,
+            left: bounds.left,
+            right: bounds.right,
+          };
+        }),
+      );
+      return {
+        status: response!.status(),
+        document: await response!.text(),
+        items,
+        scrollWidth: await page.evaluate(() => document.documentElement.scrollWidth),
+      };
     }, [
       {
         label: 'Home Continue page context',
         run: () => (context ? closeContext(context) : undefined),
         timeoutMs: 6000,
       },
-      {
-        label: 'Home Continue page browser',
-        run: () => (browser ? closeBrowser(browser) : undefined),
-        timeoutMs: 6000,
-      },
     ]),
   );
 }
 
-async function inspectHome(path: string, cookie: string, width: number, openMenu = false) {
-  let browser: Browser | undefined;
-  let context: BrowserContext | undefined;
-  return suiteLifetime.run('Home Continue page inspection setup', async () =>
-    withCleanup(async () => {
-      const origin = await site();
-      suiteLifetime.assertActive('Home Continue inspection browser launch');
-      browser = await launchBrowser();
-      suiteLifetime.assertActive('Home Continue inspection context setup');
-      context = await createContext(
-        browser,
-        { viewport: { width, height: 844 }, hasTouch: false },
-        'Home Continue inspection context acquisition',
-      );
-      suiteLifetime.assertActive('Home Continue inspection context acquisition completion');
-      await context.addCookies([
-        { name: session, value: cookie, domain: new URL(origin).hostname, path: '/', secure: true, httpOnly: true },
-      ]);
-      suiteLifetime.assertActive('Home Continue inspection cookie setup');
-      const page = await context.newPage();
-      suiteLifetime.assertActive('Home Continue inspection page creation');
-      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-      suiteLifetime.assertActive('Home Continue inspection navigation');
-      await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-      suiteLifetime.assertActive('Home Continue inspection personal readiness');
-      await page.waitForLoadState('networkidle');
-      suiteLifetime.assertActive('Home Continue inspection network readiness');
-      if (openMenu) {
-        await page.locator('[data-slot="cover-card-actions"] button').first().click();
-        suiteLifetime.assertActive('Home Continue inspection menu action');
-        await page.locator('[data-slot="drawer-content"]').waitFor();
-        suiteLifetime.assertActive('Home Continue inspection drawer readiness');
-      }
-      const inspection = await page.evaluate(() => {
-        const personal = document.querySelector<HTMLElement>('[data-slot="personal"]');
-        const row = personal?.querySelector<HTMLElement>('[data-slot="cover-row"]');
-        const cards = [...(personal?.querySelectorAll<HTMLElement>('[data-slot="cover-card"]') ?? [])];
-        const next = personal?.nextElementSibling as HTMLElement | null;
-        const bounds = (element: HTMLElement | null) => {
-          const rect = element?.getBoundingClientRect();
-          return rect ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } : null;
-        };
-        const style = row ? getComputedStyle(row) : null;
-        return {
-          personalClass: personal?.className ?? '',
-          personal: bounds(personal ?? null),
-          next: bounds(next),
-          row: row
-            ? {
-                clientWidth: row.clientWidth,
-                scrollWidth: row.scrollWidth,
-                snap: style?.scrollSnapType ?? '',
-                bounds: bounds(row),
-                cards: cards.map(bounds),
-              }
-            : null,
-          cardCount: cards.length,
-          titlesInCovers: cards.map((card) => card.querySelector('[data-slot="cover"]')?.textContent?.trim() ?? ''),
-          captionCount: personal?.querySelectorAll('[data-slot="cover-caption"]').length ?? 0,
-          progressCount: personal?.querySelectorAll('[data-slot="progress-row"]').length ?? 0,
-          placeholderGlyphCount: [...(personal?.querySelectorAll('[data-slot="cover"]') ?? [])].filter((cover) =>
-            cover.textContent?.includes('…'),
-          ).length,
-          drawerOpen: !!document.querySelector('[data-slot="drawer-content"]'),
-          menuButtons: [...(personal?.querySelectorAll<HTMLButtonElement>('button[aria-label]') ?? [])].map((button) =>
-            button.getAttribute('aria-label'),
-          ),
-          controlVisibility: Object.fromEntries(
-            [
-              ...(personal?.querySelectorAll<HTMLButtonElement>(
-                'button[aria-label="Next Continue items"], button[aria-label="Previous Continue items"]',
-              ) ?? []),
-            ].map((button) => [button.getAttribute('aria-label'), getComputedStyle(button).display !== 'none']),
-          ),
-          scrollWidth: document.documentElement.scrollWidth,
-        };
-      });
-      suiteLifetime.assertActive('Home Continue inspection result');
-      return inspection;
-    }, [
-      {
-        label: 'Home Continue inspection context',
-        run: () => (context ? closeContext(context) : undefined),
-        timeoutMs: 6000,
-      },
-      {
-        label: 'Home Continue inspection browser',
-        run: () => (browser ? closeBrowser(browser) : undefined),
-        timeoutMs: 6000,
-      },
-    ]),
-  );
-}
-function main(html: string) {
-  return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
-}
-function linksIn(html: string) {
-  const found: { href: string; text: string }[] = [];
-  for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
-    const href = /href="([^"]*)"/.exec(match[1] ?? '')?.[1]?.replaceAll('&amp;', '&');
-    if (href) found.push({ href, text: match[2]!.replace(/<[^>]+>/g, '').trim() });
-  }
-  return found;
-}
-function personal(html: string): string | undefined {
-  return /<section\b[^>]*data-slot="personal"[^>]*>([\s\S]*?)<\/section>/.exec(main(html))?.[1];
-}
-async function messageOf(locale: string, key: string): Promise<string> {
-  const file = new URL(`../messages/${locale}.json`, import.meta.url);
-  return ((await Bun.file(file).json()) as Record<string, string>)[key]!;
-}
-function continueReads() {
-  return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryContinue');
+function feedReads() {
+  return kernelReads.filter((call) => call.path === '/v1/feedItems');
 }
 
-function readsTo(path: string) {
-  return browserReads.filter((call) => call.path === path);
+function expectNoLibraryFanout() {
+  expect(
+    kernelReads.filter((call) => /^\/v1\/(?:pages:read|library|progressSessions|subjects)/.test(call.path)),
+  ).toEqual([]);
 }
 
 afterAll(() =>
   retireSuite(suiteLifetime, 'Home Continue', [
-    ...[...contexts].map((context) => ({
-      label: 'Home Continue browser context',
-      run: () => closeContext(context),
-      timeoutMs: 6000,
-    })),
-    ...[...browsers].map((browser) => ({
-      label: 'Home Continue browser',
-      run: () => closeBrowser(browser),
-      timeoutMs: 6000,
-    })),
+    {
+      label: 'Home Continue browser and contexts',
+      timeoutMs: 12000,
+      run: () =>
+        withCleanup(
+          () =>
+            cleanupAll(
+              [...contexts].map((context) => ({
+                label: 'Home Continue browser context',
+                run: () => closeContext(context),
+                timeoutMs: 5000,
+              })),
+            ),
+          [...browsers].map((browser) => ({
+            label: 'Home Continue browser',
+            run: () => closeBrowser(browser),
+            timeoutMs: 5000,
+          })),
+        ),
+    },
     { label: 'Home Continue fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
     { label: 'Home Continue Vite process group', run: () => server?.stop(), timeoutMs: 7000 },
   ]),
@@ -898,169 +826,163 @@ test('Home Continue retirement fences late startup and closes late browser/conte
 });
 
 test(
-  'a signed-in visitor with subjects in progress sees them on the home page, most recently updated first, each card linking to its progress',
+  'signed-in Mixed Home preserves the Continue lane order and keeps private rows out of the document',
   async () => {
     const cookie = await alice();
     for (const locale of locales) {
       reset();
-      const page = await readPage(`/${locale}`, cookie);
-      expect(page.status).toBe(200);
-      const row = personal(page.html);
-      expect(row, `${locale} Continue row`).toBeDefined();
-      expect(row).toMatch(new RegExp(`<h2\\b[^>]*>\\s*${await messageOf(locale, 'home_continue_heading')}\\s*</h2>`));
-      // The row sits after the search box, and holds only entries in progress, newest first.
-      const body = main(page.html);
-      expect(body.indexOf('name="q"')).toBeLessThan(body.indexOf('data-slot="personal"'));
-      // Cards keep titles in CoverCard and expose their subject destination only through the menu.
-      expect([...(row ?? '').matchAll(/data-slot="cover-card"/g)]).toHaveLength(6);
-      const hrefs = linksIn(row ?? '').map((link) => link.href);
-      expect(hrefs).toHaveLength(6);
-      expect(new Set(hrefs).size).toBe(3);
-      expect(hrefs.every((href) => href.includes('/library/progress'))).toBe(true);
-      expect(row).toContain('Newest read');
-      expect(row).not.toContain('Only planned');
-      expect(row).not.toContain('Already finished');
-      // One read of the personal library, for entries in progress, up to six, with their subjects embedded.
-      const reads = continueReads();
-      expect(reads).toHaveLength(1);
-      expect(reads[0]).toMatchObject({
-        limit: '6',
-      });
-      expect(reads[0]!.authorization).toStartWith('Bearer ');
+      const home = await readHome(locale, { cookie });
+      expect(home.status).toBe(200);
+      expect(home.document).toContain('Public discovery');
+      expect(home.document).not.toContain('Newest read');
+      expect(home.document).not.toContain(id(230));
+      expect(home.items.map(({ source, title }) => [source, title])).toEqual([
+        ['continue', 'Newest read'],
+        ['discovery', 'Public discovery'],
+        ['continue', 'Middle read'],
+        ['continue', 'Oldest read'],
+      ]);
+      expect(home.items.filter(({ source }) => source === 'continue').map(({ resume }) => resume)).toEqual([
+        `/${locale}/library/progress/${id(230)}`,
+        `/${locale}/library/progress?subjectId=${id(25)}`,
+        `/${locale}/library/progress?subjectId=${id(21)}`,
+      ]);
     }
-    reset(crowded());
-    const crowd = personal((await readPage('/en', cookie)).html) ?? '';
-    expect([...crowd.matchAll(/data-slot="cover-card"/g)]).toHaveLength(12);
-    expect(crowd).toContain('Crowded 9');
-    expect(crowd).not.toContain('Crowded 3<');
   },
   timeout,
 );
 
 test(
-  'fine pointer carousel controls follow the scroll position and the tile menu opens as a phone sheet',
-  async () => {
-    const cookie = await alice();
-    reset(crowded());
-    const view = await inspectHome('/en', cookie, 390, true);
-    expect(view.drawerOpen).toBe(true);
-    expect(view.menuButtons).toContain('Next Continue items');
-    expect(view.menuButtons).toContain('Previous Continue items');
-    expect(view.controlVisibility).toEqual({
-      'Previous Continue items': false,
-      'Next Continue items': true,
-    });
-  },
-  timeout,
-);
-
-test(
-  'Continue cards use the shared cover and progress row without an oversized empty slot',
+  'phone Continue items expose separate subject and resume links',
   async () => {
     const cookie = await alice();
     reset();
-    const view = await inspectHome('/en', cookie, 1280);
-    expect(view.cardCount).toBe(6); // three cards for each responsive layout
-    expect(view.titlesInCovers.every((title) => title === '')).toBe(true);
-    expect(view.captionCount).toBe(0);
-    expect(view.progressCount).toBe(6);
-    expect(view.placeholderGlyphCount).toBe(0);
-    expect(view.personalClass).not.toMatch(/min-h-/);
-    expect(view.personal && view.next && view.next.top - view.personal.bottom).toBeLessThan(40);
+    const home = await readHome('en', { cookie, width: 390 });
+    const newest = home.items[0]!;
+    expect(newest.title).toBe('Newest read');
+    expect(newest.subject).toContain(id(23));
+    expect(newest.resume).toBe(`/en/library/progress/${id(230)}`);
+    expect(newest.resumeLabel).toContain('Newest read');
+    expect(newest.resumeHeight).toBeGreaterThanOrEqual(24);
   },
   timeout,
 );
 
 test(
-  'at phone width Continue is a snapping sideways row with a partial next card and no page overflow',
+  'Continue items show recorded progress on their shared feed card',
+  async () => {
+    const cookie = await alice();
+    reset();
+    const home = await readHome('en', { cookie });
+    expect(home.items.map(({ title, state }) => [title, state])).toEqual([
+      ['Newest read', 'Chapter 3'],
+      ['Public discovery', undefined],
+      ['Middle read', undefined],
+      ['Oldest read', undefined],
+    ]);
+  },
+  timeout,
+);
+
+test(
+  'at phone width the bounded Mixed Home list flows vertically without page overflow',
   async () => {
     const cookie = await alice();
     reset(crowded());
-    const view = await inspectHome('/en', cookie, 390);
-    expect(view.row?.scrollWidth).toBeGreaterThan(view.row?.clientWidth ?? 0);
-    expect(view.row?.snap).toContain('x mandatory');
-    expect(view.row?.cards.some((card) => card && view.row && card.right > view.row.bounds.right)).toBe(true);
-    expect(view.scrollWidth).toBeLessThanOrEqual(390);
+    const home = await readHome('en', { cookie, width: 390 });
+    expect(home.items.map(({ title }) => title)).toEqual([
+      'Crowded 9',
+      'Public discovery',
+      'Crowded 8',
+      'Crowded 7',
+      'Crowded 6',
+      'Crowded 5',
+      'Crowded 4',
+    ]);
+    for (const [index, item] of home.items.entries()) {
+      expect(item.left).toBeGreaterThanOrEqual(0);
+      expect(item.right).toBeLessThanOrEqual(390);
+      if (index > 0) expect(item.top).toBeGreaterThanOrEqual(home.items[index - 1]!.bottom);
+    }
+    expect(home.scrollWidth).toBeLessThanOrEqual(390);
   },
   timeout,
 );
 
 test(
-  'a signed-out visitor, or one with nothing in progress, sees no Continue row and the home page makes no library read',
+  'signed-out and idle visitors see only discovery, and signed-out Home never reads a private lane',
   async () => {
-    reset();
     const cookie = await alice();
     for (const locale of locales) {
       reset();
-      const out = await readPage(`/${locale}`);
+      const out = await readHome(locale);
       expect(out.status).toBe(200);
-      expect(personal(out.html)).toBeUndefined();
-      expect(out.html).not.toContain(await messageOf(locale, 'home_continue_heading'));
-      expect(out.html).toContain('name="q"');
-      expect(continueReads()).toHaveLength(0);
+      expect(out.items.map(({ source }) => source)).toEqual(['discovery']);
+      expect(feedReads().map(({ authorization }) => authorization)).toEqual([null]);
+      expect(continueSelections).toEqual([]);
+      expectNoLibraryFanout();
 
       reset(showcase().filter((item) => item.state !== 'in_progress'));
-      const idle = await readPage(`/${locale}`, cookie);
+      const idle = await readHome(locale, { cookie });
       expect(idle.status).toBe(200);
-      expect(personal(idle.html)).toBeUndefined();
-      expect(idle.html).toContain('name="q"');
-      expect(continueReads()).toHaveLength(1);
+      expect(idle.items.map(({ source }) => source)).toEqual(['discovery']);
+      expect(continueSelections).toEqual([[]]);
     }
   },
   timeout,
 );
 
 test(
-  'when the library read fails, the home page still renders without the row',
+  'when the Continue lane fails, the same Mixed Home feed still renders public discovery',
   async () => {
     const cookie = await alice();
     reset();
     failContinue = true;
-    const page = await readPage('/en', cookie);
-    expect(continueReads()).toHaveLength(1);
-    expect(page.status).toBe(200);
-    expect(page.html).toContain('name="q"');
-    expect(personal(page.html)).toBeUndefined();
-    expect(page.html).not.toContain('Newest read');
+    const home = await readHome('en', { cookie, continued: 'unavailable' });
+    expect(home.status).toBe(200);
+    expect(home.items.map(({ source }) => source)).toEqual(['discovery']);
+    expect(continueSelections).toEqual([[]]);
+    expect(feedReads()).toHaveLength(2);
+    expectNoLibraryFanout();
   },
   timeout,
 );
 
 test(
-  'when exposure does not list library_continue.list, home shows no Continue row and makes no library reads',
+  'when private feed admission is closed, Home surfaces the refusal without reading Continue',
   async () => {
     const cookie = await alice();
     reset();
-    continueOperationExposed = false;
-    const page = await readPage('/en', cookie);
-    expect(page.status).toBe(200);
-    expect(personal(page.html)).toBeUndefined();
-    expect(page.html).toContain('name="q"');
-    expect(continueReads()).toHaveLength(0);
-    expect(readsTo('/v1/libraryEntries')).toHaveLength(0);
-    expect(readsTo('/v1/progressSessions')).toHaveLength(0);
+    continueAdmitted = false;
+    const home = await readHome('en', { cookie, result: 'closed' });
+    expect(home.status).toBe(200);
+    expect(home.document).toContain('Public discovery');
+    expect(home.items).toEqual([]);
+    expect(continueSelections).toEqual([]);
+    expect(feedReads()).toHaveLength(2);
+    expectNoLibraryFanout();
   },
   timeout,
 );
 
 test(
-  'a browser home render reads its public page once, then bounds signed-in Continue reads',
+  'Home reads one public page and one session-bound mixed page without separate owner reads',
   async () => {
-    await site();
-    reset();
-    const signedOut = await readPage('/en');
-    expect(signedOut.status).toBe(200);
-    expect(browserReads).toEqual([{ method: 'POST', path: '/v1/pages:read' }]);
-
     const cookie = await alice();
     reset(crowded());
-    const signedIn = await readPage('/en', cookie);
-    expect(signedIn.status).toBe(200);
-    expect(readsTo('/v1/pages:read')).toHaveLength(2);
-    expect(continueReads()).toHaveLength(1);
-    expect(continueReads()[0]).toMatchObject({ limit: '6' });
-    expect(headerReads).toHaveLength(1);
-    expect(browserReads).toHaveLength(3);
+    const home = await readHome('en', { cookie });
+    expect(home.status).toBe(200);
+    expect(feedReads()).toEqual([
+      { method: 'GET', path: '/v1/feedItems', query: '?stream=home&limit=20', authorization: null },
+      {
+        method: 'GET',
+        path: '/v1/feedItems',
+        query: '?stream=home&limit=20',
+        authorization: `Bearer ${accessTokens[0]}`,
+      },
+    ]);
+    expect(continueSelections).toEqual([[id(108), id(107), id(106), id(105), id(104), id(103)]]);
+    expectNoLibraryFanout();
   },
   timeout,
 );
