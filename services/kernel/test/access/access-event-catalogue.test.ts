@@ -24,7 +24,7 @@ const { installStandingParentGrant } = await import('../../src/access/standing-p
 const { createExposureCommands } = await import('../../src/access/gates/catalogue.ts');
 const { sweepWorkflowApprovals } = await import('../../src/access/workflow-approvals.ts');
 const { createOrganizationCloseRunner } = await import('../../src/access/organization-close-work.ts');
-const { createAgentVerificationCommands, failAgentVerification } =
+const { createAgentVerificationCommands, failAgentVerification, readLatestAgentVerificationRequest } =
   await import('../../src/access/agent-verification.ts');
 const { ensureAccountAgent } = await import('../../src/semantic/account-agents.ts');
 const { bootstrapRelease } = await import('../../src/semantic/definitions.ts');
@@ -820,6 +820,13 @@ test('real access commands cover every registered event and the log reader accep
     const pending = await verificationRequest('verified');
     const decision = await verification.approve(await grantContext(), { requestId: pending.value.id, key: key() });
     await runAccountIdentityVerification(pool, workClient, pending.value.id, decision.value.decisionReceiptId!);
+    const settled = await readLatestAgentVerificationRequest(pool, f.access, await grantContext(), governor.accountId);
+    expect(settled).toMatchObject({
+      id: pending.value.id,
+      state: 'approved',
+      problem: null,
+      decisionReceiptId: decision.value.decisionReceiptId,
+    });
   });
   await step('verification reversal workflow', async () => {
     const reversal = await verification.release(await grantContext(), { accountId: governor.accountId, key: key() });
