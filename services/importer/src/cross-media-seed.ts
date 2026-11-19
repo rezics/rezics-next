@@ -4307,33 +4307,6 @@ async function runSeedCli(
     let bangumiVocabularyRequirements:
       | Awaited<ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>>['requirements']
       | undefined;
-    const reseedWithCurrentVocabulary = async (nextCharacterBindings: SourceVocabularyBindings) => {
-      finalization.enter('reseed-reviewed-vocabulary');
-      if (reviewedSelection) await refreshReviewedCharacterVocabulary();
-      finalization.enter('reseed-career-bindings');
-      bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(nextCharacterBindings, importPort);
-      finalization.enter('reseed-record-import');
-      recordImportProgress = new SeedFinalization('record-import');
-      recordImportProgress.enter('plan-copy');
-      publicationPlan = structuredClone(plan);
-      const releaseContext = selectedReleaseContext!;
-      result = await seedShowcaseVndbReleases({
-        seed: seedCrossMedia,
-        tables: input,
-        plan: publicationPlan,
-        path: statePath,
-        port,
-        vocabulary: reviewedVocabulary,
-        bindings: releaseContext.bindings,
-        destination: { origin: api },
-        ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
-        extras: { ...seedExtras(currentVndbCreditReferences), recordImportProgress },
-        characterBindings: nextCharacterBindings,
-      });
-      recordImportProgress.complete();
-      recordImportProgress = undefined;
-      characterBindings = nextCharacterBindings;
-    };
     finalization.enter('bangumi-character-vocabulary');
     if (journal && publicClient && !characterBindingsPath) {
       const schemes = await prepareShowcaseBangumiSelectedCharacterVocabulary({
@@ -4367,24 +4340,50 @@ async function runSeedCli(
         vocabularyRequirements: concepts.requirements,
       });
       bangumiVocabularyRequirements = concepts.requirements;
-      finalization.enter('bangumi-character-binding-read');
-      const currentCharacterBindings = await readShowcaseBangumiSelectedCharacterVocabulary({
-        plan: publicationPlan,
-        port,
-        journal,
-      });
-      await reseedWithCurrentVocabulary(currentCharacterBindings);
-    } else if (
+    }
+    if (
       journal &&
       publicClient &&
-      characterBindingsPath &&
-      (autoVndbCreditReferences ||
+      (!characterBindingsPath ||
+        autoVndbCreditReferences ||
         (!explicitProfileBindingsPath && characterProfileBindings.concepts.length > 0) ||
         (reviewedSelection && !vocabularyPath))
     ) {
-      await reseedWithCurrentVocabulary(
-        characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
-      );
+      finalization.enter('reseed-reviewed-vocabulary');
+      if (reviewedSelection) await refreshReviewedCharacterVocabulary();
+      if (characterBindingsPath) {
+        finalization.enter('reseed-career-bindings');
+        characterBindings ??= { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+        bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(characterBindings, importPort);
+      } else {
+        finalization.enter('bangumi-character-binding-read');
+        characterBindings = await readShowcaseBangumiSelectedCharacterVocabulary({
+          plan: publicationPlan,
+          port,
+          journal,
+        });
+        bangumiCareerBindings = characterBindings;
+      }
+      finalization.enter('reseed-record-import');
+      recordImportProgress = new SeedFinalization('record-import');
+      recordImportProgress.enter('plan-copy');
+      publicationPlan = structuredClone(plan);
+      const releaseContext = selectedReleaseContext!;
+      result = await seedShowcaseVndbReleases({
+        seed: seedCrossMedia,
+        tables: input,
+        plan: publicationPlan,
+        path: statePath,
+        port,
+        vocabulary: reviewedVocabulary,
+        bindings: releaseContext.bindings,
+        destination: { origin: api },
+        ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
+        extras: { ...seedExtras(currentVndbCreditReferences), recordImportProgress },
+        characterBindings,
+      });
+      recordImportProgress.complete();
+      recordImportProgress = undefined;
     }
     finalization.enter('creator-current-reads');
     if (journal && publicClient && creditResolution) {
