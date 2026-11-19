@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
 import { ImportTransportError } from '../src/import-client.ts';
 import { ImportSession } from '../src/import-session.ts';
@@ -35,7 +35,7 @@ function nativeStatement(candidate: Candidate) {
 
 /** The fake server commits independently of delivery and checks exact replays before current CAS heads. */
 function reviewedServer() {
-  const state = { fenced: false, staleStatus: 412, omitPublicFacts: false };
+  const state = { fenced: false, staleStatus: 412, omitPublicFacts: false, account: 'seed-operator' };
   const candidates = new Map<string, Candidate>();
   const subjects = new Map<
     string,
@@ -153,7 +153,8 @@ function reviewedServer() {
       events.push('accept');
       const call = { subject, candidate: id, body: structuredClone(body), key };
       calls.accept.push(call);
-      const prior = acceptReceipts.get(key);
+      const receiptKey = `${state.account}:${key}`;
+      const prior = acceptReceipts.get(receiptKey);
       if (prior) {
         expect(call).toEqual(prior.call);
         return structuredClone(prior.receipt);
@@ -168,14 +169,15 @@ function reviewedServer() {
         acceptance: { context: body.context, candidate: id, decision: 'accept', head: candidate.head },
         revision: candidate.head,
       } as Acceptance;
-      acceptReceipts.set(key, { call, receipt: structuredClone(receipt) });
+      acceptReceipts.set(receiptKey, { call, receipt: structuredClone(receipt) });
       return receipt;
     },
     async adoptReviewedCandidates(subject, body, key) {
       events.push('adopt');
       const call = { subject, body: structuredClone(body), key };
       calls.adopt.push(call);
-      const prior = adoptReceipts.get(key);
+      const receiptKey = `${state.account}:${key}`;
+      const prior = adoptReceipts.get(receiptKey);
       if (prior) {
         expect(call).toEqual(prior.call);
         return structuredClone(prior.receipt);
@@ -184,7 +186,10 @@ function reviewedServer() {
       expect(body.mode).toBe('replace');
       const head = selectCurrent(subject, body.property, body.selection);
       const receipt = { adoption: { ...structuredClone(body), head }, revision: head } as Adoption;
-      adoptReceipts.set(key, { call, receipt: structuredClone(receipt) });
+      const stored = structuredClone(receipt);
+      // The native JSONB receipt can return the same selection fields in a different order.
+      stored.adoption.selection = stored.adoption.selection.map(({ candidate, rank }) => ({ rank, candidate }));
+      adoptReceipts.set(receiptKey, { call, receipt: stored });
       return receipt;
     },
     async readReviewedSubject(id) {
@@ -228,7 +233,9 @@ async function withCatalogue(
     server: ReturnType<typeof reviewedServer>;
   }) => Promise<void>,
 ) {
-  const directory = await mkdtemp(join(tmpdir(), 'reviewed-recovery-'));
+  const temporary = fileURLToPath(new URL('../../../.temp/', import.meta.url));
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(join(temporary, 'reviewed-recovery-'));
   try {
     await run({
       path: join(directory, 'state.sqlite'),
@@ -239,6 +246,68 @@ async function withCatalogue(
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+test('lost catalogue journal replays the original native acceptance and adoption without new writes', () =>
+  withCatalogue(async ({ path, application, server }) => {
+    const { port } = server;
+    const original = await application.seed({ path, port });
+    const calls = structuredClone(server.calls);
+    const acceptReceipts = [...server.acceptReceipts];
+    const adoptReceipts = [...server.adoptReceipts];
+    expect(calls.accept[0]!.subject).toBe(original.subjects['source-scheme']!);
+    expect(calls.adopt[0]!.body.property).toBe('schema:sameAs');
+
+    await rm(path);
+    expect(await application.seed({ path, port })).toEqual(original);
+    expect(server.calls.accept.slice(calls.accept.length)).toEqual(calls.accept);
+    expect(server.calls.adopt.slice(calls.adopt.length)).toEqual(calls.adopt);
+    expect([...server.acceptReceipts]).toEqual(acceptReceipts);
+    expect([...server.adoptReceipts]).toEqual(adoptReceipts);
+    expect(savedActions(path)).toEqual([]);
+  }));
+
+for (const missing of ['acceptance', 'adoption'] as const) {
+  test(`lost catalogue journal stops when the original ${missing} receipt cannot be recovered`, () =>
+    withCatalogue(async ({ path, application, server }) => {
+      const { port } = server;
+      await application.seed({ path, port });
+      const calls = structuredClone(server.calls);
+      if (missing === 'acceptance') server.state.account = 'other-operator';
+      else server.adoptReceipts.clear();
+      const counts = [server.acceptReceipts.size, server.adoptReceipts.size];
+      await rm(path);
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await expect(application.seed({ path, port })).rejects.toThrow('matching original native receipts');
+        expect(server.calls.accept.at(-1)).toEqual(calls.accept[0]);
+        expect(savedActions(path)).toEqual([]);
+      }
+      expect(server.calls.accept).toHaveLength(calls.accept.length + 2);
+      expect(server.calls.adopt.slice(calls.adopt.length)).toEqual(
+        missing === 'adoption' ? [calls.adopt[0]!, calls.adopt[0]!] : [],
+      );
+      expect([server.acceptReceipts.size, server.adoptReceipts.size]).toEqual(counts);
+    }));
+}
+
+test('lost catalogue journal leaves a changed editorial rank and head intact', () =>
+  withCatalogue(async ({ path, application, server }) => {
+    const { port } = server;
+    const original = await application.seed({ path, port });
+    const target = original.facts[0]!;
+    const property = target.statement.property.id;
+    const selection = [{ candidate: target.candidate, rank: 'normal' as const }];
+    const head = server.selectCurrent(target.subject, property, selection);
+    const calls = structuredClone(server.calls);
+    await rm(path);
+
+    await expect(application.seed({ path, port })).rejects.toThrow('exact initial acceptance and selection');
+    expect(server.calls).toEqual(calls);
+    expect((await port.reviewedCandidates(target.subject, reviewedCatalogueSlot(property))).adoption?.head).toBe(head);
+    expect((await port.readReviewedSubject(target.subject)).subject.statements[property]).toContainEqual(
+      expect.objectContaining({ id: target.candidate, rank: 'normal' }),
+    );
+  }));
 
 for (const kind of ['accept', 'adopt'] as const) {
   test(`lost ${kind} response reopens with the original persisted body and key`, () =>

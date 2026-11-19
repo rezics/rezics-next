@@ -55,7 +55,11 @@ export function sameAdoptionSelection(
   right: readonly { candidate: string; rank: string }[],
 ): boolean {
   const sorted = (selection: readonly { candidate: string; rank: string }[]) =>
-    JSON.stringify([...selection].sort((a, b) => a.candidate.localeCompare(b.candidate)));
+    JSON.stringify(
+      [...selection]
+        .sort((a, b) => a.candidate.localeCompare(b.candidate))
+        .map(({ candidate, rank }) => [candidate, rank]),
+    );
   return sorted(left) === sorted(right);
 }
 

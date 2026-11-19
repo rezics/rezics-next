@@ -38,6 +38,10 @@ type ReviewAction = {
   error_json: string | null;
 };
 
+function reviewActionKey(owner: Owner, identity: string, generation: number, request: ReviewRequest): string {
+  return reviewedCatalogueKey(owner, `review:${identity}:${generation}:${sourceDigest(request)}`);
+}
+
 function matchingHead(head: number, expected: number | null | undefined): boolean {
   return Number.isSafeInteger(head) && head > 0 && head >= (expected ?? 0);
 }
@@ -71,6 +75,49 @@ function assertMatchingReceipt(
   }
 }
 
+/** Kernel checks the account's exact receipt first. Both initial heads must already be occupied so a miss fails CAS. */
+export async function replayInitialReviewedSelection(
+  port: ReviewedCataloguePort,
+  input: { identity: string; owner: Owner; subject: string; candidate: string; context: string; property: string },
+  signal?: AbortSignal,
+) {
+  const { identity, owner, subject, candidate, context, property } = input;
+  // A successful first execution prepared acceptance at generation 0 and adoption at generation 1.
+  const accept = { kind: 'accept', subject, candidate, body: { context, expected_head: null } } as const;
+  const adopt: Extract<ReviewRequest, { kind: 'adopt' }> = {
+    kind: 'adopt',
+    subject,
+    body: { context, property, mode: 'replace', selection: [{ candidate, rank: 'preferred' }], expected_head: null },
+  };
+  try {
+    const acceptance = await port.acceptReviewedCandidate(
+      subject,
+      candidate,
+      accept.body,
+      reviewActionKey(owner, identity, 0, accept),
+      signal,
+    );
+    assertMatchingReceipt(accept, acceptance);
+    assertReviewedCatalogue(acceptance.acceptance.head === 1, 'Initial catalogue acceptance head does not match');
+    const adoption = await port.adoptReviewedCandidates(
+      subject,
+      adopt.body,
+      reviewActionKey(owner, identity, 1, adopt),
+      signal,
+    );
+    assertMatchingReceipt(adopt, adoption);
+    assertReviewedCatalogue(adoption.adoption.head === 1, 'Initial catalogue adoption head does not match');
+    return { acceptance, adoption };
+  } catch (error) {
+    if (error instanceof ImportTransportError && [409, 412, 422].includes(error.status ?? 0)) {
+      throw new Error('Reviewed catalogue journal recovery requires matching original native receipts', {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
 /** Review history belongs to the existing local ledger and survives run completion and reopening. */
 export class ReviewedCatalogueActions {
   constructor(private readonly database: Database) {
@@ -99,6 +146,10 @@ export class ReviewedCatalogueActions {
         "SELECT * FROM reviewed_catalogue_action WHERE identity=? AND state='prepared' LIMIT 1",
       )
       .get(identity);
+  }
+
+  hasHistory(identity: string): boolean {
+    return !!this.database.query('SELECT 1 FROM reviewed_catalogue_action WHERE identity=? LIMIT 1').get(identity);
   }
 
   private receipt(identity: string, kind: ReviewRequest['kind']): ReviewedAcceptance | ReviewedAdoption | null {
@@ -136,7 +187,7 @@ export class ReviewedCatalogueActions {
         generation,
         kind: request.kind,
         request_json: JSON.stringify(request),
-        idempotency_key: reviewedCatalogueKey(owner, `review:${identity}:${generation}:${sourceDigest(request)}`),
+        idempotency_key: reviewActionKey(owner, identity, generation, request),
         state: 'prepared',
         receipt_json: null,
         error_json: null,

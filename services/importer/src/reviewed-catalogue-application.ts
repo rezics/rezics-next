@@ -14,7 +14,11 @@ import type { ImportIdentifierLookup } from './importer.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import { RunStore, type Run } from './run-store.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
-import { ReviewedCatalogueActions, reviewedCatalogueReviewAttemptBound } from './reviewed-catalogue-actions.ts';
+import {
+  replayInitialReviewedSelection,
+  ReviewedCatalogueActions,
+  reviewedCatalogueReviewAttemptBound,
+} from './reviewed-catalogue-actions.ts';
 import {
   assertReviewedCatalogue,
   currentReviewedCatalogueSource,
@@ -171,6 +175,7 @@ async function select(
 ): Promise<ReviewedCatalogueReceipt> {
   assertReviewedCatalogue(proposed.value.type === 'value' && typeof proposed.value.content === 'string');
   const query = reviewedCatalogueSlot(proposed.property.id);
+  const owner = reviewedCatalogueSeedOwner(seed);
   const identity = sourceDigest({
     source: reviewedCatalogueEnvelope(seed, revision),
     subject,
@@ -179,6 +184,7 @@ async function select(
     context: query.context,
   });
   let stale: ImportTransportError | undefined;
+  let recovered: Pick<ReviewedCatalogueReceipt, 'acceptance' | 'adoption'> | undefined;
   for (let attempt = 0; attempt <= reviewedCatalogueReviewAttemptBound; attempt += 1) {
     signal?.throwIfAborted();
     await openFence(port, seed, signal);
@@ -203,6 +209,25 @@ async function select(
         !page.adoption || (page.adoption.mode === 'replace' && page.selection.some((c) => c.candidate === candidate)),
         'Existing editorial head requires an explicit operator decision',
       );
+      const hasEditorialState = row.decision !== null || row.head !== null || row.rank !== null || page.adoption !== null;
+      if (recovered || (hasEditorialState && !actions.hasHistory(identity))) {
+        assertReviewedCatalogue(
+          row.decision === 'accepted' &&
+            row.head === 1 &&
+            page.adoption?.mode === 'replace' &&
+            page.adoption.head === 1 &&
+            sameAdoptionSelection(page.selection, [{ candidate, rank: 'preferred' }]),
+          'Reviewed catalogue journal recovery requires the exact initial acceptance and selection',
+        );
+        if (recovered) return { subject, candidate, statement: proposed, ...recovered };
+        recovered = await replayInitialReviewedSelection(
+          port,
+          { identity, owner, subject, candidate, context: query.context, property: query.property },
+          signal,
+        );
+        // Historical receipts still require a current source and selection read.
+        continue;
+      }
       const acceptance = actions.acceptance(identity);
       const adoption = actions.adoption(identity);
       if (
@@ -216,7 +241,7 @@ async function select(
       if (attempt === reviewedCatalogueReviewAttemptBound) break;
       action = actions.prepare(
         identity,
-        reviewedCatalogueSeedOwner(seed),
+        owner,
         !acceptance || row.decision !== 'accepted'
           ? { kind: 'accept', subject, candidate, body: { context: query.context, expected_head: row.head } }
           : {
