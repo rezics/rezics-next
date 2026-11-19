@@ -32,6 +32,7 @@ import {
 } from '../../src/access/auth-bindings.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
@@ -65,6 +66,7 @@ const denied: Denied = { outcome: 'denied' };
 let capabilityOmitted = false;
 const SESSION_OPENING = 'access.operator-session.v1';
 const REGISTRATION_PROOF = 'access.registration-proof.v1';
+const HANDLE_PUBLISHED = 'access.account-handle-published';
 
 // One wrapper for the process: every protected Auth workflow step announces itself to the live driver before it
 // authorizes, so a checkpoint can pause exactly there and the production step list can be enumerated.
@@ -531,13 +533,19 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
       ?.bearers.push(token);
     return token;
   }
-  const publishReceipt = async (key: string) =>
-    (
+  async function publishReceipt(accountId: string, actorId: string, commandKey: string) {
+    const accountRoute = route(accountId);
+    const keys = nativeReceiptKeyCandidates(kernelPool, HANDLE_PUBLISHED, actorId, `${accountRoute}:${commandKey}`);
+    return (
       await facts.query<{ transaction_id: string }>(
-        'SELECT transaction_id::text FROM core.receipt WHERE idempotency_key LIKE $1 ORDER BY created_at LIMIT 1',
-        [key],
+        `SELECT transaction_id::text FROM core.receipt
+         WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3
+           AND idempotency_key=ANY($4::text[]) AND response->>'accountId'=$5
+         ORDER BY created_at LIMIT 1`,
+        [partitionOf(accountRoute), actorId, HANDLE_PUBLISHED, keys, accountId],
       )
     ).rows[0]?.transaction_id;
+  }
 
   // ---- automated subjects and credential effects ------------------------------------------------------
   /** The actor's own session, renewed only when recovery or revocation has ended it. */
@@ -766,7 +774,11 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
     const auth = (await authRows(ids)).filter((row) => !record.baseline.has(rowKey(row)));
     const count = (kinds: string[]) => auth.filter((row) => kinds.includes(row.kind)).length;
     return {
-      effects: receipts.rows.filter((row) => row.idempotency_key.endsWith(':publish-handle')).length,
+      effects: receipts.rows.filter(
+        (row) =>
+          row.command_kind === HANDLE_PUBLISHED &&
+          (row.response as { accountId?: string } | null)?.accountId === target,
+      ).length,
       authEffects: count(['session', 'effect', 'provision', 'establishment', 'key']),
       state: { receipts: receipts.rows, claims: claims.rows, auth },
       all: receipts.rows.length,
@@ -846,12 +858,9 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
       if ('outcome' in resolved) return resolved;
       if (operation.kind !== 'rename')
         throw new Error('Account authorization driver cannot execute a delete operation');
-      const prefix = required(
-        bindings.workflowPorts.approvalBinding!(resolved),
-        'Approval has no binding',
-      ).commandKeyPrefix;
-      const receiptKey = `%:${prefix}:publish-handle`;
-      const replayed = (await publishReceipt(receiptKey)) !== undefined;
+      const commandKey = bindings.workflowPorts.stableCommandKey!(resolved, 'publish-handle');
+      const readReceipt = () => publishReceipt(operation.accountId, resolved.actor.accountId, commandKey);
+      const replayed = (await readReceipt()) !== undefined;
       let paused = false;
       // The checkpoint changes authority from outside the workflow, not from inside the paused DBOS step.
       const outside = new AsyncResource('account-authorization-checkpoint');
@@ -873,7 +882,7 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
           }),
         );
         if ('outcome' in result) return result;
-        const receiptId = required(await publishReceipt(receiptKey), 'Rename completed without a command receipt');
+        const receiptId = required(await readReceipt(), 'Rename completed without a command receipt');
         return { outcome: 'permitted', receiptId, replayed };
       } finally {
         stepListeners.delete(listener);
