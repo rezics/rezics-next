@@ -1,6 +1,9 @@
+import { cappedDeadlineFor } from '../request/deadline.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { sessionRevocationContinuation } from './lifecycle-review-source.ts';
 import type { SuspensionValue } from './suspension.ts';
+
+const SESSION_REVOCATION_ROOT_READ_BUDGET_MS = 10_000;
 
 /** The trusted native Auth host, supplied by the Work composition. */
 export type CommittedSessionRevocationWorkflow = {
@@ -17,7 +20,8 @@ export function registerSessionRevocationWork(context: WorkContext, auth: Commit
       async run(event) {
         const { accountId, receiptId, continuationOperationKey } = event.data as SuspensionValue;
         if (continuationOperationKey === undefined) return;
-        const root = await sessionRevocationContinuation(context.pool, Date.now() + 10_000, {
+        const deadline = cappedDeadlineFor(SESSION_REVOCATION_ROOT_READ_BUDGET_MS);
+        const root = await sessionRevocationContinuation(context.pool, deadline, {
           accountId,
           operationKey: continuationOperationKey,
         });

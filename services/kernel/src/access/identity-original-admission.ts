@@ -43,6 +43,7 @@ import {
   sumOriginalControl,
 } from './core/index.ts';
 import { ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION } from './agent-verification-identity-work.ts';
+import { cappedDeadlineFor } from '../request/deadline.ts';
 import { IDENTITY_ORIGINAL_DEADLINE_MS } from './contract/index.ts';
 
 export const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = 'identity-history-original-source-transfer-unavailable';
@@ -229,7 +230,7 @@ export async function withSelectedHistoryOriginal<T>(
   // can fund this original. Module loading performs no discovery or control SQL.
   const allocation = await installedHistoryOriginalAllocation();
   const allowed = originalWorkVector(allocation.total);
-  const deadline = Date.now() + IDENTITY_ORIGINAL_DEADLINE_MS;
+  const deadline = cappedDeadlineFor(IDENTITY_ORIGINAL_DEADLINE_MS);
   const digest = deps.registry.digest();
   if (!/^[0-9a-f]{64}$/.test(digest) || !Number.isSafeInteger(deadline) || !deps.client)
     throw new IdentityOriginalUnavailable('identity-history-original-composition-invalid');

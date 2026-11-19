@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { cappedDeadlineFor } from '../../request/deadline.ts';
 import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capabilities.ts';
 import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/access-capabilities.ts';
 import { accountAgentId, accountAgentsForSubjects } from '../../semantic/agents.ts';
@@ -26,6 +27,8 @@ import type {
   RealmCommandTransaction,
 } from '../contract/index.ts';
 import { EMPTY_ACCESS_WORK_DIMENSIONS } from '../contract/index.ts';
+
+const SEARCH_ERASURE_OBSERVATION_BUDGET_MS = 60_000;
 
 export type NativeAccessLibraryBindings = Readonly<{
   resolveCollectionKindRawNative: NonNullable<KindAudienceLibraryPort['resolveCollectionKindRawNative']>;
@@ -174,7 +177,8 @@ export function createNativeAccessPorts(
     },
     searchErasure: {
       async observeAccountErasureSearch(pool, input) {
-        const observation = await observeAccountErasureSearch(asPool(pool), input as never, Date.now() + 60_000);
+        const deadline = cappedDeadlineFor(SEARCH_ERASURE_OBSERVATION_BUDGET_MS);
+        const observation = await observeAccountErasureSearch(asPool(pool), input as never, deadline);
         return { observed: !('gap' in observation) };
       },
     },

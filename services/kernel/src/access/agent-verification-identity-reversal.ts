@@ -12,7 +12,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { cappedDeadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { agentIdentityMaintenance } from './adapters/bind.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type {
@@ -46,6 +46,8 @@ import select from './agent-verification-identity-reversal-read.sql';
 import insert from './agent-verification-identity-reversal-insert.sql';
 
 type Receipt = AccountIdentitySource['input']['receipt'];
+const ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_BUDGET_MS = 5_000;
+
 const json = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
 const normalized = (value: unknown): string => canonicalize(JSON.parse(json(value)))!;
@@ -134,7 +136,7 @@ export function prepareAccountIdentityReversalSettlement(
   pool: Pool,
   input: AgentVerificationReversal,
 ): Promise<AccountIdentityReversalWrite> {
-  const deadline = Math.min(deadlineFor(5000), Date.now() + 5000);
+  const deadline = cappedDeadlineFor(ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_BUDGET_MS);
   input = structuredClone(input);
   return withRequestDeadline(deadline, async () => {
     const prior = await agentIdentityMaintenance().readUndo(pool, {

@@ -1,8 +1,10 @@
 import type { AuthErasureBarrier } from '@rezics/auth-contract';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
+import { cappedDeadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
 import {
+  AUTH_RECEIVING_CLOSURE_READ_BUDGET_MS,
   prepareCurrentAuthReceivingClosure,
   verifyCurrentAuthReceivingClosure,
   type CurrentAuthReceivingClosure,
@@ -49,7 +51,8 @@ export async function prepareAuthConsumerRetirement(
       ).rows[0],
   );
   if (!barrier) return null;
-  const proof = await prepareCurrentAuthReceivingClosure({ pool }, barrier, { deadline: Date.now() + 5000 });
+  const deadline = cappedDeadlineFor(AUTH_RECEIVING_CLOSURE_READ_BUDGET_MS);
+  const proof = await prepareCurrentAuthReceivingClosure({ pool }, barrier, { deadline });
   return proof ? { barrier, proof } : null;
 }
 

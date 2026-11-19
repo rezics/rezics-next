@@ -7,10 +7,13 @@ import type {
   CurrentAuthReceivingClosure,
 } from '@rezics/auth-contract';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { cappedDeadlineFor } from '../request/deadline.ts';
 import { deadlineClient, within } from './deadline.ts';
 export type { CurrentAuthReceivingClosure } from '@rezics/auth-contract';
 import { routeOf } from '../route/route.ts';
 import proofRead from './shared-history-auth.sql';
+
+export const AUTH_RECEIVING_CLOSURE_READ_BUDGET_MS = 5_000;
 
 export class AuthHistoryProofDenied extends Error {
   readonly status = 403;
@@ -537,5 +540,6 @@ export async function verifyCurrentAuthReceivingClosure(
 }
 /** Current semantics intentionally exclude legacy unbound copies-erased rows. */
 export async function readAuthHistoryCompletion(pool: Pool, expected: AuthErasureBarrier): Promise<boolean> {
-  return (await prepareCurrentAuthReceivingClosure({ pool }, expected, { deadline: Date.now() + 5000 })) !== null;
+  const deadline = cappedDeadlineFor(AUTH_RECEIVING_CLOSURE_READ_BUDGET_MS);
+  return (await prepareCurrentAuthReceivingClosure({ pool }, expected, { deadline })) !== null;
 }
