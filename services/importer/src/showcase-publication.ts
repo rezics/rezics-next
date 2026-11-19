@@ -82,6 +82,7 @@ import {
   publicValueStatementCurrent,
   publicValueStatementMatches,
   readCurrentCandidatePages,
+  sameAdoptionSelection,
   selectedStatementOnPublicRead,
   servedCoverVariants,
   servedVariantDecisionCurrent,
@@ -2847,8 +2848,23 @@ async function publishShowcasePhases(
           if (group.property !== 'schema:image') stoppedGroups.add(key);
           return null;
         }
-        const identityProperty = group.property === sourceIdentityProperty(group.record);
-        if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
+        const body: AdoptBody = {
+          context: GLOBAL_CONTEXT,
+          property: group.property,
+          ...group.slot,
+          mode: 'replace',
+          expected_head: previous?.head ?? null,
+          selection: [...selections]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([candidate, rank]) => ({ candidate, rank })),
+        };
+        // Durable adoption settles sealed replays before planning and skips a fresh write for an exact selection.
+        const unchanged = currentAdoption && sameAdoptionSelection(currentAdoption.selection, body.selection);
+        if (
+          !unchanged &&
+          group.record.kind !== 'source-vocabulary' &&
+          group.property !== sourceIdentityProperty(group.record)
+        ) {
           const sourceRead = await publicRead(id);
           if (!sourceRead) {
             groupOmissions.push({
@@ -2868,16 +2884,6 @@ async function publishShowcasePhases(
             return null;
           }
         }
-        const body: AdoptBody = {
-          context: GLOBAL_CONTEXT,
-          property: group.property,
-          ...group.slot,
-          mode: 'replace',
-          expected_head: previous?.head ?? null,
-          selection: [...selections]
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([candidate, rank]) => ({ candidate, rank })),
-        };
         return { planned: body, current: currentAdoption };
       },
     });
@@ -3030,7 +3036,9 @@ async function publishShowcasePhases(
     };
     const withheldGraphCandidates = new Set<string>();
     const graphAssertions = record.assertions.filter((assertion) => assertion.graphTarget);
-    if (graphAssertions.length && !publicHasSourceIdentity(read, record)) {
+    const hasSourceIdentity =
+      (record.kind !== 'source-vocabulary' || graphAssertions.length > 0) && publicHasSourceIdentity(read, record);
+    if (graphAssertions.length && !hasSourceIdentity) {
       for (const assertion of graphAssertions) withheldGraphCandidates.add(assertion.candidateId);
       omissions.push({
         provider: record.provider,
@@ -3110,6 +3118,10 @@ async function publishShowcasePhases(
           code: state === 'fenced' ? 'cover-fenced' : 'cover-source-unavailable',
         });
       }
+    }
+    if (record.kind !== 'source-vocabulary' && !hasSourceIdentity) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'source-uri-not-current' });
+      continue;
     }
     const visible: ShowcaseAssertion[] = [];
     for (const assertion of record.assertions) {

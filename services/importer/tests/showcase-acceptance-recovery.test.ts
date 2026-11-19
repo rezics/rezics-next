@@ -36,8 +36,10 @@ async function recoveryFixture() {
   const adopted = new Map<string, { head: number; selection: Selection }>();
   const controls: {
     fenced: boolean;
+    unavailableDuring?: 'adoption' | 'public-readback';
     accept?: (candidate: CandidateRead, body: AcceptBody, key: string) => void | Acceptance;
   } = { fenced: false };
+  let publicationPhase: string | undefined;
   const read = () =>
     ({
       subject: {
@@ -189,6 +191,8 @@ async function recoveryFixture() {
       origin: 'https://fixture.test',
       fetch: (async (input) => {
         expect(new URL(String(input)).pathname.split('/').at(-1)).toBe(subjectId);
+        if (controls.unavailableDuring && controls.unavailableDuring === publicationPhase)
+          return Response.json({}, { status: 503 });
         const current = read();
         publicReads.push(structuredClone(current));
         return Response.json(current);
@@ -212,7 +216,17 @@ async function recoveryFixture() {
         return journal;
       },
       publish: () =>
-        publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient, onProgress() {} }),
+        publishShowcase({
+          plan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review,
+          publicClient,
+          onProgress(line) {
+            publicationPhase = /\bphase=([\w-]+)/.exec(line)?.[1] ?? publicationPhase;
+          },
+        }),
       reopen() {
         journal.close();
         journal = new ShowcaseJournal(journalPath);
@@ -260,6 +274,44 @@ function expectRecovered(
     selection.map(({ candidate, rank }) => ({ ...fixture.candidates.get(candidate)!.statement, id: candidate, rank })),
   );
 }
+
+test('reopen checks the public source before changing selection and still requires final public readback', async () => {
+  const fixture = await recoveryFixture();
+  try {
+    const first = await fixture.publish();
+    expectRecovered(fixture, first);
+    const writes = fixture.adoptions.length;
+    fixture.reopen();
+
+    fixture.controls.unavailableDuring = 'adoption';
+    const unchanged = await fixture.publish();
+    expectRecovered(fixture, unchanged);
+    expect(unchanged.published).toEqual(first.published);
+    expect(fixture.adoptions).toHaveLength(writes);
+
+    fixture.controls.unavailableDuring = 'public-readback';
+    const unreadable = await fixture.publish();
+    expect(unreadable.published).toEqual([]);
+    expect(unreadable.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'public-view-unavailable' });
+    expect(fixture.adoptions).toHaveLength(writes);
+
+    const names = fixture.adopted.get('schema:name')!;
+    fixture.adopted.set('schema:name', {
+      head: names.head + 1,
+      selection: names.selection.filter(({ candidate }) => candidate !== fixture.target.id),
+    });
+    fixture.controls.unavailableDuring = 'adoption';
+    const blocked = await fixture.publish();
+    expect(blocked.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'public-view-unavailable' });
+    expect(fixture.adoptions).toHaveLength(writes);
+
+    delete fixture.controls.unavailableDuring;
+    expectRecovered(fixture, await fixture.publish());
+    expect(fixture.adoptions).toHaveLength(writes + 1);
+  } finally {
+    await fixture.close();
+  }
+});
 
 for (const status of [409, 412]) {
   test(`acceptance recovers HTTP ${status} and retains concurrent editorial selection in one invocation`, async () => {
