@@ -125,17 +125,29 @@ test('packages/ui exports no legacy component that has a shadcn counterpart, and
 const probe = mkdtempSync(join(tmpdir(), 'rezics-ui-legacy-removed-'));
 afterAll(() => rmSync(probe, { recursive: true, force: true }));
 
-test('every component packages/ui still exports has a story and passes the story test', async () => {
-  // Modules that render nothing themselves, so they have no story of their own.
-  const helpers = ['avatar-initials'];
-  const names = moduleNames(components)
-    .filter((name) => existsSync(join(components, `${name}.tsx`)) && !helpers.includes(name))
-    .sort();
-  expect(names.length).toBeGreaterThan(15);
-  const missing = names.filter((name) => !existsSync(join(components, `${name}.stories.tsx`)));
-  expect(missing).toEqual([]);
+const uiCompositions: Record<string, { file: string; title?: string }> = {
+  'content-section': { file: 'shadcn-card.stories.tsx', title: 'Default' },
+  'cover-viewer': { file: 'cover.stories.tsx', title: 'Credit Viewer' },
+  'layout-select': { file: 'shelf-page.stories.tsx', title: 'Overview' },
+};
+// EmptyState is mounted by FeedEmptyState in the Web catalogue.
+const emptyStateStory = 'apps/web/src/stories/14-feed-empty-recovery.stories.tsx';
+const storyOwners = moduleNames(components)
+  .filter((name) => existsSync(join(components, `${name}.tsx`)) && name !== 'avatar-initials' && name !== 'empty-state')
+  .sort()
+  .map((name) => ({ name, ...(uiCompositions[name] ?? { file: `${name}.stories.tsx` }) }));
 
-  const files = names.map((name) => `src/components/${name}.stories.tsx`);
+test('UI story inventory includes the canonical component compositions', () => {
+  expect(storyOwners.length).toBeGreaterThan(15);
+  expect(storyOwners.filter(({ file }) => !existsSync(join(components, file))).map(({ name }) => name)).toEqual([]);
+  const recovery = readFileSync(join(repository, emptyStateStory), 'utf8');
+  expect(recovery, emptyStateStory).toMatch(/^export const RecoveryJourney: Story = \{ play: journey \};/m);
+  expect(recovery, emptyStateStory).toMatch(/^export const LongKeyboard: Story = \{/m);
+  expect(recovery, emptyStateStory).toContain('[data-slot=empty-state]');
+});
+
+test('UI catalogue component stories pass their browser tests', async () => {
+  const files = [...new Set(storyOwners.map(({ file }) => `src/components/${file}`))];
   const report = join(probe, 'stories.json');
   const run = Bun.spawn(['bun', 'x', 'vitest', 'run', ...files, '--reporter=json', `--outputFile=${report}`], {
     cwd: root,
@@ -161,9 +173,11 @@ test('every component packages/ui still exports has a story and passes the story
   const byFile = new Map(
     result.testResults.map((file) => [file.name.slice(file.name.lastIndexOf('/') + 1), file.assertionResults]),
   );
-  for (const name of names)
+  for (const { name, file, title } of storyOwners)
     expect(
-      (byFile.get(`${name}.stories.tsx`) ?? []).filter((assertion) => assertion.status === 'passed').length,
+      (byFile.get(file) ?? []).filter(
+        (assertion) => assertion.status === 'passed' && (title === undefined || assertion.title === title),
+      ).length,
       `${name} stories`,
     ).toBeGreaterThan(0);
 }, 1_800_000);

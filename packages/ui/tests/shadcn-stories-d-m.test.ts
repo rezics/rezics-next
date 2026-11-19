@@ -11,19 +11,21 @@ const names = readdirSync(join(root, 'src', 'shadcn'))
   .filter((file) => file.endsWith('.tsx') && /^[d-m]/.test(file))
   .map((file) => file.slice(0, -'.tsx'.length))
   .sort();
+const storyFile = (name: string) =>
+  name === 'drawer' ? 'src/shadcn-drawer.stories.tsx' : `src/components/shadcn-${name}.stories.tsx`;
 
 const probe = mkdtempSync(join(tmpdir(), 'rezics-ui-shadcn-stories-d-m-'));
 afterAll(() => rmSync(probe, { recursive: true, force: true }));
 
-test('every shadcn component whose name starts with d to m has stories that pass as accessible browser tests', async () => {
+test('UI story inventory for shadcn files d to m', () => {
   for (const name of ['dialog', 'drawer', 'empty', 'kbd', 'marker', 'menubar', 'message-scroller'])
     expect(names, name).toContain(name);
 
   for (const name of names) {
-    const file = join(root, 'src', 'components', `shadcn-${name}.stories.tsx`);
-    expect(existsSync(file), `shadcn-${name}.stories.tsx`).toBe(true);
+    const file = join(root, storyFile(name));
+    expect(existsSync(file), storyFile(name)).toBe(true);
     const story = text(file);
-    expect(story, name).toMatch(/title:\s*'shadcn\//);
+    expect(story, name).toMatch(/^  title: '[A-Z][\w ]*\/[^/']+',/m);
     expect(story, name).toContain(`@rezics/ui/shadcn/${name}`);
     expect(story, name).toMatch(/\bplay\b/);
     // Real states beyond the default one: more than one story per component.
@@ -33,18 +35,12 @@ test('every shadcn component whose name starts with d to m has stories that pass
   }
   // Accessibility violations fail a story.
   expect(text(join(root, '.storybook', 'preview.tsx'))).toMatch(/a11y:\s*\{\s*test:\s*'error'\s*\}/);
+});
 
+test('UI stories for shadcn files d to m pass as accessible browser tests', async () => {
   const report = join(probe, 'stories.json');
   const run = Bun.spawn(
-    [
-      'bun',
-      'x',
-      'vitest',
-      'run',
-      ...names.map((name) => `shadcn-${name}.stories`),
-      '--reporter=json',
-      `--outputFile=${report}`,
-    ],
+    ['bun', 'x', 'vitest', 'run', ...names.map(storyFile), '--reporter=json', `--outputFile=${report}`],
     { cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } },
   );
   const [stdout, stderr] = await Promise.all([
