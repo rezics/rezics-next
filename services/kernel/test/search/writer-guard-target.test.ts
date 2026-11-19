@@ -50,7 +50,7 @@ test('physical allocation installs a new write alias atomically on every creatio
       aliases.push(names[0]!);
       return { status: 200, body: {} as T };
     },
-    async bulk<T>() {
+    async bulk() {
       throw new Error('No bulk during allocation');
     },
   };
@@ -82,7 +82,7 @@ test('guarded bulk requires its allocation alias while validating the physical r
         ],
       } as T;
     },
-    async request<T>() {
+    async request() {
       throw new Error('Successful visible writes do not need another engine request');
     },
   };

@@ -4,7 +4,6 @@ import type { FeedItem, FeedReactionTarget } from './feed-contract.ts';
 import { withReactionCounts, withViewerReactions } from './reads.ts';
 import type { ContentReadDependencies, ReactionCountFreshness } from './reads.ts';
 
-type FeedReactionReadTarget = Readonly<{ id: string; reactionTarget: FeedReactionTarget }>;
 type ContentFeedShape = Readonly<{
   key: Readonly<{ owner: 'content'; kind: 'thread' | 'post' | 'review' | 'space'; id: string; route: number }>;
   summary: Readonly<{ id: string; threadId?: string; kind?: string }> & Record<string, unknown>;

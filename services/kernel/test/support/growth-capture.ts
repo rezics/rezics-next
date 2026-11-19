@@ -85,7 +85,7 @@ export function createGrowthDatabaseLifecycle() {
     });
   };
   const closeResources = async (): Promise<void> => {
-    const results = await Promise.allSettled(
+    await Promise.allSettled(
       Array.from(resources, async ([resource, name]) => {
         try {
           await resource.end();
@@ -2290,22 +2290,6 @@ async function relationMaintenance(
         'relation maintenance metadata',
       );
   return result.rows;
-}
-
-async function disableAutovacuum(database: GrowthDatabase, relations?: readonly RelationIdentity[]): Promise<void> {
-  const deadline = makeSettleDeadline(DEFAULT_SETTLE_TIMEOUT_MS);
-  const lease = await checkoutSettleClient(database, deadline);
-  let primary: unknown;
-  try {
-    const metadata = await relationMaintenance(relations, lease, deadline);
-    await disableAutovacuumOn(metadata, lease, deadline);
-  } catch (error) {
-    primary = error;
-    throw error;
-  } finally {
-    const cause = primary instanceof GrowthSettleInfrastructureError ? primary.cause : primary;
-    releaseClient(lease, cause !== undefined && retireHeldClient(cause), primary);
-  }
 }
 
 async function disableAutovacuumOn(

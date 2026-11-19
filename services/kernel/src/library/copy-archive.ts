@@ -295,25 +295,6 @@ function profileBinding(
   };
 }
 
-function sameBinding(
-  binding: ProgressReviewEvidence['binding'],
-  observation: Awaited<ReturnType<typeof readLibraryProfileSourceObservation>>,
-): boolean {
-  if (!binding || !observation) return false;
-  const current = profileBinding(observation.anchor, observation.source),
-    before = binding;
-  return (
-    before.subjectId === current.subjectId &&
-    before.requestedSubjectId === current.requestedSubjectId &&
-    before.acceptingType === current.acceptingType &&
-    before.identityEpoch === current.identityEpoch &&
-    before.component.partition === current.component.partition &&
-    before.component.epoch === current.component.epoch &&
-    before.component.position === current.component.position &&
-    sameLibraryProfilePin(before.pin, current.pin)
-  );
-}
-
 function nativeBinding(binding: NonNullable<ProgressReviewEvidence['binding']>) {
   if (!binding.pin) throw new ProblemError('unsupported_library_profile');
   return {

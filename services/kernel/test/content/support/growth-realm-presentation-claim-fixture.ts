@@ -5,7 +5,7 @@ import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { type MediaRealmPerson, mediaRealmDownloadFixture } from '../media-realm-download-fixture.ts';
-import { testAccess, testRouteKey } from '../../support/test-kernel.ts';
+import { testAccess } from '../../support/test-kernel.ts';
 import { seed, type Population } from '../../support/growth.ts';
 
 export const emptyRealmPresentation = {
@@ -56,7 +56,6 @@ export async function growthRealmPresentationClaimFixture() {
   const admittedScopes = [...actionCatalogue(base.kernel).keys()].filter((scope) => scope !== 'media:complete').sort();
   if ([...actor.scopes].sort().join('\n') !== admittedScopes.join('\n'))
     throw new Error('Realm claim fixture bearer did not retain its admitted API scopes');
-  const routeKey = testRouteKey();
   const imageJob = createImageJob(base.db.pool, base.storage.storage);
   const bytes = Uint8Array.from(
     await sharp({ create: { width: 96, height: 48, channels: 3, background: '#215a87' } })

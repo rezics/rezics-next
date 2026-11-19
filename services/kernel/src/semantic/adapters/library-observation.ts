@@ -486,11 +486,6 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
   const projectionReads = repeatBound(sumBounds(...perSubject), 6);
   const coverIds = [...subjectIds];
   const variants = 2 * 6;
-  const coverOperands = operandsOf(coverReferences, {
-    partition: 4095,
-    routes: [65535],
-    media_ids: [coverIds[0]!],
-  });
   const coverWidth =
     size({
       mediaId: uuid,

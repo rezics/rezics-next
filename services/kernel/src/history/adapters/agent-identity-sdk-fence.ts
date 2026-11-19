@@ -544,7 +544,7 @@ export async function lockRecordedAgentIdentityHistory(
 ): Promise<
   Pending | Readonly<{ state: 'guarded'; receipt: AgentIdentitySDKRetirementReceipt; writer: SdkWriterState }>
 > {
-  const { reserveIdentityHistoryWork, nativeWork, addNativeWork } = historyComposition();
+  const { reserveIdentityHistoryWork, addNativeWork } = historyComposition();
   const { pool, deadline } = currentCommandResources(tx);
   const { assertAgentIdentityHistoryUnit } = historyComposition();
   assertAgentIdentityHistoryUnit(pool, context, client);

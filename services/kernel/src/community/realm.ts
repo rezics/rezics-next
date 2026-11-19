@@ -71,7 +71,6 @@ export type RealmUpdate = Readonly<{
   votes?: RealmVotes;
   presentation?: RealmPresentation;
 }>;
-type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 export type Realm = Readonly<{
   realmId: string;
   spaceId: string;

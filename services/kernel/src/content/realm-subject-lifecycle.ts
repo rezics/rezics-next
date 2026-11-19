@@ -76,7 +76,6 @@ export function REALM_SUBJECT_IDENTITY_PAGE() {
   return memoizedValue(REALM_SUBJECT_IDENTITY_PAGE, () => REALM_SUBJECT_RAW_LIMIT);
 }
 const maxPosition = 9_223_372_036_854_775_807n;
-const zero = '00000000-0000-0000-0000-000000000000';
 function schemas(): readonly Record<string, unknown>[] {
   return memoizedValue(schemas, () => [CONTENT_EVENTS(), COMMUNITY_EVENTS(), SEMANTIC_EVENTS]);
 }

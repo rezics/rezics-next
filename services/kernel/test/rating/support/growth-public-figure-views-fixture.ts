@@ -16,7 +16,7 @@ export async function createViewGrowthFixture() {
   let release: (() => Promise<void>) | undefined;
   try {
     const ids = native.subjectIds.slice(0, 4);
-    const [ready, pending, insufficient, absent] = ids as [string, string, string, string];
+    const [ready, pending, insufficient] = ids as [string, string, string, string];
     const route = routeOf(ready)!;
     const partitions = new Set(ids.map((id) => partitionOf(routeOf(id)!)));
     expect(partitions.size).toBe(3);

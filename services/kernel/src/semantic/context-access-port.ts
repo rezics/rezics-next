@@ -43,7 +43,7 @@ export type ContextParentAnchor = Readonly<{
   resourceType?: string;
   validate(client: ContextQueryClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
-export type ContextPublicEligibilityPrepare<E> = Readonly<{
+export type ContextPublicEligibilityPrepare<_E> = Readonly<{
   pool: Pool;
   resource: ContextResource;
 }>;

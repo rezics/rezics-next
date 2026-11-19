@@ -202,13 +202,11 @@ type Effect = {
   operands: Record<string, unknown>;
 };
 
-const closed = { additionalProperties: false } as const;
 const missing = () => new ProblemError('not_found');
 const conflict = () => new ProblemError('conflict');
 const isRoutedId = (value: unknown): value is string => typeof value === 'string' && routeOf(value) !== null;
 const object = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const jsonObject = (value: unknown): Record<string, unknown> => object(value) ?? {};
 
 function account(actor: Actor, action: Action): AccountActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -239,13 +237,6 @@ function decodeRecord(item: Item): ArchiveRecord {
 
 function commandKey(uploadId: string, ordinal: number, revision: number) {
   return `archive-merge-${uploadId.replaceAll('-', '')}-${ordinal}-${revision}`;
-}
-
-function keyForSection(section: string): 'entry' | 'label' | 'assignment' | null {
-  if (section === 'entries') return 'entry';
-  if (section === 'labels') return 'label';
-  if (section === 'assignments') return 'assignment';
-  return null;
 }
 
 function sameIdentity(left: string | null, right: unknown): left is string {
@@ -2003,7 +1994,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
 
   async function acknowledge(actor: Actor, id: string, ordinal: number, result: Record<string, unknown>) {
     return operation(actor, 'library_entry:update', undefined, async (tx, route, accountId) => {
-      const upload = await readUpload(tx, route, accountId, id, true);
+      await readUpload(tx, route, accountId, id, true);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
       if (item.status === 'acknowledged') return item.result;
       if (item.status !== 'applying') throw conflict();

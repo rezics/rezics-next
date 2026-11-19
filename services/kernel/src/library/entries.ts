@@ -964,7 +964,7 @@ export function createEntryCommands(config: Dependencies) {
         const route = requireRoute(owner.accountId);
         const write = { client: tx, route, accountId: owner.accountId };
         const gate = await enterShelfWrite(write);
-        const head = await heads.ensure(write, subjectId);
+        await heads.ensure(write, subjectId);
         const before = await placement.run(tx, { route, account_id: owner.accountId, subject_id: subjectId });
         const current = await mutationState.run(tx, {
           route,

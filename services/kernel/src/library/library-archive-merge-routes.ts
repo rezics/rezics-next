@@ -19,7 +19,6 @@ import {
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const text = t.String();
-const nullable = t.Union([text, t.Null()]);
 const object = t.Record(text, t.Any());
 const coverage = t.Array(
   t.Object(

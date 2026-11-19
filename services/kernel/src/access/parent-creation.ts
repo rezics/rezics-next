@@ -203,7 +203,7 @@ export function parentCreationAuthorization(input: {
     manifest === undefined ? undefined : creationManifestEntries(manifest);
   // Manifest metadata is authoritative; legacy target/port properties are not read.
   const resource = declared?.[0]?.resource ?? Object.freeze({ ...input.context.resource });
-  const { pool, deadline } = input.context;
+  const { deadline } = input.context;
   const validate = input.parent.validate.bind(input.parent);
   const legacyPort = declared ? undefined : input.context.creation;
   if (!declared && typeof legacyPort?.validate !== 'function') throw new GrantDeniedError();

@@ -488,7 +488,7 @@ export async function checkHits<NativeHit extends Hit>(
           }
         }
         const outcomesBySubject = new Map<string, { match: RelationFacetMatch; relationRejected: boolean }>();
-        for (const { hit, subject, index } of eligible) {
+        for (const { subject } of eligible) {
           outcomesBySubject.set(subject.id, await evaluations.get(subject.id)!());
         }
         // Reanchor identity, disclosure and facts after retained concept membership work.

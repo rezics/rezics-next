@@ -53,7 +53,7 @@ export function admitSpaceHit(value: unknown): asserts value is SpaceHit {
   if (!check().Check(admitted)) unavailable();
   const hit = admitted as SpaceHttpHit;
   admitIdentity(hit);
-  const { key, summary, matchEvidence } = hit;
+  const { key, matchEvidence } = hit;
   if (key.owner !== 'community' || key.kind !== 'space') unavailable();
   if (matchEvidence.state !== 'unsupported') unavailable();
 }
