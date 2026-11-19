@@ -11,6 +11,7 @@
     "record": "bun scripts/record.ts",
     "build": "bun scripts/check-placement.ts --returns apps/web/dist --returns apps/web/.wrangler -- vite build --config vite.config.ts",
     "check": "oxfmt --check . '!src/kernel/recorded/*.json' && bun scripts/check.ts --skip-format --test-command 'bun run test'",
+    "check:release": "bun scripts/check.ts --release",
     "typecheck": "bun scripts/typecheck.ts",
     "typecheck:root": "bun scripts/typecheck.ts --root",
     "generate": "bun scripts/generate.ts",

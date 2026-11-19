@@ -35,6 +35,7 @@ import {
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { withCommandPhase } from '../../../services/kernel/scripts/command-phases.ts';
 import { compilePreparedWebPrograms } from './typecheck.ts';
+import { ensureMessagesReady } from './messages-ready.ts';
 import {
   admitWebHostTestCommand,
   isWebHostTestFile,
@@ -746,6 +747,52 @@ async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
   await runCommand('dependency optimization', 'bun', ['x', 'vite', 'optimize', '--config', 'vite.config.ts'], env);
 }
 
+// Browser and Storybook evidence comes from development and the seeded review.
+// Keep this selection independent of the development runner's scheduling heuristics.
+const releaseUnitFiles = [
+  'tests/bundled-web-startup.test.ts',
+  'tests/search-rating-figure-admission.test.ts',
+  'tests/session-bff-identity.test.ts',
+  'tests/sitemap-canonical.test.ts',
+];
+
+export function webReleaseHostCommand(): string[] {
+  return admitWebHostTestCommand(
+    bunTestFilesCommand(
+      ['tests/native/stack.host.test.ts', 'tests/native/search-stack.host.test.ts'],
+      [
+        '--test-name-pattern',
+        'serves native kernel reads through the production Worker|native web stack default search returns its API-created matching books',
+      ],
+    ),
+  );
+}
+
+async function runWebReleaseCheck(env: NodeJS.ProcessEnv): Promise<void> {
+  const browserFile = releaseUnitFiles.find((file) => isBrowserTest(file, app));
+  if (browserFile) throw new Error(`Web release unit selection requires a browser-free test: ${browserFile}`);
+  await runCommand('format', 'oxfmt', ['--check', '.', '!src/kernel/recorded/*.json'], env);
+  const code = await ensureMessagesReady(app, env);
+  if (code !== 0) throw new Error(`Paraglide generation failed with status ${code}`);
+  await runCommand('route generation', 'bun', ['run', 'generate:routes', '--reuse'], env);
+  await runWebSelectedChecks([
+    () => runWebTypecheck(env),
+    () => runTests(releaseUnitFiles, env, 'bun run test'),
+    // The fixture builds the production Worker and client with its owned native bindings, then
+    // starts workerd on the emitted artifact and probes real HTTP against Auth, Kernel and Search.
+    () =>
+      withCommandPhase(
+        'web-release-http',
+        () =>
+          runCommand('production Worker build and HTTP', 'bun', webReleaseHostCommand().slice(1), {
+            ...env,
+            NATIVE_WEB_BUNDLED_CLIENT: '1',
+          }),
+        env,
+      ),
+  ]);
+}
+
 function testScriptArgument(args: string[]): string {
   const index = args.indexOf('--test-command');
   const command = index < 0 ? 'bun run test' : args[index + 1];
@@ -832,7 +879,10 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   if (routedSelection && !inheritedSelection)
     throw new Error('--routed-selection requires the placed Web test selection context');
   const currentArgs = routedSelection ? inheritedSelection!.normalizedArgv.slice() : args.slice();
+  const release = currentArgs[0] === '--release';
+  if (release && currentArgs.length !== 1) throw new Error('Usage: bun run check:release');
   const isSpecialRoute =
+    release ||
     currentArgs[0] === '--personal-host' ||
     currentArgs[0] === '--auth-binding-host' ||
     currentArgs.includes('--browser') ||
@@ -872,6 +922,10 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   );
   if (routed !== null) {
     process.exitCode = routed;
+    return;
+  }
+  if (release) {
+    await runWebReleaseCheck(process.env);
     return;
   }
   if (currentArgs[0] === '--personal-host') {

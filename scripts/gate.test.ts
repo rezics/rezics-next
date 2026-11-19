@@ -215,12 +215,13 @@ const args = process.argv.slice(2);
 const log = (event) => appendFileSync(dir + '/log.jsonl', JSON.stringify(event) + '\\n');
 if (args[0] === 'install') {
   log({ kind: 'install' });
-} else if (args[0] === 'run' && args[1] === 'check') {
+} else if (args[0] === 'run' && (args[1] === 'check' || args[1] === 'check:release')) {
   const workspace = process.cwd().split('/').at(-1);
   const events = readFileSync(dir + '/log.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map((line) => JSON.parse(line));
   const attempt = events.filter((event) => event.kind === 'check' && event.workspace === workspace).length + 1;
   log({ kind: 'check', workspace, attempt });
   if (workspace === 'web') {
+    log({ kind: 'web-command', args });
     console.log('[web-file] {"file":"tests/first.test.ts","result":"passed"}');
     for (let n = 0; n < 100; n++) {
       try {
@@ -598,11 +599,19 @@ test.each(['matching', 'stale'] as const)('Gate checkpoints with a %s manifest',
   ]);
 });
 
-test('Web file completion reaches the caller while the Gate workspace is still running', async () => {
+test('the Gate selects Web release qualification and streams file completion before it exits', async () => {
   const { env, dir, events } = scenario();
   env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
   const fixture = join(dir, 'checkout');
-  fixtureWorkspace(fixture, 'apps/web', '@rezics/web', 'bun scripts/check.ts');
+  const web = join(fixture, 'apps/web');
+  mkdirSync(web, { recursive: true });
+  writeFileSync(
+    join(web, 'package.json'),
+    JSON.stringify({
+      name: '@rezics/web',
+      scripts: { check: 'dev-check', 'check:release': 'bun scripts/check.ts --release' },
+    }),
+  );
   const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
     if (String(text).includes('[web-file]')) writeFileSync(join(dir, 'progress-observed'), '');
     return true;
@@ -613,6 +622,9 @@ test('Web file completion reaches the caller while the Gate workspace is still r
     output.mockRestore();
   }
   expect(events().filter((event) => event.kind === 'observed-before-exit')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'web-command')).toEqual([
+    { kind: 'web-command', args: ['run', 'check:release'] },
+  ]);
   expect(JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')).workspaces[0].passed).toBe(false);
 });
 

@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { main, runHostTests, runWebHostTests } from '../scripts/check.ts';
-import { readWebTestSelectionContext, webTestNamePatterns } from '../scripts/selection.ts';
+import { main, runHostTests, runWebHostTests, webReleaseHostCommand } from '../scripts/check.ts';
+import { readWebTestSelectionContext, selectedWebTestFiles, webTestNamePatterns } from '../scripts/selection.ts';
 import { testCommand } from '../../../scripts/test-lanes.ts';
 
 const app = resolve(import.meta.dir, '..');
@@ -21,6 +21,32 @@ function hostFiles(directory = app): string[] {
 function packageTokens(script: string): string[] {
   return (script.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((part) => part.replace(/^(['"])(.*)\1$/, '$2'));
 }
+
+test('release qualification reaches admission with a closed native HTTP selection', async () => {
+  const previousExit = process.exitCode;
+  try {
+    await main(['--release'], {
+      route: async (run) => {
+        expect(run.cwd).toBe(app);
+        expect(run.command).toEqual(['bun', 'scripts/check.ts', '--release']);
+        expect(run.returns).toEqual(['apps/web/.cache/check-timings.json']);
+        return 0;
+      },
+    });
+  } finally {
+    process.exitCode = previousExit;
+  }
+  await expect(main(['--release', '--stories'])).rejects.toThrow('Usage: bun run check:release');
+  const command = webReleaseHostCommand();
+  expect(command).toContain('--config=./bunfig.host.toml');
+  const files = selectedWebTestFiles(command);
+  expect(files).toEqual(['./tests/native/stack.host.test.ts', './tests/native/search-stack.host.test.ts']);
+  const pattern = new RegExp(webTestNamePatterns(command)[0]!);
+  for (const file of files) {
+    const source = readFileSync(resolve(app, file), 'utf8');
+    expect(source.match(new RegExp(pattern.source, 'g'))).toHaveLength(1);
+  }
+});
 
 test('the host command used by the general Web check routes Auth through its owned database lane', async () => {
   const packageJson = JSON.parse(readFileSync(resolve(app, 'package.json'), 'utf8')) as {

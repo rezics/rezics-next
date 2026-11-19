@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { afterEach, describe, expect } from 'bun:test';
-import { startNativeWebStack } from './stack.ts';
+import { bundledWebFixtureTimeoutMs, startNativeWebStack } from './stack.ts';
 import { currentNativeLifecycle, nativeTest } from './lifecycle.ts';
 
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
@@ -20,8 +20,11 @@ async function semanticDatabases(databaseUrl: string): Promise<string[]> {
   }
 }
 
+// The restart changes build-time bindings, so the production path needs time for both boots.
+const timeout = process.env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? 2 * bundledWebFixtureTimeoutMs : 300_000;
+
 describe('native web stack', () => {
-  nativeTest('isolates lifecycle and serves native kernel reads through the production Worker', 300_000, async () => {
+  nativeTest('isolates lifecycle and serves native kernel reads through the production Worker', timeout, async () => {
     const databaseUrlBefore = process.env.DATABASE_URL;
     const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
     const start = performance.now();

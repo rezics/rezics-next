@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
-import { startNativeWebStack } from './stack.ts';
+import { bundledWebFixtureTimeoutMs, startNativeWebStack } from './stack.ts';
 
 function docker(args: string[]): string {
   const result = Bun.spawnSync(['docker', ...args]);
@@ -9,7 +9,7 @@ function docker(args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-test('native web stack default search returns its API-created matching books', async () => {
+async function verifyNativeSearch() {
   const priorUrl = process.env.OPENSEARCH_URL;
   let owned: string | undefined;
   let stack: Awaited<ReturnType<typeof startNativeWebStack>> | undefined;
@@ -109,4 +109,7 @@ test('native web stack default search returns its API-created matching books', a
       else process.env.OPENSEARCH_URL = priorUrl;
     }
   }
-}, 360_000);
+}
+
+const timeout = process.env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? bundledWebFixtureTimeoutMs + 120_000 : 360_000;
+test('native web stack default search returns its API-created matching books', verifyNativeSearch, timeout);

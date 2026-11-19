@@ -273,6 +273,8 @@ const repositoryRoot = resolve(webRoot, '../..');
 const kernelRoot = resolve(repositoryRoot, 'services/kernel');
 const nativeWebsiteHost = 'web.native.rezics.com';
 const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
+const webStartupTimeoutMs = 720_000;
+export const bundledWebFixtureTimeoutMs = webStartupTimeoutMs + 120_000;
 
 function fetchNativeWebsite(input: string | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(input);
@@ -422,7 +424,7 @@ function startWeb(
     exited,
     output: () => output,
     async waitUntilReady() {
-      const deadline = Date.now() + 720_000;
+      const deadline = Date.now() + webStartupTimeoutMs;
       const started = performance.now();
       // Publication writes overlap this probe. Report through the host before its parent deadline.
       const checkpoints = process.env.NATIVE_WEB_STARTUP_READINESS === 'services' ? [0, 15_000, 45_000, 90_000] : [];
@@ -1960,7 +1962,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const timeout =
+      (options.bundledClient ?? process.env.NATIVE_WEB_BUNDLED_CLIENT === '1') ? bundledWebFixtureTimeoutMs : 360_000;
+    const stack = await standalone.run('start native web stack', timeout, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {

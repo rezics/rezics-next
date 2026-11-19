@@ -41,6 +41,10 @@ export const DEFAULT_DURATIONS: Record<string, number> = {
 };
 
 export type Workspace = { name: string; directory: string; checkScript: string };
+
+function workspaceCheckScript(directory: string): string {
+  return directory === 'apps/web' ? 'check:release' : 'check';
+}
 export type WorkspaceOutcome = {
   name: string;
   directory: string;
@@ -351,11 +355,13 @@ async function readWorkspaces(gateRoot = root): Promise<Workspace[]> {
       name?: string;
       scripts?: Record<string, string>;
     };
-    if (!scripts?.check) throw new Error(`${manifest} has no check script`);
+    const directory = dirname(manifest);
+    const script = workspaceCheckScript(directory);
+    if (!scripts?.[script]) throw new Error(`${manifest} has no ${script} script`);
     workspaces.push({
-      name: name ?? dirname(manifest),
-      directory: join(gateRoot, dirname(manifest)).slice(gateRoot.length + 1),
-      checkScript: scripts.check,
+      name: name ?? directory,
+      directory,
+      checkScript: scripts[script],
     });
   }
   return workspaces;
@@ -708,7 +714,7 @@ async function checkWorkspace(
   gateRoot = root,
   env: Record<string, string | undefined> = process.env,
 ): Promise<WorkspaceResult> {
-  const command = ['bun', 'run', 'check'];
+  const command = ['bun', 'run', workspaceCheckScript(workspace.directory)];
   const startedAt = performance.now();
   const child = Bun.spawn(resolveBunCommand(command, gateRoot), {
     cwd: join(gateRoot, workspace.directory),

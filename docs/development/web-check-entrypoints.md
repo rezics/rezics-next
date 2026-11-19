@@ -78,6 +78,11 @@ Decision: a focused Web check can always be run again; leftover occupancy adds n
 | UI `test`, `test:stories:slow-frames`, direct UI `isolated.ts`        | Original command after placement and before network probing or child spawn                                                                                                                                               | Declared named state/profile/event paths; no implicit temp fixture returns                           |
 | UI `check`                                                            | Existing formatting/compiler steps, then routed test command                                                                                                                                                             | Same as UI test                                                                                      |
 
+Run `bun run --cwd apps/web check:release` for standalone Web release qualification. The root Gate
+(`bun scripts/gate.ts`) selects the same entry, including with `--workspaces apps/web`. It uses the existing finite
+placement and timing return. The native HTTP fixtures build and start the production Worker with their own service
+bindings. Run `bun run --cwd apps/web check` for the development suite.
+
 The screenshots output argument is relocated in place, preserving the order of all flags. A destination outside the
 candidate is refused before capture. Build outputs likewise must be contained. Artifact transport must copy only
 outputs of this physical run, including on failure, and retain native failure plus return/cleanup failure. Web adds
