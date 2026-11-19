@@ -19,12 +19,7 @@ import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
-import {
-  discardConnection,
-  withBoundedCommandConnection,
-  withBoundedReadConnection,
-  withConnection,
-} from '../database/pool.ts';
+import { discardConnection, withBoundedCommandConnection, withConnection } from '../database/pool.ts';
 import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -490,7 +485,7 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
     // retains a transaction, evidence check or pool connection.
     await pause(25);
     if (Date.now() >= deadline) break;
-    const state = await withBoundedReadConnection(
+    const state = await withBoundedCommandConnection(
       pool,
       deadline,
       (client) => boundedRead(client, deadline, () => readPartition(client, partition)),
@@ -727,7 +722,7 @@ async function executeCommand<T>(
       if (authorization?.prepare) {
         // The clock read finishes before parent/org evidence and child checkout.
         time = await measureCommandPhase('time_mint', () =>
-          withBoundedReadConnection(
+          withBoundedCommandConnection(
             pool,
             deadline,
             (client) => boundedRead(client, deadline, () => mintTime(client, options.clock)),

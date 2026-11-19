@@ -4,6 +4,7 @@ import {
   BoundedReadDeadlineError,
   NestedPoolCheckoutError,
   RetiredReadClientError,
+  withBoundedCommandConnection,
   withBoundedReadConnection,
   withBoundedReadOnlyTransaction,
   withConnection,
@@ -275,31 +276,35 @@ test('settled PostgreSQL failures roll back safely and rollback failures preserv
 });
 
 test('an expired callback cannot use its released client', async () => {
-  const resume = deferred<void>();
-  const callbackFinished = deferred<unknown>();
-  const released = deferred<Error | boolean | undefined>();
-  const statements: string[] = [];
-  const database = fakePool(async () =>
-    fakeClient(
-      (config) => {
-        statements.push(config.text ?? '');
-        return queryResult([]);
-      },
-      (error) => released.resolve(error),
-    ),
-  );
-  const visit = withBoundedReadConnection(database, Date.now() + 40, async (client) => {
-    await resume.promise;
-    const error = await client.query('SELECT stale').catch((failure: unknown) => failure);
-    callbackFinished.resolve(error);
-    return 'stale';
-  });
+  for (const bounded of [withBoundedReadConnection, withBoundedCommandConnection]) {
+    const resume = deferred<void>();
+    const callbackFinished = deferred<unknown>();
+    const released = deferred<Error | boolean | undefined>();
+    const statements: string[] = [];
+    const database = fakePool(async () =>
+      fakeClient(
+        (config) => {
+          statements.push(config.text ?? '');
+          return queryResult([]);
+        },
+        (error) => released.resolve(error),
+      ),
+    );
+    const visit = bounded(database, Date.now() + 40, async (client) => {
+      await resume.promise;
+      const error = await client.query('SELECT stale').catch((failure: unknown) => failure);
+      callbackFinished.resolve(error);
+      return 'stale';
+    });
 
-  await expect(visit).rejects.toBeInstanceOf(BoundedReadDeadlineError);
-  expect(await released.promise).toBeUndefined();
-  resume.resolve();
-  expect(await callbackFinished.promise).toBeInstanceOf(RetiredReadClientError);
-  expect(statements).toEqual([]);
+    await expect(visit).rejects.toBeInstanceOf(BoundedReadDeadlineError);
+    const releaseError = await released.promise;
+    if (bounded === withBoundedCommandConnection) expect(releaseError).toBeInstanceOf(BoundedReadDeadlineError);
+    else expect(releaseError).toBeUndefined();
+    resume.resolve();
+    expect(await callbackFinished.promise).toBeInstanceOf(RetiredReadClientError);
+    expect(statements).toEqual([]);
+  }
 });
 
 test('manual BEGIN and START TRANSACTION retain custody through non-query callback expiry', async () => {

@@ -352,8 +352,8 @@ test('one actor anchor reads state floor and fence; separate evidence precedes c
   const actor = await access.authenticate(await delegatedToken(), ctx);
   expect(Object.isFrozen(actor)).toBe(true);
   const check = await accessCheck(access, actor, action, resource, ctx);
-  // The organization anchor also reads access.account; identify the native actor statement exactly.
-  const actorReads = queries.filter((q) => q.text === accountRead.sql);
+  // Match the actor statement's exact wire text, including Reylo's source tag.
+  const actorReads = queries.filter((q) => q.text === accountRead['~standard'].query.text);
   expect(actorReads).toHaveLength(1);
   expect(actorReads[0]!.values).toEqual([routeOf(person), person]);
   for (const column of ['state', 'minimum_authn_epoch', 'authn_fenced']) expect(actorReads[0]!.text).toContain(column);

@@ -113,7 +113,7 @@ export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Prom
   return accounting ? accounting.connection(dispatch) : dispatch();
 }
 
-type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction'>;
+type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction' | 'mode'>;
 
 /** Opt in to one finite physical checkout for native read work. */
 export function withBoundedReadConnection<T>(
@@ -122,7 +122,7 @@ export function withBoundedReadConnection<T>(
   read: (client: PoolClient) => Promise<T>,
   options: BoundedReadOptions = {},
 ): Promise<T> {
-  return withBoundedCommandConnection(pool, deadline, read, options);
+  return withBoundedReadLifetime((work) => withConnection(pool, work), retireConnection, deadline, read, options);
 }
 
 /** Bound a native transaction without changing the identity of its original Pool. */
@@ -132,13 +132,10 @@ export function withBoundedCommandConnection<T>(
   work: (client: PoolClient) => Promise<T>,
   options: BoundedReadOptions = {},
 ): Promise<T> {
-  return withBoundedReadLifetime(
-    (run) => withConnection(pool, run),
-    (client, error) => retireConnection(client, error),
-    deadline,
-    work,
-    options,
-  );
+  return withBoundedReadLifetime((run) => withConnection(pool, run), retireConnection, deadline, work, {
+    ...options,
+    mode: 'command',
+  });
 }
 
 /** Opt in to a finite read-only repeatable-read transaction on one checkout. */
