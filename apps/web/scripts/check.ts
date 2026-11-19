@@ -111,7 +111,11 @@ function recordRunMarker(directory: string | undefined, phase: 'start' | 'end', 
 }
 
 /** Runs every file in its own isolated Bun process, with separate browser and unit lane pools. */
-export async function runWebTestLanes(options: WebTestLanesOptions): Promise<WebTestLanesResult> {
+export function runWebTestLanes(options: WebTestLanesOptions): Promise<WebTestLanesResult> {
+  return runWebFiles(options, false);
+}
+
+async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean): Promise<WebTestLanesResult> {
   requireWebCheckCustody(root, options.directory ?? app);
   const directory = resolve(options.directory ?? app);
   const timingsFile = resolve(options.timingsFile ?? defaultTimingsFile);
@@ -144,9 +148,8 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
       create: () => undefined,
       run: async (file, database) => {
         const report = join(reportDirectory, `${database}.xml`);
-        const invocation = browserFiles.includes(file)
-          ? ['bun', 'scripts/isolated.ts', 'bun', 'test']
-          : ['bun', 'test'];
+        const wrapper = sharedBrowser ? ['scripts/with-dev-server.ts', '--'] : ['scripts/isolated.ts'];
+        const invocation = browserFiles.includes(file) ? ['bun', ...wrapper, 'bun', 'test'] : ['bun', 'test'];
         recordRunMarker(env.WEB_CHECK_EVENTS, 'start', file);
         try {
           const testArguments = (options.testArgs ?? []).filter((argument, index, all) => {
@@ -251,11 +254,14 @@ export type BrowserWorkerCommandOptions = {
 };
 
 /** Serialize the complete selected Bun invocation for the check-host worker. */
-export function browserWorkerCommand(input: BrowserWorkerCommandOptions): string[] {
+export function browserWorkerCommand(
+  input: BrowserWorkerCommandOptions,
+  mode: '--browser' | '--shared-browser' = '--browser',
+): string[] {
   return [
     'bun',
     'scripts/check.ts',
-    '--browser',
+    mode,
     '--report',
     input.report,
     ...(input.testScript === undefined ? [] : ['--test-command', input.testScript]),
@@ -276,34 +282,79 @@ function readReportFragment(directory: string): { failed: string[]; timings: Rec
   return { failed, timings };
 }
 
-/**
- * Runs the browser files in the current workspace and leaves `report` in place. A check host runs this after
- * placement; it does not place the work again.
- */
-export async function runBrowserWorker(input: {
+type BrowserWorkerInput = {
   files: string[];
   report: string;
   testScript?: string;
   testArgs?: string[];
   env?: NodeJS.ProcessEnv;
-}): Promise<number> {
-  if (input.report === '' || input.report.startsWith('/') || input.report.split('/').includes('..')) {
-    throw new Error(`report must stay inside the workspace: ${input.report}`);
-  }
+};
+
+/**
+ * Runs the browser files in the current workspace and leaves `report` in place. A check host runs this after
+ * placement; it does not place the work again.
+ */
+export async function runBrowserWorker(input: BrowserWorkerInput): Promise<number> {
   requireWebCheckCustody(root, app);
-  const reportDirectory = resolve(root, input.report);
-  const result = await runWebTestLanes({
-    files: input.files,
-    ...(input.testArgs === undefined ? {} : { testArgs: input.testArgs }),
-    // A placed worker shares one generated source tree and Vite cache between its browser files.
-    env: { ...(input.env ?? process.env), WEB_BROWSER_CHECK_CONCURRENCY: '1' },
-    ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
-    reportDirectory,
-    timingsFile: join(reportDirectory, 'timings.json'),
-    previousTimingsFile: defaultTimingsFile,
-    retainReport: true,
+  const directory = browserReportDirectory(input.report);
+  const { usesSharedBrowserServer } = await import('./isolated.ts');
+  const sharedFiles = input.files.filter((file) => isBrowserTest(file, app) && usesSharedBrowserServer(file));
+  if (sharedFiles.length < 2) return runBrowserFiles(input);
+
+  mkdirSync(directory, { recursive: true });
+  const sharedReport = relative(root, mkdtempSync(join(directory, 'shared-')));
+  const command = browserWorkerCommand({ ...input, files: sharedFiles, report: sharedReport }, '--shared-browser');
+  const env = { ...(input.env ?? process.env) };
+  // The descriptor belongs to this group's network namespace and lifetime.
+  delete env.WEB_TEST_DEV_SERVER;
+  const child = Bun.spawn(['bun', 'scripts/isolated.ts', ...command], {
+    cwd: app,
+    env,
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
   });
-  if (result.failed.length > 0) writeFileSync(join(reportDirectory, 'failed.txt'), `${result.failed.join('\n')}\n`);
+  const sharedCode = await child.exited;
+  const shared = readReportFragment(resolve(root, sharedReport));
+  const remaining = input.files.filter((file) => !sharedFiles.includes(file));
+  const code = remaining.length ? await runBrowserFiles({ ...input, files: remaining }) : 0;
+  const ordinary = remaining.length ? readReportFragment(directory) : { failed: [], timings: {} };
+  const current = Object.fromEntries(Object.entries(shared.timings).filter(([file]) => sharedFiles.includes(file)));
+  writeTimings(join(directory, 'timings.json'), { ...shared.timings, ...ordinary.timings }, current);
+  const failed = [...ordinary.failed, ...(sharedCode && !shared.failed.length ? sharedFiles : shared.failed)];
+  writeBrowserFailures(directory, failed);
+  return sharedCode || code;
+}
+
+function browserReportDirectory(report: string): string {
+  if (!report || report.startsWith('/') || report.split('/').includes('..'))
+    throw new Error(`report must stay inside the workspace: ${report}`);
+  return resolve(root, workspacePath(root, report));
+}
+
+function writeBrowserFailures(directory: string, failed: string[]): void {
+  const path = join(directory, 'failed.txt');
+  if (failed.length) writeFileSync(path, `${failed.join('\n')}\n`);
+  else rmSync(path, { force: true });
+}
+
+async function runBrowserFiles(input: BrowserWorkerInput, sharedBrowser = false): Promise<number> {
+  const reportDirectory = browserReportDirectory(input.report);
+  const result = await runWebFiles(
+    {
+      files: input.files,
+      ...(input.testArgs === undefined ? {} : { testArgs: input.testArgs }),
+      // A placed worker shares one generated source tree and Vite cache between its browser files.
+      env: { ...(input.env ?? process.env), WEB_BROWSER_CHECK_CONCURRENCY: '1' },
+      ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
+      reportDirectory,
+      timingsFile: join(reportDirectory, 'timings.json'),
+      previousTimingsFile: defaultTimingsFile,
+      retainReport: true,
+    },
+    sharedBrowser,
+  );
+  writeBrowserFailures(reportDirectory, result.failed);
   return result.failed.length > 0 ? 1 : 0;
 }
 
@@ -314,7 +365,7 @@ export function browserWorkerRequest(
   const separator = args.indexOf('--');
   const checkArgs = separator < 0 ? args : args.slice(0, separator);
   const testArgs = separator < 0 ? [] : args.slice(separator + 1);
-  if (!checkArgs.includes('--browser')) return null;
+  if (!checkArgs.includes('--browser') && checkArgs[0] !== '--shared-browser') return null;
   const testScript = testScriptArgument(checkArgs);
   const reportAt = checkArgs.indexOf('--report');
   const report = reportAt >= 0 ? checkArgs[reportAt + 1] : undefined;
@@ -322,7 +373,7 @@ export function browserWorkerRequest(
   const files: string[] = [];
   for (let index = 0; index < checkArgs.length; index += 1) {
     const argument = checkArgs[index]!;
-    if (argument === '--browser' || argument === '--skip-format') continue;
+    if (argument === '--browser' || argument === '--shared-browser' || argument === '--skip-format') continue;
     if (argument === '--report' || argument === '--test-command') {
       index += 1;
       continue;
@@ -696,6 +747,16 @@ export async function runWebSelectedChecks(checks: readonly (() => Promise<void>
 }
 
 export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
+  if (args[0] === '--shared-browser') {
+    requireWebCheckCustody(root, app);
+    const request = browserWorkerRequest(args);
+    if (!request || !process.env.WEB_TEST_DEV_SERVER) throw new Error('Shared browser files need their owning server');
+    const { usesSharedBrowserServer } = await import('./isolated.ts');
+    if (!request.files.every((file) => isBrowserTest(file, app) && usesSharedBrowserServer(file)))
+      throw new Error('Shared browser files must use the isolated Web server lane');
+    process.exitCode = await runBrowserFiles(request, true);
+    return;
+  }
   const routedSelection = args.length === 1 && args[0] === '--routed-selection';
   const inheritedSelection = routedSelection ? readWebTestSelectionContext() : undefined;
   if (routedSelection && !inheritedSelection)

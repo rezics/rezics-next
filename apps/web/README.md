@@ -243,7 +243,7 @@ file stays in its existing lane. Repository-relative `apps/web/...`, Web-relativ
 files and quoted globs are supported. Option values that resemble test paths remain option values.
 
 Decision: explicit test files run one per fresh runtime, because Bun module mocks otherwise survive across file
-boundaries. A command that needs the shared dev server is wrapped per runtime by `scripts/with-dev-server.ts`, which
+boundaries. A focused command that needs the shared dev server is wrapped per runtime by `scripts/with-dev-server.ts`, which
 reuses the warmed dependency cache; `--private-network` applies inside that wrapper, not outside it. Each focused
 invocation runs one Worker graph at a time (`--max-concurrency=1`).
 
@@ -352,10 +352,13 @@ The workspace gate runs both compiler programs, the browser pool, the unit pool 
 under one memory limit. The browser pool includes the page-story suite once. A successful run then builds Web.
 
 `bun run check` runs each non-host test file in its own `bun test` process. Browser and dev-server tests run through
-`scripts/isolated.ts`, which takes a host-wide stack slot for each file. Their separate pool has six lanes by default,
+`scripts/isolated.ts`, which takes a host-wide stack slot. Their separate pool has six lanes by default,
 matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to change that upper bound. The host lease
 sets the actual stack concurrency from `REZICS_STACK_SLOTS` (eight by default on this host). When the check already
-holds a stack slot, browser and dev-server files run one at a time inside that slot. Pure unit tests run directly,
+holds a stack slot, browser and dev-server files run one at a time inside that slot. The placed browser worker runs
+shared-server consumers in one network namespace. Each file starts a fresh Bun process and can borrow the default
+Vite server when its requested Worker bindings match. Custom commands, exclusive fixtures and binding mismatches
+still start dedicated servers. Host and server-independent files keep their own placement. Pure unit tests run directly,
 without the isolated wrapper or a slot, in a wider ten-lane pool configurable with `WEB_UNIT_CHECK_CONCURRENCY`. Both
 pools schedule files by their latest recorded wall time, longest first, and update
 [`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
