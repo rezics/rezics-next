@@ -46,8 +46,11 @@ export const settled = async <T extends Element>(element: T): Promise<T> => {
 };
 
 /**
- * Waits for the layer with this role to leave the document. Exit animations can outlast
+ * Waits for a layer to leave the document. Pass the element when it must be detached,
+ * even if it has already left the accessibility tree. Exit animations can outlast
  * waitFor's one-second default when the whole suite runs in parallel.
  */
-export const dismissed = (role: 'dialog' | 'alertdialog' | 'menu' | 'tooltip' | 'status') =>
-  waitFor(() => expect(screen.queryByRole(role)).not.toBeInTheDocument(), { timeout: 3000 });
+export const dismissed = (layer: Element | 'dialog' | 'alertdialog' | 'menu' | 'tooltip' | 'status') =>
+  waitFor(() => expect(typeof layer === 'string' ? screen.queryByRole(layer) : layer).not.toBeInTheDocument(), {
+    timeout: 3000,
+  });

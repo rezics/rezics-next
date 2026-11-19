@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { settled, withSurface } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from '../test/focus.ts';
 import { ShelfList, ShelfListRow } from './shelf-list.tsx';
 import { RelativeTime } from './relative-time.tsx';
 import { metaText } from './meta-line.tsx';
@@ -47,11 +48,14 @@ export const Entries: Story = {
     await expect(within(first).getByText('Ep 4/12')).toBeVisible();
     await userEvent.click(canvas.getByRole('link', { name: subject.title }));
     await expect(canvas.getByRole('checkbox', { name: 'Select book' })).toBeChecked();
-    await userEvent.click(canvas.getByRole('button', { name: 'Reading' }));
-    await expect(
-      within(await settled(await screen.findByRole('menu'))).getByRole('menuitemradio', { name: 'Completed' }),
-    ).toBeVisible();
+    const statusTrigger = canvas.getByRole('button', { name: 'Reading' });
+    await userEvent.click(statusTrigger);
+    const menu = await settled(await screen.findByRole('menu'));
+    await expect(within(menu).getByRole('menuitemradio', { name: 'Completed' })).toBeVisible();
+    await waitForFocus(menu);
     await userEvent.keyboard('{Escape}');
+    await dismissed(menu);
+    await expect(statusTrigger).toHaveFocus();
   },
 };
 export const MenusOpen: Story = {
