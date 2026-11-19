@@ -39,3 +39,9 @@ export function validatePublicOrigin(value: string | undefined, fallbackRequestU
     throw new Error('Configuration error: PUBLIC_ORIGIN must be an absolute HTTP origin without a path');
   }
 }
+
+/** A concealed or recovering document can render before a canonical link is present. */
+export function browserPublicOrigin(): string {
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  return validatePublicOrigin(canonical ? new URL(canonical.href).origin : window.location.origin);
+}

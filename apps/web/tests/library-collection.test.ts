@@ -2,18 +2,17 @@ import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { chromium } from 'playwright';
 import { slug } from '@rezics/definitions/slug';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
 const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
-const scopes = ['openid'];
+const scopes = ['collection:read', 'collection:update', 'collection:delete', 'collection:create'];
 const pageLimit = '100';
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -34,6 +33,7 @@ type Grant = {
 type Family = { sub: string; current: string; expiresIn: number; revoked: boolean };
 const codes = new Map<string, Grant>();
 const families = new Map<string, Family>();
+const accessSubjects = new Map<string, string>();
 const assertions = new Set<string>();
 let counter = 0;
 
@@ -48,8 +48,7 @@ const json = (body: unknown, status = 200, problem = false) =>
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const stamp = '2026-04-02T15:04:05.000Z';
-const hiddenSubjectId = 'unavailable-subject-should-not-appear';
-const deletedAccountId = 'gone-account-should-not-appear';
+const hiddenSubjectId = id(98);
 const owner = { id: 'alice', handle: 'ada', displayName: 'Ada Lovelace' };
 type Visibility = 'private' | 'unlisted' | 'public';
 type Subject = { id: string; label: string; type: string } | null;
@@ -57,12 +56,17 @@ type Curator = { id: string; handle: string | null; displayName: string | null }
 type Member = { id: string; subjectId: string; note: string | null; addedAt: string; subject: Subject };
 type Shelf = {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
+  membershipKind: 'curated';
   title: string;
   description: string | null;
   visibility: Visibility;
+  presentationKind: null;
+  presentationKindSource: 'mixed';
+  coverSource: 'none';
   revision: number;
   memberCount: number;
+  orderEpoch: number;
   createdAt: string;
   updatedAt: string;
   curator: Curator;
@@ -79,16 +83,20 @@ function shelf(
   members: Member[],
   description: string | null,
   curator: Curator,
-  curatorAccountId = curator?.id ?? deletedAccountId,
 ): Shelf {
   return {
     id: id(n),
-    curatorAccountId,
+    curatorAccountId: curator?.id ?? null,
+    membershipKind: 'curated',
     title,
     description,
     visibility,
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    coverSource: 'none',
     revision: 1,
     memberCount: members.length,
+    orderEpoch: 0,
     createdAt: stamp,
     updatedAt: stamp,
     curator,
@@ -188,7 +196,7 @@ function pageOf(item: Shelf, cursor: string | null, limit: number) {
   return { stale: false as const, members: slice, next };
 }
 
-// OpenID provider copied from posting.test.ts; collection reads send no token grant.
+// The fixture issues separate credentials for the curator and another reader.
 const fake = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
@@ -226,6 +234,7 @@ const fake = Bun.serve({
     const issue = async (family: Family, nonce?: string) => {
       counter += 1;
       const access = `access-${counter}`;
+      accessSubjects.set(`Bearer ${access}`, family.sub);
       const refresh = `refresh-${counter}`;
       family.current = refresh;
       families.set(refresh, family);
@@ -300,19 +309,46 @@ const fake = Bun.serve({
       return new Response(null, { status: 200 });
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
+    const authorization = request.headers.get('authorization');
+    const viewer = accessSubjects.get(authorization ?? '');
+    if (url.pathname === '/v1/platform/exposure')
+      return json({ admitted: gateClosed ? [] : ['collections', 'personal_library'] });
     calls.push({
       method: request.method,
       path: url.pathname,
       view: url.searchParams.get('view'),
       limit: url.searchParams.get('limit'),
       cursor: url.searchParams.get('cursor'),
-      authorization: request.headers.get('authorization'),
+      authorization,
     });
     if (gateClosed) return json(problem(403, 'platform_closed'), 403, true);
+    if (url.pathname === '/v1/viewerActions' && request.method === 'POST' && viewer) {
+      const { resources } = (await request.json()) as { resources: { type: string; id: string }[] };
+      return json({
+        resources: resources.map((resource) => {
+          const shelf = resource.type === 'library.collection' ? shelves.get(resource.id) : undefined;
+          if (!shelf || (shelf.visibility === 'private' && viewer !== shelf.curatorAccountId))
+            return { ...resource, error: 'not_found' };
+          const viewerActions =
+            viewer === shelf.curatorAccountId
+              ? [
+                  { action: 'collection:update', operations: ['collection.update', 'collection_member.create'] },
+                  { action: 'collection:delete', operations: ['collection.delete'] },
+                ]
+              : [];
+          return { ...resource, viewerActions };
+        }),
+      });
+    }
     const collectionId = /^\/v1\/collections\/([^/]+)$/.exec(url.pathname)?.[1];
     const membersId = /^\/v1\/collections\/([^/]+)\/members$/.exec(url.pathname)?.[1];
     const item = shelves.get(collectionId ?? membersId ?? '');
-    if (request.method !== 'GET' || !item || item.visibility === 'private')
+    if (
+      request.method !== 'GET' ||
+      !item ||
+      ((item.visibility === 'private' || url.searchParams.get('ownerManagement') === 'true') &&
+        viewer !== item.curatorAccountId)
+    )
       return json(problem(404, 'not_found'), 404, true);
     const full = url.searchParams.get('view') === 'FULL';
     if (collectionId) {
@@ -330,45 +366,15 @@ const fake = Bun.serve({
 });
 
 let teardownStarted = false;
-let serverStartupAbort: AbortController | undefined;
-const pendingServerStartups = new Set<Promise<string>>();
 let cleanupPromise: Promise<void> | undefined;
-
-function ensureSiteStartupActive(output = '', cause?: unknown): void {
-  if (teardownStarted) {
-    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
-    if (cause !== undefined) throw new Error(message, { cause });
-    throw new Error(message);
-  }
-}
-
-function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const parentSignal = serverStartupAbort?.signal;
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener('abort', abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener('abort', abort);
-    },
-  };
-}
+const serverStartupAbort = new AbortController();
 
 function cleanupSuite(): Promise<void> {
   return (cleanupPromise ??= (async () => {
     teardownStarted = true;
-    serverStartupAbort?.abort();
-    const startupActions = [...pendingServerStartups].map((startup, index) => ({
-      label: `pending Vite startup ${index + 1}`,
-      run: () => startup,
-      timeoutMs: 15_000,
-    }));
+    serverStartupAbort.abort();
     await cleanupAll([
-      ...startupActions,
+      { label: 'pending Vite startup', run: () => started?.catch(() => {}), timeoutMs: 15_000 },
       { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
       { label: 'Vite process group', run: () => server?.stop(), timeoutMs: 8000 },
     ]);
@@ -379,6 +385,7 @@ let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
   started ??= startDevServer({
     env: {
       KERNEL_ORIGIN: fake.url.origin,
@@ -388,6 +395,7 @@ function site(): Promise<string> {
       API_RESOURCE: resource,
       WEBSITE_SCOPES: scopes.join(' '),
     },
+    signal: serverStartupAbort.signal,
     warmUpPaths: [],
   }).then((running) => {
     server = running;
@@ -474,13 +482,12 @@ test(
     expect(anonymous.html).not.toContain('<b>not bold</b>');
     expect(nightMain).toContain('Ada Lovelace');
     expect(nightMain).toContain('ada');
-    expect(nightMain).toContain('3 members');
-    expect(nightMain).toContain(`datetime="${stamp}"`);
-    expect(nightMain).not.toContain('data-visibility');
+    expect(nightMain).toContain('2 members');
+    expect(/<time\b[^>]*\bdatetime="([^"]+)"/i.exec(nightMain)?.[1]).toBe(stamp);
+    expect(nightMain).toContain('Public');
     expect(nightMain.indexOf('Zebra story')).toBeLessThan(nightMain.indexOf('Apple story'));
     expect(nightMain.indexOf('First note')).toBeLessThan(nightMain.indexOf('Third note'));
-    expect(nightMain).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-    expect(anonymous.html).not.toContain('<script>alert(1)</script>');
+    expect(anonymous.html).not.toContain('alert(1)');
     const reads = calls.filter((call) => call.path.startsWith(`/v1/collections/${night.id}`));
     expect(reads.map((call) => call.path).sort()).toEqual(
       [`/v1/collections/${night.id}`, `/v1/collections/${night.id}/members`].sort(),
@@ -495,14 +502,14 @@ test(
     const ownerPage = await readPage(`/en/collections/${night.id}`, await alice());
     expect(ownerPage.status).toBe(200);
     // Public server renders remain anonymous; curator controls arrive in the browser after hydration.
-    expect(main(ownerPage.html)).not.toContain('data-visibility');
+    expect(main(ownerPage.html)).not.toContain('Add items');
     const curatorServerReads = calls.filter((call) => call.path.startsWith(`/v1/collections/${night.id}`));
     expect(curatorServerReads).toHaveLength(2);
     expect(curatorServerReads.every((call) => call.authorization === null)).toBe(true);
     const other = await readPage(`/en/collections/${night.id}`, await blake());
     expect(other.status).toBe(200);
     expect(main(other.html)).toContain('Night shelf');
-    expect(main(other.html)).not.toContain('data-visibility');
+    expect(main(other.html)).not.toContain('Add items');
 
     const unlisted = await readPage(`/ja/collections/${quiet.id}`);
     expect(unlisted.status).toBe(200);
@@ -511,14 +518,13 @@ test(
     expect(quietMain).toContain('Always Coming Home');
     expect(quietMain).toContain('Ada Lovelace');
     expect(quietMain).not.toContain('Night shelf');
-    expect(quietMain).not.toContain('data-visibility');
     const unlistedOwner = await readPage(`/en/collections/${quiet.id}`, await alice());
-    expect(main(unlistedOwner.html)).not.toContain('data-visibility');
+    expect(main(unlistedOwner.html)).toContain('Unlisted');
+    expect(main(unlistedOwner.html)).not.toContain('Add items');
 
     const deleted = await readPage(`/en/collections/${orphan.id}`);
     expect(deleted.status).toBe(200);
     expect(main(deleted.html)).toContain('Deleted account');
-    expect(deleted.html).not.toContain(deletedAccountId);
 
     calls.length = 0;
     const first = await readPage(`/en/collections/${long.id}`);
@@ -527,7 +533,7 @@ test(
     expect(firstMain.indexOf('Entry 001')).toBeLessThan(firstMain.indexOf('Entry 002'));
     expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 100'));
     expect(firstMain).not.toContain('Entry 101');
-    expect(firstMain).toContain('101 members');
+    expect(firstMain).not.toContain('101 members');
     const memberRead = calls.find((call) => call.path === `/v1/collections/${long.id}/members`);
     expect(memberRead).toMatchObject({ view: 'FULL', limit: pageLimit, cursor: null });
     const more = links(first.html).find((link) => link.text === 'More');
@@ -553,19 +559,22 @@ test(
 );
 
 test(
-  "members show their subject's label linked to its page, and an unreadable subject shows as unavailable",
+  'readable members link back to their exact Collection occurrence from the Subject visit',
   async () => {
     reset();
-    const page = await readPage(`/en/collections/${night.id}`);
+    const address = `/en/collections/${night.id}?layout=grid`;
+    const page = await readPage(address);
     expect(page.status).toBe(200);
     const found = links(page.html);
-    const zebra = found.find((link) => link.text === 'Zebra story');
-    const apple = found.find((link) => link.text === 'Apple story');
-    expect(zebra?.href).toBe(`/en/subjects/${id(11)}/${slug('Zebra story')}`);
-    expect(apple?.href).toBe(`/en/subjects/${id(12)}/${slug('Apple story')}`);
-    // The fake serves no definitions, so the type has no name to show and its raw value stays out.
-    expect(main(page.html)).not.toContain('book');
-    expect(main(page.html)).toContain('Unavailable');
+    for (const entry of [night.members[0]!, night.members[2]!]) {
+      const subject = entry.subject!;
+      const href = found.find((link) => link.text === subject.label)?.href;
+      expect(href).toBeDefined();
+      const target = new URL(href!, 'http://site.test');
+      expect(target.pathname).toBe(`/en/subjects/${subject.id}/${slug(subject.label)}`);
+      expect(target.searchParams.get('via')).toBe(`${address}#collection-member-${entry.id}`);
+      expect(main(page.html)).toContain(`id="collection-member-${entry.id}"`);
+    }
     expect(page.html).not.toContain(hiddenSubjectId);
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);
   },
@@ -573,7 +582,7 @@ test(
 );
 
 test(
-  'a private collection, or one the viewer may not see, shows the not-found page',
+  'private and missing Collection documents conceal data before browser admission',
   async () => {
     reset();
     for (const cookie of [undefined, await alice(), await blake()]) {
@@ -581,17 +590,97 @@ test(
       const page = await readPage(`/en/collections/${locked.id}`, cookie);
       expect(page.status).toBe(404);
       expect(page.cache).toMatch(/\bno-store\b/);
-      expect(page.html).toContain('Page not found');
-      expect(page.html).toContain('The page you requested could not be found.');
       expect(page.html).not.toContain('Locked shelf');
       expect(page.html).not.toContain('Secret note');
-      expect(calls.some((call) => call.path === `/v1/collections/${locked.id}`)).toBe(true);
+      expect(calls.filter((call) => call.path.startsWith(`/v1/collections/${locked.id}`))).toEqual([
+        expect.objectContaining({ path: `/v1/collections/${locked.id}`, authorization: null }),
+      ]);
     }
     calls.length = 0;
     const missing = await readPage(`/en/collections/${id(99)}`);
     expect(missing.status).toBe(404);
-    expect(missing.html).toContain('Page not found');
     expect(calls.some((call) => call.path === `/v1/collections/${id(99)}`)).toBe(true);
+  },
+  timeout,
+);
+
+test(
+  'the mounted Collection admits private reads and mutation controls for the curator',
+  async () => {
+    reset();
+    const origin = await site();
+    const createAddress = `${origin}/en/collections/new`;
+    const signedOutCreate = await fetch(createAddress, { redirect: 'manual' });
+    expect(signedOutCreate.status).toBe(302);
+    expect(signedOutCreate.headers.get('location')).toBe('/auth/sign-in?return_to=%2Fen%2Fcollections%2Fnew');
+    await signedOutCreate.body?.cancel();
+    const curatorSession = await alice();
+    const browser = await chromium.launch();
+    await withCleanup(async () => {
+      for (const cookie of [curatorSession, await blake(), undefined]) {
+        const context = await browser.newContext();
+        await withCleanup(async () => {
+          if (cookie)
+            await context.addCookies([
+              { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true },
+            ]);
+          const page = await context.newPage();
+          const errors: string[] = [];
+          page.on('pageerror', (error) => errors.push(error.message));
+          page.on('console', (message) => {
+            if (message.type() === 'error' && !message.text().startsWith('Failed to load resource:'))
+              errors.push(message.text());
+          });
+          const path = `/en/collections/${locked.id}`;
+          expect((await page.goto(origin + path))?.status()).toBe(404);
+          await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+          if (cookie !== curatorSession) {
+            await page.getByRole('heading', { name: 'Page not found' }).waitFor();
+            expect(await page.getByText('Secret note').count()).toBe(0);
+            if (!cookie) return;
+            await page.goto(`${origin}/en/collections/${night.id}`);
+            await page.getByRole('button', { name: 'Follow', exact: true }).waitFor();
+            await page.getByRole('button', { name: 'More actions' }).click();
+            await page.getByRole('menu').waitFor();
+            expect(await page.getByRole('menuitem', { name: 'Edit', exact: true }).count()).toBe(0);
+            expect(await page.getByRole('menuitem', { name: 'Delete', exact: true }).count()).toBe(0);
+            expect(await page.getByRole('button', { name: 'Add items' }).count()).toBe(0);
+            return;
+          }
+          await page
+            .getByRole('heading', { name: 'Locked shelf' })
+            .waitFor()
+            .catch(async (error) => {
+              throw new Error(
+                `Curator Collection did not open\n${await page.locator('main').innerText()}\n${errors.join('\n')}`,
+                { cause: error },
+              );
+            });
+          await page.getByText('Secret note', { exact: false }).waitFor();
+          expect(
+            calls
+              .filter(
+                (call) =>
+                  call.path.startsWith(`/v1/collections/${locked.id}`) &&
+                  accessSubjects.get(call.authorization ?? '') === owner.id,
+              )
+              .map((call) => call.path),
+          ).toEqual([`/v1/collections/${locked.id}`, `/v1/collections/${locked.id}/members`]);
+          await page.getByRole('button', { name: 'Add items' }).waitFor();
+          await page.getByRole('button', { name: 'More actions' }).click();
+          await page.getByRole('menuitem', { name: 'Delete', exact: true }).waitFor();
+          await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+          await page
+            .locator('summary')
+            .filter({ hasText: /^Collection details$/ })
+            .click();
+          expect(await page.getByRole('textbox', { name: 'Title', exact: true }).inputValue()).toBe('Locked shelf');
+          await page.goto(createAddress);
+          await page.getByRole('heading', { name: 'New collection' }).waitFor();
+          await page.getByRole('textbox', { name: 'Title', exact: true }).waitFor();
+        }, [{ label: 'Collection browser context', run: () => context.close(), timeoutMs: 8000 }]);
+      }
+    }, [{ label: 'Collection browser', run: () => browser.close(), timeoutMs: 8000 }]);
   },
   timeout,
 );

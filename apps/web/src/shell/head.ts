@@ -1,4 +1,5 @@
 import { getLocale, locales, type Locale } from '../paraglide/runtime.js';
+import { browserPublicOrigin } from './origin';
 
 export type PagePaths = Record<Locale, string>;
 export type HeadContext = { origin: string; locale: Locale; path: string; paths?: PagePaths };
@@ -38,7 +39,7 @@ export function pageHead(options: PageHeadOptions, context?: HeadContext) {
   if (!context) {
     if (typeof window === 'undefined') throw new Error('Page head requires the public origin and current path');
     const locale = getLocale();
-    const origin = new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin;
+    const origin = browserPublicOrigin();
     context = { origin, locale, path: window.location.pathname.replace(new RegExp(`^/${locale}(?=/|$)`), '') || '/' };
   }
   const { origin, locale, path, paths } = context;

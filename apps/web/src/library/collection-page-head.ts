@@ -5,16 +5,14 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { pageHead, type HeadContext } from '../shell/head';
-import { validatePublicOrigin } from '../shell/origin';
+import { browserPublicOrigin, validatePublicOrigin } from '../shell/origin';
 import { collectionRenderPolicy, type CollectionPageResult, type CollectionPolicyPage } from './collection-load';
 import { collectionPublicItemList } from './collection-public-document';
 import { libraryTitleValue } from './title';
 
 export const collectionPublicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
-  .client(() =>
-    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
-  );
+  .client(() => browserPublicOrigin());
 
 export function collectionPageHead(
   page: Pick<CollectionPageResult, 'id' | 'title' | 'description' | 'curator' | 'members'> & CollectionPolicyPage,
