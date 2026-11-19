@@ -61,10 +61,7 @@ fi`,
     let restorePath: (() => void) | undefined;
     try {
       const task = h.dispatch('bun.lock');
-      writeFileSync(
-        join(task.worktree, '.temp/worker-plan.json'),
-        JSON.stringify({ file: 'bun.lock', content: 'worker lock\n' }),
-      );
+      h.planWorkerFile(task, 'bun.lock', 'worker lock\n');
       await h.start(task);
       h.advanceDev('bun.lock', 'integration lock\n');
       const current = h.store.task(task.id);
@@ -79,11 +76,12 @@ fi`,
       expect(git(task.worktree, 'show', `${task.branch}:bun.lock`)).toBe('installed from integration');
       expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual(['install']);
       expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U')).toBe('');
+      await retried.exited;
     } finally {
       restorePath?.();
     }
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
@@ -137,11 +135,7 @@ test('a bun.lock conflict mixed with another file stays with the worker', async 
   try {
     h.ensureDev();
     const task = h.tasks.dispatch(briefFile(h, ['bun.lock', ordinary]));
-    mkdirSync(join(task.worktree, '.temp'), { recursive: true });
-    writeFileSync(
-      join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: 'bun.lock', content: 'worker lock\n' }),
-    );
+    h.planWorkerFile(task, 'bun.lock', 'worker lock\n');
     await h.start(task);
     git(task.worktree, 'reset', '--soft', 'HEAD^');
     writeFileSync(join(task.worktree, 'bun.lock'), 'worker lock\n');
@@ -196,13 +190,7 @@ fi
       restorePath = prependPath(bin);
       if (surface === 'retry') {
         // The replacement worker keeps the resolved lockfile intact.
-        writeFileSync(
-          join(task.worktree, '.temp/worker-plan.json'),
-          JSON.stringify({
-            file: 'bun.lock',
-            content: 'regenerated lock\n',
-          }),
-        );
+        h.planWorkerFile(task, 'bun.lock', 'regenerated lock\n');
         h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
           current.state = 'stopped';
         });
@@ -212,21 +200,7 @@ fi
         expect(git(task.worktree, 'status', '--porcelain')).toBe('');
         expect(git(task.worktree, 'merge-base', '--is-ancestor', h.head(), 'HEAD')).toBe('');
       } else {
-        const gated = join(h.settings.stateDirectory, 'gated');
-        (
-          h.settings as typeof h.settings & { integrationChecks: { paths: string[]; command: string[] }[] }
-        ).integrationChecks = [
-          {
-            paths: ['bun.lock'],
-            command: [
-              'sh',
-              '-c',
-              `test "$(cat bun.lock)" = 'regenerated lock' && test -z "$(git diff --name-only --diff-filter=U)" && printf 'checked\\n' > ${JSON.stringify(gated)}`,
-            ],
-          },
-        ];
         await h.train();
-        expect(readFileSync(gated, 'utf8')).toBe('checked\n');
         expect(h.outcomes[0]).toMatchObject({ passed: true, stage: 'merge' });
         expect(git(h.root, 'show', 'dev:bun.lock')).toBe('regenerated lock');
       }

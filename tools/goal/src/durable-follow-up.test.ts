@@ -41,6 +41,7 @@ test("a gate failure's automatic retry survives the process that recorded it exi
 
     const recovered = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await recovered.recoverOrphans();
+    await recovered.drain();
 
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.attempt({ taskId: task.id, attempt: 2 }).fixRound).toBe(1);
