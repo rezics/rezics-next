@@ -18,7 +18,8 @@ test('one mounted EntityPicker journey keeps controlled selection and search wor
         'run',
         story,
         '-t',
-        'Connected Selection Lifetime',
+        '^Connected Selection Lifetime$',
+        '--reporter=default',
         '--reporter=json',
         `--outputFile=${report}`,
       ],
@@ -33,7 +34,9 @@ test('one mounted EntityPicker journey keeps controlled selection and search wor
     const result = JSON.parse(readFileSync(report, 'utf8')) as {
       testResults: { assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
     };
-    const outcomes = result.testResults.flatMap((file) => file.assertionResults);
+    const outcomes = result.testResults
+      .flatMap((file) => file.assertionResults)
+      .filter(({ status }) => status !== 'skipped');
     expect(code, `${stdout}\n${stderr}`).toBe(0);
     expect(outcomes.map((outcome) => `${outcome.title}: ${outcome.status}`)).toEqual([
       'Connected Selection Lifetime: passed',

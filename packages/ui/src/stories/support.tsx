@@ -1,6 +1,11 @@
+/// <reference types="vite/client" />
+
 import type { Decorator } from '@storybook/react-vite';
 import { expect, screen, waitFor } from 'storybook/test';
 import { cn } from '../utils.ts';
+
+// Keep the interactive toolbar available while running the browser test in dark mode.
+export const darkTestGlobals = import.meta.env.MODE === 'test' ? { theme: 'dark' } : {};
 
 /** Story-specific layout; the global Storybook toolbar owns theme and locale. */
 export interface SurfaceParameters {

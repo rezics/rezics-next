@@ -4,7 +4,7 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '../shadcn/button.tsx';
 import { Toaster } from '../shadcn/toast.tsx';
 import { undoToast } from './undo-toast.tsx';
-import { settled, withSurface } from '../stories/support.tsx';
+import { darkTestGlobals, settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
   title: 'Feedback/Undo Toast',
@@ -44,7 +44,7 @@ export const Light: Story = {
     await showToast(canvasElement);
   },
 };
-export const Dark: Story = { ...Light, globals: {} };
+export const Dark: Story = { ...Light, globals: darkTestGlobals };
 
 export const ReplacementAndUndo: Story = {
   render: () => <Example />,

@@ -3,6 +3,7 @@ import { act, useState } from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { coverSrc, coverSummary } from '../stories/media-fixtures.ts';
 import { withSurface } from '../stories/support.tsx';
+import { focusForTyping } from '../test/focus.ts';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from './entity-picker.tsx';
 import { metaText } from './meta-line.tsx';
 
@@ -135,6 +136,7 @@ const highlightedIndex = () =>
 const highlight = async (name: RegExp | string) => {
   // Choosing a subject closes the list; the arrow key opens it again.
   const input = screen.getByRole('combobox');
+  await focusForTyping(input);
   if (input.getAttribute('aria-expanded') !== 'true') {
     await userEvent.keyboard('{ArrowDown}');
     await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
@@ -145,7 +147,7 @@ const highlight = async (name: RegExp | string) => {
   await waitFor(async () => {
     if (highlightedIndex() === want) return;
     await userEvent.keyboard('{ArrowDown}');
-    throw new Error(`The highlight is on option ${highlightedIndex()}, not ${want}`);
+    throw new Error(`Expected highlight on ${String(name)} at index ${want}, got ${highlightedIndex()}`);
   });
 };
 
@@ -445,24 +447,18 @@ export const ConnectedSelectionLifetime: Story = {
   render: () => <ConnectedJourneyHarness />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const queryInput = () => canvas.getByRole('combobox', { name: 'Journey subject' });
-    const responseInput = canvas.getByRole('textbox', { name: 'Response query' });
+    const queryInput = () => canvas.getByRole<HTMLInputElement>('combobox', { name: 'Journey subject' });
     const calls = () => activeJourney().calls;
     const changes = () => activeJourney().changes;
     const waitForCalls = async (length: number) => waitFor(() => expect(calls()).toHaveLength(length));
-    const response = async (query: string, action: 'resolve' | 'reject' = 'resolve') => {
-      await userEvent.clear(responseInput);
-      await userEvent.type(responseInput, query);
-      await userEvent.click(
-        canvas.getByRole('button', { name: action === 'resolve' ? 'Resolve search' : 'Reject search' }),
-      );
-    };
+    // Parent updates and search responses can arrive while the open picker hides the fixture controls.
+    const updateParent = (label: string) =>
+      act(async () => canvas.getByText<HTMLButtonElement>(label, { selector: 'button' }).click());
+    const settleFor = (query: string, action: 'resolve' | 'reject' = 'resolve') =>
+      act(async () => (action === 'resolve' ? resolveJourneyQuery(query) : rejectJourneyQuery(query)));
     const typeQuery = async (query: string) => {
-      await userEvent.clear(queryInput());
-      await userEvent.type(queryInput(), query);
-    };
-    const settleFor = async (query: string, action: 'resolve' | 'reject' = 'resolve') => {
-      await response(query, action);
+      const input = queryInput();
+      await userEvent.type(input, query, { initialSelectionStart: 0, initialSelectionEnd: input.value.length });
     };
     const settleAndWait = async (query: string, name: RegExp | string) => {
       await settleFor(query);
@@ -472,7 +468,7 @@ export const ConnectedSelectionLifetime: Story = {
 
     await expect(queryInput()).toHaveValue('Seed subject');
     await typeQuery('queued');
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace selection' }));
+    await updateParent('Replace selection');
     await waitFor(() => expect(queryInput()).toHaveValue('Replacement subject'));
     await new Promise((resolve) => window.setTimeout(resolve, 300));
     await expect(calls()).toHaveLength(initialCalls);
@@ -480,20 +476,20 @@ export const ConnectedSelectionLifetime: Story = {
     await typeQuery('clear-pending');
     await waitForCalls(initialCalls + 1);
     const clearPending = calls().at(-1)!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Rerender parent' }));
+    await updateParent('Rerender parent');
     await expect(clearPending.signal.aborted).toBe(false);
     await expect(calls()).toHaveLength(initialCalls + 1);
-    await userEvent.click(canvas.getByRole('button', { name: 'Clear selection' }));
+    await updateParent('Clear selection');
     await waitFor(() => expect(queryInput()).toHaveValue(''));
     await expect(clearPending.signal.aborted).toBe(true);
     await settleFor('clear-pending');
     await expect(screen.queryByRole('option')).toBeNull();
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace selection' }));
+    await updateParent('Replace selection');
     await typeQuery('title-pending');
     await waitForCalls(initialCalls + 2);
     const titlePending = calls().at(-1)!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Refresh title' }));
+    await updateParent('Refresh title');
     await waitFor(() => expect(queryInput()).toHaveValue('Renamed replacement'));
     await expect(titlePending.signal.aborted).toBe(true);
     await settleFor('title-pending');
@@ -524,12 +520,13 @@ export const ConnectedSelectionLifetime: Story = {
     await typeQuery('disabled-pending');
     await waitForCalls(initialCalls + 7);
     const disabledPending = calls().at(-1)!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Disable picker' }));
-    await expect(queryInput()).toBeDisabled();
+    const disabledInput = queryInput();
+    await updateParent('Disable picker');
+    await expect(disabledInput).toBeDisabled();
     await expect(disabledPending.signal.aborted).toBe(true);
     await settleFor('disabled-pending');
     await expect(screen.queryByRole('option')).toBeNull();
-    await userEvent.click(canvas.getByRole('button', { name: 'Enable picker' }));
+    await updateParent('Enable picker');
     await expect(queryInput()).toHaveValue('disabled-pending');
     await new Promise((resolve) => window.setTimeout(resolve, 300));
     await expect(calls()).toHaveLength(initialCalls + 7);
@@ -538,7 +535,7 @@ export const ConnectedSelectionLifetime: Story = {
     await expect(calls().at(-1)?.query).toBe('disabled-pendingx');
     await settleAndWait('disabled-pendingx', /Result for disabled-pendingx/);
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Throw next search' }));
+    await updateParent('Throw next search');
     await typeQuery('retry-me');
     await waitForCalls(initialCalls + 9);
     await expect(await screen.findByText('The search failed.')).toBeVisible();
@@ -552,7 +549,7 @@ export const ConnectedSelectionLifetime: Story = {
     await expect(queryInput()).toHaveValue('Result for retry-me');
     await expect(calls()).toHaveLength(beforeSinglePick);
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Use multiple selection' }));
+    await updateParent('Use multiple selection');
     await expect(queryInput()).toHaveValue('');
     await typeQuery('multi');
     await waitForCalls(initialCalls + 11);
@@ -565,7 +562,7 @@ export const ConnectedSelectionLifetime: Story = {
     await choose(/Multi B/);
     await waitFor(() => expect(changes()).toHaveLength(3));
     await expect(queryInput()).toHaveValue('multi');
-    const selected = canvas.getByRole('list', { name: 'Selected' });
+    const selected = await canvas.findByRole('list', { name: 'Selected' });
     await expect(within(selected).getAllByRole('listitem')).toHaveLength(3);
     await userEvent.click(canvas.getByRole('button', { name: 'Remove Multi A' }));
     await waitFor(() => expect(changes()).toHaveLength(4));
@@ -573,7 +570,7 @@ export const ConnectedSelectionLifetime: Story = {
     await expect(queryInput()).toHaveValue('multi');
     await expect(calls()).toHaveLength(beforeMultiplePicks);
 
-    const input = queryInput() as HTMLInputElement;
+    const input = queryInput();
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     if (!valueSetter) throw new Error('The browser input value setter is unavailable.');
     await act(async () => {
@@ -603,7 +600,7 @@ export const ConnectedSelectionLifetime: Story = {
     await waitForCalls(initialCalls + 13);
     const beforeUnmount = changes().length;
     const unmounted = calls().at(-1)!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Unmount picker' }));
+    await updateParent('Unmount picker');
     await expect(unmounted.signal.aborted).toBe(true);
     await settleFor('unmount-pending');
     await new Promise((resolve) => window.setTimeout(resolve, 50));

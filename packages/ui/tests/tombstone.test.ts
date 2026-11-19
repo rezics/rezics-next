@@ -1,11 +1,10 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const root = join(import.meta.dir, '..');
-const output = join(root, '../../.temp/deletion-acceptance');
 
 test("Tombstone renders a reference to a deleted or withheld record in the place and size the record would take (a post, a card in a grid or row, a list row), with its kind's message and no title, author, cover or link of the record", async () => {
   const { Tombstone } = await import('../src/components/tombstone.tsx');
@@ -101,7 +100,9 @@ test("undoToast(label, onUndo) shows the action's result with an Undo button for
 });
 
 test('the tombstone and undo toast stories have no accessibility violations in light and dark themes', async () => {
-  mkdirSync(output, { recursive: true });
+  const temporary = join(root, '../../.temp');
+  mkdirSync(temporary, { recursive: true });
+  const output = mkdtempSync(join(temporary, 'deletion-acceptance-'));
   const report = join(output, 'stories.json');
   const run = Bun.spawn(
     [
@@ -111,6 +112,7 @@ test('the tombstone and undo toast stories have no accessibility violations in l
       'x',
       'vitest',
       'run',
+      '--reporter=default',
       '--reporter=json',
       `--outputFile=${report}`,
       'src/components/tombstone.stories.tsx',

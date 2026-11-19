@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
 import { Tombstone } from './tombstone.tsx';
-import { withSurface } from '../stories/support.tsx';
+import { darkTestGlobals, withSurface } from '../stories/support.tsx';
 
 const meta = {
   title: 'Feedback/Tombstone',
@@ -21,7 +21,7 @@ const liveCard = (
     state="Reading"
     href="/surviving"
     cover={{
-      subject: { id: 'surviving', title: 'A surviving record', types: ['schema:Book'] },
+      subject: { id: 'surviving', title: 'A surviving record', types: ['schema:CreativeWork'] },
       cover: null,
       src: () => '',
     }}
@@ -68,7 +68,7 @@ function Examples() {
 }
 
 export const Light: Story = { globals: {}, render: () => <Examples /> };
-export const Dark: Story = { ...Light, globals: {} };
+export const Dark: Story = { ...Light, globals: darkTestGlobals };
 
 export const Footprints: Story = {
   render: () => <Examples />,
