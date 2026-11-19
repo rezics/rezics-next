@@ -53,6 +53,10 @@ after the required observation. Prefer existing checks to a new harness.
 
 Reuse a compatible live stack or prepared fixture with isolated state. Restart only the process whose lifetime
 matters. Use full preparation, cold startup or growth when the outcome depends on it, preserving its original bound.
+For repeated data-heavy checks, retain the isolated database, search generation, media and command journal together.
+Use a compatible checkpoint or copy when a retry mutates the input needed by another check. Use the development
+watcher for API repair and restart the affected services on the pinned revision for final evidence. Time data
+preparation, dependency startup and the actual check separately.
 When publication is a fixture prerequisite, wait on its authoritative ready state. Then verify the public request
 within its own deadline so setup traffic and setup failures do not distort the serving evidence.
 
