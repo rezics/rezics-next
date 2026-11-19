@@ -62,6 +62,17 @@ test('ordinary Web bounds V8 while retaining caller Node options and explicit he
   const bundledNative = { REZICS_TEST_RUNTIME: '1', NATIVE_WEB_BUNDLED_CLIENT: '1' };
   const bundledPlan = storybookLaunchPlan(['--app'], bundledNative, roots);
   expect(webServeEnvironment(bundledPlan.kind, bundledNative).NODE_OPTIONS).toBe('--max-old-space-size=2560');
+  const catalogue = { REZICS_WALK_WEB_OUTPUT: '/private/compiled-web' };
+  const build = storybookLaunchPlan(['--app', '--build-bundled'], catalogue, roots);
+  const preview = storybookLaunchPlan(['--app'], catalogue, roots);
+  expect(build).toEqual({ ...preview, kind: 'catalogue-build' });
+  expect(preview.kind).toBe('catalogue-preview');
+  expect(preview.cwd).toBe(roots.web);
+  expect(preview.args).toContain('--strictPort');
+  expect(build.args).not.toContain('--build-bundled');
+  expect(webServeEnvironment(build.kind, catalogue).NODE_OPTIONS).toBe('--max-old-space-size=2560');
+  expect(webServeEnvironment(preview.kind, catalogue).NODE_OPTIONS).toBeUndefined();
+  expect(() => storybookLaunchPlan(['--app', '--build-bundled'], {}, roots)).toThrow('private output directory');
   expect(webServeEnvironment('vite', {}).NODE_OPTIONS).toBeUndefined();
 });
 
@@ -142,6 +153,8 @@ test('refuses a non-loopback bind address', () => {
 test('Web prepares messages in disposable Bun processes while the live plugin validates its cache', () => {
   expect(webServeNeedsGeneratedMessages('app')).toBe(true);
   expect(webServeNeedsGeneratedMessages('vite')).toBe(true);
+  expect(webServeNeedsGeneratedMessages('catalogue-build')).toBe(true);
+  expect(webServeNeedsGeneratedMessages('catalogue-preview')).toBe(false);
   expect(webServeNeedsGeneratedMessages('storybook')).toBe(false);
   const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
   const viteConfig = readFileSync(resolve(import.meta.dir, '../vite.config.ts'), 'utf8');

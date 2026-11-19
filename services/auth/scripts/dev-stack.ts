@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { Pool } from 'pg';
@@ -9,6 +9,7 @@ import { securityScopeLimit } from '@rezics/auth-contract';
 import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
+import { catalogueWebOutputEnv } from '../../../apps/web/scripts/bundled-web-startup.ts';
 import { catalogueLocaleModules } from '../../../apps/web/scripts/paraglide-vite.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
 import {
@@ -1277,6 +1278,7 @@ export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   };
   delete child.REZICS_TEST_RUNTIME;
   delete child[catalogueLocaleModules];
+  delete child[catalogueWebOutputEnv];
   return child;
 }
 
@@ -1433,10 +1435,14 @@ async function catalogueWebProcess(
     bindings.SITE_ORIGINS !== origins.web
   )
     throw new Error('Catalogue Web bindings belong to another stack');
+  const output = environment[catalogueWebOutputEnv];
+  if (!output) throw new Error('Catalogue Web output was not prepared by this walk');
+  websiteWorkerScopes(bindings);
   return frontendProcess('web', args, environment, {
     ...bindings,
     ...frontendOriginBindings(),
     [catalogueLocaleModules]: '1',
+    [catalogueWebOutputEnv]: output,
   });
 }
 
@@ -1447,8 +1453,11 @@ export async function resolveFrontendProcess(
   environment = process.env,
   setupFile?: string,
 ) {
+  if (action === 'web' && importCatalogueWalk(environment)) {
+    if (!admitted) throw new Error('Catalogue Web launch requires an admitted catalogue walk');
+    return catalogueWebProcess(args, environment, setupFile);
+  }
   if (admitted && action === 'web') {
-    if (importCatalogueWalk(environment)) return catalogueWebProcess(args, environment, setupFile);
     if (firstPublicWebWalk(environment))
       return frontendProcess(action, args, environment, await prepareAdmittedWebBindings());
   }
@@ -1461,6 +1470,8 @@ async function launch(action: 'pages' | 'web', args: string[]) {
     action === 'web' &&
     (importCatalogueWalk() || firstPublicWebWalk() || observe) &&
     walkStackAdmitted(process.env, root);
+  if (args[0] === '--build-bundled' && (!admitted || !importCatalogueWalk()))
+    throw new Error('Catalogue Web build requires an admitted catalogue walk');
   const memory = observe && admitted;
   if (memory) logWebStartupMemory('declarations-before', 'webPreparer');
   const launch = await resolveFrontendProcess(action, args, admitted);
@@ -1887,6 +1898,7 @@ export async function runWalk(
       let starting: ReturnType<typeof Bun.spawn> | undefined;
       let walkFailure: unknown;
       let occupiedSlot: number | undefined;
+      let webOutput: string | undefined;
       let stripe: { port: number; webhookSecret: string; stop(): void } | undefined;
       try {
         try {
@@ -1920,12 +1932,36 @@ export async function runWalk(
             }
             if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
           }
-          if (importCatalogueWalk()) env[catalogueWebDigest] = webBindingsDigest(await readFile(webVarsFile, 'utf8'));
+          if (importCatalogueWalk()) {
+            controller.signal.throwIfAborted();
+            env[catalogueWebDigest] = webBindingsDigest(await readFile(webVarsFile, 'utf8'));
+            webOutput = await mkdtemp(resolve(root, '.temp/compiled-catalogue-web-'));
+            env[catalogueWebOutputEnv] = webOutput;
+            const lifetime = new StackFixtureLifetime(WALK_READY_DEADLINE_MS);
+            const cancelBuild = () => lifetime.cancel(controller.signal.reason);
+            controller.signal.addEventListener('abort', cancelBuild, { once: true });
+            if (controller.signal.aborted) cancelBuild();
+            try {
+              await lifetime.command(
+                'catalogue-web-build',
+                [process.execPath, import.meta.path, 'web', '--build-bundled'],
+                {
+                  cwd: root,
+                  env,
+                  progress: true,
+                },
+              );
+            } finally {
+              controller.signal.removeEventListener('abort', cancelBuild);
+              await lifetime.close();
+            }
+          }
           const log = walkStackLogPath(root, task);
           await mkdir(dirname(log), { recursive: true });
           // Every walk creates a new database, so retire old native identifiers even when slot URLs are reused.
           const kernelEnv = await kernelEnvironment();
           if (kernelEnv.DATABASE_URL) await resetWalkSeedJournals(root, kernelEnv.DATABASE_URL);
+          controller.signal.throwIfAborted();
           // Both streams inherit one open file description. Separate Bun.file opens have independent offsets.
           const output = await open(log, 'w', 0o600);
           try {
@@ -1985,9 +2021,13 @@ export async function runWalk(
           throw error;
         } finally {
           stripe?.stop();
-          if (starting) await stopSpawned(starting);
           try {
-            removeWalkStack(names);
+            try {
+              if (starting) await stopSpawned(starting);
+              removeWalkStack(names);
+            } finally {
+              if (webOutput) await rm(webOutput, { recursive: true, force: true });
+            }
           } catch (cleanupError) {
             if (walkFailure) throw retainOriginalAndCleanupFailure(walkFailure, cleanupError, 'walk failed');
             throw cleanupError;
