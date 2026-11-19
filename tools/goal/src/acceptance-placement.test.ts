@@ -3,7 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
-import { checkScriptFixture, harness, reading, temporaryDirectory } from './test-support.ts';
+import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
+import { offHostFixtureParent } from '../test-support/off-host-fixture.ts';
+import { checkScriptFixture, harness, reading } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
 
 const devScripts = checkScriptFixture();
@@ -324,7 +326,7 @@ test('the audited timeout, focused-runner, and environment forms survive public 
 });
 
 test('the real off-host wrapper runs a bounded unit command once and refuses local database fallback', () => {
-  const temporary = temporaryDirectory();
+  const temporary = ownedTemporaryDirectory(offHostFixtureParent(), 'rezics-goal-off-host-');
   try {
     const root = temporary.path;
     git(root, ['init', '--quiet']);
