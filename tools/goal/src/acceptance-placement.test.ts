@@ -1,20 +1,22 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join, resolve } from 'node:path';
-import { checkScriptFixture, harness, reading } from './test-support.ts';
+import { dirname, join } from 'node:path';
+import { checkScriptFixture, harness, reading, temporaryDirectory } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
 
-const repositoryRoot = resolve(import.meta.dir, '../../..');
 const devScripts = checkScriptFixture();
 
-function briefText(command: string[], options: { placement?: string; after?: string[] } = {}): string {
+function briefText(
+  command: string[],
+  options: { placement?: string; after?: string[]; urgent?: boolean } = {},
+): string {
   return `---
 goal: fixture
 manager: fixture
 kind: implementation
-paths: [result.txt]
+${options.urgent ? 'urgent: true\n' : ''}paths: [result.txt]
 riskAreas: []
 acceptance:
   command: ${JSON.stringify(command)}
@@ -31,22 +33,7 @@ Run the acceptance command.
 `;
 }
 
-function installWorkerCheck(root: string, interceptRemote = false): string[] {
-  return devScripts.install(root, (file, source) => {
-    const instrumented =
-      interceptRemote && file === 'scripts/remote-check.ts'
-        ? source.replace(
-            'if (import.meta.main) {',
-            "if (import.meta.main) {\n  if (process.env.REZICS_TEST_REMOTE_MARKER) appendFileSync(process.env.REZICS_TEST_REMOTE_MARKER, 'remote route used');",
-          )
-        : source;
-    if (instrumented === source && interceptRemote && file === 'scripts/remote-check.ts')
-      throw new Error('Could not instrument the worker-check remote boundary');
-    return instrumented;
-  });
-}
-
-function localCheckEnvironment(root: string, remoteMarker?: string): NodeJS.ProcessEnv {
+function localCheckEnvironment(root: string): NodeJS.ProcessEnv {
   const hosts = join(root, '.temp/goal/fake-hosts.json');
   mkdirSync(join(root, '.temp/goal'), { recursive: true });
   writeFileSync(
@@ -60,30 +47,48 @@ function localCheckEnvironment(root: string, remoteMarker?: string): NodeJS.Proc
           memoryMaxGiB: 8,
           cpuQuotaPercent: 100,
           slots: 1,
+          performance: false,
         },
       ],
     }),
   );
   return {
-    ...process.env,
+    PATH: '/usr/bin:/bin',
     GOAL_MAIN_CHECKOUT: root,
     KERNEL_CHECK_REMOTE: hosts,
+    REZICS_CHECK_LEDGER_DIR: join(root, '.temp/goal/check-ledger'),
     REZICS_CHECK_MEMORY_GIB: '4',
     REZICS_CHECK_MEMORY_DIR: join(root, '.temp/goal/check-memory'),
     REZICS_STACK_SLOTS: '4',
     REZICS_STACK_LEASE_DIR: join(root, '.temp/goal/stack-lease'),
     REZICS_CHECK_SCOPE: 'off',
-    ...(remoteMarker ? { REZICS_TEST_REMOTE_MARKER: remoteMarker } : {}),
   };
 }
 
 function commandStatus(result: ReturnType<typeof spawnSync>): string {
   return (
+    result.error?.message ||
     result.stderr?.toString().trim() ||
     result.stdout?.toString().trim() ||
-    result.error?.message ||
     `status ${result.status}`
   );
+}
+
+function workerCheck(root: string, env: NodeJS.ProcessEnv, args: readonly string[]) {
+  return spawnSync(process.execPath, [join(root, 'scripts/worker-check.ts'), ...args], {
+    cwd: root,
+    env,
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+}
+
+function startCheck(root: string, env: NodeJS.ProcessEnv, argv: readonly string[]): string {
+  const start = workerCheck(root, env, argv);
+  if (start.status !== 0) throw new Error(`worker-check start failed: ${commandStatus(start)}`);
+  const id = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
+  if (!id) throw new Error(`worker-check did not publish a check id: ${commandStatus(start)}`);
+  return id;
 }
 
 test('registered local placement survives dispatch, retry, held reshape, and task publication', async () => {
@@ -114,13 +119,14 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
     ];
     writeFileSync(firstBrief, briefText(freshCommand));
     const task = tasks.dispatch(firstBrief);
-    expect(h.store.task(task.id).brief.acceptance.placement).toBe('local');
+    expect(h.store.task(task.id).brief.acceptance).toMatchObject({ placement: 'local', command: freshCommand });
 
+    // The ordinary check-host budget selects minimal verification even without an explicit mode.
     const first = await tasks.retry(task.id);
     await first.exited;
-    expect(prompts[0]).toContain(
-      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'the signed-out account action opens a sheet on phones and a dropdown on desktop'",
-    );
+    expect(first.attempt).toMatchObject({ taskId: task.id, attempt: 1 });
+    expect(prompts[0]).toContain('Verification is minimal. Defer ordinary acceptance');
+    expect(prompts[0]).not.toContain('bun scripts/worker-check.ts --local --');
 
     const dependency = tasks.dispatch(h.briefFile);
     const retryBrief = join(h.settings.stateDirectory, 'placement-retry.md');
@@ -132,12 +138,14 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
       'the phone navigation and every shell menu use the responsive bottom sheet',
     ];
     writeFileSync(retryBrief, briefText(retryCommand));
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
     const second = await tasks.retry(task.id, { brief: retryBrief });
     await second.exited;
+    expect(second.attempt).toMatchObject({ taskId: task.id, attempt: 2 });
     expect(h.store.task(task.id).brief.acceptance).toMatchObject({ placement: 'local', command: retryCommand });
-    expect(prompts[1]).toContain(
-      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'the phone navigation and every shell menu use the responsive bottom sheet'",
-    );
+    expect(prompts[1]).toContain('Source-only delivery is authorized for this attempt.');
+    expect(prompts[1]).not.toContain('Verification is minimal');
+    expect(prompts[1]).not.toContain('bun scripts/worker-check.ts --local --');
 
     h.store.updateTask({ taskId: task.id, attempt: second.attempt.attempt }, (current) => {
       current.state = 'stopped';
@@ -149,7 +157,7 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
     writeFileSync(heldBrief, briefText(['bun', 'run', '--cwd', 'apps/web', 'typecheck'], { after: [dependency.id] }));
     tasks.queueRetry(task.id, { brief: heldBrief });
     const published = h.store.task(task.id);
-    expect(published.state).toBe('held');
+    expect(published).toMatchObject({ id: task.id, state: 'held', currentAttempt: second.attempt.attempt });
     expect(published.brief.acceptance).toMatchObject({
       placement: 'local',
       command: ['bun', 'run', '--cwd', 'apps/web', 'typecheck'],
@@ -192,8 +200,9 @@ test('the audited timeout, focused-runner, and environment forms survive public 
     const shellCommand = 'bun run --cwd apps/web typecheck && bun test apps/web/tests/subject-story-fake.test.ts';
     const freshCommand = ['timeout', '590', 'sh', '-c', shellCommand];
     const freshPath = join(h.settings.stateDirectory, 'audited-timeout.md');
-    writeFileSync(freshPath, briefText(freshCommand));
-    const task = tasks.dispatch(freshPath);
+    writeFileSync(freshPath, briefText(freshCommand, { urgent: true }));
+    // The urgent verifier lane is exempt from the ordinary budget and renders the declared acceptance.
+    const task = tasks.dispatch(freshPath, null, false, 'verifier');
     expect(task.brief.acceptance).toMatchObject({ placement: 'local', command: freshCommand });
 
     const first = await tasks.retry(task.id);
@@ -223,7 +232,7 @@ test('the audited timeout, focused-runner, and environment forms survive public 
       selector,
     ];
     const retryPath = join(h.settings.stateDirectory, 'audited-focused-retry.md');
-    writeFileSync(retryPath, briefText(focusedCommand));
+    writeFileSync(retryPath, briefText(focusedCommand, { urgent: true }));
     const second = await tasks.retry(task.id, { brief: retryPath });
     await second.exited;
     expect(h.store.task(task.id).brief.acceptance).toMatchObject({
@@ -246,7 +255,7 @@ test('the audited timeout, focused-runner, and environment forms survive public 
       `bun run --cwd apps/web typecheck && env -u KERNEL_ORIGIN PUBLIC_ORIGIN=http://127.0.0.1:3000 bun apps/web/scripts/focused.ts --private-network -- bun test tests/page-stories.test.ts -t "${selector}"`,
     ];
     const heldPath = join(h.settings.stateDirectory, 'audited-focused-held.md');
-    writeFileSync(heldPath, briefText(heldCommand, { after: [dependency.id] }));
+    writeFileSync(heldPath, briefText(heldCommand, { after: [dependency.id], urgent: true }));
     tasks.queueRetry(task.id, { brief: heldPath });
     expect(h.store.task(task.id)).toMatchObject({
       state: 'held',
@@ -314,78 +323,48 @@ test('the audited timeout, focused-runner, and environment forms survive public 
   }
 });
 
-test('the real worker-check local route runs a pure command once and does not enter remote placement', () => {
-  const temporary = mkdtempSync(join(repositoryRoot, '.temp/acceptance-placement-local-'));
-  let checkId: string | undefined;
+test('the real off-host wrapper runs a bounded unit command once and refuses local database fallback', () => {
+  const temporary = temporaryDirectory();
   try {
-    const root = join(temporary, 'worktree');
-    mkdirSync(root, { recursive: true });
+    const root = temporary.path;
     git(root, ['init', '--quiet']);
-    installWorkerCheck(root, true);
-    const script = join(root, 'scripts/worker-check.ts');
-    const marker = join(temporary, 'command-runs.txt');
-    const remoteMarker = join(temporary, 'remote-route.txt');
-    const env = localCheckEnvironment(root, remoteMarker);
-    const commandFile = join(root, 'apps/web/tests/local-acceptance.test.ts');
-    mkdirSync(resolve(commandFile, '..'), { recursive: true });
-    writeFileSync(
-      commandFile,
-      `import { appendFileSync } from 'node:fs';\nimport { test } from 'bun:test';\ntest('local acceptance runs once', () => appendFileSync(process.env.REZICS_TEST_LOCAL_MARKER!, 'ran\\n'));\n`,
-    );
-    const start = spawnSync(
-      process.execPath,
-      [script, '--local', '--', 'bun', 'test', 'apps/web/tests/local-acceptance.test.ts'],
-      {
-        cwd: root,
-        env: { ...env, REZICS_TEST_LOCAL_MARKER: marker },
-        encoding: 'utf8',
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
-      },
-    );
-    if (start.status !== 0) throw new Error(`worker-check --local start failed: ${commandStatus(start)}`);
-    checkId = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
-    expect(checkId).toMatch(/^[0-9a-f-]{36}$/i);
+    devScripts.install(root);
+    const env = localCheckEnvironment(root);
+    const checks = join(root, '.temp/goal/checks');
+    for (const [file, marker, exitCode] of [
+      ['tests/local-acceptance.test.ts', 'local acceptance executed', 0],
+      ['services/kernel/tests/database.test.ts', 'database acceptance executed', 75],
+    ] as const) {
+      const commandFile = join(root, file);
+      mkdirSync(dirname(commandFile), { recursive: true });
+      writeFileSync(
+        commandFile,
+        `import { test } from 'bun:test';\ntest('fixture command', () => console.log(${JSON.stringify(marker)}));\n`,
+      );
+      const argv = ['--local', '--', 'bun', 'test', file, '-t', 'fixture command'];
+      const id = startCheck(root, env, argv);
+      const wait = workerCheck(root, env, ['--wait', id]);
+      if (wait.status !== exitCode) throw new Error(`unexpected worker-check result: ${commandStatus(wait)}`);
+      const record: unknown = JSON.parse(readFileSync(join(checks, 'results', `${id}.json`), 'utf8'));
+      expect(record).toMatchObject({ argv, status: 'finished', exitCode });
 
-    const wait = spawnSync(process.execPath, [script, '--wait', checkId!], {
-      cwd: root,
-      env,
-      encoding: 'utf8',
-      timeout: 30_000,
-      maxBuffer: 2 * 1024 * 1024,
-    });
-    if (wait.status !== 0) throw new Error(`worker-check local result failed: ${commandStatus(wait)}`);
-    const record = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${checkId}.json`), 'utf8')) as {
-      argv?: string[];
-      status?: string;
-      exitCode?: number;
-    };
-    expect(record.argv).toContain('--local');
-    expect(record.status).toBe('finished');
-    expect(record.exitCode).toBe(0);
-    expect(readFileSync(marker, 'utf8')).toBe('ran\n');
-    expect(existsSync(remoteMarker)).toBe(false);
-  } finally {
-    if (checkId) {
-      const root = join(temporary, 'worktree');
-      const script = join(root, 'scripts/worker-check.ts');
-      spawnSync(process.execPath, [script, '--wait', checkId], {
-        cwd: root,
-        env: localCheckEnvironment(root),
-        encoding: 'utf8',
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
-      });
+      const logs = readdirSync(checks)
+        .filter((name) => name.startsWith(`worker-check-${id}-`) && name.endsWith('.log'))
+        .map((name) => readFileSync(join(checks, name), 'utf8'));
+      expect(logs).toHaveLength(1);
+      expect(logs[0]!.split('\n').filter((line) => line === marker)).toHaveLength(exitCode === 0 ? 1 : 0);
+      if (exitCode !== 0) expect(logs[0]).toContain('contain no performance-approved host');
     }
-    rmSync(temporary, { recursive: true, force: true });
+  } finally {
+    temporary.close();
   }
-});
+}, 35_000);
 
 test('an unresolved old check prevents local policy adoption without cancelling it or launching a replacement', async () => {
   const h = harness();
-  let checkId: string | undefined;
+  let releaseCheck: (() => void) | undefined;
   try {
-    const files = installWorkerCheck(h.root);
+    const files = devScripts.install(h.root);
     git(h.root, ['add', '--', ...files]);
     git(h.root, ['commit', '-m', 'Seed worker-check custody fixture']);
     const prompts: string[] = [];
@@ -400,33 +379,24 @@ test('an unresolved old check prevents local policy adoption without cancelling 
     );
     const task = tasks.dispatch(h.briefFile);
     const releaseMarker = join(h.settings.stateDirectory, 'release-old-check');
-    const checkStart = spawnSync(
-      process.execPath,
-      [
-        join(task.worktree, 'scripts/worker-check.ts'),
-        '--local',
-        '--',
-        process.execPath,
-        '-e',
-        'const fs = require("node:fs"); const timer = setInterval(() => { if (fs.existsSync(process.env.REZICS_TEST_RELEASE_MARKER)) clearInterval(timer); }, 10)',
-      ],
-      {
-        cwd: task.worktree,
-        env: { ...localCheckEnvironment(task.worktree), REZICS_TEST_RELEASE_MARKER: releaseMarker },
-        encoding: 'utf8',
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
-      },
-    );
-    if (checkStart.status !== 0) throw new Error(`old check start failed: ${commandStatus(checkStart)}`);
-    checkId = /check: id ([0-9a-f-]{36})/i.exec(checkStart.stdout)?.[1];
-    expect(checkId).toMatch(/^[0-9a-f-]{36}$/i);
+    const env = localCheckEnvironment(task.worktree);
+    // Stand in for a local formatter so the old check stays running until this fixture releases it.
+    const formatter = join(h.settings.stateDirectory, 'oxfmt');
+    writeFileSync(formatter, '#!/bin/sh\nfor i in $(seq 500); do [ ! -f "$1" ] || exit 0; sleep 0.02; done\nexit 1\n', {
+      mode: 0o700,
+    });
+    const checkId = startCheck(task.worktree, env, ['--local', '--', formatter, releaseMarker]);
+    releaseCheck = () => {
+      writeFileSync(releaseMarker, 'release');
+      const wait = workerCheck(task.worktree, env, ['--wait', checkId]);
+      if (wait.status !== 0) throw new Error(`test-owned old check failed: ${commandStatus(wait)}`);
+    };
 
     const first = await tasks.retry(task.id);
     await first.exited;
     h.store.updateAttempt(first.attempt, (attempt) => {
       attempt.state = 'waiting';
-      attempt.checks = [checkId!];
+      attempt.checks = [checkId];
       attempt.session = 'legacy-session';
     });
     h.store.updateTask(first.attempt, (current) => {
@@ -443,40 +413,31 @@ test('an unresolved old check prevents local policy adoption without cancelling 
     expect(h.store.attempt(first.attempt).state).toBe('waiting');
     expect(h.store.retryIntent(first.attempt)).toBeUndefined();
     expect(prompts).toHaveLength(1);
-    const record = JSON.parse(
-      readFileSync(join(task.worktree, '.temp/goal/checks/results', `${checkId}.json`), 'utf8'),
-    ) as { status?: string; exitCode?: number; runnerPid?: number; runnerHost?: string };
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    expect(readdirSync(results)).toEqual([`${checkId}.json`]);
+    const record = JSON.parse(readFileSync(join(results, `${checkId}.json`), 'utf8')) as {
+      status?: string;
+      exitCode?: number;
+      runnerPid?: number;
+      runnerHost?: string;
+    };
     expect(record.status).toBe('running');
     expect(record.exitCode).toBeUndefined();
     expect(record.runnerPid).toEqual(expect.any(Number));
     expect(record.runnerHost).toBe(hostname());
     expect(() => process.kill(record.runnerPid!, 0)).not.toThrow();
 
-    writeFileSync(releaseMarker, 'release');
-    const wait = spawnSync(process.execPath, [join(task.worktree, 'scripts/worker-check.ts'), '--wait', checkId!], {
-      cwd: task.worktree,
-      env: localCheckEnvironment(task.worktree),
-      encoding: 'utf8',
-      timeout: 30_000,
-      maxBuffer: 2 * 1024 * 1024,
-    });
-    if (wait.status !== 0) throw new Error(`test-owned old check failed: ${commandStatus(wait)}`);
-    checkId = undefined;
+    const finish = releaseCheck;
+    releaseCheck = undefined;
+    finish();
     tasks.queueRetry(task.id, { brief: localBrief });
     expect(h.store.retryIntent(first.attempt)?.status).toBe('pending');
     expect(h.store.task(task.id).brief.acceptance.placement).toBe('local');
   } finally {
-    if (checkId) {
-      const task = h.store.tasks()[0];
-      if (task)
-        spawnSync(process.execPath, [join(task.worktree, 'scripts/worker-check.ts'), '--wait', checkId], {
-          cwd: task.worktree,
-          env: localCheckEnvironment(task.worktree),
-          encoding: 'utf8',
-          timeout: 30_000,
-          maxBuffer: 2 * 1024 * 1024,
-        });
+    try {
+      releaseCheck?.();
+    } finally {
+      h.dispose();
     }
-    h.dispose();
   }
-});
+}, 20_000);
