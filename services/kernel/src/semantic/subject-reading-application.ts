@@ -528,6 +528,8 @@ async function readSummaryBatch(
       return await withReadTransaction(
         deps.pool,
         async (client) => {
+          // The owned batch contains only routed Subject and fact slot keys. Keep the caller's snapshot plan if nested.
+          if (!owned) await client.query('SET LOCAL enable_seqscan = off');
           const active = 'access' in deps ? await ports.readActiveRelease(client) : null;
           if ('access' in deps && !active) {
             await partitionReadClient(client, 0);

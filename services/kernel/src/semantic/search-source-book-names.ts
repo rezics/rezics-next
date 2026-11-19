@@ -63,6 +63,8 @@ export function bookCandidateNames(
     const result = await withReadTransaction(
       pool,
       async (client) => {
+        // Even in a small home, seek each requested key instead of rescanning the home for every candidate.
+        await client.query('SET LOCAL enable_seqscan = off');
         const rows = (await nativeSourceQuery(client, readNames, {
           routes,
           subject_ids: [...ids],
