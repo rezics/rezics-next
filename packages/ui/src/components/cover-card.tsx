@@ -250,7 +250,10 @@ export function CoverCard({
                 variant="secondary"
                 aria-label={status.label}
                 data-slot="cover-card-status"
-                className="relative z-20 h-auto min-h-5 max-w-full overflow-visible whitespace-normal wrap-anywhere"
+                className={cn(
+                  'relative z-20 h-auto max-w-full overflow-visible whitespace-normal text-muted-foreground wrap-anywhere',
+                  status.href === undefined ? 'min-h-5' : small ? 'min-h-6' : 'min-h-7',
+                )}
                 {...(status.href !== undefined ? { render: <a href={status.href} /> } : {})}
               >
                 {status.label}

@@ -54,7 +54,6 @@ test('ContentItem composes its slots as one named heading, one stretched link an
   expect(html).toContain('href="/people/author"');
   expect(html).toContain('relative z-10');
   expect(html).toContain('motion-reduce:before:transition-none');
-  expect(html).toContain('[&_button]:min-h-11');
 
   const headingId = html.match(/<h3 id="([^"]+)" lang="ja"/)?.[1];
   expect(headingId).toBeDefined();
@@ -236,12 +235,10 @@ test('ContentItem layers native independent controls per slot and keeps plain an
 
   const raisedSelectors = [
     ':not(.absolute,.fixed)]:relative',
-    '[&_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    '[&amp;_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    '[&amp;_.absolute:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:absolute',
+    '[&amp;_.fixed:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:fixed',
     ':focus-visible]:outline-ring',
-    '[&_a]:min-h-11',
-    '[&_a]:min-w-11',
-    '[&_button]:min-h-11',
-    '[&_button]:min-w-11',
   ];
   for (const slot of ['visual', 'context', 'metadata', 'preview', 'state', 'actions', 'trailing']) {
     const opening = slotOpening(controlledRow, slot);
@@ -314,28 +311,37 @@ test('ShelfListRow preserves its selection controls, independent status link, co
   expect(html).toContain('href="/status"');
   expect(html).toContain('aria-label="Select book"');
   expect(html).toContain('aria-checked="true"');
-  expect(html).toContain('aria-label="Decrease"');
-  expect(html).toContain('aria-label="Increase"');
+  for (const label of ['Decrease', 'Increase']) {
+    const stepButton = html.match(new RegExp(`<button\\b[^>]*aria-label="${label}"[^>]*>`))?.[0];
+    expect(stepButton).toContain(' size-6 ');
+  }
   expect(html).toContain('w-[72px]');
   expect(html).toContain('sm:w-24');
   expect(html).toContain('data-ratio="5:7"');
   const primaryLink = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(primaryLink).toBeDefined();
   assertPrimaryAnchorHasNoInteractiveDescendants(primaryLink!);
-  expect(html).toContain('Progress unknown');
-  expect(html).not.toContain('aria-label="Progress unknown"');
-  expect(html).not.toContain('style="width:0%"');
-  expect(html).not.toContain('line-clamp-');
-  expect(html).toContain('whitespace-normal');
-  expect(html).toContain('wrap-anywhere');
+  expect(html).toMatch(/<span[^>]*>Progress unknown<\/span>/);
+  expect(html).not.toContain('role="progressbar"');
+  const statusOpening = html.match(/<div\b[^>]*data-slot="shelf-list-row-status"[^>]*>/)?.[0];
+  expect(statusOpening).not.toContain('line-clamp-');
+  expect(statusOpening).toContain('whitespace-normal');
+  expect(statusOpening).toContain('wrap-anywhere');
   expect(html).toContain('@min-[40rem]/content-item:grid');
-  const plainShelf = renderToStaticMarkup(
-    createElement(ShelfListRow, {
-      title: 'Plain work',
-      href: '/works/plain',
-      cover: { subject: { id: 'plain', title: 'Plain work', types: [] }, cover: null, src: () => '' },
-      labels: { select: 'Select', menu: 'More' },
-    }),
-  );
-  expect(plainShelf).not.toContain('data-content-item-slot="state"');
+});
+
+test('ShelfListRow leaves the title column free when no status or other state is supplied', () => {
+  for (const absentState of [{}, { status: false, date: false }]) {
+    const plainShelf = renderToStaticMarkup(
+      createElement(ShelfListRow, {
+        title: 'Plain work',
+        href: '/works/plain',
+        cover: { subject: { id: 'plain', title: 'Plain work', types: [] }, cover: null, src: () => '' },
+        labels: { select: 'Select', menu: 'More' },
+        ...absentState,
+      }),
+    );
+    expect(plainShelf).not.toContain('data-content-item-slot="state"');
+    expect(plainShelf).not.toContain('@min-[40rem]/content-item:grid');
+  }
 });
