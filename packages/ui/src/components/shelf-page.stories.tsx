@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { CoverCard, CoverGrid, CoverRow } from './cover-card.tsx';
 import { ShelfTabs, ShelfToolbar, ShelfTypeChips } from './shelf-toolbar.tsx';
@@ -145,10 +145,18 @@ export const Overview: Story = {
 export const MenuOpen: Story = {
   render: () => <Page />,
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
-    const sort = await screen.findByRole('dialog', { name: 'Sort' });
-    await expect(within(sort).getByRole('combobox', { name: labels.sort })).toBeVisible();
-    await expect(within(sort).getByRole('combobox', { name: labels.direction })).toBeVisible();
+    const canvas = within(canvasElement);
+    const view = canvas.queryByRole('button', { name: labels.view, exact: true });
+    const opener = view ?? canvas.getByRole('button', { name: labels.sort, exact: true });
+    await expect(opener).toBeVisible();
+    await userEvent.click(opener);
+
+    await waitFor(async () => {
+      const dialog = screen.getByRole('dialog', { name: view ? labels.view : labels.sort, exact: true });
+      const sort = view ? within(dialog).getByRole('tabpanel', { name: labels.sort, exact: true }) : dialog;
+      await expect(within(sort).getByRole('combobox', { name: labels.sort, exact: true })).toBeVisible();
+      await expect(within(sort).getByRole('combobox', { name: labels.direction, exact: true })).toBeVisible();
+    });
   },
 };
 export const InProgress: Story = { args: { initial: 'progress' } };
