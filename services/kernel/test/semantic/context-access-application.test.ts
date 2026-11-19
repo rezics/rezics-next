@@ -75,9 +75,6 @@ function makePort(name: string, calls: string[], options: PortOptions = {}): Con
     recordSourceDisposition: () => {
       calls.push(`${name}:recordSourceDisposition`);
     },
-    recordSourceCommit: async () => {
-      calls.push(`${name}:recordSourceCommit`);
-    },
   };
 }
 

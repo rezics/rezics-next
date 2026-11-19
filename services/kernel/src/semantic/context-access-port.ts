@@ -129,7 +129,6 @@ export type ContextAccessPort = Readonly<{
     recordKey: string,
     disposition: Exclude<ContextSourceDisposition, null>,
   ): void;
-  recordSourceCommit(tx: CommandTransaction, transactionId: string): Promise<void>;
 }>;
 
 let bound: ContextAccessPort | undefined;

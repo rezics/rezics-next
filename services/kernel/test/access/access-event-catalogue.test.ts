@@ -12,6 +12,7 @@ import { readBatch } from '../../src/events/log.ts';
 // The focused acceptance command also runs from the repository root.
 await import('reylo/register');
 const { WEBSITE_CLIENT_ID } = await import('@rezics/auth');
+const { grantCommand } = await import('../../src/access/grant-command.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../src/access/bootstrap-governance.ts');
 const { createDelegationCommands } = await import('../../src/access/delegation-commands.ts');
@@ -1004,22 +1005,65 @@ test('real access commands cover every registered event and the log reader accep
   await step('redrive pending Context role provenance', async () => {
     const resource = { route: routeOf(context.id)!, id: context.id };
     const accountId = reinstater.accountId;
-    // Model a grant captured before the receiver could enroll it, anchored to the native Context creation.
-    const seeded = await pool.query(
-      `INSERT INTO access.resource_role_grant
-       (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
-       SELECT route,resource_id,subject_kind,$3,'',grant_role,valid,transaction_id
-       FROM access.resource_role_grant
-       WHERE route=$1 AND resource_id=$2 AND subject_id=$4 AND grant_role='semantic.context.owner'`,
-      [resource.route, resource.id, accountId, governor.accountId],
+    const partition = partitionOf(resource.route);
+    const input = {
+      resource,
+      subject: { kind: 'account', id: accountId },
+      role: 'semantic.context.owner',
+      valid: '(,)',
+    };
+    const signin = await f.request('/signin', {
+      email: 'catalogue_governor@ordinary.test',
+      password,
+      client_id: 'catalogue-client',
+      scope: catalogueScopes,
+    });
+    expect(signin.status, await signin.clone().text()).toBe(200);
+    const token = await f.request('/token', {}, cookies(signin));
+    expect(token.status, await token.clone().text()).toBe(200);
+    const { access_token: freshBearer } = (await token.json()) as { access_token: string };
+    const deadline = Date.now() + 20_000;
+    const access = kernel.testAccess;
+    const actor = await access.authenticate(freshBearer, { pool, deadline });
+    const grant = await grantCommand(
+      { pool, access },
+      { pool, actor, deadline },
+      {
+        resource,
+        actions: ['access:grant'],
+        kind: 'access.role-grant.create',
+        key: key(),
+        input,
+        denied: () => new Error('Context fixture grant denied'),
+        zoneGrantTarget: { subjectAccountId: accountId, addsGrant: true },
+      },
+      async (tx, transactionId) => {
+        await tx.query(
+          `INSERT INTO access.resource_role_grant
+           (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+           VALUES($1,$2,'identity',$3,'',$4,$5,$6)`,
+          [resource.route, resource.id, accountId, input.role, input.valid, transactionId],
+        );
+        // Force delivery before the command fence to leave the native occurrence pending.
+        await tx.query('SET CONSTRAINTS access.resource_role_provenance_deliver IMMEDIATE');
+        return input;
+      },
     );
-    expect(seeded.rowCount).toBe(1);
     const [pending] = await readContextRoleProvenance(pool, { resource, accountId });
-    expect(pending?.delivery).toBe('pending');
-    await withErasureOperationalClient(pool, (client) =>
-      advancePendingContextRoleProvenance({ pool, client }, { partition: partitionOf(resource.route) }),
+    expect(pending).toMatchObject({
+      delivery: 'pending',
+      contextKey: null,
+      sourceTransaction: grant.transactionId,
+      grantTransaction: grant.transactionId,
+    });
+    const after = { route: resource.route, occurrence: (BigInt(pending!.occurrence) - 1n).toString() };
+    const progress = await withErasureOperationalClient(pool, (client) =>
+      advancePendingContextRoleProvenance({ pool, client }, { partition, after }),
     );
-    expect(await readContextRoleProvenance(pool, { resource, accountId })).toMatchObject([{ delivery: 'delivered' }]);
+    expect(progress).toMatchObject({ attempted: 1, pending: 0 });
+    expect(await readContextRoleProvenance(pool, { resource, accountId })).toMatchObject([
+      { ...pending, delivery: 'delivered', contextKey: expect.stringMatching(/^[1-9][0-9]*$/) },
+    ]);
   });
 
   const seen = new Set<string>();
