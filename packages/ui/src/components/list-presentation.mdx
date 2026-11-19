@@ -32,6 +32,8 @@ The caller owns selection and supplies detail only to the selected occurrence. E
 independent of Subject IDs: repeated Subjects can have separate notes, facts and return anchors. Omit
 `occurrenceId` for filtered projections without a native ID; a render key does not establish occurrence identity.
 The caller also supplies the detail ID and expanded state for the Inspect disclosure.
+Inspect keeps its compact link styling and has an effective pointer target of at least 44 × 44 CSS pixels at phone
+widths and with a coarse primary pointer. The target fits within the spacing around the opener.
 
 Opening does not focus or scroll the detail. Keyboard activation retains the focused Inspect control, and the
 next Tab reaches detail's Close control, followed by its supplied actions. Pointer activation keeps the browser's

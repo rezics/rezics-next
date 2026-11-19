@@ -369,26 +369,49 @@ async function inspectReadingExamples(canvasElement: HTMLElement, layout: 'list'
   }
   const openers = items.map((item) => item.querySelector<HTMLButtonElement>('[data-collection-detail-opener]')!);
   const more = within(canvasElement).getByRole('link', { name: 'More' });
-  const view = canvasElement.ownerDocument.defaultView!;
+  const doc = canvasElement.ownerDocument;
+  const view = doc.defaultView!;
+  await expect(view.innerWidth).toBe(390);
+  const sizes: string[] = [];
   for (const [index, item] of items.entries()) {
     const opener = openers[index]!;
+    const subject = readingExamples[index]!.subject;
+    if (subject) {
+      const titleLink = within(item).getByRole('link', { name: subject.title, exact: true });
+      const title =
+        layout === 'grid' ? titleLink : item.querySelector<HTMLElement>('[data-slot="member-list-row-title"]')!;
+      title.scrollIntoView({ block: 'center' });
+      const { left, top, width, height } = title.getBoundingClientRect();
+      const hit = doc.elementFromPoint(left + width / 2, top + height / 2);
+      await expect(hit?.closest('a')).toBe(titleLink);
+    }
     opener.scrollIntoView({ block: 'center' });
     const rect = opener.getBoundingClientRect();
     const itemRect = item.getBoundingClientRect();
-    await expect(rect.width).toBeGreaterThanOrEqual(44);
-    await expect(rect.height).toBeGreaterThanOrEqual(44);
-    await expect(rect.top).toBeGreaterThanOrEqual(itemRect.top);
-    await expect(rect.bottom).toBeLessThanOrEqual(itemRect.bottom + 1);
-    const hit = canvasElement.ownerDocument.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    await expect(hit === opener || opener.contains(hit)).toBe(true);
+    const hitbox = view.getComputedStyle(opener, '::before');
+    const width = Number.parseFloat(hitbox.width);
+    const height = Number.parseFloat(hitbox.height);
+    sizes.push(`${width}×${height}`);
+    await expect(width).toBeGreaterThanOrEqual(44);
+    await expect(height).toBeGreaterThanOrEqual(44);
+    const x = rect.left + opener.clientLeft + Number.parseFloat(hitbox.left);
+    const y = rect.top + opener.clientTop + Number.parseFloat(hitbox.top);
+    await expect(y).toBeGreaterThanOrEqual(itemRect.top);
+    await expect(y + height).toBeLessThanOrEqual(itemRect.bottom + 1);
+    for (const hitX of [x + 1, x + width / 2, x + width - 1]) {
+      for (const hitY of [y + 1, y + height / 2, y + height - 1]) {
+        await expect(doc.elementFromPoint(hitX, hitY)).toBe(opener);
+      }
+    }
     const scrollY = view.scrollY;
     if (index === 1) {
       opener.focus();
       await userEvent.keyboard('{Enter}');
     } else {
+      const edge = doc.elementFromPoint(x + width / 2, y + height - 1)!;
       await userEvent.pointer([
-        { keys: '[MouseLeft>]', target: opener },
-        { keys: '[/MouseLeft]', target: opener },
+        { keys: '[MouseLeft>]', target: edge },
+        { keys: '[/MouseLeft]', target: edge },
       ]);
     }
     await expect(Math.abs(view.scrollY - scrollY)).toBeLessThanOrEqual(1);
@@ -413,14 +436,17 @@ async function inspectReadingExamples(canvasElement: HTMLElement, layout: 'list'
   await expect(more.getBoundingClientRect().top).toBeGreaterThanOrEqual(
     Math.max(...items.map((item) => item.getBoundingClientRect().bottom)),
   );
+  console.info(`Collection Reading ${layout} at ${view.innerWidth}px, Inspect targets in CSS px: ${sizes.join(', ')}`);
 }
 
 export const CollectionReadingGrid: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <CollectionReadingExample layout="grid" />,
   play: async ({ canvasElement }) => inspectReadingExamples(canvasElement, 'grid'),
 };
 
 export const CollectionReadingList: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <CollectionReadingExample layout="list" />,
   play: async ({ canvasElement }) => inspectReadingExamples(canvasElement, 'list'),
 };
