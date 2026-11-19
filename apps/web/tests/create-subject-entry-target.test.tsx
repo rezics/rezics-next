@@ -2,10 +2,22 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CreateSubjectEntry } from '../src/features/catalogue/create-subject-entry';
 
-test('creation is a pre-hydration anchor with wrapping, phone-sized and keyboard-focus styles', () => {
+test('creation renders a compact, wrapping anchor with a separate phone and coarse-pointer hitbox', () => {
   const html = renderToStaticMarkup(<CreateSubjectEntry locale="de" />);
-  expect(html).toContain('href="/de/catalogue/new"');
-  for (const token of ['h-auto', 'min-h-11', 'min-w-11', 'max-w-full', 'whitespace-normal', 'focus-visible:outline-2'])
-    expect(html).toContain(token);
-  expect(html).not.toContain('whitespace-nowrap');
+  expect(html).toMatch(/^<a href="\/de\/catalogue\/new".*>Eintrag erstellen<\/a>$/);
+  const classes = html.match(/class="([^"]+)"/)?.[1]?.split(' ');
+  expect(classes).toEqual(
+    expect.arrayContaining([
+      'h-auto',
+      'min-h-6',
+      'max-md:hitbox-y-[11px]',
+      'pointer-coarse:hitbox-y-[11px]',
+      'max-w-full',
+      'whitespace-normal',
+      '[overflow-wrap:anywhere]',
+      'focus-visible:outline-2',
+      'focus-visible:outline-solid',
+    ]),
+  );
+  expect(classes).not.toContain('whitespace-nowrap');
 });
