@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { harness, integrationHarness } from './test-support.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
@@ -25,6 +24,7 @@ function host(name: 'a' | 'b' | 'c') {
     identity: `/tmp/${name}-check-key`,
     ...baseline,
     processorsPerSlot: 2,
+    performance: true,
   };
 }
 
@@ -55,6 +55,7 @@ test('Goal applies c-only placement to the frozen full gate and publishes only a
   try {
     await h.seed('alpha');
     const frozenCandidate = h.head();
+    const mainBefore = h.head('main');
     const ordinaryHostsFile = join(h.settings.stateDirectory, 'remote-check-hosts.json');
     const ordinary = `${JSON.stringify({ hosts: [host('a'), host('b'), host('c')] }, null, 2)}\n`;
     writeFileSync(ordinaryHostsFile, ordinary);
@@ -74,6 +75,7 @@ test('Goal applies c-only placement to the frozen full gate and publishes only a
       job: h.job,
       prepareGateCommand: (run, command) => preparePromotionGate(h.settings, run, command)?.command ?? null,
       runGate: async (command, cwd) => {
+        if (command.includes('scripts/gate.ts')) expect(h.head('main')).toBe(mainBefore);
         executed.push({ command, head: git(cwd, ['rev-parse', 'HEAD']) });
         return { passed: true, output: '', timedOut: false };
       },
@@ -98,6 +100,9 @@ test('Goal applies c-only placement to the frozen full gate and publishes only a
           identity: host('c').identity,
           slots: 5,
           memoryMaxGiB: 24,
+          memoryPerRunGiB: 6,
+          processorsPerSlot: 2,
+          performance: true,
           cpuQuotaPercent: 4800,
         },
       ],
@@ -193,6 +198,9 @@ test('promotion derives a c-only file from the ordinary schema and forwards the 
       identity: host('c').identity,
       slots: 5,
       memoryMaxGiB: 24,
+      memoryPerRunGiB: 6,
+      processorsPerSlot: 2,
+      performance: true,
       cpuQuotaPercent: 4800,
     });
     expect(prepared.snapshot).toMatchObject({
@@ -218,113 +226,220 @@ test('promotion derives a c-only file from the ordinary schema and forwards the 
     expect(readFileSync(ordinaryHostsFile, 'utf8')).toBe(source);
     expect(h.settings.gate).toEqual(originalSettingsCommand);
     expect(preparePromotionGate(h.settings, run, originalSettingsCommand)?.snapshot).toEqual(prepared.snapshot);
-
-    const gateSource = readFileSync(join(repositoryRoot, 'scripts/gate.ts'), 'utf8');
-    const remoteCheckSource = readFileSync(join(repositoryRoot, 'scripts/remote-check.ts'), 'utf8');
-    const kernelSource = readFileSync(join(repositoryRoot, 'services/kernel/scripts/check.ts'), 'utf8');
-    expect(gateSource).toContain("new Bun.Glob('{apps,services,packages}/*/package.json')");
-    expect(gateSource).toContain("await run(['bun', 'install', '--frozen-lockfile'], root)");
-    expect(gateSource).toContain("const command = ['bun', 'run', 'check']");
-    expect(gateSource).toContain('tools/goal/scripts/gate.ts');
-    expect(gateSource).toContain('process.execPath');
-    expect(remoteCheckSource).toContain('bun install --frozen-lockfile');
-    expect(kernelSource).toContain('process.env.KERNEL_CHECK_CONCURRENCY ?? 6');
   } finally {
     h.dispose();
   }
 });
 
-test('the actual root gate forwards the derived host file, three remote slots, and kernel concurrency five', () => {
+function offHostGateFixture() {
+  // The source checkout can be inside the enclosing gate's admitted run.
+  const directory = mkdtempSync('/tmp/rezics-promotion-');
+  const root = join(directory, '.temp/checkout');
+  const bin = join(directory, '.temp/bin');
+  mkdirSync(root, { recursive: true });
+  mkdirSync(bin, { recursive: true });
+  const env = {
+    PATH: `${bin}:${process.env.PATH}`,
+    HOME: directory,
+    TMPDIR: join(directory, '.temp'),
+    FIXTURE: join(directory, '.temp'),
+    GIT_ALLOW_PROTOCOL: '',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    REMOTE_CHECK_SSH_CONTROL_DIR: join(directory, '.temp/ssh'),
+    REMOTE_CHECK_POLL_MS: '20',
+  };
+  const output = join(env.FIXTURE, 'events.jsonl');
+  const fakeBun = join(bin, 'bun');
+  writeFileSync(fakeBun, "#!/bin/sh\necho 'Unexpected local gate command' >&2\nexit 3\n", { mode: 0o755 });
+  const localBin = join(root, 'node_modules/.bin');
+  mkdirSync(localBin, { recursive: true });
+  symlinkSync(fakeBun, join(localBin, 'bun'));
+  return {
+    root,
+    executable(name: string, source: string) {
+      const file = join(bin, name);
+      writeFileSync(file, `#!${process.execPath}\n${source}`);
+      chmodSync(file, 0o755);
+    },
+    run(command: string[], preload?: string) {
+      // Run the real entry point with the isolated checkout as its working directory.
+      return spawnSync(
+        command[0]!,
+        [
+          ...command.slice(1, -2),
+          process.execPath,
+          ...(preload ? ['--preload', preload] : []),
+          join(repositoryRoot, command.at(-1)!),
+        ],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 15_000,
+          env,
+        },
+      );
+    },
+    events() {
+      return readFileSync(output, 'utf8')
+        .trim()
+        .split('\n')
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              kind: string;
+              command?: string[];
+              concurrency?: string;
+              target?: string;
+              key?: string;
+            },
+        );
+    },
+    dispose() {
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+test('the off-host root gate forwards three slots and Kernel concurrency five to the C-only route', () => {
   const h = harness();
+  const gate = offHostGateFixture();
   try {
     const ordinaryHostsFile = join(h.settings.stateDirectory, 'remote-check-hosts.json');
     writeFileSync(ordinaryHostsFile, JSON.stringify({ hosts: [host('a'), host('b'), host('c')] }));
     const command = configured(h.settings, ordinaryHostsFile);
     const prepared = preparePromotionGate(h.settings, promotionRun(command), command)!;
-    const fake = join(h.settings.stateDirectory, 'fake-bin');
-    const eventsDirectory = join(h.settings.stateDirectory, 'fake-remote');
-    mkdirSync(fake, { recursive: true });
-    mkdirSync(eventsDirectory, { recursive: true });
-    const fakeSsh = join(fake, 'ssh');
-    writeFileSync(
-      fakeSsh,
-      `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
-const dir = process.env.FAKE_REMOTE!;
-const script = process.argv.at(-1) ?? '';
-const host = process.argv.find((argument) => argument.startsWith('gate@')) ?? '';
-const identityIndex = process.argv.indexOf('-i');
-const identity = identityIndex < 0 ? '' : process.argv[identityIndex + 1] ?? '';
-const record = (kind, value = '', target = '', key = '') =>
-  appendFileSync(dir + '/events.jsonl', JSON.stringify({ kind, value, target, key }) + '\\n');
-const hold = () => { process.stdin.resume(); process.stdin.on('end', () => process.exit(0)); };
-if (script.includes('MemAvailable')) { record('probe'); console.log('AVAILABLE 8000000000'); }
-else if (script.includes('REMOTE_CHECK_RESERVATION')) { record('reservation'); console.log('RESERVATION'); hold(); }
-else if (script.includes('REMOTE_CHECK_SLOT_')) { record('slot'); console.log('SLOT 0'); hold(); }
-else if (script.includes('systemd-run')) { record('run', script, host, identity); console.log('fake remote gate'); }
-else record('cleanup');
-`,
-    );
-    chmodSync(fakeSsh, 0o755);
-    const fakeRsync = join(fake, 'rsync');
-    writeFileSync(
-      fakeRsync,
-      `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
-const input = await Bun.stdin.text();
-appendFileSync(process.env.FAKE_REMOTE + '/events.jsonl', JSON.stringify({ kind: 'rsync', files: input.split('\\0').filter(Boolean).length }) + '\\n');
-`,
-    );
-    chmodSync(fakeRsync, 0o755);
+    // An empty workspace set leaves exactly one remote group, for the control-plane gate.
+    writeFileSync(join(gate.root, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
+    const bunPackage = join(gate.root, 'node_modules/bun');
+    mkdirSync(join(bunPackage, 'bin'), { recursive: true });
+    writeFileSync(join(bunPackage, 'package.json'), JSON.stringify({ version: Bun.version }));
+    symlinkSync(process.execPath, join(bunPackage, 'bin/bun.exe'));
+    git(gate.root, ['init', '--quiet', '--template=']);
 
-    const gateEnvironment: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: `${fake}:${process.env.PATH}`,
-      FAKE_REMOTE: eventsDirectory,
-    };
-    delete gateEnvironment.KERNEL_CHECK_ON_REMOTE;
-    const result = spawnSync(prepared.command[0]!, prepared.command.slice(1), {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-      timeout: 30_000,
-      env: gateEnvironment,
-    });
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-    const events = readFileSync(join(eventsDirectory, 'events.jsonl'), 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as { kind: string; value?: string; target?: string; key?: string });
-    expect(events.filter((event) => event.kind === 'slot')).toHaveLength(3);
-    const remoteEvent = events.find((event) => event.kind === 'run');
-    const remoteRun = remoteEvent?.value ?? '';
-    expect(remoteEvent?.target).toBe(host('c').address);
-    expect(remoteEvent?.key).toBe(host('c').identity);
-    expect(remoteRun).toContain('KERNEL_CHECK_CONCURRENCY=5');
-    expect(remoteRun).toContain('bun scripts/gate.ts');
+    // Capture the handoff before admission. The real remote-check child still applies its slot cap.
+    const preload = join(gate.root, '.temp/record-spawn.ts');
+    mkdirSync(join(gate.root, '.temp'));
+    writeFileSync(
+      preload,
+      `
+import { appendFileSync } from 'node:fs';
+const spawn = Bun.spawn;
+Bun.spawn = (command, options) => {
+  if (command[1]?.endsWith('/remote-check.ts')) {
+    appendFileSync(process.env.FIXTURE + '/events.jsonl', JSON.stringify({
+      kind: 'handoff',
+      command,
+      concurrency: options.env.KERNEL_CHECK_CONCURRENCY,
+      hostsFile: options.env.KERNEL_CHECK_REMOTE,
+    }) + '\\n');
+  }
+  return spawn(command, options);
+};
+`,
+    );
+    gate.executable(
+      'ssh',
+      `
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const control = args.includes('-O');
+const target = args.at(control ? -1 : -2);
+if (target !== 'gate@127.0.0.3') throw new Error('Unexpected fixture SSH target: ' + target);
+if (control) process.exit(0);
+const script = args.at(-1)!;
+if (!script.includes('MemAvailable')) throw new Error('Unexpected fixture SSH request: ' + script.slice(0, 120));
+appendFileSync(process.env.FIXTURE + '/events.jsonl', JSON.stringify({
+  kind: 'probe',
+  target,
+  key: args[args.indexOf('-i') + 1],
+}) + '\\n');
+console.log([
+  'MEMORY_CURRENT -',
+  'MEMORY_MAX -',
+  'MEMORY_HEADROOM 32000000000',
+  'MEMORY_RESERVED 0',
+  'MEMORY_RECLAIMABLE 0',
+  'PROCESSORS 32',
+  'SLICE_PROCESSORS 32',
+  'LOAD 0',
+  'PRESSURE_PAUSED 0',
+  'AVAILABLE 32000000000',
+  'TMP_BYTES 16000000000',
+  'TMP_INODES 1000000',
+  'DISK_FREE 512000000000',
+  'ORDINARY_SLOTS_USED 0',
+  'EXPRESS_SLOT_USED 0',
+  'GATE_WAITING 0',
+  'MULTI_SLOT_WAITING_SLOTS 0',
+  'MULTI_SLOT_WAITING_ID -',
+  'LANDING_WAITING_SLOTS 0',
+  'LANDING_WAITING_ID -',
+  'LANDING_WAITING_STARTED -',
+  'LANDING_WAITING_ESTIMATE_MS -1',
+  'LANDING_WAITING_MEMORY_BYTES 2684354560',
+].join('\\n'));
+`,
+    );
+
+    const result = gate.run(prepared.command, preload);
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status, result.stderr).toBe(64);
+    expect(result.stderr).toContain('requested 3 slots exceeds the cap of 2');
+    const events = gate.events();
+    expect(events.filter((event) => event.kind === 'handoff')).toEqual([
+      {
+        kind: 'handoff',
+        command: [
+          process.execPath,
+          join(repositoryRoot, 'scripts/remote-check.ts'),
+          '--gate',
+          '--slots',
+          '3',
+          '--returns',
+          '.temp/gate/parts/group-1.json',
+          gate.root,
+          '--',
+          'env',
+          'GATE_GROUP_INDEX=0',
+          'GATE_RESULT_FILE=.temp/gate/parts/group-1.json',
+          'bun',
+          'scripts/gate.ts',
+          '--workspaces',
+          'tools/goal/scripts/gate.ts',
+        ],
+        concurrency: '5',
+        hostsFile: prepared.snapshot.hostsFile,
+      },
+    ]);
+    expect(events.filter((event) => event.kind === 'probe')).toEqual([
+      { kind: 'probe', target: host('c').address, key: host('c').identity },
+    ]);
   } finally {
+    gate.dispose();
     h.dispose();
   }
-}, 45_000);
+}, 20_000);
 
 test('an explicit unreadable remote gate host path fails instead of running the full gate locally', () => {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    GATE_REMOTE_SLOTS: '3',
-    KERNEL_CHECK_CONCURRENCY: '5',
-    KERNEL_CHECK_REMOTE: join(repositoryRoot, `.temp/goal/route-${randomUUID()}/promotion-gate-hosts.json`),
-  };
-  delete env.KERNEL_CHECK_ON_REMOTE;
-  const result = spawnSync('bun', ['scripts/gate.ts'], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    timeout: 10_000,
-    env,
-  });
-  expect(result.status).not.toBe(0);
-  expect(`${result.stdout ?? ''}${result.stderr ?? ''}`).toContain('refusing to run the gate locally');
-  expect(`${result.stdout ?? ''}${result.stderr ?? ''}`).not.toContain('bun install --frozen-lockfile');
-});
+  const gate = offHostGateFixture();
+  try {
+    const result = gate.run([
+      'env',
+      'GATE_REMOTE_SLOTS=3',
+      'KERNEL_CHECK_CONCURRENCY=5',
+      `KERNEL_CHECK_REMOTE=${join(gate.root, 'missing-hosts.json')}`,
+      'bun',
+      'scripts/gate.ts',
+    ]);
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('refusing to run the gate locally');
+    expect(result.stdout).not.toContain('bun install --frozen-lockfile');
+  } finally {
+    gate.dispose();
+  }
+}, 20_000);
 
 test('promotion rejects local-only routing flags and removes inherited local mode from gate children', () => {
   const h = harness();
