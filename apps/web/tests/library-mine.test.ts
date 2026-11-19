@@ -606,6 +606,7 @@ test(
     expect(body).toContain('Unavailable');
     const unavailable = [...list.querySelectorAll('li')].find((row) => row.textContent.includes('Unavailable'))!;
     expect(unavailable.querySelector('a')).toBeNull();
+    expect(unavailable.hasAttribute('data-follow-target')).toBe(false);
     expect(first.html).not.toContain('hidden-follow-target-id');
     expect(body).not.toContain('No longer followed');
 
@@ -635,6 +636,7 @@ test(
         .getByRole('listitem')
         .filter({ has: page.getByRole('button', { name: 'Inspect Unavailable', exact: true }) });
       expect(await hiddenRow.getByRole('link').count()).toBe(0);
+      expect(await hiddenRow.getAttribute('data-follow-target')).toBe('hidden-follow-target-id');
       await hiddenRow.getByRole('button', { name: 'More actions for Unavailable' }).click();
       await page.getByRole('menuitem', { name: 'Unfollow' }).click();
       await hiddenRow.waitFor({ state: 'detached' });

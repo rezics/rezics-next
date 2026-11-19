@@ -43,7 +43,7 @@ export function FollowingReadingRow({
 
   return (
     <ContentItem
-      data-follow-target={follow.target ? follow.targetId : undefined}
+      data-follow-target={follow.targetId || undefined}
       data-follow-target-type={follow.targetType}
       data-following-selected={selected || undefined}
       className={`px-3 sm:px-4 ${selected ? 'bg-accent/40' : ''}`}
