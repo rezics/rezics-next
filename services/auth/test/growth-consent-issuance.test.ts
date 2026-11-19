@@ -8,7 +8,7 @@ import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { routeOf } from '../../kernel/src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
+import type { GrowthDatabase } from '../../kernel/test/support/growth.ts';
 import {
   createAuthService,
   createBarrierProofVerifier,
@@ -61,6 +61,8 @@ async function loadKernel(url: string) {
 // Selected identities, floors and receipts come only from native lifecycle
 // commands. SQL below grows unrelated history, never a replacement authority.
 async function fixture() {
+  // Growth support imports Kernel partition SQL through the pool. Load it after the Reylo test preload.
+  const { openGrowthDatabase } = await import('../../kernel/test/support/growth.ts');
   const postgres = testDatabase();
   const db = await openGrowthDatabase(postgres.url);
   try {
@@ -496,6 +498,7 @@ async function grow(db: GrowthDatabase, axis: (typeof axes)[number], scale: numb
 }
 
 test('checkGrowth captures complete native consent transactions, pending issuance, live proof and Access barriers at 1x/8x/64x500', async () => {
+  const { checkGrowth } = await import('../../kernel/test/support/growth.ts');
   const f = await fixture();
   try {
     // The one-shot adapter schema introspection shares the max=1 auth pool.
