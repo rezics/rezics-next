@@ -364,6 +364,13 @@ test('Selected original partitions cannot reallocate spent local capacity or inv
     VALUES($1,$2,$3,$4,$5,$5,true)`,
     [original, job, JSON.stringify({ job_id: job }), Date.now() + 5000, parent],
   );
+  await expect(
+    pool.query(
+      `INSERT INTO core.identity_history_allocation(original_id,local_work,transfer_work,accounts_work,parent_work)
+      VALUES($1,$2,$3,$4,$5)`,
+      [original, local, transfer, local, parent],
+    ),
+  ).rejects.toThrow('identity_history_allocation_check');
   await pool.query(
     `INSERT INTO core.identity_history_allocation(original_id,local_work,transfer_work,parent_work)
     VALUES($1,$2,$3,$4)`,
@@ -374,6 +381,7 @@ test('Selected original partitions cannot reallocate spent local capacity or inv
   const before = await snapshot();
   expect(before.source_work).toBeNull();
   expect(before.library_work).toBeNull();
+  expect(before.accounts_work).toBeNull();
   await expect(
     pool.query('UPDATE core.identity_history_allocation SET source_work=$2 WHERE original_id=$1', [original, local]),
   ).rejects.toThrow('cannot refill');

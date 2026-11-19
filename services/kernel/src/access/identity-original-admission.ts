@@ -328,14 +328,16 @@ export async function withSelectedHistoryOriginal<T>(
       [command.transactionId, job.job_id, JSON.stringify(binding), deadline, allowed, allowed],
     );
     await tx.query(
-      `INSERT INTO core.identity_history_allocation(original_id,local_work,source_work,library_work,transfer_work,parent_work)
-       VALUES($1,$2,$3,$4,$5,$6)`,
+      `INSERT INTO core.identity_history_allocation
+         (original_id,local_work,source_work,library_work,transfer_work,accounts_work,parent_work)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
       [
         command.transactionId,
         originalWorkVector(allocation.local),
         allocation.source === null ? null : originalWorkVector(allocation.source),
         allocation.library === null ? null : originalWorkVector(allocation.library),
         originalWorkVector(allocation.transfer),
+        originalWorkVector(allocation.accounts),
         allowed,
       ],
     );
