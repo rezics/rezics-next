@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DEFAULT_DURATIONS, loadDurationTable, runLocalGate, splitWorkspaces, type Workspace } from './gate.ts';
@@ -178,6 +178,20 @@ if (args[0] === 'install') {
   const events = readFileSync(dir + '/log.jsonl', 'utf8').trim().split('\\n').filter(Boolean).map((line) => JSON.parse(line));
   const attempt = events.filter((event) => event.kind === 'check' && event.workspace === workspace).length + 1;
   log({ kind: 'check', workspace, attempt });
+  if (workspace === 'auth') {
+    const write = (stream, text) => new Promise((resolve) => stream.write(text, resolve));
+    await write(process.stdout, 'Auth checks started\\n');
+    await write(process.stderr, '(fail) Auth readiness\\n  ^ this test timed out after 60000ms.\\n');
+    const noise = 'x'.repeat(64 * 1024);
+    for (const stream of [process.stdout, process.stderr]) {
+      for (let i = 0; i < 64; i++) await write(stream, noise);
+      await write(stream, '\\n');
+    }
+    await write(process.stderr, 'Database cleanup failed: fixture\\ntests/middle.test.ts:\\nLoad-sensitive tests (passed alone): 1\\nprevious read\\n');
+    for (let i = 0; i < 64; i++) await write(process.stderr, noise);
+    await write(process.stderr, '\\nAuth checks finished\\n');
+    process.exit(1);
+  }
   if (workspace === 'a-plain' && attempt === 1) {
     console.log('test/a-plain.test.ts:');
     console.log('(fail) only failure is a timeout [60000ms]');
@@ -450,6 +464,36 @@ test("the gate writes a JSON result with each workspace's outcome, failing files
     passed: false,
     failingFiles: ['test/b-lane.test.ts'],
   });
+});
+
+test('a noisy Auth Pages check retains its native failure and middle report entries within a bounded log', async () => {
+  const { env, dir, events } = scenario();
+  env.PATH = `${join(root, 'gate-bin')}:${process.env.PATH}`;
+  const fixture = join(dir, 'checkout');
+  fixtureWorkspace(fixture, 'apps/auth', '@rezics/auth-pages');
+  let log = '';
+  const output = spyOn(process.stdout, 'write').mockImplementation((text) => {
+    log += String(text);
+    return true;
+  });
+  try {
+    expect(await runLocalGate(['--workspaces', 'apps/auth'], fixture, env)).toBe(1);
+  } finally {
+    output.mockRestore();
+  }
+  expect(events().filter((event) => event.kind === 'check')).toHaveLength(1);
+  expect(log).toContain('Auth checks started');
+  expect(log).toContain('Auth checks finished');
+  expect(log).toContain('diagnostic bytes]');
+  expect(log.length).toBeLessThan(300_000);
+  expect(JSON.parse(readFileSync(env.GATE_RESULT_FILE!, 'utf8')).workspaces).toMatchObject([
+    {
+      directory: 'apps/auth',
+      passed: false,
+      failingFiles: ['tests/middle.test.ts'],
+      loadSensitiveTests: ['previous read'],
+    },
+  ]);
 });
 
 test('a transport failure is not replayed, and local load-induced reruns keep their reports', async () => {

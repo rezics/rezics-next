@@ -55,7 +55,9 @@ type WorkspaceResult = {
   code: number;
   durationMs: number;
   directory: string;
-  output: string;
+  retryable: boolean;
+  failingFiles: string[];
+  loadSensitiveTests: string[];
   workspace: Workspace;
 };
 export type GateControlPlaneOutcome = { passed: boolean; durationSeconds: number; host: string };
@@ -592,6 +594,99 @@ async function run(
   return code;
 }
 
+// Bound the text passed to Bun's diagnostic classifier and host-prefix formatter. A failed
+// DOM assertion can print a large object graph before the runner prints its file summary.
+const workspaceExcerptBytes = 64 * 1024;
+
+async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>) {
+  const head = Buffer.allocUnsafe(workspaceExcerptBytes);
+  const tail = Buffer.allocUnsafe(workspaceExcerptBytes);
+  let bytes = 0;
+  let tailOffset = 0;
+  const files = new Set<string>();
+  const tests = new Set<string>();
+  let remainingFiles = 0;
+  let remainingTests = 0;
+  let pending = '';
+  let longLine = false;
+  let previousCR = false;
+  let metadataBytes = 0;
+  let metadataOverflow = false;
+  const decoder = new TextDecoder();
+
+  function remember(entries: Set<string>, value: string) {
+    if (metadataOverflow || entries.has(value)) return;
+    metadataBytes += Buffer.byteLength(value) + 1;
+    if (metadataBytes > MAX_GATE_REPORT_BYTES) metadataOverflow = true;
+    else entries.add(value);
+  }
+
+  function readLine(line: string) {
+    const trimmed = line.trim();
+    if (remainingFiles && trimmed) {
+      remember(files, trimmed);
+      remainingFiles--;
+    }
+    if (remainingTests) {
+      if (trimmed) remember(tests, trimmed);
+      remainingTests--;
+    }
+    const direct = trimmed.match(
+      /^((?:apps|services|packages|test|tests|src|tools)\/[^\s:]+\.test\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?(?::|\s|$)/,
+    );
+    if (direct) remember(files, direct[1]!);
+    const summary = line.match(/tests failed for (\d+) file\(s\):/i);
+    if (summary) remainingFiles = Number(summary[1]);
+    const heading = line.match(/^Load-sensitive (?:tests|growth checks) \(.*\):\s*(\d+)\s*$/);
+    if (heading) remainingTests = Number(heading[1]);
+  }
+
+  function scan(text: string) {
+    if (!text) return;
+    if (previousCR && text.startsWith('\n')) text = text.slice(1);
+    previousCR = text.endsWith('\r');
+    let start = 0;
+    for (const separator of text.matchAll(/\r\n?|\n/g)) {
+      const end = separator.index!;
+      if (!longLine && pending.length + end - start <= workspaceExcerptBytes) {
+        readLine(pending + text.slice(start, end));
+      }
+      pending = '';
+      longLine = false;
+      start = end + separator[0].length;
+    }
+    if (pending.length + text.length - start > workspaceExcerptBytes) longLine = true;
+    if (!longLine) pending += text.slice(start);
+  }
+
+  for await (const chunk of stream) {
+    for (let start = 0; start < chunk.length; start += workspaceExcerptBytes) {
+      const part = chunk.subarray(start, start + workspaceExcerptBytes);
+      const headCount = Math.min(part.length, Math.max(0, head.length - bytes));
+      if (headCount) head.set(part.subarray(0, headCount), bytes);
+      const rest = part.subarray(headCount);
+      const count = Math.min(rest.length, tail.length - tailOffset);
+      tail.set(rest.subarray(0, count), tailOffset);
+      tail.set(rest.subarray(count), 0);
+      tailOffset = (tailOffset + rest.length) % tail.length;
+      bytes += part.length;
+      scan(decoder.decode(part, { stream: true }));
+    }
+  }
+  scan(decoder.decode());
+  if (pending && !longLine) readLine(pending);
+  const omitted = Math.max(0, bytes - head.length - tail.length);
+  const text = omitted
+    ? head.toString() +
+      `\n[Gate omitted ${omitted} diagnostic bytes]\n` +
+      Buffer.concat([tail.subarray(tailOffset), tail.subarray(0, tailOffset)]).toString()
+    : Buffer.concat([
+        head.subarray(0, Math.min(bytes, head.length)),
+        tail.subarray(0, Math.max(0, bytes - head.length)),
+      ]).toString();
+  return { text, omitted, files, tests, metadataOverflow };
+}
+
 async function checkWorkspace(
   workspace: Workspace,
   gateRoot = root,
@@ -608,11 +703,26 @@ async function checkWorkspace(
   });
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
+    readWorkspaceOutput(child.stdout),
+    readWorkspaceOutput(child.stderr),
   ]);
   const durationMs = performance.now() - startedAt;
-  const output = [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join('\n');
+  const metadataOverflow = stdout.metadataOverflow || stderr.metadataOverflow;
+  const output = [
+    stdout.text.trimEnd(),
+    stderr.text.trimEnd(),
+    metadataOverflow ? 'Gate workspace report entries exceed the report size limit.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  // Missing diagnostic context must never authorize a second whole-workspace check.
+  const retryable =
+    code !== 0 &&
+    !metadataOverflow &&
+    !stdout.omitted &&
+    !stderr.omitted &&
+    !/\bscripts\/check\.ts\b/.test(workspace.checkScript) &&
+    !!classifyLoadInducedOutput(output)?.length;
   const block = [
     `Workspace ${workspace.name} finished in ${(durationMs / 1000).toFixed(2)}s`,
     `$ ${command.join(' ')}  (${workspace.directory})`,
@@ -620,61 +730,31 @@ async function checkWorkspace(
   ]
     .filter(Boolean)
     .join('\n');
-  return { block: `${block}\n\n`, code, durationMs, directory: workspace.directory, output, workspace };
-}
-
-function extractFailingFiles(output: string): string[] {
-  const files = new Set<string>();
-  const lines = output.split(/\r\n?|\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    const summary = lines[index]!.match(/tests failed for (\d+) file\(s\):/i);
-    if (summary) {
-      let remaining = Number(summary[1]);
-      for (let cursor = index + 1; cursor < lines.length && remaining > 0; cursor += 1) {
-        const candidate = lines[cursor]!.trim();
-        if (!candidate) continue;
-        files.add(candidate);
-        remaining -= 1;
-      }
-    }
-    const direct = lines[index]!.trim().match(
-      /^((?:apps|services|packages|test|tests|src|tools)\/[^\s:]+\.test\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?(?::|\s|$)/,
-    );
-    if (direct) files.add(direct[1]!);
-  }
-  return [...files].sort();
-}
-
-function extractLoadSensitiveTests(output: string): string[] {
-  const lines = output.split(/\r\n?|\n/);
-  const tests = new Set<string>();
-  for (let index = 0; index < lines.length; index += 1) {
-    const heading = lines[index]!.match(/^Load-sensitive (?:tests|growth checks) \(.*\):\s*(\d+)\s*$/);
-    if (!heading) continue;
-    const count = Number(heading[1]);
-    for (let offset = 1; offset <= count && index + offset < lines.length; offset += 1) {
-      const item = lines[index + offset]!.trim();
-      if (item) tests.add(item);
-    }
-  }
-  return [...tests].sort();
+  return {
+    block: `${block}\n\n`,
+    code: metadataOverflow && code === 0 ? 1 : code,
+    durationMs,
+    directory: workspace.directory,
+    retryable,
+    workspace,
+    failingFiles: [...new Set([...stdout.files, ...stderr.files])].sort(),
+    loadSensitiveTests: [...new Set([...stdout.tests, ...stderr.tests])].sort(),
+  };
 }
 
 function outcomeFrom(
   result: WorkspaceResult,
-  extraDurationMs = 0,
-  extraOutput = '',
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined>,
+  retry?: WorkspaceResult,
 ): WorkspaceOutcome {
-  const combinedOutput = [result.output, extraOutput].filter(Boolean).join('\n');
   return {
     name: result.workspace.name,
     directory: result.directory,
     host: env.REMOTE_CHECK_HOST ?? 'local',
-    passed: result.code === 0,
-    durationSeconds: Number(((result.durationMs + extraDurationMs) / 1000).toFixed(3)),
-    failingFiles: extractFailingFiles(combinedOutput),
-    loadSensitiveTests: extractLoadSensitiveTests(combinedOutput),
+    passed: (retry ?? result).code === 0,
+    durationSeconds: Number(((result.durationMs + (retry?.durationMs ?? 0)) / 1000).toFixed(3)),
+    failingFiles: [...new Set([...result.failingFiles, ...(retry?.failingFiles ?? [])])].sort(),
+    loadSensitiveTests: [...new Set([...result.loadSensitiveTests, ...(retry?.loadSensitiveTests ?? [])])].sort(),
   };
 }
 
@@ -767,7 +847,7 @@ export async function runLocalGate(
     while (nextWorkspace < workspaces.length) {
       const index = nextWorkspace++;
       const result = await checkWorkspace(workspaces[index]!, gateRoot, env);
-      outcomes.push(outcomeFrom(result, 0, '', env));
+      outcomes.push(outcomeFrom(result, env));
       if (result.code === 0) writeOutput(result.block, 'stdout', env);
       else failures.push(result);
     }
@@ -781,18 +861,14 @@ export async function runLocalGate(
   for (const workspace of workspaces) {
     const failure = failedByDirectory.get(workspace.directory);
     if (!failure) continue;
-    const usesCheckRunner = /\bscripts\/check\.ts\b/.test(workspace.checkScript);
-    const loadFailures = classifyLoadInducedOutput(failure.output);
-    if (usesCheckRunner || !loadFailures || loadFailures.length === 0) {
+    if (!failure.retryable) {
       remainingFailures.push(failure);
       continue;
     }
 
     const again = await checkWorkspace(workspace, gateRoot, env);
     const existing = outcomes.find((outcome) => outcome.directory === workspace.directory)!;
-    const aggregate = outcomeFrom(failure, again.durationMs, again.output, env);
-    aggregate.passed = again.code === 0;
-    Object.assign(existing, aggregate);
+    Object.assign(existing, outcomeFrom(failure, env, again));
     if (again.code === 0) {
       writeOutput(failure.block, 'stdout', env);
       writeOutput(again.block, 'stdout', env);
