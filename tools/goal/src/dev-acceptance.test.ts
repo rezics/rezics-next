@@ -1,86 +1,79 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
-const fails = ['bun', '-e', "console.error('AssertionError: required behavior failed'); process.exit(1)"];
+const acceptance = ['feature-acceptance'];
+const failure = 'AssertionError: required behavior failed';
 
-test("a dev landing runs the task's acceptance on the merged candidate and refuses a failure with its evidence", async () => {
+// Direct dev defers acceptance to the verifier. Stabilize still gates publication on declared acceptance.
+test('stabilize runs acceptance on the rebased candidate and retains failure evidence', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const task = h.dispatch('feature', [], fails);
+    git(h.root, 'branch', 'stabilize', 'dev');
+    const task = h.dispatch('feature', [], acceptance, 'fixture', 'stabilize');
     await h.start(task);
-    const base = h.head();
-    await h.train();
+    const base = h.advanceBranch('stabilize', 'base-change');
+    const checks: { head: string; hasFeature: boolean; hasBaseChange: boolean }[] = [];
 
-    expect(h.head()).toBe(base);
-    expect(h.store.task(task.id).state).not.toBe('integrated');
-    expect(h.outcomes).toHaveLength(1);
-    expect(h.outcomes[0]).toMatchObject({
-      passed: false,
-      stage: 'gate',
-      failedCommand: fails,
-      firstFailure: { assertion: expect.stringContaining('required behavior failed') },
-    });
-    const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
-    expect(log).toContain(`Acceptance on`);
-    expect(log).toContain(fails.join(' '));
-    expect(log).toContain('AssertionError: required behavior failed');
-  } finally {
-    h.dispose();
-  }
-});
-
-test('a dev acceptance failure with the same fingerprint on its base is marked pre-existing', async () => {
-  const h = integrationHarness();
-  try {
-    h.ensureDev();
-    h.advanceDev('base-change');
-    const task = h.dispatch('feature', [], fails);
-    await h.start(task);
-    await h.train();
-
-    expect(h.outcomes[0]).toMatchObject({ passed: false, failsOnMain: true, stage: 'gate' });
-    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Acceptance failure is pre-existing on dev');
-  } finally {
-    h.dispose();
-  }
-});
-
-test("a passing dev landing advances dev and a batch runs every entry's acceptance", async () => {
-  const h = integrationHarness();
-  try {
-    h.ensureDev();
-    h.settings.integration.batchSize = 2;
-    const first = h.dispatch('first', [], ['accept-first']);
-    const second = h.dispatch('second', [], ['accept-second']);
-    await h.start(first);
-    await h.start(second);
-    const checked: { command: string; files: string[] }[] = [];
     await h.train(async (command, cwd) => {
-      checked.push({
-        command: command.join(' '),
-        files: ['first', 'second'].filter((file) => {
-          try {
-            readFileSync(join(cwd, file));
-            return true;
-          } catch {
-            return false;
-          }
-        }),
+      if (command[0] !== acceptance[0]) return { passed: true, output: '', timedOut: false };
+      const hasFeature = existsSync(join(cwd, 'feature'));
+      checks.push({
+        head: git(cwd, 'rev-parse', 'HEAD'),
+        hasFeature,
+        hasBaseChange: existsSync(join(cwd, 'base-change')),
       });
-      return { passed: true, output: '', timedOut: false };
+      return { passed: !hasFeature, output: hasFeature ? failure : '', timedOut: false };
     });
 
-    expect(h.head()).not.toBe(h.head('main'));
-    expect(h.store.task(first.id).state).toBe('integrated');
-    expect(h.store.task(second.id).state).toBe('integrated');
-    expect(checked.map(({ command }) => command)).toEqual(['accept-first', 'accept-second']);
-    expect(checked.map(({ files }) => files)).toEqual([
-      ['first', 'second'],
-      ['first', 'second'],
+    expect(checks).toEqual([
+      { head: expect.any(String), hasFeature: true, hasBaseChange: true },
+      { head: base, hasFeature: false, hasBaseChange: true },
     ]);
+    expect(checks[0]!.head).not.toBe(base);
+    expect(h.head('stabilize')).toBe(base);
+    expect(h.outcomes).toMatchObject([
+      {
+        taskId: task.id,
+        passed: false,
+        stage: 'gate',
+        failedCommand: acceptance,
+        failsOnMain: false,
+        firstFailure: { assertion: expect.stringContaining(failure) },
+      },
+    ]);
+    const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
+    expect(log).toContain(`Acceptance on ${checks[0]!.head}`);
+    expect(log).toContain(acceptance.join(' '));
+  } finally {
+    h.dispose();
+  }
+});
+
+test('stabilize marks a matching baseline failure as pre-existing', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    git(h.root, 'branch', 'stabilize', 'dev');
+    const base = h.advanceBranch('stabilize', 'base-change');
+    const task = h.dispatch('feature', [], acceptance, 'fixture', 'stabilize');
+    await h.start(task);
+    const checked: string[] = [];
+
+    await h.train(async (command, cwd) => {
+      if (command[0] !== acceptance[0]) return { passed: true, output: '', timedOut: false };
+      checked.push(git(cwd, 'rev-parse', 'HEAD'));
+      return { passed: false, output: failure, timedOut: false };
+    });
+
+    expect(checked).toEqual([expect.any(String), base]);
+    expect(checked[0]).not.toBe(base);
+    expect(h.head('stabilize')).toBe(base);
+    expect(h.outcomes).toMatchObject([{ taskId: task.id, passed: false, failsOnMain: true, stage: 'gate' }]);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Acceptance failure is pre-existing');
   } finally {
     h.dispose();
   }
