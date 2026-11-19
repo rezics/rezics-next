@@ -132,6 +132,7 @@ import {
 } from './source-registry.ts';
 import {
   currentBangumiCharacterVocabularyBindings,
+  ownsBangumiCharacterFidelityCandidate,
   runBangumiCharacterFidelity,
 } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
@@ -2573,6 +2574,12 @@ export async function seedCrossMedia(
   let importer!: ReturnType<typeof createImporter>;
   let graphStore: CrossMediaGraph | undefined;
   const openGraph = () => (graphStore ??= new CrossMediaGraph(importer.session.store.database));
+  const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
+  const bangumiCharacterAppearances = [...(plan.characterAppearances ?? []), ...(plan.gameCharacterAppearances ?? [])];
+  const hasBangumiFidelityInput =
+    bangumiCharacterAppearances.length > 0 ||
+    bangumiFidelityRecords.some((record) => record.key.startsWith('character:'));
+  let reconcileBangumiFidelity = false;
   let genreAdapter: ReturnType<typeof createShowcaseBangumiGenreLookup> | undefined;
   let gameEnvironmentAdapter: ReturnType<typeof createShowcaseBangumiGameEnvironmentLookup> | undefined;
   let gameGenreAdapter: ReturnType<typeof createShowcaseBangumiGameGenreLookup> | undefined;
@@ -2618,7 +2625,17 @@ export async function seedCrossMedia(
     ...(destination ? { destination } : {}),
     ...(identifierLookup ? { identifierLookup } : {}),
     ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
-    separatelyOwnedCandidates: (candidates) => openGraph().ownedCandidates(candidates),
+    separatelyOwnedCandidates(candidates) {
+      const graphOwned = openGraph().ownedCandidates(candidates);
+      if (!hasBangumiFidelityInput || reconcileBangumiFidelity) return graphOwned;
+      // Baseline and unbound passes cannot reconcile vocabulary facts from the bound fidelity pass.
+      return new Set([
+        ...graphOwned,
+        ...candidates
+          .filter((candidate) => ownsBangumiCharacterFidelityCandidate(candidate, crossMediaAliases.bangumi))
+          .map(({ candidate }) => candidate),
+      ]);
+    },
     ...(vndbCredits
       ? { recordConcurrency: 1 }
       : extras?.recordConcurrency === undefined
@@ -2927,14 +2944,6 @@ export async function seedCrossMedia(
       }
       runs[provider] = run;
     }
-    const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
-    const bangumiCharacterAppearances = [
-      ...(plan.characterAppearances ?? []),
-      ...(plan.gameCharacterAppearances ?? []),
-    ];
-    const hasBangumiFidelityInput =
-      bangumiCharacterAppearances.length > 0 ||
-      bangumiFidelityRecords.some((record) => record.key.startsWith('character:'));
     let fidelity: Awaited<ReturnType<typeof runBangumiCharacterFidelity>> | undefined;
     // Without Character bindings, the baseline can hand off its current reads while a cover-only
     // generation stays sealed. The vocabulary stage reseeds with current bindings.
@@ -2950,6 +2959,7 @@ export async function seedCrossMedia(
         runs.bangumi = resumed;
       }
       progress?.enter('bangumi-character-fidelity');
+      reconcileBangumiFidelity = characterBindings !== undefined;
       fidelity = await runBangumiCharacterFidelity({
         importer,
         port,
@@ -2958,6 +2968,7 @@ export async function seedCrossMedia(
         appearances: bangumiCharacterAppearances,
         ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
       });
+      reconcileBangumiFidelity = false;
       if (fidelity.run.status !== 'committed') throw seedImportRunFailure('bangumi', fidelity.run);
       runs.bangumiCharacterFidelity = fidelity.run;
     }

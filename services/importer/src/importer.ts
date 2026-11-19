@@ -2376,6 +2376,7 @@ export class Importer {
         (this.options.vocabularyAdmission ||
           staged.projection.sourceVocabulary ||
           this.options.identifierLookup ||
+          separate?.size ||
           ownReferences ||
           unavailableCover) &&
         conversion &&
