@@ -7,6 +7,7 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
+import { readIdentityMapping } from '../../src/semantic/identity-adapters/read.ts';
 import type { SummaryReaderDependencies } from '../../src/semantic/summaries.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import { runAccountIdentityVerification } from '../support/account-identity-publication.ts';
@@ -181,7 +182,7 @@ test.serial(
 );
 
 test.serial(
-  'current fences and wrong reciprocal links withhold targets; missing required native authority is unavailable',
+  'current fences and wrong reciprocal links withhold targets; unready native mappings make them unavailable',
   async () => {
     const target = await linked(null);
     await f.pool.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
@@ -205,13 +206,25 @@ test.serial(
       target.receiptId,
     ]);
     const agentId = accountAgentId(target.accountId);
-    await f.pool.query('DELETE FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2', [
-      routeOf(agentId),
-      agentId,
-    ]);
-    await expect(readPublicAccountCanonicalTargets(deps(), [target.subjectId])).rejects.toBeInstanceOf(
-      AccessUnavailableError,
+    const mapping = await readIdentityMapping(f.pool, agentId);
+    if (mapping.state !== 'mapped') throw new Error('Verification fixture did not publish its agent mapping');
+    // Keep the published source row and make its publication epoch unusable.
+    const unready = await f.admin.query(
+      'UPDATE semantic.identity_epoch_mapping SET epoch=0 WHERE route=$1 AND original=$2',
+      [routeOf(agentId), agentId],
     );
+    try {
+      expect(unready.rowCount).toBe(1);
+      await expect(readPublicAccountCanonicalTargets(deps(), [target.subjectId])).rejects.toBeInstanceOf(
+        AccessUnavailableError,
+      );
+    } finally {
+      await f.admin.query('UPDATE semantic.identity_epoch_mapping SET epoch=$3 WHERE route=$1 AND original=$2', [
+        routeOf(agentId),
+        agentId,
+        mapping.epoch.toString(),
+      ]);
+    }
   },
 );
 
@@ -229,7 +242,8 @@ test.serial(
         const allowed = await f.access.authorize(client, actor, action, resource, evidence, time);
         if (!checked) {
           checked = true;
-          await f.pool.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+          // Simulate a concurrent writer while Semantic holds its own read snapshot.
+          await f.admin.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
             routeOf(target.accountId),
             target.accountId,
           ]);
@@ -291,7 +305,7 @@ test.serial(
           const allowed = await f.access.authorize(client, actor, action, resource, evidence, time);
           if (!changed) {
             changed = true;
-            await f.pool.query(
+            await f.admin.query(
               'UPDATE access.account SET public_views=public_views || $3::jsonb WHERE route=$1 AND account_id=$2',
               [routeOf(target.accountId), target.accountId, JSON.stringify({ posts: enabled })],
             );
