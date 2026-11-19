@@ -36,6 +36,13 @@ export type WalkPorts = {
   search: number;
 };
 
+/** Routes the reviewed Bangumi person:1916 and VNDB s224 claims to partition 692 in a fresh catalogue walk. */
+export function catalogueWalkRouteKey(): Buffer {
+  const key = Buffer.alloc(32);
+  key.writeUInt32BE(4209);
+  return key;
+}
+
 type WalkStackPortAvailability = (ports: WalkPorts) => Promise<boolean>;
 
 /** The host policy: a positive count, bounded so every slot's ports stay below the ephemeral range. */

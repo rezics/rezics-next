@@ -276,6 +276,9 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    and fetches that exact public document from native Auth. Full-effect walks start Auth pages before Kernel so
    issuer-origin JWKS is available during seed; Web waits until the journey seeds. An admitted stack runs Kernel
    without `--watch`.
+   Before database setup, the isolated `--import-catalogue` walk sets its fixture routing key. Native creation
+   places the reviewed Bangumi `person:1916` and VNDB `s224` claims and Subject births in partition 692.
+   Seed reopen uses the same database and key. Walk teardown restores the previous Kernel environment.
    The default lightweight Account mode (`REZICS_WALK_DEFER_FRONTENDS=1`) omits OpenSearch and a
    second Kernel process, serves Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead;
    the child starts issuer then Web when it needs mounted pages. Full-effect walks such as Content set
