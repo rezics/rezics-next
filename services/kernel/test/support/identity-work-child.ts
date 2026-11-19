@@ -1,95 +1,41 @@
-import { Pool } from 'pg';
 import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
-import { composeWorkApplication } from '../../src/composition/work.ts';
-import { createWorkClient } from '../../src/work/client.ts';
-import { composeWork } from '../../src/work/registry.ts';
-import { KERNEL_WORK_MODULES } from './default-work-modules.ts';
-import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
+import { startWorker } from '../../src/worker.ts';
+import type { IdentityWorkProcessConfig } from './identity-work-process.ts';
+import { testReceiptKeysEnv } from './receipt-keys.ts';
 import { workerTestEnv } from './worker-env.ts';
-import { readReceiptKeyRing } from '../../src/command/receipt-key.ts';
-import { effectsRelay } from '../../src/events/effects.ts';
-import { relayConcurrencyForPool, startRelays } from '../../src/events/relays.ts';
 
-// The kernel's production work executor, run in its own process so the parent test process can own another DBOS
-// host (Auth) without two launched executors sharing one process. Configuration arrives on stdin, never as argv.
-// bun test preload does not apply here; install the ordinary native root before Work builds worker authorization.
-const input = await Bun.stdin.json();
+// The parent owns the Auth DBOS host. Launch the Kernel executor in this process using configuration from stdin.
+const input: IdentityWorkProcessConfig = await Bun.stdin.json();
 installNativeHistoryPreload();
-composeWorkApplication();
-// Search indexing, shared-history ticks and identity workflows share this executor pool. The
-// parent test process has a separate pool; eight connections starve publication on the check host.
-const pool = new Pool({ connectionString: input.databaseUrl, max: 32 });
-let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
-let work: Awaited<ReturnType<typeof composeWork>> | undefined;
-let relays: ReturnType<typeof startRelays> | undefined;
-
-async function release(): Promise<void> {
-  try {
-    await relays?.stop();
-  } finally {
-    try {
-      await work?.shutdown();
-    } finally {
-      try {
-        await client?.close();
-      } finally {
-        await pool.end();
-      }
-    }
-  }
-}
-
-try {
-  const receiptKeys =
-    input.receiptKeys === undefined
-      ? testReceiptKeys()
-      : readReceiptKeyRing({ ...process.env, KERNEL_RECEIPT_KEYS: input.receiptKeys });
-  configureTestReceiptKeys(pool, receiptKeys);
-  client = await createWorkClient(input.databaseUrl, pool);
-  const openSearchUrl =
-    typeof input.openSearchUrl === 'string' && input.openSearchUrl.length > 0
-      ? input.openSearchUrl
-      : process.env.OPENSEARCH_URL;
-  const executorId =
-    typeof input.executorId === 'string' && input.executorId.length > 0
-      ? input.executorId
-      : `identity-work-${process.pid}`;
-  const modules =
-    input.workModules === undefined
-      ? KERNEL_WORK_MODULES
-      : input.workModules.map((name: string) => {
-          const module = KERNEL_WORK_MODULES.find((candidate) => candidate.name === name);
-          if (!module) throw new Error(`Unknown native work module: ${name}`);
-          return module;
-        });
-  work = await composeWork(modules, {
+const executorId = input.executorId || `identity-work-${process.pid}`;
+const env = workerTestEnv({
+  KERNEL_ROUTE_KEY: input.routeKey,
+  KERNEL_SEARCH_PREFIX: input.searchPrefix,
+  KERNEL_EXECUTOR_ID: executorId,
+  KERNEL_RECEIPT_KEYS: input.receiptKeys ?? testReceiptKeysEnv().KERNEL_RECEIPT_KEYS,
+  OPENSEARCH_URL: input.openSearchUrl || process.env.OPENSEARCH_URL,
+});
+const worker = await startWorker(
+  {
     databaseUrl: input.databaseUrl,
-    pool,
-    client,
     executorId,
-    env: workerTestEnv({
-      KERNEL_ROUTE_KEY: input.routeKey,
-      KERNEL_SEARCH_PREFIX: input.searchPrefix,
-      KERNEL_EXECUTOR_ID: executorId,
-      ...(openSearchUrl === undefined ? {} : { OPENSEARCH_URL: openSearchUrl }),
-    }),
-    receiptKeys,
-  });
-  await work.launch();
-  if (input.effectsRelay === true)
-    relays = startRelays(pool, [effectsRelay(pool, work.effects)], { concurrency: relayConcurrencyForPool(pool) });
-} catch (error) {
-  try {
-    await release();
-  } catch (cleanupError) {
-    throw new AggregateError([error, cleanupError], 'Identity work launch and cleanup failed');
-  }
-  throw error;
-}
+    // Search indexing, shared history and identity publication share this pool.
+    poolSize: 32,
+    handleSignals: false,
+    effectsRelay: input.effectsRelay === true,
+  },
+  (modules) =>
+    input.workModules?.map((name) => {
+      const module = modules.find((candidate) => candidate.name === name);
+      if (!module) throw new Error(`Unknown native work module: ${name}`);
+      return module;
+    }) ?? modules,
+  env,
+);
 let stopping: Promise<never> | undefined;
 function stop(): Promise<never> {
   return (stopping ??= (async () => {
-    await release();
+    await worker.stop();
     process.exit(0);
   })());
 }

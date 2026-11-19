@@ -68,6 +68,8 @@ export type WorkerConfig = {
   clock?: KernelClock;
   /** Trusted composition only. The worker owns and ends the returned runtime pool. */
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
+  /** An enclosing host may own effects dispatch separately from this executor. */
+  effectsRelay?: boolean;
   /** Trusted native diagnostics for one effects partition. */
   effectsRelayProbe?: EffectsRelayProbe;
   /** Supplied by the existing Auth host, directly or through its private worker channel. */
@@ -250,9 +252,11 @@ export async function startWorker(
       }));
       work = await composeWork(tracedModules, { ...config, pool, client, env });
       await work.launch();
-      relays = startRelays(pool, [effectsRelay(pool, work.effects, config.effectsRelayProbe)], {
-        concurrency: relayConcurrencyForPool(pool),
-      });
+      if (config.effectsRelay !== false) {
+        relays = startRelays(pool, [effectsRelay(pool, work.effects, config.effectsRelayProbe)], {
+          concurrency: relayConcurrencyForPool(pool),
+        });
+      }
     })();
     await starting;
     return { stop };
