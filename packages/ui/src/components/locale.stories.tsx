@@ -62,12 +62,14 @@ export const SimplifiedChinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('zh-CN')).toBeVisible();
-    await expect(canvas.getByText('《三体》')).toHaveAttribute('lang', 'zh-CN');
+    const title = canvas.getByText('《三体》');
+    await expect(title).toBeVisible();
+    await expect(title.closest('[lang]')).toHaveAttribute('lang', 'zh-CN');
   },
 };
 
 export const DarkMode: Story = {
-  globals: {},
+  globals: { theme: 'dark' },
   render: () => (
     <LocaleProvider locale="zh-CN">
       <LocaleSummary dark />
