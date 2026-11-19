@@ -6,7 +6,7 @@ import { createPublicPreparation, type PublicPreparationOptions } from '../../sr
 import { createPublicPreparationStore, type PopulationFrontier } from '../../src/search/public-preparation-store.ts';
 import type { DefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { RELEASE_FORMAT, releaseDigest } from '@rezics/definitions';
+import { releaseDigest } from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName, subjectGenerations } from '../../src/search/indices.ts';
@@ -50,7 +50,7 @@ afterAll(async () => {
   for (const index of indices) await search.request('DELETE', `/${index}`);
   await pool.end();
 });
-async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefinition['meaning']['release']) {
+async function fixture(keyPages?: SubjectSourceKeyPages) {
   const prefix = `publication-${crypto.randomUUID().slice(0, 8)}-`;
   for (const generation of [1, 2]) {
     await createSubjectIndex(search, prefix, generation);
@@ -59,18 +59,10 @@ async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefin
   await search.request('POST', '/_aliases', {
     actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
   });
-  const release: CustodyDefinition['meaning']['release'] = released ?? {
-    format: RELEASE_FORMAT,
-    catalogue: { id: 'publication-boundary', version: '1' },
-    generator: { name: 'fixture', version: '1' },
-    prefixes: {},
-    types: {},
-    properties: {},
-  };
   const definition: CustodyDefinition = {
     source: { id: crypto.randomUUID(), partition: 0, epoch: 1, configuration: 'boundary' },
     readDefinition: crypto.randomUUID(),
-    meaning: { digest: releaseDigest(release), release },
+    meaning: { digest: releaseDigest(bundledRelease), release: bundledRelease },
     capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20 },
     dependencyKeys: [{ kind: 'order', order: 'id' }],
   };
@@ -297,31 +289,104 @@ test('native complete pages retain their cursor and empty filtered pages advance
   }
 });
 
+test('Subject validation replays one changed occupied home before a fresh engine pass', async () => {
+  const changed = 31;
+  const earlier = 12;
+  const occupied = [earlier, changed, 32];
+  const after = { route: 0, id: '00000000-0000-7000-8000-000000000001' };
+  const reads: unknown[] = [];
+  const f = await fixture({
+    async read(request) {
+      reads.push([request.partition, request.after]);
+      const {
+        rows: [home],
+      } = await pool.query<{ epoch: number; position: string }>(
+        'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+        [request.partition],
+      );
+      return {
+        status: 'eligible',
+        partition: request.partition,
+        epoch: home!.epoch,
+        position: BigInt(home!.position),
+        ids: [],
+        after: request.after === null ? after : null,
+        complete: request.after !== null,
+        cost: zero,
+      };
+    },
+  });
+  try {
+    const prepared = await f.operations.prepare(f.registered.consumer, context());
+    if (prepared.status !== 'preparing') throw new Error(prepared.reason);
+    const job = prepared.job.job;
+    const step = () => f.operations.step(prepared.job, context());
+    const state = async () =>
+      (
+        await pool.query(
+          'SELECT phase,home,pit,engine_after FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+          [job],
+        )
+      ).rows[0];
+    const advanceHead = (home: number) =>
+      pool.query('UPDATE core.partition SET position=position+1 WHERE partition_no=$1', [home]);
+    await pool.query('UPDATE semantic.partition_subjects SET visible=1 WHERE partition_no=ANY($1)', [occupied]);
+    await pool.query(
+      `INSERT INTO search.generation_publication_home (partition_no,job,pass,epoch,position)
+       SELECT partition_no,$1,1,epoch,position FROM core.partition`,
+      [job],
+    );
+    await pool.query(
+      "UPDATE search.generation_publication SET phase='validate',home=16 WHERE partition_no=0 AND job=$1",
+      [job],
+    );
+    await advanceHead(changed);
+    expect(await step()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    // An older worker can continue the Subject scan and open a PIT without a composite cursor.
+    expect(await state()).toEqual({ phase: 'subject', home: changed, pit: null, engine_after: null });
+    expect(await step()).toMatchObject({ status: 'progress' });
+    expect(await state()).toEqual({ phase: 'subject', home: changed, pit: null, engine_after: null });
+    expect(await step()).toMatchObject({ status: 'progress' });
+    expect(reads).toEqual([
+      [changed, null],
+      [changed, after],
+    ]);
+    expect(await state()).toEqual({ phase: 'engine', home: 0, pit: null, engine_after: null });
+    expect(await step()).toMatchObject({ status: 'progress' });
+    expect(await state()).toMatchObject({ phase: 'engine', pit: expect.any(String), engine_after: null });
+    expect(await step()).toMatchObject({ status: 'progress' });
+    expect(await state()).toEqual({ phase: 'validate', home: 0, pit: null, engine_after: null });
+    await advanceHead(earlier);
+    expect(await step()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await state()).toMatchObject({ phase: 'subject', home: earlier });
+  } finally {
+    await f.operations.close();
+    await pool.query('UPDATE semantic.partition_subjects SET visible=0 WHERE partition_no=ANY($1)', [occupied]);
+  }
+});
+
 test('scheduled preparation resumes its stored publication and advances four metered native turns', async () => {
   await bootstrapRelease(pool, bundledRelease);
-  const f = await fixture(
-    {
-      async read({ partition }) {
-        const {
-          rows: [home],
-        } = await pool.query<{ epoch: number; position: string }>(
-          'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
-          [partition],
-        );
-        return {
-          status: 'eligible',
-          partition,
-          epoch: home!.epoch,
-          position: BigInt(home!.position),
-          ids: [],
-          after: null,
-          complete: true,
-          cost: zero,
-        };
-      },
+  const f = await fixture({
+    async read({ partition }) {
+      const {
+        rows: [home],
+      } = await pool.query<{ epoch: number; position: string }>(
+        'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+        [partition],
+      );
+      return {
+        status: 'eligible',
+        partition,
+        epoch: home!.epoch,
+        position: BigInt(home!.position),
+        ids: [],
+        after: null,
+        complete: true,
+        cost: zero,
+      };
     },
-    bundledRelease,
-  );
+  });
   const work = await createWorkClient(databaseUrl!);
   await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
   const store = createPublicPreparationStore(pool, work, f.prefix);

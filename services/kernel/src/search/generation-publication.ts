@@ -145,6 +145,7 @@ const cost = (): Meter => ({
 });
 const PAGE = 50;
 const SUBJECT_VALIDATION_HOMES = 256;
+const SUBJECT_VALIDATION_REPLAY = 'subject-validation-replay';
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const same = isDeepStrictEqual;
@@ -796,11 +797,18 @@ export function createSearchGenerationPublication(
     return next_home;
   }
   async function rewindSubjectHome(job: Job, home: number, client: PoolClient, meter: Meter) {
-    const removed = await client.query(
-      'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
-      [home, job.job],
-    );
-    meter.frontierWrites += removed.rowCount ?? 0;
+    if (job.phase === 'validate') {
+      // Keep the witness until replay starts so a lost checkpoint can retry validation.
+      // Older workers ignore previous_uuid during reconciliation and replace it before alias intent.
+      // Leaving both PIT and cursor null lets those workers continue their full scan.
+      job.previous_uuid = SUBJECT_VALIDATION_REPLAY;
+    } else {
+      const removed = await client.query(
+        'DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
+        [home, job.job],
+      );
+      meter.frontierWrites += removed.rowCount ?? 0;
+    }
     job.phase = 'subject';
     job.home = home;
     job.after_route = null;
@@ -1024,6 +1032,8 @@ export function createSearchGenerationPublication(
     if (job.phase === 'subject' || job.phase === 'account') {
       // A retained PIT marks an engine page interrupted by a changed Subject home.
       const resumesSubjectEngine = job.family === 'subjects' && job.pit !== null;
+      const replaysValidationHome =
+        job.family === 'subjects' && job.pit === null && job.previous_uuid === SUBJECT_VALIDATION_REPLAY;
       let emptySeeks = 0;
       for (;;) {
         if (job.home === 4096) {
@@ -1089,6 +1099,7 @@ export function createSearchGenerationPublication(
             !registry &&
             job.family === 'subjects' &&
             !resumesSubjectEngine &&
+            !replaysValidationHome &&
             complete &&
             ids.length === 0 &&
             after === null
@@ -1129,7 +1140,9 @@ export function createSearchGenerationPublication(
           job.after_route = null;
           job.after_id = null;
           if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
-          else if (resumesSubjectEngine) {
+          else if (resumesSubjectEngine || replaysValidationHome) {
+            // A validation replay needs a fresh engine scan, followed by validation from home zero.
+            if (replaysValidationHome) job.previous_uuid = null;
             job.phase = 'engine';
             job.home = 0;
           } else if (job.family === 'subjects' && !registry && ids.length > 0) {
@@ -1345,22 +1358,25 @@ export function createSearchGenerationPublication(
               row.claim_revision === '0'
             : same(row, await head(row.partition, context));
         if (matches) continue;
-        if (
+        const sameOwnerAdvance =
           current_position !== null &&
           row.account_revision === '0' &&
           row.claim_revision === '0' &&
-          advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position))
-        )
-          return rewindSubjectHome(job, row.partition, client, meter);
-        await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-          row.partition,
-          job.job,
-        ]);
-        job.phase = 'subject';
-        job.home = row.partition;
-        job.after_id = null;
-        job.after_route = null;
-        await save(client, job, meter);
+          advancedUnderSubjectFence(job, row, current_epoch, BigInt(current_position));
+        if (job.family === 'subjects' && (!job.fenced_pass || sameOwnerAdvance)) {
+          await rewindSubjectHome(job, row.partition, client, meter);
+          if (sameOwnerAdvance) return;
+        } else {
+          await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
+            row.partition,
+            job.job,
+          ]);
+          job.phase = 'subject';
+          job.home = row.partition;
+          job.after_id = null;
+          job.after_route = null;
+          await save(client, job, meter);
+        }
         throw new Pending('source_pending');
       }
       job.home = end;
