@@ -202,6 +202,9 @@ test('the private projection rejects account selectors, public requests, bearer 
 
 test('current account, floor, native client and consent admission cannot be replaced by a cached identity allow', async () => {
   const cookie = await signin();
+  await expect(
+    database.query('UPDATE session SET "userId"=$2 WHERE "userId"=$1', [person, other]),
+  ).rejects.toMatchObject({ code: '55000', message: 'Session identity is immutable' });
   for (const change of [
     { state: 'suspended' },
     { state: 'deleted' },
@@ -233,9 +236,6 @@ test('late native identity results are withheld after revocation, proof changes,
     },
     async () => {
       await database.query('UPDATE session SET "authMethods"=\'pop\' WHERE "userId"=$1', [person]);
-    },
-    async () => {
-      await database.query('UPDATE session SET "userId"=$2 WHERE "userId"=$1', [person, other]);
     },
     async () => {
       await database.query('UPDATE session SET "clientId"=$2 WHERE "userId"=$1', [person, otherClientId]);
