@@ -87,7 +87,11 @@ export function RatingPopulationControl({
           disabled={disabled}
           defaultValue={(selected ?? '') === '' ? null : (selected ?? '')}
         >
-          <SelectTrigger id={id} aria-describedby={helpId} className="w-full min-w-0">
+          <SelectTrigger
+            id={id}
+            aria-describedby={helpId}
+            className="w-full min-w-0 max-md:min-h-11 pointer-coarse:min-h-11"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
