@@ -15,9 +15,8 @@ WITH input AS (
     ON k.live AND k.input_key=ANY(p.coverage_keys || i.text_keys)
   LIMIT 1
 ), dirty AS MATERIALIZED (
-  SELECT h.* FROM parent p JOIN search.public_filter_coverage_home h
-    ON (h.partition_no,h.registration)=(0,p.registration)
-  WHERE h.behind ORDER BY h.source_home LIMIT 9
+  SELECT h.* FROM parent p
+  CROSS JOIN LATERAL semantic.public_filter_book_dirty_homes(p.registration) h
 ), reusable AS MATERIALIZED (
   SELECT prior.book_withdrawals AS withdrawals FROM parent p
   LEFT JOIN LATERAL (
@@ -88,7 +87,7 @@ WITH input AS (
   FROM parent p CROSS JOIN members m CROSS JOIN proof JOIN core.partition owner ON owner.partition_no=0
     AND owner.write_state='active' AND owner.epoch=:owner_epoch::integer
   WHERE NOT EXISTS(SELECT 1 FROM pending)
-    AND NOT EXISTS(SELECT 1 FROM semantic.public_filter_privacy_head WHERE population_fenced)
+    AND NOT semantic.public_filter_population_is_fenced()
   ORDER BY m.definition
   ON CONFLICT(partition_no,request_key) WHERE state='begun' AND coverage_publication IS NOT NULL
   DO UPDATE SET request_key=EXCLUDED.request_key

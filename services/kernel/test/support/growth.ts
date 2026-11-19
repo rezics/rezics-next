@@ -1143,6 +1143,16 @@ function captureRunFailureEvidence(
   return {
     ...(profiled && counts
       ? {
+          countedCost: {
+            statements: profiled.cost.statements,
+            controlStatements: profiled.cost.controlStatements,
+            catalogStatements: profiled.cost.catalogStatements,
+            rows: profiled.cost.rows,
+            blocks: profiled.cost.blocks,
+            requestBytes: profiled.cost.requestBytes,
+            responseBytes: profiled.cost.responseBytes,
+            backgroundStatements: profiled.cost.backgroundStatements,
+          },
           repeatedForegroundStatements: [...counts]
             .filter(([, occurrences]) => occurrences.length > 1)
             .sort((left, right) => right[1].length - left[1].length)

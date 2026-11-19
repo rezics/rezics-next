@@ -3707,6 +3707,20 @@ BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
 
 
 --
+-- Name: public_filter_book_dirty_homes(text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_book_dirty_homes(registration_id text) RETURNS SETOF search.public_filter_coverage_home
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT h.* FROM search.public_filter_coverage_home h
+  WHERE h.partition_no = 0 AND h.registration = registration_id AND h.behind
+  ORDER BY h.source_home LIMIT 9
+$$;
+
+
+--
 -- Name: public_filter_book_withdrawal_covers(search.public_filter_coverage_home, uuid, jsonb); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3869,6 +3883,18 @@ BEGIN
     ELSE RAISE EXCEPTION 'Invalid native public-filter encoding';
   END CASE;
 END $$;
+
+
+--
+-- Name: public_filter_population_is_fenced(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.public_filter_population_is_fenced() RETURNS boolean
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT EXISTS (SELECT 1 FROM semantic.public_filter_privacy_head WHERE population_fenced)
+$$;
 
 
 --
