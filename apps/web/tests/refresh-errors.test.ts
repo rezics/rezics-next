@@ -32,7 +32,7 @@ const subjectTitle = subject.labels.en;
 const subjectPath = `/en/subjects/${subject.id}/${slug(subjectTitle)}`;
 const catalogue = createFakeKernelFetch(fixtures);
 let pageFailure: { status: number; code: string; retryAfter?: string } | undefined;
-let pageFailureGate: Promise<void> | undefined;
+let pageFailureGate: { arrived: () => void; wait: Promise<void> } | undefined;
 let pageReads = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -103,7 +103,9 @@ const fake = Bun.serve({
         pageReads++;
         if (pageFailure) {
           const { code, status, retryAfter } = pageFailure;
-          await pageFailureGate;
+          const gate = pageFailureGate;
+          gate?.arrived();
+          await gate?.wait;
           return Response.json(
             { code, detail: 'private upstream cause' },
             { status, headers: retryAfter ? { 'retry-after': retryAfter } : {} },
@@ -328,11 +330,28 @@ test(
       expect(await main.getByRole('link', { name: 'Search', exact: true }).getAttribute('href')).toBe('/en/search');
       expect(pageReads).toBe(before + 1);
       const { promise, resolve } = Promise.withResolvers<void>();
-      pageFailureGate = promise;
+      const { promise: arrived, resolve: markArrived } = Promise.withResolvers<void>();
+      pageFailureGate = { arrived: markArrived, wait: promise };
+      let arrivalTimeout: ReturnType<typeof setTimeout> | undefined;
       try {
         await retry.click();
-        await main.getByRole('button', { name: 'Trying again…', exact: true }).waitFor();
+        const pending = main.getByRole('button', { name: 'Trying again…', exact: true });
+        await pending.waitFor();
+        await Promise.race([
+          arrived,
+          new Promise<never>((_, reject) => {
+            arrivalTimeout = setTimeout(() => reject(new Error('Retry did not reach the held Kernel read')), 30_000);
+          }),
+        ]);
+        expect(await pending.isDisabled()).toBe(true);
+        expect(await pending.getAttribute('aria-busy')).toBe('true');
+        expect(await main.getByRole('status').filter({ hasText: 'Trying again…' }).isVisible()).toBe(true);
+        expect(await main.count()).toBe(1);
+        expect(await main.innerText()).not.toContain('private upstream cause');
+        expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');
+        expect(pageReads).toBe(before + 2);
       } finally {
+        clearTimeout(arrivalTimeout);
         resolve();
         pageFailureGate = undefined;
       }

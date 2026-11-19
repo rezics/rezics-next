@@ -1,6 +1,11 @@
+import type { AnyRouter } from '@tanstack/react-router';
+import type { ReactElement } from 'react';
 import type { BrowserObservationSnapshot } from '../../session/observation';
 
 export type RecoveryOwner = { visit: string | undefined; reader: BrowserObservationSnapshot };
+
+// Invalidation can replace the error boundary with the router's pending outlet.
+export const pendingRouteRetries = new WeakMap<AnyRouter, { current: () => boolean; content: ReactElement }>();
 
 /** A retry can settle only for the visit and reader incarnation that own its pending request. */
 export function recoveryOwnerIsCurrent(expected: RecoveryOwner, current: RecoveryOwner, mounted: boolean): boolean {
