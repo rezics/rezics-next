@@ -5,6 +5,7 @@ import { Button } from '../shadcn/button.tsx';
 import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
 import { Textarea } from '../shadcn/textarea.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
+import { settled } from '../stories/support.tsx';
 import { ShelfToolbar } from './shelf-toolbar.tsx';
 
 // Review these same outcomes with the viewport and theme toolbar controls.
@@ -519,7 +520,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
 
     const displayTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.display) });
     await userEvent.click(displayTrigger);
-    const displayPanel = await screen.findByRole('dialog', { name: toolbarLabels.display });
+    const displayPanel = await settled(await screen.findByRole('dialog', { name: toolbarLabels.display }));
     const largeDensity = within(displayPanel).getByRole('button', { name: toolbarLabels.large });
     await userEvent.click(largeDensity);
     await expect(largeDensity).toHaveAttribute('aria-pressed', 'true');
@@ -547,7 +548,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     };
     Object.defineProperty(browser, 'matchMedia', { configurable: true, writable: true, value: coarseMatchMedia });
     await userEvent.click(sortTrigger);
-    const phoneSheet = await screen.findByRole('dialog', { name: toolbarLabels.sort });
+    const phoneSheet = await settled(await screen.findByRole('dialog', { name: toolbarLabels.sort }));
     await expect(within(phoneSheet).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
     // Let the sheet finish ignoring the pointer that opened it.
     await new Promise<void>((resolve) =>
@@ -568,7 +569,7 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     await userEvent.click(canvas.getByRole('button', { name: 'Mount ShelfToolbar' }));
     const freshSortTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.sort) });
     await userEvent.click(freshSortTrigger);
-    const freshPanel = await screen.findByRole('dialog', { name: toolbarLabels.sort });
+    const freshPanel = await settled(await screen.findByRole('dialog', { name: toolbarLabels.sort }));
     await expect(within(freshPanel).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());

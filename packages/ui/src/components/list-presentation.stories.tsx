@@ -5,7 +5,7 @@ import { fallbackListPresentation, type CoverSubject, type CoverSummary } from '
 import { CoverCard, CoverGrid } from './cover-card.tsx';
 import { MemberListRow, MemberReadingDetail, MemberReadingItem } from './list-presentation.tsx';
 import { Button } from '../shadcn/button.tsx';
-import { withSurface } from '../stories/support.tsx';
+import { settled, withSurface } from '../stories/support.tsx';
 
 const book: CoverSubject = { id: 'list-book', title: 'The Little Prince', types: ['schema:Book'] };
 const movie: CoverSubject = { id: 'list-movie', title: 'The Red Turtle', types: ['schema:Movie'] };
@@ -179,10 +179,10 @@ export const Mixed: Story = {
     await userEvent.click(trigger);
     const dialog = screen.queryByRole('dialog');
     if (dialog) {
-      await expect(within(dialog).getByRole('button', { name: 'Inspect menu' })).toBeVisible();
+      await expect(within(await settled(dialog)).getByRole('button', { name: 'Inspect menu' })).toBeVisible();
       await userEvent.keyboard('{Escape}');
     } else {
-      await expect(await screen.findByRole('menu')).toBeVisible();
+      await expect(await settled(await screen.findByRole('menu'))).toBeVisible();
       await expect(screen.getByRole('menuitem', { name: 'Inspect menu' })).toBeVisible();
       await userEvent.keyboard('{Escape}');
     }

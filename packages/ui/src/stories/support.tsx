@@ -34,6 +34,8 @@ export const settled = async <T extends Element>(element: T): Promise<T> => {
   while (layer.parentElement && layer.parentElement !== layer.ownerDocument.body) {
     layer = layer.parentElement;
   }
+  // Base UI removes its starting style on the next frame, which can start a CSS transition.
+  await waitFor(() => expect(element.closest('[data-starting-style]')).toBeNull());
   const finite = layer
     .getAnimations({ subtree: true })
     .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);

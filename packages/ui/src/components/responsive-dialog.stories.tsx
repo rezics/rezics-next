@@ -93,7 +93,12 @@ async function ready(context: { canvasElement: HTMLElement }) {
   await userEvent.clear(input);
   await userEvent.type(input, '250');
   await expect(input).toHaveValue(250);
-  await expect(within(context.canvasElement).getByRole('button', { name: 'Open filter review' })).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  const launcher = await within(context.canvasElement).findByRole('button', { name: 'Open filter review' });
+  await expect(launcher).toBeVisible();
+  await userEvent.click(launcher);
+  const reopened = await within(document.body).findByRole('dialog', { name: 'Collection filters' });
+  await expect(await within(reopened).findByRole('spinbutton', { name: 'Minimum word count' })).toHaveValue(250);
 }
 
 export const Draft: Story = { render: () => <FilterReview />, play: ready };

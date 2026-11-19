@@ -155,7 +155,7 @@ test('UI catalogue component stories pass their browser tests', async () => {
     stderr: 'pipe',
     env: { ...process.env, CI: '1' },
   });
-  const [stdout, stderr] = await Promise.all([
+  const [stdout, stderr, exitCode] = await Promise.all([
     new Response(run.stdout).text(),
     new Response(run.stderr).text(),
     run.exited,
@@ -167,9 +167,10 @@ test('UI catalogue component stories pass their browser tests', async () => {
   const failures = result.testResults.flatMap((file) =>
     file.assertionResults
       .filter((assertion) => assertion.status !== 'passed')
-      .map((assertion) => `${file.name}: ${assertion.title}: ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`),
+      .map((assertion) => `${file.name}: ${assertion.title}: ${assertion.failureMessages[0]?.slice(0, 850) ?? ''}`),
   );
   expect(failures).toEqual([]);
+  expect(exitCode, stderr.slice(-4000)).toBe(0);
   const byFile = new Map(
     result.testResults.map((file) => [file.name.slice(file.name.lastIndexOf('/') + 1), file.assertionResults]),
   );
