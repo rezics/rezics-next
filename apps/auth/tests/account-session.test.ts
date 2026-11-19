@@ -26,7 +26,7 @@ test('loadAccountSession bounds the native stream, preserves classifications and
     }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityResponseByteBudgets, securityResponseLimits } = await import('@rezics/auth-contract');
-    const { loadAccountSession } = await import('./apps/auth/src/account-operations.ts');
+    const { loadAccountSession } = await import('./src/account-operations.ts');
     const originalTimeout = globalThis.setTimeout;
     globalThis.setTimeout = (callback, delay, ...args) => originalTimeout(callback, delay === 5000 ? 5 : delay, ...args);
     const calls = [];
@@ -123,7 +123,7 @@ test('loadAccountSession bounds the native stream, preserves classifications and
     console.log(JSON.stringify({ calls: calls.length, cap }));
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });
