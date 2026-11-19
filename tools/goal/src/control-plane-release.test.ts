@@ -5,8 +5,10 @@ import { MergeTrain, type TrainOptions } from './merge-train.ts';
 import { git, type GateRunner } from './merge.ts';
 import type { GateOutcome } from './contracts.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { integrationHarness, markdown } from './test-support.ts';
+import { checkScriptFixture, integrationHarness, markdown } from './test-support.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { verifyDev } from './dev-verifier.ts';
+import { latestRound } from './dev-verifier-storage.ts';
 
 type ReleaseHooks = Partial<
   Pick<
@@ -27,6 +29,7 @@ function dispatchControlPlane(
   h: ReturnType<typeof integrationHarness>,
   file = 'tools/goal/src/release.ts',
   manager = 'control-manager',
+  instruction = 'Write the requested result and commit it.',
 ) {
   const brief = join(h.settings.stateDirectory, `control-plane-${crypto.randomUUID()}.md`);
   writeFileSync(
@@ -34,7 +37,8 @@ function dispatchControlPlane(
     markdown
       .replace('goal: fixture', `goal: control-plane\ntarget: main\nmanager: ${manager}`)
       .replace('paths: [result.txt]', `paths: [${file}]`)
-      .replace('command: [bun, test]', 'command: ["true"]'),
+      .replace('command: [bun, test]', 'command: ["true"]')
+      .replace('Write the requested result and commit it.', instruction),
   );
   const task = h.tasks.dispatch(brief);
   mkdirSync(dirname(join(task.worktree, file)), { recursive: true });
@@ -86,21 +90,20 @@ async function train(
   await h.job.drain();
 }
 
-function addBranchCommit(
+function advanceAcceptedSource(
   h: ReturnType<typeof integrationHarness>,
   branch: string,
-  files: Record<string, string>,
+  file: string,
+  content: string,
 ): string {
   const base = h.head(branch);
   const tree = join(h.settings.worktreeRoot, `release-race-${crypto.randomUUID()}`);
   mkdirSync(h.settings.worktreeRoot, { recursive: true });
   git(h.root, 'worktree', 'add', '--detach', tree, base);
   try {
-    for (const [file, content] of Object.entries(files)) {
-      mkdirSync(dirname(join(tree, file)), { recursive: true });
-      writeFileSync(join(tree, file), content);
-    }
-    git(tree, 'add', '-A');
+    mkdirSync(dirname(join(tree, file)), { recursive: true });
+    writeFileSync(join(tree, file), content);
+    git(tree, 'add', '--', file);
     git(tree, 'commit', '-m', `Advance ${branch} during validation`);
     const commit = git(tree, 'rev-parse', 'HEAD');
     git(h.root, 'update-ref', `refs/heads/${branch}`, commit, base);
@@ -130,7 +133,6 @@ test('ordinary release drains dev before capture, then keeps only main custody t
   let running: Promise<void> | undefined;
   try {
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
     const devTask = h.dispatch('dev-result.txt');
     const task = dispatchControlPlane(h);
     await h.start(devTask);
@@ -319,7 +321,7 @@ test('ordinary release refuses repeated external dev drift at the final atomic r
             LeaseHeldError,
           );
           acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease')).release();
-          external = addBranchCommit(h, 'dev', { 'external.txt': `external change ${attempts}\n` });
+          external = h.advanceDev('external.txt', `external change ${attempts}\n`);
         },
       },
     );
@@ -338,8 +340,11 @@ test('ordinary release refuses repeated external dev drift at the final atomic r
 test('a checked candidate publishes main, stabilize and dev together with exact release evidence', async () => {
   const h = integrationHarness();
   try {
-    h.ensureDev();
     const base = h.head('main');
+    const mainBranch = 'release/qualified-main';
+    git(h.root, 'switch', '-c', mainBranch);
+    h.settings.mainBranch = mainBranch;
+    h.ensureDev();
     git(h.root, 'branch', 'stabilize', base);
     const task = dispatchControlPlane(h);
     await h.start(task);
@@ -349,10 +354,11 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
       return { passed: true, output: '', timedOut: false };
     });
 
-    const main = h.head('main');
+    const main = h.head(mainBranch);
     const stabilize = h.head('stabilize');
     const dev = h.head('dev');
     expect(main).not.toBe(base);
+    expect(h.head('main')).toBe(base);
     expect(git(h.root, 'rev-parse', 'stabilize^2')).toBe(main);
     expect(git(h.root, 'rev-parse', 'dev^2')).toBe(stabilize);
     expect(git(h.root, 'merge-base', '--is-ancestor', main, stabilize)).toBe('');
@@ -365,6 +371,7 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
 
     const [record] = releaseRecords(h);
     expect(record).toMatchObject({
+      mainBranch,
       mainCommit: main,
       mainExpected: base,
       devScriptTree: base,
@@ -387,7 +394,7 @@ test('an owned production report CLI keeps narrow checks and records bounded exa
   const h = integrationHarness();
   try {
     const entrypoint = 'tools/goal/scripts/efficiency-report.ts';
-    const cliSource = readFileSync(join(import.meta.dir, '../scripts/efficiency-report.ts'), 'utf8');
+    const cliSource = checkScriptFixture().read(entrypoint);
     const baseFiles = {
       [entrypoint]: cliSource,
       'tools/goal/src/efficiency-report.ts': 'export const renderHourlyEfficiencyReport = () => "report";\n',
@@ -480,7 +487,7 @@ for (const movingBranch of ['main', 'stabilize', 'dev'] as const) {
         if (!raced) {
           raced = true;
           if (movingBranch === 'main') unrelated = addMainCommit(h, 'main-race.txt');
-          else unrelated = addBranchCommit(h, movingBranch, { [`${movingBranch}-race.txt`]: 'unrelated work\n' });
+          else unrelated = h.advanceBranch(movingBranch, `${movingBranch}-race.txt`, 'unrelated work\n');
         }
         return { passed: true, output: '', timedOut: false };
       };
@@ -515,7 +522,7 @@ test('a repeated propagation conflict is notified once, quarantined, and leaves 
     h.ensureDev();
     const base = h.head('main');
     git(h.root, 'branch', 'stabilize', base);
-    addBranchCommit(h, 'stabilize', { [file]: 'stabilize side\n' });
+    h.advanceBranch('stabilize', file, 'stabilize side\n');
     const stabilize = h.head('stabilize');
     const task = dispatchControlPlane(h, file);
     await h.start(task);
@@ -555,7 +562,7 @@ test('a known dev add/add conflict prevents main and stabilize from advancing', 
     const conflictFile = 'tools/goal/src/web-landing-smoke.test.ts';
     const main = h.head('main');
     git(h.root, 'branch', 'stabilize', main);
-    const dev = addBranchCommit(h, 'dev', { [conflictFile]: 'dev-side launch scenario\n' });
+    const dev = h.advanceDev(conflictFile, 'dev-side launch scenario\n');
     const task = dispatchControlPlane(h, conflictFile);
     await h.start(task);
 
@@ -784,7 +791,7 @@ test('One accepted control-plane main cohort validates its combined final head o
     h.ensureDev();
     const main = h.head('main');
     git(h.root, 'branch', 'stabilize', main);
-    const independent = addBranchCommit(h, 'dev', { 'independent.txt': 'retained development\n' });
+    const independent = h.advanceDev('independent.txt', 'retained development\n');
     const tasks = [
       dispatchControlPlane(h, 'tools/goal/src/cohort-a.ts'),
       dispatchControlPlane(h, 'tools/goal/src/cohort-b.ts'),
@@ -957,7 +964,7 @@ test('a batch publication ref race preserves independent dev work and rebuilds o
       {
         beforeIntegrationAdvance() {
           publications++;
-          if (!raced) raced = addBranchCommit(h, 'dev', { 'dev-race.txt': 'independent during CAS\n' });
+          if (!raced) raced = h.advanceDev('dev-race.txt', 'independent during CAS\n');
         },
       },
     ).releaseControlPlaneBatch(manifest);
@@ -1022,20 +1029,15 @@ test('batch receiving refuses GOAL_MANAGER without a persisted authenticated man
     const task = dispatchControlPlane(h);
     await h.start(task);
     const manifest = captureControlPlaneBatch(h.store, h.queue, 'control-manager');
-    await expect(
-      receiveControlPlaneBatch(
-        manifest,
-        {
-          store: h.store,
-          queue: h.queue,
-          train: batchTrain(h),
-          landing() {
-            throw new Error('unauthenticated caller cannot authorize requests');
-          },
-        },
-        { GOAL_MANAGER: 'control-manager' },
-      ),
-    ).rejects.toThrow('authenticated');
+    expect(manifest.members).toHaveLength(1);
+    const request = join(h.settings.stateDirectory, 'cohort.json');
+    writeFileSync(request, JSON.stringify(manifest));
+    const result = Bun.spawnSync(
+      [process.execPath, join(import.meta.dir, '../scripts/release-control-plane-batch.ts'), request],
+      { cwd: h.root, env: { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_MANAGER: 'control-manager' } },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain('An authenticated owning control-plane manager session is required');
     expect(h.queue.entry(manifest.members[0]!)?.request.managerLanding).toBeUndefined();
   } finally {
     h.dispose();
@@ -1108,7 +1110,6 @@ test('A queued product dev landing does not abort Main proof and changed refs re
   const gateRelease = join(h.settings.stateDirectory, 'release-slow-proof');
   try {
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
     const main = h.head('main');
     git(h.root, 'branch', 'stabilize', main);
     const control = dispatchControlPlane(h);
@@ -1218,23 +1219,75 @@ test('A queued product dev landing does not abort Main proof and changed refs re
   }
 }, 30_000);
 
-test('ordinary dev independence: startup backlog lands before main captures proof refs', async () => {
+test('ordinary dev independence: source-only backlog lands before main proof and is verified on its exact dev head', async () => {
   const h = integrationHarness();
   try {
+    const fixture = checkScriptFixture();
+    const { packageManager, devDependencies } = JSON.parse(fixture.read('package.json'));
+    const { lockfileVersion, configVersion, packages } = Bun.JSON5.parse(fixture.read('bun.lock')) as {
+      lockfileVersion: number;
+      configVersion?: number;
+      packages: Record<string, unknown>;
+    };
+    const bun = devDependencies.bun;
+    writeFileSync(join(h.root, 'package.json'), JSON.stringify({ packageManager, devDependencies: { bun } }));
+    writeFileSync(
+      join(h.root, 'bun.lock'),
+      JSON.stringify({
+        lockfileVersion,
+        configVersion,
+        workspaces: { '': { devDependencies: { bun } } },
+        packages: Object.fromEntries(
+          Object.entries(packages).filter(([name]) => name === 'bun' || name.startsWith('@oven/bun-')),
+        ),
+      }),
+    );
+    git(h.root, 'add', 'package.json', 'bun.lock');
+    git(h.root, 'commit', '-m', 'Pin the verifier fixture Bun artifact');
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
+    h.settings.verifierChecks = [{ paths: ['startup-product.ts'], command: ['check-startup-product'] }];
     const control = dispatchControlPlane(h);
-    const product = h.dispatch('startup-product.txt');
+    const product = h.dispatch('startup-product.ts');
     await h.start(control);
     await h.start(product);
     let captured = '';
-    await train(h, async (command, cwd, log) => {
-      expect(h.store.task(product.id).state).toBe('integrated');
-      captured = h.store.task(product.id).integratedCommit!;
-      expect(h.head('dev')).toBe(captured);
-      return success(command, cwd, log);
-    });
-    expect(h.outcomes.map((outcome) => outcome.taskId)).toEqual([product.id, control.id]);
+    let checked = '';
+    await train(
+      h,
+      async (command, cwd, log) => {
+        expect(command).not.toContain('check-startup-product');
+        expect(h.store.task(product.id).state).toBe('integrated');
+        captured = h.store.task(product.id).integratedCommit!;
+        expect(h.head('dev')).toBe(captured);
+        return success(command, cwd, log);
+      },
+      async (command, cwd) => {
+        expect(h.head('dev')).toBe(captured);
+        await verifyDev({
+          settings: h.settings,
+          store: h.store,
+          async runGate(command, cwd, log) {
+            if (command[0] !== 'check-startup-product') return success(command, cwd, log);
+            checked = git(cwd, 'rev-parse', 'HEAD');
+            expect(existsSync(join(cwd, 'startup-product.ts'))).toBe(true);
+            return {
+              passed: false,
+              output: 'AssertionError: startup product failed independent verification',
+              timedOut: false,
+            };
+          },
+        });
+        expect(h.store.task(product.id).state).toBe('integrated');
+        return releaseEvidence(command, cwd);
+      },
+    );
+    expect(checked).toBe(captured);
+    expect(latestRound(h.store)?.round).toMatchObject({ headCommit: captured, failed: 1, unknown: 0 });
+    expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
+      [product.id, true],
+      [control.id, true],
+    ]);
     expect(releaseRecords(h)[0]?.devScriptTree).toBe(captured);
   } finally {
     h.dispose();
@@ -1248,7 +1301,6 @@ test('ordinary dev independence: stale proof hands off without reusing partial e
   let owner: ReturnType<typeof acquireDirectoryLease> | undefined;
   try {
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
     const main = h.head('main');
     const control = dispatchControlPlane(h);
     await h.start(control);
@@ -1319,7 +1371,6 @@ test('ordinary dev independence: a launch assertion stays failed when product pr
   const h = integrationHarness();
   try {
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
     const main = h.head('main');
     const control = dispatchControlPlane(h);
     const product = h.dispatch('after-failed-launch.txt');
@@ -1366,7 +1417,6 @@ test('ordinary dev independence: repeated interrupted admissions are finite acro
   const h = integrationHarness();
   try {
     h.ensureDev();
-    h.settings.integration.devLandingChecks = false;
     const main = h.head('main');
     const control = dispatchControlPlane(h);
     await h.start(control);
@@ -1443,7 +1493,7 @@ test('ordinary dev independence: accepted source movement at publication cannot 
       runGate: success,
       runLaunchSmoke: releaseEvidence,
       beforePromotionAdvance() {
-        moved = addBranchCommit(h, control.branch, { 'tools/goal/src/moved-source.ts': 'later source\n' });
+        moved = advanceAcceptedSource(h, control.branch, 'tools/goal/src/moved-source.ts', 'later source\n');
       },
     }).run();
     expect(moved).not.toBe(source);
@@ -1473,7 +1523,11 @@ async function semanticSources(h: ReturnType<typeof integrationHarness>) {
   git(h.root, 'add', '--', semanticFile);
   git(h.root, 'commit', '-m', 'Seed semantic composition fixture');
   h.ensureDev();
-  const tasks = [dispatchControlPlane(h, semanticFile), dispatchControlPlane(h, semanticFile)];
+  const tasks = [
+    dispatchControlPlane(h, semanticFile, 'control-manager', 'Enable the left capability and commit it.'),
+    dispatchControlPlane(h, semanticFile, 'control-manager', 'Enable the right capability and commit it.'),
+  ];
+  expect(tasks[0]!.id).not.toBe(tasks[1]!.id);
   for (const [index, task] of tasks.entries()) {
     writeFileSync(
       join(task.worktree, '.temp/worker-plan.json'),
@@ -2006,7 +2060,7 @@ test('a failed native proof is durable and classified before moved refs and surv
     const result = await batchTrain(h, async (command) => {
       if (!isFullControlPlaneSuite(command)) return success(command, h.root, '');
       suites++;
-      addBranchCommit(h, 'dev', { 'moved-during-failed-proof.txt': 'independent dev change\n' });
+      h.advanceDev('moved-during-failed-proof.txt', 'independent dev change\n');
       return { passed: false, timedOut: false, output: 'retained native assertion failure\n' };
     }).releaseControlPlaneBatch(manifest);
     expect(suites).toBe(1);
@@ -2822,7 +2876,7 @@ async function refExhaustedCohort(h: ReturnType<typeof integrationHarness>) {
       if (isFullControlPlaneSuite(command)) {
         suites++;
         // An external writer deliberately bypasses the ordinary lease; CAS must remain truthful.
-        addBranchCommit(h, 'dev', { [`external-ref-${suites}.txt`]: 'external publication\n' });
+        h.advanceDev(`external-ref-${suites}.txt`, 'external publication\n');
       }
       return { passed: true, timedOut: false, output: 'retained positive full check\n' };
     }).releaseControlPlaneBatch(manifest),
@@ -3028,9 +3082,12 @@ test('ref continuation refuses failed, incomplete, live, stale, tampered and wor
       expect(h.queue.controlPlaneRefContinuation(controlPlaneBatchId(input.manifest))).toBeUndefined();
     }
     writeFileSync(journal.path, raw);
-    addBranchCommit(h, h.store.task(input.manifest.members[0]!.taskId).branch, {
-      'stale-source.txt': 'source changed\n',
-    });
+    advanceAcceptedSource(
+      h,
+      h.store.task(input.manifest.members[0]!.taskId).branch,
+      'stale-source.txt',
+      'source changed\n',
+    );
     await expect(receive()).rejects.toThrow('source, contract, request or claim changed');
     expect(readFileSync(journal.path, 'utf8')).toBe(raw);
     expect(h.queue.controlPlaneRefContinuation(controlPlaneBatchId(input.manifest))).toBeUndefined();
