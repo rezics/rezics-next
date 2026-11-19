@@ -306,6 +306,8 @@ test(
       calls.length = 0;
       const { page, urls } = await open();
       try {
+        // Let the development server finish loading the document and its client dependencies before filling it.
+        await page.waitForLoadState('networkidle');
         const { address, secret, submit: button } = await form(page);
         const login = page.url();
         const document = await page.locator('html').elementHandle();
@@ -343,12 +345,13 @@ test(
         submitted(signIns()[0]);
         if (status === 503) {
           const choice = page.locator('section[aria-label="Sign in"]');
-          const uncertain = choice.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
+          const uncertainCopy = 'Sign-in could not be confirmed.';
+          const uncertain = choice.getByRole('status').filter({ hasText: uncertainCopy });
           await uncertain.waitFor({ state: 'visible' });
           await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
           expect(await uncertain.evaluate((element) => element === document.activeElement)).toBe(true);
           expect(await alert.count()).toBe(0);
-          expect(await page.getByLabel(/^password$/i).count()).toBe(0);
+          expect(await secret.count()).toBe(0);
           const review = choice.getByRole('button', { name: 'Review current session', exact: true });
           await review.waitFor({ state: 'visible' });
           await Promise.all([
@@ -359,11 +362,9 @@ test(
             review.click(),
           ]);
           await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
-          await choice
-            .getByText('The sign-in outcome could not be confirmed.', { exact: false })
-            .waitFor({ state: 'visible' });
-          expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
-          expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
+          await uncertain.waitFor({ state: 'visible' });
+          expect(await address.inputValue()).toBe('');
+          expect(await secret.inputValue()).toBe('');
           expect(await alert.count()).toBe(0);
           expect(signIns()).toHaveLength(1);
           expect(calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin/page')).toHaveLength(2);
@@ -462,7 +463,12 @@ test(
         const login = new URL(page.url());
         expect(login.pathname).toBe('/login');
         expect(await page.locator('html').getAttribute('lang'), own.locale).toBe(own.locale);
-        expect(await page.getByRole('heading', { name: own.heading, exact: true }).count(), own.locale).toBe(1);
+        expect(await page.getByRole('heading', { level: 1, name: own.heading, exact: true }).count(), own.locale).toBe(
+          1,
+        );
+        expect(await page.getByRole('heading', { level: 2, name: own.heading, exact: true }).count(), own.locale).toBe(
+          1,
+        );
         const address = page.getByLabel(own.email);
         const secret = page.locator('input[name="password"]');
         expect(await address.count(), `${own.locale}: the email field has a localized label`).toBe(1);
