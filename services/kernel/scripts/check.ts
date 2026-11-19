@@ -198,7 +198,13 @@ function seconds(started: number): number {
   return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
 }
 
-export type CheckPlan = { files: string[] | null; tests: string[]; testArguments?: string[]; testsOnly?: true };
+export type CheckPlan = {
+  files: string[] | null;
+  tests: string[];
+  testArguments?: string[];
+  testsOnly?: true;
+  fullQuality?: true;
+};
 
 function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
   if (!specifier.startsWith('.')) return null;
@@ -372,6 +378,15 @@ export function planCheck(
   moduleDirectory: string,
   options: { env?: NodeJS.ProcessEnv; changed?: (revision: string) => string[] } = {},
 ): { plan: CheckPlan; announcement: string | null } {
+  if (args[0] === '--full-quality') {
+    const files = args.slice(1);
+    if (!files.length || files.some((file) => !file.endsWith('.test.ts')))
+      throw new Error('Kernel full-quality group requires explicit test files');
+    return {
+      plan: { ...checkPlan(files, moduleDirectory), fullQuality: true },
+      announcement: 'Kernel file group: global compiler, lint and format with selected native tests.',
+    };
+  }
   if (args[0] === '--tests-only') {
     const separator = args.indexOf('--');
     const names = args.slice(1, separator < 0 ? undefined : separator);
@@ -693,19 +708,14 @@ export async function runKernelCheckStages(input: KernelCheckStages): Promise<vo
   const productFailures = input.productFailures ?? [];
   const quality: QualityOutcome = { diagnostics: [], qualityFailures: [...productFailures], compilerOutput: '' };
   if (!input.plan.testsOnly) {
+    const qualityFiles = input.plan.fullQuality ? null : input.plan.files;
     try {
       const typecheck = await aroundCompiler(() =>
         Promise.resolve(
-          invokeTypecheck(
-            input.programs.tsc,
-            input.plan.files,
-            input.environment,
-            input.reyloConfig,
-            input.captureCommand,
-          ),
+          invokeTypecheck(input.programs.tsc, qualityFiles, input.environment, input.reyloConfig, input.captureCommand),
         ),
       );
-      const classified = classifyTypecheckResult(typecheck, input.ownedFiles);
+      const classified = classifyTypecheckResult(typecheck, input.plan.fullQuality ? null : input.ownedFiles);
       quality.diagnostics = classified.diagnostics;
       quality.compilerOutput = classified.compilerOutput;
     } catch (error) {
@@ -715,7 +725,7 @@ export async function runKernelCheckStages(input: KernelCheckStages): Promise<vo
     try {
       quality.qualityFailures = [
         ...productFailures,
-        ...(await collectLintFormatFailures(input.plan.files, input.programs, input.environment, input.captureCommand)),
+        ...(await collectLintFormatFailures(qualityFiles, input.programs, input.environment, input.captureCommand)),
       ];
     } catch (error) {
       fail(withQualityFailures(asFailureMessage(error), quality));
@@ -1253,6 +1263,7 @@ export async function placeKernelCheck(
         ...(forwardedEnv.length ? ['env', ...forwardedEnv] : []),
         'bun',
         'scripts/check.ts',
+        ...(plan.fullQuality ? ['--full-quality'] : []),
         ...(plan.testsOnly ? ['--tests-only'] : []),
         ...(plan.files ?? []),
         ...(plan.testArguments ? ['--', ...plan.testArguments] : []),
@@ -1346,7 +1357,9 @@ async function main(): Promise<void> {
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
   let searchUrl: string | undefined;
   const ownedFiles =
-    plan.files === null ? null : diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null);
+    plan.files === null || plan.fullQuality
+      ? null
+      : diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null);
 
   await runKernelCheckStages({
     plan,
