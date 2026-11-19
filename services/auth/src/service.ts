@@ -3077,7 +3077,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             });
             if (changed.status !== 'applied') throw new Denied(503);
             if (staleReview) throw new Denied(409);
-            if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
+            if (!(await authority.withCheckout(() => barrierProofs.verify(proof.reference, proof)))) throw new Denied();
             const receipt = await trustedAccess.invalidateAccount!({
               accountId: proof.accountId,
               previousEpoch: proof.previousEpoch,

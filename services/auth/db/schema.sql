@@ -1390,7 +1390,9 @@ BEGIN
       authority_change:=ROW(NEW.scopes,NEW.pending_scopes,NEW.pending_reference) IS DISTINCT FROM ROW(OLD.scopes,OLD.pending_scopes,OLD.pending_reference);
       required:=authority_change
         AND EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.account_id=NEW.account_id AND d.client_id=NEW.client_id);
-      operation:=CASE WHEN NEW.scopes IS NOT DISTINCT FROM OLD.scopes THEN 'consent-pending' ELSE 'consent-upsert' END;
+      -- Clearing a ceiling authorizes the full grant even when the stored scopes stay the same.
+      operation:=CASE WHEN NEW.scopes IS NOT DISTINCT FROM OLD.scopes AND NEW.pending_scopes IS NOT NULL
+        THEN 'consent-pending' ELSE 'consent-upsert' END;
     END IF;
   ELSIF TG_TABLE_NAME='auth_client' THEN
     client_key:=CASE WHEN TG_OP='DELETE' THEN OLD.client_id ELSE NEW.client_id END;
@@ -1464,6 +1466,9 @@ BEGIN
   IF TG_TABLE_NAME='auth_consent' THEN
     IF operation='consent-upsert' AND TG_OP<>'DELETE' THEN
       IF transition.target->'scopes' IS DISTINCT FROM to_jsonb(NEW.scopes) OR
+        (TG_OP='UPDATE' AND NEW.scopes IS NOT DISTINCT FROM OLD.scopes
+          AND (transition.target->'pendingScopes' IS DISTINCT FROM 'null'::jsonb
+            OR transition.target->'pendingReference' IS DISTINCT FROM 'null'::jsonb)) OR
         (transition.target ? 'pendingScopes' AND transition.target->'pendingScopes' IS DISTINCT FROM COALESCE(to_jsonb(NEW.pending_scopes),'null'::jsonb)) OR
         (transition.target ? 'pendingReference' AND transition.target->>'pendingReference' IS DISTINCT FROM NEW.pending_reference) THEN
         RAISE EXCEPTION 'Kind consent transition target mismatch' USING ERRCODE='23514';
