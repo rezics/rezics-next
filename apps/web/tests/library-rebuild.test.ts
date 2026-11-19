@@ -1,13 +1,12 @@
+import { Window } from 'happy-dom';
+import releaseRecording from '../src/kernel/recorded/definitions-release.json';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test as bunTest } from 'bun:test';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
-
-const app = join(import.meta.dir, '..');
 
 let serverStartupAbort: AbortController | undefined;
 const pendingServerStartups = new Set<Promise<string>>();
@@ -20,30 +19,6 @@ const ownedContexts = new Set<BrowserContext>();
 const pendingContextSetups = new Set<Promise<unknown>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
 const failedContextSetups = new WeakSet<BrowserContext>();
-
-function ensureSiteStartupActive(output = '', cause?: unknown): void {
-  if (teardownStarted) {
-    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
-    if (cause !== undefined) throw new Error(message, { cause });
-    throw new Error(message);
-  }
-}
-
-function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const parentSignal = serverStartupAbort?.signal;
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener('abort', abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener('abort', abort);
-    },
-  };
-}
 
 type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
 
@@ -193,7 +168,7 @@ const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/i;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
 const clientKeys = await generateKeyPair('ES256', { extractable: true });
@@ -298,6 +273,7 @@ const shelf = {
   title: 'Night shelf',
   description: null,
   visibility: 'public',
+  membershipKind: 'curated',
   revision: 1,
   memberCount: 3,
   createdAt: stamp,
@@ -428,8 +404,11 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    const alice = accessTokens.some((token) => request.headers.get('authorization') === `Bearer ${token}`);
     if (url.pathname === '/v1/platform/exposure')
-      return json({ admitted: ['personal_library', 'reading_progress', 'collections'] });
+      return json({
+        admitted: ['personal_library', 'reading_progress', 'collections', ...(alice ? ['library_entry.delete'] : [])],
+      });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -541,7 +520,13 @@ const fake = Bun.serve({
     if (url.pathname === '/v1/definitions/releases/rebuild-1')
       return json({
         digest: 'rebuild-1',
-        release: { types: { 'schema:Book': { labels: { en: 'book', 'zh-Hans': '书籍' } } }, properties: {} },
+        release: {
+          types: {
+            'schema:Book': { labels: { en: 'book', 'zh-Hans': '书籍' }, library: { profileId: 'legacy-fixed-v1' } },
+          },
+          properties: {},
+          libraryProfiles: { 'legacy-fixed-v1': releaseRecording.release.libraryProfiles['legacy-fixed-v1'] },
+        },
       });
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     const body = request.method === 'PUT' || request.method === 'POST' ? await request.json().catch(() => null) : null;
@@ -555,7 +540,8 @@ const fake = Bun.serve({
     const page = <T>(rows: T[], key: string) => json({ [key]: rows, next: null });
     if (request.method === 'GET') {
       // Collections are public here; a signed-out reader sees them as everyone does.
-      if (url.pathname === '/v1/collections') return page([shelf], 'collections');
+      if (url.pathname === '/v1/collections' && url.searchParams.get('curatorAccountId') === 'alice')
+        return alice ? page([shelf], 'collections') : json(problem(401, 'authentication_required'), 401, true);
       if (url.pathname === `/v1/collections/${shelfId}`) return json({ collection: shelf });
       if (url.pathname === `/v1/collections/${shelfId}/members`) return page(members, 'members');
       if (url.pathname === `/v1/publishedLogs/${publishedLog.id}`) return json({ publishedLog });
@@ -563,8 +549,7 @@ const fake = Bun.serve({
     // Unknown routes, including the anonymous home read, answer 404; a bearer is required only for personal records.
     if (!/^\/v1\/(libraryEntries|follows|copies|publishedLogs|progressSessions)(\/|$)/.test(url.pathname))
       return json(problem(404, 'not_found'), 404, true);
-    if (!request.headers.get('authorization')?.startsWith('Bearer '))
-      return json(problem(401, 'authentication_required'), 401, true);
+    if (!alice) return json(problem(401, 'authentication_required'), 401, true);
     if (request.method === 'GET') {
       if (url.pathname === '/v1/libraryEntries') {
         const state = url.searchParams.get('state');
@@ -574,9 +559,17 @@ const fake = Bun.serve({
         );
       }
       if (url.pathname === '/v1/follows') return page(follows, 'follows');
-      if (url.pathname === '/v1/copies') return page(copies, 'copies');
-      if (url.pathname === '/v1/publishedLogs') return page([publishedLog], 'publishedLogs');
-      if (url.pathname === '/v1/progressSessions') return page([progress], 'progressSessions');
+      if (url.pathname === '/v1/copies') {
+        const subjectId = url.searchParams.get('subjectId');
+        return page(
+          copies.filter((copy) => !subjectId || copy.subjectId === subjectId),
+          'copies',
+        );
+      }
+      if (url.pathname === '/v1/publishedLogs' && url.searchParams.get('accountId') === 'alice')
+        return page([publishedLog], 'publishedLogs');
+      if (url.pathname === '/v1/progressSessions' && url.searchParams.get('subjectId') === zebra.id)
+        return page([progress], 'progressSessions');
       if (url.pathname === `/v1/progressSessions/${sessionId}`) return json({ progressSession: progress });
       if (url.pathname === `/v1/progressSessions/${sessionId}/changes`) return page([], 'changes');
       if (url.pathname === `/v1/progressSessions/${sessionId}/completedUnits`) return page([], 'completedUnits');
@@ -608,7 +601,11 @@ let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= startDevServer({
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (started) return started;
+  serverStartupAbort = new AbortController();
+  started = startDevServer({
+    signal: serverStartupAbort.signal,
     env: {
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
@@ -622,6 +619,7 @@ function site(): Promise<string> {
     server = running;
     return running.origin;
   });
+  pendingServerStartups.add(started);
   return started;
 }
 
@@ -660,16 +658,7 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
 }
 
 let aliceCookie: Promise<string> | undefined;
-let aliceAccess = '';
-const alice = async () => {
-  if (!aliceCookie) {
-    const pending = signIn('/en', { sub: 'alice' });
-    aliceCookie = pending;
-    await pending;
-    aliceAccess = accessTokens.at(-1) ?? '';
-  }
-  return aliceCookie;
-};
+const alice = () => (aliceCookie ??= signIn('/en', { sub: 'alice' }));
 
 async function readPage(path: string, cookie?: string) {
   const response = await fetch(`${await site()}${path}`, {
@@ -677,16 +666,19 @@ async function readPage(path: string, cookie?: string) {
   });
   return { status: response.status, html: await response.text() };
 }
+const parser = new new Window().DOMParser();
 function main(html: string) {
-  return /<main\b[^>]*>([\s\S]*)<\/main>/.exec(html)?.[1] ?? html;
+  return parser.parseFromString(html, 'text/html').querySelector('main')!;
 }
-/** The list items of the page's main content, as markup. */
-function rows(html: string) {
-  return [...main(html).matchAll(/<li\b[\s\S]*?<\/li>/g)].map((match) => match[0]);
+function items(html: string, selector: string) {
+  return [...main(html).querySelectorAll(selector)].map((item) => item.outerHTML);
 }
-function articles(html: string) {
-  return [...main(html).matchAll(/<article\b[\s\S]*?<\/article>/g)].map((match) => match[0]);
-}
+const shelfRegion = '[data-personal-library-shelf-focus]';
+const shelfRows = `${shelfRegion} fieldset > ul > li`;
+const collectionMembers = '[data-slot="collection-reading-region"] [data-collection-members] > li';
+const copyRows = 'li[data-slot="list-row"]:has([data-copy-edit-id])';
+const progressRows = '[data-progress-session-id]';
+const followingRows = 'ul[aria-label="Following"] > li';
 const covers = (markup: string) => [...markup.matchAll(/data-slot="cover"/g)].length;
 const text = (markup: string) => markup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 const withTitle = (list: string[], title: string) => list.find((item) => item.includes(title))!;
@@ -733,19 +725,20 @@ test(
     // The grid: one card per entry, each a cover over its title, linking to the subject.
     const gridPage = await readPage('/en/library', cookie);
     expect(gridPage.status).toBe(200);
-    const cards = articles(gridPage.html);
+    const cards = items(gridPage.html, `${shelfRegion} [data-slot="cover-card"]`);
     expect(cards).toHaveLength(3);
     expectImage(withTitle(cards, 'Zebra story'));
     expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="5:7"');
     expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}/${slug('Zebra story')}"`);
+    expect(withTitle(cards, 'Zebra story')).toContain(`datetime="${stamp}"`);
     expectPlaceholder(withTitle(cards, 'Apple story'));
     expectPlaceholder(withTitle(cards, 'Unavailable'));
-    expect(main(gridPage.html)).not.toContain(hiddenSubjectId);
+    expect(main(gridPage.html).innerHTML).not.toContain(hiddenSubjectId);
 
     // The list: Reads work without JavaScript, so the cover, title, type and status are all in the document.
     const page = await readPage('/en/library?layout=list', cookie);
     expect(page.status).toBe(200);
-    const list = rows(page.html);
+    const list = items(page.html, shelfRows);
     expect(list).toHaveLength(3);
     const first = withTitle(list, 'Zebra story');
     expectImage(first);
@@ -755,7 +748,8 @@ test(
     expect(text(first)).toContain('Completed');
     expectPlaceholder(withTitle(list, 'Apple story'));
     const hidden = withTitle(list, 'Unavailable');
-    expectPlaceholder(hidden);
+    expect(hidden).toContain('data-slot="tombstone"');
+    expect(hidden).not.toContain('data-slot="list-row-link"');
     expect(hidden).not.toContain(hiddenSubjectId);
     for (const row of list) {
       expect(row).not.toMatch(/<select|<details|<summary/);
@@ -764,12 +758,12 @@ test(
     }
     const chinese = await readPage('/zh-Hans/library?layout=list', cookie);
     const own = await messages('zh-Hans');
-    expect(text(withTitle(rows(chinese.html), 'Zebra story'))).toContain('书籍');
-    expect(text(withTitle(rows(chinese.html), 'Zebra story'))).toContain(own.library_state_completed!);
+    expect(text(withTitle(items(chinese.html, shelfRows), 'Zebra story'))).toContain('书籍');
+    expect(text(withTitle(items(chinese.html, shelfRows), 'Zebra story'))).toContain(own.library_state_completed!);
 
     const browserPage = await open('/en/library?layout=list', cookie);
     try {
-      const row = browserPage.locator('main li').filter({ hasText: 'Zebra story' });
+      const row = browserPage.locator(shelfRows).filter({ hasText: 'Zebra story' });
       expect(await row.count()).toBe(1);
       // One compact row.
       expect((await row.boundingBox())!.height).toBeLessThan(120);
@@ -785,22 +779,27 @@ test(
       expect(await menu.getByRole('menuitem', { name: 'Remove from library' }).count()).toBe(1);
       await menu.getByRole('menuitem', { name: 'Copies' }).click();
       await browserPage.waitForURL(`**/en/library/copies?subjectId=${zebra.id}`);
+      await browserPage.getByRole('heading', { name: 'Zebra story', exact: true }).waitFor();
       await browserPage.goto(`${await site()}/en/library?layout=list`, { waitUntil: 'networkidle' });
       await browserPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
       await row.waitFor();
 
       // Choosing a state saves it: one write, no Save button.
       calls.length = 0;
-      await row.getByRole('button', { name: 'Completed' }).click();
+      await row.getByRole('button', { name: 'Actions for Zebra story' }).click();
+      await menu.getByRole('menuitem', { name: 'Change status' }).click();
       await browserPage.getByRole('menuitemradio', { name: 'Paused' }).click();
+      await browserPage.keyboard.press('Escape');
+      await browserPage.keyboard.press('Escape');
+      await menu.first().waitFor({ state: 'detached' });
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(1);
       expect(calls.find((call) => call.method === 'PUT')).toMatchObject({
         path: `/v1/libraryEntries/${zebra.id}`,
         body: { state: 'paused', revision: 4 },
       });
-      expect(calls.find((call) => call.method === 'PUT')!.key).toMatch(uuid);
-      await eventually(async () => (await row.getByRole('button', { name: 'Paused' }).count()) === 1);
+      expect(calls.find((call) => call.method === 'PUT')!.key).toMatch(quotedUuid);
+      await row.getByRole('link', { name: 'Paused', exact: true }).waitFor();
 
       // Removal asks first, then sends the revision the row holds.
       calls.length = 0;
@@ -829,26 +828,22 @@ test(
     for (const viewer of [cookie, undefined]) {
       const page = await readPage(`/en/collections/${shelfId}`, viewer);
       expect(page.status).toBe(200);
-      const list = rows(page.html);
-      expect(list).toHaveLength(3);
+      const list = items(page.html, collectionMembers);
+      expect(list).toHaveLength(2);
       expectImage(withTitle(list, 'Zebra story'));
       expectPlaceholder(withTitle(list, 'Apple story'));
-      const hidden = withTitle(list, 'Unavailable');
-      expectPlaceholder(hidden);
-      expect(hidden).not.toContain(hiddenSubjectId);
+      expect(page.html).not.toContain(hiddenSubjectId);
+      expect(page.html).not.toContain(members[1]!.id);
+      expect(list.join('')).not.toContain('Move down');
       expect(text(withTitle(list, 'Zebra story'))).toContain('Book');
       expect(text(withTitle(list, 'Zebra story'))).toContain('First note');
     }
-    // The server render is anonymous even when the request carries a curator session.
-    const owned = await readPage(`/en/collections/${shelfId}`, cookie);
-    expect(text(withTitle(rows(owned.html), 'Zebra story'))).not.toContain('Move down');
-
-    const mine = await readPage('/en/library/collections', cookie);
+    const mine = await readPage('/en/library/collections?layout=rows', cookie);
     expect(mine.status).toBe(200);
-    const shelves = articles(mine.html);
+    const shelves = items(mine.html, '[data-collections-list-region] [data-collection-row]');
     expect(shelves).toHaveLength(1);
     expectPlaceholder(shelves[0]!);
-    expect(shelves[0]).toContain('data-ratio="1:1"');
+    expect(shelves[0]).toContain('data-ratio="5:7"');
     expect(text(shelves[0]!)).toContain('Night shelf');
   },
   timeout,
@@ -862,18 +857,21 @@ test(
 
     const copyPage = await readPage('/en/library/copies', cookie);
     expect(copyPage.status).toBe(200);
-    const copyList = articles(copyPage.html);
+    const copyList = items(copyPage.html, copyRows);
     expect(copyList).toHaveLength(3);
     expectImage(withTitle(copyList, 'Zebra story'));
     expectPlaceholder(withTitle(copyList, 'Apple story'));
-    expectPlaceholder(withTitle(copyList, 'Unavailable'));
-    expect(withTitle(copyList, 'Zebra story')).toContain('Study');
-    expect(text(withTitle(copyList, 'Zebra story'))).toContain('Save');
-    expect(text(withTitle(copyList, 'Zebra story'))).toContain('Delete');
+    const hiddenCopy = withTitle(copyList, 'Unavailable');
+    expectPlaceholder(hiddenCopy);
+    expect(hiddenCopy).not.toContain('data-slot="list-row-link"');
+    expect(copyPage.html).not.toContain(hiddenSubjectId);
+    const ownedCopy = withTitle(copyList, 'Zebra story');
+    expect(ownedCopy).toContain('Study');
+    expect(ownedCopy).toContain('aria-label="More actions"');
 
     const progressPage = await readPage(`/en/library/progress?subjectId=${zebra.id}`, cookie);
     expect(progressPage.status).toBe(200);
-    const sessions = rows(progressPage.html);
+    const sessions = items(progressPage.html, progressRows);
     expect(sessions).toHaveLength(1);
     expectImage(sessions[0]!);
     expect(text(sessions[0]!)).toContain('Book');
@@ -881,38 +879,41 @@ test(
 
     const sessionPage = await readPage(`/en/library/progress/${sessionId}`, cookie);
     expect(sessionPage.status).toBe(200);
-    const header = /<header\b[\s\S]*?<\/header>/.exec(main(sessionPage.html))![0];
+    expect(sessionPage.status).toBe(200);
+    const header = items(sessionPage.html, 'article > header')[0]!;
     expectImage(header);
     expect(text(header)).toContain('Zebra story');
     expect(text(header)).toContain('Book');
-    const publishedLog = withTitle(rows(sessionPage.html), 'Halfway');
-    expect(covers(publishedLog)).toBe(0);
-    expect(text(publishedLog)).not.toContain('Zebra story');
-    expect(text(publishedLog)).toContain('Ada Lovelace');
-    expect(publishedLog.replaceAll('<!-- -->', '')).toContain('>@ada</span>');
-    expect(text(publishedLog)).toContain('Read log');
+    const log = withTitle(items(sessionPage.html, '[aria-labelledby="published-logs-heading"] li'), 'Halfway');
+    expect(covers(log)).toBe(0);
+    expect(text(log)).not.toContain('Zebra story');
+    expect(text(log)).toContain('Ada Lovelace @ada');
+    expect(log).toContain(`href="/en/logs/${publishedLog.id}"`);
 
     const progressPageChinese = await readPage(`/zh-Hans/library/progress?subjectId=${zebra.id}`, cookie);
-    expect(text(rows(progressPageChinese.html)[0]!)).toContain('书籍');
+    expect(text(items(progressPageChinese.html, progressRows)[0]!)).toContain('书籍');
     const sessionPageChinese = await readPage(`/zh-Hans/library/progress/${sessionId}`, cookie);
-    const headerChinese = /<header\b[\s\S]*?<\/header>/.exec(main(sessionPageChinese.html))![0];
+    const headerChinese = items(sessionPageChinese.html, 'article > header')[0]!;
     expect(text(headerChinese)).toContain('书籍');
 
     const followingPage = await readPage('/en/library/following', cookie);
     expect(followingPage.status).toBe(200);
-    const followed = articles(followingPage.html);
+    const followed = items(followingPage.html, followingRows);
     expect(followed).toHaveLength(4);
     expectImage(withTitle(followed, 'Zebra story'));
     expect(text(withTitle(followed, 'Zebra story'))).toContain('Book');
-    expectPlaceholder(withTitle(followed, 'Apple story'));
-    expectPlaceholder(withTitle(followed, 'Night shelf'));
+    expect(covers(withTitle(followed, 'Apple story'))).toBe(0);
+    expect(covers(withTitle(followed, 'Night shelf'))).toBe(0);
     expect(withTitle(followed, 'Night shelf')).toContain(`href="/en/collections/${shelfId}"`);
-    expectPlaceholder(withTitle(followed, 'Unavailable'));
-    for (const card of followed) expect(card).toContain('aria-label="More actions for ');
-    expect(main(followingPage.html)).not.toContain(hiddenSubjectId);
+    const hiddenFollow = withTitle(followed, 'Unavailable');
+    expect(covers(hiddenFollow)).toBe(0);
+    expect(hiddenFollow).not.toContain('data-slot="list-row-link"');
+    expect(followingPage.html).not.toContain(hiddenSubjectId);
 
     const followingPageChinese = await readPage('/zh-Hans/library/following', cookie);
-    expect(text(withTitle(articles(followingPageChinese.html), 'Zebra story'))).toContain('书籍');
+    expect(text(withTitle(items(followingPageChinese.html, 'li[data-follow-target]'), 'Zebra story'))).toContain(
+      '书籍',
+    );
   },
   timeout,
 );
