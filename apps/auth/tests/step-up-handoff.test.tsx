@@ -45,6 +45,8 @@ async function handoff() {
   const route = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => rootRoute } as never);
   const history = createBrowserHistory({ window: dom as unknown as Window });
   const router = createRouter({ routeTree: rootRoute.addChildren([route]), history });
+  // Start installs its SSR manifest before hydrating the server match tree.
+  router.ssr = { manifest: undefined };
   const errors: string[] = [];
   let root: { unmount(): void } | undefined;
   const close = async () => {

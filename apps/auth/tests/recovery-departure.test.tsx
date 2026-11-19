@@ -23,7 +23,7 @@ const secondLink = '#account_id=second&token=second-token';
 async function setup(fragment = firstLink) {
   window.history.replaceState(null, '', `/recovery${fragment}`);
   const root = createRootRoute();
-  const recovery = Route.update({ id: '/recovery', path: '/recovery', getParentRoute: () => root } as never);
+  const recovery = createRoute({ path: '/recovery', getParentRoute: () => root, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => root, path: '/away', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: root.addChildren([recovery, away]) });
