@@ -51,15 +51,16 @@ const { TurnstileWidget, loadTurnstile } = await import('../src/turnstile.tsx');
 const registration = await import('../src/registration-page');
 const { Route } = await import('../src/routes/signup');
 const { Route: LoginRoute } = await import('../src/routes/login');
-const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, Outlet } =
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } =
   await import('@tanstack/react-router');
-const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
-overwriteGetLocale(() => 'en');
+const locale = await import('../src/paraglide/runtime.js');
+let previousLocale: typeof locale.getLocale;
 
 beforeAll(() => {
   for (const [name, value] of Object.entries(globals))
     Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
-  overwriteGetLocale(() => 'en');
+  previousLocale = locale.getLocale;
+  locale.overwriteGetLocale(() => 'en');
 });
 const mountedOwners = new Set<() => Promise<void>>();
 afterEach(async () => {
@@ -69,6 +70,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  locale.overwriteGetLocale(previousLocale);
   for (const [name, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, name, descriptor);
     else Reflect.deleteProperty(globalThis, name);
@@ -487,39 +489,35 @@ async function signup() {
       config,
     ),
   );
+  const query =
+    '?client_id=web&state=opaque&resource=one&resource=two&empty=&sig=private&exp=1&prompt=login&max_age=600';
+  dom.history.replaceState(null, '', `/signup${query}`);
+  const history = createBrowserHistory({ window: dom });
   const close = ui.close;
   ui.close = async () => {
     try {
       await close();
     } finally {
+      history.destroy();
       advice.mockRestore();
       mountedOwners.delete(ui.close);
     }
   };
   mountedOwners.add(ui.close);
   const rootRoute = createRootRoute({ component: Outlet });
-  // Mount the real route; control its current advice boundary, not an unused loader.
-  const route = Route.update({
-    id: '/signup',
-    path: '/signup',
-    getParentRoute: () => rootRoute,
-  } as never);
-  const query =
-    '?client_id=web&state=opaque&resource=one&resource=two&empty=&sig=private&exp=1&prompt=login&max_age=600';
+  const route = createRoute({ getParentRoute: () => rootRoute, path: '/signup', component: Route.options.component });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       route,
-      LoginRoute.update({ id: '/login', path: '/login', getParentRoute: () => rootRoute } as never),
+      createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginRoute.options.component }),
     ]),
-    history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
+    history,
   });
   try {
     await router.load();
     await ui.render(createElement(RouterProvider, { router }));
-    expect(
-      ui.host.querySelector('input[name=handle]'),
-      'native registration advice renders the real form',
-    ).not.toBeNull();
+    expect(ui.host.querySelector('input[name=handle]'), ui.host.textContent ?? '').not.toBeNull();
+    expect(scripts().map((script) => script.src)).toContain(config.scriptUrl);
   } catch (error) {
     await ui.close();
     throw error;
@@ -882,7 +880,13 @@ test('default signup keeps handle privacy, unsupported rate limits, outages and 
       expect(bodies).toHaveLength(count);
       expect(new Set(bodies.map((body) => body.key)).size).toBe(1);
       expect(new Set(bodies.map((body) => body.turnstile_token)).size).toBe(count);
-      expect(api.resets).toHaveLength(count);
+      if (status === 409 && code === 'registration_denied') {
+        expect(api.resets).toHaveLength(0);
+        expect(api.live.size).toBe(0);
+        expect(scripts().some((script) => script.src === page.config.scriptUrl)).toBe(false);
+        await flush(() => api.widgets[0]!.options.callback('retired-token'));
+        expect(bodies).toHaveLength(count);
+      } else expect(api.resets).toHaveLength(count);
     } finally {
       await page.ui.close();
     }
@@ -1097,7 +1101,9 @@ for (const stage of ['creation', 'sign-in'])
           }
           if (boundary === 'unmount') await page.ui.close();
           else if (boundary === 'replace') {
-            await flush(() => page.router.history.replace('/signup?state=new'));
+            await flush(() => {
+              void page.router.navigate({ to: '/signup?state=new', replace: true });
+            });
             if (stage === 'creation')
               await flush(() =>
                 document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-action"]')!.click(),

@@ -1,22 +1,42 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
+import * as registration from '../src/registration-page';
 import type { RegistrationPage } from '../src/registration-page';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
-const originalScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
-afterAll(() => {
-  if (originalScroll) Object.defineProperty(globalThis, 'scrollTo', originalScroll);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
+let restoreAdvice: (() => void) | undefined;
+let restoreBrowser: () => void;
+beforeEach(() => {
+  const locale = getLocale;
+  overwriteGetLocale(() => 'en');
+  const head = dom.document.head;
+  const append = head.appendChild;
+  const inertScripts = spyOn(head, 'appendChild').mockImplementation(function <T extends Node>(node: T): T {
+    if (node instanceof dom.HTMLScriptElement) (node as HTMLScriptElement).type = 'application/x-test';
+    return append.call(head, node) as T;
+  });
+  restoreBrowser = () => {
+    inertScripts.mockRestore();
+    delete window.turnstile;
+    overwriteGetLocale(locale);
+  };
 });
-const append = document.head.appendChild.bind(document.head);
-document.head.appendChild = <T extends Node>(node: T): T => {
-  if (node instanceof dom.HTMLScriptElement) (node as unknown as HTMLScriptElement).type = 'application/x-test';
-  return append(node);
-};
+afterEach(() => {
+  restoreAdvice?.();
+  restoreAdvice = undefined;
+  restoreBrowser();
+});
 
 const query = '?client_id=showcase&scope=openid&return_to=%2Fwork%2Fseeded&hint=%2Fraw%2Bbytes';
 let serial = 0;
@@ -55,19 +75,16 @@ async function setup() {
     scriptUrl: `https://challenge.test/return-${++serial}.js`,
   };
   let advice: RegistrationPage = registrationPage;
-  let reads = 0;
-  const readStartWaiters: (() => void)[] = [];
-  const pendingReads: ((page: RegistrationPage) => void)[] = [];
-  const route = Route.update({
-    id: '/signup',
-    path: '/signup',
-    getParentRoute: () => root,
-    loader: () => {
-      if (reads++ === 0) return advice;
-      readStartWaiters.shift()?.();
-      return new Promise<RegistrationPage>((resolve) => pendingReads.push(resolve));
-    },
-  } as never);
+  const pendingReads: ReturnType<typeof Promise.withResolvers<RegistrationPage>>[] = [];
+  const read = spyOn(registration, 'readRegistrationPage')
+    .mockResolvedValueOnce(registrationPage)
+    .mockImplementation(() => {
+      const pending = Promise.withResolvers<RegistrationPage>();
+      pendingReads.push(pending);
+      return pending.promise;
+    });
+  restoreAdvice = () => read.mockRestore();
+  const route = createRoute({ getParentRoute: () => root, path: '/signup', component: Route.options.component });
   const router = createRouter({
     routeTree: root.addChildren([route]),
     history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
@@ -84,11 +101,15 @@ async function setup() {
     reset: () => {},
     remove: () => {},
   };
-  await flush(() =>
-    document
-      .querySelector<HTMLScriptElement>(`script[src="${registrationPage.scriptUrl}"]`)!
-      .dispatchEvent(new dom.Event('load') as unknown as Event),
-  );
+  const loadWidget = async () => {
+    const script = dom.document.querySelector<HTMLScriptElement>(`script[src="${registrationPage.scriptUrl}"]`);
+    expect(script, page.host.textContent ?? '').not.toBeNull();
+    const previous = token;
+    await flush(() => script!.dispatchEvent(new dom.Event('load') as unknown as Event));
+    expect(token).toBeFunction();
+    expect(token).not.toBe(previous);
+  };
+  await loadWidget();
 
   const input = (name: string) => page.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const ready = async () => {
@@ -99,25 +120,6 @@ async function setup() {
     await flush(() => token('private-token'));
     await flush(() => send(page.host));
   };
-  const startNextRead = () => {
-    const started = Promise.withResolvers<void>();
-    readStartWaiters.push(started.resolve);
-    return started.promise;
-  };
-  const restored = async () => {
-    await new Promise<void>((resolve) => {
-      let unsubscribe = () => {};
-      const finish = () => {
-        if (!router.state.matches.some((match) => match.routeId === '/signup' && match.isFetching !== false)) {
-          unsubscribe();
-          resolve();
-        }
-      };
-      unsubscribe = router.subscribe('onRendered', finish);
-      finish();
-    });
-    await flush(() => {});
-  };
   const transition = (type: 'pagehide' | 'pageshow') => {
     const event = new dom.Event(type);
     Object.defineProperty(event, 'persisted', { value: true });
@@ -125,15 +127,14 @@ async function setup() {
   };
   return {
     ...page,
-    router,
-    registrationPage,
-    calls: page.calls,
+    loadWidget,
     input,
     ready,
     token: (value: string) => flush(() => token(value)),
-    startNextRead,
-    restored,
-    releaseRead: (next: RegistrationPage = advice) => flush(() => pendingReads.shift()!(next)),
+    releaseRead: (next: RegistrationPage = advice) => {
+      expect(pendingReads).toHaveLength(1);
+      return flush(() => pendingReads.shift()!.resolve(next));
+    },
     transition: (type: 'pagehide' | 'pageshow') => flush(() => transition(type)),
     focus: () => flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event)),
     setAdvice: (next: RegistrationPage) => {
@@ -144,20 +145,14 @@ async function setup() {
 }
 
 async function refreshAfterReturn(p: Awaited<ReturnType<typeof setup>>) {
-  const started = p.startNextRead();
   await p.transition('pageshow');
-  await started;
   await p.releaseRead();
-  await p.restored();
 }
 
 async function retryAdvice(p: Awaited<ReturnType<typeof setup>>, next: RegistrationPage) {
   p.setAdvice(next);
-  const started = p.startNextRead();
-  await flush(() => button(document.body, 'Check current options again')!.click());
-  await started;
+  await flush(() => button(document.body, 'Check account options again')!.click());
   await p.releaseRead(next);
-  await p.restored();
 }
 
 test('persisted return keeps only an unknown outcome, fences late creation, and acknowledgement starts fresh', async () => {
@@ -170,13 +165,10 @@ test('persisted return keeps only an unknown outcome, fences late creation, and 
   expect(p.host.querySelector('form')).toBeNull();
   expect(document.body.textContent).not.toContain('private-password');
   expect(document.body.textContent).not.toContain('reader@example.test');
-  const started = p.startNextRead();
   await p.transition('pageshow');
-  await started;
-  expect(p.host.textContent).toContain('Checking current account options');
+  expect(p.host.textContent).toContain('Checking account options');
   expect(p.host.querySelector('form')).toBeNull();
   await p.releaseRead();
-  await p.restored();
 
   expect(p.host.textContent).toContain('Your earlier account creation may have completed');
   expect(p.host.querySelector('input[name="password"]')).toBeNull();
@@ -188,12 +180,8 @@ test('persisted return keeps only an unknown outcome, fences late creation, and 
 
   await p.acknowledge();
   expect(p.host.querySelector('form')).not.toBeNull();
-  expect(p.host.textContent).toContain('This is a new registration attempt');
-  await flush(() =>
-    document
-      .querySelector<HTMLScriptElement>(`script[src="${p.registrationPage.scriptUrl}"]`)!
-      .dispatchEvent(new dom.Event('load') as unknown as Event),
-  );
+  expect(p.host.textContent).toContain('This is a new registration');
+  await p.loadWidget();
   await flush(() => fill(p.input('handle'), 'Reader_2'));
   await flush(() => fill(p.input('email'), 'reader2@example.test'));
   await flush(() => fill(p.input('password'), 'another-private-password'));
@@ -270,22 +258,19 @@ test('unavailable advice keeps recovery choices and current viewer changes never
   await p.transition('pagehide');
   p.setAdvice(unavailableAdvice);
   await refreshAfterReturn(p);
-  expect(p.host.textContent).toContain('Current account options are unavailable');
+  expect(p.host.textContent).toContain('Account options are unavailable');
   expect(p.host.querySelector('form')).toBeNull();
   expect(p.host.querySelector<HTMLAnchorElement>(`a[href="/login${query}"]`)).not.toBeNull();
   expect(p.host.querySelector<HTMLAnchorElement>(`a[href="/recovery${query}"]`)).not.toBeNull();
 
   await retryAdvice(p, signedInAdvice('current-account-one'));
-  expect(p.host.textContent).toContain('This describes the current session');
-  expect(p.host.textContent).toContain('does not show whether the earlier registration completed');
+  expect(p.host.textContent).toContain('An account is signed in');
+  expect(p.host.textContent).toContain('does not show whether the earlier registration finished');
   expect(p.host.querySelector('form')).toBeNull();
 
   p.setAdvice(signedInAdvice('current-account-two'));
-  const started = p.startNextRead();
   await p.focus();
-  await started;
   await p.releaseRead(signedInAdvice('current-account-two'));
-  await p.restored();
   expect(p.host.textContent).toContain('The signed-in account changed during this review');
   expect(p.host.textContent).toContain('does not resolve the earlier registration');
   expect(p.calls.map((call) => call.path)).toEqual(['/signup']);
