@@ -631,6 +631,20 @@ test('nested checkout is refused before another physical connection is requested
   expect(checkouts).toBe(1);
 });
 
+test('an unmetered checkout preserves the underlying query method on an observed client', async () => {
+  const raw = fakeClient(() => queryResult([]));
+  const query = raw.query;
+  const observed = new Proxy(raw, {
+    get(target, key) {
+      return key === 'query' ? target.query.bind(target) : Reflect.get(target, key);
+    },
+  });
+  await withConnection(fakePool(async () => observed), async (client) => {
+    await client.query('SELECT 1');
+  });
+  expect(raw.query).toBe(query);
+});
+
 test('an adopted Continue reader preserves native options and accounts one checkout and each query once', async () => {
   const submitted: NativeReadQueryConfig[] = [];
   const accounted: string[] = [];
