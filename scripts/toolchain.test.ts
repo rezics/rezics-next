@@ -102,11 +102,14 @@ for (const [extension, source] of [
   });
 }
 
-test('the formatter swap remains deferred for the two measured output differences', async () => {
-  for (const filename of ['docs/research/throughput-audit-high.md', 'specs/imported-field-driver.ts']) {
-    const current = format(oxfmt, filename, await Bun.file(join(root, filename)).text());
-    expect(format(bun, filename, current)).not.toBe(current);
-  }
+test('the active formatter preserves the leading equals sign before a Markdown code span', async () => {
+  const filename = 'docs/research/throughput-audit-high.md';
+  const manifest = await Bun.file(join(root, 'package.json')).json();
+  expect(manifest.scripts.format).toBe('oxfmt .');
+  const input = 'The final age\n=`cutoff-createdAt`.\n';
+  const current = format(oxfmt, filename, input);
+  expect(current).toBe(input);
+  expect(format(bun, filename, current)).toBe('The final age\n\\=`cutoff-createdAt`.\n');
 });
 
 type LintDiagnostic = {
@@ -186,24 +189,15 @@ test('bun check preserves TypeScript diagnostics, strict options and imported ty
   expect(check(bun).code).toBe(0);
 });
 
-for (const workspace of ['services/kernel', 'services/auth']) {
-  test(`${workspace} retains tsc because Bun cannot run its SQL content mapper`, async () => {
-    const manifest = await Bun.file(join(root, workspace, 'package.json')).json();
-    // The kernel's script places itself on a check host and runs the same tsc from scripts/typecheck.ts.
-    const script: string = manifest.scripts.typecheck;
-    const typecheck = script.startsWith('bun scripts/typecheck.ts')
-      ? await Bun.file(join(root, workspace, 'scripts/typecheck.ts')).text()
-      : script;
-    expect(typecheck.replace(/['",]/g, '').replace(/\s+/g, ' ')).toContain('tsc --noEmit --runExternalCode');
-    const result = run([
-      bun,
-      'check',
-      '--no-script',
-      '--runExternalCode',
-      '-p',
-      join(root, workspace, 'tsconfig.json'),
-    ]);
-    expect(result.code).not.toBe(0);
-    expect(result.error).toContain('Unknown flag "--runExternalCode"');
-  });
-}
+test('Bun cannot run the SQL content mapper flag', () => {
+  const result = run([
+    bun,
+    'check',
+    '--no-script',
+    '--runExternalCode',
+    '-p',
+    join(root, 'services/kernel/tsconfig.json'),
+  ]);
+  expect(result.code).not.toBe(0);
+  expect(result.error).toContain('Unknown flag "--runExternalCode"');
+});

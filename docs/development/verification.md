@@ -504,8 +504,8 @@ Declaration generation continues to use tsc. The npm `latest` and `canary` tags 
 
 ### Formatting
 
-Keep oxfmt 0.74.0 for `bun run format`, `bun run format:check` and workspace gates.
-On a temporary copy of the base tree, oxfmt formatted all 3,170 eligible files in the completed comparison. Then
+Use the repository's oxfmt pin for `bun run format`, `bun run format:check` and workspace gates.
+On a temporary copy of the base tree, oxfmt 0.74.0 formatted all 3,170 eligible files in the completed comparison. Then
 `bun fmt --check` used the same `.oxfmtrc.json` and reported exactly two differences:
 
 | File                                         | Difference from oxfmt output                                                              |
@@ -513,20 +513,15 @@ On a temporary copy of the base tree, oxfmt formatted all 3,170 eligible files i
 | `docs/research/throughput-audit-high.md:546` | Bun escapes the leading `=` before a code span as `\=`.                                   |
 | `specs/imported-field-driver.ts:139`         | Bun puts `coverReference(key: string): Promise<{` on one line; oxfmt wraps the parameter. |
 
-This is the formatter swap decision: two differences prevent the switch. The existing
-configuration and source files stay intact. Representative TS, TSX, JSON, CSS and
-Markdown fixtures match; the two exceptions have a regression check. Existing
-formatting issues elsewhere in the base tree were normalized only in the temporary
-comparison copy, never in the checkout or frozen files.
+The Markdown difference remains with the current pin and has a fixed regression
+fixture. Representative TS, TSX, JSON, CSS and Markdown fixtures match.
 
 ### Type checks
 
-Use `bun check --no-script -p tsconfig.json` in the eleven workspaces below, both in
-their check commands and their root-invoked typecheck scripts. `--no-script` is required
-because each workspace defines a `check` script. Leaf packages `access`, `bounds`, `money`,
-`operations`, `progress` and `search-text` define the same `check` script so a root-file
-typecheck can gate them. Keep generation before checking the websites. Both checkers
-reported zero errors for every workspace in the paired run.
+Workspaces without SQL content mappers use `bun check --no-script -p` with their
+declared project. `--no-script` selects the checker when the workspace defines a
+`check` script. Keep generation before checking the Auth website. Both checkers
+reported zero errors in the historical paired run below.
 The regression fixture also compares diagnostic locations, error codes and messages
 for incompatible imported types, exact optional properties and indexed access, and
 checks that the corrected source passes both tools.
@@ -545,7 +540,7 @@ checks that the corrected source passes both tools.
 | `packages/ui`            |       5.786 |       2.663 | Identical: zero errors |
 | `services/importer`      |       3.240 |       1.539 | Identical: zero errors |
 
-Keep tsc 7.1.0-beta for kernel and auth, which use Reylo `contentMappers` to type SQL
+Keep tsc for Kernel, Auth and Web, which use Reylo `contentMappers` to type SQL
 imports against a migrated PostgreSQL database. The pinned Bun rejects
 `--runExternalCode` with `Unknown flag "--runExternalCode"`. Without that flag, the
 auth project reports 885 errors (655 unresolved SQL imports), and kernel reports
