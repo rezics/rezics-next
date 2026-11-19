@@ -154,11 +154,12 @@ test('one fixed consent erasure batch stays bounded as live consent and future s
         };
       },
     };
+    const dueOwner = (ordinal: number) => `maintenance-erased-${String(ordinal).padStart(8, '0')}`;
     const due: Population = {
       name: 'maintenance-due',
       hotPartition: 0,
       rows: ({ ordinal }) => {
-        const id = `maintenance-erased-${ordinal}`;
+        const id = dueOwner(ordinal);
         return {
           'public.auth_consent': clients.map((client) => consent(id, client)),
           'public.auth_consent_erasure': [{ account_id: id, due_at: past }],
@@ -172,6 +173,8 @@ test('one fixed consent erasure batch stays bounded as live consent and future s
       scales: [256, 1024, 4096],
       repetitions: 1,
       warmups: 1,
+      captureMode: 'cost-folded',
+      warmupSettlementOnly: true,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(current, scale, previous) {
         await seed(current, live, { from: previous, to: scale });
@@ -181,15 +184,21 @@ test('one fixed consent erasure batch stays bounded as live consent and future s
         await seed(current, due, { from: warmupEnd, to: measuredEnd });
         measuredOwners.set(
           scale,
-          Array.from({ length: 100 }, (_, index) => `maintenance-erased-${warmupEnd + index}`),
+          Array.from({ length: 100 }, (_, index) => dueOwner(warmupEnd + index)),
         );
         nextDueOwner = measuredEnd;
       },
       async warmup(_current) {
         expect(await auth.internal.eraseDueConsents(100)).toBe(100);
+        expect(await auth.internal.eraseDueConsents(100)).toBe(100);
       },
       async operation(current, scale) {
         const owners = measuredOwners.get(scale)!;
+        expect(await auth.internal.eraseDueConsents()).toBe(1);
+        expect(
+          (await current.admin.query('SELECT client_id FROM auth_consent WHERE account_id=$1', [owners[0]])).rows,
+        ).toEqual([{ client_id: clients[1] }]);
+        expect(await auth.internal.eraseDueConsents(99)).toBe(99);
         expect(await auth.internal.eraseDueConsents(100)).toBe(100);
         await expectErased(current, owners);
       },
