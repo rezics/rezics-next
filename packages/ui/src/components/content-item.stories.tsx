@@ -70,7 +70,13 @@ export const Composed: Story = {
     const noteSummary = canvas.getByText('Read the complete note');
     await userEvent.tab();
     await expect(noteSummary).toHaveFocus();
-    await userEvent.keyboard('{Enter}');
+    // Testing Library does not emulate Enter's native activation of a summary.
+    if (import.meta.env.MODE === 'test') {
+      const { userEvent: browserUser } = await import('vitest/browser');
+      await browserUser.keyboard('{Enter}');
+    } else {
+      await userEvent.click(noteSummary);
+    }
     await expect(canvas.getByText('The complete note remains visible after the disclosure opens.')).toBeVisible();
 
     const privateCheckbox = canvas.getByRole('checkbox', { name: 'Keep note private' });
@@ -218,12 +224,8 @@ function Example() {
                     <option value="shared">Shared</option>
                   </select>
                   <textarea aria-label="Personal note" defaultValue="A personal annotation" />
-                  <Button
-                    type="button"
-                    aria-label="Save personal note"
-                    onClick={() => setMessage('Personal note saved')}
-                  >
-                    Save note
+                  <Button type="button" onClick={() => setMessage('Personal note saved')}>
+                    Save personal note
                   </Button>
                   <a
                     href="#note-source"

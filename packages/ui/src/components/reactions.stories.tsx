@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import React from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { settled, withSurface } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { waitForFocus } from '../test/focus.ts';
 import { applyReactionChange, Reactions, type ReactionKind } from './reactions.tsx';
 
 const meta = {
@@ -158,8 +159,10 @@ export const MenuOpen: Story = {
       await expect(choice).toBeVisible();
       await expect(choice.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }
+    await waitForFocus(choices);
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await dismissed(choices);
+    await expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
