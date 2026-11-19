@@ -219,23 +219,47 @@ export const Canonical: Story = {
     );
 
     await userEvent.keyboard('{Tab}');
-    for (const control of [
-      restore,
-      secondRestore,
-      refresh,
-      more,
-      ...canvas.getByTestId('recovery-prompts').querySelectorAll<HTMLAnchorElement>('a'),
-      ...withheldOwner.querySelectorAll<HTMLAnchorElement>('a[href^="/moderation/"]'),
-    ]) {
+    const prompts = [...canvas.getByTestId('recovery-prompts').querySelectorAll<HTMLAnchorElement>('a')];
+    for (const [control, minimumHeight] of [
+      [restore, 28],
+      [secondRestore, 24],
+      [refresh, 24],
+      [more, 24],
+      ...prompts.map((prompt, index) => [prompt, index === 0 ? 28 : 24] as const),
+    ] as const) {
+      control.scrollIntoView({ block: 'center' });
       const rect = control.getBoundingClientRect();
-      await expect(rect.width).toBeGreaterThanOrEqual(44);
-      await expect(rect.height).toBeGreaterThanOrEqual(44);
+      await expect(rect.height).toBeGreaterThanOrEqual(minimumHeight);
+      const hitInset = control === more ? 10 : 0;
+      if (control === more) {
+        await expect(rect.width).toBe(24);
+        await expect(rect.height).toBe(24);
+      }
+      for (const [x, y] of [
+        [(rect.left + rect.right) / 2, rect.top - hitInset + 1],
+        [(rect.left + rect.right) / 2, rect.bottom + hitInset - 1],
+        [rect.left - hitInset + 1, (rect.top + rect.bottom) / 2],
+        [rect.right + hitInset - 1, (rect.top + rect.bottom) / 2],
+      ] as const) {
+        await expect(
+          control.contains(control.ownerDocument.elementFromPoint(x, y)),
+          `Pointer target for ${control.getAttribute('aria-label') ?? control.textContent}`,
+        ).toBe(true);
+      }
       control.focus();
       await expect(control).toHaveFocus();
-      await expect(Number.parseFloat(getComputedStyle(control).outlineWidth)).toBeGreaterThanOrEqual(2);
+      await expect(control.matches(':focus-visible')).toBe(true);
+      await waitFor(() => expect(getComputedStyle(control).boxShadow).not.toBe('none'));
     }
+    const decision = within(withheldOwner).getByRole('link', { name: m.thread_post_decision_link() });
+    decision.focus();
+    await expect(decision).toHaveFocus();
+    await expect(Number.parseFloat(getComputedStyle(decision).outlineWidth)).toBeGreaterThanOrEqual(2);
     for (const element of [owner, unknown, canvas.getByTestId('recovery-prompts')]) {
-      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+      await expect(
+        element.scrollWidth,
+        `Horizontal overflow in ${element.id || element.getAttribute('data-testid')}`,
+      ).toBeLessThanOrEqual(element.clientWidth + 1);
     }
     await expect(owner.getBoundingClientRect().height).toBeGreaterThanOrEqual(320);
     await userEvent.click(restore);

@@ -5,7 +5,7 @@ import { realmBanEpisodeAdvice } from './realm-ban-current';
 import type { InstalledRealmBanPage, RealmBanRow } from './realm-bans';
 import { ManagementField, ManagementReference } from './members/management-ui';
 
-export const realmBanActionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere';
+export const realmBanActionClass = 'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere';
 
 type Identity = InstalledRealmBanPage['items'][number]['account'];
 

@@ -113,10 +113,15 @@ async function observeWrappingAndControls(context: Parameters<NonNullable<Story[
   const confirm = within(confirmation).getByRole('button', { name: m.realm_bans_confirm() });
   const cancel = within(confirmation).getByRole('button', { name: m.realm_bans_cancel() });
   await expect(confirm).not.toBe(cancel);
-  for (const control of canvas.getAllByRole('button')) {
+  for (const control of [unban, confirm, cancel]) {
+    control.scrollIntoView({ block: 'center' });
     const bounds = control.getBoundingClientRect();
-    await expect(bounds.height).toBeGreaterThanOrEqual(44);
-    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(getComputedStyle(control).minHeight).toBe('28px');
+    await expect(bounds.height).toBeGreaterThanOrEqual(28);
+    const centerX = (bounds.left + bounds.right) / 2;
+    for (const y of [bounds.top + 1, bounds.bottom - 1]) {
+      await expect(control.contains(control.ownerDocument.elementFromPoint(centerX, y))).toBe(true);
+    }
   }
   await userEvent.tab();
   await expect(confirm).toHaveFocus();

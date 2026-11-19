@@ -66,7 +66,11 @@ export function RemovedPost({
   if (post.availability === 'withheld') {
     return (
       <li {...common}>
-        <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
+        <ContentItemFrame
+          as="div"
+          data-slot="content-item-frame"
+          className="min-w-0 rounded-xl px-4 py-5 before:inset-0 sm:px-6"
+        >
           {'createdAt' in post && typeof post.createdAt === 'string' ? (
             <div className="mb-3 flex items-start justify-between gap-3">
               <Byline
@@ -97,7 +101,11 @@ export function RemovedPost({
   const ownedRestorableUntil = owner && deleted && !restored ? restorableUntil : undefined;
   return (
     <li {...common}>
-      <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
+      <ContentItemFrame
+        as="div"
+        data-slot="content-item-frame"
+        className="min-w-0 rounded-xl px-4 py-5 before:inset-0 sm:px-6"
+      >
         {children}
         <div className="relative">
           <Tombstone
@@ -118,7 +126,13 @@ export function RemovedPost({
                 title={m.thread_content_more_actions()}
                 backLabel={m.thread_delete_cancel()}
                 trigger={
-                  <Button aria-label={m.thread_content_more_actions()} ref={menuButton} size="icon-sm" variant="ghost">
+                  <Button
+                    aria-label={m.thread_content_more_actions()}
+                    className="hitbox-[11px]"
+                    ref={menuButton}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
                     <EllipsisIcon aria-hidden="true" />
                   </Button>
                 }

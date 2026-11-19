@@ -216,7 +216,12 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
         {open ? m.thread_reply_parent_close() : m.thread_reply_parent_view()}
       </Button>
       {open ? (
-        <section id={regionId} aria-label={m.thread_reply_parent()} className="min-w-0 space-y-2 rounded-lg border p-3">
+        <section
+          id={regionId}
+          role="group"
+          aria-label={m.thread_reply_parent()}
+          className="min-w-0 space-y-2 rounded-lg border p-3"
+        >
           {result.state === 'loading' ? <p role="status">{m.thread_reply_parent_loading()}</p> : null}
           {result.state === 'unavailable' ? (
             <>

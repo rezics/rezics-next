@@ -1,4 +1,5 @@
-import { Button } from '@rezics/ui/shadcn/button';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { websiteSignInHref } from '../session/return-target';
@@ -8,15 +9,15 @@ export function ExistingReviewNotice({ reviewId }: { reviewId: string }) {
   return (
     <p className="min-w-0 [overflow-wrap:anywhere]">
       {m.thread_review_duplicate()}{' '}
-      <Button
-        variant="link"
-        size="sm"
-        className="h-auto min-h-6 max-w-full whitespace-normal"
-        nativeButton={false}
-        render={<a href={`/${locale}/threads/${reviewId}`} />}
+      <a
+        href={`/${locale}/threads/${reviewId}`}
+        className={cn(
+          buttonVariants({ variant: 'link', size: 'sm' }),
+          'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+        )}
       >
         {m.thread_review_existing()}
-      </Button>
+      </a>
     </p>
   );
 }
@@ -34,26 +35,21 @@ export function SignInPrompt({
   const text = label ?? m.account_sign_in();
   if (compact)
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-auto min-h-6 max-w-full whitespace-normal"
-        nativeButton={false}
-        render={<a href={href} />}
+      <a
+        href={href}
+        className={cn(
+          buttonVariants({ variant: 'outline', size: 'sm' }),
+          'h-auto min-h-6 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+        )}
       >
         {text}
-      </Button>
+      </a>
     );
   return (
     <p className="min-w-0 rounded-lg border border-border/70 bg-card p-4 text-muted-foreground [overflow-wrap:anywhere]">
-      <Button
-        variant="link"
-        className="h-auto min-h-7 max-w-full whitespace-normal"
-        nativeButton={false}
-        render={<a href={href} />}
-      >
+      <a href={href} className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}>
         {text}
-      </Button>
+      </a>
     </p>
   );
 }
