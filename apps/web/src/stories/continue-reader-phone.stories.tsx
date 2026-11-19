@@ -7,6 +7,7 @@ import type { ContinueResult, ContinueView } from '../library/continue-source';
 import recording from '../kernel/recorded/library-continue-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { expectCompactMiraTarget } from './mira-control-target';
 import { PageStory, pageReady, PatternStory } from './page';
 
 const meta = {
@@ -131,6 +132,21 @@ async function target(control: HTMLElement, icon = false) {
   expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
   return bounds;
 }
+async function retryTarget(control: HTMLElement) {
+  await userEvent.keyboard('{Tab}');
+  control.focus();
+  await expect(control).toHaveFocus();
+  expect(control.matches(':focus-visible')).toBe(true);
+  expect(getComputedStyle(control).boxShadow).not.toBe('none');
+  const bounds = expectCompactMiraTarget(control, 24);
+  const range = control.ownerDocument.createRange();
+  range.selectNodeContents(control);
+  const label = range.getBoundingClientRect();
+  expect(label.left).toBeGreaterThanOrEqual(bounds.left);
+  expect(label.right).toBeLessThanOrEqual(bounds.right);
+  return bounds;
+}
+
 async function follow(link: HTMLAnchorElement, expected: string) {
   await expect(link).toHaveAttribute('href', expected);
   let followed: string | undefined;
@@ -222,7 +238,7 @@ export const UnavailableRecovery: Story = {
     const alert = await canvas.findByRole('alert');
     await expect(alert).toHaveTextContent(m.library_continue_unavailable());
     const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
-    const bounds = await target(retry);
+    const bounds = await retryTarget(retry);
     expect(bounds.top).toBeGreaterThanOrEqual(alert.getBoundingClientRect().bottom + 12);
     expect(activeJourney?.reads()).toBe(0);
     noDocumentOverflow(canvasElement);
@@ -249,7 +265,7 @@ function notice(initial: ContinueView, message: () => string): Story {
       expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth + 1);
       if (initial.state === 'preparing') {
         const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
-        const bounds = await target(retry);
+        const bounds = await retryTarget(retry);
         expect(bounds.top).toBeGreaterThanOrEqual(status.getBoundingClientRect().bottom + 12);
       }
       noDocumentOverflow(canvasElement);
@@ -269,7 +285,7 @@ export const CurrentDestinationUnavailable: Story = {
     const canvas = within(region);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_continue_unavailable());
     const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
-    await target(retry);
+    await retryTarget(retry);
     await userEvent.click(retry);
     await waitFor(() => expect(canvas.getByRole('alert')).toHaveTextContent(m.library_continue_unavailable()));
     expect(canvas.queryByText(m.library_continue_empty())).toBeNull();

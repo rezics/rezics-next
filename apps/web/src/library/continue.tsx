@@ -316,7 +316,7 @@ export function ContinueSection({
               type="button"
               variant="outline"
               size="sm"
-              className="mt-4 h-auto min-h-6 max-w-full text-start whitespace-normal wrap-anywhere"
+              className="mt-4 h-auto min-h-6 max-w-full text-start whitespace-normal wrap-anywhere max-md:hitbox-[11px] pointer-coarse:hitbox-[11px]"
               disabled={busy}
               onClick={onRetry}
             >

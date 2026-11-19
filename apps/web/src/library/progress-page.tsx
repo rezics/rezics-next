@@ -4,6 +4,7 @@ import { progressAddressIssue, progressIndexAddress } from './progress-address';
 import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { ProgressChoice } from './progress-actions';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -107,6 +108,11 @@ const buttonClass = buttonVariants({
   variant: 'outline',
   className: 'h-auto min-h-7 max-w-full whitespace-normal text-center wrap-anywhere',
 });
+
+const paginationClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 min-w-7 max-w-full whitespace-normal text-center wrap-anywhere max-md:hitbox-[9px] pointer-coarse:hitbox-[9px]',
+);
 
 function ProgressReturnRecovery({
   selection,
@@ -1327,11 +1333,14 @@ function ProgressIndexPageContent({
       windowControls={
         cursor || page.next || windowActions?.previous || windowActions?.refresh ? (
           <Exposure operation="progress_session.list">
-            <nav aria-label={m.library_progress_index_reader_pagination()} className="flex flex-wrap gap-2">
+            <nav
+              aria-label={m.library_progress_index_reader_pagination()}
+              className="flex flex-wrap gap-2 max-md:gap-5 max-md:px-2 pointer-coarse:gap-5 pointer-coarse:px-2"
+            >
               {windowActions?.previous ? (
                 <Button
                   variant="outline"
-                  className={buttonClass}
+                  className={paginationClass}
                   disabled={loading}
                   onClick={(event) => windowActions.previous?.(event.detail === 0)}
                 >
@@ -1342,7 +1351,7 @@ function ProgressIndexPageContent({
                 windowActions?.first ? (
                   <Button
                     variant="outline"
-                    className={buttonClass}
+                    className={paginationClass}
                     disabled={loading}
                     onClick={(event) => windowActions.first?.(event.detail === 0)}
                   >
@@ -1356,7 +1365,7 @@ function ProgressIndexPageContent({
                     onClick={(event) => {
                       if (authority && !authority.isCurrent()) event.preventDefault();
                     }}
-                    className={buttonClass}
+                    className={paginationClass}
                   >
                     {m.library_collections_first_page()}
                   </Link>
@@ -1366,7 +1375,7 @@ function ProgressIndexPageContent({
                 windowActions?.more ? (
                   <Button
                     variant="outline"
-                    className={buttonClass}
+                    className={paginationClass}
                     disabled={loading}
                     onClick={(event) => windowActions.more?.(event.detail === 0)}
                   >
@@ -1380,7 +1389,7 @@ function ProgressIndexPageContent({
                     onClick={(event) => {
                       if (authority && !authority.isCurrent()) event.preventDefault();
                     }}
-                    className={buttonClass}
+                    className={paginationClass}
                   >
                     {m.library_progress_more()}
                   </Link>
@@ -1389,7 +1398,7 @@ function ProgressIndexPageContent({
               {windowActions?.refresh ? (
                 <Button
                   variant="outline"
-                  className={buttonClass}
+                  className={paginationClass}
                   disabled={loading}
                   onClick={(event) => windowActions.refresh?.(event.detail === 0)}
                 >
@@ -1876,11 +1885,16 @@ function SessionRow({
               label={progress?.text ?? m.home_continue_in_progress()}
               menu={
                 entries.length ? (
-                  <ListRowControl>
+                  <ListRowControl className="max-md:p-2.5 pointer-coarse:p-2.5">
                     <Menu
                       title={m.library_collection_actions()}
                       trigger={
-                        <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={m.library_collection_actions()}
+                          className="max-md:hitbox-[11px] pointer-coarse:hitbox-[11px]"
+                        >
                           <EllipsisIcon aria-hidden="true" />
                         </Button>
                       }

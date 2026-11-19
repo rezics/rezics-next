@@ -648,7 +648,11 @@ test('admitted window controls wrap, route keyboard focus to the list, and yield
       m.library_progress_more(),
       m.library_progress_index_refresh(),
     ]) {
-      expect(h.body.getByRole('button', { name, exact: true }).className).toContain('min-h-[44px]');
+      const control = h.body.getByRole('button', { name, exact: true });
+      expect(control.classList.contains('min-h-7')).toBe(true);
+      expect(control.classList.contains('h-auto')).toBe(true);
+      expect(control.classList.contains('max-md:hitbox-[9px]')).toBe(true);
+      expect(control.classList.contains('pointer-coarse:hitbox-[9px]')).toBe(true);
     }
     const previous = h.body.getByRole('button', { name: m.library_progress_index_previous(), exact: true });
     previous.focus();
