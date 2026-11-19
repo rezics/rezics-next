@@ -3,19 +3,33 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { newErrorLines } from './merge-train.ts';
-import { firstFailure } from './merge.ts';
+import { firstFailure, git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
 type IntegrationCheck = { paths: string[]; command: string[] };
 
-function integrationChecks(h: ReturnType<typeof integrationHarness>, checks: IntegrationCheck[]): void {
+function stabilizeHarness() {
+  const h = integrationHarness();
+  h.ensureDev();
+  git(h.root, 'branch', 'stabilize', 'dev');
+  return {
+    ...h,
+    head: (ref = 'stabilize') => h.head(ref),
+    dispatch: (file: string, goal = 'fixture') => h.dispatch(file, [], ['true'], goal, 'stabilize'),
+    advanceBase: (file: string) => h.advanceBranch('stabilize', file),
+  };
+}
+
+function integrationChecks(
+  h: Pick<ReturnType<typeof integrationHarness>, 'settings'>,
+  checks: IntegrationCheck[],
+): void {
   (h.settings as typeof h.settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks = checks;
 }
 
 test("a branch that fails the integration check is not integrated and gets a gate failure carrying the check's first failure", async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     integrationChecks(h, [
       {
         paths: ['**'],
@@ -39,11 +53,10 @@ test("a branch that fails the integration check is not integrated and gets a gat
   }
 });
 
-test('a branch integrates when dev already fails the integration check', async () => {
-  const h = integrationHarness();
+test('a branch integrates when the stabilization base already fails the integration check', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('broken');
+    h.advanceBase('broken');
     integrationChecks(h, [
       {
         paths: ['**'],
@@ -65,11 +78,10 @@ test('a branch integrates when dev already fails the integration check', async (
   }
 });
 
-test('a branch is refused for an error that dev, already failing the check, does not have', async () => {
-  const h = integrationHarness();
+test('a branch is refused for a new error when the stabilization base already fails the check', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('broken');
+    h.advanceBase('broken');
     integrationChecks(h, [
       {
         paths: ['**'],
@@ -96,11 +108,10 @@ test('a branch is refused for an error that dev, already failing the check, does
   }
 });
 
-test('a branch on an integrated candidate reuses its check result as the dev baseline', async () => {
-  const h = integrationHarness();
+test('a branch on an integrated candidate reuses its check result as the stabilization baseline', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('broken');
+    h.advanceBase('broken');
     integrationChecks(h, [
       {
         paths: ['**'],
@@ -135,10 +146,9 @@ test('newErrorLines ignores moved positions and timings and counts repeats', () 
   ]);
 });
 
-test('a branch that passes the integration check integrates into dev as before', async () => {
-  const h = integrationHarness();
+test('a branch that passes the integration check integrates into stabilize', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     integrationChecks(h, [{ paths: ['**'], command: ['sh', '-c', "echo 'integration check passed'"] }]);
     const task = h.dispatch('feature');
     await h.start(task);
@@ -155,10 +165,9 @@ test('a branch that passes the integration check integrates into dev as before',
   }
 });
 
-test("the dev head's check result is computed once per dev commit", async () => {
-  const h = integrationHarness();
+test('the stabilization baseline is computed once per base commit', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const dev = h.head();
     integrationChecks(h, [
       {
@@ -166,15 +175,16 @@ test("the dev head's check result is computed once per dev commit", async () => 
         command: [
           'sh',
           '-c',
-          `if [ "$(git rev-parse HEAD)" = "${dev}" ]; then echo dev-check-run; fi; test ! -e broken || { echo 'AssertionError: broken integration'; exit 1; }`,
+          `if [ "$(git rev-parse HEAD)" = "${dev}" ]; then echo dev-check-run; fi; test ! -e broken-first && test ! -e broken-second || { echo 'AssertionError: broken integration'; exit 1; }`,
         ],
       },
     ]);
-    const first = h.dispatch('broken');
-    const second = h.dispatch('broken');
+    const first = h.dispatch('broken-first');
     await h.start(first);
-    await h.start(second);
+    await h.train(undefined, false);
 
+    const second = h.dispatch('broken-second', 'fixture-peer');
+    await h.start(second);
     await h.train(undefined, false);
 
     const logs = h.outcomes.map((outcome) => readFileSync(outcome.logPath, 'utf8')).join('\n');
@@ -190,9 +200,8 @@ test("the dev head's check result is computed once per dev commit", async () => 
 });
 
 test("a branch whose changes match no check's paths integrates without running any check", async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     integrationChecks(h, [
       { paths: ['services/kernel/**'], command: ['sh', '-c', "echo 'integration check ran'; exit 1"] },
     ]);
@@ -213,11 +222,10 @@ test("a branch whose changes match no check's paths integrates without running a
   }
 });
 
-test('a later check still runs when an earlier one fails as on dev, and its new errors refuse the branch', async () => {
-  const h = integrationHarness();
+test('a later check still runs when an earlier one fails as on the base, and its new errors refuse the branch', async () => {
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
-    h.advanceDev('broken');
+    h.advanceBase('broken');
     integrationChecks(h, [
       {
         paths: ['**'],
@@ -243,9 +251,8 @@ test('a later check still runs when an earlier one fails as on dev, and its new 
 });
 
 test('a branch that changes frozen acceptance files keeps the typed refusal', async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
     const task = h.dispatch('frozen.test.ts');
     await h.start(task);
     // The fixture worker's one file stands for the controller's frozen acceptance commit.
@@ -321,9 +328,9 @@ test('read-only integration checks run at once, and a check that writes the tree
 });
 
 test("the workspace typecheck check receives the branch's changed files; other checks do not", async () => {
-  const h = integrationHarness();
+  const h = stabilizeHarness();
   try {
-    h.ensureDev();
+    h.settings.integration.devPrelandingTypecheck = true;
     const seen = join(h.root, '.temp', 'typecheck-changed.txt');
     const other = join(h.root, '.temp', 'other-changed.txt');
     integrationChecks(h, [
