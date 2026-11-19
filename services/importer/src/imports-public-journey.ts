@@ -38,8 +38,10 @@ import { ImportSession } from './import-session.ts';
 import { BindingInspectionStore } from './binding-inspection-store.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import {
+  admitSelectedSynopsisSupport,
   createPublicBulkClient,
   GLOBAL_CONTEXT,
+  publicRelationPageSize,
   PublicSubjectGetUnavailable,
   ReviewedSubjectNotReady,
   selectedSynopsisQueryFromPublic,
@@ -57,6 +59,8 @@ import {
   type JourneyTarget,
 } from './showcase-bangumi-journey.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
+import { showcaseLimits } from './showcase-contract.ts';
+import { publicValueStatementCurrent } from './showcase-current-reads.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -902,6 +906,39 @@ async function currentLinks(api: string, id: string, property: string) {
   return body.links as { summary: { id: string; type: string }; property: string }[];
 }
 
+type PublishedAssertion = ShowcasePublicationResult['published'][number]['assertions'][number];
+
+async function assertCurrentRelations(
+  api: string,
+  holder: string,
+  property: string,
+  expected: readonly PublishedAssertion[],
+): Promise<void> {
+  assert.ok(expected.length, `published ${holder} has no ${property} assertion`);
+  const read = createPublicBulkClient({ origin: api }).readSubjectRelations!;
+  const pending = new Map(expected.map((assertion) => [assertion.adoption.candidateId, assertion.readback]));
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  for (let count = 0; count < showcaseLimits.candidatesPerRecord; count += publicRelationPageSize) {
+    const page = await read(holder, property, cursor);
+    for (const statement of page.statements) {
+      if (
+        !isRecord(statement) ||
+        typeof statement.id !== 'string' ||
+        !pending.has(statement.id) ||
+        !publicValueStatementCurrent(statement, property) ||
+        !sameStatementProvenance(statement, pending.get(statement.id))
+      )
+        continue;
+      pending.delete(statement.id);
+    }
+    if (!pending.size || !page.next || cursors.has(page.next)) break;
+    cursors.add(page.next);
+    cursor = page.next;
+  }
+  assert.equal(pending.size, 0, `current ${holder} ${property} is missing adopted relations: ${[...pending.keys()]}`);
+}
+
 type SeedEnv = {
   account: string;
   accountKeyPath: string;
@@ -1414,24 +1451,25 @@ async function walkGameReleaseCounterpart(api: string, publication: ShowcasePubl
   const vnRead = await currentSubject(api, vn.subjectId);
   assert.equal(vnRead.subject.id, vn.subjectId);
   const release = published.find(
-    (row) =>
-      row.provider === 'vndb' &&
-      (row.nativeType === 'schema:VideoGame' ||
-        row.nativeType.includes('Release') ||
-        row.sourceKey.startsWith('r') ||
-        row.assertions.some((assertion) => assertion.property === 'schema:gamePlatform')),
+    (row) => row.provider === 'vndb' && /^r[1-9][0-9]*$/u.test(row.sourceKey),
   );
+  assert.ok(release, 'seed published no VNDB Release');
+  const releaseRead = await currentSubject(api, release.subjectId);
+  assert.equal(releaseRead.subject.id, release.subjectId);
+  assert.equal(releaseRead.subject.type, release.nativeType);
   const counterpart = published.find((row) =>
-    row.assertions.some((assertion) => assertion.property === 'rezics:crossMediaCounterpart'),
+    row.assertions.some((assertion) => assertion.property === 'rezics:crossMediaCounterpart' && assertion.target),
   );
   assert.ok(counterpart, 'seed published no counterpart assertion');
-  const links = await currentLinks(api, counterpart.subjectId, 'rezics:crossMediaCounterpart');
-  assert.ok(links.length > 0, 'counterpart has no current inverse or forward links');
+  const edge = counterpart.assertions.find(
+    (assertion) => assertion.property === 'rezics:crossMediaCounterpart' && assertion.target,
+  )!;
+  await assertCurrentRelations(api, counterpart.subjectId, edge.property, [edge]);
   return {
     game: { sourceKey: game.sourceKey, id: game.subjectId, type: gameRead.subject.type },
     vn: { sourceKey: vn.sourceKey, id: vn.subjectId, type: vnRead.subject.type },
-    release: release ? { sourceKey: release.sourceKey, id: release.subjectId, type: release.nativeType } : null,
-    counterpart: { sourceKey: counterpart.sourceKey, id: counterpart.subjectId, links: links.length },
+    release: { sourceKey: release.sourceKey, id: release.subjectId, type: release.nativeType },
+    counterpart: { sourceKey: counterpart.sourceKey, id: counterpart.subjectId, target: edge.target!.subjectId },
   };
 }
 
@@ -1575,26 +1613,20 @@ async function walkFranchise(api: string, publication: ShowcasePublicationResult
   assert.ok(relation, 'typed franchise relations have no current published edge');
   assert.ok(relation.holderSubjectId && relation.targetSubjectId);
   assert.ok(relation.citation && relation.fields.length, 'typed franchise relation has no exact source provenance');
-  const links = await currentLinks(api, relation.holderSubjectId, relation.property);
-  assert.ok(
-    links.some((link) => link.summary.id === relation.targetSubjectId),
-    'published typed franchise edge is missing from current links',
-  );
   const holder = publication.published.find(
     (row) =>
       row.provider === 'vndb' && row.sourceKey === relation.holderKey && row.subjectId === relation.holderSubjectId,
   );
   assert.ok(holder, 'typed franchise holder is missing from the published seed');
-  assert.ok(
-    holder.assertions.some(
-      (assertion) =>
-        assertion.candidateId === relation.candidateId &&
-        assertion.property === relation.property &&
-        assertion.target?.subjectId === relation.targetSubjectId &&
-        assertion.citations?.includes(relation.citation!),
-    ),
-    'published typed franchise edge lost its supported citation or endpoint',
+  const edge = holder.assertions.find(
+    (assertion) =>
+      assertion.candidateId === relation.candidateId &&
+      assertion.property === relation.property &&
+      assertion.target?.subjectId === relation.targetSubjectId &&
+      assertion.citations?.includes(relation.citation!),
   );
+  assert.ok(edge, 'published typed franchise edge lost its supported citation or endpoint');
+  await assertCurrentRelations(api, relation.holderSubjectId, relation.property, [edge]);
   return {
     steins: steins.subjectId,
     clannad: clannad.subjectId,
@@ -1636,25 +1668,20 @@ async function walkSelectedSynopsis(api: string, publication: ShowcasePublicatio
     row.assertions.some((assertion) => assertion.property === 'schema:abstract'),
   );
   assert.ok(withAbstract, 'seed published no selected synopsis');
-  const read = await currentSubject(api, withAbstract.subjectId);
-  const abstracts = read.subject.statements['schema:abstract'] ?? [];
-  const statement = abstracts.find((row) => isRecord(row) && typeof row.id === 'string');
-  assert.ok(
-    statement && isRecord(statement) && typeof statement.id === 'string',
-    'selected synopsis has no current statement',
-  );
-  const query = selectedSynopsisQueryFromPublic(read as never, statement.id);
-  assert.ok(query, 'selected synopsis query cannot be built from the current Global statement');
-  const selected = await fetch(`${api}/v1/subjects/${withAbstract.subjectId}?${query.query}`);
-  assert.equal(selected.status, 200);
-  const body: unknown = await selected.json();
-  assert.ok(isRecord(body) && isRecord(body.selectedSynopsis), 'selectedSynopsis is absent');
-  assert.equal(body.selectedSynopsis.kind, 'matched');
+  const published = withAbstract.assertions.find((assertion) => assertion.property === 'schema:abstract')!;
+  const publicClient = createPublicBulkClient({ origin: api });
+  const read = await publicClient.readSubject(withAbstract.subjectId);
+  const statement = published.adoption.candidateId;
+  const operands = selectedSynopsisQueryFromPublic(read, statement);
+  assert.ok(operands, 'selected synopsis query cannot be built from the current Global statement');
+  const selected = await publicClient.readSelectedSynopsis(withAbstract.subjectId, operands.query);
+  const support = admitSelectedSynopsisSupport(selected, statement, operands.document);
+  assert.equal(support.kind, 'matched');
   return {
     sourceKey: withAbstract.sourceKey,
     id: withAbstract.subjectId,
-    statement: statement.id,
-    kind: body.selectedSynopsis.kind,
+    statement,
+    kind: support.kind,
   };
 }
 
@@ -1925,12 +1952,18 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
         const staff = citedAnimeCreditTargets(cited, '233', 'staff');
         assert.ok(cast.length, 'anime 233 has no current cited cast');
         assert.ok(staff.length, 'anime 233 has no current cited staff');
-        const characterLinks = await currentLinks(api, anime.row.subjectId, 'schema:character');
-        const characters = currentAnimeCharacterIds(characterLinks);
-        for (const id of characters) {
-          const character = await currentSubject(api, id);
-          assert.equal(character.subject.type, 'wd:Q95074', `Character ${id} current type`);
-        }
+        const appearances = anime.row.assertions.filter((assertion) => assertion.property === 'schema:character');
+        await assertCurrentRelations(api, anime.row.subjectId, 'schema:character', appearances);
+        const characters = currentAnimeCharacterIds(
+          await Promise.all(
+            appearances.map(async ({ property, readback }) => {
+              assert.ok(isRecord(readback) && isRecord(readback.value) && typeof readback.value.content === 'string');
+              const { subject } = await currentSubject(api, readback.value.content);
+              assert.equal(subject.type, 'wd:Q95074', `Character ${subject.id} current type`);
+              return { property, summary: subject };
+            }),
+          ),
+        );
         const characterCurrent = await walkAdoptedCharacters(api, seeded);
         return {
           id: anime.row.subjectId,
