@@ -47,7 +47,7 @@ test('native identity ports and one-owner raw progress preserve independent alia
     // Actual metadata work is separately measured, not hidden in each candidate leaf's receipt.
     const sweep = await capture(db, () => basisReader(pool, { deadline: deadline() }));
     expect(sweep.value.state).toBe('ready');
-    expect(costOf(sweep.capture).rows).toBeGreaterThanOrEqual(8192);
+    expect(costOf(sweep.capture).relations['semantic.identity_basis_shard']?.rows).toBe(128);
     if (sweep.value.state !== 'ready') throw new Error('Expected ready structural basis');
     const window = await aliases(pool, {
       terminal: book,

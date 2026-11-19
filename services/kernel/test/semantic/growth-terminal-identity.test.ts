@@ -91,6 +91,6 @@ test('terminal identity and fixed-home digest stay bounded as irrelevant editori
   for (const sample of report.samples) {
     expect(sample.cost.relations['semantic.fact']).toBeUndefined();
     expect(sample.cost.relations['semantic.revision']).toBeUndefined();
-    expect(sample.cost.relations['semantic.identity_home']?.rows).toBeGreaterThanOrEqual(4096);
+    expect(sample.cost.relations['semantic.identity_basis_shard']?.rows).toBeGreaterThanOrEqual(128);
   }
 }, 600_000);

@@ -38,8 +38,10 @@ function fixture(consumer: Consumer) {
           let rows: Row[] = [];
           if (sql.startsWith('BEGIN')) transaction = true;
           else if (sql === 'ROLLBACK') controls.cleanup();
-          else if (sql === 'COMMIT') controls.commit();
-          else if (sql.startsWith('SET LOCAL')) {
+          else if (sql === 'COMMIT') {
+            controls.commit();
+            transaction = false;
+          } else if (sql.startsWith('SET LOCAL')) {
             // The real executor retains its statement timeout setup.
           } else if (sql.includes('clock_timestamp()')) {
             const at = new Date(now).toISOString();
@@ -48,17 +50,9 @@ function fixture(consumer: Consumer) {
             rows = [{ write_state: controls.home }];
           } else if (sql.includes('FROM semantic.definition_catalogue_head')) {
             rows = await controls.read([{ root_digest: null, head: 1 }], ++observations);
-          } else if (sql.includes('FROM semantic.identity_epoch_group')) {
+          } else if (sql.includes('FROM semantic.identity_basis_shard')) {
             rows = await controls.read(
-              Array.from({ length: 4096 }, (_, partition_no) => ({
-                partition_no,
-                epoch: 1,
-                node: 'home',
-                write_state: 'active',
-                moved_to: null,
-                generation: '1',
-                pending: '0',
-              })),
+              Array.from({ length: 64 }, (_, shard) => ({ shard, ready: true, basis: Buffer.alloc(32) })),
               ++observations,
             );
           } else throw new Error(`Unexpected isolated read: ${sql}`);
@@ -111,8 +105,7 @@ function fixture(consumer: Consumer) {
       controls.home = 'active';
       const result = await read(now + 50);
       if (consumer === 'catalogue') expect(result).toBeNull();
-      else
-        expect(result).toEqual({ state: 'ready', basis: { digest: expect.stringMatching(/^[0-9a-f]{64}$/) } });
+      else expect(result).toEqual({ state: 'ready', basis: { digest: expect.stringMatching(/^[0-9a-f]{64}$/) } });
     },
   };
 }
@@ -171,7 +164,7 @@ for (const consumer of ['catalogue', 'identity'] as const) {
           f.controls.read = async (rows, current) => {
             if (current !== observation) return rows;
             if (kind !== 'decode') throw failure;
-            Object.defineProperty(rows[0]!, consumer === 'catalogue' ? 'root_digest' : 'generation', {
+            Object.defineProperty(rows[0]!, consumer === 'catalogue' ? 'root_digest' : 'basis', {
               get() {
                 throw failure;
               },
@@ -237,8 +230,8 @@ test('identity basis retains missing, pending and changed currentness with later
     try {
       f.controls.read = async (rows, observation) => {
         if (state === 'missing') rows.pop();
-        if (state === 'pending') rows[0]!.pending = '1';
-        if (state === 'changed' && observation === 2) rows[0]!.generation = '2';
+        if (state === 'pending') rows[0]!.ready = false;
+        if (state === 'changed' && observation === 2) rows[0]!.basis = Buffer.alloc(32, 1);
         return rows;
       };
       await expect(f.read()).resolves.toEqual({ state: 'not_ready' });

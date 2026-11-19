@@ -3825,6 +3825,24 @@ CREATE TRIGGER history_work_changed AFTER UPDATE OF owner_ready, absence_verifie
 
 
 --
+-- Name: partition identity_basis_topology; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_basis_topology AFTER INSERT OR DELETE OR UPDATE OF partition_no, epoch, node, write_state, moved_to ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_basis_topology();
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER identity_basis_topology;
+
+
+--
+-- Name: partition identity_basis_truncate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_basis_truncate BEFORE TRUNCATE ON core.partition FOR EACH STATEMENT EXECUTE FUNCTION semantic.truncate_identity_basis_source();
+
+ALTER TABLE core.partition ENABLE ALWAYS TRIGGER identity_basis_truncate;
+
+
+--
 -- Name: partition identity_epoch_prearm_owner_gate; Type: TRIGGER; Schema: core; Owner: -
 --
 
