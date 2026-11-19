@@ -16,7 +16,9 @@ leaves a sparse page. Next uses the opaque cursor and replaces the page; a stale
 explicit restart. There is no accumulated list, global search, page-local type filter, favorite command or hidden refill.
 
 Subject links use `subjectHref`; Collection links use the localized Collection reader when `collection.get` is
-exposed. A missing summary renders an unavailable row. Server HTML and its hydration data omit the stored target ID, destination and action operands for that row. After viewer and operation admission, the private page read supplies the owner’s exact reference for inspection and removal.
+exposed. A missing summary renders an unavailable row. Server HTML and hydration data omit that row's stored
+target ID and destination. After viewer and operation admission, the private page read supplies the owner's exact
+reference and enables inspection and removal.
 A supplied cover is rendered through the existing SubjectCover; absent covers remain absent. No initial row makes
 a point read. Reading a label or follow source does not establish catalogue type, membership, notification delivery
 or authorization. Removal retains FollowTargetControl, its current intent equivalence, point review and refresh
