@@ -6,6 +6,16 @@ import { authRequest } from '../src/session/routes.ts';
 import { prepareSession } from '../src/session/request.ts';
 import { mediaRequest } from '../src/media/index.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { FeedPage } from '../src/features/pages/home-feed-read';
+import {
+  boardOpeningCard,
+  boardOpeningCursor,
+  boardOpeningExample,
+  boardOpeningId,
+} from '../src/threads/board-opening-fixtures';
+import type { ReadingPage } from '../src/threads/thread-page';
 import { slug } from '@rezics/definitions/slug';
 import fixtures from '../src/kernel/fixtures.json';
 import { threadHref } from '../src/threads/thread-href';
@@ -23,45 +33,44 @@ const authCalls: string[] = [];
 let subjectSize = 1;
 let searchSize = 1;
 const contentId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const boardId = contentId(800);
-const threadId = contentId(801);
+const boardId = boardOpeningId;
+let threadId = contentId(801);
+let homeSize = 1;
 let boardSize = 1;
 let postSize = 1;
-const pageMetadata = {
-  route: 0,
-  visibility: 'published',
-  securityRevision: '1',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-const documentBody = (n: number) => ({
-  version: 'rezics-document-v1',
-  profile: 'blocks',
-  doc: {
-    type: 'doc',
-    content: [
-      {
-        type: 'paragraph',
-        attrs: { id: `post-${n}` },
-        content: [{ type: 'text', text: `Post ${n}` }],
-      },
-    ],
-  },
+const opening = boardOpeningExample('current', 0);
+const board = { ...opening.board, title: 'Cost board', realmId: null, community: null };
+const threadCard = boardOpeningCard(0);
+const post = (n: number) => ({ ...boardOpeningCard(n).thread.firstPost, threadId });
+const threadTitle = 'Cost thread';
+const thread = (): ReadingPage['thread'] => ({
+  ...threadCard.thread,
+  id: threadId,
+  title: threadTitle,
+  firstPost: post(0),
 });
-const post = (n: number) => ({
-  ...pageMetadata,
-  id: contentId(900 + n),
-  threadId,
-  boardId,
-  authorId: contentId(999),
-  parentId: null,
-  revisionId: contentId(1200 + n),
-  sha256: 'a'.repeat(64),
-  licence: 'CC-BY-4.0',
-  subjectIds: [],
-  mediaIds: [],
-  availability: 'available',
-  body: documentBody(n),
-});
+const asOf = new Date(0).toISOString();
+
+function homeFeed(size: number, limit: number): FeedPage {
+  return {
+    ...homeFeedStoryPage('en', false, 'empty'),
+    next: size > limit ? 'next-feed-page' : null,
+    feedItems: Array.from({ length: Math.min(size, limit) }, (_, i) => {
+      const id = contentId(500 + i);
+      const type = 'schema:Book';
+      const label = { value: `Feed result ${i}`, language: 'en' };
+      return {
+        id: `semantic:${id}`,
+        source: 'discovery',
+        key: { owner: 'semantic', kind: type, route: 0, id },
+        occurredAt: null,
+        summary: { id, type, types: [type], label, creativeWork: true, cover: null },
+        destination: { kind: 'subject', id, title: label.value },
+      };
+    }),
+  };
+}
+
 function recordKernelCall(request: Request, url: URL, includeQuery = true) {
   kernelCalls.push(`${request.method} ${url.pathname}${includeQuery ? url.search : ''}`);
   kernelAuthorizations.push(request.headers.get('authorization'));
@@ -141,48 +150,40 @@ const kernel = Bun.serve({
       authCalls.push(url.pathname);
       return new Response(null, { status: 200 });
     }
-    if (url.pathname === `/v1/boards/${boardId}`) {
+    if (request.method === 'GET' && url.pathname === '/v1/feedItems') {
+      recordKernelCall(request, url);
+      return Response.json(homeFeed(homeSize, Number(url.searchParams.get('limit'))));
+    }
+    if (request.method === 'GET' && url.pathname === `/v1/boards/${boardId}`) {
+      recordKernelCall(request, url);
+      return Response.json({ board });
+    }
+    if (request.method === 'GET' && url.pathname === `/v1/boards/${boardId}/page`) {
       recordKernelCall(request, url);
       return Response.json({
-        board: { ...pageMetadata, id: boardId, title: 'Cost board', availability: 'available' },
+        ...opening,
+        board,
+        threads: Array.from({ length: Math.min(boardSize, 20) }, (_, n) => boardOpeningCard(n)),
+        next: boardSize > 20 ? boardOpeningCursor : null,
       });
     }
-    if (url.pathname === `/v1/boards/${boardId}/threads`) {
+    if (request.method === 'GET' && url.pathname === `/v1/threads/${threadId}`) {
       recordKernelCall(request, url);
-      return Response.json({
-        threads: Array.from({ length: boardSize }, (_, n) => ({
-          ...pageMetadata,
-          id: contentId(1000 + n),
-          boardId,
-          authorId: contentId(999),
-          licence: 'CC-BY-4.0',
-          subjectIds: [],
-          title: `Thread ${n}`,
-          availability: 'available',
-          firstPost: post(n),
-        })),
-        next: null,
-      });
+      return Response.json({ thread: thread() });
     }
-    if (url.pathname === `/v1/threads/${threadId}`) {
+    if (request.method === 'GET' && url.pathname === `/v1/threads/${threadId}/reading-page`) {
       recordKernelCall(request, url);
-      return Response.json({
-        thread: {
-          ...pageMetadata,
-          id: threadId,
-          boardId,
-          authorId: contentId(999),
-          licence: 'CC-BY-4.0',
-          subjectIds: [],
-          title: 'Cost thread',
-          availability: 'available',
-          firstPost: post(0),
-        },
-      });
-    }
-    if (url.pathname === `/v1/threads/${threadId}/posts`) {
-      recordKernelCall(request, url);
-      return Response.json({ posts: Array.from({ length: postSize }, (_, n) => post(n)), next: null });
+      const current = thread();
+      const replies = Array.from({ length: Math.min(postSize - 1, 20) }, (_, n) => post(n + 1));
+      const authors = [...new Set([current.firstPost, ...replies].map((item) => item.authorId))].map((id) => ({
+        id,
+        handle: `reader-${id.slice(-3)}`,
+        displayName: null,
+        avatar: null,
+      }));
+      const page = authoredReadingPage(current, replies, authors);
+      page.replies.next = postSize - 1 > page.query.limit ? 'next-replies-page' : null;
+      return Response.json(page);
     }
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
       const body = (await request.json()) as { limit: number };
@@ -195,18 +196,19 @@ const kernel = Bun.serve({
         })),
         total: { value: searchSize, relation: 'exact' },
         next: null,
-        as_of: new Date(0).toISOString(),
+        as_of: asOf,
       });
     }
     if (url.pathname === '/v1/subjects:suggest' && request.method === 'GET') {
       recordKernelCall(request, url, false);
       return Response.json({
-        subjects: Array.from({ length: Math.min(searchSize, Number(url.searchParams.get('limit')) || 8) }, (_, i) => ({
-          id: `${subjectId}-${i}`,
-          type: 'book',
+        subjects: Array.from({ length: Math.min(searchSize, Number(url.searchParams.get('limit'))) }, (_, i) => ({
+          id: contentId(600 + i),
+          type: 'schema:Book',
           labels: { en: `Result ${i}` },
+          summary: null,
         })),
-        as_of: new Date(0).toISOString(),
+        as_of: asOf,
       });
     }
     if (url.pathname === `/v1/subjects/${subjectId}/collections` && request.method === 'GET') {
@@ -267,21 +269,22 @@ test('locale resolution stays within its bound as s grows', async () => {
 test('home page stays within its bound as s grows', async () => {
   const origin = await site();
   for (const s of [1, 8, 64]) {
-    subjectSize = s;
+    homeSize = s;
     kernelCalls.length = 0;
     authCalls.length = 0;
     for (const cookie of ['', `__Host-rezics_session=${cookieId}`]) {
       kernelCalls.length = 0;
       const response = await fetch(`${origin}/en/`, { headers: { cookie } });
       expect(response.status).toBe(200);
-      expect(kernelCalls).toEqual(['POST /v1/pages:read']);
+      expect(await response.text()).toContain(`>Feed result ${Math.min(s, 20) - 1}</`);
+      expect(kernelCalls).toEqual(['GET /v1/feedItems?stream=home&limit=20']);
       expect(authCalls).toEqual([]);
     }
   }
 }, 300_000);
 test('subject page stays within its bound as s grows', async () => {
   const origin = await site();
-  // Personal state is browser-only; the signed-in cookie does not alter the server's public read set.
+  // No public kernel request carries the session cookie's identity.
   for (const s of [1, 8, 64]) {
     subjectSize = s;
     kernelCalls.length = 0;
@@ -290,20 +293,15 @@ test('subject page stays within its bound as s grows', async () => {
       headers: { cookie: `__Host-rezics_session=${cookieId}` },
     });
     expect(response.status).toBe(200);
-    // Agent subtype classification and the page's type label use a bounded definitions read, whatever s is.
+    expect(await response.text()).toContain('Label 0');
     const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
     expect(definitions.length).toBeLessThanOrEqual(3);
     const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
-    expect(page).toHaveLength(5);
-    expect(page).toEqual(
-      expect.arrayContaining([
-        `GET /v1/subjects/${subjectId}`,
-        'POST /v1/pages:read',
-        `GET /v1/subjects/${subjectId}/reactions`,
-        `GET /v1/subjects/${subjectId}/ratings?question=00000000-0000-7000-8000-000000000001&population=00000000-0000-8000-8000-000000000000`,
-        `GET /v1/subjects/${subjectId}/source-statistics`,
-      ]),
-    );
+    expect(page.map(decodeURIComponent).sort()).toEqual([
+      'GET /v1/definitionTypes/schema:Book?locale=en',
+      `GET /v1/subjects/${subjectId}`,
+      'POST /v1/pages:read',
+    ]);
     expect(kernelAuthorizations).toEqual(kernelCalls.map(() => null));
   }
 }, 300_000);
@@ -315,11 +313,8 @@ test('board page stays within its bound as s grows', async () => {
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/boards/${boardId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([
-      `GET /v1/boards/${boardId}`,
-      `GET /v1/boards/${boardId}/threads?sort=active`,
-      `GET /v1/accounts?ids=${contentId(999)}`,
-    ]);
+    expect(await response.text()).toContain(`>Discussion ${Math.min(s, 20) - 1}</`);
+    expect(kernelCalls).toEqual([`GET /v1/boards/${boardId}/page?sort=active`]);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
@@ -327,17 +322,18 @@ test('thread page stays within its bound as s grows', async () => {
   const origin = await site();
   for (const s of [1, 8, 64]) {
     postSize = s;
-    kernelCalls.length = 0;
-    authCalls.length = 0;
-    const response = await fetch(`${origin}/en${threadHref({ id: threadId, title: 'Cost thread' })}`);
-    expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([
-      `GET /v1/threads/${threadId}`,
-      `GET /v1/threads/${threadId}/posts`,
-      `GET /v1/boards/${boardId}`,
-      `GET /v1/accounts?ids=${contentId(999)}`,
-    ]);
-    expect(authCalls).toEqual([]);
+    threadId = contentId(801 + s);
+    const path = `${origin}/en${threadHref({ id: threadId, title: threadTitle })}`;
+    const reading = [`GET /v1/threads/${threadId}/reading-page`, `GET /v1/boards/${boardId}`];
+    for (const expected of [[`GET /v1/threads/${threadId}`, ...reading], reading]) {
+      kernelCalls.length = 0;
+      authCalls.length = 0;
+      const response = await fetch(path);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain(`>Opening contribution ${Math.min(s - 1, 20)}</`);
+      expect(kernelCalls).toEqual(expected);
+      expect(authCalls).toEqual([]);
+    }
   }
 }, 300_000);
 test('search page stays within its bound as s grows', async () => {
@@ -362,7 +358,7 @@ test('suggestions stay within their bound as s grows', async () => {
     // One suggest read, plus at most the active digest and the release that name the types, whatever s is.
     expect(kernelCalls.filter((call) => !call.includes('/v1/definitions/'))).toEqual(['GET /v1/subjects:suggest']);
     expect(kernelCalls.filter((call) => call.includes('/v1/definitions/')).length).toBeLessThanOrEqual(2);
-    expect(((await response.json()) as { subjects: unknown[] }).subjects.length).toBeLessThanOrEqual(8);
+    expect(((await response.json()) as { subjects: unknown[] }).subjects.length).toBe(Math.min(s, 8));
   }
 }, 300_000);
 
