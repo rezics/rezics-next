@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { createServer, type Socket } from 'node:net';
+import { analyzeInstalledMany, NAME_KEY_NORMALIZER } from '../../src/search/engine-analysis.ts';
+import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError, SearchUnavailableError } from '../../src/search/opensearch.ts';
+import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 
 const url = process.env.OPENSEARCH_URL;
 if (!url) throw new Error("OPENSEARCH_URL must name the check's OpenSearch node");
@@ -75,6 +78,56 @@ async function recovered(client: ReturnType<typeof createOpenSearch>) {
   expect(result.status).toBe(200);
   expect(result.body.version.number).toMatch(/^3\./);
 }
+
+test('the installed name normalizer recovers after a typed transient breaker response', async () => {
+  const prefix = `test-analysis-pressure-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = subjectIndexName(prefix, 1);
+  const input = { normalizer: NAME_KEY_NORMALIZER, text: ['Ｒｕｓｔ', '', '𠀀', 'Ｒｕｓｔ'] };
+  const payloads: unknown[] = [];
+  await createSubjectIndex(native, prefix, 1);
+  try {
+    await withServer(
+      async (request) => {
+        expect(request.method).toBe('POST');
+        expect(new URL(request.url).pathname).toBe(`/${index}/_analyze`);
+        payloads.push(await request.clone().json());
+        if (payloads.length > 1) return forward(request);
+        return Response.json(
+          {
+            error: {
+              type: 'circuit_breaking_exception',
+              reason: 'internal breaker diagnostics',
+              durability: 'TRANSIENT',
+              bytes_wanted: 128209856,
+              bytes_limit: 127506841,
+            },
+            status: 429,
+          },
+          { status: 429 },
+        );
+      },
+      async (address) => {
+        const search = createOpenSearch(address);
+        const analyze = () => analyzeInstalledMany(search, index, input);
+        const error = await unavailable(analyze());
+        expect(error).toMatchObject({ reason: 'overloaded', message: 'OpenSearch analysis returned HTTP 429' });
+        expect(COMMAND_STEP_RETRIES.shouldRetry(error)).toBe(true);
+        expect(payloads).toEqual([input]);
+
+        const rust = { token: 'rust', position: 0, startOffset: 0, endOffset: 4 };
+        expect(await analyze()).toEqual([
+          [rust],
+          [],
+          [{ token: '𠀀', position: 0, startOffset: 0, endOffset: 2 }],
+          [rust],
+        ]);
+        expect(payloads).toEqual([input, input]);
+      },
+    );
+  } finally {
+    await native.request('DELETE', `/${index}`);
+  }
+});
 
 test('actual UTF-8 bytes are counted across HTTP chunks, including split multibyte characters and exact boundaries', async () => {
   // Native document data gives the positive payload multibyte content without a fake success engine.

@@ -31,6 +31,27 @@ function unavailable(message = 'OpenSearch analysis is malformed'): never {
   throw new SearchUnavailableError(message);
 }
 
+class SearchAnalysisOverloadedError extends SearchUnavailableError {
+  readonly reason = 'overloaded';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'SearchAnalysisOverloadedError';
+  }
+}
+
+function analysisHttpFailure(status: number, body: unknown): never {
+  const message = `OpenSearch analysis returned HTTP ${status}`;
+  if (status === 429 && record(body) && record(body.error)) {
+    const { type, durability } = body.error;
+    if (type === 'circuit_breaking_exception' && durability === 'TRANSIENT') {
+      // Let Work back off after the Search turn settles. Do not issue another request in this turn.
+      throw new SearchAnalysisOverloadedError(message);
+    }
+  }
+  return unavailable(message);
+}
+
 function readToken(value: unknown, allowEmptyNameKey: boolean): EngineToken {
   if (
     !record(value) ||
@@ -161,10 +182,10 @@ async function readAnalysisTokens(
     });
   } catch (error) {
     if (error instanceof SearchUnavailableError) throw error;
-    if (error instanceof OpenSearchError) unavailable(`OpenSearch analysis returned HTTP ${error.status}`);
+    if (error instanceof OpenSearchError) analysisHttpFailure(error.status, error.body);
     throw error;
   }
-  if (response.status !== 200) unavailable(`OpenSearch analysis returned HTTP ${response.status}`);
+  if (response.status !== 200) analysisHttpFailure(response.status, response.body);
   if (
     !record(response.body) ||
     !Array.isArray(response.body.tokens) ||
