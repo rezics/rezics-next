@@ -1,10 +1,22 @@
-import { openAuthGrowthDatabase } from './support/auth-growth-database.ts';
+import { nativeFixture, nativeFixtureResources } from './support/erasure-native.ts';
+import { beforeNativeKernelTests, nativeKernelSetupTimeout } from './support/native-kernel.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
-import { checkGrowth, seed, type GrowthDatabase, type Population, type Row } from '../../kernel/test/support/growth.ts';
+import { AUTH_MAINTENANCE_SCHEDULE } from '../src/maintenance.ts';
+import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
+import type { GrowthDatabase, Population, Row } from '../../kernel/test/support/growth.ts';
+
+// The growth pool imports Kernel partition SQL. Install Reylo before loading that pool.
+beforeNativeKernelTests();
+async function growthFixture() {
+  const { checkGrowth, seed } = await import('../../kernel/test/support/growth.ts');
+  const { openAuthGrowthDatabase } = await import('./support/auth-growth-database.ts');
+  return { checkGrowth, seed, openAuthGrowthDatabase };
+}
 
 const instant = new Date('2026-01-01T00:00:00.000Z');
 const future = new Date('2099-01-01T00:00:00.000Z');
@@ -87,54 +99,97 @@ async function expectErased(current: GrowthDatabase, owners: string[]) {
   ).toBe(0);
 }
 
-test('consent erasure scheduling stays bounded as unrelated erasure rows and consents grow', async () => {
-  const fixture = testDatabase();
-  const db = await openAuthGrowthDatabase(fixture.url);
-  try {
-    const auth = await makeAuth(db.pool);
-    await auth.internal.registerClient({ clientId: 'schedule-growth-client', firstParty: false, scopes: ['read'] });
-    const unrelated = scheduledPopulation('schedule-growth-client', 'schedule-unrelated', true);
-    const measured: Population = {
-      name: 'schedule-measured',
-      hotPartition: 0,
-      rows: ({ ordinal }) => {
-        const id = `schedule-owner-${ordinal}`;
-        return { 'public.user': [user(id)], 'public.auth_consent': [consent(id, 'schedule-growth-client')] };
+describe('active account deletion', () => {
+  const resources = nativeFixtureResources();
+  let f: Awaited<ReturnType<typeof nativeFixture>>;
+  let db: GrowthDatabase;
+  const clientId = 'schedule-growth-client';
+  const owners: string[] = [];
+
+  beforeAll(async () => {
+    const { openAuthGrowthDatabase } = await growthFixture();
+    f = await nativeFixture({
+      openPool: async (url) => {
+        db = await openAuthGrowthDatabase(url);
+        resources.own('Growth pools', () => db.close());
+        return db.openPool();
       },
+    });
+    resources.own('Native erasure fixture', () => f.close());
+    await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
+    await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
+    const auth = f.host.service.internal;
+    await auth.registerClient({ clientId, firstParty: false, scopes: ['read'] });
+
+    // Interrupt the foreground drain after the deletion workflow transfers its source.
+    const eraseAccount = auth.eraseAccount;
+    let interruptedOwner: string | undefined;
+    auth.eraseAccount = async (owner) => {
+      interruptedOwner = owner;
+      throw new Error('Interrupted before the foreground erasure drain');
     };
-    let nextRepetition = 0;
+    try {
+      for (let i = 0; i < 6; i++) {
+        const person = await f.person(`schedule-owner-${i}`);
+        const owner = person.accountId;
+        await db.admin.query('INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)', [
+          owner,
+          clientId,
+          ['read'],
+        ]);
+        expect((await f.delete(person)).status).toBe(503);
+        expect(interruptedOwner).toBe(owner);
+        expect(
+          (
+            await db.admin.query('SELECT source_discharged_at,user_deleted_at FROM auth_erasure WHERE account_id=$1', [
+              owner,
+            ])
+          ).rows[0],
+        ).toEqual({ source_discharged_at: expect.any(Date), user_deleted_at: null });
+        owners.push(owner);
+      }
+    } finally {
+      auth.eraseAccount = eraseAccount;
+    }
+    // DBOS owns background lock transactions on this pool even with its schedules paused.
+    // All six sources are discharged. The foreground Auth drain only needs the service and its pool.
+    await f.host.workflows.close();
+  }, nativeKernelSetupTimeout);
+  afterAll(() => resources.close());
+
+  test('consent erasure scheduling stays bounded as unrelated erasure rows and consents grow', async () => {
+    const { checkGrowth, seed } = await growthFixture();
+    const unrelated = scheduledPopulation(clientId, 'schedule-unrelated', true);
     const report = await checkGrowth(db, {
       name: 'consent erasure scheduling',
       scales: [256, 1024, 4096],
       repetitions: 1,
       warmups: 1,
+      captureMode: 'cost-folded',
+      warmupSettlementOnly: true,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      async grow(current, scale, previous) {
-        await seed(current, unrelated, { from: previous, to: scale });
-        const end = nextRepetition + 2;
-        await seed(current, measured, { from: nextRepetition, to: end });
-        nextRepetition = end;
-      },
+      grow: (current, scale, previous) => seed(current, unrelated, { from: previous, to: scale }),
       async operation(current, _scale, repetition) {
-        const owner = `schedule-owner-${repetition}`;
-        await auth.internal.eraseAccount(owner);
+        const owner = owners[repetition]!;
+        await f.host.service.internal.eraseAccount(owner);
         expect(
-          (await current.admin.query('SELECT account_id FROM auth_consent WHERE account_id=$1', [owner])).rowCount,
-        ).toBe(1);
-        expect(
-          (await current.admin.query('SELECT account_id FROM auth_consent_erasure WHERE account_id=$1', [owner]))
-            .rowCount,
-        ).toBe(1);
+          (
+            await current.admin.query(
+              `SELECT e.user_deleted_at, s.due_at=e.consent_due_at AS original_cutoff
+             FROM auth_erasure e JOIN auth_consent_erasure s USING(account_id)
+             JOIN auth_consent c USING(account_id) WHERE e.account_id=$1 AND c.client_id=$2`,
+              [owner, clientId],
+            )
+          ).rows,
+        ).toEqual([{ user_deleted_at: expect.any(Date), original_cutoff: true }]);
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
-  } finally {
-    await db.close();
-    fixture.close();
-  }
+  });
 });
 
 test('one fixed consent erasure batch stays bounded as live consent and future schedules grow', async () => {
+  const { checkGrowth, seed, openAuthGrowthDatabase } = await growthFixture();
   const fixture = testDatabase();
   const db = await openAuthGrowthDatabase(fixture.url);
   try {
