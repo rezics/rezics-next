@@ -2,24 +2,43 @@ import { expect, spyOn, test } from 'bun:test';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture } from './creation-page-fixture';
 import { managementOperationStepUpUrl, storePendingRenameReviewStepUp } from '../src/management-operation-step-up';
-import { managementOperationProfile } from '../src/management-operations';
-import { recheckStepUpReturn } from '../src/step-up-return';
-import { confirmStepUp } from '../src/step-up';
+import { managementOperationProfile } from '@rezics/auth-contract';
 
 creationFixture();
+// Bind the server-function handlers after the fixture installs Start's test bridge.
+const { recheckStepUpReturn } = await import('../src/step-up-return');
+const { confirmStepUp } = await import('../src/step-up');
 
-test('ordinary and retained reviews stay within their existing whole-call reads', async () => {
+const returnCostTest = 'ordinary and retained reviews stay within their existing whole-call reads';
+test(returnCostTest, async () => {
+  // Opening tests can cache management-operations with Start's real handler before this bridge loads.
+  if (process.env.REZICS_STEP_UP_RETURN_COST_CHILD !== '1') {
+    const child = Bun.spawn([process.execPath, 'test', import.meta.path, '--test-name-pattern', returnCostTest], {
+      env: { ...process.env, REZICS_STEP_UP_RETURN_COST_CHILD: '1' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(code, stdout + stderr).toBe(0);
+    return;
+  }
+
   const accountId = '00000000-0000-4000-8000-000000000031';
   const profile = managementOperationProfile('rename');
-  const calls: { path: string; method: string; body: unknown }[] = [];
-  const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-    const path = String(input);
+  const calls: { url: string; method: string; body: unknown; cookie: string | null }[] = [];
+  using request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const url = String(input);
     calls.push({
-      path,
+      url,
       method: String(init?.method ?? 'GET'),
       body: init?.body ? JSON.parse(String(init.body)) : null,
+      cookie: new Headers(init?.headers).get('Cookie'),
     });
-    if (path === '/recovery/page')
+    if (url === '/recovery/page')
       return Promise.resolve(
         Response.json(
           recoveryPage(
@@ -33,7 +52,7 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
           ),
         ),
       );
-    if (path === '/session')
+    if (url === 'https://auth.test/session')
       return Promise.resolve(
         Response.json({
           account_id: accountId,
@@ -44,7 +63,7 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
           amr: ['pwd'],
         }),
       );
-    throw new Error(`unexpected request ${path}`);
+    throw new Error(`unexpected request ${url}`);
   });
 
   const ordinary = await recheckStepUpReturn(
@@ -54,22 +73,18 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
     () => true,
   );
   expect(ordinary).toEqual({ kind: 'continue', target: 'https://auth.test/security' });
-  expect(calls).toEqual([{ path: '/recovery/page', method: 'POST', body: { stage: 'step-up' } }]);
+  const adviceRead = { url: '/recovery/page', method: 'POST', body: { stage: 'step-up' }, cookie: null };
+  expect(calls).toEqual([adviceRead]);
 
   calls.length = 0;
   expect(storePendingRenameReviewStepUp(accountId)).toBe(true);
   const query = new URL(managementOperationStepUpUrl('rename'), 'https://auth.test').search;
   const retained = await recheckStepUpReturn(query, 'https://auth.test', new AbortController().signal, () => true);
-  const expected = new URL(managementOperationStepUpUrl('rename'), 'https://auth.test').searchParams.get('return_to');
-  expect(retained).toEqual({ kind: 'continue', target: new URL(expected!, 'https://auth.test').href });
-  expect(calls.map(({ path, method }) => [path, method])).toEqual([
-    ['/recovery/page', 'POST'],
-    ['/session', 'GET'],
+  expect(calls).toEqual([
+    adviceRead,
+    { url: 'https://auth.test/session', method: 'GET', body: null, cookie: 'auth_session=original' },
   ]);
-  expect(calls.some(({ path }) => path === '/signin' || path.includes('/execute') || path.includes('/approve'))).toBe(
-    false,
-  );
-  request.mockRestore();
+  expect(retained).toEqual({ kind: 'continue', target: 'https://auth.test/account/rename' });
 });
 
 test.each([
