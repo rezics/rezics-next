@@ -76,7 +76,8 @@ export async function publishBookOriginals(
     assert(database && fixture.search);
     const { pool } = database;
     const engine = createOpenSearch(process.env.OPENSEARCH_URL!);
-    const prefix = fixture.search.indexPrefix;
+    const native = fixture.search;
+    const prefix = native.indexPrefix;
     const index = subjectAlias(prefix);
     const publicationJobs = (deadline: number) =>
       withBoundedReadConnection(pool, deadline, (connection) => readPublicationJobs(connection, prefix));
@@ -218,6 +219,7 @@ export async function publishBookOriginals(
     return {
       fixture,
       database,
+      pauseWhenCaughtUp: (deadline: number) => native.pauseAfterSubjectReplay(published, deadline),
       originals,
       published,
       waitForPublication,
@@ -235,12 +237,20 @@ export async function publishBookOriginals(
 }
 
 export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
-  const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
-    await publishBookOriginals(setupDeadline, cleanupMs, {
-      searchWorker: 'owned-child',
-      // The editor authors up to 4,096 distractors plus the selected catalogue and its supporting reads.
-      writeRateOverrides: JSON.stringify({ 'new-account': { write: { maximum: 6000, seconds: 60 } } }),
-    });
+  const {
+    fixture,
+    database,
+    originals,
+    published,
+    waitForPublication,
+    pauseWhenCaughtUp,
+    createAnchor,
+    createSubject,
+  } = await publishBookOriginals(setupDeadline, cleanupMs, {
+    searchWorker: 'owned-child',
+    // The editor authors up to 4,096 distractors plus the selected catalogue and its supporting reads.
+    writeRateOverrides: JSON.stringify({ 'new-account': { write: { maximum: 6000, seconds: 60 } } }),
+  });
   try {
     const search = fixture.search;
     assert(search);
@@ -280,14 +290,14 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     assert(Date.now() < setupDeadline, 'Book catalogue setup expired while publishing TypeLists');
     const request = (who: 'alice' | 'anonymous' | 'suspended') =>
       fixture.request(who, 'POST', '/v1/pages:read', { target: { route }, languages: ['en'] });
-    async function read(who: 'alice' | 'anonymous', warm = false) {
+    async function read(who: 'alice' | 'anonymous', warmupDeadline?: number) {
       // Alice's warmup follows publication waits. The measured read uses the anonymous path.
       if (who === 'alice') await fixture.renewCredential('alice');
-      const until = Date.now() + 120_000;
       for (;;) {
-        const { value: response, stages } = warm
-          ? await observeComposedWarmup(() => request(who))
-          : { value: await request(who), stages: [] };
+        const { value: response, stages } =
+          warmupDeadline !== undefined
+            ? await observeComposedWarmup(() => request(who))
+            : { value: await request(who), stages: [] };
         const reads = response.body.reads as Record<string, TypeListResponse> | undefined;
         if (response.status === 200) {
           assert.deepEqual(response.body.document, document);
@@ -295,13 +305,13 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
           assert.deepEqual(Object.keys(reads).sort(), Object.keys(plan.reads).sort());
         }
         const results = response.status === 200 ? reads! : { page: response };
-        if (warm && Object.values(results).some(({ status }) => status === 503)) {
+        if (warmupDeadline !== undefined && Object.values(results).some(({ status }) => status === 503)) {
           for (const entry of Object.values(results).filter(({ status }) => status !== 200))
             assert(
               entry.status === 503 && ['index_not_ready', 'semantic_not_ready'].includes(String(entry.body.code)),
               JSON.stringify({ who, response: entry, stages }),
             );
-          if (Date.now() >= until) {
+          if (Date.now() >= warmupDeadline) {
             const outcomes = Object.entries(results).map(([key, { status, body }]) => ({
               node: lists.find((list) => plan.nodes[list.id] === key)?.id ?? key,
               status,
@@ -338,7 +348,11 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
     return {
       database,
       read,
-      pauseBackgroundWork: () => search.backgroundWork('paused'),
+      async warmup() {
+        const deadline = Date.now() + 120_000;
+        await read('anonymous', deadline);
+        await pauseWhenCaughtUp(deadline);
+      },
       async denied() {
         const response = requireStatus(await request('suspended'), 401, 'Read with revoked credentials');
         assert.equal(response.body.code, 'invalid_credentials');

@@ -104,11 +104,7 @@ test(
       repetitions: 1,
       grow: (_db, scale, previous) => world.grow(previous, scale),
       warmupSettlementOnly: true,
-      async warmup() {
-        await world.read('anonymous', true);
-        // The measured request uses the already-published native generation.
-        await world.pauseBackgroundWork();
-      },
+      warmup: () => world.warmup(),
       operation: measurePage,
       async verify(_db, scale, _repetition, value, capture) {
         const measured = value as Awaited<ReturnType<typeof measurePage>>;
