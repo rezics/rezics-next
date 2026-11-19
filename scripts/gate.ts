@@ -605,6 +605,7 @@ async function run(
 const workspaceExcerptBytes = 64 * 1024;
 const workspaceProgressPrefixes: Partial<Record<string, string>> = {
   'apps/web': '[web-file] ',
+  'services/auth': '[auth-file] ',
   'services/kernel': '[kernel-file] ',
 };
 
