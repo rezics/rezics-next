@@ -229,18 +229,17 @@ test('Stay keeps an unsent target review and focus; Leave clears it with zero co
       return { kind: 'unknown' };
     },
   });
-  await flush(() =>
-    ui.host
-      .querySelector<HTMLButtonElement>('#security-passkeys-heading')!
-      .parentElement!.querySelector<HTMLButtonElement>('li button')!
-      .click(),
-  );
-  const cancel = ui.host.querySelector<HTMLButtonElement>('[role="dialog"] button')!;
-  expect(document.activeElement).toBe(cancel);
+  const removeLabel = m.auth_security_passkey_remove_named({ name: 'Security key' });
+  const remove = ui.host.querySelector<HTMLButtonElement>(`button[aria-label="${removeLabel}"]`);
+  expect(remove !== null, 'the named passkey has a remove action').toBe(true);
+  await flush(() => remove!.click());
+  const cancel = ui.host.querySelector<HTMLButtonElement>('[aria-labelledby="security-target-review-title"] button');
+  expect(cancel?.textContent).toBe(m.auth_inventory_cancel());
+  expect(document.activeElement === cancel, 'initial focus stays on the review cancel action').toBe(true);
   await startNavigation(ui.router, '/next');
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
   await tick();
-  expect(document.activeElement).toBe(cancel);
+  expect(document.activeElement === cancel, 'Stay restores focus to the review cancel action').toBe(true);
   expect(ui.host.querySelector('[role="dialog"]')!.textContent).toContain('Security key');
   const { navigation } = await startNavigation(ui.router, '/next');
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());

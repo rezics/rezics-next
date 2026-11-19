@@ -101,7 +101,15 @@ test.each(['password', 'prompt'])('departure retires %s and reloads private revi
       } as unknown as Credential);
   });
   expect(calls).toHaveLength(1);
-  expect((host.querySelector('#security-new-password') as HTMLInputElement).value).toBe('');
+  const newPassword = host.querySelector<HTMLInputElement>('#security-new-password');
+  if (kind === 'password') {
+    expect(newPassword === null, 'an unresolved password stage keeps the form closed').toBe(true);
+    expect(host.querySelector('[data-password-return-status]')?.textContent).toContain(
+      m.auth_security_password_return_stage(),
+    );
+  } else {
+    expect(newPassword?.value).toBe('');
+  }
   expect(host.querySelector('fieldset')).toBeNull();
   expect(inventories).toEqual(['clients', 'consents', 'clients', 'consents']);
   expect(host.textContent).not.toContain(m.auth_security_passkey_added());
