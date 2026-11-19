@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureSource } from '@rezics/auth-contract';
@@ -253,7 +253,14 @@ test('real default deletion transfers only its discharged native source, then er
 
 test('default recovery consumes an ordinary committed native result after caller loss and restart, without a caller retry', async () => {
   const f = await nativeFixture({ restartable: true });
-  const mutation = spyOn(f.bindings.workflowPorts, 'completeHandleTransition');
+  const ports = f.bindings.workflowPorts;
+  const finish = ports.completeHandleTransition!;
+  let mutations = 0;
+  ports.completeHandleTransition = async (input) => {
+    const result = await finish(input);
+    mutations++;
+    return result;
+  };
   let restore = () => {};
   try {
     const person = await f.person('lost-result');
@@ -289,6 +296,7 @@ test('default recovery consumes an ordinary committed native result after caller
     expect(copy.ready).toBe(false);
     expect(copy.result_finished_at).toBeInstanceOf(Date);
     expect((await f.bindings.workflowPorts.readAccount(person.accountId))!.handle).toBe(operation.handle);
+    expect(mutations).toBe(1);
     await f.restart();
     // No resumeOperation or caller retry repairs the native result consumer.
     expect((await f.delete(person)).status).toBe(200);
@@ -302,7 +310,7 @@ test('default recovery consumes an ordinary committed native result after caller
       370_000,
     );
     expect(await copiesAbsent(f.pool, copy.workflow_id)).toBe(true);
-    expect(mutation).toHaveBeenCalledTimes(1);
+    expect(mutations).toBe(1);
     expect(
       (
         await f.call('/signin', {
@@ -314,7 +322,7 @@ test('default recovery consumes an ordinary committed native result after caller
       ).status,
     ).toBe(200);
   } finally {
-    mutation.mockRestore();
+    ports.completeHandleTransition = finish;
     restore();
     await f.close();
   }
@@ -322,7 +330,14 @@ test('default recovery consumes an ordinary committed native result after caller
 
 test('activated registration lost after native result consumption retires through default maintenance after restart', async () => {
   const f = await nativeFixture({ restartable: true });
-  const activation = spyOn(f.bindings.workflowPorts, 'activate');
+  const ports = f.bindings.workflowPorts;
+  const activate = ports.activate;
+  let activations = 0;
+  ports.activate = async (input) => {
+    const result = await activate(input);
+    activations++;
+    return result;
+  };
   let restore = () => {};
   try {
     const key = randomUUID();
@@ -357,6 +372,7 @@ test('activated registration lost after native result consumption retires throug
         ])
       ).rows[0],
     ).toMatchObject({ ready: false, result_finished_at: expect.any(Date) });
+    expect(activations).toBe(1);
     await f.restart();
     const person = await f.login({ accountId: source.account_id, email });
     expect((await f.delete(person)).status).toBe(200);
@@ -370,9 +386,9 @@ test('activated registration lost after native result consumption retires throug
       370_000,
     );
     expect(await copiesAbsent(f.pool, source.consumer_workflow_id)).toBe(true);
-    expect(activation).toHaveBeenCalledTimes(1);
+    expect(activations).toBe(1);
   } finally {
-    activation.mockRestore();
+    ports.activate = activate;
     restore();
     await f.close();
   }
