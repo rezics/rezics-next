@@ -10,6 +10,7 @@ import type { MediaVariantDecision, ReviewedSubjectRead } from '../src/import-cl
 import { ImportTransportError } from '../src/import-client.ts';
 import { GLOBAL_CONTEXT, PublicSubjectGetUnavailable, ReviewedSubjectNotReady } from '../src/public-bulk-client.ts';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
+import { planCrossMediaSeed, type CrossMediaTables } from '../src/cross-media-seed.ts';
 import {
   characterIdentityForSource,
   importProducerPhase,
@@ -25,6 +26,7 @@ import {
   type ReviewedPersonMergeTransport,
 } from '../src/showcase-person-identity.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
+import { planShowcaseVndbCredits } from '../src/showcase-vndb-credits.ts';
 import { reviewedStatementFixture, reviewedSubjectFixture } from './transport-driver.ts';
 
 const bangumiOriginal = '00000000-0000-4000-8000-00000000000a';
@@ -55,6 +57,58 @@ const pair = [
   source(bangumi, bangumiOriginal, 'bangumi_cross_media'),
   source(vndb, vndbOriginal, 'vndb_cross_media'),
 ] as const;
+
+test('the bounded development plan retains the reviewed Person credit sources', async () => {
+  const tables: Record<string, Record<string, unknown>[]> = {
+    'bangumi/subject': [
+      { id: 51, type: 2, name: 'CLANNAD' },
+      { id: 1851, type: 2, name: 'Angel Beats!' },
+    ],
+    'bangumi/subject-persons': [
+      { subject_id: 51, person_id: 1000, position: 1 },
+      { subject_id: 1851, person_id: 1000, position: 3 },
+      { subject_id: 1851, person_id: 1916, position: 1 },
+    ],
+    'bangumi/person': [
+      { id: 1000, type: 1 },
+      { id: 1916, type: 1 },
+    ],
+    'vndb/vn_titles': [{ id: 'v4', lang: 'ja', official: 't', title: 'CLANNAD', latin: null }],
+    'vndb/vn': [{ id: 'v4', olang: 'ja', alias: null }],
+    'vndb/entry_meta': [{ id: 'v4', revision: '1', lastmod: '2026-11-04 00:00:00+00' }],
+    'vndb/vn_staff': [
+      { id: 'v4', aid: '1000', role: 'staff' },
+      { id: 'v4', aid: '386', role: 'scenario' },
+    ],
+    'vndb/staff_alias': [
+      { id: 's1000', aid: '1000', name: 'Other' },
+      { id: 's224', aid: '386', name: 'Credited' },
+      { id: 's224', aid: '28069', name: 'Preferred' },
+    ],
+    'vndb/staff': [
+      { id: 's1000', main: '1000' },
+      { id: 's224', main: '28069' },
+    ],
+  };
+  const input: CrossMediaTables = {
+    async *rows(provider, table) {
+      yield* tables[`${provider}/${table}`] ?? [];
+    },
+  };
+  const plan = await planCrossMediaSeed(input, {
+    includeReviewedPersonCredits: true,
+    selection: { bangumi: [51], vndb: ['v4'], includeReleases: false, peoplePerProvider: 1 },
+  });
+  expect(plan.members).toContainEqual({ source: 'bangumi', key: '1851', kind: 'work', membership: 'referenced' });
+  expect(plan.entities.bangumi.map((row) => row.key)).toEqual(['person:1916']);
+  expect(plan.credits.map(({ work, person, roleCode }) => [work, person, roleCode])).toEqual([
+    ['1851', 'person:1916', 1],
+  ]);
+  expect(plan.entities.vndb).toMatchObject([{ key: 's224', payload: { aliases: [{ aid: '386' }, { aid: '28069' }] } }]);
+  expect(planShowcaseVndbCredits(plan).credits.map(({ staffId, sourcePath }) => [staffId, sourcePath])).toEqual([
+    ['s224', '/vn_staff/v4/386/scenario'],
+  ]);
+});
 
 function publicPerson(id: string): ReviewedSubjectRead {
   return {

@@ -40,6 +40,7 @@ import {
   readCombinedPersonCredits,
   characterIdentityForSource,
   selectPersonReviewPair,
+  showcasePersonCreditWorks,
   showcasePersonReview,
   type AdoptedCharacterCurrent,
   type BoundPersonIdentity,
@@ -547,6 +548,7 @@ export async function planCrossMediaSeed(
   input: CrossMediaTables,
   options: {
     deferVndbCharacterAppearances?: boolean;
+    includeReviewedPersonCredits?: boolean;
     selection?: CrossMediaSelection;
     /** Anime endpoints already admitted by the Book family source relation. */
     bookAnime?: readonly string[];
@@ -554,6 +556,10 @@ export async function planCrossMediaSeed(
 ): Promise<CrossMediaPlan> {
   const selection = options.selection;
   const bookAnime = new Set(options.bookAnime?.map(Number));
+  const personCreditWork = options.includeReviewedPersonCredits ? Number(showcasePersonCreditWorks.bangumi) : undefined;
+  const reviewedBangumiPerson = Number(showcasePersonReview.selection.bangumi.slice('person:'.length));
+  const referencedAnime = new Set(bookAnime);
+  if (personCreditWork !== undefined) referencedAnime.add(personCreditWork);
   if (selection) {
     ensure(
       selection.bangumi.length > 0 &&
@@ -627,7 +633,7 @@ export async function planCrossMediaSeed(
   const titled = new Map<number, Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
-    if (selection && !selection.bangumi.includes(id) && !bookAnime.has(id)) continue;
+    if (selection && !selection.bangumi.includes(id) && !referencedAnime.has(id)) continue;
     ensure(!types.has(id), 'Duplicate selected Bangumi subject');
     types.set(id, row.type as number);
     if (selection && !selection.bangumi.includes(id)) continue;
@@ -671,7 +677,7 @@ export async function planCrossMediaSeed(
   const anime = new Set<Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
-    if (!familyIds.has(id) && !referencedWorks.has(id) && !bookAnime.has(id)) continue;
+    if (!familyIds.has(id) && !referencedWorks.has(id) && !referencedAnime.has(id)) continue;
     subjects.set(id, row);
   }
   for (const [id, family] of familyIds) {
@@ -711,10 +717,11 @@ export async function planCrossMediaSeed(
     if ([1, 2, 4].includes(row.type as number))
       plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
   }
-  for (const id of bookAnime) {
+  for (const id of referencedAnime) {
     const row = subjects.get(id);
+    if (id === personCreditWork) ensure(row?.type === 2, `Missing reviewed Bangumi Person credit work: ${id}`);
     if (row?.type !== 2) continue;
-    if (!selectedAnime.has(id)) selectedAnime.set(id, referencedWorks.get(id));
+    if (bookAnime.has(id) && !selectedAnime.has(id)) selectedAnime.set(id, referencedWorks.get(id));
     if (familyIds.has(id) || referencedWorks.has(id)) continue;
     member({ source: 'bangumi', key: String(id), kind: 'work', membership: 'referenced' });
     plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
@@ -865,7 +872,13 @@ export async function planCrossMediaSeed(
   const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((record) => record.key));
   const selectedAnimeWorks = new Set(
     [...plan.records.bangumi, ...plan.entities.bangumi]
-      .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)
+      .filter(
+        (record) =>
+          record.payload &&
+          typeof record.payload === 'object' &&
+          record.payload.type === 2 &&
+          (Number(record.key) !== personCreditWork || familyWorks.has(personCreditWork)),
+      )
       .map((record) => record.key),
   );
   const selectedGameWorks = new Set(
@@ -971,7 +984,8 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     const sourceIndex = staffIndex++;
     const subjectId = number(row, 'subject_id');
-    if (!creditWorks.has(subjectId)) continue;
+    if (!creditWorks.has(subjectId) && !(subjectId === personCreditWork && number(row, 'person_id') === reviewedBangumiPerson))
+      continue;
     const count = (staffCounts.get(subjectId) ?? 0) + 1;
     staffCounts.set(subjectId, count);
     if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedStaffIndices.size >= CREDIT_ASSOCIATIONS) {
@@ -1083,17 +1097,18 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     const sourceIndex = currentStaffIndex++;
     if (!admittedStaffIndices.has(sourceIndex)) continue;
-    const work = String(number(row, 'subject_id'));
+    const subjectId = number(row, 'subject_id');
+    const work = String(subjectId);
     const personId = number(row, 'person_id');
     const person = `person:${personId}`;
-    const workType = types.get(number(row, 'subject_id'));
+    const workType = types.get(subjectId);
     const mapping = mapSourceEnumeration('bangumi', `staff.${workType}`, row.position as number);
     member({
       source: 'bangumi',
       key: person,
       kind: 'person',
       membership: 'referenced',
-      ...tagged(familyIds.get(number(row, 'subject_id'))),
+      ...tagged(familyIds.get(subjectId)),
     });
     if (!mapping?.term || mapping.status === 'omitted') {
       gap(
@@ -1980,9 +1995,13 @@ export async function planCrossMediaSeed(
     }
     const reservedPeople = new Set(reservedCredits.values());
     for (const provider of ['bangumi', 'vndb'] as const) {
+      const reviewedPerson = options.includeReviewedPersonCredits
+        ? showcasePersonReview.selection[provider]
+        : undefined;
       let people = 0;
       const omitted = new Set<string>();
-      const priority = (key: string) => Number(provider === 'bangumi' && reservedPeople.has(key));
+      const priority = (key: string) =>
+        2 * Number(key === reviewedPerson) + Number(provider === 'bangumi' && reservedPeople.has(key));
       plan.entities[provider] = [...plan.entities[provider]]
         .sort((left, right) => priority(right.key) - priority(left.key) || left.key.localeCompare(right.key))
         .filter((row) => {
@@ -3558,6 +3577,7 @@ async function readPriorShowcasePublication(
 export type CrossMediaSeedCliOptions = {
   /** Include the independently selected, pinned literary families beside a finite showcase selection. */
   includeBooks?: boolean;
+  includeReviewedPersonCredits?: boolean;
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
@@ -3651,6 +3671,7 @@ async function runSeedCli(
   const plannedBooks = options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
+    ...(options.includeReviewedPersonCredits ? { includeReviewedPersonCredits: true } : {}),
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),
     ...(plannedBooks?.selected.series.length && plannedBooks.selected.volumes.length
       ? { bookAnime: plannedBooks.selected.anime }
@@ -4688,7 +4709,17 @@ async function runSeedCli(
     const afterMerge =
       personMerge?.state === 'published' && publicClient
         ? await rereadCanonicalPersonIdentities({
-            identities: combinedResult.personIdentities,
+            identities: [
+              ...combinedResult.personIdentities.filter(
+                (entry) =>
+                  !personMerge.identities.some(
+                    (original) =>
+                      original.identity.source === entry.identity.source &&
+                      original.identity.externalId === entry.identity.externalId,
+                  ),
+              ),
+              ...personMerge.identities.map((entry) => ({ ...entry, state: 'current' as const })),
+            ],
             readPublic: (id) => publicClient.readSubject(id),
           })
         : undefined;
@@ -4712,26 +4743,25 @@ async function runSeedCli(
             authorizeMediaVariant: (mediaId, variant) => importPort.authorizeMediaVariant(mediaId, variant),
           })
         : undefined;
-    const canonicalPersonId =
-      afterMerge?.identities[0]?.currentSubjectId ??
-      combinedResult.personIdentities.find((entry) => entry.identity.externalId === 'person:1916')?.currentSubjectId;
-    const creditWorks = publicClient
-      ? combinedResult.readings.flatMap((reading) =>
-          reading.externalId === '1851' || reading.externalId === 'v4'
-            ? [{ externalId: reading.externalId, boundSubjectId: reading.boundSubjectId ?? reading.subject.subject.id }]
-            : [],
-        )
-      : [];
     finalization.enter('credit-current-reads');
     const combinedCredits =
-      publicClient && canonicalPersonId && creditWorks.length
+      publicClient && personMerge?.state === 'published'
         ? await readCombinedPersonCredits({
-            canonicalPersonId,
-            originals: combinedResult.personIdentities.map((entry) => ({
+            canonicalPersonId: personMerge.survivor,
+            originals: personMerge.identities.map((entry) => ({
               boundPersonId: entry.boundSubjectId,
               personExternalId: entry.identity.externalId,
             })),
-            works: creditWorks,
+            works: combinedResult.readings.flatMap((reading) =>
+              reading.externalId === showcasePersonCreditWorks[reading.source]
+                ? [
+                    {
+                      externalId: reading.externalId,
+                      boundSubjectId: reading.boundSubjectId ?? reading.subject.subject.id,
+                    },
+                  ]
+                : [],
+            ),
             readPublic: (id) => publicClient.readSubject(id),
           })
         : undefined;

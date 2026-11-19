@@ -605,6 +605,7 @@ test('an identity observation for a followed endpoint cannot stand in for the re
 test('combined Person credit readback keeps each current statement’s Character, name, citation, and binding', async () => {
   const survivor = '00000000-0000-4000-8000-000000000008';
   const vndb = '00000000-0000-4000-8000-000000000007';
+  const other = '00000000-0000-4000-8000-000000000009';
   const row = (
     target: string,
     rank: string,
@@ -662,10 +663,11 @@ test('combined Person credit readback keeps each current statement’s Character
           statements: {
             'schema:author': [
               row(vndb, 'normal', 'Maeda Jun', '00000000-0000-4000-8000-00000000000c', 'https://vndb.test/v4'),
+              row(other, 'normal', 'Other credit', '00000000-0000-4000-8000-00000000000d', 'https://vndb.test/other'),
             ],
           },
         }),
-        { related: { [vndb]: { redirect: survivor } } },
+        { related: { [vndb]: { redirect: survivor }, [other]: { redirect: survivor } } },
       ),
     },
   ];

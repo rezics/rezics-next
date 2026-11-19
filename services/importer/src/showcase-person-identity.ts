@@ -74,6 +74,8 @@ export const showcasePersonReview = {
   independentEvidence: 'https://artist.cdjournal.com/a/maeda-jun/842760',
 } as const;
 
+export const showcasePersonCreditWorks = { bangumi: '1851', vndb: 'v4' } as const;
+
 export type PersonReviewPair =
   | Readonly<{ state: 'selected'; sources: readonly [PersonReviewSource, PersonReviewSource] }>
   | Readonly<{
@@ -374,6 +376,8 @@ const creditProperties = new Set([
   'schema:contributor',
   'schema:creator',
   'schema:composer',
+  'schema:musicBy',
+  'schema:lyricist',
   'wdt:P86',
   'wdt:P676',
   'wdt:P725',
@@ -426,7 +430,12 @@ function selectedFacts(rows: readonly StatementRow[] | undefined): readonly Read
   characterExternalId?: string;
 }>[] {
   return (rows ?? [])
-    .filter((row) => row.rank !== 'deprecated' && row.value?.type === 'value' && typeof row.value.content === 'string')
+    .filter(
+      (row) =>
+        (row.rank === 'normal' || row.rank === 'preferred') &&
+        row.value?.type === 'value' &&
+        typeof row.value.content === 'string',
+    )
     .map((row) => {
       const characterExternalId = creditCharacter(row);
       return {
@@ -650,25 +659,16 @@ export function recordCombinedPersonCredits(input: {
     for (const [property, rows] of Object.entries(subjectStatements(work.read))) {
       if (!creditProperties.has(property)) continue;
       for (const row of selectedFacts(rows)) {
-        const target = row.content;
-        const survivor =
-          target === input.canonicalPersonId
-            ? target
-            : related[target]?.redirect === input.canonicalPersonId
-              ? input.canonicalPersonId
-              : originals.has(target)
-                ? input.canonicalPersonId
-                : undefined;
-        if (!survivor) continue;
-        const boundPersonId = originals.has(target) ? target : input.canonicalPersonId;
-        const personExternalId = originals.get(boundPersonId) ?? originals.get(input.canonicalPersonId);
-        if (!personExternalId) continue;
+        const boundPersonId = row.content;
+        const personExternalId = originals.get(boundPersonId);
+        const redirect = related[boundPersonId]?.redirect;
+        if (!personExternalId || (redirect !== undefined && redirect !== input.canonicalPersonId)) continue;
         credits.push({
           workExternalId: work.externalId,
           workSubjectId: workId,
           personExternalId,
           boundPersonId,
-          canonicalPersonId: survivor,
+          canonicalPersonId: input.canonicalPersonId,
           property,
           creditedAs: row.qualifiers,
           citations: row.citations,

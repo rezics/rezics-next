@@ -276,6 +276,7 @@ async function prepareDevelopmentImport(
   enter('import-handoff');
   const importedResult = await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     includeBooks: true,
+    includeReviewedPersonCredits: true,
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
     reviewedCatalogueSubjects: reviewedCatalogue.subjects,
     selection: developmentShowcaseSelection,

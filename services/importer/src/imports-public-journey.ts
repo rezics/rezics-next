@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
-import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { WALK_COMMIT_CAUSES, type WalkCommitCause } from '@rezics/definitions/bulk';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
 import { startSeededWalkFrontends, walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
@@ -60,6 +60,13 @@ import {
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import { showcaseLimits } from './showcase-contract.ts';
 import { publicValueStatementCurrent } from './showcase-current-reads.ts';
+import {
+  observePersonIdentity,
+  personIdentityForSource,
+  recordCombinedPersonCredits,
+  showcasePersonCreditWorks,
+  showcasePersonReview,
+} from './showcase-person-identity.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -1473,72 +1480,100 @@ async function walkGameReleaseCounterpart(api: string, publication: ShowcasePubl
 }
 
 async function walkPersonCredits(api: string, report: CrossMediaSeedReport, publication: ShowcasePublicationResult) {
-  const bangumi = selectPublished(publication.published, 'bangumi', 'person:1916');
-  const vndb = selectPublished(publication.published, 'vndb', 's224');
-  const left = await currentSubject(api, bangumi.subjectId);
-  const right = await currentSubject(api, vndb.subjectId);
-  assert.equal(left.subject.type, 'schema:Person');
-  assert.equal(right.subject.type, 'schema:Person');
   const merge = report.personMerge;
-  if (merge?.state !== 'published') throw new Error('reviewed Person pair is not one current canonical Person');
+  assert.ok(merge?.state === 'published', 'reviewed Person pair is not one current canonical Person');
   const canonical = merge.survivor;
-  assert.equal(left.subject.id, canonical, 'Bangumi original does not read as the canonical Person');
-  assert.equal(right.subject.id, canonical, 'VNDB original does not read as the canonical Person');
-  assert.equal(left.subject.id, right.subject.id);
   assert.ok(merge.operation, 'reviewed Person merge operation was not observed');
   assert.ok(
     Number.isSafeInteger(merge.revision) && merge.revision > 0,
     'reviewed Person operation has no completed revision',
   );
-  for (const externalId of ['person:1916', 's224']) {
-    const identity = report.personIdentities.find((entry) => entry.identity.externalId === externalId);
-    assert.ok(identity, `seed omitted current identity ${externalId}`);
-    assert.equal(identity.currentSubjectId, canonical, `${externalId} was not reread after merge`);
-    assert.equal(identity.boundSubjectId, externalId === 'person:1916' ? bangumi.subjectId : vndb.subjectId);
+  const providers = ['bangumi', 'vndb'] as const;
+  const originals = providers.map((provider) => {
+    const externalId = showcasePersonReview.selection[provider];
+    const identity = personIdentityForSource(provider, externalId, 'schema:Person')!;
+    const original = merge.identities.find((entry) => entry.identity.source === provider);
+    assert.ok(original, `reviewed merge omitted the ${provider} original`);
+    assert.deepEqual(original.identity, identity);
+    assert.equal(original.currentSubjectId, canonical);
+    assert.ok(
+      report.personIdentities.some(
+        (entry) =>
+          entry.identity.source === provider &&
+          entry.identity.externalId === externalId &&
+          entry.boundSubjectId === original.boundSubjectId &&
+          entry.currentSubjectId === canonical,
+      ),
+      `${externalId} was not reread from its original binding after merge`,
+    );
+    return original;
+  });
+  assert.notEqual(canonical, merge.redirected, 'reviewed merge did not redirect a distinct original');
+  assert.deepEqual(originals.map((entry) => entry.boundSubjectId).sort(), [canonical, merge.redirected].sort());
+  for (const original of originals) {
+    const read = (await currentSubject(api, original.boundSubjectId)) as Parameters<typeof observePersonIdentity>[1];
+    assert.equal(read.subject.id, canonical, `${original.identity.externalId} did not resolve to the survivor`);
+    for (const { identity } of originals)
+      assert.equal(observePersonIdentity(identity, read).state, 'current', `expected current ${identity.externalId}`);
   }
   const combined = report.combinedCredits;
   assert.ok(combined, 'seed omitted independently reread combined Person credits');
   assert.equal(combined.canonicalPersonId, canonical);
-  const originalEndpoints = new Set([bangumi.subjectId, vndb.subjectId]);
-  assert.ok(originalEndpoints.has(merge.redirected), 'completed Person merge did not redirect an original endpoint');
-  const creditWorks = [
-    { externalId: '1851', row: selectPublished(publication.published, 'bangumi', '1851') },
-    { externalId: 'v4', row: selectPublished(publication.published, 'vndb', 'v4') },
-  ];
-  for (const work of creditWorks) {
-    const currentCredits: NonNullable<CrossMediaSeedReport['combinedCredits']>['credits'] = combined.credits.filter(
-      (credit) => credit.workExternalId === work.externalId,
+  const creditedWorks = [];
+  for (const original of originals) {
+    const provider = original.identity.source;
+    const externalId = showcasePersonCreditWorks[provider];
+    const row = selectPublished(publication.published, provider, externalId);
+    const read = (await currentSubject(api, row.subjectId)) as Parameters<typeof observePersonIdentity>[1];
+    assert.equal(read.subject.id, row.subjectId);
+    assert.equal(read.subject.type, row.nativeType);
+    const expectedCredits: typeof combined.credits = combined.credits.filter(
+      (credit) => credit.workExternalId === externalId,
     );
-    assert.ok(currentCredits.length, `${work.externalId} has no independently reread Person credit`);
-    const currentWork = await currentSubject(api, work.row.subjectId);
-    assert.equal(currentWork.subject.id, work.row.subjectId);
-    for (const credit of currentCredits) {
-      assert.equal(credit.workSubjectId, work.row.subjectId);
+    assert.ok(expectedCredits.length, `${externalId} has no independently reread Person credit`);
+    const current = recordCombinedPersonCredits({
+      canonicalPersonId: canonical,
+      originals: originals.map((entry) => ({
+        boundPersonId: entry.boundSubjectId,
+        personExternalId: entry.identity.externalId,
+      })),
+      works: [{ externalId, read }],
+    });
+    assert.deepEqual(
+      current.credits.map((credit) => JSON.stringify(credit)).sort(),
+      expectedCredits.map((credit) => JSON.stringify(credit)).sort(),
+      `${externalId} current Person credits differ from the seed readback`,
+    );
+    const sourceCitations =
+      provider === 'bangumi'
+        ? [`${bangumiRecordUrl(externalId)}#/subject-persons/${externalId}/${original.identity.value}/position`]
+        : ['scenario', 'music', 'staff'].map(
+            (role) => `${vndbRecordUrl(externalId)}#/vn_staff/${externalId}/386/${role}`,
+          );
+    for (const credit of current.credits) {
+      assert.equal(credit.personExternalId, original.identity.externalId);
+      assert.equal(credit.boundPersonId, original.boundSubjectId);
       assert.ok(
-        originalEndpoints.has(credit.boundPersonId),
-        `${work.externalId} credit lost its original Person endpoint`,
-      );
-      assert.equal(credit.canonicalPersonId, canonical);
-      assert.ok(
-        statementContents(currentWork, credit.property).includes(credit.boundPersonId),
-        `${work.externalId} current credit no longer names its original Person endpoint`,
+        credit.citations.some((citation) => sourceCitations.includes(citation)),
+        `${externalId} current ${credit.property} credit has no exact source-row citation`,
       );
     }
+    for (const citation of sourceCitations)
+      assert.ok(
+        current.credits.some((credit) => credit.citations.includes(citation)),
+        `missing current credit ${citation}`,
+      );
+    creditedWorks.push({ sourceKey: externalId, type: row.nativeType, credits: current.credits });
   }
-  const credits = publication.published.filter((row) =>
-    row.assertions.some((assertion) =>
-      ['schema:author', 'schema:contributor', 'wdt:P725', 'schema:creator'].includes(assertion.property),
-    ),
-  );
   return {
-    bangumi: bangumi.subjectId,
-    vndb: vndb.subjectId,
+    bangumi: originals[0]!.boundSubjectId,
+    vndb: originals[1]!.boundSubjectId,
     canonical,
     operation: merge.operation,
     completedRevision: merge.revision,
     redirected: merge.redirected,
     rereadCredits: combined.credits.length,
-    creditedWorks: credits.map((row) => ({ sourceKey: row.sourceKey, type: row.nativeType })),
+    creditedWorks,
   };
 }
 
