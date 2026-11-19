@@ -212,19 +212,20 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
       return;
     }
     case 'release-supersedes': {
+      const property = 'rezics:releaseSupersedes';
       const endpoint = environment.sourceCode(row.endpointCode);
       if (!row.endpoint) {
-        rowGap(environment, row, 'missing_identity', 'wdt:P155', endpoint ?? undefined, endpoint ?? undefined);
+        rowGap(environment, row, 'missing_identity', property, endpoint ?? undefined, endpoint ?? undefined);
         return;
       }
       environment.propose({
         row,
         subject: row.release,
-        property: 'wdt:P155',
+        property,
         content: '',
         target: row.endpoint,
         sourceEndpoint: row.endpointCode,
-        mappingRevision: 'release-supersedes@1',
+        mappingRevision: 'release-supersedes@2',
       });
       return;
     }
