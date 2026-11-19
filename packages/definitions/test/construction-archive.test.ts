@@ -20,7 +20,7 @@ test('the complete original construction comparisons and native counters run in 
       './test/publication-construction.test.ts',
     ]);
     expect(result.exitCode, result.stderr).toBe(0);
-    expect(result.stderr).toMatch(/85 pass/);
+    expect(result.stderr).toMatch(/^ 86 pass$/m);
     expect(result.stderr).toMatch(/0 fail/);
     expect(result.stderr).not.toMatch(/\d+ (?:skip|todo)/);
     const evidenceLine = result.stdout.split('\n').find((line) => line.startsWith('construction native evidence '));
