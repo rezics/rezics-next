@@ -963,8 +963,8 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(initial.prompt).toContain('The native marker timestamp unit is epoch milliseconds.');
     const originalBriefPath = h.store.task(activeTask.id).briefPath;
 
-    const currentCommand =
-      'bun scripts/performance/admission-local.ts && bun scripts/performance/native-marker-local.ts';
+    const currentArgv = ['bun', 'test', 'apps/web/tests/shell-menus.test.ts'];
+    const currentCommand = currentArgv.join(' ');
     const currentText = contractRevision(
       [
         'BEGIN_WAITING_SESSION',
@@ -973,7 +973,10 @@ test('a same-session wake replaces stale remote policy with the complete amended
         'Native marker timestamp unit correction: marker timestamps are epoch microseconds; compare epoch seconds by dividing by 1000000.',
       ].join('\n'),
       currentCommand,
-    );
+    )
+      .replace('goal: fixture', 'goal: fixture\nurgent: true')
+      .replace('acceptance:\n', 'acceptance:\n  placement: local\n')
+      .replace(`command: ["sh", "-c", ${JSON.stringify(currentCommand)}]`, `command: ${JSON.stringify(currentArgv)}`);
     underLease(h, activeTask.id, () => replaceTaskContract(h, activeTask.id, 1, currentText));
     const amended = h.store.task(activeTask.id);
     expect(amended.briefPath).not.toBe(originalBriefPath);
@@ -998,7 +1001,8 @@ test('a same-session wake replaces stale remote policy with the complete amended
     expect(resumed.prompt).toContain(
       'Native marker timestamp unit correction: marker timestamps are epoch microseconds',
     );
-    expect(resumed.prompt).toContain('Run the acceptance command in the foreground from the worktree root');
+    expect(resumed.prompt).toContain('The acceptance placement is local');
+    expect(resumed.prompt).toContain(JSON.stringify(currentArgv));
     expect(resumed.prompt).not.toContain(remoteCommand);
     expect(resumed.prompt).not.toContain('The native marker timestamp unit is epoch milliseconds.');
     expect(resumed.prompt).not.toContain('Run the remote campaign');
