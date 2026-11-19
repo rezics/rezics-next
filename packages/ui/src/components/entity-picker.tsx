@@ -139,6 +139,8 @@ export function EntityPicker({
     selectionKey: multiple ? '' : selectedKey,
   });
   const pending = useRef<SearchInvocation | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
   const boundary = useRef({ multiple, disabled: isDisabled, selectionKey: selectedKey });
   const searchRef = useRef(search);
   searchRef.current = search;
@@ -325,11 +327,24 @@ export function EntityPicker({
         isItemEqualToValue={(a: EntityPickerSubject, b: EntityPickerSubject) => a.id === b.id}
       >
         <ComboboxInput
+          ref={inputRef}
           aria-label={label}
           placeholder={placeholder}
           disabled={isDisabled}
           showTrigger={false}
           className="w-full"
+          onKeyDown={(event) => {
+            // The popup is portaled past the picker's other controls.
+            if (
+              event.key === 'Tab' &&
+              !event.shiftKey &&
+              event.currentTarget.getAttribute('aria-expanded') === 'true' &&
+              retryRef.current
+            ) {
+              event.preventDefault();
+              retryRef.current.focus();
+            }
+          }}
         />
         <ComboboxContent aria-busy={busy} className="min-w-0">
           {/* Results scroll, and a scrolling region needs a keyboard stop for assistive technology that does not follow the input. */}
@@ -347,23 +362,32 @@ export function EntityPicker({
             )}
           </ComboboxList>
           <div
-            role="status"
             className={cn(
               'flex flex-wrap items-center justify-center gap-2 px-3 text-center text-sm text-muted-foreground [overflow-wrap:anywhere]',
               (status || busy) && 'py-3',
             )}
           >
             {busy ? <Spinner role="presentation" aria-hidden="true" aria-label={undefined} /> : null}
-            <span className="min-w-0">{status}</span>
+            <span role="status" className="min-w-0">
+              {status}
+            </span>
             {currentResults.phase === 'failed' && !isDisabled ? (
               <Button
+                ref={retryRef}
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-auto whitespace-normal py-1"
+                onKeyDown={(event) => {
+                  if (event.key === 'Tab' && event.shiftKey) {
+                    event.preventDefault();
+                    inputRef.current?.focus();
+                  }
+                }}
                 onClick={() => {
                   if (isDisabled || currentResults.phase !== 'failed' || currentResults.query !== inputText.trim())
                     return;
+                  inputRef.current?.focus();
                   run(currentResults.query, 0);
                 }}
               >
@@ -373,28 +397,33 @@ export function EntityPicker({
           </div>
         </ComboboxContent>
       </Combobox>
-      {multiple && selected.length > 0 ? (
-        <ul aria-label={t.selected} className="grid min-w-0 gap-2">
-          {selected.map((subject) => (
-            <li
-              key={subject.id}
-              className="flex min-w-0 items-start gap-3 rounded-2xl border border-border bg-card p-2 text-card-foreground"
-            >
-              <ResultCover subject={subject} src={src} ratio={selectedRatio} />
-              <ResultText subject={subject} />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={isDisabled}
-                aria-label={t.remove.replace('{title}', subject.title)}
-                onClick={() => change(selected.filter((entry) => entry.id !== subject.id))}
-              >
-                <XIcon aria-hidden="true" />
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {multiple ? (
+        // Keep selection changes in a live region that stays available while Base UI scopes access to the popup.
+        <div aria-live="polite" className={selected.length === 0 ? 'sr-only' : undefined}>
+          {selected.length > 0 ? (
+            <ul aria-label={t.selected} className="grid min-w-0 gap-2">
+              {selected.map((subject) => (
+                <li
+                  key={subject.id}
+                  className="flex min-w-0 items-start gap-3 rounded-2xl border border-border bg-card p-2 text-card-foreground"
+                >
+                  <ResultCover subject={subject} src={src} ratio={selectedRatio} />
+                  <ResultText subject={subject} />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={isDisabled}
+                    aria-label={t.remove.replace('{title}', subject.title)}
+                    onClick={() => change(selected.filter((entry) => entry.id !== subject.id))}
+                  >
+                    <XIcon aria-hidden="true" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

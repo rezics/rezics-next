@@ -2,10 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { act, useState } from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { coverSrc, coverSummary } from '../stories/media-fixtures.ts';
-import { withSurface } from '../stories/support.tsx';
+import { settled, withSurface } from '../stories/support.tsx';
 import { focusForTyping } from '../test/focus.ts';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from './entity-picker.tsx';
-import { metaText } from './meta-line.tsx';
 
 const subject = (id: string, title: string, typeLabel: string, year: number | undefined, cover = true) =>
   ({
@@ -112,12 +111,28 @@ export const Selected: Story = {
   },
 };
 
+const slowSearch = fakeSearch({ delay: 60_000 });
+
 export const SlowSearch: Story = {
-  args: { multiple: true, defaultValue: odd.slice(0, 1), search: fakeSearch({ delay: 60_000, pool: odd }) },
+  args: {
+    multiple: true,
+    defaultValue: odd.slice(0, 1),
+    search: (query, signal) => (query === 'three' ? fakeSearch()(query, signal) : slowSearch(query, signal)),
+  },
   async play({ canvasElement }) {
-    await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'long title');
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', { name: 'Subject' });
+    await userEvent.type(input, 'three');
+    await enabled(/The Three-Body Problem/);
+    await userEvent.type(input, 'x');
     await expect(await screen.findByText('Searching…')).toBeVisible();
-    await expect(within(canvasElement).getByRole('list', { name: 'Selected' })).toHaveTextContent(odd[0]!.title);
+    await expect(screen.getByRole('option', { name: /The Three-Body Problem/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    const selected = canvas.getByRole('list', { name: 'Selected' });
+    await expect(selected).toHaveTextContent(odd[0]!.title);
+    await expect(within(selected).getByRole('button', { name: `Remove ${odd[0]!.title}` })).toBeEnabled();
   },
 };
 
@@ -168,7 +183,7 @@ export const SearchAsYouType: Story = {
     // One search for the finished word, not one per keystroke.
     await expect(typed).toHaveBeenCalledTimes(1);
     await expect(typed.mock.calls[0]![0]).toBe('three');
-    await expect(option).toHaveTextContent(metaText(['Novel', '2008']));
+    await expect(option).toHaveTextContent('Novel · 2008');
     await expect(option.querySelector('picture img')).not.toBeNull();
     await expect(await options()).toHaveLength(3);
     await expect(screen.queryByRole('option', { name: /Thursday/ })).toBeNull();
@@ -246,13 +261,21 @@ export const SearchFailed: Story = {
   args: { search: fakeSearch({ offline }), multiple: true, defaultValue: odd.slice(0, 1) },
   async play({ canvasElement }) {
     offline.value = true;
-    await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');
+    const input = within(canvasElement).getByRole('combobox', { name: 'Subject' });
+    await userEvent.type(input, 'three');
     const failure = await screen.findByText('The search failed.');
     await waitFor(() => expect(failure).toBeVisible());
     await expect(screen.queryByText(/offline/)).toBeNull();
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    await userEvent.tab();
+    await expect(retry).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    await expect(input).toHaveFocus();
+    await userEvent.tab();
     offline.value = false;
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await userEvent.keyboard('{Enter}');
     await enabled(/The Three-Body Problem/);
+    await expect(input).toHaveFocus();
     await expect(screen.queryByText('The search failed.')).toBeNull();
   },
 };
@@ -290,20 +313,26 @@ export const LongTitlesAndMissingData: Story = {
     const untitled = screen.getByRole('option', { name: /Untitled/ });
     await expect(untitled).toHaveTextContent('Untitled');
     await expect(untitled.querySelector('[data-slot="cover-placeholder-icon"]')).not.toBeNull();
-    await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent(
-      metaText(['Visual novel', '2011']),
-    );
+    await expect(screen.getByRole('option', { name: /無題の物語/ })).toHaveTextContent('Visual novel · 2011');
   },
 };
 
 export const MultipleLongTitles: Story = {
-  args: { multiple: true },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  args: { multiple: true, search: async () => odd.slice(0, 2) },
   async play({ canvasElement }) {
-    await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');
-    await choose(/The Three-Body Problem/);
-    const popup = document.querySelector<HTMLElement>('[data-slot="combobox-content"]')!;
-    await expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
-    await expect(within(canvasElement).getByRole('list', { name: 'Selected' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('combobox', { name: 'Subject' }), 'a');
+    const listbox = await settled(await screen.findByRole('listbox', { name: 'Subject' }));
+    const { left, right } = listbox.getBoundingClientRect();
+    await expect(left).toBeGreaterThanOrEqual(0);
+    await expect(right).toBeLessThanOrEqual(window.innerWidth + 1);
+    for (const subject of odd.slice(0, 2)) await choose(new RegExp(subject.title));
+    const selected = await canvas.findByRole('list', { name: 'Selected' });
+    for (const row of within(selected).getAllByRole('listitem')) {
+      await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+      await expect(within(row).getByRole('button', { name: /^Remove / })).toBeVisible();
+    }
   },
 };
 
