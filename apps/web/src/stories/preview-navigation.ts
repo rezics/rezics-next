@@ -106,6 +106,8 @@ export function bindPreviewNavigation({
       event.defaultPrevented ||
       !event.cancelable ||
       !event.canIntercept ||
+      // A responsive overlay can push its own history entry at the unchanged preview URL.
+      event.destination.url === frameUrl ||
       event.downloadRequest !== null ||
       event.formData !== null ||
       !['push', 'replace'].includes(event.navigationType)

@@ -19,7 +19,11 @@ export type ContributionScenario =
   | 'uncertain';
 
 /** Isolated native-interface story/request seam. Never mounted in the development kernel fake. */
-export function contributionFixture(scenario: ContributionScenario = 'ready', locale = 'en') {
+export function contributionFixture(
+  scenario: ContributionScenario = 'ready',
+  locale = 'en',
+  { admitInitialWithdrawal = false }: { admitInitialWithdrawal?: boolean } = {},
+) {
   const base = candidateFixture('ready', locale);
   // This is a just-submitted native proposal in the story, not a provenance-based ownership decision.
   base.candidate.source = null;
@@ -55,7 +59,8 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
     });
     if (request.method === 'GET' && url.pathname === `${path}/lifecycle`) {
       if (scenario === 'loading') return new Promise<Response>(() => {});
-      if (scenario === 'withheld' && !deleted) return json({ code: 'not_found' }, 404);
+      if (scenario === 'withheld' && !deleted && (!admitInitialWithdrawal || receipts.size > 0))
+        return json({ code: 'not_found' }, 404);
       return json({
         subject: base.id,
         candidate: base.candidate.id,
@@ -64,11 +69,11 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
         state: deleted ? 'deleted' : 'available',
         selected: false,
         actions:
-          scenario === 'unavailable'
+          scenario === 'unavailable' && !admitInitialWithdrawal
             ? { state: 'unavailable' }
             : {
                 state: 'available',
-                operations: scenario === 'denied' ? [] : [deleted ? 'restore' : 'delete'],
+                operations: scenario === 'denied' && !admitInitialWithdrawal ? [] : [deleted ? 'restore' : 'delete'],
               },
       });
     }

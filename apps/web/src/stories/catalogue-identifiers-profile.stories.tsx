@@ -140,9 +140,19 @@ export const EntryCarriesSelectedOrigin: Story = {
   render: () => <OriginEntryExample />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.contribute_title() }));
-    await userEvent.click(await canvas.findByRole('menuitem', { name: m.contribute_edit() }));
-    const entry = await canvas.findByRole('menuitem', { name: m.identifiers_title() });
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await canvas.findByRole('button', { name: m.contribute_title() }));
+    const group = await waitFor(
+      () =>
+        body.queryByRole('button', { name: m.contribute_edit() }) ??
+        body.getByRole('menuitem', { name: m.contribute_edit() }),
+    );
+    await userEvent.click(group);
+    const entry = await waitFor(
+      () =>
+        body.queryByRole('link', { name: m.identifiers_title() }) ??
+        body.getByRole('menuitem', { name: m.identifiers_title() }),
+    );
     expect(entry.getAttribute('href')).toContain('originContext=0ac7c5d7-1f67-4d02-8a72-0676044ecb19');
     expect(entry.getAttribute('href')).toContain('originRealm=b7d92525-081e-42e1-9cb8-ef72b1492a25');
   },

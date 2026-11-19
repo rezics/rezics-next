@@ -49,11 +49,13 @@ function ContributionLifecycleLive({
   locale,
   transport,
   onClear,
+  landmarkLabel,
 }: {
   address: ContributionAddress;
   locale: string;
   transport: ContributionTransport;
   onClear: () => void | Promise<void>;
+  landmarkLabel?: string;
 }) {
   const lifetime = useEditorLifetime();
   const resultFocus = useContributionResultFocus();
@@ -220,7 +222,7 @@ function ContributionLifecycleLive({
   }, []);
 
   return (
-    <section aria-label={m.contribution_title({}, o)} aria-busy={busy} className="min-w-0">
+    <section aria-label={landmarkLabel ?? m.contribution_title({}, o)} aria-busy={busy} className="min-w-0">
       <ContentItemFrame
         as="div"
         className="flex min-w-0 flex-col gap-5 rounded-xl bg-card p-4 [overflow-wrap:anywhere] sm:p-6"
