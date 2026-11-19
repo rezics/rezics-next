@@ -1,8 +1,9 @@
+import { configureTestReceiptKeys } from '../../kernel/test/support/receipt-keys.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { migrate, POSTGRES_IMAGE, run } from '../scripts/database.ts';
@@ -18,6 +19,8 @@ import {
   type PublicJwks,
 } from '../src/index.ts';
 import { credentialEffectTransport } from '../src/host.ts';
+
+beforeNativeKernelTests();
 
 export const issuer = 'https://auth.rezics.com';
 export const password = 'correct horse battery staple';
@@ -69,11 +72,11 @@ export async function passkeyFixture(supplied?: { pool: Pool; kernelPool: Pool; 
   const database = supplied ? undefined : passkeyDatabase();
   const pool = supplied?.pool ?? new Pool({ connectionString: database!.url });
   const kernelPool = supplied?.kernelPool ?? new Pool({ connectionString: database!.url });
+  configureTestReceiptKeys(kernelPool);
   const previousUrl = process.env.DATABASE_URL;
   process.env.DATABASE_URL = supplied?.url ?? database!.url;
   let native;
   try {
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
     native = {
       ...(await import('../../kernel/src/access/index.ts')),
       ...(await import('../../kernel/src/access/auth-credential-capability.ts')),

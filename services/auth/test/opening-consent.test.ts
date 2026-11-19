@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate, POSTGRES_IMAGE, run } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
+
+beforeNativeKernelTests();
 
 const client = 'opening-ext';
 const sessionScope = ['account:manage', 'read'];
@@ -186,7 +188,6 @@ beforeAll(async () => {
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = database.url;
   try {
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
     const fixture = await import('../../kernel/test/access/native-account-bindings-fixture.ts');
     k = {
       nativeFixture: fixture.nativeFixture,

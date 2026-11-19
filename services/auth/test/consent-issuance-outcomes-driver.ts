@@ -1,9 +1,9 @@
+import { configureTestReceiptKeys } from '../../kernel/test/support/receipt-keys.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
-import { testDatabase } from '../scripts/database.ts';
+import { kernelTestDatabase, testDatabase } from '../scripts/database.ts';
 import {
   createAuthService,
   createBarrierProofVerifier,
@@ -12,17 +12,16 @@ import {
   type AuthServiceOptions,
   type TrustedAccessPorts,
 } from '../src/index.ts';
-import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { routeOf } from '../../kernel/src/route/route.ts';
 
 // Kernel modules compile their SQL against a migrated Access database at import,
 // so load them only after the first native fixture exists.
 let kernelModules: ReturnType<typeof loadKernel> | undefined;
+
 async function loadKernel(url: string) {
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = url;
   try {
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
     return {
       ...(await import('../../kernel/src/access/account-data.ts')),
       ...(await import('../../kernel/src/access/auth-barriers.ts')),
@@ -109,30 +108,34 @@ const AUTH_APPLICATION = 'consent-outcome-auth';
 export async function createNativeDriver(max = 4): Promise<ConsentIssuanceDriver> {
   const fixture = testDatabase();
   const authUrl = fixture.url;
-  const kernelUrl = new URL(fixture.url);
-  // One name per fixture: several drivers of one file share a server when the check runs it.
-  const accessDatabase = `${decodeURIComponent(kernelUrl.pathname.slice(1))}_access`;
-  kernelUrl.pathname = `/${accessDatabase}`;
+  let accessFixture: ReturnType<typeof kernelTestDatabase> | undefined;
   const pools: Pool[] = [];
   const open = (url: string, size: number, name: string) => {
     const pool = new Pool({ connectionString: url, max: size, connectionTimeoutMillis: 5000, application_name: name });
     pools.push(pool);
     return pool;
   };
-  try {
-    const observer = open(authUrl, 1, 'consent-outcome-observer');
-    await observer.query(`CREATE DATABASE ${accessDatabase}`);
-    migrateKernel(kernelUrl.href);
-    const database = open(authUrl, max, AUTH_APPLICATION);
-    const kernel = open(kernelUrl.href, 4, 'consent-outcome-access');
-    const modules = await (kernelModules ??= loadKernel(kernelUrl.href));
-    return await nativeDriver(modules, { database, observer, kernel }, async () => {
+  const cleanup = async () => {
+    try {
       await Promise.all(pools.map((pool) => pool.end()));
-      fixture.close();
-    });
+    } finally {
+      try {
+        accessFixture?.close();
+      } finally {
+        fixture.close();
+      }
+    }
+  };
+  try {
+    accessFixture = kernelTestDatabase();
+    const observer = open(authUrl, 1, 'consent-outcome-observer');
+    const database = open(authUrl, max, AUTH_APPLICATION);
+    const kernel = open(accessFixture.url, 4, 'consent-outcome-access');
+    configureTestReceiptKeys(kernel);
+    const modules = await (kernelModules ??= loadKernel(accessFixture.url));
+    return await nativeDriver(modules, { database, observer, kernel }, cleanup);
   } catch (error) {
-    await Promise.all(pools.map((pool) => pool.end()));
-    fixture.close();
+    await cleanup();
     throw error;
   }
 }

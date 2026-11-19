@@ -1,6 +1,8 @@
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
+import { configureTestReceiptKeys } from '../../kernel/test/support/receipt-keys.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { setImmediate } from 'node:timers/promises';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -15,6 +17,8 @@ import {
   type TrustedAccessPorts,
   type SessionProof,
 } from '../src/index.ts';
+
+beforeNativeKernelTests();
 
 const retained = 'account:read';
 const removed = 'account:update';
@@ -39,7 +43,6 @@ async function loadKernel(url: string) {
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = url;
   try {
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
     return {
       ...(await import('../../kernel/src/access/account-data.ts')),
       ...(await import('../../kernel/src/access/auth-bindings.ts')),
@@ -61,7 +64,9 @@ async function fixture() {
   const postgres = testDatabase();
   const db = await openGrowthDatabase(postgres.url);
   try {
+    installNativeRoleProducer(db.admin);
     migrateKernel(postgres.url);
+    configureTestReceiptKeys(db.pool);
     const native = await loadKernel(postgres.url);
     const authPool = db.openPool({ max: 1, connectionTimeoutMillis: 5000, application_name: 'consent-growth-auth' });
     const proofs = createBarrierProofVerifier({ database: authPool });

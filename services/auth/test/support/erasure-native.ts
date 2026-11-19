@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
+import { preloadNativeKernel } from './native-kernel.ts';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
@@ -208,9 +208,7 @@ export async function nativeFixture(
       // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
       // evaluates those adapters first and fails with a missing `sql` export.
       phase = 'Native Access module loading';
-      await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
-      const { installNativeHistoryPreload } = await import('../../../kernel/src/composition/preload.ts');
-      installNativeHistoryPreload();
+      await preloadNativeKernel();
       modules = {
         ...(await import('../../../kernel/src/access/index.ts')),
         ...(await import('../../../kernel/src/access/native-account-bindings.ts')),

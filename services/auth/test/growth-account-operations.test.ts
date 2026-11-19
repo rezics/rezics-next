@@ -1,6 +1,7 @@
+import { installNativeRoleProducer } from '../src/erasure-coverage.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
+import { beforeNativeKernelTests } from './support/native-kernel.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { accountOperationTransport, type AccountOperationAccess } from '../src/account-operations-transport.ts';
@@ -14,6 +15,8 @@ import {
   seed,
   type Population,
 } from '../../kernel/test/support/growth.ts';
+
+beforeNativeKernelTests();
 
 const clientId = 'transport-growth';
 const scopes = ['organization:create'];
@@ -231,9 +234,8 @@ test('Account operation transport stays within its bound as account and approval
     | undefined;
   let diagnostic: (() => Promise<void>) | undefined;
   try {
+    installNativeRoleProducer(db.admin);
     migrateKernel(database.url);
-    // Auth's check runner does not preload the Kernel SQL loader.
-    await import(createRequire(new URL('../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
     const { nativeFixture, issuer, password } =
       await import('../../kernel/test/access/native-account-bindings-fixture.ts');
     const { admitGroup } = await import('../../kernel/src/access/gates/admission.ts');
