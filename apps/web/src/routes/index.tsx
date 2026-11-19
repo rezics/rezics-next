@@ -8,7 +8,7 @@ import { Home } from './-home';
 
 export const Route = createFileRoute('/')({
   staticData: { publicCache: true },
-  loader: ({ context }) => context.queryClient.fetchQuery({ ...homePageQuery(getLocale()), staleTime: 0 }),
+  loader: ({ context }) => context.queryClient.fetchQuery(homePageQuery(getLocale())),
   head: ({ loaderData }) => {
     const locale = getLocale();
     if (!loaderData) return { meta: [{ title: 'REZICS' }] };
