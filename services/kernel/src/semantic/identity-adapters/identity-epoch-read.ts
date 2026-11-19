@@ -90,6 +90,15 @@ function selectedPendingEvidence(row: Record<string, unknown>): IdentityPendingE
   };
 }
 
+// Pending claims have their own keyed entry in the persisted evidence format.
+function selectedControlEvidence({
+  pending_job: _job,
+  pending_epoch: _epoch,
+  ...row
+}: Record<string, unknown>): IdentityControlEvidence {
+  return row as IdentityControlEvidence;
+}
+
 function selectedSourceEvidence(row: Record<string, unknown>): IdentitySourceEvidence {
   return {
     subject_id: row.subject_id as string,
@@ -180,7 +189,7 @@ async function controlPhase(
     ]);
     ownersRows.push(...homeOwners);
     pendingRows.push(...pendingResult.rows.map(selectedPendingEvidence));
-    currentRows.push(...(currentResult.rows as unknown as IdentityControlEvidence[]));
+    currentRows.push(...currentResult.rows.map(selectedControlEvidence));
   }
   return { owners: ownersRows, pending: pendingRows, current: currentRows };
 }
@@ -525,21 +534,28 @@ async function readIdentityMappingsInSnapshot(
     const { rows } = await client.query(owners.sql, [missing]);
     nativeOwners.push(...(rows as IdentityOwnerEvidence[]));
   }
-  const locators = controlLocatorsOf(controlRows);
-  const pendingRows = locators.length
+  // Job support admits a separately metered claim lookup. Released reads can
+  // take the same claim from the group already selected for each original.
+  const locators = job ? controlLocatorsOf(controlRows) : [];
+  const jobClaims = locators.length
+    ? (await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)])).rows
+    : undefined;
+  const groups = controlRows.length
     ? (
-        await client.query(pending.sql, [locators.map((key) => key.partition), locators.map((key) => key.group)])
-      ).rows.map(selectedPendingEvidence)
-    : [];
-  const currentRows = controlRows.length
-    ? ((
         await client.query(current.sql, [
           controlRows.map((row) => row.control_partition),
           controlRows.map((row) => row.control_group),
           controlRows.map((row) => row.original),
         ])
-      ).rows as unknown as IdentityControlEvidence[])
+      ).rows
     : [];
+  const currentRows = groups.map(selectedControlEvidence);
+  const claims = new Map<string, IdentityPendingEvidence>();
+  for (const row of jobClaims ?? groups) {
+    const claim = selectedPendingEvidence(row);
+    claims.set(`${claim.partition_no}/${claim.terminal}`, claim);
+  }
+  const pendingRows = [...claims.values()];
   const evidence = sortedEvidence({
     sourceOwners: nativeOwners.filter((row) => sourceHomes.has(row.partition_no)),
     sourceRows,

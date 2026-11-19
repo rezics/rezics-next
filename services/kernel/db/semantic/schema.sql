@@ -2917,6 +2917,42 @@ $$;
 
 
 --
+-- Name: identity_epoch_group_points(integer[], uuid[], uuid[]); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.identity_epoch_group_points(partitions integer[], terminals uuid[], originals uuid[]) RETURNS TABLE(partition_no integer, terminal uuid, published_epoch bigint, owner_epoch integer, generation uuid, closure_state text, closure_incarnation uuid, requested_original uuid, directory_state text, directory_enrollment uuid, directory_incarnation uuid, directory_install uuid, directory_export uuid, directory_revision bigint, directory_owner integer, registration_transaction uuid, redirected boolean, pending_job uuid, pending_epoch bigint)
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT g.partition_no,g.terminal,g.published_epoch,g.owner_epoch,g.generation,
+    g.closure_state,g.closure_incarnation,requested.original,
+    o.closure_state,o.closure_enrollment,o.closure_incarnation,o.closure_install_transaction,
+    o.closure_export_transaction,o.closure_source_revision,o.closure_source_epoch,
+    n.transaction_id,r.target IS NOT NULL,g.pending_job,g.pending_epoch
+  FROM unnest(partitions,terminals,originals) requested(partition_no,terminal,original)
+  JOIN LATERAL (
+    SELECT g.* FROM semantic.identity_epoch_group g
+    WHERE (g.partition_no,g.terminal)=(requested.partition_no,requested.terminal) LIMIT 1
+  ) g ON true
+  LEFT JOIN LATERAL (
+    SELECT o.* FROM semantic.identity_epoch_original o
+    WHERE (o.partition_no,o.generation,o.original)=(g.partition_no,g.generation,requested.original) LIMIT 1
+  ) o ON true
+  LEFT JOIN LATERAL (
+    SELECT n.transaction_id FROM semantic.identity_epoch_native_commit n
+    WHERE (n.partition_no,n.transaction_id)=(o.partition_no,o.closure_registration_transaction)
+      AND n.xmin::text=o.closure_registration_xid LIMIT 1
+  ) n ON true
+  LEFT JOIN LATERAL (
+    SELECT r.target FROM semantic.redirect r
+    WHERE r.subject_id=g.terminal
+      AND r.route=get_byte(uuid_send(g.terminal),10)*256+get_byte(uuid_send(g.terminal),11)
+    ORDER BY r.sequence DESC LIMIT 1
+  ) r ON true
+$$;
+
+
+--
 -- Name: identity_epoch_installation_guards(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2946,6 +2982,114 @@ CREATE FUNCTION semantic.identity_epoch_mapping_owns(r integer, id uuid) RETURNS
  JOIN semantic.identity_epoch_mapping_effect e ON e.partition_no=r/16
    AND e.job_id=f.job_id AND e.job_epoch=f.job_epoch AND e.transaction_id=f.transaction_id
  WHERE f.route=r AND f.destination=id AND e.xmin::text=pg_current_xact_id()::text);
+$$;
+
+
+--
+-- Name: erasure_record_key; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+CREATE SEQUENCE semantic.erasure_record_key
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: identity_epoch_mapping; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_mapping (
+    route integer NOT NULL,
+    original uuid NOT NULL,
+    terminal uuid NOT NULL,
+    epoch bigint NOT NULL,
+    origin text NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    control_partition integer,
+    control_group uuid,
+    source_revision bigint DEFAULT 0 NOT NULL,
+    owner_epoch integer DEFAULT 1 NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    closure_state text DEFAULT 'legacy'::text NOT NULL,
+    closure_enrollment uuid,
+    closure_generation uuid,
+    closure_incarnation uuid,
+    closure_immediate uuid,
+    closure_export_transaction uuid,
+    closure_hold_transaction uuid,
+    closure_hold_xid text,
+    closure_registration_transaction uuid,
+    closure_install_transaction uuid,
+    closure_install_xid text,
+    closure_ack_transaction uuid,
+    closure_ack_xid text,
+    closure_source_reservation uuid,
+    closure_claim uuid,
+    closure_withdraw_transaction uuid,
+    closure_withdraw_xid text,
+    closure_successor_ticket uuid,
+    closure_successor_original uuid,
+    closure_ticket_reservation uuid,
+    closure_mutation_xid text,
+    closure_cancelled_successor boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
+    CONSTRAINT identity_epoch_mapping_closure_state_check CHECK ((closure_state = ANY (ARRAY['legacy'::text, 'exporting'::text, 'installed'::text, 'active'::text, 'withdrawn'::text]))),
+    CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
+    CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
+    CONSTRAINT identity_epoch_mapping_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: identity_epoch_mapping_sources(uuid[], integer[]); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.identity_epoch_mapping_sources(originals uuid[], routes integer[]) RETURNS TABLE(subject_id uuid, mapping semantic.identity_epoch_mapping, dirty_revision bigint, captured_revision bigint, current_target uuid)
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT s.subject_id,m.mapping,coalesce(d.revision,0),coalesce(d.captured_revision,0),r.target
+  FROM unnest(originals,routes) requested(original,route)
+  JOIN LATERAL (
+    SELECT s.subject_id,s.route FROM semantic.subject s
+    WHERE (s.route,s.subject_id)=(requested.route,requested.original) LIMIT 1
+  ) s ON true
+  LEFT JOIN LATERAL (
+    SELECT m AS mapping FROM semantic.identity_epoch_mapping m
+    WHERE (m.route,m.original)=(s.route,s.subject_id) LIMIT 1
+  ) m ON true
+  LEFT JOIN LATERAL (
+    SELECT d.revision,d.captured_revision FROM semantic.identity_epoch_dirty d
+    WHERE (d.route,d.original)=(s.route,s.subject_id) LIMIT 1
+  ) d ON true
+  LEFT JOIN LATERAL (
+    SELECT r.target FROM semantic.redirect r WHERE (r.route,r.subject_id)=(s.route,s.subject_id)
+    ORDER BY r.sequence DESC LIMIT 1
+  ) r ON true
+$$;
+
+
+--
+-- Name: identity_epoch_pending_groups(integer[], uuid[]); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.identity_epoch_pending_groups(partitions integer[], terminals uuid[]) RETURNS TABLE(partition_no integer, terminal uuid, pending_job uuid, pending_epoch bigint)
+    LANGUAGE sql STABLE
+    SET enable_seqscan TO 'off'
+    AS $$
+  SELECT g.partition_no,g.terminal,g.pending_job,g.pending_epoch
+  FROM unnest(partitions,terminals) requested(partition_no,terminal)
+  JOIN LATERAL (
+    SELECT g.partition_no,g.terminal,g.pending_job,g.pending_epoch FROM semantic.identity_epoch_group g
+    WHERE (g.partition_no,g.terminal)=(requested.partition_no,requested.terminal) LIMIT 1
+  ) g ON true
 $$;
 
 
@@ -4547,22 +4691,6 @@ BEGIN
  WHERE partition_no=p_home AND transaction_id=p_tx;
 END; $_$;
 
-
---
--- Name: erasure_record_key; Type: SEQUENCE; Schema: semantic; Owner: -
---
-
-CREATE SEQUENCE semantic.erasure_record_key
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
 
 --
 -- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
@@ -6966,52 +7094,6 @@ CREATE TABLE semantic.identity_epoch_legacy_member (
     original uuid NOT NULL,
     source_partition integer NOT NULL,
     source_generation bigint NOT NULL
-);
-
-
---
--- Name: identity_epoch_mapping; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.identity_epoch_mapping (
-    route integer NOT NULL,
-    original uuid NOT NULL,
-    terminal uuid NOT NULL,
-    epoch bigint NOT NULL,
-    origin text NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    control_partition integer,
-    control_group uuid,
-    source_revision bigint DEFAULT 0 NOT NULL,
-    owner_epoch integer DEFAULT 1 NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    closure_state text DEFAULT 'legacy'::text NOT NULL,
-    closure_enrollment uuid,
-    closure_generation uuid,
-    closure_incarnation uuid,
-    closure_immediate uuid,
-    closure_export_transaction uuid,
-    closure_hold_transaction uuid,
-    closure_hold_xid text,
-    closure_registration_transaction uuid,
-    closure_install_transaction uuid,
-    closure_install_xid text,
-    closure_ack_transaction uuid,
-    closure_ack_xid text,
-    closure_source_reservation uuid,
-    closure_claim uuid,
-    closure_withdraw_transaction uuid,
-    closure_withdraw_xid text,
-    closure_successor_ticket uuid,
-    closure_successor_original uuid,
-    closure_ticket_reservation uuid,
-    closure_mutation_xid text,
-    closure_cancelled_successor boolean DEFAULT false NOT NULL,
-    CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
-    CONSTRAINT identity_epoch_mapping_closure_state_check CHECK ((closure_state = ANY (ARRAY['legacy'::text, 'exporting'::text, 'installed'::text, 'active'::text, 'withdrawn'::text]))),
-    CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
-    CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
-    CONSTRAINT identity_epoch_mapping_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
