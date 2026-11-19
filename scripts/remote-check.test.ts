@@ -8510,11 +8510,15 @@ sys.exit(child.wait())
       .replaceAll('/sys/fs/cgroup', join(directory, 'cgroups'))
       .replaceAll('__FIXTURE_OUTER_CHECKOUT__', repository)
       .replaceAll(':/usr/local/bin:', ':');
-    if (settings.program)
-      script = script.replaceAll(
-        Buffer.from(dependencyPreparationProgram).toString('base64'),
-        Buffer.from(settings.program).toString('base64'),
-      );
+    // Sample healthy PSI unless the fixture supplies its own pressure observations.
+    const program = (settings.program ?? dependencyPreparationProgram).replace(
+      "Path('/proc/pressure/' + resource).read_text()",
+      "'full avg10=0.00'",
+    );
+    script = script.replaceAll(
+      Buffer.from(dependencyPreparationProgram).toString('base64'),
+      Buffer.from(program).toString('base64'),
+    );
     if (settings.revision)
       script = script.replace(/expected_revision=[a-f0-9]+/, `expected_revision=${settings.revision}`);
     const environment = {
@@ -8728,7 +8732,19 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   expect(cold.artifacts().cache).toBe('miss');
   const entry = join(fixture.directory, 'dependency-artifacts', cold.artifacts().key);
   utimesSync(entry, 1, 1);
-  const warm = fixture.create();
+  const program = dependencyPreparationProgram.replace(
+    'attempt_started = time.monotonic()',
+    `payload = ${JSON.stringify(join(entry, 'payload'))} + '/'
+def count_payload_reads(event, args):
+    if event == 'open' and isinstance(args[0], str) and args[2] & os.O_ACCMODE == os.O_RDONLY:
+        if args[0].startswith(payload):
+            print('payload-read ' + args[0][len(payload):], file=sys.stderr, flush=True)
+        elif '/.temp/check-host/restore-' in args[0] and os.path.isfile(args[0]):
+            print('staging-read ' + args[0], file=sys.stderr, flush=True)
+sys.addaudithook(count_payload_reads)
+attempt_started = time.monotonic()`,
+  );
+  const warm = fixture.create({ program });
   const result = warm.execute();
   expect(result.status, result.stderr).toBe(0);
   expect(warm.artifacts()).toMatchObject({
@@ -8740,7 +8756,13 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   expect(fixture.events()).toEqual(['install:1.2.3', 'postinstall:1.2.3', 'download:1.2.3']);
   expect(existsSync(join(warm.run, 'command-invoked'))).toBe(true);
   const binary = 'node_modules/native-installer/bin/native';
+  const payloadReads = Array.from(result.stderr.matchAll(/^payload-read (.+)$/gm), (match) => match[1]);
+  const manifest = JSON.parse(readFileSync(join(entry, 'manifest.json'), 'utf8'));
+  const payloadFiles = Object.keys(manifest.entries).filter((file) => manifest.entries[file][0] === 'file');
+  expect(payloadReads.sort()).toEqual(payloadFiles.sort());
+  expect(result.stderr).not.toContain('staging-read ');
   expect(statSync(join(warm.run, binary)).ino).not.toBe(statSync(join(cold.run, binary)).ino);
+  expect(statSync(join(warm.run, binary)).ino).not.toBe(statSync(join(entry, 'payload', binary)).ino);
   writeFileSync(join(warm.run, binary), 'mutated by command');
   const third = fixture.create();
   expect(third.execute().status).toBe(0);
@@ -8755,6 +8777,8 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
       postinstalls: 1,
       downloads: 1,
       privateCopies: true,
+      payloadReads: payloadReads.length,
+      payloadBytes: payloadReads.reduce((bytes, file) => bytes + statSync(join(entry, 'payload', file)).size, 0),
     }),
   );
 });
@@ -9445,11 +9469,18 @@ test('native preparation invalidates changed package version, lock, platform, ru
     expect(changed.artifacts().key).not.toBe(originalKey);
   }
   const entry = join(fixture.directory, 'dependency-artifacts', originalKey);
-  writeFileSync(join(entry, 'payload/node_modules/native-installer/bin/native'), 'corrupt');
+  const binary = join(entry, 'payload/node_modules/native-installer/bin/native');
+  writeFileSync(binary, Buffer.alloc(statSync(binary).size, 'x'));
+  const manifestPath = join(entry, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  writeFileSync(manifestPath, JSON.stringify({ ...manifest, removed: ['source.txt'] }));
   const corrupt = fixture.create();
-  expect(corrupt.execute().status).toBe(0);
+  const result = corrupt.execute();
+  expect(result.status, result.stderr).toBe(0);
   expect(corrupt.artifacts().cache).toBe('miss');
-  rmSync(join(entry, 'manifest.json'));
+  expect(readFileSync(join(corrupt.run, 'generated/source.txt'), 'utf8')).toBe('original source');
+  expect(readdirSync(join(corrupt.run, '.temp/check-host')).filter((name) => name.startsWith('restore-'))).toEqual([]);
+  rmSync(manifestPath);
   const partial = fixture.create();
   expect(partial.execute().status).toBe(0);
   expect(partial.artifacts().cache).toBe('miss');
