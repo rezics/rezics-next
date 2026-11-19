@@ -169,18 +169,6 @@ function fixtureTempParent(): string {
 
 const gitTemplates = new Map<string, string>();
 const checkScriptCache = new Map<string, { commit: string; files: Map<string, string> }>();
-const CHECK_SCRIPT_PATHS = [
-  'scripts/worker-check.ts',
-  'scripts/remote-check.ts',
-  'scripts/check-git.ts',
-  'scripts/check-ledger.ts',
-  'scripts/stack-run.ts',
-  'scripts/stack-lease.ts',
-  'scripts/check-custody.ts',
-  'scripts/check-artifacts.ts',
-  'scripts/check-memory.ts',
-  'scripts/check-host/docker',
-] as const;
 
 function cloneSharedGit(template: string, destination: string, identity: { name: string; email: string }): void {
   mkdirSync(destination, { recursive: true });
@@ -385,14 +373,37 @@ export function checkScriptFixture(ref = 'refs/heads/dev') {
   return {
     read,
     install(root: string, transform: (path: string, source: string) => string = (_path, source) => source) {
-      for (const path of CHECK_SCRIPT_PATHS) {
+      // remote-check reads the Docker wrapper as text. Discover the other files through runtime imports.
+      const paths = new Set(['scripts/worker-check.ts', 'scripts/remote-check.ts', 'scripts/check-host/docker']);
+      const aliases: Record<string, string[]> = {};
+      const scanner = new Bun.Transpiler({ loader: 'ts' });
+      for (const path of paths) {
         const target = join(root, path);
         mkdirSync(dirname(target), { recursive: true });
         const source = read(path);
         writeFileSync(target, transform(path, source));
-        if (path === 'scripts/worker-check.ts' && source.includes("'./tmp-janitor.ts'"))
-          writeFileSync(join(root, 'scripts/tmp-janitor.ts'), read('scripts/tmp-janitor.ts'));
+        if (!path.endsWith('.ts')) continue;
+        for (const dependency of scanner.scanImports(source.replace(/^#![^\n]*/, ''))) {
+          const specifier = dependency.path;
+          if (specifier.startsWith('./') || specifier.startsWith('../')) {
+            paths.add(join(dirname(path), specifier));
+          } else if (specifier.startsWith('@rezics/')) {
+            // Resolve workspace exports from the captured commit even in fixtures without a package installation.
+            const [, name, ...subpath] = specifier.split('/');
+            const directory = `packages/${name}`;
+            const manifest = JSON.parse(read(`${directory}/package.json`));
+            const entry = manifest.exports[subpath.length ? `./${subpath.join('/')}` : '.'];
+            const module = join(directory, typeof entry === 'string' ? entry : entry.default);
+            paths.add(module);
+            aliases[specifier] = [`./${module}`];
+          }
+        }
       }
+      if (Object.keys(aliases).length) {
+        writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { paths: aliases } }));
+        paths.add('tsconfig.json');
+      }
+      return [...paths];
     },
   };
 }

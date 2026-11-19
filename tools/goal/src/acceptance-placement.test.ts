@@ -31,8 +31,8 @@ Run the acceptance command.
 `;
 }
 
-function installWorkerCheck(root: string, interceptRemote = false): void {
-  devScripts.install(root, (file, source) => {
+function installWorkerCheck(root: string, interceptRemote = false): string[] {
+  return devScripts.install(root, (file, source) => {
     const instrumented =
       interceptRemote && file === 'scripts/remote-check.ts'
         ? source.replace(
@@ -385,8 +385,8 @@ test('an unresolved old check prevents local policy adoption without cancelling 
   const h = harness();
   let checkId: string | undefined;
   try {
-    installWorkerCheck(h.root);
-    git(h.root, ['add', 'scripts']);
+    const files = installWorkerCheck(h.root);
+    git(h.root, ['add', '--', ...files]);
     git(h.root, ['commit', '-m', 'Seed worker-check custody fixture']);
     const prompts: string[] = [];
     const tasks = new WorkerTasks(

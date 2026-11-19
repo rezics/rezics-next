@@ -2143,11 +2143,9 @@ consumer tests pin those APIs; no tests that only assert a directory name.
 
 The existing local-placement, compatibility and smoke test fixtures share `checkScriptFixture` in `src/test-support.ts`.
 It captures the development ref as one immutable commit before reading files, including the manifest and lockfile
-used by compatibility probes. It copies only the worker-check runtime dependencies: worker-check, remote-check,
-check-git, check-ledger, stack-run, stack-lease, check-custody, check-artifacts, check-memory and the check-host Docker
-wrapper. The stack-run and check-artifacts imports share that same snapshot, including their transitive custody
-dependency. Negative probes transform those copied sources; package identity, pinned Bun verification and wrapper
-policy remain part of the existing assertions.
+used by compatibility probes. It follows runtime imports from worker-check and remote-check, resolves workspace
+exports from that commit and copies the Docker wrapper that remote-check reads as text. Fixtures that create child
+worktrees commit the installed paths. Negative probes transform the copied sources.
 These fixture copies do not replace the train's detached dev checkout or its release-ref validation.
 
 The Bun artifact contract retains `bun@1.4.4-canary.20261027.1` and accepts the supplied exact
