@@ -16,12 +16,12 @@ import {
   runCommand,
   type CommandAuthorization,
 } from '../../src/command/command.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import type { Access, Actor, Resource } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 afterAll(() => pool.end());
 const actor: Extract<Actor, { kind: 'anonymous' }> = { kind: 'anonymous' };
 const resource: Resource = { route: 0x1234, id: '019a1b2c-3d4e-7f00-8a00-123400000001' };

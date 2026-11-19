@@ -1,3 +1,4 @@
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -13,10 +14,10 @@ import {
 } from '../../src/access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
-import { createPool, withConnection } from '../../src/database/pool.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 const source = accountDiscoverySource(pool);
 const read = (partitions: readonly number[]) =>
   readAccountDiscoveryReductionBinding(pool, partitions, { deadline: Date.now() + 2000 });

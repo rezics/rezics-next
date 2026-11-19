@@ -19,6 +19,7 @@ import {
   type AuthoritativeTime,
   type CommandTransaction,
 } from '../../../src/command/command.ts';
+import { receiptKeysFor } from '../../../src/command/receipt-key.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { validateContentDocument } from '../../../src/content/document.ts';
 import readPost from '../../../src/content/read-post.sql';
@@ -26,6 +27,7 @@ import readThread from '../../../src/content/read-thread.sql';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { testReceiptKeysEnv } from '../../support/receipt-keys.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './native-system.ts';
 
 const phaseLog = fileURLToPath(new URL('../../../../../.temp/erasure-phases.log', import.meta.url));
@@ -208,7 +210,7 @@ export async function createFixtureResources(
     // The account is already bootstrapped. Run the operator command beside publishing;
     // waiting for its process import first spends the hook budget before any post exists.
     bootstrapProcess = Bun.spawn([process.execPath, commandPath, '--account', governanceId], {
-      env: { ...process.env, DATABASE_URL: appUrl },
+      env: { ...process.env, ...testReceiptKeysEnv(receiptKeysFor(pool)), DATABASE_URL: appUrl },
       stdout: 'pipe',
       stderr: 'pipe',
     });

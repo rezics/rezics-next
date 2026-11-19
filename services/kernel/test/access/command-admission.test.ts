@@ -1,3 +1,4 @@
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -29,7 +30,7 @@ import {
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { actorFixture } from './actor-side-fixture.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
 const admin = createPool(process.env.DATABASE_URL!);
 const statements: { text: string; values?: unknown[] }[] = [];

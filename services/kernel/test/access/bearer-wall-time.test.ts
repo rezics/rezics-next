@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -13,7 +13,7 @@ import { accessCommandAuthorization, type AccountActor } from '../../src/request
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
 afterAll(() => pool.end());
 const signing = await generateKeyPair('ES256', { extractable: true });

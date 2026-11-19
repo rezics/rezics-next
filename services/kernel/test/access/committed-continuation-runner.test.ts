@@ -1,3 +1,4 @@
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -15,13 +16,13 @@ import { createAccess as createAuthenticatedAccess } from '../../src/access/inde
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createPool, withConnection } from '../../src/database/pool.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 const facts = new Pool({ connectionString: url });
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const actions: ActionCatalogue = new Map([

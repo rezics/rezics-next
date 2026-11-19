@@ -2,14 +2,14 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createAccess, createResourceAnonymousEligibility, type ResourceEligibility } from '../../src/access/index.ts';
 import { principalCommandIdentity, runCommand } from '../../src/command/command.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { accessCommandAuthorization, actorOf, type Actor, type Resource } from '../../src/request/access.ts';
 import { anonymousRequestDigest } from '../../src/http/request.ts';
 import { newId } from '../../src/route/route.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 afterAll(() => pool.end());
 const action = 'report:create';
 const access = createAccess({

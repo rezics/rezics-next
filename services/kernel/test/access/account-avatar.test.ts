@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { readPublicIdentityObservations } from '../../src/access/account-data.ts';
 import { readPublicAccountByHandle } from '../../src/access/public-identity.ts';
@@ -9,7 +9,7 @@ import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } 
 import { newId, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const commands = createLifecycleCommands({ pool, access });
 const routeKey = new Uint8Array(32).fill(23);

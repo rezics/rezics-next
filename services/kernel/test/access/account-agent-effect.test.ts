@@ -10,7 +10,8 @@ import {
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { readSubject } from '../../src/semantic/subject.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { bindReceiptKeys, receiptKeysFor } from '../../src/command/receipt-key.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -19,7 +20,7 @@ import { ensureActiveAccountAgents, ACCOUNT_AGENT_PAGE_SIZE } from '../../script
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
+const pool = createReceiptTestPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const route = 0x5123;
 const personId = newId(route);
@@ -104,20 +105,22 @@ async function revisionCount(accountId: string): Promise<number> {
   return result.rows[0]!.count as number;
 }
 
-function failEnsureCheckoutOnce(source: Pool): Pool {
+function failEnsureCheckoutOnce(source: Pool, failure: Error): Pool {
   let checkouts = 0;
-  return new Proxy(source, {
+  const intercepted = new Proxy(source, {
     get(target, property) {
       if (property === 'connect')
         return (...args: unknown[]) => {
           checkouts += 1;
-          if (checkouts === 2) return Promise.reject(new Error('simulated process loss before ensure'));
+          if (checkouts === 2) return Promise.reject(failure);
           return target.connect(...(args as Parameters<Pool['connect']>));
         };
       const value = Reflect.get(target, property, target) as unknown;
       return typeof value === 'function' ? value.bind(target) : value;
     },
-  }) as Pool;
+  });
+  bindReceiptKeys(intercepted, receiptKeysFor(source));
+  return intercepted;
 }
 
 beforeAll(async () => {
@@ -220,7 +223,7 @@ test('a committed display-name change emits a reference event and old deliveries
 });
 
 test('a retry after account commit repairs a crash before the semantic ensure', async () => {
-  const interrupted = failEnsureCheckoutOnce(pool);
+  const interrupted = failEnsureCheckoutOnce(pool, new Error('simulated process loss before ensure'));
   const committedEvent = event('com.rezics.access.actor-activated.v1', crashId);
   await expect(applyAccountAgentEffect(interrupted, committedEvent)).rejects.toThrow(
     'simulated process loss before ensure',
@@ -316,18 +319,7 @@ test('an ensure failure with the missing-release message still throws so deliver
   const accountId = newId(route);
   await seedAccounts([{ id: accountId, handle: 'agent_other_failure', displayName: 'Other Failure' }]);
   const failure = new Error('Global definition release is not active');
-  let checkouts = 0;
-  const failing = new Proxy(pool, {
-    get(target, property) {
-      if (property === 'connect')
-        return (...args: unknown[]) => {
-          if (++checkouts === 2) return Promise.reject(failure);
-          return target.connect(...(args as Parameters<Pool['connect']>));
-        };
-      const value = Reflect.get(target, property, target) as unknown;
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
+  const failing = failEnsureCheckoutOnce(pool, failure);
   const activation = event('com.rezics.access.actor-activated.v1', accountId);
   await expect(applyAccountAgentEffect(failing, activation)).rejects.toBe(failure);
   expect(await revisionCount(accountId)).toBe(0);

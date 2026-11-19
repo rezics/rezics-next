@@ -5,9 +5,12 @@ import { createMembershipInverseCommands } from '../../src/access/membership-inv
 import { accessCheck, type AccountActor, type Resource } from '../../src/request/access.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { configuredReceiptKeys } from '../../src/command/receipt-key.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 export const action = 'subject:read';
 export async function actorFixture(pool: Pool, admin: Pool = pool) {
+  if (!configuredReceiptKeys(pool)) configureTestReceiptKeys(pool);
   const actorId = newId(0x1234);
   const principalId = newId(0x2345);
   const organizationId = newId(0x3456);

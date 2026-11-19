@@ -32,7 +32,7 @@ import { commandPhase, countContentionRetry, measureCommandPhase } from './timin
 import { currentCommandWorkAssociation, type CommandWorkAssociation } from './work-context.ts';
 import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { bindReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
+import { bindReceiptKeys, configuredReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   commandAgentIdentitySource,
@@ -689,7 +689,8 @@ async function executeCommand<T>(
   const { partition } = options;
   if (options.receipt) assertReceipt(options.receipt);
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
-  const receiptKeys = options.principal ? receiptKeysFor(pool) : undefined;
+  // Receipt-free transactions can still read existing native receipts during recovery.
+  const receiptKeys = options.principal ? receiptKeysFor(pool) : configuredReceiptKeys(pool);
   const receiptCandidates = options.receipt
     ? receiptKeyCandidates(receiptKeys!, options.receipt.kind, options.receipt.principal, options.receipt.key)
     : [];

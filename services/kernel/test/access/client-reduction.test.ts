@@ -10,7 +10,7 @@ import {
 import { exportJWK, generateKeyPair } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
@@ -36,7 +36,7 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
   };
 }
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 const issuer = 'https://client-management.auth.test';
 const audience = 'https://client-management.api.test';
 const scopes = ['account:manage', 'account:read', 'access:grant', ...WORKFLOW_APPROVAL_ACTIONS.keys()].sort();
