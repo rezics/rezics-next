@@ -85,7 +85,7 @@ export function FeedEmptyState({
   const alert =
     kind === 'request' || kind === 'denied' || kind === 'cursor' || kind === 'deadline' || kind === 'unavailable';
   return (
-    <div data-feed-empty-state={kind} data-feed-empty-context={context}>
+    <div data-feed-empty-state={kind} data-feed-empty-context={context} className="[&_a]:min-h-11 [&_button]:min-h-11">
       <EmptyState
         title={title}
         description={explanation?.description}

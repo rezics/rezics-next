@@ -153,7 +153,7 @@ test('Home explains complete discovery, Following, filtered and end states in al
       const document = browser.document;
       const frame = document.querySelector(`[data-feed-empty-context="${context}"]`);
       expect(frame).not.toBeNull();
-      expect(frame?.querySelector('h2')?.textContent).toBe(
+      expect(frame?.querySelector('h3')?.textContent).toBe(
         homeFeedRecoveryMessages(locale, context).explanations?.empty?.title as string,
       );
       expect(frame?.querySelector(`a[href="/${locale}/search"]`)).not.toBeNull();
@@ -189,13 +189,15 @@ test('Home explains complete discovery, Following, filtered and end states in al
       const document = browser.document;
       const frame = document.querySelector(`[data-feed-empty-state="${state}"]`)!;
       const copy = homeFeedRecoveryMessages(locale, 'discovery').explanations![state]!;
-      expect(frame.querySelector('h2')?.textContent).toBe(copy.title as string);
+      expect(frame.querySelector('h3')?.textContent).toBe(copy.title as string);
       expect(frame.textContent).toContain(copy.description as string);
       expect(frame.textContent).not.toContain('private-predicate');
-      if (state === 'auth')
-        expect(frame.querySelector('a')?.getAttribute('href')).toBe(
-          `/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`,
-        );
+      if (state === 'auth') {
+        const destination = new URL(frame.querySelector('a')!.getAttribute('href')!, 'https://web.test');
+        expect(destination.origin).toBe('https://web.test');
+        expect(destination.pathname).toBe('/auth/sign-in');
+        expect(destination.searchParams.get('return_to')).toBe(`/${locale}`);
+      }
       if (state === 'closed' || state === 'denied' || state === 'loading')
         expect(frame.querySelector('button, a')).toBeNull();
       browser.happyDOM.abort();
@@ -213,7 +215,7 @@ test('Home explains complete discovery, Following, filtered and end states in al
       );
       const frame = browser.document.querySelector(`[data-feed-empty-state="${state}"]`)!;
       const copy = homeFeedRecoveryMessages(locale, 'discovery').explanations![state]!;
-      expect(frame.querySelector('h2')?.textContent).toBe(copy.title as string);
+      expect(frame.querySelector('h3')?.textContent).toBe(copy.title as string);
       expect(frame.textContent).toContain(copy.description as string);
       browser.happyDOM.abort();
     }

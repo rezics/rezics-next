@@ -153,10 +153,14 @@ test('generic results render genuine MyRealms summaries with the installed headi
       'Read and compare notes.',
       'A place for conversations.',
     ]);
-    expect(rows.map((row) => row.querySelector('h2')?.closest('a')?.getAttribute('href'))).toEqual([
+    const primaryLinks = rows.map((row) => row.querySelector('a[data-slot="list-row-link"]'));
+    expect(primaryLinks.map((link) => link?.getAttribute('href'))).toEqual([
       '/en/realms/realm-1',
       '/en/realms/realm-2',
     ]);
+    expect(primaryLinks.map((link) => link?.getAttribute('aria-labelledby'))).toEqual(
+      rows.map((row) => row.querySelector('h2')?.id),
+    );
     const next = [...surface.host.querySelectorAll<HTMLAnchorElement>('a')].find(
       (link) => link.textContent === 'More Realms',
     );

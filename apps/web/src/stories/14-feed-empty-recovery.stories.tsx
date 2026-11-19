@@ -244,11 +244,13 @@ const journey: Story['play'] = async ({ canvasElement }) => {
     await select(state);
     await expect(frame()).toBeVisible();
     await expect(live()).not.toHaveTextContent(m.home_feed_empty());
-    if (state === 'auth')
-      await expect(within(frame()).getByRole('link', { name: m.account_sign_in() })).toHaveAttribute(
-        'href',
-        expect.stringContaining(`/${getLocale()}/auth/sign-in`),
-      );
+    if (state === 'auth') {
+      const link = within(frame()).getByRole('link', { name: m.account_sign_in() });
+      const destination = new URL(link.getAttribute('href')!, window.location.origin);
+      await expect(destination.origin).toBe(window.location.origin);
+      await expect(destination.pathname).toBe('/auth/sign-in');
+      await expect(destination.searchParams.get('return_to')).toBe(`/${getLocale()}`);
+    }
     if (state === 'closed' || state === 'denied' || state === 'loading')
       await expect(within(frame()).queryByRole('button')).toBeNull();
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
