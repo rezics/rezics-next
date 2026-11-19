@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchStatement } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import {
   seedCrossMedia,
   planCrossMediaSeed,
@@ -17,11 +17,140 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
+import { bangumiAppearanceProposalSource } from '../../../importer/src/cross-media-bindings.ts';
+import { createSelectedFamilySourceRegistration } from '../../../importer/src/source-registry.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { currentCandidates, fixtureFetch, valueContent } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
+
+test('Bangumi 10380 publishes the current reproposal of its cited Character appearance', async () => {
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  const directory = await mkdtemp(join(tmpdir(), 'bangumi-appearance-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const plan = emptyCrossMediaPlan();
+    const port = captureShowcaseCommands(runtime.importTransport, journal);
+    const result = await seedCrossMedia(
+      plan,
+      join(directory, 'import.sqlite'),
+      port,
+      { origin: runtime.origin },
+      { providers: [] },
+    );
+    const key = '10380';
+    const payload = { id: 10380, name: 'STEINS;GATE', type: 2 };
+    plan.records.bangumi.push({ source: 'bangumi', key, revision: null, payload });
+    plan.members.push({ source: 'bangumi', key, kind: 'work', membership: 'family', franchise: 'steins-gate' });
+    const sourceRow = { subject_id: 10380, character_id: 55541, type: 3, order: 0 };
+    const appearance = {
+      subjectId: key,
+      characterId: sourceRow.character_id,
+      sourceIndex: 48839,
+      roleCode: sourceRow.type,
+      order: sourceRow.order,
+      sourceRow,
+    };
+    plan.characterAppearances = [appearance];
+    const alias = crossMediaAliases.bangumi;
+    const source = bangumiAppearanceProposalSource(alias, appearance);
+    const registration = createSelectedFamilySourceRegistration('bangumi', alias);
+    const row = { external_id: key, record_revision: 'unversioned', record: payload };
+    const create = registration.convert(row, { source: alias }).proposals.find((command) => command.op === 'create')!;
+    const target = (id: string, type: string, label: string): BatchCommand => ({
+      op: 'create',
+      key: id,
+      source: { ...source, external_id: id },
+      subject: { type, labels: { und: label } },
+    });
+    const created = await port.batch({
+      commands: [
+        create,
+        target('character:55541', 'wd:Q95074', '黒木'),
+        target('role:3', 'skos:Concept', 'Guest character'),
+      ],
+    });
+    const [work, character, role] = created.results.map((entry) => {
+      if (entry.status !== 201 || !('id' in entry.value)) throw new Error('Missing appearance subject');
+      return entry.value.id;
+    });
+    if (!work || !character || !role) throw new Error('Incomplete appearance subjects');
+    const proposals = registration
+      .convert(row, { source: alias, subjectId: work })
+      .proposals.filter((item) => item.op === 'propose');
+    const base = await port.batch({ commands: proposals });
+    expect(base.results.every((entry) => entry.status === 201)).toBe(true);
+    const snak = (property: string, content: string) => ({
+      property: { id: property },
+      value: { type: 'value' as const, content },
+    });
+    const references = [
+      {
+        parts: [
+          snak('schema:url', 'https://bgm.tv/subject/10380#/subject-characters/48839/type'),
+          snak('schema:version', 'unversioned'),
+        ],
+      },
+    ];
+    const proposal: Extract<BatchCommand, { op: 'propose' }> = {
+      op: 'propose',
+      key: 'original-appearance',
+      subject: work,
+      source,
+      statement: {
+        ...snak('schema:character', character),
+        qualifiers: [snak('wdt:P3831', role), snak('schema:position', '1')],
+        references,
+      },
+    };
+    const propose = async (command: typeof proposal) => {
+      const [entry] = (await port.batch({ commands: [command] })).results;
+      if (entry?.status !== 201 || !('candidate' in entry.value)) throw new Error('Missing appearance candidate');
+      return entry.value.candidate;
+    };
+    const old = await propose(proposal);
+    const withdrawn = await port.batch({
+      commands: [{ op: 'retract', key: 'withdraw-appearance', subject: work, source, candidate: old, references }],
+    });
+    expect(withdrawn.results[0]?.status).toBe(200);
+    const current = await propose({ ...proposal, key: 'replace-appearance' });
+    const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.bulk.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
+    const publicClient = createPublicBulkClient({
+      origin: runtime.origin,
+      fetch: fixtureFetch(async (input) => {
+        const url = new URL(String(input));
+        return runtime.request(url.pathname + url.search);
+      }),
+    });
+    const published = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review: runtime.importTransport,
+      publicClient,
+    });
+    expect(published.status, JSON.stringify(published.omissions)).toBe('published');
+    const appearances = published.published
+      .find((record) => record.subjectId === work)
+      ?.assertions.filter((a) => a.property === 'schema:character');
+    expect(appearances).toMatchObject([
+      { candidateId: current, adoption: { candidateId: current }, readback: { id: current, ...proposal.statement } },
+    ]);
+  } finally {
+    journal.close();
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);
 
 test('local publication accepts only its acknowledged plan after authorization and verifies it through an anonymous read', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });

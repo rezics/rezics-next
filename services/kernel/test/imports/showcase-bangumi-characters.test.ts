@@ -214,32 +214,6 @@ test('selected anime character vocabulary is separately adopted and refreshed th
 
     const refreshed = await seed(bindings);
     expect(refreshed.characterDiagnostics).toEqual([]);
-    const previous = journal
-      .acknowledgedCommands()
-      .find(
-        ({ command }) =>
-          command.op === 'propose' &&
-          command.subject === workOneId &&
-          command.statement.property.id === 'schema:character',
-      );
-    if (previous?.command.op !== 'propose' || !previous.candidateId) throw new Error('Missing Work appearance');
-    const proposal = previous.command;
-    const withdrawn = await port.batch({
-      commands: [
-        {
-          op: 'retract',
-          key: 'withdraw-appearance',
-          subject: workOneId,
-          source: proposal.source,
-          candidate: previous.candidateId,
-          references: proposal.statement.references!,
-        },
-      ],
-    });
-    expect(withdrawn.results[0]?.status).toBe(200);
-    const replacement = await port.batch({ commands: [{ ...proposal, key: 'replace-appearance' }] });
-    const result = replacement.results[0];
-    if (result?.status !== 201 || !('candidate' in result.value)) throw new Error('Missing replacement appearance');
     const published = await publishShowcase({
       plan,
       result: refreshed,
@@ -250,16 +224,6 @@ test('selected anime character vocabulary is separately adopted and refreshed th
       vocabularyRequirements: concepts.requirements,
     });
     expect(published.status).toBe('published');
-    const appearances = published.published
-      .find((row) => row.subjectId === workOneId)
-      ?.assertions.filter((assertion) => assertion.property === 'schema:character');
-    expect(appearances).toMatchObject([
-      {
-        candidateId: result.value.candidate,
-        adoption: { candidateId: result.value.candidate },
-        readback: { id: result.value.candidate },
-      },
-    ]);
 
     const firstWork = subjectStatements(await publicClient.readSubject(workOneId));
     const secondWork = subjectStatements(await publicClient.readSubject(workTwoId));
