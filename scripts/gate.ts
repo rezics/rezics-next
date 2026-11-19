@@ -607,6 +607,7 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>) {
   const tests = new Set<string>();
   let remainingFiles = 0;
   let remainingTests = 0;
+  let activeTestFile: string | undefined;
   let pending = '';
   let longLine = false;
   let previousCR = false;
@@ -631,12 +632,22 @@ async function readWorkspaceOutput(stream: ReadableStream<Uint8Array>) {
       if (trimmed) remember(tests, trimmed);
       remainingTests--;
     }
-    const direct = trimmed.match(
-      /^((?:apps|services|packages|test|tests|src|tools)\/[^\s:]+\.test\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?(?::|\s|$)/,
+    const testLine = trimmed.match(
+      /^((?:apps|services|packages|test|tests|src|tools)\/[^\s:]+\.test\.[cm]?[jt]sx?)(?::\d+(?::\d+)?|\(\d+,\d+\))?:(.*)$/,
     );
-    if (direct) remember(files, direct[1]!);
+    if (testLine) {
+      const [, file, detail] = testLine;
+      if (!detail!.trim()) activeTestFile = file;
+      else if (/^\s*(?:error|fail(?:ed)?)(?:\s|:|$)/i.test(detail!)) remember(files, file!);
+    }
+    if (activeTestFile && (/^\(fail\)\s/.test(trimmed) || trimmed === '# Unhandled error between tests'))
+      remember(files, activeTestFile);
+    if (/^(?:bun test |\d+ tests? failed:|Ran \d+ tests?)/.test(trimmed)) activeTestFile = undefined;
     const summary = line.match(/tests failed for (\d+) file\(s\):/i);
-    if (summary) remainingFiles = Number(summary[1]);
+    if (summary) {
+      activeTestFile = undefined;
+      remainingFiles = Number(summary[1]);
+    }
     const heading = line.match(/^Load-sensitive (?:tests|growth checks) \(.*\):\s*(\d+)\s*$/);
     if (heading) remainingTests = Number(heading[1]);
   }

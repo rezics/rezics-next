@@ -229,16 +229,21 @@ if (args[0] === 'install') {
       for (let i = 0; i < 64; i++) await write(stream, noise);
       await write(stream, '\\n');
     }
-    await write(process.stderr, 'Database cleanup failed: fixture\\ntests/middle.test.ts:\\nLoad-sensitive tests (passed alone): 1\\nprevious read\\n');
+    await write(process.stderr, 'Database cleanup failed: fixture\\ntests/middle.test.ts:\\n(fail) middle check ran\\nLoad-sensitive tests (passed alone): 1\\nprevious read\\n');
     for (let i = 0; i < 64; i++) await write(process.stderr, noise);
     await write(process.stderr, '\\nAuth checks finished\\n');
     process.exit(1);
   }
   if (workspace === 'a-plain' && attempt === 1) {
+    console.log('test/before.test.ts:');
+    console.log('(pass) preceding test [1ms]');
     console.log('test/a-plain.test.ts:');
     console.log('(fail) only failure is a timeout [60000ms]');
     console.log('  ^ this test timed out after 60000ms.');
+    console.log('test/after.test.ts:');
+    console.log('(pass) following test [1ms]');
     console.log('1 tests failed:');
+    console.log('(fail) only failure is a timeout [60000ms]');
     console.log('Load-sensitive tests (passed alone): 1');
     console.log('load-sensitive test: test/a-plain.test.ts :: timeout :: retry passed');
     process.exit(1);
@@ -339,11 +344,7 @@ function scenario(): { env: Record<string, string>; events: () => Event[]; local
   };
 }
 
-function spawnGate(
-  env: Record<string, string>,
-  cwd = candidateCheckout(env.FAKE_DIR!),
-  args: string[] = [],
-) {
+function spawnGate(env: Record<string, string>, cwd = candidateCheckout(env.FAKE_DIR!), args: string[] = []) {
   return Bun.spawn([process.execPath, gate, ...args], {
     cwd,
     env,
