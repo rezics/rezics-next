@@ -298,7 +298,7 @@ async function signUp(page: Page, web: string, issuer: string): Promise<{ handle
     .catch(() => undefined);
   const handleField = page.locator('#signup-handle');
   if ((await handleField.count()) > 0) await handleField.fill(handle);
-  else await page.getByLabel('Handle', { exact: true }).fill(handle);
+  else await page.locator('input').and(page.getByLabel('Handle', { exact: true })).fill(handle);
   const emailField = page.locator('#signup-email');
   if ((await emailField.count()) > 0) await emailField.fill(email);
   else await page.getByLabel('Email', { exact: true }).fill(email);

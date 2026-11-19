@@ -356,9 +356,14 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
               .first()
               .click();
             await hydrated(page);
-            await page.getByLabel('Handle', { exact: true }).fill(`personal-${crypto.randomUUID().slice(0, 8)}`);
+            await page
+              .locator('#signup-form input')
+              .and(page.getByLabel('Handle', { exact: true }))
+              .fill(`personal-${crypto.randomUUID().slice(0, 8)}`);
             await page.getByLabel('Email', { exact: true }).fill(`personal-${crypto.randomUUID()}@example.test`);
-            await page.getByLabel('Password', { exact: true }).fill(`Personal-${crypto.randomUUID()}-Secure`);
+            const password = `Personal-${crypto.randomUUID()}-Secure`;
+            await page.getByLabel('Password', { exact: true }).fill(password);
+            await page.getByLabel('Confirm password', { exact: true }).fill(password);
             const created = page.waitForResponse(
               (r) => new URL(r.url()).pathname === '/signup' && r.request().method() === 'POST',
             );
