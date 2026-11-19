@@ -405,6 +405,7 @@ export default defineConfig((context) => {
   const releaseOutput = output && output === releaseWebOutput(process.env);
   const previewRoot =
     catalogueOutput || (testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1') ? output : undefined;
+  const previewEnv = previewRoot && (catalogueOutput || releaseOutput) ? { envDir: previewRoot } : {};
   const compactMessages =
     !testRuntime && (catalogueOutput || context.command === 'serve') && process.env[catalogueLocaleModules] === '1';
   const paraglide = paraglideViteOptions(compactMessages);
@@ -419,7 +420,7 @@ export default defineConfig((context) => {
     // The release fixture supplies its bindings through the process environment; use its private env directory.
     return {
       root: previewRoot,
-      ...(catalogueOutput || releaseOutput ? { envDir: previewRoot } : {}),
+      ...previewEnv,
       preview: {
         allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
         ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
@@ -452,7 +453,7 @@ export default defineConfig((context) => {
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
     ...(previewRoot ? { root: previewRoot, cacheDir: join(previewRoot, '.vite') } : {}),
-    ...(catalogueOutput || releaseOutput ? { envDir: previewRoot } : {}),
+    ...previewEnv,
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
