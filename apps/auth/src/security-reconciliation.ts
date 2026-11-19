@@ -3,7 +3,7 @@ import { waitForSecurityAction } from './security-target-operation';
 import { createServerFn } from '@tanstack/react-start';
 import { securityActionResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
 import { readJsonBounded } from './private-auth-json';
-import { readNativeAccountSession } from './account-session';
+import { readNativeAccountSessionAuthority } from './account-session';
 import { parseSecurityPage, readNativeSecurityPage, type SecurityPageEnvelope } from './security-inventory';
 import { readSecurityIssuerResponse } from './security-response-config';
 import type { SecurityLoadResult, SecurityPasskey, SecuritySession } from './security';
@@ -203,13 +203,13 @@ const readback = createServerFn({ method: 'POST' })
 const act = createServerFn({ method: 'POST' })
   .validator(target)
   .handler(async ({ data }): Promise<SecurityActionResult> => {
-    let authority: Awaited<ReturnType<typeof readNativeAccountSession>>;
+    let authority: Awaited<ReturnType<typeof readNativeAccountSessionAuthority>>;
     try {
-      authority = await readNativeAccountSession();
+      authority = await readNativeAccountSessionAuthority();
     } catch {
       return { kind: 'failure' };
     }
-    if (authority.kind === 'signed-out') return { kind: 'signed-out' };
+    if (authority.kind === 'signed-out' || authority.kind === 'denied') return { kind: authority.kind };
     if (authority.kind !== 'ready') return { kind: 'failure' };
     if (authority.accountId !== data.accountId) return { kind: 'denied' };
 
