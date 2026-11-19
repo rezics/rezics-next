@@ -165,15 +165,36 @@ export const MenuKeyboard: Story = {
     await expect(within(dialog).getByRole('textbox', { name: 'Additional details' })).toBeRequired();
     await expect(within(dialog).getByRole('group', { name: 'Human verification' })).toBeVisible();
     await waitFor(() => expect(menu).not.toBeInTheDocument());
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await dismissed('dialog');
+    await waitForFocus(trigger);
   },
 };
 export const MenuOpen: Story = {
   args: { onCopyLink: fn(), onReport: fn(async () => undefined), ownsContent: false, verified: true },
   render: () => <StrangerActions />,
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
-    await expect(await screen.findByRole('dialog')).toBeVisible();
-    await expect(screen.getByRole('button', { name: 'Report' })).toBeVisible();
+    const trigger = () => within(canvasElement).getByRole('button', { name: 'More actions' });
+    // The browser check runs at a desktop viewport. Exercise the coarse-pointer sheet with a touch sequence.
+    const matchMedia = window.matchMedia;
+    let sheet: HTMLElement;
+    window.matchMedia = (query) => matchMedia.call(window, query === '(pointer: coarse)' ? '(min-width: 0px)' : query);
+    try {
+      await userEvent.pointer({ target: trigger(), keys: '[TouchA]' });
+      sheet = await settled(await screen.findByRole('dialog', { name: 'More actions' }));
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+
+    await waitForFocus(sheet);
+    await userEvent.pointer({ target: within(sheet).getByRole('button', { name: 'Report' }), keys: '[TouchA]' });
+    const dialog = await settled(await screen.findByRole('dialog', { name: 'Report this content' }));
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+    await waitForFocus(dialog);
+    await expect(within(dialog).getByRole('group', { name: 'Human verification' })).toBeVisible();
+    await userEvent.pointer({ target: within(dialog).getByRole('button', { name: 'Cancel' }), keys: '[TouchA]' });
+    await dismissed('dialog');
+    await waitFor(() => expect(trigger()).toHaveFocus());
   },
 };
 

@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EllipsisIcon, LoaderCircleIcon } from 'lucide-react';
 import {
   AlertDialog,
@@ -82,6 +82,24 @@ export function ContentActions(props: ContentActionsProps) {
   const deletePendingRef = useRef(false);
   const deleteOperationRef = useRef<object | null>(null);
   const deleteFailureLabelRef = useRef(labels.deleteFailure);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const triggerRef = useCallback(
+    (button: HTMLButtonElement | null) => {
+      opener.current = button;
+      if (typeof props.triggerRef === 'function') {
+        const cleanup = props.triggerRef(button);
+        if (cleanup) {
+          return () => {
+            opener.current = null;
+            cleanup();
+          };
+        }
+      } else if (props.triggerRef) {
+        props.triggerRef.current = button;
+      }
+    },
+    [props.triggerRef],
+  );
 
   useClientLayoutEffect(() => {
     deleteFailureLabelRef.current = labels.deleteFailure;
@@ -164,7 +182,7 @@ export function ContentActions(props: ContentActionsProps) {
         title={labels.moreActions}
         backLabel={labels.cancel}
         trigger={
-          <Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost">
+          <Button aria-label={labels.moreActions} ref={triggerRef} size="icon-sm" variant="ghost">
             <EllipsisIcon aria-hidden="true" />
           </Button>
         }
@@ -204,7 +222,7 @@ export function ContentActions(props: ContentActionsProps) {
             }}
             open={deleteOpen}
           >
-            <AlertDialogContent size="sm">
+            <AlertDialogContent finalFocus={opener} size="sm">
               <AlertDialogHeader>
                 <AlertDialogTitle>{labels.deleteTitle}</AlertDialogTitle>
                 <AlertDialogDescription>{labels.deleteDescription}</AlertDialogDescription>
@@ -232,6 +250,7 @@ export function ContentActions(props: ContentActionsProps) {
       ) : (
         <ReportDialog
           {...(props.maxDetails === undefined ? {} : { maxDetails: props.maxDetails })}
+          finalFocus={opener}
           onOpenChange={changeReportOpen}
           onSubmit={props.onReport}
           open={reportOpen}
