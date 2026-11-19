@@ -51,11 +51,12 @@ test('a link change across mixed authored runs preserves IDs, marks and native u
     try {
       const before = editor.state.doc;
       const range = { from: 1, to: before.content.size - 1 };
+      const backward = { from: range.to, to: range.from };
+      editor.commands.setTextSelection(backward);
+      native.commands.setTextSelection(backward);
       expect(applyLink(editor, range, 'https://example.test/new')).toBe(true);
       const linked = editor.state.doc;
-      expect(native.chain().setTextSelection(range).setMark('link', { href: 'https://example.test/new' }).run()).toBe(
-        true,
-      );
+      expect(native.commands.setMark('link', { href: 'https://example.test/new' })).toBe(true);
       expect(linked.toJSON()).toEqual(native.state.doc.toJSON());
       expect(editor.state.selection.toJSON()).toEqual(native.state.selection.toJSON());
       expect(changed!.steps.map((step) => step.toJSON())).toEqual(nativeChanged!.steps.map((step) => step.toJSON()));
@@ -71,9 +72,13 @@ test('a link change across mixed authored runs preserves IDs, marks and native u
         );
       });
       expect(undoCommand.run(editor, () => undefined)).toBe(true);
+      expect(undoCommand.run(native, () => undefined)).toBe(true);
       expect(editor.state.doc.eq(before)).toBe(true);
+      expect(editor.state.selection.toJSON()).toEqual(native.state.selection.toJSON());
       expect(redoCommand.run(editor, () => undefined)).toBe(true);
+      expect(redoCommand.run(native, () => undefined)).toBe(true);
       expect(editor.state.doc.eq(linked)).toBe(true);
+      expect(editor.state.selection.toJSON()).toEqual(native.state.selection.toJSON());
       editor.view.dispatch(closeHistory(editor.state.tr));
       expect(applyLink(editor, range, null)).toBe(true);
       editor.state.doc.descendants((node) => {

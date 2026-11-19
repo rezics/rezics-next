@@ -278,8 +278,8 @@ test('caller renderers keep authored common attributes on replacement output', (
   expect(html).toContain('<div data-block-id="custom-table" lang="fr" dir="ltr"><section><table><tbody>');
   expect(html).toMatch(/<p\b[^>]*>Custom table<\/p>/);
   expect(html.match(/data-block-id="custom-table"/g) ?? []).toHaveLength(1);
-  expect(html).toContain(
-    '<div data-block-id="custom-image" lang="he" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="custom-image" style="max-width:100%"><span data-authorized-image="media-id">Owner image</span></div></div>',
+  expect(html).toMatch(
+    /<div data-block-id="custom-image" lang="he" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="custom-image"[^>]*><span data-authorized-image="media-id">Owner image<\/span><\/div><\/div>/,
   );
   expect(html).not.toContain('/media/');
 });
@@ -345,8 +345,8 @@ test('supplied image renderers receive complete occurrence facts and unresolved 
       conceal: false,
     },
   ]);
-  expect(html).toContain(
-    '<div data-block-id="image-anchor" lang="ar" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="image-anchor" style="max-width:100%;width:320px" title="An authored title"><span data-authorized-image="media-id">Owner-rendered image</span></div></div>',
+  expect(html).toMatch(
+    /<div data-block-id="image-anchor" lang="ar" dir="rtl"><div data-slot="document-image-occurrence" data-occurrence-id="image-anchor"[^>]* style="width:320px" title="An authored title"><span data-authorized-image="media-id">Owner-rendered image<\/span><\/div><\/div>/,
   );
   expect(html).not.toContain('Image unavailable');
   const unavailable = renderToStaticMarkup(createElement(DocumentBody, { document, renderImage: () => null }));

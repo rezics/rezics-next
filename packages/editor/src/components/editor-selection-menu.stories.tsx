@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
+import { editorBrowserInput } from '../test/browser-input.ts';
 
 function demo(profile: DocumentProfile = 'blocks', translated = false) {
   const initial = fromPlainText('Selected words', profile);
@@ -150,32 +151,35 @@ export const ProfileCommands: Story = {
 export const KeyboardReach: Story = {
   render: () => <keyboard.Demo />,
   async play({ canvasElement }) {
+    const { events } = await editorBrowserInput();
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Post' });
     expect(canvas.queryByRole('toolbar', { name: 'Selection tools' })).toBeNull();
     await select(canvasElement);
     const toolbar = within(await canvas.findByRole('toolbar', { name: 'Selection tools' }));
-    await userEvent.keyboard('{Alt>}{F10}{/Alt}');
+    await events.keyboard('{Alt>}{F10}{/Alt}');
     const bold = toolbar.getByRole('button', { name: 'Strong' });
     expect(bold).toHaveFocus();
     expect(toolbar.getAllByRole('button').filter((button) => button.tabIndex === 0)).toEqual([bold]);
-    await userEvent.keyboard('{ArrowRight}');
+    await events.keyboard('{ArrowRight}');
     expect(toolbar.getByRole('button', { name: 'Italic' })).toHaveFocus();
-    await userEvent.keyboard('{ArrowLeft}{Enter}');
+    await events.keyboard('{ArrowLeft}{Enter}');
     await waitFor(() => expect(checked(keyboard.latest.current)?.content?.[0]?.marks?.[0]?.type).toBe('bold'));
     // Applying a mark returns focus to the editor on a later frame; a shortcut sent before then is lost.
     await waitForFocus(textbox);
-    await userEvent.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
+    await events.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
     const menu = within(await screen.findByRole('listbox', { name: 'Turn into' }));
     const query = screen.getByRole('combobox', { name: 'Find a block' });
     await waitFor(() => expect(query).toHaveFocus());
     const choices = menu.getAllByRole('option').filter((option) => option.getAttribute('aria-disabled') !== 'true');
     const heading = menu.getByRole('option', { name: 'Heading 1' });
-    await userEvent.keyboard('{Home}');
-    for (let step = 0; step < choices.indexOf(heading); step++) await userEvent.keyboard('{ArrowDown}');
+    await events.keyboard('{Home}');
+    for (let step = 0; step < choices.indexOf(heading); step++) await events.keyboard('{ArrowDown}');
     await waitFor(() => expect(query).toHaveAttribute('aria-activedescendant', heading.id));
     expect(heading).toHaveAttribute('aria-selected', 'true');
-    await userEvent.keyboard('{Escape}');
+    await events.keyboard('{Escape}');
+    await waitForFocus(toolbar.getByRole('button', { name: 'Turn into' }));
+    await events.keyboard('{Escape}');
     await waitFor(() => expect(textbox).toHaveFocus());
     expect(window.getSelection()?.toString()).toBe('Selected words');
     window.getSelection()?.collapseToEnd();
