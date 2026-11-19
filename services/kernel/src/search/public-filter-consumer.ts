@@ -2743,11 +2743,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const preparedMixed = mixed && q.snapshot.kind === 'prepared';
       const allowance = preparedMixed ? 600 : Math.min(600, 6 * pageSize + 3);
       const maxWindow = preparedMixed ? Math.min(200, allowance) : Math.min(200, 2 * pageSize + 1);
-      // A direct Book list needs one lookahead. Current-authority rejects can use
-      // the usual larger refill on this same PIT and retained execution.
-      let size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
-      if (!prefix && q.snapshot.kind === 'pit' && 'bookTypeList' in plan && plan.bookTypeList)
-        size = Math.min(size, pageSize + 1);
+      const size = prefix?.size ?? (preparedMixed ? Math.min(200, allowance) : plan.size);
       if (!Number.isInteger(size) || size < 1 || size > maxWindow) throw new TypeError('Invalid retained refill size');
       let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];
