@@ -2,7 +2,6 @@ import { afterEach, expect, mock, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 const origin = 'https://auth.test';
-const sessionUrl = origin + '/session';
 const cookie = 'auth_session=original';
 
 export function runManagementTestsInChild(file: string) {
@@ -68,12 +67,16 @@ export function installManagementServerFixture() {
     binding.AUTH_SECURITY_SCOPE_CONFIGURATION = 'catalogue:4';
     const calls = observed.splice(0);
     for (const { url, path, init } of calls) {
-      if (path !== '/session') {
+      if (path !== '/session' && path !== '/operator-sessions/open') {
         expect(url).toBe(path);
         continue;
       }
-      expect(url).toBe(sessionUrl);
-      expect(init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'manual' });
+      expect(url).toBe(origin + path);
+      expect(init).toMatchObject({
+        method: path === '/session' ? 'GET' : 'POST',
+        cache: 'no-store',
+        redirect: 'manual',
+      });
       const headers = new Headers(init.headers);
       expect(headers.get('cookie')).toBe(cookie);
       expect(headers.get('origin')).toBe(origin);
@@ -93,9 +96,10 @@ export function installManagementServerFixture() {
         },
       },
     });
+    return values;
   }
 
-  function respond(reply: (call: Call) => Response) {
+  function respond(reply: (call: Call) => Response | Promise<Response>) {
     const calls: Call[] = [];
     globalThis.fetch = (async (input, init = {}) => {
       const url = String(input);
