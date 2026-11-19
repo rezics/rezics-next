@@ -38,6 +38,7 @@ type Original = Anchor & { label: string };
 type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 const editorCredentialWindowMs = 30_000;
+export const bookGrowthPublicationWindow = { records: 1_024, milliseconds: 120_000 } as const;
 
 export async function publishBookOriginals(
   setupDeadline: number,
@@ -347,7 +348,8 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
         await search.backgroundWork('running');
         assert.equal(population.size, from);
         // Let the same live generation settle each bounded authoring window before adding more fixture data.
-        const seedWindow = 1_024;
+        const seedWindow = bookGrowthPublicationWindow.records;
+        const publishBy = () => Date.now() + bookGrowthPublicationWindow.milliseconds;
         for (let start = from; start < to; start += seedWindow) {
           const end = Math.min(start + seedWindow, to);
           const seeded: string[] = [];
@@ -359,10 +361,10 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
             population.add(subject.id);
             seeded.push(subject.id);
           }
-          if (end < to) assert.deepEqual(await waitForPublication(seeded, Date.now() + 120_000), published);
+          if (end < to) assert.deepEqual(await waitForPublication(seeded, publishBy()), published);
         }
         assert.equal(population.size, to);
-        assert.deepEqual(await waitForPublication([...population], Date.now() + 120_000), published);
+        assert.deepEqual(await waitForPublication([...population], publishBy()), published);
       },
       close: (deadline: number) => fixture.close(deadline),
     };
