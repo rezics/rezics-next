@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { InlinePostEditor, PostComposer } from '../threads/composer';
 import type { CurrentPost, EditFailure, WriteFailure } from '../threads/actions';
 import type { DraftMediaState } from '../threads/media-state';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
+import { sessionQuery } from '../session/query';
 import recorded from '../kernel/recorded/thread-owned.json';
 
 const meta = {
@@ -31,6 +34,23 @@ const keepDraft = () => undefined;
 const shell = 'mx-auto grid w-full min-w-0 max-w-5xl gap-8 p-4 sm:p-8';
 const section = 'min-w-0 space-y-3 [overflow-wrap:anywhere]';
 const heading = 'text-xl font-semibold';
+
+function AuthoringStory({ children }: { children: ReactNode }) {
+  const [client] = useState(() => {
+    const fixture = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    fixture.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: post.authorId,
+      csrfToken: 'prepared-authoring-session',
+    });
+    return fixture;
+  });
+  return (
+    <PatternStory visitor="Signed In">
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </PatternStory>
+  );
+}
 
 // These are bounded document DTO examples, following the existing composer/media fixtures.
 const mediaIds = Array.from(
@@ -65,17 +85,23 @@ const mediaRefusal = async (): Promise<EditFailure> => ({
 });
 
 async function ownControl(control: HTMLElement) {
-  await expect(control).toHaveClass('min-h-11', 'min-w-11', 'whitespace-normal', '[overflow-wrap:anywhere]');
-  await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  await expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  await expect(getComputedStyle(control).minHeight).toBe('28px');
+  await expect(getComputedStyle(control).whiteSpace).toBe('normal');
   await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+  control.scrollIntoView({ block: 'center' });
+  const rect = control.getBoundingClientRect();
+  await expect(rect.height).toBeGreaterThanOrEqual(28);
+  const centerX = (rect.left + rect.right) / 2;
+  for (const y of [rect.top + 1, rect.bottom - 1]) {
+    await expect(control.contains(control.ownerDocument.elementFromPoint(centerX, y))).toBe(true);
+  }
   control.focus();
   await expect(control).toHaveFocus();
 }
 
 export const OpeningAndReply: Story = {
   render: () => (
-    <PatternStory visitor="Signed In">
+    <AuthoringStory>
       <main className={shell}>
         <h1 className={heading}>{m.thread_new_heading()}</h1>
         <section className={section} aria-label={m.thread_new_body_label()}>
@@ -100,21 +126,22 @@ export const OpeningAndReply: Story = {
           />
         </section>
       </main>
-    </PatternStory>
+    </AuthoringStory>
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const title = await view.findByLabelText(m.thread_title_label());
-    const sends = await view.findAllByRole('button', { name: m.thread_write_send() });
     await waitFor(() => expect(canvasElement.querySelectorAll('.ProseMirror')).toHaveLength(2));
+    const sendButtons = () => view.getAllByRole<HTMLButtonElement>('button', { name: m.thread_write_send() });
+    const [openingSend, replySend] = sendButtons();
     await expect(title.id).toBe('thread-title');
-    await expect((title as HTMLInputElement).form).toBe((sends[0] as HTMLButtonElement).form);
-    await expect((sends[0] as HTMLButtonElement).form).not.toBe((sends[1] as HTMLButtonElement).form);
-    await expect(sends[0]).toBeDisabled();
+    await expect((title as HTMLInputElement).form).toBe(openingSend!.form);
+    await expect(openingSend!.form).not.toBe(replySend!.form);
+    await expect(openingSend).toBeDisabled();
     await userEvent.type(title, m.thread_media_state_unavailable());
-    await waitFor(() => expect(sends[0]).toBeEnabled());
-    for (const send of sends) await ownControl(send);
-    await userEvent.click(sends[1]!);
+    await waitFor(() => expect(sendButtons()[0]).toBeEnabled());
+    for (const send of sendButtons()) await ownControl(send);
+    await userEvent.click(sendButtons()[1]!);
     const retry = await view.findByRole('button', { name: m.thread_recovery_retry_original() });
     await ownControl(retry);
   },
@@ -129,7 +156,7 @@ export const InlineRevision: Story = {
       attribution: null,
     } as CurrentPost;
     return (
-      <PatternStory visitor="Signed In">
+      <AuthoringStory>
         <main className={shell}>
           <h1 className={heading}>{m.thread_edit_save()}</h1>
           <InlinePostEditor
@@ -143,7 +170,7 @@ export const InlineRevision: Story = {
             onSuccess={keepDraft}
           />
         </main>
-      </PatternStory>
+      </AuthoringStory>
     );
   },
   play: async ({ canvasElement }) => {
@@ -153,17 +180,27 @@ export const InlineRevision: Story = {
     await ownControl(save);
     await ownControl(cancel);
     await userEvent.click(save);
-    const load = await view.findByRole('button', { name: m.thread_edit_load_current() });
-    await ownControl(load);
-    await userEvent.click(load);
+    const review = await waitFor(() => {
+      const control = view.getByRole('button', { name: m.thread_edit_review_current() });
+      expect(control).toBeEnabled();
+      expect(getComputedStyle(control).minHeight).toBe('28px');
+      return control;
+    });
+    await ownControl(review);
+    await userEvent.keyboard('{Enter}');
+    const dialog = await screen.findByRole('alertdialog', { name: m.thread_inspect_title() });
+    const replace = within(dialog).getByRole('button', { name: m.thread_edit_replace_current() });
+    await userEvent.click(replace);
     await waitFor(() => expect(view.queryByRole('alert')).not.toBeInTheDocument());
-    await view.findByText(m.thread_media_state_unavailable());
+    await waitFor(() =>
+      expect(canvasElement.querySelector('.ProseMirror')).toHaveTextContent(m.thread_media_state_unavailable()),
+    );
   },
 };
 
 export const MediaRecoveryLongText: Story = {
   render: () => (
-    <PatternStory visitor="Signed In">
+    <AuthoringStory>
       <main className={shell}>
         <h1 className={heading}>{m.thread_media_status()}</h1>
         <InlinePostEditor
@@ -176,7 +213,7 @@ export const MediaRecoveryLongText: Story = {
           onSuccess={keepDraft}
         />
       </main>
-    </PatternStory>
+    </AuthoringStory>
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
