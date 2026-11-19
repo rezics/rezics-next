@@ -67,11 +67,11 @@ function recordFields(record: Record<string, unknown>): string[] {
 /** Select only episodes whose exact source parent is a selected type-2 family member. */
 export async function discoverShowcaseBangumiEpisodes(input: {
   tables: CrossMediaTables;
-  selectedAnime: ReadonlyMap<number, Franchise>;
+  selectedAnime: ReadonlyMap<number, Franchise | undefined>;
   alias: string;
 }): Promise<ShowcaseEpisodeSelection> {
   const result: ShowcaseEpisodeSelection = { entities: [], members: [], edges: [], gaps: [] };
-  const counts = new Map<Franchise, number>();
+  const counts = new Map<Franchise | number, number>();
   const seen = new Set<string>();
   const selected: {
     sourceRecord: SourceRecord;
@@ -90,9 +90,8 @@ export async function discoverShowcaseBangumiEpisodes(input: {
 
   for await (const row of input.tables.rows('bangumi', 'episode')) {
     const parentId = positiveId(row.subject_id);
-    if (parentId === undefined) continue;
+    if (parentId === undefined || !input.selectedAnime.has(parentId)) continue;
     const family = input.selectedAnime.get(parentId);
-    if (!family) continue;
     const parentIsWellFormed =
       typeof row.subject_id === 'number' && Number.isSafeInteger(row.subject_id) && row.subject_id > 0;
     const id = positiveId(row.id);
@@ -122,7 +121,8 @@ export async function discoverShowcaseBangumiEpisodes(input: {
     }
     seen.add(sourceKey);
 
-    const count = counts.get(family) ?? 0;
+    const scope = family ?? parentId;
+    const count = counts.get(scope) ?? 0;
     if (count >= SHOWCASE_EPISODE_WINDOW) {
       addGap({
         source: 'bangumi',
@@ -133,7 +133,7 @@ export async function discoverShowcaseBangumiEpisodes(input: {
       });
       continue;
     }
-    counts.set(family, count + 1);
+    counts.set(scope, count + 1);
 
     const sourceRecord: SourceRecord = {
       source: 'bangumi',
@@ -146,7 +146,7 @@ export async function discoverShowcaseBangumiEpisodes(input: {
       key: sourceKey,
       kind: 'episode',
       membership: 'referenced',
-      franchise: family,
+      ...(family ? { franchise: family } : {}),
     };
     selected.push({ sourceRecord, member, row, parentId, parentIsWellFormed });
     if (!parentIsWellFormed) {

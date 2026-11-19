@@ -545,9 +545,15 @@ export type CrossMediaSelection = {
 
 export async function planCrossMediaSeed(
   input: CrossMediaTables,
-  options: { deferVndbCharacterAppearances?: boolean; selection?: CrossMediaSelection } = {},
+  options: {
+    deferVndbCharacterAppearances?: boolean;
+    selection?: CrossMediaSelection;
+    /** Anime endpoints already admitted by the Book family source relation. */
+    bookAnime?: readonly string[];
+  } = {},
 ): Promise<CrossMediaPlan> {
   const selection = options.selection;
+  const bookAnime = new Set(options.bookAnime?.map(Number));
   if (selection) {
     ensure(
       selection.bangumi.length > 0 &&
@@ -621,9 +627,10 @@ export async function planCrossMediaSeed(
   const titled = new Map<number, Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
-    if (selection && !selection.bangumi.includes(id)) continue;
+    if (selection && !selection.bangumi.includes(id) && !bookAnime.has(id)) continue;
     ensure(!types.has(id), 'Duplicate selected Bangumi subject');
     types.set(id, row.type as number);
+    if (selection && !selection.bangumi.includes(id)) continue;
     const family = crossMediaFranchise(row.name, row.name_cn);
     if (family) titled.set(id, family);
   }
@@ -664,7 +671,7 @@ export async function planCrossMediaSeed(
   const anime = new Set<Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
-    if (!familyIds.has(id) && !referencedWorks.has(id)) continue;
+    if (!familyIds.has(id) && !referencedWorks.has(id) && !bookAnime.has(id)) continue;
     subjects.set(id, row);
   }
   for (const [id, family] of familyIds) {
@@ -695,7 +702,7 @@ export async function planCrossMediaSeed(
     }
     plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
   }
-  const selectedAnime = new Map<number, Franchise>();
+  const selectedAnime = new Map<number, Franchise | undefined>();
   for (const [id, family] of familyIds) if (types.get(id) === 2) selectedAnime.set(id, family);
   for (const [id, family] of referencedWorks) {
     if (familyIds.has(id) || !subjects.has(id)) continue;
@@ -703,6 +710,14 @@ export async function planCrossMediaSeed(
     const row = subjects.get(id)!;
     if ([1, 2, 4].includes(row.type as number))
       plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
+  }
+  for (const id of bookAnime) {
+    const row = subjects.get(id);
+    if (row?.type !== 2) continue;
+    if (!selectedAnime.has(id)) selectedAnime.set(id, referencedWorks.get(id));
+    if (familyIds.has(id) || referencedWorks.has(id)) continue;
+    member({ source: 'bangumi', key: String(id), kind: 'work', membership: 'referenced' });
+    plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
   }
 
   const relationRows: Row[] = [];
@@ -846,6 +861,7 @@ export async function planCrossMediaSeed(
   const characters = new Set<number>();
   const persons = new Set<number>();
   const familyWorks = new Set(familyIds.keys());
+  const creditWorks = new Set([...familyWorks, ...selectedAnime.keys()]);
   const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((record) => record.key));
   const selectedAnimeWorks = new Set(
     [...plan.records.bangumi, ...plan.entities.bangumi]
@@ -955,7 +971,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     const sourceIndex = staffIndex++;
     const subjectId = number(row, 'subject_id');
-    if (!familyWorks.has(subjectId)) continue;
+    if (!creditWorks.has(subjectId)) continue;
     const count = (staffCounts.get(subjectId) ?? 0) + 1;
     staffCounts.set(subjectId, count);
     if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedStaffIndices.size >= CREDIT_ASSOCIATIONS) {
@@ -969,7 +985,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'person-characters')) {
     const sourceIndex = voiceIndex++;
     const subjectId = number(row, 'subject_id');
-    if (!familyWorks.has(subjectId)) continue;
+    if (!creditWorks.has(subjectId)) continue;
     const characterId = number(row, 'character_id');
     const count = (voiceCounts.get(subjectId) ?? 0) + 1;
     voiceCounts.set(subjectId, count);
@@ -1067,7 +1083,6 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     const sourceIndex = currentStaffIndex++;
     if (!admittedStaffIndices.has(sourceIndex)) continue;
-    if (!familyWorks.has(number(row, 'subject_id'))) continue;
     const work = String(number(row, 'subject_id'));
     const personId = number(row, 'person_id');
     const person = `person:${personId}`;
@@ -1096,7 +1111,6 @@ export async function planCrossMediaSeed(
     const sourceIndex = currentVoiceIndex++;
     if (!admittedVoiceIndices.has(sourceIndex)) continue;
     const subjectId = number(row, 'subject_id');
-    if (!familyWorks.has(subjectId)) continue;
     const work = String(subjectId);
     const personId = number(row, 'person_id');
     const characterId = number(row, 'character_id');
@@ -1951,11 +1965,26 @@ export async function planCrossMediaSeed(
 
   if (selection) {
     const peopleLimit = selection.peoplePerProvider ?? SHOWCASE_PEOPLE_PER_PROVIDER;
+    // Reserve one eligible staff and voice endpoint per admitted Book counterpart within the existing limit.
+    const bangumiPeople = new Set(plan.entities.bangumi.map((row) => row.key));
+    const reservedCredits = new Map<string, string>();
+    for (const credit of plan.credits) {
+      if (!bookAnime.has(Number(credit.work)) || !bangumiPeople.has(credit.person)) continue;
+      if (credit.kind === 'staff') {
+        const mapping = mapSourceEnumeration('bangumi', `staff.${credit.workType}`, credit.roleCode!);
+        if (!mapping?.term || mapping.status === 'omitted') continue;
+      }
+      const slot = `${credit.work}:${credit.kind}`;
+      const previous = reservedCredits.get(slot);
+      if (!previous || credit.person.localeCompare(previous) < 0) reservedCredits.set(slot, credit.person);
+    }
+    const reservedPeople = new Set(reservedCredits.values());
     for (const provider of ['bangumi', 'vndb'] as const) {
       let people = 0;
       const omitted = new Set<string>();
+      const priority = (key: string) => Number(provider === 'bangumi' && reservedPeople.has(key));
       plan.entities[provider] = [...plan.entities[provider]]
-        .sort((left, right) => left.key.localeCompare(right.key))
+        .sort((left, right) => priority(right.key) - priority(left.key) || left.key.localeCompare(right.key))
         .filter((row) => {
           const isPerson = provider === 'bangumi' ? row.key.startsWith('person:') : /^[sp][1-9][0-9]*$/u.test(row.key);
           if (!isPerson || people++ < peopleLimit) return true;
@@ -3617,9 +3646,15 @@ async function runSeedCli(
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!, options.onDumpTableReleased);
   enter('record-planning');
+  const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
+    await import('./showcase-books.ts');
+  const plannedBooks = options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),
+    ...(plannedBooks?.selected.series.length && plannedBooks.selected.volumes.length
+      ? { bookAnime: plannedBooks.selected.anime }
+      : {}),
   });
   enter('character-vocabulary-planning');
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
@@ -3790,10 +3825,6 @@ async function runSeedCli(
   let releasePublicationProgress: SeedFinalization<'release-publication'> | undefined;
   try {
     finalization.enter('vocabulary-preparation');
-    const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
-      await import('./showcase-books.ts');
-    const plannedBooks =
-      options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
     if (journal && publicClient)
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan,
