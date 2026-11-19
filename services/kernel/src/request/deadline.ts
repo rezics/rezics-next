@@ -49,5 +49,8 @@ export function deadlineFor(budgetMs: number, now: () => number = Date.now): num
 /** Starts a local budget capped by any active caller deadline. */
 export function cappedDeadlineFor(budgetMs: number, now: () => number = Date.now): number {
   const started = now();
-  return Math.min(started + budgetMs, deadlineFor(budgetMs, () => started));
+  return Math.min(
+    started + budgetMs,
+    deadlineFor(budgetMs, () => started),
+  );
 }

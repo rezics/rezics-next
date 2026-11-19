@@ -122,7 +122,7 @@ function failEnsureCheckoutOnce(source: Pool, failure: Error): Pool {
 }
 
 beforeAll(async () => {
-  beforeRelease = await identityEpochDatabase(databaseUrl);
+  beforeRelease = await identityEpochDatabase();
   configureTestReceiptKeys(beforeRelease.pool);
   await bootstrapRelease(pool, bundledRelease);
   await seedAccounts([
