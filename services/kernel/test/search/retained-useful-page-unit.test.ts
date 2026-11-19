@@ -100,13 +100,14 @@ function operations(overrides: Partial<PublicFilterConsumerOperations> = {}): Pu
         throw new Error('unexpected mixed query');
       },
       async consume(id) {
-        expect(id).toBe(execution?.execution);
+        if (!execution) throw new Error('Expected a native execution before consuming it');
+        expect(id).toBe(execution.execution);
         consumed = true;
       },
       async finish() {
         if (!execution || !consumed) throw new Error('Expected one consumed native execution');
         const status = await native.readStatus({ queried: execution.queried, execution: execution.execution }, context);
-        if (status.status === 'unavailable') {
+        if (status.status !== 'observed') {
           failure = status;
           throw refused;
         }

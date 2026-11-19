@@ -72,7 +72,8 @@ test('Bangumi 10380 publishes the current reproposal of its cited Character appe
       ],
     });
     const [work, character, role] = created.results.map((entry) => {
-      if (entry.status !== 201 || !('id' in entry.value)) throw new Error('Missing appearance subject');
+      if (entry.status !== 201 || !('value' in entry) || !('id' in entry.value))
+        throw new Error('Missing appearance subject');
       return entry.value.id;
     });
     if (!work || !character || !role) throw new Error('Incomplete appearance subjects');
@@ -106,7 +107,8 @@ test('Bangumi 10380 publishes the current reproposal of its cited Character appe
     };
     const propose = async (command: typeof proposal) => {
       const [entry] = (await port.batch({ commands: [command] })).results;
-      if (entry?.status !== 201 || !('candidate' in entry.value)) throw new Error('Missing appearance candidate');
+      if (entry?.status !== 201 || !('value' in entry) || !('candidate' in entry.value))
+        throw new Error('Missing appearance candidate');
       return entry.value.candidate;
     };
     const old = await propose(proposal);

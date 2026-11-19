@@ -613,6 +613,7 @@ async function projectSummaries(
     if (!subjects.length) return rows;
     const slots = new Map<string, { slot_id: string; ordinal: number }[]>();
     for (const { id, slot_id, ordinal } of await readRepresentativeEditions.run(deps.client, { subjects })) {
+      if (id === null) continue;
       const selected = slots.get(id) ?? [];
       selected.push({ slot_id, ordinal: Number(ordinal) });
       slots.set(id, selected);
