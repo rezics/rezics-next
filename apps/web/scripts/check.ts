@@ -108,7 +108,6 @@ function isBrowserTest(file: string, directory: string): boolean {
 }
 
 function reportOutcome(outcome: FileOutcome<string>): void {
-  if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
   if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
 }
 
@@ -179,12 +178,14 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
           attempts.set(file, attempt);
           const result = await capture(argv[0]!, argv.slice(1), env, directory);
           attempts.set(file, { ...attempt, exitCode: result.status });
-          try {
-            reportsByFile.set(file, readFileSync(report, 'utf8'));
-          } catch {
-            reportsByFile.delete(file);
+          if (result.status !== 0) {
+            try {
+              reportsByFile.set(file, readFileSync(report, 'utf8'));
+            } catch {
+              reportsByFile.delete(file);
+            }
+            throw new Error(`${testScript} ./${file} failed:\n${result.output}`);
           }
-          if (result.status !== 0) throw new Error(`${testScript} ./${file} failed:\n${result.output}`);
           return result.output;
         } finally {
           recordRunMarker(env.WEB_CHECK_EVENTS, 'end', file);
@@ -222,6 +223,8 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
     appendFileSync(join(reportDirectory, 'outcomes.jsonl'), `${line}\n`);
     process.stdout.write(`[web-file] ${line}\n`);
     (options.onComplete ?? reportOutcome)(outcome);
+    // capture already streamed the output. Only failures are needed by the retry classifier.
+    if (!options.onComplete) delete outcome.output;
   }
 
   try {
@@ -332,6 +335,40 @@ type BrowserWorkerInput = {
 export async function runBrowserWorker(input: BrowserWorkerInput): Promise<number> {
   requireWebCheckCustody(root, app);
   const directory = browserReportDirectory(input.report);
+  const { commandNeedsSharedDevServer, prepareSharedWebDevCache, webTestDepCacheReadyEnvName } =
+    await import('./with-dev-server.ts');
+  const env = { ...(input.env ?? process.env) };
+  delete env.WEB_TEST_DEV_SERVER;
+  const needsCache = input.files.some(
+    (file) => isBrowserTest(file, app) && commandNeedsSharedDevServer(['bun', 'test', file]),
+  );
+  if (!needsCache) return runBrowserFiles({ ...input, env });
+
+  // Both shared and private Vite processes use one writable copy in this serial
+  // worker. Materialize it outside the isolated namespace and discard it last.
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const cacheRoot = mkdtempSync(join(root, '.temp/web-browser-cache-'));
+  try {
+    const cache = await prepareSharedWebDevCache({ ...env, WEB_TEST_STATE_DIR: cacheRoot });
+    return await runPreparedBrowserWorker(
+      {
+        ...input,
+        env: {
+          ...env,
+          WEB_VITE_CACHE_DIR: cache.directory,
+          [webTestDepCacheReadyEnvName]: '1',
+          WEB_TEST_DEV_SERVER_CACHE: cache.reused ? 'reuse' : 'build',
+          WEB_TEST_DEV_SERVER_LOCK: cache.lockHash,
+        },
+      },
+      directory,
+    );
+  } finally {
+    rmSync(cacheRoot, { recursive: true, force: true });
+  }
+}
+
+async function runPreparedBrowserWorker(input: BrowserWorkerInput, directory: string): Promise<number> {
   const { usesSharedBrowserServer } = await import('./isolated.ts');
   const sharedFiles = input.files.filter((file) => isBrowserTest(file, app) && usesSharedBrowserServer(file));
   if (sharedFiles.length < 2) return runBrowserFiles(input);
@@ -339,12 +376,9 @@ export async function runBrowserWorker(input: BrowserWorkerInput): Promise<numbe
   mkdirSync(directory, { recursive: true });
   const sharedReport = relative(root, mkdtempSync(join(directory, 'shared-')));
   const command = browserWorkerCommand({ ...input, files: sharedFiles, report: sharedReport }, '--shared-browser');
-  const env = { ...(input.env ?? process.env) };
-  // The descriptor belongs to this group's network namespace and lifetime.
-  delete env.WEB_TEST_DEV_SERVER;
   const child = Bun.spawn(['bun', 'scripts/isolated.ts', ...command], {
     cwd: app,
-    env,
+    env: input.env ?? process.env,
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -356,8 +390,9 @@ export async function runBrowserWorker(input: BrowserWorkerInput): Promise<numbe
   const ordinary = remaining.length ? readReportFragment(directory) : { failed: [], timings: {} };
   const current = Object.fromEntries(Object.entries(shared.timings).filter(([file]) => sharedFiles.includes(file)));
   writeTimings(join(directory, 'timings.json'), { ...shared.timings, ...ordinary.timings }, current);
-  const failed = [...ordinary.failed, ...(sharedCode && !shared.failed.length ? sharedFiles : shared.failed)];
-  writeBrowserFailures(directory, failed);
+  if (sharedCode && !shared.failed.length)
+    process.stderr.write(`Shared browser worker exited ${sharedCode} without a failed-file summary.\n`);
+  writeBrowserFailures(directory, [...ordinary.failed, ...shared.failed]);
   return sharedCode || code;
 }
 
