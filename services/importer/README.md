@@ -58,6 +58,8 @@ sealing and replay use the same intent; existing generations retain their prior 
 
 Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates its admitted acquisition mode; only complete mode classifies omissions before sealing. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
 
+Catalogue graph delivery replays exact prepared keys and bodies when a retryable 503 or a failed transaction commit leaves the effect unknown. Retry uses the existing page attempt and deadline budgets. A definite refusal or an exhausted recovery stops dependent publication.
+
 Decision: a waiter for a staged same-run dependency owned by another active record yields its parent's write-admission slot and reacquires through the adaptive scheduler before continuing; a failed dependency leaves its parent unclassified for sealed replay. This keeps earlier effects and exact pending bytes intact at width one.
 
 ## Command line, metadata and recovery
