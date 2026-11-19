@@ -28,7 +28,7 @@ async function setup(complete = false) {
     `/recovery${complete ? '#account_id=private-account&token=private-token' : ''}`,
   );
   const root = createRootRoute();
-  const route = Route.update({ id: '/recovery', path: '/recovery', getParentRoute: () => root } as never);
+  const route = createRoute({ path: '/recovery', getParentRoute: () => root, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => root, path: '/away', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: root.addChildren([route, away]) });

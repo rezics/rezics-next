@@ -14,7 +14,7 @@ afterAll(() => {
   if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
   else Reflect.deleteProperty(globalThis, 'scrollTo');
 });
-const { createRootRoute, createRoute, createRouter, createMemoryHistory, Outlet, RouterProvider } =
+const { createRootRoute, createRoute, createRouter, createBrowserHistory, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { Route } = await import('../src/routes/step-up');
 const passkeys = await import('../src/passkeys');
@@ -28,9 +28,9 @@ const signInQuery =
 async function setup(query = signInQuery) {
   window.history.replaceState(null, '', `/step-up${query}`);
   const parent = createRootRoute({ component: Outlet });
-  const stepUp = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => parent } as never);
+  const stepUp = createRoute({ path: '/step-up', getParentRoute: () => parent, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
-  const history = createMemoryHistory({ initialEntries: [`/step-up${query}`] });
+  const history = createBrowserHistory({ window: dom });
   const router = createRouter({ routeTree: parent.addChildren([stepUp, away]), history });
   await router.load();
   const supported = spyOn(passkeys, 'passkeysSupported').mockReturnValue(true);
@@ -55,6 +55,7 @@ async function setup(query = signInQuery) {
     return event.defaultPrevented;
   };
   const dispose = () => {
+    history.destroy();
     for (const spy of [supported, signInWithPasskey, cancel, assign]) spy.mockRestore();
   };
   cleanup = dispose;

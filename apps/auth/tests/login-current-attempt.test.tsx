@@ -6,16 +6,16 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
+import { button, creationFixture, dom, fill, flush, open as mount } from './creation-page-fixture';
 import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { initializeDocumentLocale } from '../src/locale-observation';
 import * as passkeys from '../src/passkeys';
 import type { PasskeySignInResult } from '../src/passkeys';
-import { Route } from '../src/routes/login';
-import { Route as StepUpRoute } from '../src/routes/step-up';
-import { button, creationFixture, dom, fill, flush, open as mount } from './creation-page-fixture';
 import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
+const { Route } = await import('../src/routes/login');
+const { Route: StepUpRoute } = await import('../src/routes/step-up');
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanup.splice(0)) close();
@@ -25,8 +25,12 @@ async function open(path = '/login') {
   initializeDocumentLocale('en');
   window.history.replaceState(null, '', `${path}?return_to=%2Fsecurity`);
   const parent = createRootRoute();
-  const route = Route.update({ id: '/login', path: '/login', getParentRoute: () => parent } as never);
-  const stepUp = StepUpRoute.update({ id: '/step-up', path: '/step-up', getParentRoute: () => parent } as never);
+  const route = createRoute({ path: '/login', getParentRoute: () => parent, component: Route.options.component });
+  const stepUp = createRoute({
+    path: '/step-up',
+    getParentRoute: () => parent,
+    component: StepUpRoute.options.component,
+  });
   const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: parent.addChildren([route, stepUp, away]) });

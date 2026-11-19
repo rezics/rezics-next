@@ -26,7 +26,7 @@ async function settle() {
 async function setup() {
   window.history.replaceState(null, '', '/step-up?return_to=%2Fsecurity');
   const parent = createRootRoute();
-  const stepUp = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => parent } as never);
+  const stepUp = createRoute({ path: '/step-up', getParentRoute: () => parent, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ routeTree: parent.addChildren([stepUp, away]), history });

@@ -7,11 +7,11 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
-import { Route } from '../src/routes/login';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
 import { nativeSignInProof } from './sign-in-fixture';
 creationFixture();
+const { Route } = await import('../src/routes/login');
 const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
 afterAll(() => {
@@ -35,7 +35,7 @@ async function setup(query = '?client_id=reader&scope=openid&scope=&sig=old&exp=
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   spies.push(assign);
   const parent = createRootRoute();
-  const login = Route.update({ id: '/login', path: '/login', getParentRoute: () => parent } as never);
+  const login = createRoute({ path: '/login', getParentRoute: () => parent, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => parent, path: '/recovery', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: parent.addChildren([login, away]) });
