@@ -60,13 +60,14 @@ async function create() {
 }
 
 test('Changed selected native cursor refuses before affected dispatch and failed validation cannot refill admission', async () => {
-  const account = newId(0x9d20);
+  const account = newId(0);
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();
   const registry = new HistoryRegistry();
-  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
-    home,
-  ]);
+  await f.admin.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','deleted',$2)",
+    [routeOf(account), account],
+  );
   await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
     routeOf(account),
     account,
