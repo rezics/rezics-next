@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { readRegistrationPage } from '../../../services/auth/src/registration-page';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -19,6 +20,7 @@ const paths = [
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const turnstileUrl = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 let child: ChildProcess | undefined;
+let issuer: ReturnType<typeof Bun.serve> | undefined;
 let started: Promise<string> | undefined;
 let browser: Browser | undefined;
 
@@ -60,13 +62,42 @@ function site(): Promise<string> {
     child.once('error', (error) => {
       startError = error;
     });
-    const origin = `http://127.0.0.1:${port}`;
+    const preview = `http://127.0.0.1:${port}`;
+    // Production Pages calls Auth behind the same origin. Keep the preview's public Host
+    // so its server function validates the browser Origin and reaches this issuer route.
+    issuer = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url);
+        if (url.pathname === '/registration-page') {
+          const headers = { 'cache-control': 'no-store' };
+          if (
+            request.method !== 'GET' ||
+            url.search ||
+            request.headers.get('origin') !== origin ||
+            request.headers.get('sec-fetch-site') === 'cross-site' ||
+            request.headers.has('authorization')
+          )
+            return Response.json({ error: 'unavailable' }, { status: 403, headers });
+          const page = await readRegistrationPage({
+            readSession: async () => new Response(null, { status: 401 }),
+            passwordLimits: async () => ({ minLength: 8, maxLength: 128 }),
+            verificationConfigured: true,
+          });
+          return Response.json(page, { headers });
+        }
+        url.host = new URL(preview).host;
+        return fetch(new Request(url, request), { redirect: 'manual' });
+      },
+    });
+    const origin = issuer.url.origin;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (startError) throw startError;
       if (child.exitCode !== null) throw new Error(`preview exited with ${child.exitCode}: ${output}`);
       try {
-        const response = await fetch(`${origin}/login`, { signal: AbortSignal.timeout(60_000) });
+        const response = await fetch(`${preview}/login`, { signal: AbortSignal.timeout(60_000) });
         await response.text();
         if (response.status < 500) return origin;
       } catch {}
@@ -111,14 +142,14 @@ async function page(locale = 'en') {
       render(element, options) {
         element.dataset.action = options.action;
         element.dataset.language = options.language;
-        options.callback('offline-turnstile-token');
+        window.addEventListener('offline-turnstile-complete', () => options.callback('offline-turnstile-token'), { once: true });
         return 'offline-widget';
       },
       reset() {}, remove() {}
     };`,
     }),
   );
-  // The production preview has no issuer backend. These are browser Auth responses, not kernel reads.
+  // Supply the other unauthenticated browser Auth responses used by this preview.
   await context.route(/\/(session|sessions|consent\/[^/?]+)(\?|$)/, (route) =>
     route.fulfill({
       status: 401,
@@ -131,6 +162,7 @@ async function page(locale = 'en') {
 
 afterAll(async () => {
   await browser?.close();
+  issuer?.stop(true);
   if (child?.pid) {
     try {
       process.kill(-child.pid, 'SIGTERM');
@@ -240,13 +272,33 @@ test(
           expect(await tab.locator('html').getAttribute('lang')).toBe(locale);
           expect(await tab.getByRole('heading').count()).toBeGreaterThan(0);
           if (path === '/signup') {
-            await tab.locator('.auth-signup-turnstile[data-action="signup"]').waitFor({ state: 'attached' });
-            expect(await tab.locator('.auth-signup-turnstile').getAttribute('data-language')).toBe(locale);
+            const widget = tab.locator('.auth-signup-turnstile > [data-action="signup"]');
+            await widget.waitFor({ state: 'attached' });
+            expect(await widget.getAttribute('data-language')).toBe(locale);
             expect(await tab.locator(`script[src="${turnstileUrl}"]`).count()).toBe(1);
-            await tab.locator('#signup-handle').fill('reader');
-            await tab.locator('#signup-email').fill('reader@example.test');
-            await tab.locator('#signup-password').fill('correct horse battery staple');
-            expect(await tab.locator('button[type="submit"]').isEnabled()).toBe(true);
+            const fields = [
+              ['#signup-handle', 'reader'],
+              ['#signup-email', 'reader@example.test'],
+              ['#signup-password', 'correct horse battery staple'],
+              ['#signup-confirm-password', 'correct horse battery staple'],
+            ] as const;
+            for (const [field, value] of fields) await tab.locator(field).fill(value);
+            let submissions = 0;
+            await tab.route(`${origin}/signup`, (route) => {
+              if (route.request().method() !== 'POST') return route.fallback();
+              submissions++;
+              return route.abort();
+            });
+            const submit = tab.locator('#signup-form button[type="submit"]');
+            await submit.click();
+            const missingToken = tab.locator('#signup-turnstile-error');
+            await missingToken.waitFor({ state: 'visible' });
+            expect(submissions).toBe(0);
+            await tab.evaluate(() => window.dispatchEvent(new Event('offline-turnstile-complete')));
+            await missingToken.waitFor({ state: 'hidden' });
+            expect(await submit.isEnabled()).toBe(true);
+            for (const [field] of fields) await tab.locator(field).fill('');
+            await tab.unroute(`${origin}/signup`);
           }
           expect(await tab.evaluate(() => (window as unknown as { violations: string[] }).violations)).toEqual([]);
         }
