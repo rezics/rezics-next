@@ -1,7 +1,7 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { readAgentPages } from '../../src/access/account-data.ts';
@@ -9,7 +9,7 @@ import type { Access } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 const kernel = createKernel({ pool, routeKey: new Uint8Array(32).fill(29) });
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(41)]]) };
 const created = '2000-01-01T00:00:00.123456Z';

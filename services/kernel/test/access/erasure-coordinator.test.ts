@@ -14,7 +14,7 @@ import {
   REGISTRATION_TTL_MS,
 } from '../../src/access/lifecycle.ts';
 import { advanceErasureCompletion } from '../../src/access/erasure.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
@@ -315,7 +315,7 @@ test('concurrent final acknowledgements complete once and event replay cannot re
   const request = { accountId, key: key() };
   await commands().tombstone(ctx, request);
   for (const id of ids.slice(0, -2)) await ack(accountId, id, 'none');
-  const otherPool = createPool(db.url);
+  const otherPool = createReceiptTestPool(db.url);
   try {
     await Promise.all([
       ack(accountId, ids.at(-2)!, 'none'),
@@ -636,7 +636,7 @@ test('retention resolution rolls back if its event fails and concurrent resoluti
     await db.admin.query('DROP TRIGGER reject_retention_event ON core.outbox');
     await db.admin.query('DROP FUNCTION public.reject_retention_event()');
   }
-  const otherPool = createPool(db.url);
+  const otherPool = createReceiptTestPool(db.url);
   try {
     await Promise.all([
       resolve(accountId),

@@ -1,7 +1,7 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -14,7 +14,7 @@ import openingInsert from '../../src/access/operator-opening-insert.sql';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 pool.options.max = 1;
 afterAll(() => pool.end());
 const keys = { current: 1, keys: new Map([[1, Buffer.alloc(32, 79)]]) };

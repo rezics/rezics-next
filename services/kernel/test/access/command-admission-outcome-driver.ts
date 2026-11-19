@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { fromPlainText } from '@rezics/document';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
@@ -11,6 +11,7 @@ import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { encodeReceiptKey, receiptKeysFor } from '../../src/command/receipt-key.ts';
 import type { CredentialFloorBinding, SessionProof } from '@rezics/auth-contract';
 import { createThread } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -65,21 +66,21 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
   const isolatedUrl = new URL(sourceUrl);
   isolatedUrl.pathname = `/${name}`;
 
-  let pool: ReturnType<typeof createPool> | undefined;
+  let pool: Pool | undefined;
   let fixturePool: Pool | undefined;
   let observationPool: Pool | undefined;
   let kernel: ReturnType<typeof createKernel> | undefined;
   let access!: ReturnType<typeof createAccess>;
   let closed = false;
   let nativeAt: string | null = null;
-  const otherPools: ReturnType<typeof createPool>[] = [];
+  const otherPools: Pool[] = [];
   const fixtureData = new WeakMap<Fixture, SeedData>();
   const createdDatabase = { value: false };
 
   try {
     await admin.query(`CREATE DATABASE ${quoteIdentifier(name)} TEMPLATE ${quoteIdentifier(sourceName)}`);
     createdDatabase.value = true;
-    const runtimePool = createPool(isolatedUrl.toString());
+    const runtimePool = createReceiptTestPool(isolatedUrl.toString());
     pool = runtimePool;
     runtimePool.options.max = 4;
     fixturePool = new Pool({ connectionString: isolatedUrl.toString(), max: 2 });
@@ -305,7 +306,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         const outcome = await createThread(
           {
             clock: () => new Date(),
-            pool: commandPool as ReturnType<typeof createPool>,
+            pool: commandPool as Pool,
             access,
             routeKey: new Uint8Array(32).fill(43),
           },
@@ -340,7 +341,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
     }
 
     async function otherPool(): Promise<object> {
-      const candidate = createPool(isolatedUrl.toString());
+      const candidate = createReceiptTestPool(isolatedUrl.toString());
       candidate.options.max = 1;
       otherPools.push(candidate);
       await candidate.query('SELECT current_database()');
@@ -527,6 +528,12 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
           [fixture.actor.accountId, threadCommandKind],
         ),
       ]);
+      // The shared contract uses request keys. Match them against the fixture's stored receipt keys.
+      const receiptKeys = receiptKeysFor(runtimePool);
+      const principal = { kind: 'account' as const, id: fixture.actor.accountId };
+      const requestKeys = new Map(
+        fixture.keys.map((key) => [encodeReceiptKey(receiptKeys, threadCommandKind, principal, key), key]),
+      );
       return {
         state: {
           threads: threadsResult.rows,
@@ -539,7 +546,11 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         },
         effects: threadsResult.rows,
         outbox: outboxResult.rows,
-        receipts: receiptsResult.rows,
+        receipts: receiptsResult.rows.map((row) => {
+          const key = requestKeys.get(row.key);
+          if (key === undefined) throw new Error('Native receipt does not match a fixture request key');
+          return { ...row, key };
+        }),
       };
     }
 

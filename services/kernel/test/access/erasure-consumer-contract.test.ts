@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import type { CommandTransaction } from '../../src/command/command.ts';
@@ -15,9 +15,9 @@ import { createOrganizationCloseRunner } from '../../src/access/organization-clo
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 // Separate pools bypass the process-local command gate: the race must reach PostgreSQL's row lock.
-const ownerPool = createPool(process.env.DATABASE_URL!);
+const ownerPool = createReceiptTestPool(process.env.DATABASE_URL!);
 afterAll(async () => {
   await pool.end();
   await ownerPool.end();

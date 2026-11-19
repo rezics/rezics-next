@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { readBatch } from '../../src/events/log.ts';
@@ -34,7 +34,7 @@ const { actionDeclarations, cookies, issuer, nativeFixture, password, scopes } =
   await import('./native-account-bindings-fixture.ts');
 
 const url = process.env.DATABASE_URL!;
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 const catalogueScopes = [
   ...scopes,
   'account:read',

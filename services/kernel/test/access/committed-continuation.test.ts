@@ -11,7 +11,7 @@ import {
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -64,7 +64,7 @@ let frozen: Date | null = null;
 let expiryGovernor: Awaited<ReturnType<typeof person>> | undefined;
 const clock = () => frozen ?? new Date();
 const admin = new Pool({ connectionString: connection('postgres') });
-const kernel = createPool(kernelUrl);
+const kernel = createReceiptTestPool(kernelUrl);
 const facts = new Pool({ connectionString: kernelUrl });
 let authPool: Pool | undefined;
 /** Proofs outlive host.stop(), which ends only the pool handed to the Auth host. */

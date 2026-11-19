@@ -1,3 +1,4 @@
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
@@ -18,13 +19,14 @@ import {
   type CommandAttempt,
   type CommandAuthorization,
 } from '../../src/command/command.ts';
+import { encodeReceiptKey, receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { actorFixture } from './actor-side-fixture.ts';
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
 const admin = createPool(process.env.DATABASE_URL!);
 const statements: string[] = [];
@@ -226,9 +228,14 @@ test('same formula authorizes anonymous at independent T before target checkout;
       ])
     ).rows,
   ).toEqual([{ n: 1 }]);
+  const storedKey = encodeReceiptKey(
+    receiptKeysFor(pool),
+    'test.anonymous.report',
+    { kind: 'anonymous', id: ANONYMOUS_PRINCIPAL_ID },
+    key.toLowerCase(),
+  );
   expect(
-    (await admin.query('SELECT count(*)::int AS n FROM core.receipt WHERE idempotency_key=$1', [key.toLowerCase()]))
-      .rows,
+    (await admin.query('SELECT count(*)::int AS n FROM core.receipt WHERE idempotency_key=$1', [storedKey])).rows,
   ).toEqual([{ n: 1 }]);
   expect(
     (

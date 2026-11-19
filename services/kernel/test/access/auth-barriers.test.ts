@@ -3,6 +3,7 @@ import { createAuthService, createBarrierProofVerifier, type AuthService, type T
 import { exportJWK, generateKeyPair } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
@@ -29,6 +30,7 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+configureTestReceiptKeys(pool);
 const lifecycle = createLifecycleInternals({
   pool,
   routeKey: new Uint8Array(32),

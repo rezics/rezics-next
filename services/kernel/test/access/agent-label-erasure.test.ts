@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { createPool } from '../../src/database/pool.ts';
+import { testReceiptKeysEnv } from '../support/receipt-keys.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
+import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
@@ -21,7 +23,7 @@ import { Value } from 'typebox/value';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
+const pool = createReceiptTestPool(databaseUrl);
 const route = 0x5348;
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const recovery = new Map<object, RecoveryEvidence>();
@@ -317,7 +319,7 @@ test("deleting a verified account reverses the verification first and then erase
   `;
   const worker = Bun.spawn([process.execPath, '-e', program], {
     cwd: new URL('../..', import.meta.url).pathname,
-    env: { ...process.env, REVERSAL: JSON.stringify(reversing.data) },
+    env: { ...process.env, ...testReceiptKeysEnv(receiptKeysFor(pool)), REVERSAL: JSON.stringify(reversing.data) },
     stdout: 'pipe',
     stderr: 'pipe',
   });

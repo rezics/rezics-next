@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { createPool } from '../../src/database/pool.ts';
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { AgentVerificationPageConflictError, writeAgentVerificationPage } from '../../src/access/agent-verification.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -16,7 +16,7 @@ const routeKey = new Uint8Array(32).fill(37);
 const clock = () => new Date();
 let admin: Pool;
 let databaseName: string;
-let pool: ReturnType<typeof createPool>;
+let pool: Pool;
 let kernel: ReturnType<typeof createKernel>;
 
 type AccountSeed = {
@@ -67,7 +67,7 @@ beforeAll(async () => {
   target.pathname = `/${databaseName}`;
   await admin.query(`CREATE DATABASE "${databaseName}"`);
   migrate(target.toString());
-  pool = createPool(target.toString());
+  pool = createReceiptTestPool(target.toString());
   kernel = createKernel({ pool, routeKey, clock });
 
   const verifiedSubject = newId(subjectRoute);

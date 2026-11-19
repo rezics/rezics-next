@@ -1,7 +1,8 @@
+import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { afterAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
-import { createPool, withConnection } from '../../src/database/pool.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { pageActiveAccounts } from '../../src/access/active-account-page.ts';
 import { readAccount, readPublicIdentities } from '../../src/access/account-data.ts';
@@ -133,7 +134,7 @@ export async function openNative(options: AccountDiscoveryNativeOptions): Promis
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(url);
+const pool = createReceiptTestPool(url);
 const routeKey = new Uint8Array(32).fill(83);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 let instant = Date.now();
