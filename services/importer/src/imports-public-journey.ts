@@ -15,7 +15,7 @@ import { relative, resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { WALK_COMMIT_CAUSES, type WalkCommitCause } from '@rezics/definitions/bulk';
 import { walkAcceptanceId, walkStackAdmitted } from '../../../scripts/stack-run.ts';
-import { walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
+import { startSeededWalkFrontends, walkStackLogPath, walkSubjectReadReason } from '../../../scripts/walk-stack.ts';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli, type ImportCliOptions } from './cli.ts';
 import { createImporter } from './importer.ts';
@@ -53,7 +53,6 @@ import {
   journeyViewports,
   runBangumiJourney,
   selectJourneyWorks,
-  startWalkStackActions,
   type JourneyMountedVisit,
   type JourneyPublishedRow,
   type JourneyTarget,
@@ -2036,10 +2035,7 @@ export async function runImportsPublicJourney(args: readonly string[] = []): Pro
     };
     await recordStage('mounted');
     try {
-      const frontends = await startWalkStackActions(
-        ['pages', 'web'],
-        [`${origins.issuer}/.well-known/openid-configuration`, origins.web],
-      );
+      const frontends = await startSeededWalkFrontends(root, origins);
       try {
         await runBangumiJourney({
           skipPersona: true,

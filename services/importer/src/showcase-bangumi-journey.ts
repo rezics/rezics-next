@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { startSeededWalkFrontends } from '../../../scripts/walk-stack.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
@@ -447,40 +448,6 @@ export type BangumiJourneyOptions = {
   onMountedVisit?(visit: JourneyMountedVisit): void | Promise<void>;
 };
 
-export async function startWalkStackActions(actions: readonly ('pages' | 'web')[], readyUrls: readonly string[]) {
-  const children = actions.map((action) =>
-    Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
-      cwd: root,
-      env: process.env,
-      stdin: 'ignore',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }),
-  );
-  const killOnExit = () => {
-    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-  };
-  process.once('exit', killOnExit);
-  try {
-    for (const url of readyUrls) await ready(url);
-  } catch (error) {
-    process.off('exit', killOnExit);
-    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    throw error;
-  }
-  return {
-    stop: async () => {
-      process.off('exit', killOnExit);
-      for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
-      await Promise.all(children.map((child) => child.exited));
-    },
-  };
-}
-
-async function startWalkFrontends(web: string, issuer: string) {
-  return startWalkStackActions(['pages', 'web'], [`${issuer}/.well-known/openid-configuration`, web]);
-}
-
 export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   const web = requiredOrigin('REZICS_LOCAL_STACK_WEB_ORIGIN');
   const issuer = requiredOrigin('REZICS_LOCAL_STACK_ISSUER_ORIGIN');
@@ -647,9 +614,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   const frontends =
     options.startFrontends === false
       ? undefined
-      : options.startFrontends === 'web'
-        ? await startWalkStackActions(['web'], [web])
-        : await startWalkFrontends(web, issuer);
+      : await startSeededWalkFrontends(root, { issuer, web });
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as {
     chromium: { launch(options: { headless: boolean; env?: NodeJS.ProcessEnv }): Promise<any> };

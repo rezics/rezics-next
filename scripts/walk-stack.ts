@@ -431,6 +431,64 @@ export async function waitUntilWalkReady(options: {
   }
 }
 
+/** Vite can answer an ordinary page before compiling the sign-in route. */
+async function untilWebSignInRedirect(web: string, children: readonly WalkReadyChild[]): Promise<void> {
+  const url = `${web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`;
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline) {
+    const exited = children.find((child) => child.exitCode !== null || child.signalCode !== null);
+    if (exited) throw new Error(`walk: web exited (${exited.exitCode ?? exited.signalCode}) before sign-in redirected`);
+    try {
+      const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+      if (response.status !== 404) return;
+    } catch {
+      // The listener can refuse a request while the route compiles.
+    }
+    await Bun.sleep(2_000);
+  }
+  throw new Error(`walk: web sign-in stayed HTTP 404 after compiling (${url})`);
+}
+
+/** Starts and owns the admitted walk's frontends once seed publication has completed. */
+export async function startSeededWalkFrontends(
+  root: string,
+  origins: { issuer: string; web: string },
+): Promise<{ stop(): Promise<void> }> {
+  const pagesUp = await walkOriginListening(origins.issuer);
+  const actions = pagesUp ? (['web'] as const) : (['pages', 'web'] as const);
+  const children = actions.map((action) =>
+    Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
+  const killOnExit = () => {
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  };
+  const stop = async () => {
+    process.off('exit', killOnExit);
+    await Promise.all(children.map((child) => stopSpawned(child)));
+  };
+  process.once('exit', killOnExit);
+  try {
+    await waitUntilWalkReady({
+      urls: [
+        ...(pagesUp ? [] : [`${origins.issuer}/.well-known/openid-configuration`]),
+        `${origins.web}${SEEDED_WEB_READY_PATH}`,
+      ],
+      children,
+    });
+    await untilWebSignInRedirect(origins.web, children);
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return { stop };
+}
+
 /** Seed import writes wait until topology remaining is zero, not only until one subject POST succeeds. */
 export async function waitUntilIdentityBootstrapRemainingZero(
   remaining: () => Promise<number | string>,
