@@ -3333,6 +3333,13 @@ CREATE INDEX conversation_activity_publication_source_idx ON core.outbox USING b
 
 
 --
+-- Name: effects_identity_admission_pending_idx; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX effects_identity_admission_pending_idx ON core.outbox USING btree (partition_no, "position") WHERE ((type = 'com.rezics.semantic.identity-epoch.admitted.v1'::text) AND (payload_state = 'present'::text));
+
+
+--
 -- Name: history_event_consumer_open_consumer; Type: INDEX; Schema: core; Owner: -
 --
 
