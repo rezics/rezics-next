@@ -1796,6 +1796,9 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
   128 total output slots). Each page/step supplies the internal cost object and harness evidence specified by
   [Filtered lists](../../../../docs/filtered-lists.md#cost). Otherwise use admitted bounded preparation or reject
   before enumeration. No raw candidate256 or fixed-home sweep requirement is carried forward.
+- Decision: execute compatible installed Book TypeLists through one native page request. Share the request's
+  authority and immutable publication inputs across the lists. Read each current Subject and summary key once per
+  phase, and keep the exact filter, examined frontier, cursor and withdrawal proof for every list.
 - Growth check: [growth-query](../../test/search/growth-query.test.ts), [growth-indexing](../../test/search/growth-indexing.test.ts),
   [growth-facets](../../test/search/growth-facets.test.ts) and [growth-rating-query](../../test/search/growth-rating-query.test.ts)
   record the Cost counters at three scales. Filter+source+order pages measure native iterator steps on the existing
