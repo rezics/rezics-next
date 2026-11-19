@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { inputByLabel } from './browser-fixture';
 import { nativeSignInProof } from './sign-in-fixture';
 import { signInPage } from './security-page-fixture';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -282,10 +283,10 @@ function signupCalls() {
 }
 
 async function form(page: Page) {
-  const handleInput = page.getByLabel('Handle', { exact: true });
-  const emailInput = page.getByLabel('Email', { exact: true });
-  const passwordInput = page.getByLabel('Password', { exact: true });
-  const confirmationInput = page.getByLabel('Confirm password', { exact: true });
+  const handleInput = inputByLabel(page, 'Handle');
+  const emailInput = inputByLabel(page, 'Email');
+  const passwordInput = inputByLabel(page, 'Password');
+  const confirmationInput = inputByLabel(page, 'Confirm password');
   await page.waitForFunction(
     () => document.querySelector('#signup-handle') !== null || document.querySelector('[role="alert"]') !== null,
     undefined,
@@ -294,7 +295,7 @@ async function form(page: Page) {
   if ((await handleInput.count()) !== 1)
     throw new Error(
       `sign-up form unavailable: ${JSON.stringify({
-        url: page.url(),
+        path: new URL(page.url()).pathname,
         alerts: await page.getByRole('alert').allTextContents(),
         status: await page.getByRole('status').allTextContents(),
         requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
@@ -355,7 +356,7 @@ test(
       const login = new URL(page.url());
       expect(login.pathname).toBe('/login');
       // Root hydration precedes the current native page read. Settle that advice before clicking its moving layout.
-      await page.getByLabel('Email', { exact: true }).waitFor({ state: 'visible' });
+      await inputByLabel(page, 'Email').waitFor({ state: 'visible' });
       expect(login.search.startsWith(`?${authorizationQuery}&exp=`)).toBe(true);
       const advice = calls.filter((call) => call.url === '/signin/page' && call.method === 'POST');
       expect(advice).toHaveLength(1);
@@ -373,9 +374,9 @@ test(
         // Distinguish a failed click/URL commit from signup advice or challenge readiness on this same visit.
         throw new Error(
           `login to signup did not commit: ${JSON.stringify({
-            url: page.url(),
+            path: new URL(page.url()).pathname,
             state: await page.evaluate(() => ({
-              href: document.querySelector('a[href^="/signup"]')?.getAttribute('href'),
+              hasSignupLink: document.querySelector('a[href^="/signup"]') !== null,
               ready: document.readyState,
               hydrated: 'hydrated' in document.documentElement.dataset,
             })),
@@ -565,7 +566,7 @@ test(
       expect(bodies).toHaveLength(1);
       const retry = page.getByRole('button', { name: 'Retry original attempt', exact: true });
       await retry.waitFor({ state: 'visible' });
-      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(await inputByLabel(page, 'Handle').count()).toBe(0);
       const uncertainty = await page.locator('#signup-uncertain-panel').innerText();
       expect(uncertainty).toContain(handle.toLowerCase());
       expect(uncertainty).toContain(email.toLowerCase());
@@ -641,7 +642,7 @@ test(
       const notice = await page.locator('#signup-uncertain-panel').innerText();
       expect(notice).toMatch(/original account creation may still have completed/i);
       expect(notice).not.toContain(password);
-      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(await inputByLabel(page, 'Handle').count()).toBe(0);
       const requests = signupCalls().map((call) => JSON.parse(call.body) as Record<string, string>);
       expect(requests).toHaveLength(2);
       expect(requests[1]!.key).toBe(requests[0]!.key);
@@ -676,7 +677,7 @@ test(
       await controls.submit.click();
       await page.getByRole('button', { name: 'Retry original attempt', exact: true }).waitFor();
       expect(bodies).toHaveLength(1);
-      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(await inputByLabel(page, 'Handle').count()).toBe(0);
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(0);
       expect(signupCalls()).toHaveLength(0);
@@ -793,7 +794,7 @@ test(
       expect(alertText).not.toMatch(/already exists|already registered|in use|address exists|email exists/i);
       expect(alertText).toMatch(/sign in/i);
       expect(alertText).toMatch(/recover/i);
-      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(await inputByLabel(page, 'Handle').count()).toBe(0);
       const links = await page.getByRole('link').evaluateAll((elements) =>
         elements.map((element) => ({
           href: (element as HTMLAnchorElement).href,
@@ -889,7 +890,7 @@ test(
       expect(message).not.toContain(misleadingRetry);
       expect(message).not.toContain(String(retryAfter));
       expect(await retry.isDisabled()).toBe(false);
-      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(await inputByLabel(page, 'Handle').count()).toBe(0);
       expect(signupCalls()).toHaveLength(1);
     } finally {
       await page.context().close();

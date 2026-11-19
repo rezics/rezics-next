@@ -1,4 +1,5 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { inputByLabel } from './browser-fixture';
 import { signInPage } from './security-page-fixture';
 import { nativeSignInProof } from './sign-in-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -357,7 +358,7 @@ test(
         await page.waitForURL(`${origin}/login`);
         await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
         expect(await page.getByLabel(/email/i).isEditable()).toBe(true);
-        expect(await page.getByLabel(/^password$/i).isEditable()).toBe(true);
+        expect(await inputByLabel(page, 'Password').isEditable()).toBe(true);
         await page.reload({ waitUntil: 'networkidle' });
         await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
         expect(page.url()).toBe(`${origin}/login`);
@@ -593,13 +594,16 @@ test(
     const { page, origin } = await open(`/authorize?${authorizationQuery}`);
     try {
       const address = page.getByLabel(/email/i);
-      const password = page.getByLabel(/^password$/i);
+      const password = inputByLabel(page, 'Password');
       await address.fill(email);
       await password.fill('correct horse battery staple');
-      await Promise.all([
-        page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+        ),
         page.getByRole('button', { name: 'Sign in', exact: true }).click(),
       ]);
+      expect(response.status()).toBe(200);
       const expected = new URLSearchParams(authorizationQuery);
       expected.delete('prompt');
       const resumedUrl = `/authorize?${expected.toString()}`;
