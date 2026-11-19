@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemberListRow, MemberReadingItem } from '../src/components/list-presentation.tsx';
 import type { CoverSummary } from '../src/components/cover.tsx';
+import { Button } from '../src/shadcn/button.tsx';
 
 const cover: CoverSummary = {
   media: 'member-cover',
@@ -32,7 +33,7 @@ test('MemberListRow composes its supplied subject facts and trailing control thr
           listPresentation: { imageAspect: 'landscape', keyFacts: ['schema:genre'] },
           ratio: '2:3',
           storyOverlay: true,
-          trailing: createElement('button', { type: 'button' }, 'More actions'),
+          trailing: createElement(Button, { type: 'button', size: 'sm' }, 'More actions'),
         },
         createElement(
           'p',
@@ -69,7 +70,11 @@ test('MemberListRow composes its supplied subject facts and trailing control thr
   expect(primaryLink).not.toContain('href="/genres/fantasy"');
   expect(primaryLink?.slice(primaryLink.indexOf('>') + 1)).not.toMatch(/<(?:a|button|input)\b/);
   expect(html.match(/<a\b/g)?.length).toBe(2);
-  expect(html).toContain('[&amp;_button]:min-h-11');
+  const trailing = html.match(/<div\b[^>]*data-content-item-slot="trailing"[^>]*>/)?.[0];
+  expect(trailing).toContain('relative z-10');
+  expect(trailing).toContain(':focus-visible]:outline-ring');
+  const button = html.match(/<button\b[^>]*>More actions<\/button>/)?.[0];
+  expect(button).toContain(' h-6 ');
 });
 
 test('MemberListRow keeps known Type defaults ahead of ratio and leaves unknown Type geometry to composition', () => {

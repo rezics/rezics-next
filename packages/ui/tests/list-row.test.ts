@@ -78,7 +78,10 @@ test("a shelf list row's vertical cover is at least 72 px wide on a phone and 96
   );
   expect(html).toContain('w-[72px]');
   expect(html).toContain('sm:w-24');
-  expect(html).toContain('style="aspect-ratio:5 / 7"');
-  expect(html).not.toMatch(/\bh-\d+/);
+  expect(html).toMatch(/<div\b[^>]*data-slot="cover"[^>]*data-ratio="5:7"[^>]*data-size="fill"/);
+  const frame = html.match(/<div\b[^>]*data-slot="aspect-ratio"[^>]*>/)?.[0];
+  expect(frame).toContain(`style="--ratio:${5 / 7}"`);
+  expect(frame).toContain('aspect-(--ratio)');
+  expect(html.match(/<li\b[^>]*>/)?.[0]).not.toMatch(/(?:^|[\s:"])h-(?:\d|\[)/);
   expect(html).not.toContain('divide-y');
 });

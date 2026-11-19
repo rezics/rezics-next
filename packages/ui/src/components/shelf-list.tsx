@@ -63,9 +63,10 @@ export function ShelfListRow({
     onSelectedChange?.(!selected);
     onSelect?.(event);
   };
+  const hasStatus = status != null && typeof status !== 'boolean';
+  const hasDate = date != null && typeof date !== 'boolean';
   const chip =
-    status != null &&
-    (statusMenu != null || statusMenuEntries != null ? (
+    hasStatus && (statusMenu != null || statusMenuEntries != null) ? (
       <Menu
         title={labels.status ?? 'Status'}
         trigger={
@@ -78,7 +79,7 @@ export function ShelfListRow({
       />
     ) : (
       status
-    ));
+    );
   return (
     <ContentItem
       forceOverlay={forceOverlay}
@@ -107,17 +108,17 @@ export function ShelfListRow({
       }
       metadata={meta}
       state={
-        chip != null || progress != null || stepper != null || date != null ? (
+        hasStatus || progress != null || stepper != null || hasDate ? (
           <div
             data-slot="shelf-list-row-state"
             className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
           >
-            {chip != null && (
+            {hasStatus && (
               <div data-slot="shelf-list-row-status" className="min-w-0 max-w-full whitespace-normal wrap-anywhere">
                 {chip}
               </div>
             )}
-            {chip != null && progress != null && (
+            {hasStatus && progress != null && (
               <span data-slot="shelf-list-row-separator" aria-hidden="true" className="sm:hidden">
                 ·
               </span>
@@ -147,7 +148,7 @@ export function ShelfListRow({
                 </Button>
               </div>
             )}
-            {date != null && (
+            {hasDate && (
               <span
                 data-slot="shelf-list-row-date"
                 className="min-w-0 max-w-full whitespace-normal text-xs text-muted-foreground wrap-anywhere"
