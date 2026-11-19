@@ -854,7 +854,53 @@ export async function preferCurrentCandidateAcknowledgements(
     const current = proposalIdentity((exact ?? fallback).command);
     selected.push(...group.filter((entry) => proposalIdentity(entry.command) === current));
   }
-  return selected;
+  // One exact fact can have several receipts after a retract and repropose. Resolve those
+  // generations before the manifest charges its candidate budget, preserving every live key.
+  const generations = new Map<string, Map<string, Extract<BatchCommand, { op: 'propose' }>>>();
+  for (const { candidateId, command, commandDigest } of selected) {
+    if (
+      !candidateId ||
+      command.op !== 'propose' ||
+      command.source.field_group !== 'facts' ||
+      commandDigest !== showcaseDigest(command)
+    )
+      continue;
+    const identity = proposalIdentity(command);
+    const receipts = generations.get(identity) ?? new Map();
+    receipts.set(candidateId, command);
+    generations.set(identity, receipts);
+  }
+  const superseded = new Set<string>();
+  for (const receipts of generations.values()) {
+    if (receipts.size < 2) continue;
+    const command = receipts.values().next().value!;
+    try {
+      const page = await candidatePage(
+        {
+          review,
+          id: command.subject,
+          property: command.statement.property.id,
+          slot: relationSlot(command.statement),
+          ...(journal ? { journal } : {}),
+        },
+        pageCache,
+      );
+      const exact = page.candidates.filter(
+        (candidate) =>
+          receipts.has(candidate.id) &&
+          showcaseSourceMatches(candidate.source, command.source) &&
+          showcaseStatementMatches(candidate.statement, command.statement),
+      );
+      if (exact.some((row) => row.retracted === null && row.decision !== 'rejected' && row.rank !== 'deprecated'))
+        for (const row of exact)
+          if (typeof row.retracted === 'number' && row.retracted > 0 && row.rank === null) superseded.add(row.id);
+    } catch {
+      // Leave uncertain receipts for the ordinary current validation and diagnostics.
+    }
+  }
+  return superseded.size
+    ? selected.filter(({ candidateId }) => !candidateId || !superseded.has(candidateId))
+    : selected;
 }
 
 export async function resolveLegacyCandidates(input: {
@@ -1689,22 +1735,6 @@ async function publishShowcasePhases(
     trace.assertions('completed', assertions.length, assertions.length);
   }
   validationGroups.clear();
-  // A source may retract a proposal and later submit the identical fact under a new native ID.
-  // Only a validated, live replacement on the same holder can supersede the historical receipt.
-  const liveFacts = new Set<string>();
-  const withdrawnFacts = new Map<string, string>();
-  for (const { record, assertion } of assertions) {
-    if (assertion.source.field_group !== 'facts') continue;
-    const candidate = validated.get(assertion.candidateId);
-    if (!candidate) continue;
-    const key = `${record.subjectId}\0${assertion.candidateDigest}`;
-    if (candidate.retracted === null && candidate.decision !== 'rejected' && candidate.rank !== 'deprecated')
-      liveFacts.add(key);
-    else if (typeof candidate.retracted === 'number' && candidate.retracted > 0 && candidate.rank === null)
-      withdrawnFacts.set(candidate.id, key);
-  }
-  for (const [id, key] of withdrawnFacts) if (liveFacts.has(key)) validated.delete(id);
-
   manifestAcknowledgements = manifestAcknowledgements.filter(
     (acknowledgement) => !acknowledgement.candidateId || validated.has(acknowledgement.candidateId),
   );

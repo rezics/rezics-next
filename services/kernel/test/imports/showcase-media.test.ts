@@ -17,8 +17,13 @@ import { acquireBangumiCoverSources } from '../../../importer/src/showcase-media
 import {
   captureShowcaseCommands,
   publishShowcase,
+  publishShowcaseVocabulary,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
+import {
+  prepareShowcaseBangumiSelectedCharacterVocabulary,
+  readShowcaseBangumiSelectedCharacterVocabulary,
+} from '../../../importer/src/showcase-bangumi-game-characters.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { developmentShowcaseSelection } from '../../../../scripts/datasets/cross-media-seed.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -320,6 +325,160 @@ test('synthetic selected Person and Organization images use the common authorize
 
 const characterWorkCoverSourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/native-10380.png';
 const characterSourceUrl = 'https://lain.bgm.tv/pic/crt/l/46/52/11546_crt_FlzuU.jpg';
+
+test('Bangumi work retains exact Character facts and native cover across catalogue reopen', async () => {
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-catalogue-reopen-'));
+  const statePath = join(directory, 'state.sqlite');
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  try {
+    const raw = emptyCrossMediaPlan();
+    const payload = { id: 51, type: 2, name: 'CLANNAD', name_cn: '团子大家族' };
+    raw.records.bangumi.push({ source: 'bangumi', key: '51', revision: null, payload });
+    raw.members.push({ source: 'bangumi', key: '51', kind: 'work', membership: 'family', franchise: 'clannad' });
+    raw.entities.bangumi.push({
+      source: 'bangumi',
+      key: 'character:11546',
+      revision: null,
+      payload: { id: 11546, type: 1, name: 'Fixture Character' },
+    });
+    raw.characterAppearances!.push({
+      subjectId: '51',
+      characterId: 11546,
+      roleCode: 1,
+      order: 0,
+      sourceIndex: 0,
+      sourceRow: { subject_id: 51, character_id: 11546, type: 1, order: 0 },
+    });
+    const bytes = await sharp({ create: { width: 40, height: 56, channels: 3, background: '#176aa0' } })
+      .png()
+      .toBuffer();
+    await runtime.mediaBoundary.source(sourceUrl, undefined, bytes);
+    const acquire = () =>
+      acquireBangumiCoverSources(raw, {
+        journal,
+        sleep: async () => {},
+        fetch: fixtureFetch(async (input) =>
+          String(input).endsWith('/characters/11546')
+            ? Response.json({ id: 11546, type: 1, name: 'Fixture Character', images: null })
+            : Response.json({
+                ...payload,
+                images: { large: sourceUrl, common: sourceUrl, medium: sourceUrl, small: sourceUrl, grid: sourceUrl },
+              }),
+        ),
+      });
+    const review = runtime.importTransport;
+    const publicClient = createPublicBulkClient({
+      origin: runtime.origin,
+      fetch: fixtureFetch(async (input) => {
+        const url = new URL(String(input));
+        return runtime.request(url.pathname + url.search);
+      }),
+    });
+    const editor = await openApiObserver(runtime);
+    expect(
+      (
+        await editor.http('/v1/grants', {
+          resource: { route: 0, id: GLOBAL_CONTEXT },
+          subject: { kind: 'account', id: runtime.identity.bulk.accountId },
+          actions: ['context:accept', 'context:adopt'],
+          valid: '(,)',
+        })
+      ).status,
+    ).toBe(201);
+    const mediaRequests: string[] = [];
+    const port = () =>
+      captureShowcaseCommands(
+        {
+          ...review,
+          async requestMedia(...args: Parameters<typeof review.requestMedia>) {
+            const receipt = await review.requestMedia(...args);
+            mediaRequests.push(receipt.body.media.id);
+            return receipt;
+          },
+        },
+        journal,
+      );
+    const seed = async (plan: typeof raw, bound = false) => {
+      const transport = port();
+      const bindings = bound
+        ? await readShowcaseBangumiSelectedCharacterVocabulary({ plan, port: transport, journal })
+        : undefined;
+      return seedCrossMedia(
+        plan,
+        statePath,
+        transport,
+        { origin: runtime.origin },
+        { providers: ['bangumi'], entitiesFirst: true, mediaDeadlineMs: 0, recordConcurrency: 1 },
+        bindings,
+      );
+    };
+    const plan = await acquire();
+    const firstImport = await seed(plan);
+    expect(mediaRequests).toHaveLength(1);
+    await runtime.mediaBoundary.drain({ mediaIds: mediaRequests, maxJobs: 16, signal: new AbortController().signal });
+    const publication = { plan, result: firstImport, aliases: crossMediaAliases, journal, review, publicClient };
+    const baselinePlan = { ...plan, characterAppearances: [] };
+    const baseline = await publishShowcase({ ...publication, plan: baselinePlan, result: await seed(baselinePlan) });
+    expect(baseline.status, JSON.stringify(baseline.omissions)).toBe('published');
+    let vocabularyRequirements: Awaited<
+      ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>
+    >['requirements'] = [];
+    for (const stage of ['schemes', 'concepts'] as const) {
+      const vocabulary = await prepareShowcaseBangumiSelectedCharacterVocabulary({
+        plan,
+        port: port(),
+        journal,
+        stage,
+      });
+      vocabularyRequirements = vocabulary.requirements;
+      const report = await publishShowcaseVocabulary({ ...publication, vocabularyRequirements });
+      expect(report.published.map(({ sourceKey }) => sourceKey).sort(), JSON.stringify(report.omissions)).toEqual(
+        vocabularyRequirements.map(({ sourceKey }) => sourceKey).sort(),
+      );
+    }
+    const publish = (plan: typeof raw, result: typeof firstImport) =>
+      publishShowcase({ ...publication, plan, result, journal, vocabularyRequirements });
+    const firstBound = await seed(plan, true);
+    expect(firstBound.characterDiagnostics).toEqual([]);
+    const first = await publish(plan, firstBound);
+    expect(first.status, JSON.stringify(first.omissions)).toBe('published');
+    const work = first.published.find(({ sourceKey }) => sourceKey === '51')!;
+    expect(work.assertions).toContainEqual(
+      expect.objectContaining({
+        property: 'schema:character',
+        citations: ['https://bgm.tv/subject/51#/subject-characters/0/type'],
+        qualifiers: expect.arrayContaining([expect.objectContaining({ property: { id: 'wdt:P3831' } })]),
+      }),
+    );
+    const cover = first.manifest.media.find(({ sourceKey }) => sourceKey === '51')!;
+    expect(cover).toMatchObject({
+      mediaId: mediaRequests[0],
+      sourceUrl,
+      provenance: { external_id: '51', field_group: 'cover' },
+      readHandoff: { subjectId: work.subjectId, property: 'schema:image', value: mediaRequests[0] },
+    });
+    const sealed = journal.acknowledgedCommands();
+
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const reopenedPlan = await acquire();
+    await expect(seed(reopenedPlan)).resolves.toBeDefined();
+    const reopenedBound = await seed(reopenedPlan, true);
+    expect(reopenedBound.characterDiagnostics).toEqual([]);
+    const reopened = await publish(reopenedPlan, reopenedBound);
+    expect(reopened.status, JSON.stringify(reopened.omissions)).toBe('published');
+    expect(reopened.published.find(({ sourceKey }) => sourceKey === '51')).toEqual(work);
+    expect(reopened.manifest.media.find(({ sourceKey }) => sourceKey === '51')).toEqual(cover);
+    expect(journal.acknowledgedCommands()).toEqual(sealed);
+    expect(mediaRequests).toHaveLength(1);
+  } finally {
+    journal.close();
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);
 
 test('default finite Bangumi selection imports a direct Character image through native review and fencing', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });

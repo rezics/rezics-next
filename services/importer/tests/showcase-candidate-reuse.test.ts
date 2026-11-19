@@ -103,6 +103,62 @@ test('exact command keys survive native candidate reuse through publication', as
   }
 });
 
+test('only a current exact reproposal can displace withdrawn facts before the manifest candidate limit', async () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const command: BatchCommand = {
+      op: 'propose',
+      key: 'appearance',
+      subject: id(1),
+      source: {
+        source: 'bangumi_cross_media',
+        external_id: '51',
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'cross-media-entities@16',
+        field_group: 'facts',
+      },
+      statement: { property: { id: 'schema:character' }, value: { type: 'value', content: id(2) }, references: [] },
+    };
+    const currentId = id(showcaseLimits.candidatesPerRecord + 10);
+    const withdrawn = Array.from({ length: showcaseLimits.candidatesPerRecord }, (_, index) => ({
+      id: id(index + 10),
+      source: command.source,
+      statement: command.statement,
+      retracted: 2 as number | null,
+      rank: null,
+    }));
+    for (const [key, candidate] of [
+      ...withdrawn.map(({ id }) => [`a-history-${id}`, id]),
+      ['z-current', currentId],
+      ['z-replay', currentId],
+    ] as const) {
+      const receipt = { ...command, key };
+      journal.prepareCommand(receipt);
+      journal.acknowledgeCommand(receipt, { key, status: 200, value: { candidate, revision: 4 } });
+    }
+    const acks = journal.acknowledgedCommands();
+    let rows = withdrawn;
+    const review = {
+      async reviewedCandidates(_subject: string, query: { cursor?: string }) {
+        const offset = Number(query.cursor ?? 0);
+        return {
+          candidates: rows.slice(offset, offset + 100),
+          next: offset + 100 < rows.length ? String(offset + 100) : null,
+          adoption: null,
+        } as never;
+      },
+    };
+    expect(await preferCurrentCandidateAcknowledgements(acks, review, new Map())).toEqual(acks);
+    rows = [...withdrawn, { ...withdrawn[0]!, id: currentId, retracted: null }];
+    const selected = await preferCurrentCandidateAcknowledgements(acks, review, new Map());
+    expect(selected.map(({ command }) => command.key)).toEqual(['z-current', 'z-replay']);
+    expect(journal.acknowledgedCommands()).toEqual(acks);
+  } finally {
+    journal.close();
+  }
+});
+
 test('an exact selected command remains addressable beyond the historical acknowledgement page', () => {
   const journal = new ShowcaseJournal(':memory:');
   try {

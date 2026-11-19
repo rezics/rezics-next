@@ -1,5 +1,6 @@
 import { bangumiCharacterKind } from '@rezics/conversion/cross-media-entities';
 import { bundledDigest } from '@rezics/definitions/bundled';
+import type { BatchWriteRequest } from '@rezics/definitions/bulk';
 import type {
   NativeIdentity,
   SourceRecord,
@@ -18,6 +19,7 @@ import { ImportTransportError, type ReviewedSubjectRead } from './import-client.
 import type { Importer, ImportRunResult } from './importer.ts';
 import { type BangumiCharacterAppearance } from './showcase-contract.ts';
 import { bangumiAppearanceProposalSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
+import type { Candidate } from './record-bindings.ts';
 import { createSourceRegistration, crossMediaBangumiRevision, type SourceAssets } from './source-registry.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -37,6 +39,19 @@ const taxonomyGroups: Record<keyof typeof schemes, string> = {
   'bangumi.person.career': 'person.career',
 };
 type Taxonomy = keyof typeof schemes;
+
+/** The baseline conversion does not project these vocabulary facts on either work or Character records. */
+export function ownsBangumiCharacterFidelityCandidate(candidate: Candidate, alias: string): boolean {
+  if (candidate.field_group !== 'facts' || !candidate.key.startsWith(`${alias}:`)) return false;
+  const proposal = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0];
+  if (proposal?.op !== 'propose' || proposal.source.source !== alias) return false;
+  const { external_id: key, converter_revision: revision } = proposal.source;
+  const property = proposal.statement.property.id;
+  return (
+    (property === 'schema:character' && revision === entityRevision && /^[1-9][0-9]*$/u.test(key)) ||
+    (property === 'schema:keywords' && revision === crossMediaBangumiRevision && key.startsWith('character:'))
+  );
+}
 
 // Leave capacity for other requests sharing the normal Subject read lane.
 const FIDELITY_READ_WIDTH = 4;
