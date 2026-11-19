@@ -65,6 +65,30 @@ function observe(copy: LiveCopy): LiveCopy {
 export function liveCopyLocator(copy: LiveCopy): LiveCopyLocator {
   return { route: copy.route, transitionId: copy.transition_id };
 }
+
+/** Advance from the observed listing frontier only while it is still current. */
+export async function advanceListingBootstrap(
+  tx: OperationalTransaction,
+  partition: number,
+  frontier: { after_route: number; after_subject: string; after_collection: string },
+  next: { route: number; subject_id: string; collection_id: string } | null,
+): Promise<void> {
+  await tx.query(
+    `UPDATE access.live_copy_bootstrap SET after_route=$5,after_subject=$6,after_collection=$7,covered=$8
+     WHERE partition_no=$1 AND (after_route,after_subject,after_collection)=($2,$3::uuid,$4::uuid) AND NOT covered`,
+    [
+      partition,
+      frontier.after_route,
+      frontier.after_subject,
+      frontier.after_collection,
+      next?.route ?? frontier.after_route,
+      next?.subject_id ?? frontier.after_subject,
+      next?.collection_id ?? frontier.after_collection,
+      !next,
+    ],
+  );
+}
+
 function roster(roles: readonly LiveCopyRole[]): readonly LiveCopyRole[] {
   const byAccount = new Map<string, number>();
   for (const role of roles) {

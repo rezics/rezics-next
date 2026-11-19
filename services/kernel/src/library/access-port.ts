@@ -63,6 +63,7 @@ import type {
 import type { readAccountDiscoverySummaries as NativeReadAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import type { ACCESS_EVENTS as NativeAccessEvents } from '../access/events.ts';
 import type {
+  advanceListingBootstrap as NativeAdvanceListingBootstrap,
   admitLiveCopyRoles as NativeAdmitLiveCopyRoles,
   cancelLiveCopy as NativeCancelLiveCopy,
   consumeLiveCopy as NativeConsumeLiveCopy,
@@ -121,6 +122,7 @@ export type LibraryAccessPorts = Readonly<{
   readLiveCopy: typeof NativeReadLiveCopy;
   readLiveCopyDomain: typeof NativeReadLiveCopyDomain;
   readLiveCopyResult: typeof NativeReadLiveCopyResult;
+  advanceListingBootstrap: typeof NativeAdvanceListingBootstrap;
   admitLiveCopyRoles: typeof NativeAdmitLiveCopyRoles;
   observeLiveCopyAdmissions: typeof NativeObserveLiveCopyAdmissions;
   openLiveCopyGate: typeof NativeOpenLiveCopyGate;
@@ -259,6 +261,9 @@ export const readLiveCopyDomain: LibraryAccessPorts['readLiveCopyDomain'] = (...
 
 export const readLiveCopyResult: LibraryAccessPorts['readLiveCopyResult'] = (...args) =>
   requireLibraryAccess().readLiveCopyResult(...args);
+
+export const advanceListingBootstrap: LibraryAccessPorts['advanceListingBootstrap'] = (...args) =>
+  requireLibraryAccess().advanceListingBootstrap(...args);
 
 export const admitLiveCopyRoles: LibraryAccessPorts['admitLiveCopyRoles'] = (...args) =>
   requireLibraryAccess().admitLiveCopyRoles(...args);

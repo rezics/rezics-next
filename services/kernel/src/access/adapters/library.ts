@@ -27,6 +27,7 @@ import {
 import { readAccountDiscoverySummaries } from '../account-discovery-source.ts';
 import { ACCESS_EVENTS } from '../events.ts';
 import {
+  advanceListingBootstrap,
   admitLiveCopyRoles,
   cancelLiveCopy,
   consumeLiveCopy,
@@ -83,6 +84,7 @@ export function createLibraryAccessPorts(): LibraryAccessPorts {
     readLiveCopy,
     readLiveCopyDomain,
     readLiveCopyResult,
+    advanceListingBootstrap,
     admitLiveCopyRoles,
     observeLiveCopyAdmissions,
     openLiveCopyGate,
