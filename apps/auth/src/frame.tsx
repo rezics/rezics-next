@@ -50,7 +50,9 @@ export function AuthPage({
         {identity}
         {returnToSecurity ? (
           <nav className="auth-operation-exit" aria-label={m.auth_security_heading()}>
-            <a href="/security">{m.auth_account_operation_return()}</a>
+            <a className="pointer-coarse:hitbox-y-2" href="/security">
+              {m.auth_account_operation_return()}
+            </a>
             <p>{m.auth_account_operation_leave_notice()}</p>
           </nav>
         ) : null}

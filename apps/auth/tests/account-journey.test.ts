@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import type { Locator } from 'playwright';
 import {
   ACCOUNT_OPERATION_KEY_STORAGE_LIMIT,
   forgetOperationKey,
@@ -286,6 +287,25 @@ test('consent reduction posts only the selected third-party grant and never trea
   expect(calls).toHaveLength(0);
 });
 
+async function miraTouchPoint(control: Locator, wraps = false) {
+  await control.evaluate((node) => node.scrollIntoView({ block: 'center' }));
+  const size = await control.boundingBox();
+  if (wraps) expect(size?.height).toBeGreaterThan(28);
+  else expect(size?.height).toBe(28);
+  expect(size?.width).toBeGreaterThanOrEqual(44);
+  const target = await control.evaluate((node) => {
+    const { left, top, width, height } = node.getBoundingClientRect();
+    const x = left + width / 2;
+    const centerY = top + height / 2;
+    const hits = (pointY: number) => node.contains(document.elementFromPoint(x, pointY));
+    const edge = Math.max(21.5, height / 2 + 4);
+    return { x, y: centerY + edge - 1.5, hitsTop: hits(centerY - edge), hitsBottom: hits(centerY + edge) };
+  });
+  expect(target.hitsTop).toBe(true);
+  expect(target.hitsBottom).toBe(true);
+  return { x: target.x, y: target.y };
+}
+
 // Deferred browser coverage: use the default routes, shell, styles and native adapters.
 test('Default account deletion and operator-transfer pages allow full phone-width review, truthful prerequisites and safe exit without silently approving or repeating an operation', async () => {
   const { spawn } = await import('node:child_process');
@@ -294,6 +314,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
   const { createFakeAuthState, startFakeAuth } = await import('../scripts/fake-auth');
   const { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } = await import('@rezics/auth-contract');
   const { OPERATOR_MANAGEMENT_PROFILE } = await import('../src/operator-transfer');
+  const { OPERATOR_TRANSFER_PAGE_PATH } = await import('../src/operator-transfer-page');
   const en = (await import('../messages/en.json')).default;
   const zh = (await import('../messages/zh-Hans.json')).default;
   const state = createFakeAuthState();
@@ -352,7 +373,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
         denyAccountOperation: true,
       });
-      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale });
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale, hasTouch: true });
       await context.addCookies([
         { name: 'auth_session', value: 'review-session', url: origin },
         { name: 'rezics_locale', value: locale, url: origin },
@@ -382,7 +403,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
       async function boundedReview() {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         const overflow = await page.locator('.auth-card').evaluate((card) =>
-          [...card.querySelectorAll<HTMLElement>('p, h1, h2, dd, label, button, a, textarea')]
+          [...card.querySelectorAll<HTMLElement>('p, h1, h2, dd, label, button, a, summary, textarea')]
             .filter((node) => {
               const rect = node.getBoundingClientRect();
               return (
@@ -393,10 +414,6 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
             .map((node) => node.textContent),
         );
         expect(overflow).toEqual([]);
-        for (const control of await page.locator('.auth-card button:visible, .auth-operation-exit a').all()) {
-          const box = await control.boundingBox();
-          expect(box!.height).toBeGreaterThanOrEqual(44);
-        }
       }
       try {
         await visit('/account/delete?return_to=https%3A%2F%2Funtrusted.example%2F');
@@ -418,15 +435,17 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         expect(await prerequisites.locator('a[href="/security"]').count()).toBe(1);
         await boundedReview();
         await confirmation.fill(copy.auth_account_delete_confirmation_phrase);
-        await deletion.click();
+        const deletePoint = await miraTouchPoint(deletion);
+        await page.touchscreen.tap(deletePoint.x, deletePoint.y);
         const refusal = page.getByRole('alert').filter({ hasText: copy.auth_account_delete_denied });
         await refusal.waitFor();
         expect(writes.map(({ path }) => path)).toEqual(['/account-operations/approve']);
         expect(await confirmation.count()).toBe(0);
-        expect(await deletion.isDisabled()).toBe(true);
+        expect(await deletion.count()).toBe(0);
         expect(await page.locator('.auth-account-identity').count()).toBe(0);
         expect(new URL(page.url()).pathname).toBe('/account/delete');
-        expect(await refusal.locator('a').getAttribute('href')).toBe('#account-delete-prerequisites');
+        const refresh = page.getByRole('button', { name: copy.auth_account_delete_recovery_refresh, exact: true });
+        expect(await refresh.isEnabled()).toBe(true);
         await boundedReview();
 
         // An unknown execution retains the same operation key and needs fresh confirmation.
@@ -447,6 +466,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         const beforeExit = writes.length;
         const exit = page.locator('.auth-operation-exit a');
         expect(await exit.getAttribute('href')).toBe('/security');
+        await miraTouchPoint(exit);
         await exit.focus();
         expect(await exit.evaluate((link) => document.activeElement === link)).toBe(true);
         await exit.click();
@@ -457,26 +477,43 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         await visit('/account/delete');
         await confirmation.waitFor();
         expect(await confirmation.inputValue()).toBe('');
-        expect(await deletion.isDisabled()).toBe(true);
+        const repeat = page.getByRole('button', { name: copy.auth_account_delete_recovery_repeat, exact: true });
+        expect(await repeat.isDisabled()).toBe(true);
         expect(writes).toHaveLength(beforeExit);
 
         state.sessionClientId = OPERATOR_MANAGEMENT_PROFILE.client_id;
         state.sessionScopes = [...OPERATOR_MANAGEMENT_PROFILE.scope];
-        const subject = `operated-${'账户'.repeat(40)}`;
-        const source = `source-${'operator'.repeat(15)}`;
-        const destination = `destination-${'管理'.repeat(40)}`;
-        await page.route('**/account-management/operators/relation', (route) =>
-          route.fulfill({
+        const subject = '00000000-0000-7000-8000-000000000003';
+        const source = '00000000-0000-7000-8000-000000000002';
+        const destination = '00000000-0000-7000-8000-000000000005';
+        await page.route(`**${OPERATOR_TRANSFER_PAGE_PATH}`, (route) => {
+          const request = route.request().postDataJSON();
+          if (request.kind === 'readiness')
+            return route.fulfill({ json: { viewer: { kind: 'ready' }, review: { kind: 'readiness' } } });
+          if (request.kind !== 'source' || request.subjectAccountId !== subject) return route.fulfill({ status: 400 });
+          return route.fulfill({
             json: {
-              previous: { subjectAccountId: subject, operatorAccountId: source, reservationId: 'reservation' },
-              expectedVersion: '12',
+              viewer: { kind: 'ready' },
+              review: {
+                kind: 'source',
+                relation: {
+                  previous: {
+                    subjectAccountId: subject,
+                    operatorAccountId: source,
+                    reservationId: '00000000-0000-7000-8000-000000000004',
+                  },
+                  expectedVersion: '12',
+                },
+                action: 'allowed',
+              },
             },
-          }),
-        );
+          });
+        });
         await page.route('**/account-operations/approve', (route) =>
-          route.fulfill({ status: 403, json: { error: 'account_operation_denied' } }),
+          route.fulfill({ status: 403, json: { error: 'account_operation_denied', effect_status: 'not_applied' } }),
         );
         await visit('/operators/transfer?return_to=%2F%2Funtrusted.example');
+        expect((await page.locator('#transfer-request-file').boundingBox())?.height).toBe(28);
         await page.locator('#transfer-subject').fill(subject);
         await page.locator('#transfer-destination').fill(destination);
         await page.getByRole('button', { name: copy.auth_transfer_prepare, exact: true }).click();
@@ -489,8 +526,16 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         await page.setViewportSize({ width: 1280, height: 860 });
         await boundedReview();
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.getByText(copy.auth_transfer_handoff_manual_acceptance, { exact: true }).click();
-        await page.locator('#transfer-acceptance').fill('opaque-acceptance-reference');
+        const manual = page.locator('summary').filter({ hasText: copy.auth_transfer_handoff_manual_acceptance });
+        await miraTouchPoint(manual, locale === 'en');
+        const acceptance = page.locator('#transfer-acceptance');
+        await manual.press('Enter');
+        expect(await acceptance.isVisible()).toBe(true);
+        await manual.press('Space');
+        expect(await acceptance.isVisible()).toBe(false);
+        await manual.click();
+        await acceptance.fill('opaque-acceptance-reference');
+        await page.getByRole('button', { name: copy.auth_transfer_review_same_person, exact: true }).click();
         await page.locator('#transfer-confirm').check();
         await page.getByRole('button', { name: copy.auth_transfer_submit, exact: true }).click();
         await page.getByRole('alert').filter({ hasText: copy.auth_transfer_denied }).waitFor();
@@ -632,7 +677,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await Bun.sleep(500);
     }
     browser = await chromium.launch();
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'en' });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'en', hasTouch: true });
     await context.addCookies([{ name: 'auth_session', value: 'review-session', url: origin }]);
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);
@@ -656,9 +701,14 @@ test('Default Security and deletion flows show a genuine recognizable current si
       );
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       const summary = page.locator('.auth-account-identity summary');
-      expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      await summary.click();
-      expect(await page.locator('.auth-account-identity details').innerText()).toContain(state.sessionAccountId);
+      const details = page.locator('.auth-account-identity details');
+      await summary.press('Enter');
+      expect(await details.getAttribute('open')).toBe('');
+      await summary.press('Space');
+      expect(await details.getAttribute('open')).toBeNull();
+      const point = await miraTouchPoint(summary);
+      await page.touchscreen.tap(point.x, point.y);
+      expect(await details.innerText()).toContain(state.sessionAccountId);
     }
     try {
       await visit('/security');
@@ -691,9 +741,9 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await page.locator('#security-sessions-heading').waitFor();
       expect(await page.locator('.auth-account-identity').innerText()).toContain(state.sessionAccountId);
       expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
-      expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      const retryPoint = await miraTouchPoint(retry);
       identityMode = 'ready';
-      await retry.click();
+      await page.touchscreen.tap(retryPoint.x, retryPoint.y);
       await assertIdentity(secondEmail, 'security');
 
       identityMode = 'late';

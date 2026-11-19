@@ -814,11 +814,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   return (
     <AuthPage heading={m.auth_members_heading()}>
       {router ? (
-        <Link to="/security" className="inline-flex min-h-11 items-center underline underline-offset-4">
+        <Link to="/security" className="auth-members-back pointer-coarse:hitbox-y-2 underline underline-offset-4">
           {m.auth_members_back()}
         </Link>
       ) : (
-        <a href="/security" className="inline-flex min-h-11 items-center underline underline-offset-4">
+        <a href="/security" className="auth-members-back pointer-coarse:hitbox-y-2 underline underline-offset-4">
           {m.auth_members_back()}
         </a>
       )}

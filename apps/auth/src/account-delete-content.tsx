@@ -892,7 +892,7 @@ export function DeleteAccountContent({
               advice.action !== 'available'
             }
             aria-busy={pending}
-            className="w-full"
+            className="w-full pointer-coarse:hitbox-y-[9px]"
           >
             {attempt?.uncertain ? m.auth_account_delete_recovery_repeat() : m.auth_account_delete_submit()}
           </Button>

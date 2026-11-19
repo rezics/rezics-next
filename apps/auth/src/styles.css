@@ -176,12 +176,32 @@ body {
 }
 
 .auth-operation-exit a,
+.auth-members-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+}
+
+@media (pointer: coarse) {
+  .auth-operation-exit a,
+  .auth-members-back,
+  .auth-disclosure {
+    margin-block-end: 0.5rem;
+  }
+
+  details:has(> .auth-disclosure) {
+    padding-block-start: 0.5rem;
+  }
+}
+
+.auth-operation-exit a,
 .auth-account-operation-success a {
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 
 .auth-operation-exit a:focus-visible,
+.auth-members-back:focus-visible,
 .auth-account-operation-requirements a:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 4px;
@@ -251,11 +271,13 @@ body {
   font-size: 0.875rem;
 }
 
-.auth-account-identity summary {
+.auth-disclosure {
+  min-height: 1.75rem;
+  align-content: center;
   cursor: pointer;
 }
 
-.auth-account-identity summary:focus-visible {
+.auth-disclosure:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
