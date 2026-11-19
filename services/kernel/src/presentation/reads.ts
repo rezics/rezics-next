@@ -15,6 +15,8 @@ import { SESSION_HEADER } from '../http/request.ts';
 import { ProblemError, problemResponse } from '../http/problem.ts';
 import type { FieldError } from '../http/problem.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { bookTypeListRequest } from '../search/request.ts';
+import type { BookCatalogueReader } from '../search/http/catalogue-search.ts';
 import { runComposedPageReads } from '../search/composed-book-reads.ts';
 import { validateSearchLimit } from '../search/hits.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
@@ -700,6 +702,7 @@ export function preparePageRead(
 }
 
 export async function readPage(options: {
+  bookCatalogue?: BookCatalogueReader;
   dispatch: (request: Request) => Promise<Response>;
   incoming: Request;
   /** Original absolute page deadline; an earlier ambient request deadline also applies. */
@@ -779,6 +782,21 @@ async function executePageReads(options: Parameters<typeof readPage>[0], lifetim
   const execute = async (read: PreparedRead): Promise<DispatchResult> => {
     lifetime.check();
     const descriptor = read.descriptor;
+    if (options.bookCatalogue && descriptor.kind === 'search') {
+      const request = bookTypeListRequest(descriptor.body, descriptor.cursor);
+      if (request) {
+        budget.charge(nativeCost(read));
+        try {
+          const body = await options.bookCatalogue(request);
+          lifetime.check();
+          return { result: { status: 200, body }, tokens: [] };
+        } catch (error) {
+          lifetime.check();
+          const response = problemResponse(error, { method: 'POST', id: Bun.randomUUIDv7(), action: 'subject:read' });
+          return { result: await lifetime.result(response), tokens: [] };
+        }
+      }
+    }
     if (descriptor.kind === 'members' && descriptor.source.kind !== 'collection') {
       const concealed = (): DispatchResult => ({ result: { status: 404, body: { code: 'not_found' } }, tokens: [] });
       if (!options.resolveBuiltin)

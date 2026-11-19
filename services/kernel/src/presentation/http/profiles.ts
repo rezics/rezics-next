@@ -84,6 +84,7 @@ export function profileRoutes(
     routeKey,
     clock,
     deadlineNow,
+    bookSearch,
   }: {
     pool: Pool;
     access?: Access | AccessFactory;
@@ -91,6 +92,7 @@ export function profileRoutes(
     routeKey: Uint8Array;
     clock: () => Date;
     deadlineNow: () => number;
+    bookSearch?: Parameters<typeof pageRoutes>[1]['bookSearch'];
   },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
@@ -326,6 +328,7 @@ export function profileRoutes(
     clock,
     deadlineNow,
     dispatch: (request) => app.handle(request),
+    ...(bookSearch ? { bookSearch } : {}),
     ...(access === undefined ? {} : { access }),
   });
 }

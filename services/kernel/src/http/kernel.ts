@@ -601,6 +601,17 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   });
   profileRoutes(app, {
     ...dependencies,
+    ...(dependencies.search
+      ? {
+          bookSearch: {
+            service: dependencies.search,
+            includeEligibility:
+              !dependencies.access ||
+              typeof dependencies.access === 'function' ||
+              typeof dependencies.access.prepare === 'function',
+          },
+        }
+      : {}),
     tokens,
     clock,
     access: (config) => resolveAccess({ ...config, realmRoleReader }),

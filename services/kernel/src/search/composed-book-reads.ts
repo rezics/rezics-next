@@ -15,6 +15,13 @@ import type {
 } from '../semantic/index.ts';
 import { readPageControls, type ControlRow, type PageControl } from './book-page-controls.ts';
 import { readBookIdentities, type BookIdentityRead } from './composed-book-identities.ts';
+import { readBookSummaries, type BookSummaryRead } from './composed-book-summaries.ts';
+import {
+  readBookCandidates,
+  readBookFigures,
+  type BookCandidateRead,
+  type BookFigureRead,
+} from './composed-book-candidates.ts';
 import { withPublicFilterCoverageStarts } from './public-filter-coverage-page.ts';
 
 type Population = Extract<PrivacyReductionObservationRequest, { kind: 'population' }>;
@@ -51,6 +58,67 @@ function phase<T>(run: (waiting: T[], check: () => void) => Promise<Map<T, () =>
   };
 }
 
+type NativeRole<Input, Result> = Input & { admit: AdmissionYield; answer: PromiseWithResolvers<Result> };
+function nativePhase<Input, Result>(
+  read: (
+    requests: NativeRole<Input, Result>[],
+    check: () => void,
+  ) => Promise<Map<NativeRole<Input, Result>, () => void>>,
+) {
+  const stage = phase(read);
+  return {
+    stage,
+    offer(input: Input) {
+      const command = catalogue.getStore();
+      if (!command || !enter(command.child, stage)) return;
+      return command.yieldPermit(() => {
+        const answer = Promise.withResolvers<Result>();
+        stage.offer(command.child, { ...input, answer, admit: command.admit });
+        return answer.promise;
+      });
+    },
+  };
+}
+
+type CurrentCheck = { owner: object; expected: string; read: () => Promise<void> };
+async function readCurrent(requests: NativeRole<CurrentCheck, void>[], check: () => void) {
+  const replies = new Map<(typeof requests)[number], () => void>();
+  for (const members of Map.groupBy(requests, (entry) => entry.owner).values()) {
+    for (const peers of Map.groupBy(members, (entry) => entry.expected).values()) {
+      try {
+        check();
+        await peers[0]!.admit(peers[0]!.read);
+        for (const peer of peers) replies.set(peer, () => peer.answer.resolve());
+      } catch (error) {
+        for (const peer of peers) replies.set(peer, () => peer.answer.reject(error));
+      }
+    }
+  }
+  return replies;
+}
+
+type InputOf<T> = Omit<T, 'admit' | 'answer'>;
+const candidates = nativePhase<InputOf<BookCandidateRead>, Awaited<BookCandidateRead['answer']['promise']>>(
+  readBookCandidates,
+);
+const figures = nativePhase<InputOf<BookFigureRead>, Awaited<BookFigureRead['answer']['promise']>>(readBookFigures);
+const summaries = nativePhase<InputOf<BookSummaryRead>, Awaited<BookSummaryRead['answer']['promise']>>(
+  readBookSummaries,
+);
+const aliasCurrent = nativePhase<CurrentCheck, void>(readCurrent);
+const releaseCurrent = nativePhase<CurrentCheck, void>(readCurrent);
+export const composedBookCandidates = candidates.offer;
+export const composedBookFigures = figures.offer;
+export const composedBookSummaries = summaries.offer;
+export function composedBookCurrent(
+  role: 'aliasCurrent' | 'releaseCurrent',
+  owner: object,
+  expected: string,
+  read: () => Promise<void>,
+) {
+  return (role === 'aliasCurrent' ? aliasCurrent : releaseCurrent).offer({ owner, expected, read });
+}
+
 const controls = {
   load: phase(readPageControls),
   saveReservation: phase(readPageControls),
@@ -77,9 +145,14 @@ const phases = [
   identities,
   controls.complete,
   controls.saveWindow,
+  candidates.stage,
   controls.consume,
+  figures.stage,
+  summaries.stage,
+  aliasCurrent.stage,
   controls.seal,
   finals,
+  releaseCurrent.stage,
 ];
 
 type Child = {
@@ -87,8 +160,8 @@ type Child = {
   position: number;
   page?: string;
 };
-function enter(child: Child, stage: (typeof phases)[number]) {
-  const position = phases.indexOf(stage);
+function enter(child: Child, stage: object) {
+  const position = phases.findIndex((item) => item === stage);
   if (position <= child.position) return false;
   child.position = position;
   return true;

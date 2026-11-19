@@ -1,3 +1,4 @@
+import { composedBookSummaries } from '../composed-book-reads.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { SearchFreshnessSchema } from '../search-context.ts';
 import { chooseLabel } from '../../semantic/language.ts';
@@ -168,58 +169,72 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
-    options: { deadline?: number; authority?: { access: Access; actor: Actor } } = {},
+    options: { deadline?: number; authority?: { access: Access; actor: Actor }; bookPage?: object } = {},
   ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
     return completeCatalogue(options.deadline, async (original) => {
       // Close metadata custody before native SubjectReading prepares authorization and owns its snapshot.
       const release = active === undefined ? await readActiveRelease(original) : active;
       requireCatalogueTime(original);
-      const authority = options.authority;
-      // Prepare request authority once per summary attempt and verify the selected IDs on its snapshot.
-      const prepareBatch = authority?.access.prepareReadDecisions
-        ? async () => {
-            const decisions = await prepareReadDecisions(authority.access, {
-              actor: authority.actor,
-              actions: new Set(['subject:read']),
-              context: { pool, deadline: original },
-            });
-            const eligibility = relatedReadDecisionEligibility();
-            return async (client: Parameters<typeof decisions.decide>[0], ids: readonly string[]) => {
-              const allowed = new Map<string, boolean>();
-              for (let offset = 0; offset < ids.length; offset += 200) {
-                const batch = ids.slice(offset, offset + 200);
-                const read = await decisions.decide(client, {
-                  action: 'subject:read',
-                  resourceType: 'semantic.subject',
-                  ids: batch,
-                  eligibility,
-                });
-                for (const id of batch) allowed.set(id, read[id]?.allowed === true);
-              }
-              return allowed;
-            };
-          }
-        : undefined;
-      const summaries = release
-        ? await readSubjectSummaries(
-            {
-              client: { query: pool.query.bind(pool) },
-              pool,
-              routeKey,
+      const ids = page.subjects.map((subject) => subject.id);
+      const read = async (ids: readonly string[], deadline: number) => {
+        if (!release) return new Map<string, SubjectSummary | null>();
+        const authority = options.authority;
+        // Prepare request authority once per summary attempt and verify the selected IDs on its snapshot.
+        const prepareBatch = authority?.access.prepareReadDecisions
+          ? async () => {
+              const decisions = await prepareReadDecisions(authority.access, {
+                actor: authority.actor,
+                actions: new Set(['subject:read']),
+                context: { pool, deadline },
+              });
+              const eligibility = relatedReadDecisionEligibility();
+              return async (client: Parameters<typeof decisions.decide>[0], ids: readonly string[]) => {
+                const allowed = new Map<string, boolean>();
+                for (let offset = 0; offset < ids.length; offset += 200) {
+                  const batch = ids.slice(offset, offset + 200);
+                  const read = await decisions.decide(client, {
+                    action: 'subject:read',
+                    resourceType: 'semantic.subject',
+                    ids: batch,
+                    eligibility,
+                  });
+                  for (const id of batch) allowed.set(id, read[id]?.allowed === true);
+                }
+                return allowed;
+              };
+            }
+          : undefined;
+        return readSubjectSummaries(
+          {
+            client: { query: pool.query.bind(pool) },
+            pool,
+            routeKey,
+            deadline,
+            release: release.release,
+            authorize: summaryAuthorization(async (id, batch) => {
+              requireCatalogueTime(deadline);
+              const route = routeOf(id)!;
+              const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+              requireCatalogueTime(deadline);
+              return check;
+            }, prepareBatch),
+          },
+          ids,
+          { languages },
+        );
+      };
+      const batch =
+        options.bookPage && release
+          ? composedBookSummaries({
+              owner: options.bookPage,
+              release: release.digest,
+              languages,
+              ids,
               deadline: original,
-              release: release.release,
-              authorize: summaryAuthorization(async (id, batch) => {
-                requireCatalogueTime(original);
-                const route = routeOf(id)!;
-                const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-                requireCatalogueTime(original);
-                return check;
-              }, prepareBatch),
-            },
-            page.subjects.map((subject) => subject.id),
-            { languages },
-          )
-        : new Map();
+              read,
+            })
+          : undefined;
+      const summaries = await (batch ?? read(ids, original));
       return {
         ...page,
         subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),

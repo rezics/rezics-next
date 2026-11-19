@@ -18,6 +18,8 @@ import { actionCatalogue, SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
+import { openBookCatalogue } from '../../search/http/catalogue-search.ts';
+import type { SearchServiceContract } from '../../search/service-contract.ts';
 import { validateHitOptions } from '../../search/hits.ts';
 import type { SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -225,6 +227,7 @@ function nativePageRoute<App, const Path extends string>(
     tokens,
     clock,
     dispatch,
+    bookSearch,
     deadlineNow,
   }: {
     pool: Pool;
@@ -233,6 +236,7 @@ function nativePageRoute<App, const Path extends string>(
     tokens: KeyRing;
     clock: () => Date;
     dispatch: (request: Request) => Promise<Response>;
+    bookSearch?: { service: Pick<SearchServiceContract, 'search'>; includeEligibility: boolean };
     /** Real wall time for the page authority's request deadlines, supplied by composition. */
     deadlineNow: () => number;
   },
@@ -344,6 +348,23 @@ function nativePageRoute<App, const Path extends string>(
           clock,
           deadlineNow,
           dispatch,
+          ...(bookSearch && !draftPreview
+            ? {
+                bookCatalogue: (active, signal) =>
+                  openBookCatalogue({
+                    pool,
+                    routeKey,
+                    access: pageAccess,
+                    actor,
+                    admission,
+                    job: { ...job, signal },
+                    clock,
+                    search: bookSearch.service,
+                    active,
+                    includeEligibility: bookSearch.includeEligibility,
+                  }),
+              }
+            : {}),
           actor,
           deadline: job.deadline,
           request,

@@ -2,6 +2,7 @@ import { BOOK_CATALOGUE_TYPES } from '@rezics/definitions/contract';
 import { FilterError, parseDiscoveryFilter, parseFilter } from '@rezics/filter';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
+import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import { routeOf } from '../route/route.ts';
 import { validateHitOptions, validateSearchLimit, type HitOptions } from './hits.ts';
 import { parseText, textSyntaxProblem, TextSyntaxError } from './text.ts';
@@ -38,6 +39,29 @@ export function hasPublicBookSearchShape(request: { filter?: unknown; sort?: unk
     types.every((type) => typeof type === 'string' && bookCatalogueTypes.has(type)) &&
     new Set(types).size === types.length
   );
+}
+
+/** Only the closed descriptor emitted by an installed, name-ordered Book TypeList. */
+export function bookTypeListRequest(body: object, cursor?: string): SearchRequest | undefined {
+  if (
+    !isRecord(body) ||
+    body.sort !== 'name' ||
+    typeof body.limit !== 'number' ||
+    Object.keys(body).some((key) => !['filter', 'sort', 'limit', 'languages'].includes(key)) ||
+    !hasPublicBookSearchShape(body) ||
+    (cursor !== undefined && cursor.length > LIST_CURSOR_BOUNDS.search.maxTokenLength)
+  )
+    return;
+  const languages = body.languages;
+  if (languages !== undefined && (!Array.isArray(languages) || !languages.every((value) => typeof value === 'string')))
+    return;
+  return {
+    filter: body.filter,
+    sort: 'name',
+    limit: body.limit,
+    ...(languages === undefined ? {} : { languages }),
+    ...(cursor === undefined ? {} : { cursor }),
+  };
 }
 
 export function containsRealmPredicate(value: unknown): boolean {

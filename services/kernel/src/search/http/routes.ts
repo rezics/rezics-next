@@ -1,4 +1,5 @@
 import { runBookCatalogueRead } from '../composed-book-reads.ts';
+import { executeCatalogueSearch } from './catalogue-search.ts';
 import { hasPublicBookSearchShape } from '../request.ts';
 import { knowledgeDiscoveryRoutes } from '../http.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -103,7 +104,7 @@ export function searchRoutes<App>(
     return access({ actions: actionCatalogue(actionCatalogueApp) });
   };
   const catalogueResponses = createCatalogueResponseAdapter({ pool, routeKey });
-  const { fill, publicBases } = catalogueResponses;
+  const { fill } = catalogueResponses;
 
   const trending = createTrendingSearchesService({ pool, clock });
   const mounted = knowledgeDiscoveryRoutes(app, {
@@ -429,25 +430,20 @@ export function searchRoutes<App>(
             const scopeOptions = scopeAccess
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }
               : undefined;
-            let completed: SearchHttpResponse | undefined;
-            await searchHttpExecute(nativeBody, () =>
-              search.search(searchHttpPrincipal(actor), nativeBody, clock().getTime(), active, {
+            const completed = await executeCatalogueSearch({
+              search,
+              body: nativeBody,
+              now: clock().getTime(),
+              actor,
+              active,
+              authorize,
+              catalogue: catalogueResponses,
+              context: {
                 deadline: job.deadline,
                 ...(scopeOptions ? { scope: scopeOptions } : {}),
                 ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
-                async complete(page) {
-                  completed = publicBases(
-                    await fill(page, authorize, body.languages, active, {
-                      deadline: job.deadline,
-                      ...(scopeAccess ? { authority: { access: scopeAccess, actor } } : {}),
-                    }),
-                    body.languages ?? [],
-                    active,
-                  );
-                },
-              }),
-            );
-            if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+              },
+            });
             const emptyRecovery = await recoveryForPage(
               { count: completed.subjects.length, next: completed.next, as_of: completed.as_of },
               scopeOptions,

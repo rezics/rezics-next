@@ -697,6 +697,7 @@ async function answerPage(
   lifetime: PageReadLifetime,
   input: {
     release: import('@rezics/filter').FilterRelease | undefined;
+    bookCatalogue?: import('../search/http/catalogue-search.ts').BookCatalogueReader;
     continuationOnlyLists: boolean;
     execution: PageExecution;
     session: { ring: PageExecution['tokens']; scope: string };
@@ -853,6 +854,7 @@ async function answerPage(
     releaseGuard = input.finalGuard ? input.budget.reserve(1, 1) : undefined;
     page = await ports.pageRead.readPage({
       dispatch: input.execution.dispatch,
+      ...(input.bookCatalogue ? { bookCatalogue: input.bookCatalogue } : {}),
       deadline: input.execution.deadline,
       resolveBuiltin: async (key) => {
         lifetime.check();
@@ -1275,6 +1277,7 @@ async function readConfiguredPage(
       : undefined;
   return answerPage(application, ports, lifetime, {
     release: definitionRelease?.release,
+    ...(execution.bookCatalogue ? { bookCatalogue: execution.bookCatalogue(definitionRelease, lifetime.signal) } : {}),
     continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
     execution,
     session,

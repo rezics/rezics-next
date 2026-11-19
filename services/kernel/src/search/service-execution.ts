@@ -33,6 +33,7 @@ import {
   type SearchCursorBinding,
   type SearchSortValue,
 } from './cursor.ts';
+import { composedBookCandidates, composedBookCurrent, composedBookFigures } from './composed-book-reads.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import type { FactClause, Hit as CheckedHit } from './disclosure/check.ts';
 import type { SearchDisclosureApplication } from './disclosure-application.ts';
@@ -891,7 +892,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       const native = active === undefined && !releaseOverride ? await readActiveRelease() : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
       if (publicFilters && !native) throw indexNotReady();
-      const identityEpoch = await executedIdentity(deadline);
+      const bookPage =
+        readContext?.bookPage && !text && sort === 'name' && hasPublicBookSearchShape(request)
+          ? readContext.bookPage
+          : undefined;
+      const identityEpoch = await (bookPage
+        ? (bookPage.identityEpoch ??= executedIdentity(deadline))
+        : executedIdentity(deadline));
       const executedRequest = cursorPlanner.bindExecutionRequest(admission, identityEpoch);
       const bindingRequest = executedRequest.bindingRequest;
       const kinds: KindSnapshot | undefined = current
@@ -1207,7 +1214,9 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       }
       // Pin the active generation before querying, including empty queries. Every
       // refill targets that physical index even if the alias switches during validation.
-      const generation = await indexRequest(aliasGeneration);
+      const generation = await (bookPage
+        ? (bookPage.generation ??= indexRequest(aliasGeneration))
+        : indexRequest(aliasGeneration));
       if (cursor && cursor.generation !== generation) throw new ProblemError('search_restart_required');
       if (
         retained &&
@@ -1215,7 +1224,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           retained.queried.consumer.meaningDigest !== native?.digest)
       )
         throw new ProblemError('search_restart_required');
-      const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+      const readFormat = () => indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+      const format = await (bookPage ? (bookPage.sortFormat ??= readFormat()) : readFormat());
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
       const calendarFormat =
         admitted && containsCalendarRange(admitted)
@@ -1307,6 +1317,23 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       };
       let canonicalIds: Awaited<ReturnType<typeof resolveCanonicalKeyset<IndexedSubject>>> | undefined;
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
+        if (bookPage && admitted && 'type' in admitted) {
+          const batch = composedBookCandidates({
+            owner: bookPage,
+            pool,
+            source,
+            disclosure,
+            hits,
+            types: admitted.type.in,
+          });
+          if (batch) {
+            const { canonical, checked } = await sourceRequest(() => batch);
+            if (canonical.status !== 'ready') throw indexNotReady();
+            canonicalIds = canonical;
+            for (const [hit, subject] of checked) evidenceById.set(subject.id, hit.engineEvidence);
+            return checked;
+          }
+        }
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
           disclosure.checkHits(disclosureSource, hits, clauses, {
@@ -1543,6 +1570,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 retained.queried,
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
+                bookPage,
               ),
             );
           } else {
@@ -1555,6 +1583,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
                 { plan: capturePlan, snapshot: indexedTypeList ? 'pit' : 'prepared' },
                 context,
                 readContext?.savedCollection ? native!.digest : undefined,
+                bookPage,
               ),
             );
             operations = bound.operations;
@@ -1630,9 +1659,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           );
           results.forEach((hit, index) => (hit.facts = facts[index]!));
         }
-        const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+        const publicResults = await sourceRequest(
+          () => (bookPage && composedBookFigures({ pool, hits: results })) ?? publicHitFigures(pool, results),
+        );
         // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
-        const observed = await observation(generation!, deadline);
+        const observed = await (bookPage
+          ? (bookPage.observation ??= observation(generation, deadline))
+          : observation(generation, deadline));
         if (rating) {
           const currentRating = await ratingEpoch();
           if (
@@ -1693,13 +1726,19 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           const finalValues = await evaluateScope(shown.map((subject) => subject.id));
           if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
         }
-        if ((await indexRequest(freshAliasGeneration)) !== generation)
-          throw new ProblemError('search_restart_required');
+        const assertAlias = async () => {
+          if ((await indexRequest(freshAliasGeneration)) !== generation)
+            throw new ProblemError('search_restart_required');
+        };
+        await ((bookPage && composedBookCurrent('aliasCurrent', bookPage, String(generation), assertAlias)) ??
+          assertAlias());
         if (retainedRead) {
           await indexRequest(retainedRead.finalize);
           await indexRequest(retainedRead.release);
         }
-        await assertCurrentRelease();
+        await ((bookPage &&
+          composedBookCurrent('releaseCurrent', bookPage, JSON.stringify(releaseBinding), assertCurrentRelease)) ??
+          assertCurrentRelease());
         return response;
       } finally {
         try {

@@ -85,12 +85,14 @@ export type DefaultPublicFilterRuntime = Readonly<{
     request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
     acceptedRelease?: string,
+    bookPage?: object,
   ): Promise<BoundPublicRequest>;
   /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
   resumeRequest(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
     acceptedRelease?: string,
+    bookPage?: object,
   ): Promise<PublicFilterConsumerOperations>;
   bindSuggestion(
     request: PublicSuggestionCaptureInput,
@@ -153,6 +155,26 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         return response;
       },
     };
+  }
+  async function openSubjectPublication(context: PublicFilterConsumerContext, acceptedRelease?: string) {
+    const release = await requestMeaning(context, acceptedRelease);
+    if (!release) notReady();
+    const { active } = await subjectGenerations(requestSearch(context), config.prefix);
+    if (active === null) notReady();
+    return { release, active, target: subjectIndexName(config.prefix, active) };
+  }
+
+  // Each list still owns its capture or retained observation. Only its opening
+  // publication inputs belong to the whole native Book request.
+  const bookPublications = new WeakMap<object, ReturnType<typeof openSubjectPublication>>();
+  function subjectPublication(context: PublicFilterConsumerContext, acceptedRelease?: string, bookPage?: object) {
+    if (!bookPage || acceptedRelease !== undefined) return openSubjectPublication(context, acceptedRelease);
+    let opening = bookPublications.get(bookPage);
+    if (!opening) {
+      opening = openSubjectPublication(context);
+      bookPublications.set(bookPage, opening);
+    }
+    return opening;
   }
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength !== 32)
     throw new TypeError('Public Search requires the canonical route key');
@@ -513,34 +535,23 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         }
       });
     },
-    bindRequest(request, context, acceptedRelease) {
+    bindRequest(request, context, acceptedRelease, bookPage) {
       return track(async () => {
         checkDeadline(context);
-        const release = await requestMeaning(context, acceptedRelease);
-        if (!release) notReady();
-        const state = await subjectGenerations(requestSearch(context), config.prefix);
-        if (state.active === null) notReady();
-        if (request.plan.generation !== undefined && request.plan.generation !== state.active)
+        const { release, active, target } = await subjectPublication(context, acceptedRelease, bookPage);
+        if (request.plan.generation !== undefined && request.plan.generation !== active)
           throw new ProblemError('search_restart_required');
-        const operations = requestHandle(
-          await subjectOperations(subjectIndexName(config.prefix, state.active), release, context),
-        );
+        const operations = requestHandle(await subjectOperations(target, release, context));
         const capture = await operations.capture(structuredClone(request), context);
         checkDeadline(context);
         return { operations, capture };
       });
     },
-    resumeRequest(queried, context, acceptedRelease) {
+    resumeRequest(queried, context, acceptedRelease, bookPage) {
       return track(async () => {
         checkDeadline(context);
-        const release = await requestMeaning(context, acceptedRelease);
-        if (!release) notReady();
-        const state = await subjectGenerations(requestSearch(context), config.prefix);
-        if (state.active === null) notReady();
-        if (
-          queried.consumer.physicalTarget !== subjectIndexName(config.prefix, state.active) ||
-          queried.consumer.meaningDigest !== release.digest
-        )
+        const { release, target } = await subjectPublication(context, acceptedRelease, bookPage);
+        if (queried.consumer.physicalTarget !== target || queried.consumer.meaningDigest !== release.digest)
           throw new ProblemError('search_restart_required');
         // Native query resolves incarnation, Source registration and the exact retained execution.
         return requestHandle(await subjectOperations(queried.consumer.physicalTarget, release, context));
