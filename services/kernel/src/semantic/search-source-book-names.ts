@@ -6,15 +6,13 @@ import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { nativeSourceQuery } from '../database/native-source-query.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { IndexedSubject, SubjectSnapshot } from '../search/source.ts';
+import type { IndexedSubject, SubjectSnapshot } from '../search/index.ts';
 import { activeRelease, readBaseReleases, readRelease } from './definition-release-read.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { withReadTransaction } from './read.ts';
 import { normalizeSourceStatement } from './scope-leaf-selection.ts';
 import readNames from './search-source-book-names.sql';
 
-// A first window can request two candidates per output slot and one lookahead per list.
-const WINDOW_KEYS = 2 * MAX_PAGE_COST + MAX_PAGE_READS;
 const LABEL_LIMIT = 65;
 const LANGUAGE_LIMIT = 33;
 const LANGUAGE_PROPERTY = 'schema:inLanguage';
@@ -49,8 +47,10 @@ export function bookCandidateNames(
   routeKey: Uint8Array | undefined,
   resume: (deadline: number, subject: { route: number; id: string }) => Promise<void>,
 ) {
+  // Two candidates per output slot and one lookahead per list.
+  const windowKeys = 2 * MAX_PAGE_COST + MAX_PAGE_READS;
   return async (ids: readonly string[]): Promise<ReadonlyMap<number, SubjectSnapshot> | null> => {
-    if (ids.length > WINDOW_KEYS) return null;
+    if (ids.length > windowKeys) return null;
     const routes = ids.map((id) => {
       const route = routeOf(id);
       if (route === null) throw new TypeError('Book candidate id must be a routable subject key');

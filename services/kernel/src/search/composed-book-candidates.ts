@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { AdmissionYield } from '../http/admission.ts';
+import type { AdmissionYield } from '../http/request.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readReleasedIdentityMappingsInSnapshot } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';

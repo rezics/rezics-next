@@ -20,7 +20,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-const bookCatalogueTypes = new Set<string>(BOOK_CATALOGUE_TYPES);
 const publicBookSearchFields = new Set(['filter', 'text', 'sort', 'limit', 'cursor', 'languages', 'descriptions']);
 
 /** The public slice accepts one positive predicate over exact released bibliographic Types. */
@@ -36,7 +35,7 @@ export function hasPublicBookSearchShape(request: { filter?: unknown; sort?: unk
     Array.isArray(types) &&
     types.length > 0 &&
     types.length <= BOOK_CATALOGUE_TYPES.length &&
-    types.every((type) => typeof type === 'string' && bookCatalogueTypes.has(type)) &&
+    types.every((type) => BOOK_CATALOGUE_TYPES.some((catalogueType) => catalogueType === type)) &&
     new Set(types).size === types.length
   );
 }

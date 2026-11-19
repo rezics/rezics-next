@@ -1,4 +1,4 @@
-import type { AdmissionYield } from '../http/admission.ts';
+import type { AdmissionYield } from '../http/request.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 

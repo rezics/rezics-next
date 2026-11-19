@@ -47,6 +47,7 @@ export {
 } from './contribution-attribution.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 export { AccessUnavailableError } from './unavailable.ts';
+export { globalReadPreparation, pairGlobalReadPreparation } from './global-read-preparation.ts';
 export {
   createContentEditionBuyerFact,
   type ContentEditionBenefit,

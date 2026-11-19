@@ -2,9 +2,9 @@ import type {
   PublicFilterCost,
   PublicFilterSubjectIdentities,
   PublicFilterSubjectIdentityRequest,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 import type { PublicFilterSource } from '../semantic/index.ts';
-import type { AdmissionYield } from '../http/admission.ts';
+import type { AdmissionYield } from '../http/request.ts';
 
 export type BookIdentityRow = Extract<PublicFilterSubjectIdentities, { status: 'observed' }>['rows'][number];
 export type BookIdentityRead = {

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { withBoundedReadConnection } from '../../database/pool.ts';
-import type { Admission, JobContext } from '../../http/admission.ts';
+import type { Admission, JobContext } from '../../http/request.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor, type Resource } from '../../request/access.ts';
 import { GLOBAL_CONTEXT, type activeRelease } from '../../semantic/definitions.ts';

@@ -6,7 +6,7 @@ import {
 } from '../request/book-binding-steps.ts';
 import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Admission, AdmissionYield, JobContext } from '../http/admission.ts';
+import type { Admission, AdmissionYield, JobContext } from '../http/request.ts';
 import type {
   NativeBookPreparation,
   NativePublicFilterPreparation,
@@ -104,25 +104,16 @@ async function readCurrent(requests: NativeRole<CurrentCheck, void>[], check: ()
 }
 
 type InputOf<T> = Omit<T, 'admit' | 'answer'>;
-const candidates = nativePhase<InputOf<BookCandidateRead>, Awaited<BookCandidateRead['answer']['promise']>>(
-  readBookCandidates,
-);
-const figures = nativePhase<InputOf<BookFigureRead>, Awaited<BookFigureRead['answer']['promise']>>(readBookFigures);
-const summaries = nativePhase<InputOf<BookSummaryRead>, Awaited<BookSummaryRead['answer']['promise']>>(
-  readBookSummaries,
-);
-const aliasCurrent = nativePhase<CurrentCheck, void>(readCurrent);
-const releaseCurrent = nativePhase<CurrentCheck, void>(readCurrent);
-export const composedBookCandidates = candidates.offer;
-export const composedBookFigures = figures.offer;
-export const composedBookSummaries = summaries.offer;
+export const composedBookCandidates = (input: InputOf<BookCandidateRead>) => bookReadStages().candidates.offer(input);
+export const composedBookFigures = (input: InputOf<BookFigureRead>) => bookReadStages().figures.offer(input);
+export const composedBookSummaries = (input: InputOf<BookSummaryRead>) => bookReadStages().summaries.offer(input);
 export function composedBookCurrent(
   role: 'aliasCurrent' | 'releaseCurrent',
   owner: object,
   expected: string,
   read: () => Promise<void>,
 ) {
-  return (role === 'aliasCurrent' ? aliasCurrent : releaseCurrent).offer({ owner, expected, read });
+  return bookReadStages()[role].offer({ owner, expected, read });
 }
 
 async function readBindings(waiting: NativeRole<BindingOffer, unknown>[], check: () => void) {
@@ -155,66 +146,97 @@ async function readBindings(waiting: NativeRole<BindingOffer, unknown>[], check:
   }
   return replies;
 }
-const bindingStages = Object.fromEntries(bindingSteps.map((key) => [key, nativePhase(readBindings)])) as Record<
-  BindingStep,
-  ReturnType<typeof nativePhase<BindingOffer, unknown>>
->;
 
-const controls = {
-  previousWindow: phase(readPageControls),
-  claim: phase(readPageControls),
-  savePit: phase(readPageControls),
-  transfer: phase(readPageControls),
-  load: phase(readPageControls),
-  saveReservation: phase(readPageControls),
-  saveWindow: phase(readPageControls),
-  plan: phase(readPageControls),
-  reserve: phase(readPageControls),
-  dispatch: phase(readPageControls),
-  complete: phase(readPageControls),
-  consume: phase(readPageControls),
-  seal: phase(readPageControls),
-};
-const cuts = phase(beginCuts);
-const starts = phase(readRole);
-const identities = phase(readBookIdentities);
-const finals = phase(readRole);
-const phases = [
-  bindingStages.definitions.stage,
-  bindingStages.registration.stage,
-  cuts,
-  controls.claim,
-  bindingStages.unopened.stage,
-  bindingStages.pitOwner.stage,
-  bindingStages.beforePit.stage,
-  bindingStages.afterPit.stage,
-  bindingStages.retain.stage,
-  controls.savePit,
-  bindingStages.adopt.stage,
-  controls.transfer,
-  bindingStages.reference.stage,
-  bindingStages.restore.stage,
-  controls.load,
-  controls.previousWindow,
-  controls.plan,
-  starts,
-  controls.reserve,
-  controls.saveReservation,
-  controls.dispatch,
-  bindingStages.successor.stage,
-  identities,
-  controls.complete,
-  controls.saveWindow,
-  candidates.stage,
-  controls.consume,
-  figures.stage,
-  summaries.stage,
-  aliasCurrent.stage,
-  controls.seal,
-  finals,
-  bindingStages.release.stage,
-  releaseCurrent.stage,
-];
+function createBookReadStages() {
+  const candidates = nativePhase<InputOf<BookCandidateRead>, Awaited<BookCandidateRead['answer']['promise']>>(
+    readBookCandidates,
+  );
+  const figures = nativePhase<InputOf<BookFigureRead>, Awaited<BookFigureRead['answer']['promise']>>(readBookFigures);
+  const summaries = nativePhase<InputOf<BookSummaryRead>, Awaited<BookSummaryRead['answer']['promise']>>(
+    readBookSummaries,
+  );
+  const aliasCurrent = nativePhase<CurrentCheck, void>(readCurrent);
+  const releaseCurrent = nativePhase<CurrentCheck, void>(readCurrent);
+  const bindingStages = Object.fromEntries(bindingSteps.map((key) => [key, nativePhase(readBindings)])) as Record<
+    BindingStep,
+    ReturnType<typeof nativePhase<BindingOffer, unknown>>
+  >;
+
+  const controls = {
+    previousWindow: phase(readPageControls),
+    claim: phase(readPageControls),
+    savePit: phase(readPageControls),
+    transfer: phase(readPageControls),
+    load: phase(readPageControls),
+    saveReservation: phase(readPageControls),
+    saveWindow: phase(readPageControls),
+    plan: phase(readPageControls),
+    reserve: phase(readPageControls),
+    dispatch: phase(readPageControls),
+    complete: phase(readPageControls),
+    consume: phase(readPageControls),
+    seal: phase(readPageControls),
+  };
+  const cuts = phase(beginCuts);
+  const starts = phase(readRole);
+  const identities = phase(readBookIdentities);
+  const finals = phase(readRole);
+  const phases = [
+    bindingStages.definitions.stage,
+    bindingStages.registration.stage,
+    cuts,
+    controls.claim,
+    bindingStages.unopened.stage,
+    bindingStages.pitOwner.stage,
+    bindingStages.beforePit.stage,
+    bindingStages.afterPit.stage,
+    bindingStages.retain.stage,
+    controls.savePit,
+    bindingStages.adopt.stage,
+    controls.transfer,
+    bindingStages.reference.stage,
+    bindingStages.restore.stage,
+    controls.load,
+    controls.previousWindow,
+    controls.plan,
+    starts,
+    controls.reserve,
+    controls.saveReservation,
+    controls.dispatch,
+    bindingStages.successor.stage,
+    identities,
+    controls.complete,
+    controls.saveWindow,
+    candidates.stage,
+    controls.consume,
+    figures.stage,
+    summaries.stage,
+    aliasCurrent.stage,
+    controls.seal,
+    finals,
+    bindingStages.release.stage,
+    releaseCurrent.stage,
+  ];
+  return {
+    candidates,
+    figures,
+    summaries,
+    aliasCurrent,
+    releaseCurrent,
+    bindingStages,
+    controls,
+    cuts,
+    starts,
+    identities,
+    finals,
+    phases,
+  };
+}
+
+let nativeBookStages: ReturnType<typeof createBookReadStages> | undefined;
+function bookReadStages() {
+  return (nativeBookStages ??= createBookReadStages());
+}
 
 type Child = {
   next: PromiseWithResolvers<void>;
@@ -222,7 +244,7 @@ type Child = {
   page?: string;
 };
 function enter(child: Child, stage: object) {
-  const position = phases.findIndex((item) => item === stage);
+  const position = bookReadStages().phases.findIndex((item) => item === stage);
   if (position <= child.position) return false;
   child.position = position;
   return true;
@@ -235,7 +257,7 @@ export function runBookCatalogueRead<T>(admission: Admission, job: JobContext, r
   return admission.run('normal', job, (yieldPermit) =>
     child
       ? catalogue.run({ child, yieldPermit, admit: (work) => admission.run('normal', job, work) }, () =>
-          withBookBindingSteps((step, offer) => bindingStages[step].offer(offer), run),
+          withBookBindingSteps((step, offer) => bookReadStages().bindingStages[step].offer(offer), run),
         )
       : run(),
   );
@@ -251,7 +273,12 @@ export function restoreComposedBookCut(
   context: PublicFilterConsumerContext,
 ) {
   const command = catalogue.getStore();
-  if (!command || command.child.position >= phases.length || command.child.page || queried.snapshot.kind !== 'pit')
+  if (
+    !command ||
+    command.child.position >= bookReadStages().phases.length ||
+    command.child.page ||
+    queried.snapshot.kind !== 'pit'
+  )
     return;
   return advanceNativePublicFilterPreparation(binding, { pageObservation: queried }, context);
 }
@@ -263,7 +290,9 @@ export function composedBookCapture(
   charge: (cut: NativePublicFilterPreparation) => void,
 ) {
   const command = catalogue.getStore();
-  if (!command || !native(input.source) || command.child.page || !enter(command.child, cuts)) return;
+  if (!command || !native(input.source) || command.child.page) return;
+  const { cuts } = bookReadStages();
+  if (!enter(command.child, cuts)) return;
   return command.yieldPermit(async () => {
     const answer = Promise.withResolvers<NativePublicFilterPreparation | null>();
     cuts.offer(command.child, { binding, input, context, answer, admit: command.admit });
@@ -325,6 +354,7 @@ export function composedBookObservation(
 ): Promise<PrivacyReductionObservation> | undefined {
   const command = catalogue.getStore();
   if (!command || !population || !native(source)) return;
+  const { starts, finals } = bookReadStages();
   const stage = request.start === null ? starts : finals;
   if ((command.child.page !== undefined && command.child.page !== page) || !enter(command.child, stage)) return;
   command.child.page = page;
@@ -344,7 +374,9 @@ export function composedBookIdentities(
   charge: BookIdentityRead['charge'],
 ) {
   const command = catalogue.getStore();
-  if (!command?.child.page || !source.readPublicFilterSubjectIdentities || !enter(command.child, identities)) return;
+  if (!command?.child.page || !source.readPublicFilterSubjectIdentities) return;
+  const { identities } = bookReadStages();
+  if (!enter(command.child, identities)) return;
   return command.yieldPermit(() => {
     const answer = Promise.withResolvers<Awaited<BookIdentityRead['answer']['promise']>>();
     identities.offer(command.child, { source, request, charge, answer, admit: command.admit });
@@ -354,13 +386,9 @@ export function composedBookIdentities(
 
 export function composedBookControl(input: PageControl) {
   const command = catalogue.getStore();
-  const stage = controls[input.phase];
-  if (
-    !command ||
-    (command.child.page !== undefined && command.child.page !== input.page) ||
-    !enter(command.child, stage)
-  )
-    return;
+  if (!command) return;
+  const stage = bookReadStages().controls[input.phase];
+  if ((command.child.page !== undefined && command.child.page !== input.page) || !enter(command.child, stage)) return;
   if (input.page !== null) command.child.page = input.page;
   return command.yieldPermit(() => {
     const answer = Promise.withResolvers<ControlRow | undefined>();
@@ -424,6 +452,7 @@ export async function runComposedPageReads<T>(
   execute: (read: T, index: number) => Promise<void>,
   check: () => void,
 ): Promise<void> {
+  const { phases } = bookReadStages();
   const children: Child[] = reads.map(() => ({ next: Promise.withResolvers<void>(), position: -1 }));
   const failures: { error: unknown }[] = [];
   await bounded(children, async (child, index) => {

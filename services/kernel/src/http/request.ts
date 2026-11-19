@@ -3,6 +3,7 @@ export { requestDigest, anonymousCommandTarget, anonymousRequestDigest } from '.
 import type { ActionCatalogue } from '../request/access.ts';
 import { kernelWriteRateFor } from './write-rate-routes.ts';
 export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
+export type { Admission, AdmissionYield, JobContext } from './admission.ts';
 
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;

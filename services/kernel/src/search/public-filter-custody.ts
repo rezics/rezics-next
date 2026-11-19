@@ -2821,7 +2821,7 @@ export async function stepRetainedTargetErasure(
 }
 
 export const readBookRegistrations: NonNullable<
-  import('../semantic/source-binding-port.ts').PublicFilterSearchBindingPort['readBookRegistrations']
+  import('../semantic/index.ts').PublicFilterSearchBindingPort['readBookRegistrations']
 > = async (pool, members, context) => {
   const shared = operationCost(pool, context);
   try {

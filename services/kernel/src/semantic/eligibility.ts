@@ -1,4 +1,4 @@
-import { globalReadPreparation } from '../access/global-read-preparation.ts';
+import { globalReadPreparation } from '../access/index.ts';
 import { createResourcePublicEligibility, type ResourceEligibility } from '../access/eligibility.ts';
 import type {
   ResourceEligibilityPrepareContext,

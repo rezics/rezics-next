@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { AdmissionYield } from '../http/admission.ts';
+import type { AdmissionYield } from '../http/request.ts';
 
 function control(columns: Record<string, string>, sql: string) {
   const names = Object.keys(columns);
