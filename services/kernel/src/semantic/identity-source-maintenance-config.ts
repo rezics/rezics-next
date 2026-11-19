@@ -1,3 +1,4 @@
+import { SEARCH_INDEX_STATEMENT_KEYS } from './contract/identity-search-statement-bounds.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 
@@ -83,7 +84,18 @@ function dimension(env: Environment, key: string, fallback: number, maximum: num
 
 /** Parse ceilings for independent Source work. These are never additive original
  * funding: the selected History route requires Accounts' private prepaid partition. */
-export function readIdentitySourceMaintenanceConfig(env: Environment): IdentitySourceMaintenanceConfig {
+export function readIdentitySourceMaintenanceConfig(
+  env: Environment,
+  independentSearchWriter = false,
+): IdentitySourceMaintenanceConfig {
+  // The independent writer can assemble or revalidate eight selected values in an owned turn.
+  // Per key: seven disclosure/selection points, four provenance points and one source fence.
+  // Include the wider count probe and the selection lookahead. Explicit limits still win.
+  const additionalPoints = independentSearchWriter
+    ? SEARCH_INDEX_STATEMENT_KEYS * (7 + 4 + 1) + SEARCH_INDEX_STATEMENT_KEYS + 2
+    : 0;
+  const points = libraryDefaults.NATIVE_POINTS + additionalPoints;
+  const seeks = libraryDefaults.EMPTY_SEEKS + additionalPoints;
   return Object.freeze({
     native: Object.freeze({
       rows: dimension(env, 'NATIVE_ROWS', nativeDefaults.ROWS, nativeDefaults.ROWS),
@@ -96,11 +108,11 @@ export function readIdentitySourceMaintenanceConfig(env: Environment): IdentityS
       candidateKeys: dimension(env, 'LIBRARY_CANDIDATE_KEYS', libraryDefaults.CANDIDATE_KEYS, 1),
       identityMetadataRows: dimension(env, 'LIBRARY_IDENTITY_METADATA_ROWS', libraryDefaults.IDENTITY_METADATA_ROWS, 0),
       nativeRows: dimension(env, 'LIBRARY_NATIVE_ROWS', libraryDefaults.NATIVE_ROWS, 8192),
-      nativePoints: dimension(env, 'LIBRARY_NATIVE_POINTS', libraryDefaults.NATIVE_POINTS, 128),
+      nativePoints: dimension(env, 'LIBRARY_NATIVE_POINTS', points, points),
       witnessKeys: dimension(env, 'LIBRARY_WITNESS_KEYS', libraryDefaults.WITNESS_KEYS, 1),
       statements: dimension(env, 'LIBRARY_STATEMENTS', libraryDefaults.STATEMENTS, 128),
       bytes: dimension(env, 'LIBRARY_BYTES', libraryDefaults.BYTES, 1048576),
-      emptySeeks: dimension(env, 'LIBRARY_EMPTY_SEEKS', libraryDefaults.EMPTY_SEEKS, 128),
+      emptySeeks: dimension(env, 'LIBRARY_EMPTY_SEEKS', seeks, seeks),
     }),
   });
 }

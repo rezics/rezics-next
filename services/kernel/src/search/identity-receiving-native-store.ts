@@ -19,7 +19,7 @@ import {
 } from '../command/command.ts';
 import type { IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
-import { SEARCH_INDEX_STATEMENT_KEYS } from '../semantic/identity-search-index-statements.ts';
+import { SEARCH_INDEX_STATEMENT_KEYS } from '../semantic/contract/identity-search-statement-bounds.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchRepairWriterReceipt, validateSearchRepairWriterEvidence } from './writer-guard.ts';

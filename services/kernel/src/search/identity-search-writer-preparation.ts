@@ -142,7 +142,8 @@ export function createSearchIdentityWriterPreparation(
     try {
       return await runSearchTurn(turn, () => {
         const outsideSource = AsyncLocalStorage.snapshot();
-        return withIdentitySourceConsumerMaintenance({ pool, env }, { deadline: turn.deadline }, async () => {
+        const maintenance = { pool, env, independentSearchWriter: true as const };
+        return withIdentitySourceConsumerMaintenance(maintenance, { deadline: turn.deadline }, async () => {
           const context = searchIdentityWorkContext(pool);
           return (
             await (

@@ -4,6 +4,14 @@ export const retiredProjectionMeaning = 'retiring';
 export const lockProjectionBuildForRetirementSql = `SELECT build_id::text,generation::text,meaning_digest
  FROM semantic.public_filter_projection_build WHERE (partition_no,subject_id)=($1,$2) FOR UPDATE`;
 
+// An ordinary first page cannot retire a build while an identity writer holds the original's group.
+export const lockReleasedProjectionBuildForRetirementSql = `SELECT EXISTS (
+ SELECT 1 FROM semantic.identity_epoch_mapping m
+ JOIN semantic.identity_epoch_group g ON (g.partition_no,g.terminal)=(m.control_partition,m.control_group)
+ WHERE (m.route,m.original)=(b.route,b.subject_id) AND g.pending_job IS NOT NULL
+) AS identity_pending FROM semantic.public_filter_projection_build b
+ WHERE (b.partition_no,b.subject_id)=($1,$2) FOR UPDATE OF b`;
+
 export const retireProjectionHeadSql = `DELETE FROM semantic.public_filter_projection_head h
  USING (SELECT partition_no FROM semantic.public_filter_projection_head
         WHERE build_id=$1 ORDER BY partition_no LIMIT 1) next

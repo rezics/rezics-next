@@ -64,6 +64,7 @@ import {
   invalidateProjectionBuildSql,
   lockProjectionBuildForHeadsSql,
   lockProjectionBuildForRetirementSql,
+  lockReleasedProjectionBuildForRetirementSql,
   retiredProjectionMeaning,
   retireProjectionHeadSql,
   verifyCompletedPublicFilterProjectionSql,
@@ -1063,7 +1064,7 @@ async function saveBuild(
   build: string,
   heads: ReadonlyMap<number, PrivacyReductionHead>,
   deadline: number,
-): Promise<BuildRow | { retirement: PublicFilterProjectionRetirement } | null> {
+): Promise<BuildRow | { retirement: PublicFilterProjectionRetirement } | 'identity_pending' | null> {
   const route = routeOf(subject)!;
   async function attempt(client: PoolClient) {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -1096,7 +1097,16 @@ async function saveBuild(
         return { retirement };
       }
     } else {
-      await client.query(lockProjectionBuildForRetirementSql, [observation.partition, subject]);
+      const {
+        rows: [prior],
+      } = await client.query<{ identity_pending: boolean }>(lockReleasedProjectionBuildForRetirementSql, [
+        observation.partition,
+        subject,
+      ]);
+      if (prior?.identity_pending) {
+        await client.query('ROLLBACK');
+        return 'identity_pending' as const;
+      }
       await nativeSourceQuery(client, retireBuildHeads, { partition_no: observation.partition, subject_id: subject });
     }
     const created = rows(
@@ -1660,6 +1670,7 @@ export async function readPublicFilterProjectionPage(
         deadline,
       );
       if (!stored) return unready('dependency_pending', cost);
+      if (stored === 'identity_pending') return unready(stored, cost);
       cost.frontierWrites++;
       if ('retirement' in stored)
         return { status: 'unready', reason: 'dependency_pending', cost, retirement: stored.retirement };

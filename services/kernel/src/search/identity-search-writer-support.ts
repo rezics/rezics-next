@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { CommandTransaction } from '../command/command.ts';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
+import { routeOf } from '../route/route.ts';
+import projectionBuild from '../semantic/public-filter-projection-build-read.sql';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
 import { readRelease } from '../semantic/definitions.ts';
@@ -114,7 +117,14 @@ function closed(value: Projection | null): value is Projection & { state: 'compl
 }
 
 function termCursor(row: Awaited<ReturnType<typeof retained>>, support: PublicFilterProjectionFrontier) {
-  if (!row || row.segment === 0)
+  // A replacement build starts at its first term even when an older generation left a durable cursor.
+  const priorGeneration = row?.after[5];
+  const replaced =
+    row?.after[4] !== support.build &&
+    typeof priorGeneration === 'string' &&
+    /^[1-9][0-9]*$/.test(priorGeneration) &&
+    BigInt(priorGeneration) < support.generation;
+  if (!row || row.segment === 0 || replaced)
     return { after: null, digest: EMPTY_IDENTITY_SEARCH_TERMS_DIGEST, points: 0, state: 'progress' as const };
   const [, , , state, build, generation, after, digest] = row.after;
   if (
@@ -162,6 +172,26 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
         const terminal = sameDocument ? original : decodeProjection(await retained(tx, basis, 'terminal'));
         if (!closed(terminal)) return { definition: savedDefinition, phase: 'terminal' as const, projection: terminal };
         const terms = sameDocument && original.frontier ? await retained(tx, basis, 'terms') : null;
+        if (terms && original.frontier) {
+          const result = await nativeSourceQuery(tx, projectionBuild, {
+            partition_no: subjectPartition(basis.change.original),
+            route: routeOf(basis.change.original)!,
+            subject_id: basis.change.original,
+            meaning_digest: basis.release,
+          });
+          const build = Array.isArray(result) ? result[0] : result;
+          if (
+            !build ||
+            build.build_id !== original.frontier.build ||
+            String(build.generation) !== String(original.frontier.generation)
+          ) {
+            return {
+              definition: savedDefinition,
+              phase: 'original' as const,
+              projection: { ...original, state: 'restart' as const, frontier: null },
+            };
+          }
+        }
         const home =
           terms?.after[3] === 'complete' ? await readPartition(tx, subjectPartition(basis.change.original)) : null;
         return { phase: 'ready' as const, definition: savedDefinition, original, terminal, sameDocument, terms, home };

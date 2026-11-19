@@ -351,6 +351,7 @@ export function withIdentitySourceConsumerMaintenance<T>(
     client?: WorkClient;
     registry?: HistoryRegistry;
     selectedHistoryJob?: string;
+    independentSearchWriter?: true;
   }>,
   context: Readonly<{ deadline: number }>,
   body: (funded: IdentitySourceConsumerMaintenanceContext) => Promise<T>,
@@ -377,7 +378,7 @@ export function withIdentitySourceConsumerMaintenance<T>(
       body,
     );
   }
-  const config = readIdentitySourceMaintenanceConfig(deps.env);
+  const config = readIdentitySourceMaintenanceConfig(deps.env, deps.independentSearchWriter);
   const now = Date.now();
   if (!deps.pool || typeof deps.pool.connect !== 'function') throw new TypeError('Invalid Source maintenance pool');
   if (!Number.isFinite(context.deadline) || context.deadline <= now)

@@ -14,14 +14,19 @@ import { GLOBAL_CONTEXT } from './contract/global-context.ts';
 import { projectSelectedCreditsInSnapshot } from './credit-search.ts';
 import { creditSearchProperties, type SelectedCredit } from './credit-search-selection.ts';
 
-export const SEARCH_INDEX_STATEMENT_KEYS = 4;
-export const SEARCH_INDEX_STATEMENT_BYTES = 65536;
-export const SEARCH_INDEX_PROVENANCE_BYTES = 4096;
+import {
+  canonicalStatementBodyBytes,
+  SEARCH_INDEX_PROVENANCE_BYTES,
+  SEARCH_INDEX_SMALL_WINDOW,
+  SEARCH_INDEX_STATEMENT_KEYS,
+} from './contract/identity-search-statement-bounds.ts';
 
 // The complete active window includes one lookahead key. Overflow must yield before assembly.
-export const readCanonicalStatementCountSql = `SELECT count(*)::integer AS count
+const countSql = (limit: number) => `SELECT count(*)::integer AS count
  FROM (SELECT 1 FROM semantic.search_selected
-  WHERE (route,subject_id)=($1,$2) AND active LIMIT ${SEARCH_INDEX_STATEMENT_KEYS + 1}) selected`;
+  WHERE (route,subject_id)=($1,$2) AND active LIMIT ${limit + 1}) selected`;
+export const readCanonicalStatementCountSql = countSql(SEARCH_INDEX_SMALL_WINDOW);
+export const readWideCanonicalStatementCountSql = countSql(SEARCH_INDEX_STATEMENT_KEYS);
 
 export const readCanonicalStatementPresenceSql = `SELECT 1 FROM semantic.search_selected
  WHERE (route,subject_id)=($1,$2) AND active LIMIT 1`;
@@ -58,7 +63,7 @@ export const readCanonicalStatementsSql = `WITH raw AS MATERIALIZED (
 )
 SELECT route,subject_id::text,slot_id::text,candidate_id::text,property,rank,ordinal,release,revision,relation,compact,ordinal_in_window,
  concealed,eligible,
- CASE WHEN ((NOT relation AND NOT concealed) OR eligible) AND octet_length(body::text)<=${SEARCH_INDEX_STATEMENT_BYTES}
+ CASE WHEN ((NOT relation AND NOT concealed) OR eligible) AND octet_length(body::text)<=$5::integer
   THEN body END AS body,
  CASE WHEN eligible AND octet_length(source::text)<=${SEARCH_INDEX_PROVENANCE_BYTES} THEN source END AS source,
  (eligible AND COALESCE(octet_length(source::text),0)>${SEARCH_INDEX_PROVENANCE_BYTES}) AS oversized_source
@@ -76,9 +81,14 @@ type Selected = SelectedCredit & {
 };
 
 export async function readCanonicalStatementCount(tx: CommandTransaction, subject: string) {
-  const [row] = (await tx.query<{ count: number }>(readCanonicalStatementCountSql, [routeOf(subject), subject])).rows;
-  return row && Number.isInteger(row.count) && row.count >= 0 && row.count <= SEARCH_INDEX_STATEMENT_KEYS
-    ? row.count
+  const key = [routeOf(subject), subject];
+  const [prefix] = (await tx.query<{ count: number }>(readCanonicalStatementCountSql, key)).rows;
+  if (!prefix || !Number.isInteger(prefix.count) || prefix.count < 0) return null;
+  if (prefix.count <= SEARCH_INDEX_SMALL_WINDOW) return prefix.count;
+  if (prefix.count !== SEARCH_INDEX_SMALL_WINDOW + 1) return null;
+  const [wide] = (await tx.query<{ count: number }>(readWideCanonicalStatementCountSql, key)).rows;
+  return wide && Number.isInteger(wide.count) && wide.count >= prefix.count && wide.count <= SEARCH_INDEX_STATEMENT_KEYS
+    ? wide.count
     : null;
 }
 
@@ -104,6 +114,7 @@ export async function readCanonicalIndexStatements(
     subject.id,
     keys,
     relationOrCreditProperties,
+    canonicalStatementBodyBytes(keys),
   ]);
   const relationRows = rows.filter((row) => row.eligible === true);
   const descriptiveRows = rows.filter((row) => !row.relation && !row.concealed);

@@ -22,12 +22,12 @@ import projectionSubjects from './search-source-subjects.sql';
 import relatedVisibility from './read-subject-related-states.sql';
 import provenance from './scope-leaf-selection-provenance.sql';
 import sourceFencesRead from '../content/read-source-fences.sql';
+import { readCanonicalStatementsSql } from './identity-search-index-statements.ts';
 import {
-  readCanonicalStatementsSql,
   SEARCH_INDEX_PROVENANCE_BYTES,
   SEARCH_INDEX_STATEMENT_BYTES,
   SEARCH_INDEX_STATEMENT_KEYS,
-} from './identity-search-index-statements.ts';
+} from './contract/identity-search-statement-bounds.ts';
 import {
   readIdentitySearchIndexTermSlotSql,
   readIdentitySearchIndexTermsSql,
@@ -188,17 +188,21 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
       ),
       declare(
         readCanonicalStatementsSql,
-        [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS, ['a'.repeat(16380)]],
+        [65535, maxId, SEARCH_INDEX_STATEMENT_KEYS, ['a'.repeat(16380)], SEARCH_INDEX_STATEMENT_BYTES],
         (values) => {
-          const [route, id, keys, facets] = values;
+          const [route, id, keys, facets, bodyBytes] = values;
           if (
-            values.length !== 4 ||
+            values.length !== 5 ||
             typeof id !== 'string' ||
             routeOf(id) !== route ||
             typeof keys !== 'number' ||
             !Number.isInteger(keys) ||
             keys < 1 ||
             keys > SEARCH_INDEX_STATEMENT_KEYS ||
+            typeof bodyBytes !== 'number' ||
+            !Number.isInteger(bodyBytes) ||
+            bodyBytes < 1 ||
+            bodyBytes > SEARCH_INDEX_STATEMENT_BYTES ||
             !Array.isArray(facets) ||
             !facets.every((facet) => typeof facet === 'string') ||
             Buffer.byteLength(JSON.stringify(facets)) > 16384
@@ -212,7 +216,7 @@ export function identitySearchSourcePageCosts(): readonly PageCost[] {
             nativePoints: points,
             witnessKeys: 0,
             statements: 1,
-            bytes: 4096 + Buffer.byteLength(JSON.stringify(facets)) + keys * (SEARCH_INDEX_STATEMENT_BYTES + 8192),
+            bytes: 4096 + Buffer.byteLength(JSON.stringify(facets)) + keys * (bodyBytes + 8192),
             emptySeeks: points,
           });
         },

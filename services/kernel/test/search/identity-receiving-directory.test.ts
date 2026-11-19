@@ -95,11 +95,16 @@ import {
 } from '../../src/semantic/identity-search-index-terms.ts';
 import {
   readCanonicalStatementCountSql,
+  readWideCanonicalStatementCountSql,
   readCanonicalStatementPresenceSql,
   readCanonicalStatementsSql,
+} from '../../src/semantic/identity-search-index-statements.ts';
+import {
+  SEARCH_INDEX_SMALL_WINDOW,
   SEARCH_INDEX_PROVENANCE_BYTES,
   SEARCH_INDEX_STATEMENT_KEYS,
-} from '../../src/semantic/identity-search-index-statements.ts';
+  canonicalStatementBodyBytes,
+} from '../../src/semantic/contract/identity-search-statement-bounds.ts';
 import candidateProvenance from '../../src/semantic/scope-leaf-selection-provenance.sql';
 import sourceFences from '../../src/content/read-source-fences.sql';
 import { readCreatorTermBudgetSql } from '../../src/semantic/credit-search-creators.ts';
@@ -1037,13 +1042,26 @@ test.each([
       } else if (canonicalTerms && sql === readCanonicalStatementPresenceSql) {
         expect(values).toEqual([writerHome << 4, terminal]);
         rows = adoptedName || adoptedRelation || selectionOverflow ? [{}] : [];
-      } else if (canonicalTerms && sql === readCanonicalStatementCountSql) {
+      } else if (
+        canonicalTerms &&
+        (sql === readCanonicalStatementCountSql || sql === readWideCanonicalStatementCountSql)
+      ) {
         expect(values).toEqual([writerHome << 4, terminal]);
         rows = [
-          { count: selectionOverflow ? SEARCH_INDEX_STATEMENT_KEYS + 1 : Number(adoptedName || adoptedRelation) },
+          {
+            count: selectionOverflow
+              ? (sql === readCanonicalStatementCountSql ? SEARCH_INDEX_SMALL_WINDOW : SEARCH_INDEX_STATEMENT_KEYS) + 1
+              : Number(adoptedName || adoptedRelation),
+          },
         ];
       } else if ((adoptedName || adoptedRelation) && sql === readCanonicalStatementsSql) {
-        expect(values).toEqual([writerHome << 4, terminal, 1, adoptedRelation ? relationRoster : []]);
+        expect(values).toEqual([
+          writerHome << 4,
+          terminal,
+          1,
+          adoptedRelation ? relationRoster : [],
+          canonicalStatementBodyBytes(1),
+        ]);
         rows = [
           {
             route: writerHome << 4,
