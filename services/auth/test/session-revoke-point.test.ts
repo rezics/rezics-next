@@ -313,17 +313,12 @@ test('native session revoke examines a fixed exact session neighborhood as the s
         bounds: { output: 'constant', connections: 'constant' },
       },
       async grow(_, scale, previous) {
-        // Same original unrelated population, without inflating a seed floor or
-        // changing planner options. Actual measured layouts govern path checks.
-        await db.admin.query(
-          `INSERT INTO "user" (id,name,"emailVerified") SELECT 'unrelated-'||i,'',false
-           FROM generate_series($1::int,$2::int) i`,
-          [previous * 1000 + 1, scale * 1000],
-        );
         // Preserve the existing native fixture's unrelated proof populations too.
         // Otherwise a tiny consent table grows with prepared callers rather than
         // the scale, obscuring the fixed complete-handler row neighborhood.
-        for (const statement of [
+        const statements = [
+          `INSERT INTO "user" (id,name,"emailVerified") SELECT 'unrelated-'||i,'',false
+           FROM generate_series($1::int,$2::int) i`,
           `INSERT INTO auth_client (client_id,first_party,scopes)
            SELECT 'unrelated-'||i,true,ARRAY['read'] FROM generate_series($1::int,$2::int) i`,
           `INSERT INTO auth_client_coverage (client_id,ready)
@@ -332,14 +327,17 @@ test('native session revoke examines a fixed exact session neighborhood as the s
            SELECT 'unrelated-'||i,'unrelated-'||i,ARRAY['read'],true FROM generate_series($1::int,$2::int) i`,
           `INSERT INTO auth_consent (account_id,client_id,scopes)
            SELECT 'unrelated-'||i,'unrelated-'||i,ARRAY['read'] FROM generate_series($1::int,$2::int) i`,
-        ])
-          await db.admin.query(statement, [previous * 1000 + 1, scale * 1000]);
-        await db.admin.query(
           `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
            SELECT 'unrelated-'||i,'unrelated-'||i,'unrelated-'||i,'unrelated-'||i,'2099-01-01',now(),'read',1,1,'pwd'
            FROM generate_series($1::int,$2::int) i`,
-          [previous * 1000 + 1, scale * 1000],
-        );
+        ];
+        const batchSize = 1000;
+        const last = scale * 1000;
+        // Each query commits separately, releasing the per-account locks taken by erasure guards.
+        for (let first = previous * 1000 + 1; first <= last; first += batchSize) {
+          const end = Math.min(first + batchSize - 1, last);
+          for (const statement of statements) await db.admin.query(statement, [first, end]);
+        }
       },
       prepare: (_, scale) => prepare(scale),
       async warmup(_, scale) {
