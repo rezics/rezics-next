@@ -1131,10 +1131,28 @@ function captureRunFailureEvidence(
     if (backends.length === 128) break;
     backends.push(backend);
   }
+  const profiled = process.env.GROWTH_PROFILE && isCostFoldedCapture(captureResult) ? captureResult : undefined;
+  const counts = profiled
+    ? Map.groupBy(
+        profiled.foregroundOccurrences.filter(
+          ({ index, catalogOnly }) => !catalogOnly && classifyGrowthSql(profiled.statements[index]!) === 'statement',
+        ),
+        ({ index }) => profiled.statements[index]!,
+      )
+    : undefined;
   return {
-    ...(process.env.GROWTH_PROFILE && isCostFoldedCapture(captureResult)
+    ...(profiled && counts
       ? {
-          largestForegroundReads: captureResult.foregroundOccurrences
+          repeatedForegroundStatements: [...counts]
+            .filter(([, occurrences]) => occurrences.length > 1)
+            .sort((left, right) => right[1].length - left[1].length)
+            .slice(0, 20)
+            .map(([statement, occurrences]) => ({
+              count: occurrences.length,
+              first: occurrences[0]!.index,
+              statement: statement.replace(/\s+/g, ' ').slice(0, 220),
+            })),
+          largestForegroundReads: profiled.foregroundOccurrences
             .toSorted((left, right) => right.rows - left.rows || right.blocks - left.blocks)
             .slice(0, 16)
             .map(({ index, rows, blocks, node }) => ({
@@ -1142,7 +1160,7 @@ function captureRunFailureEvidence(
               rows,
               blocks,
               node,
-              statement: captureResult.statements[index]?.replace(/\s+/g, ' ').slice(0, 220),
+              statement: profiled.statements[index]?.replace(/\s+/g, ' ').slice(0, 220),
             })),
         }
       : {}),
