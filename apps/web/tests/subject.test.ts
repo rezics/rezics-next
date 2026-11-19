@@ -51,7 +51,7 @@ function site(): Promise<string> {
       API_RESOURCE: '',
       WEBSITE_SCOPES: '',
       SITE_ORIGINS: '',
-      WORKER_INSPECTOR_PORT: '',
+      WORKER_INSPECTOR_PORT: undefined,
     },
     warmUpPaths: [],
   }).then((running) => {

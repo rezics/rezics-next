@@ -101,7 +101,7 @@ export async function startPagesWorker() {
       WEBSITE_CLIENT_ID: '',
       API_RESOURCE: '',
       WEBSITE_SCOPES: '',
-      WORKER_INSPECTOR_PORT: '',
+      WORKER_INSPECTOR_PORT: undefined,
     };
     const { privateKey } = await generateKeyPair('ES256', { extractable: true });
     env.WEBSITE_CLIENT_KEY = JSON.stringify({
