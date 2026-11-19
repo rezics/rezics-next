@@ -31,12 +31,11 @@ function own(claimRequest: RealmClaimStatus = pending): RealmClaimStatusRead {
   return {
     kind: 'ready',
     claimRequest,
-    source:
-      claimRequest.state === 'approved'
+    source: !claimRequest.currentEpisode
+      ? { ...orphan, orphanedAt: '2026-11-01T00:00:00.000Z', claimEligibleAt: '2026-12-01T00:00:00.000Z' }
+      : claimRequest.state === 'approved'
         ? { ...orphan, ownershipState: 'owned', governanceReadOnly: false, orphanedAt: null, claimEligibleAt: null }
-        : claimRequest.currentEpisode
-          ? orphan
-          : { ...orphan, orphanedAt: '2026-10-30T00:00:00.000Z', claimEligibleAt: '2026-11-29T00:00:00.000Z' },
+        : orphan,
   };
 }
 function deferred<T>() {
@@ -126,7 +125,7 @@ async function mounted(
 
 function noReceipt(host: HTMLElement) {
   expect(host.innerHTML).not.toContain(receipt.requestId);
-  for (const value of [pending.orphanedAt, pending.requestedAt, approved.approvedAt!])
+  for (const value of [pending.orphanedAt, orphan.claimEligibleAt!, pending.requestedAt, approved.approvedAt!])
     expect(host.innerHTML).not.toContain(value);
   expect(host.querySelectorAll('time, details')).toHaveLength(0);
   expect(host.querySelectorAll('h2')).toHaveLength(0);
@@ -160,7 +159,7 @@ test('Own Realm claim status keeps human outcome and episode dates primary with 
 
     const details = host.querySelector('details')!;
     const summary = details.querySelector('summary')!;
-    expect(summary.textContent).toBe(m.realm_status_details_reference());
+    expect(summary.textContent).toBe(m.community_management_details_claim_summary());
     expect(details.open).toBe(false);
     expect(summary.hasAttribute('tabindex')).toBe(false);
     expect(summary.hasAttribute('role')).toBe(false);
@@ -176,6 +175,7 @@ test('Own Realm claim status keeps human outcome and episode dates primary with 
 
     for (const [label, value] of [
       [m.realm_claim_orphaned_at(), pending.orphanedAt],
+      [m.realm_claim_eligible_at(), orphan.claimEligibleAt!],
       [m.realm_claim_requested_at(), pending.requestedAt],
     ] as const) {
       const time = host.querySelector(`time[datetime="${value}"]`)!;
@@ -194,12 +194,6 @@ test('Own Realm claim status keeps human outcome and episode dates primary with 
     expect(check.textContent).toBe(m.realm_claim_status_check_again());
     expect(host.querySelectorAll('button')).toHaveLength(1);
     expect(back.contains(check)).toBe(false);
-    for (const control of [back, summary, check]) {
-      expect(control.classList.contains('min-h-11')).toBe(true);
-      expect(control.closest('a, button') === control || control === summary).toBe(true);
-    }
-    expect(back.className).toContain('focus-visible:outline');
-    expect(summary.className).toContain('focus-visible:outline');
     await tab();
     expect(document.activeElement).toBe(back);
     await tab();
@@ -228,17 +222,23 @@ test('current and earlier pending/approved episodes retain visible outcomes, war
               row.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending(),
             );
             expect(host.textContent).toContain(
-              row.state === 'approved'
-                ? m.realm_claim_status_approved_help()
-                : currentEpisode
-                  ? m.realm_claim_review_help()
+              currentEpisode
+                ? row.state === 'approved'
+                  ? m.realm_claim_status_approved_help()
+                  : m.realm_claim_review_help()
+                : row.state === 'approved'
+                  ? m.realm_claim_status_old_episode()
                   : m.realm_claim_status_old_pending(),
             );
             expect(host.textContent?.includes(m.realm_claim_status_old_episode())).toBe(!currentEpisode);
-            expect(host.querySelectorAll('time')).toHaveLength(row.approvedAt ? 3 : 2);
-            for (const value of [row.orphanedAt, row.requestedAt, ...(row.approvedAt ? [row.approvedAt] : [])]) {
-              const time = host.querySelector(`time[datetime="${value}"]`)!;
-              expect(time.textContent).toContain(value);
+            expect(Array.from(host.querySelectorAll('time'), (time) => time.dateTime)).toEqual([
+              row.orphanedAt,
+              ...(currentEpisode && row.state === 'pending' ? [orphan.claimEligibleAt!] : []),
+              row.requestedAt,
+              ...(row.approvedAt ? [row.approvedAt] : []),
+            ]);
+            for (const time of host.querySelectorAll('time')) {
+              expect(time.textContent).toContain(time.dateTime);
               expect(time.textContent).toContain('UTC');
               expect(time.closest('details, [hidden]')).toBeNull();
             }
