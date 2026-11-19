@@ -512,13 +512,14 @@ test('tampered, ineligible and cancelled plans never expand the selected set', a
   }
 });
 
-test('crash in every deletion phase resumes the same plan without restoring removed rows', async () => {
-  const dir = directory();
-  try {
-    for (const phase of RETENTION_DELETE_PHASES) {
-      const state = join(dir, `${phase}.sqlite`);
+test.each([...RETENTION_DELETE_PHASES])(
+  'crash in %s resumes the same plan without restoring removed rows',
+  async (phase) => {
+    const dir = directory();
+    try {
+      const state = join(dir, 'state.sqlite');
       const seeded = seedJourney(state);
-      const planPath = join(dir, `${phase}.json`);
+      const planPath = join(dir, 'plan.json');
       const planned = await runImportCli([
         'retention',
         '--state',
@@ -531,28 +532,28 @@ test('crash in every deletion phase resumes the same plan without restoring remo
         planPath,
         '--json',
       ]);
+      expect(planned.code).toBe(0);
       const planId = JSON.parse(planned.stdout).planId as string;
-      let seen = false;
-      try {
-        await applyRetentionPlan(
-          { state, plan: planPath, confirm: planId },
-          {
-            observer: {
-              beforePage(input: { generation: string; phase: RetentionDeletePhase }) {
-                if (input.phase === phase && !seen) {
-                  seen = true;
-                  throw new Error(`crash:${phase}`);
-                }
-              },
+      const applyInput = { state, plan: planPath, confirm: planId };
+      await expect(
+        applyRetentionPlan(applyInput, {
+          observer: {
+            beforePage(input) {
+              if (input.generation === seeded.retired && input.phase === phase) throw new Error(`crash:${phase}`);
             },
           },
-        );
-        throw new Error(`expected crash in ${phase}`);
-      } catch (error) {
-        expect((error as Error).message).toBe(`crash:${phase}`);
-      }
-      const resumed = await applyRetentionPlan({ state, plan: planPath, confirm: planId });
-      expect(resumed).toMatchObject({ status: 'complete', retired: [seeded.retired] });
+        }),
+      ).rejects.toThrow(`crash:${phase}`);
+      let firstResumedPage: { generation: string; phase: RetentionDeletePhase } | undefined;
+      const resumed = await applyRetentionPlan(applyInput, {
+        observer: {
+          beforePage(input) {
+            firstResumedPage ??= input;
+          },
+        },
+      });
+      expect(firstResumedPage).toEqual({ generation: seeded.retired, phase });
+      expect(resumed).toMatchObject({ planId, status: 'complete', retired: [seeded.retired] });
       const store = new RunStore<SourceProjection>(state, { projectionMode: 'source-record' });
       try {
         expect(
@@ -567,14 +568,14 @@ test('crash in every deletion phase resumes the same plan without restoring remo
         ).toEqual({ n: 0 });
         expect(
           store.database
-            .query('SELECT COUNT(*) AS n FROM run_payloads WHERE source=? AND command_key=?')
-            .get(source, 'cmd-Q1'),
-        ).toEqual({ n: 1 });
+            .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
+            .all(source),
+        ).toEqual(seeded.payload);
       } finally {
         store.close();
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
+  },
+);
