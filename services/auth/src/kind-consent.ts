@@ -55,6 +55,8 @@ export type KindConsentChange = Readonly<{
   accountId?: string;
   /** Exact intended authority change, retained until its native commit. */
   target: Readonly<Record<string, unknown>>;
+  /** Check native preconditions under the frontier lock before opening new work. */
+  admit?(connection: PoolClient): Promise<void>;
   /** Auth-only mutation, run after all Source fences are verified. */
   apply(connection: PoolClient, transitionId: string): Promise<void>;
 }>;
@@ -682,6 +684,7 @@ export function createKindConsentParticipant(input: {
         [change.clientId, change.accountId ?? null, change.kind === 'restore'],
       );
       if (conflict.rowCount) return null;
+      await change.admit?.(connection);
       const frontier = (
         await connection.query<{ frontier: string }>(
           `SELECT COALESCE(max(enrollment_seq),0)::text AS frontier

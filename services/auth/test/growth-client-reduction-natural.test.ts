@@ -168,6 +168,17 @@ test('three scale native growth remains within derived affected-owner bound', as
               first_party: false,
             },
           ],
+          'public.auth_kind_consent_transition': [
+            {
+              transition_key: `kind-consent:client-reduction-finish:${id}`,
+              transition_kind: 'client',
+              client_id: id,
+              target: { operation: 'client-reduction-finish', operationId: id, scopes: ['read'], firstParty: false },
+              frontier_seq: 0,
+              state: 'applied',
+              applied_at: new Date(0),
+            },
+          ],
           'public.auth_effect_receipt': [
             {
               receipt_id: id,
@@ -288,7 +299,11 @@ test('three scale native growth remains within derived affected-owner bound', as
         expect(saved).toEqual({ completed: dimension !== 'affected', after_ordinal: ordinal });
         expect(await unrelated()).toEqual(before);
       }
-      console.info('Natural dimension:', JSON.stringify(report));
+      console.info(
+        'Natural dimension:',
+        dimension,
+        report.samples.map(({ scale, cost: { rows, blocks, statements } }) => ({ scale, rows, blocks, statements })),
+      );
       expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
       for (const { cost } of report.samples) {
         // Begin/page/finish: fixed exact probes. Each of P owners adds one receipt,

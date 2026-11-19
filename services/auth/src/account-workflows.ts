@@ -320,6 +320,52 @@ export function clientAuthority(
     if (row.first_party !== input.firstParty || JSON.stringify(row.scopes) !== JSON.stringify(normalize(input.scopes)))
       deny();
   }
+  type Reduction = Parameters<AuthService['internal']['beginClientReduction']>[0];
+  async function admitReductionStart(connection: PoolClient, input: Reduction) {
+    const client = (
+      await connection.query<{ scopes: string[]; first_party: boolean; operation_id: string | null }>(
+        `SELECT c.scopes,c.first_party,g.operation_id FROM auth_client c
+         JOIN auth_client_coverage v USING (client_id)
+         LEFT JOIN auth_client_reduction g USING (client_id)
+         WHERE c.client_id=$1 AND v.ready AND NOT EXISTS (
+           SELECT 1 FROM auth_client_reduction_progress p WHERE p.operation_id=$2
+             AND (p.client_id,p.scopes,p.first_party) IS DISTINCT FROM ($1::text,$3::text[],$4::boolean)
+         ) FOR UPDATE OF c`,
+        [input.clientId, input.operationId, input.scopes, input.firstParty],
+      )
+    ).rows[0];
+    if (
+      !client ||
+      (client.operation_id !== null && client.operation_id !== input.operationId) ||
+      input.scopes.some((scope) => !client.scopes.includes(scope)) ||
+      (!client.first_party && input.firstParty)
+    )
+      deny();
+  }
+  async function admitReductionFinish(connection: PoolClient, input: Reduction) {
+    const row = await progress(connection, input.clientId, input.operationId);
+    same(row, input);
+    if (row.completed) return row;
+    if (row.terminal_ordinal === null || (row.consumer_version === 1 && row.page_count !== row.completed_count)) deny();
+    if (row.after_ordinal !== row.terminal_ordinal) {
+      const pending = await connection.query(
+        `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
+         AND traversal_ordinal<=$3 LIMIT 1`,
+        [input.clientId, row.after_ordinal, row.terminal_ordinal],
+      );
+      if (pending.rowCount) deny();
+    }
+    const gate = await connection.query('SELECT 1 FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
+      input.clientId,
+      input.operationId,
+    ]);
+    if (!gate.rowCount) deny();
+    return row;
+  }
+  async function admitNative(connection: PoolClient, clientId: string) {
+    const native = nativeReduction.getStore();
+    if (native) await admitNativeReduction(connection, clientId, native.operationId, native.obligationId);
+  }
   const bounded = (limit: number) => {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) deny();
   };
@@ -345,15 +391,14 @@ export function clientAuthority(
           scopes: granted,
           firstParty: input.firstParty,
         },
+        async admit(connection) {
+          await admitNative(connection, input.clientId);
+          await admitReductionStart(connection, { ...input, scopes: granted });
+        },
         async apply(connection) {
           await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
-          const native = nativeReduction.getStore();
-          if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
-          const coverage = await connection.query(
-            'SELECT client_id FROM auth_client_coverage WHERE client_id=$1 AND ready',
-            [input.clientId],
-          );
-          if (!coverage.rowCount) deny();
+          await admitNative(connection, input.clientId);
+          await admitReductionStart(connection, { ...input, scopes: granted });
           await connection.query(
             `INSERT INTO auth_client_reduction_progress (operation_id,client_id,scopes,first_party,consumer_version) VALUES ($1,$2,$3,$4,1)
            ON CONFLICT (operation_id) DO NOTHING`,
@@ -362,14 +407,6 @@ export function clientAuthority(
           const row = await progress(connection, input.clientId, input.operationId);
           same(row, input);
           if (row.completed) return;
-          const client = (
-            await connection.query<{ scopes: string[]; first_party: boolean }>(
-              'SELECT scopes,first_party FROM auth_client WHERE client_id=$1 FOR UPDATE',
-              [input.clientId],
-            )
-          ).rows[0];
-          if (!client || granted.some((s) => !client.scopes.includes(s)) || (!client.first_party && input.firstParty))
-            deny();
           const gate = (
             await connection.query<{ operation_id: string }>(
               `INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party) VALUES ($1,$2,$3,$4)
@@ -388,6 +425,20 @@ export function clientAuthority(
         const row = await progress(connection, input.clientId, input.operationId);
         const after = input.after === '' ? '0' : input.after;
         if (!/^(0|[1-9][0-9]*)$/.test(after) || row.completed) deny();
+        if (row.consumer_version === 1 && row.page_after === after && row.page_count !== null) {
+          // The workflow can replay this step after some owners committed.
+          // Keep the original boundary and acknowledgement counts on replay.
+          const pending = await connection.query<{ account_id: string }>(
+            `SELECT account_id FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2 AND traversal_ordinal<=$3
+             ORDER BY traversal_ordinal LIMIT $4`,
+            [input.clientId, row.after_ordinal, row.page_end, input.limit + 1],
+          );
+          if (pending.rows.length > input.limit) deny();
+          return {
+            items: pending.rows.map((owner) => owner.account_id),
+            next: row.terminal_ordinal === row.page_end ? null : row.page_end,
+          };
+        }
         if (row.after_ordinal !== after) {
           // Owners can disappear after a page was returned. Accept its boundary
           // only when no unacknowledged owner remains in the interval.
@@ -516,28 +567,15 @@ export function clientAuthority(
           scopes: granted,
           firstParty: input.firstParty,
         },
+        async admit(connection) {
+          await admitNative(connection, input.clientId);
+          await admitReductionFinish(connection, input);
+        },
         async apply(connection) {
           await connection.query("SELECT set_config('auth.cursor_worker','2',true)");
-          const native = nativeReduction.getStore();
-          if (native) await admitNativeReduction(connection, input.clientId, native.operationId, native.obligationId);
-          const row = await progress(connection, input.clientId, input.operationId);
-          same(row, input);
+          await admitNative(connection, input.clientId);
+          const row = await admitReductionFinish(connection, input);
           if (row.completed) return;
-          if (row.terminal_ordinal === null || (row.consumer_version === 1 && row.page_count !== row.completed_count))
-            deny();
-          if (row.after_ordinal !== row.terminal_ordinal) {
-            const pending = await connection.query(
-              `SELECT 1 FROM auth_consent WHERE client_id=$1 AND traversal_ordinal>$2
-             AND traversal_ordinal<=$3 LIMIT 1`,
-              [input.clientId, row.after_ordinal, row.terminal_ordinal],
-            );
-            if (pending.rowCount) deny();
-          }
-          const gate = await connection.query(
-            'SELECT client_id FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2',
-            [input.clientId, input.operationId],
-          );
-          if (!gate.rowCount) deny();
           await connection.query('UPDATE auth_client SET scopes=$2,first_party=$3 WHERE client_id=$1', [
             input.clientId,
             row.scopes,
@@ -670,7 +708,11 @@ export function clientAuthority(
         if (coverage.first_party && items.length)
           await connection.query(
             `INSERT INTO auth_consent (account_id,client_id,scopes)
-            SELECT id,$2,$3 FROM unnest($1::text[]) id ON CONFLICT (account_id,client_id) DO NOTHING`,
+            SELECT owner.id,$2,$3 FROM unnest($1::text[]) AS owner(id)
+            LEFT JOIN LATERAL (
+              SELECT account_id FROM auth_erasure WHERE account_id=owner.id LIMIT 1
+            ) AS erased ON true
+            WHERE erased.account_id IS NULL ON CONFLICT (account_id,client_id) DO NOTHING`,
             [items, input.clientId, coverage.scopes],
           );
         const next = rows.length > input.limit ? page.at(-1)!.traversal_ordinal : null;
