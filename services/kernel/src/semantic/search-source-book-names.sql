@@ -1,5 +1,6 @@
 -- One routed point per candidate. Probe only the current label heads and the
 -- selected original-language property needed by Book's catalogue rendering.
+WITH limits AS (SELECT :label_limit::integer AS labels, :language_limit::integer AS languages)
 SELECT wanted.route, wanted.id::text AS id, home.position::text AS position,
        home.write_state AS "writeState", home.moved_to AS "movedTo",
        subject.type, subject.visibility, subject.security_revision::text AS "securityRevision",
@@ -33,9 +34,9 @@ LEFT JOIN LATERAL (
     WHERE h.route = subject.route AND h.subject_id = subject.subject_id AND h.kind = 'label' AND h.active
       AND state.ready AND subject.visibility = 'visible' AND redirect.target IS NULL
     ORDER BY h.language
-    LIMIT :label_limit::integer
+    LIMIT (SELECT labels FROM limits)
   )
-  SELECT (SELECT count(*) FROM heads) >= :label_limit::integer AS wide,
+  SELECT (SELECT count(*) FROM heads) >= (SELECT labels FROM limits) AS wide,
          jsonb_agg(jsonb_build_object('language', label.language, 'value', label.value)
                    ORDER BY label.language COLLATE "C") AS body
   FROM heads h
@@ -54,11 +55,11 @@ LEFT JOIN LATERAL (
       AND s.property = 'schema:inLanguage' AND s.active AND s.relation IS FALSE
       AND state.ready AND subject.visibility = 'visible' AND redirect.target IS NULL
     ORDER BY s.slot_id, s.candidate_id
-    LIMIT :language_limit::integer
+    LIMIT (SELECT languages FROM limits)
   )
   -- The same concealment floor as search-source-statements.sql, on exact
   -- selected candidate keys. Imported-source fences are checked on this snapshot.
-  SELECT (SELECT count(*) FROM selected) >= :language_limit::integer AS wide,
+  SELECT (SELECT count(*) FROM selected) >= (SELECT languages FROM limits) AS wide,
          jsonb_agg(jsonb_build_object(
            'route', s.route, 'subject_id', s.subject_id, 'slot_id', s.slot_id,
            'candidate_id', s.candidate_id, 'release', s.release, 'value', s.value
