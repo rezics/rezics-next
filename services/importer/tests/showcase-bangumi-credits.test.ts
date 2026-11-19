@@ -219,6 +219,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         .flatMap(([, { selection }]) =>
           selection.map(({ candidate, rank }) => ({
             ...candidates.get(candidate)!.statement,
+            id: candidate,
             rank,
           })),
         );

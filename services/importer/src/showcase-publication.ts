@@ -82,7 +82,7 @@ import {
   publicValueStatementCurrent,
   publicValueStatementMatches,
   readCurrentCandidatePages,
-  selectedSynopsisOnPublicRead,
+  selectedStatementOnPublicRead,
   servedCoverVariants,
   servedVariantDecisionCurrent,
   statementOnPublicRead,
@@ -1689,6 +1689,21 @@ async function publishShowcasePhases(
     trace.assertions('completed', assertions.length, assertions.length);
   }
   validationGroups.clear();
+  // A source may retract a proposal and later submit the identical fact under a new native ID.
+  // Only a validated, live replacement on the same holder can supersede the historical receipt.
+  const liveFacts = new Set<string>();
+  const withdrawnFacts = new Map<string, string>();
+  for (const { record, assertion } of assertions) {
+    if (assertion.source.field_group !== 'facts') continue;
+    const candidate = validated.get(assertion.candidateId);
+    if (!candidate) continue;
+    const key = `${record.subjectId}\0${assertion.candidateDigest}`;
+    if (candidate.retracted === null && candidate.decision !== 'rejected' && candidate.rank !== 'deprecated')
+      liveFacts.add(key);
+    else if (typeof candidate.retracted === 'number' && candidate.retracted > 0 && candidate.rank === null)
+      withdrawnFacts.set(candidate.id, key);
+  }
+  for (const [id, key] of withdrawnFacts) if (liveFacts.has(key)) validated.delete(id);
 
   manifestAcknowledgements = manifestAcknowledgements.filter(
     (acknowledgement) => !acknowledgement.candidateId || validated.has(acknowledgement.candidateId),
@@ -3090,14 +3105,10 @@ async function publishShowcasePhases(
       }
       const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
       const rows = publicStatements(read, assertion.property);
-      let readback = rows.find((row) =>
-        assertion.property === 'schema:abstract'
-          ? selectedSynopsisOnPublicRead(row, assertion.statement, assertion.candidateId)
-          : statementOnPublicRead(row, assertion.statement),
-      );
+      let readback = rows.find((row) => selectedStatementOnPublicRead(row, assertion.statement, assertion.candidateId));
       if (!readback && slot && selected && selected.rank !== 'deprecated') {
         const relation = (await readRelations(assertion.property)).get(assertion.candidateId);
-        if (relation && statementOnPublicRead(relation, assertion.statement)) readback = relation;
+        if (selectedStatementOnPublicRead(relation, assertion.statement, assertion.candidateId)) readback = relation;
       }
       if (!readback && assertion.graphTarget) {
         withheldGraphCandidates.add(assertion.candidateId);

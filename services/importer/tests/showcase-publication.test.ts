@@ -554,6 +554,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       },
     };
     let relationOutsidePreview = false;
+    const sameValuePeerId = randomUUID();
     const preparingSourceSubjects = new Set<string>();
     const relationReadCursors: (string | null)[] = [];
     const publicClient = createPublicBulkClient({
@@ -623,7 +624,14 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           statements: {
             ...value.subject.statements,
             'schema:abstract': currentRows,
-            ...(relationOutsidePreview ? { 'schema:exampleOfWork': undefined } : {}),
+            ...(relationOutsidePreview
+              ? {
+                  'schema:exampleOfWork': value.subject.statements['schema:exampleOfWork']?.map((row) => ({
+                    ...row,
+                    id: sameValuePeerId,
+                  })),
+                }
+              : {}),
           },
         };
         const publicValue = { ...value, subject: publicSubject };

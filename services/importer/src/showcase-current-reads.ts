@@ -27,6 +27,7 @@ export type AdoptionMode = 'inherit' | 'replace' | 'suppress';
 export type CandidateRead = {
   id: string;
   source: BatchCommand['source'] | null;
+  retracted?: number | null;
   statement: BatchStatement;
   head: number | null;
   rank?: CandidateRank | null;
@@ -391,9 +392,8 @@ export function statementOnPublicRead(value: unknown, expected: BatchStatement):
   return sameStatementProvenance(value, expected);
 }
 
-export function selectedSynopsisOnPublicRead(value: unknown, expected: BatchStatement, candidateId: string): boolean {
+export function selectedStatementOnPublicRead(value: unknown, expected: BatchStatement, candidateId: string): boolean {
   return (
-    expected.property.id === 'schema:abstract' &&
     !!value &&
     typeof value === 'object' &&
     'id' in value &&
