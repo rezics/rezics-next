@@ -4,6 +4,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { fromPlainText } from '@rezics/document';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { createAccess } from '../../src/access/index.ts';
+import { AuthenticationError } from '../../src/access/contract/authentication.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
@@ -328,7 +329,11 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
           },
         };
       } catch (error) {
-        if (!(error instanceof GrantDeniedError)) throw error;
+        const invalidBearer =
+          error instanceof AuthenticationError &&
+          error.status === 401 &&
+          error.challenge === 'Bearer error="invalid_token"';
+        if (!(error instanceof GrantDeniedError) && !invalidBearer) throw error;
         return {
           actor,
           access: fixture.access,
