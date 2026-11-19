@@ -9,7 +9,12 @@ import { createHash, generateKeyPairSync, randomBytes, X509Certificate } from 'n
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type CDPSession, type Page } from 'playwright';
-import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+import {
+  AUTH_MANAGEMENT_CLIENT_ID,
+  AUTH_MANAGEMENT_SCOPES,
+  AUTH_PAGE_OPERATION_CLIENT_ID,
+  AUTH_PAGE_OPERATION_SCOPES,
+} from '@rezics/auth-contract';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -44,11 +49,11 @@ let sessionScopes: string[] = [];
 let sessionMethod: 'pwd' | 'pop' = 'pwd';
 let sessionAccountId = accountId;
 
-function reset(options: { passkeys?: Passkey[]; hasPassword?: boolean; fresh?: boolean; accountId?: string } = {}) {
+function reset(options: { passkeys?: Passkey[]; fresh?: boolean; accountId?: string } = {}) {
   calls.length = 0;
   issued.clear();
   passkeys = options.passkeys ?? [];
-  hasPassword = options.hasPassword ?? true;
+  hasPassword = true;
   fresh = options.fresh ?? true;
   sessionCookieSet = false;
   sessionClientId = 'login';
@@ -95,6 +100,10 @@ const fake = Bun.serve({
       const scopes = profile.scope;
       const valid =
         (profile.client_id === 'login' && Array.isArray(scopes) && scopes.length === 0) ||
+        (profile.client_id === AUTH_MANAGEMENT_CLIENT_ID &&
+          Array.isArray(scopes) &&
+          scopes.length === AUTH_MANAGEMENT_SCOPES.security.length &&
+          AUTH_MANAGEMENT_SCOPES.security.every((scope, index) => scope === scopes[index])) ||
         (profile.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
           Array.isArray(scopes) &&
           Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
@@ -134,8 +143,13 @@ const fake = Bun.serve({
         action: 'available',
         policy: 'personal-deletion',
       });
-    if (url.pathname === '/security-page' && request.method === 'GET')
-      return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], passkeys, fresh));
+    if (url.pathname === '/security-page' && request.method === 'GET') {
+      const inventory =
+        fresh && !hasPassword && passkeys.length === 1
+          ? passkeys.map((passkey) => ({ ...passkey, remove: 'last-credential' as const }))
+          : passkeys;
+      return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], inventory, fresh));
+    }
     if (url.pathname === '/session' && request.method === 'GET')
       return json(
         nativeSignInProof({ client_id: sessionClientId, scope: sessionScopes }, sessionMethod, sessionAccountId),
@@ -224,7 +238,7 @@ const fake = Bun.serve({
       if (!fresh) return stepUp();
       const id = parsed().id;
       if (passkeys.length === 1 && !hasPassword)
-        return json({ error: 'last_interactive_credential', effect_status: 'not_applied' }, 409);
+        return json({ error: 'credential_effect_denied', effect_status: 'not_applied' }, 409);
       passkeys = passkeys.filter((passkey) => passkey.id !== id);
       return json({ success: true });
     }
@@ -555,7 +569,8 @@ test(
       expect(registered).toEqual({ response: expect.any(Object), name: 'Phone' });
       expectWebAuthnResponse(registered.response, 'attestation');
       const rows = list.getByRole('listitem');
-      await rows.nth(1).getByRole('button').and(english.locator(':enabled')).waitFor();
+      const removePhone = rows.nth(1).getByRole('button', { name: 'Remove passkey Phone', exact: true });
+      await removePhone.and(english.locator(':enabled')).waitFor();
       expect(await rows.count()).toBe(2);
       expect(await rows.nth(1).innerText()).toContain('Phone');
       expect(await section.getByLabel('Passkey name (optional)').inputValue()).toBe('');
@@ -569,12 +584,20 @@ test(
       // passkey refuses another one, so the person uses a different authenticator.
       await authenticator!.cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: authenticator!.id });
       await addVirtualAuthenticator(authenticator!.cdp);
-      await section.getByRole('button', { name: 'Add a passkey', exact: true }).click();
-      await rows.nth(2).getByRole('button').and(english.locator(':enabled')).waitFor();
-      expect(postBody('/passkeys/register').name).toMatch(/^(Google Chrome|Chromium) on \w+$/);
-      expect(await rows.nth(2).innerText()).toContain(postBody('/passkeys/register').name);
+      await Promise.all([
+        english.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/register'),
+        section.getByRole('button', { name: 'Add a passkey', exact: true }).click(),
+      ]);
+      const autoName = postBody('/passkeys/register').name;
+      expect(autoName).toMatch(/^(Google Chrome|Chromium) on \w+$/);
+      await rows
+        .nth(2)
+        .getByRole('button', { name: `Remove passkey ${autoName}`, exact: true })
+        .and(english.locator(':enabled'))
+        .waitFor();
+      expect(await rows.nth(2).innerText()).toContain(autoName);
 
-      await rows.nth(1).getByRole('button', { name: 'Remove passkey Phone', exact: true }).click();
+      await removePhone.click();
       const review = english.getByRole('dialog', { name: 'Review passkey removal', exact: true });
       await review.waitFor();
       expect(await review.count()).toBe(1);
@@ -584,7 +607,6 @@ test(
       await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
       expect(postBody('/passkeys/remove')).toEqual({ id: expect.any(String) });
       expect(postBody('/passkeys/remove').id).toBe(registered.response.id);
-      await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
       expect(await list.count()).toBe(0);
       expect(await section.count()).toBe(0);
       expect(authCalls('/passkeys/remove')).toHaveLength(1);
@@ -598,43 +620,59 @@ test(
 test(
   'removing the last interactive credential is refused with a localized message',
   async () => {
-    reset({
-      hasPassword: false,
-      passkeys: [
-        {
-          id: 'only-passkey',
-          name: 'Only key',
-          created_at: new Date(now - 86_400_000).toISOString(),
-          last_used_at: null,
-        },
+    for (const [locale, section, remove, review, confirm, refusal, message] of [
+      [
+        'en',
+        'Passkeys',
+        'Remove passkey Only key',
+        'Review passkey removal',
+        'Confirm passkey removal',
+        'A security request was refused. Removal is not confirmed.',
+        'You cannot remove your last way to sign in. Add a password or another passkey first.',
       ],
-    });
-    for (const [locale, message] of [
-      ['en', 'You cannot remove your last way to sign in. Add a password or another passkey first.'],
       [
         'fr',
+        'Clés d’accès',
+        'Supprimer la clé d’accès Only key',
+        'Vérifier la suppression de la clé d’accès',
+        'Confirmer la suppression de la clé d’accès',
+        'Une demande de sécurité a été refusée. La suppression n’est pas confirmée.',
         'Vous ne pouvez pas supprimer votre dernière méthode de connexion. Ajoutez d’abord un mot de passe ou une autre clé d’accès.',
       ],
     ] as const) {
-      calls.length = 0;
+      reset({
+        passkeys: [
+          {
+            id: 'only-passkey',
+            name: 'Only key',
+            created_at: new Date(now - 86_400_000).toISOString(),
+            last_used_at: null,
+          },
+        ],
+      });
       const { page } = await open('/security', { locale });
       try {
-        const row = page
-          .getByRole('region', { name: locale === 'en' ? 'Passkeys' : 'Clés d’accès' })
-          .getByRole('listitem');
-        await row.waitFor({ state: 'visible' });
-        await row.getByRole('button').click();
+        const inventory = page.getByRole('region', { name: section, exact: true });
+        const row = inventory.getByRole('listitem');
+        const removeButton = row.getByRole('button', { name: remove, exact: true });
+        await removeButton.click();
+        const dialog = page.getByRole('dialog', { name: review, exact: true });
+        await dialog.waitFor();
         expect(authCalls('/passkeys/remove')).toHaveLength(0);
-        await page
-          .getByRole('dialog')
-          .getByRole('button', { name: /^Confirm/ })
-          .click();
-        const alert = page.getByRole('alert').filter({ hasText: message });
-        await alert.waitFor({ state: 'visible' });
-        expect(await alert.innerText()).toContain(message);
-        expect(await row.count()).toBe(1);
+
+        // Another session removes the password while the review is open.
+        hasPassword = false;
+        await dialog.getByRole('button', { name: confirm, exact: true }).click();
+        await page.getByRole('status').filter({ hasText: refusal }).waitFor();
+        expect(await inventory.count()).toBe(0);
         expect(authCalls('/passkeys/remove')).toHaveLength(1);
+        expect(postBody('/passkeys/remove')).toEqual({ id: 'only-passkey' });
         expect(passkeys).toHaveLength(1);
+
+        await page.reload();
+        await row.getByText(message, { exact: true }).waitFor();
+        expect(await removeButton.isDisabled()).toBe(true);
+        expect(authCalls('/passkeys/remove')).toHaveLength(1);
       } finally {
         await page.context().close();
       }
@@ -721,19 +759,22 @@ test(
       const { page } = await open(path, { webauthn: false });
       try {
         expect(await page.evaluate(() => 'PublicKeyCredential' in window)).toBe(false);
-        if (path === '/security') await page.getByRole('heading', { name: 'Passkeys', exact: true }).waitFor();
+        if (path === '/security') {
+          const inventory = page.getByRole('region', { name: 'Passkeys', exact: true });
+          await inventory.getByRole('heading', { name: 'Passkeys', exact: true }).waitFor();
+          await inventory.getByText('You have not added a passkey yet.', { exact: true }).waitFor();
+        }
         expect(await page.getByRole('button', { name: /passkey/i }).count(), path).toBe(0);
-        expect(await page.getByRole('heading', { name: /passkeys/i }).count(), path).toBe(path === '/security' ? 1 : 0);
-        if (path === '/login')
-          await page
+        if (path === '/login') {
+          const method = page.getByRole('region', { name: 'Sign in with a passkey', exact: true });
+          await method.getByRole('heading', { name: 'Sign in with a passkey', exact: true }).waitFor();
+          await method
             .getByRole('status')
-            .filter({ hasText: /passkey/i })
+            .filter({ hasText: /^Passkey sign-in is not supported by this browser\. Use your password instead\.$/ })
             .waitFor();
-        if (path !== '/security')
-          expect(await page.getByText(/passkey/i).count(), path).toBe(path === '/login' ? 1 : 0);
+        }
         if (path !== '/security') {
           expect(await page.locator('input[type=email]').getAttribute('autocomplete')).toBe('username');
-          // The password form is the whole page.
           expect(await page.getByRole('button', { name: /^(Sign in|Verify your identity)$/ }).count()).toBe(1);
         }
         expect(calls.filter((call) => call.url.includes('passkey'))).toHaveLength(0);
@@ -763,9 +804,21 @@ test(
       await page.getByLabel('Email', { exact: true }).fill(email);
       await page.getByLabel('Password', { exact: true }).fill(password);
       await Promise.all([
+        page
+          .waitForResponse(
+            (response) => response.url() === `${origin}/signin` && response.request().method() === 'POST',
+          )
+          .then((response) => expect(response.status(), 'native Security sign-in acknowledgement').toBe(200)),
         page.waitForURL((url) => url.pathname === '/security'),
         page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
       ]);
+      expect(authCalls('/signin')).toHaveLength(1);
+      expect(postBody('/signin')).toEqual({
+        email,
+        password,
+        client_id: AUTH_MANAGEMENT_CLIENT_ID,
+        scope: [...AUTH_MANAGEMENT_SCOPES.security],
+      });
       expect(new URL(page.url()).origin).toBe(origin);
       expect(new URL(page.url()).search).toBe('');
       expect(authCalls('/authorize')).toHaveLength(0);
