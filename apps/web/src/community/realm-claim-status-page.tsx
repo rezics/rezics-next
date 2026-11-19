@@ -75,7 +75,7 @@ export function RealmClaimStatusView({
       aria-labelledby={`${id}-heading`}
     >
       <a
-        className="inline-flex max-w-full items-center text-sm underline underline-offset-4"
+        className="inline-flex min-h-7 max-w-full items-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:hitbox-y-[9px] pointer-coarse:hitbox-y-[9px]"
         href={localizeHref(`/realms/${realmId}`)}
       >
         {m.realm_claim_status_back()}
@@ -89,7 +89,11 @@ export function RealmClaimStatusView({
       </header>
       <section className="space-y-5" aria-busy={state.busy}>
         {receipt ? (
-          <ContentItemFrame as="article" aria-labelledby={`${id}-case`} className="min-w-0 space-y-5 p-5 sm:p-6">
+          <ContentItemFrame
+            as="article"
+            aria-labelledby={`${id}-case`}
+            className="min-w-0 space-y-5 p-5 sm:p-6 [&>details>summary]:min-h-7 [&>details>summary]:focus-visible:outline-2 [&>details>summary]:focus-visible:outline-offset-2 [&>details>summary]:focus-visible:outline-ring max-md:[&>details>summary]:hitbox-y-[9px] pointer-coarse:[&>details>summary]:hitbox-y-[9px]"
+          >
             <ContentItemHeading level={2} id={`${id}-case`} className="text-xl font-semibold">
               {receipt.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending()}
             </ContentItemHeading>
@@ -144,7 +148,7 @@ export function RealmClaimStatusView({
         )}
         <Button
           variant="outline"
-          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start max-md:hitbox-y-[9px] pointer-coarse:hitbox-y-[9px]"
           disabled={!active || state.busy}
           onClick={() => void control.refresh()}
         >

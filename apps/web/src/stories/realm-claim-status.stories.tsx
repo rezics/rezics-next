@@ -10,6 +10,13 @@ import { orphan, receipt, eligible } from './patterns/realm-claim/example';
 import { m } from '../paraglide/messages.js';
 
 export type StatusScenario = 'pending' | 'approved' | 'unrelated' | 'unavailable' | 'reload' | 'obsolete' | 'withheld';
+const approvedAt = '2026-10-31T12:34:56.000Z';
+const laterEpisode = {
+  ...orphan,
+  orphanedAt: '2026-11-01T00:00:00.000Z',
+  claimEligibleAt: '2026-12-01T00:00:00.000Z',
+};
+
 export function RealmClaimStatusExample({
   scenario = 'pending',
   receiptRecovery = false,
@@ -27,7 +34,7 @@ export function RealmClaimStatusExample({
       approvedAt: null,
       currentEpisode: true,
       state: 'pending',
-      ...(scenario === 'approved' ? { state: 'approved', approvedAt: '2026-10-31T12:34:56.000Z' } : {}),
+      ...(scenario === 'approved' ? { state: 'approved', approvedAt } : {}),
       ...(scenario === 'obsolete' ? { currentEpisode: false } : {}),
     };
     const source =
@@ -40,7 +47,7 @@ export function RealmClaimStatusExample({
             claimEligibleAt: null,
           }
         : scenario === 'obsolete'
-          ? { ...orphan, orphanedAt: '2026-10-30T00:00:00.000Z', claimEligibleAt: '2026-11-29T00:00:00.000Z' }
+          ? laterEpisode
           : orphan;
     const read: RealmClaimStatusRead =
       scenario === 'unrelated'
@@ -134,6 +141,77 @@ const meta = {
 } satisfies Meta<typeof StatusPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+async function expectDates(canvas: HTMLElement, expected: (readonly [label: string, date: string])[]) {
+  const dates = Array.from(canvas.querySelectorAll('time'));
+  await expect(dates.map((date) => [date.closest('dd')?.previousElementSibling?.textContent, date.dateTime])).toEqual(
+    expected,
+  );
+  for (const date of dates) {
+    await expect(date).toBeVisible();
+    await expect(date).toHaveTextContent(date.dateTime);
+    await expect(date).toHaveTextContent('UTC');
+    await expect(date.closest('details')).toBeNull();
+  }
+}
+
+async function expectWithheld(canvas: HTMLElement) {
+  await expect(canvas.querySelector('details, time')).toBeNull();
+  await expect(canvas).not.toHaveTextContent(receipt.requestId);
+}
+
+async function observeReferenceDetails({ canvasElement, args }: Parameters<NonNullable<Story['play']>>[0]) {
+  const view = within(canvasElement);
+  const summary = view.getByText(m.community_management_details_claim_summary(), { selector: 'summary' });
+  const details = summary.closest('details')!;
+  const reference = within(details).getByText(receipt.requestId);
+  await expect(details.open).toBe(false);
+  await expect(reference).not.toBeVisible();
+  await expectDates(canvasElement, [
+    [m.realm_claim_orphaned_at(), receipt.orphanedAt],
+    ...(args.scenario === 'pending' ? [[m.realm_claim_eligible_at(), orphan.claimEligibleAt!] as const] : []),
+    [m.realm_claim_requested_at(), receipt.requestedAt],
+    ...(args.scenario === 'approved' ? [[m.realm_claim_status_approved_at(), approvedAt] as const] : []),
+  ]);
+  if (args.scenario === 'obsolete') {
+    await expect(view.getByText(m.realm_claim_status_old_episode())).toBeVisible();
+  }
+  if (args.scenario === 'approved') {
+    await expect(view.getByText(m.realm_claim_status_approved_help())).toBeVisible();
+  }
+
+  const back = view.getByRole('link', { name: m.realm_claim_status_back() });
+  const check = view.getByRole('button', { name: m.realm_claim_status_check_again() });
+  await expect(check).toBeEnabled();
+  summary.focus();
+  await userEvent.tab({ shift: true });
+  await expect(back).toHaveFocus();
+  await userEvent.tab();
+  await expect(summary).toHaveFocus();
+  await expect(summary.matches(':focus-visible')).toBe(true);
+  await userEvent.click(summary);
+  await expect(reference).toBeVisible();
+  await expect(summary).toHaveFocus();
+  await userEvent.tab();
+  await expect(check).toHaveFocus();
+
+  if (matchMedia('(max-width: 767px), (pointer: coarse)').matches) {
+    for (const control of [back, summary, check]) {
+      control.scrollIntoView({ block: 'center' });
+      const bounds = control.getBoundingClientRect();
+      const centerX = (bounds.left + bounds.right) / 2;
+      const centerY = (bounds.top + bounds.bottom) / 2;
+      await expect(bounds.height).toBeLessThan(44);
+      await expect(bounds.width).toBeGreaterThanOrEqual(44);
+      for (const y of [centerY - 21.5, centerY + 21.5]) {
+        await expect(control.contains(control.ownerDocument.elementFromPoint(centerX, y))).toBe(true);
+      }
+    }
+  }
+  const page = back.closest('article')!;
+  await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth + 1);
+}
+
 export const Pending: Story = {
   args: { scenario: 'pending' },
   play: async ({ canvasElement }) => {
@@ -146,9 +224,15 @@ export const Pending: Story = {
     );
   },
 };
-export const Approved: Story = { args: { scenario: 'approved' } };
-export const Unrelated: Story = { args: { scenario: 'unrelated' } };
-export const Unavailable: Story = { args: { scenario: 'unavailable' } };
+export const Approved: Story = { args: { scenario: 'approved' }, play: observeReferenceDetails };
+export const Unrelated: Story = {
+  args: { scenario: 'unrelated' },
+  play: ({ canvasElement }) => expectWithheld(canvasElement),
+};
+export const Unavailable: Story = {
+  args: { scenario: 'unavailable' },
+  play: ({ canvasElement }) => expectWithheld(canvasElement),
+};
 export const Reload: Story = {
   args: { scenario: 'reload' },
   play: async ({ canvasElement }) => {
@@ -157,44 +241,28 @@ export const Reload: Story = {
     await expect(view.queryByRole('button', { name: m.realm_claim_request() })).toBeNull();
   },
 };
-export const ObsoleteEpisode: Story = { args: { scenario: 'obsolete' } };
+export const ObsoleteEpisode: Story = { args: { scenario: 'obsolete' }, play: observeReferenceDetails };
 export const SessionWithheld: Story = {
   args: { scenario: 'withheld' },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByRole('heading', { name: m.realm_claim_status_heading() })).toBeVisible();
-    await expect(view.queryByText(receipt.requestId)).toBeNull();
-    await expect(view.queryByText('2026-10-31T10:00:00.000Z')).toBeNull();
+    await expectWithheld(canvasElement);
   },
 };
 export const ReferenceDetails = {
   args: { scenario: 'pending' },
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    const summary = view.getByText(m.realm_status_details_reference());
-    await expect(view.getByText(receipt.requestId)).not.toBeVisible();
-    await expect(canvasElement.querySelectorAll('time')).toHaveLength(2);
-    await userEvent.click(summary);
-    await expect(view.getByText(receipt.requestId)).toBeVisible();
-    await expect(view.getByRole('button', { name: m.realm_claim_status_check_again() })).toBeEnabled();
-    await expect(view.getByRole('link', { name: m.realm_claim_status_back() })).toBeVisible();
-  },
+  play: observeReferenceDetails,
 } satisfies Story;
 export const Wrapping390: Story = {
   args: { scenario: 'pending' },
-  globals: { locale: 'de' },
+  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
   play: ReferenceDetails.play,
 };
 export const Wrapping1280: Story = {
   args: { scenario: 'approved' },
-  globals: { locale: 'de' },
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    await userEvent.click(view.getByText(m.realm_status_details_reference()));
-    await expect(view.getByText(receipt.requestId)).toBeVisible();
-    await expect(canvasElement.querySelectorAll('time')).toHaveLength(3);
-    await expect(view.getByText(m.realm_claim_status_approved_help())).toBeVisible();
-  },
+  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  play: observeReferenceDetails,
 };
 export const RightToLeft: Story = {
   args: { scenario: 'obsolete' },
@@ -218,7 +286,6 @@ export const RefreshBusy: Story = {
     const view = within(canvasElement);
     await expect(await view.findByRole('button', { name: m.realm_claim_status_checking() })).toBeDisabled();
     await expect(view.getByRole('link', { name: m.realm_claim_status_back() })).toBeVisible();
-    await expect(view.queryByText(receipt.requestId)).toBeNull();
-    await expect(canvasElement.querySelectorAll('time, details')).toHaveLength(0);
+    await expectWithheld(canvasElement);
   },
 };
