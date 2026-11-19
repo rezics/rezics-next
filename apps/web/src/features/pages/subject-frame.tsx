@@ -397,7 +397,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
           rel="next"
           className={cn(
             buttonVariants({ variant: 'outline' }),
-            'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
           )}
         >
           {m.subject_view_continue({ label }, { locale: page.locale as never })}

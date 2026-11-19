@@ -42,7 +42,7 @@ export function RatingDistribution({
   const maximum = histogram.reduce((max, count) => Math.max(max, count), 0) || 1;
   return (
     <details data-slot="rating-distribution">
-      <summary className="list-item list-inside max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <summary className="hitbox-y-[8px] list-item list-inside min-h-7 max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         {m.subject_ratings_distribution({}, options)}
       </summary>
       <ol

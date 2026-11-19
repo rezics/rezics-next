@@ -125,8 +125,7 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
   };
   const target = (element: HTMLElement) => {
     for (const token of [
-      'min-h-11',
-      'min-w-11',
+      'min-h-7',
       'max-w-full',
       'whitespace-normal',
       'wrap-anywhere',
@@ -136,6 +135,8 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
       'focus-visible:outline-ring',
     ])
       expect(element.classList.contains(token)).toBe(true);
+    const hitboxes = { A: 'hitbox-[8px]', BUTTON: 'hitbox-[9px]', SUMMARY: 'hitbox-y-[8px]' };
+    expect(element.classList.contains(hitboxes[element.tagName as keyof typeof hitboxes])).toBe(true);
     expect(element.classList.contains('truncate')).toBe(false);
     expect(element.classList.contains('overflow-hidden')).toBe(false);
     expect(element.getAttribute('dir')).toBeNull();

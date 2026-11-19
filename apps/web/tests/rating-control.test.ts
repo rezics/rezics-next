@@ -196,8 +196,9 @@ test('ready, signed-out and pending actions keep comfortable wrapping targets an
   const expectTarget = (tag: string) => {
     for (const token of [
       'h-auto',
-      'min-h-11',
-      'min-w-11',
+      'hitbox-[9px]',
+      'min-h-7',
+      'min-w-7',
       'max-w-full',
       'whitespace-normal',
       'wrap-anywhere',
@@ -483,7 +484,8 @@ test('matching current readback keeps original-command recovery separate from or
   );
   const actions = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
   expect(actions).toHaveLength(2);
-  for (const action of actions) expect(action).toMatch(/min-h-11.*min-w-11.*wrap-anywhere.*focus-visible:outline-2/);
+  for (const action of actions)
+    expect(action).toMatch(/hitbox-\[9px\].*min-h-7.*min-w-7.*wrap-anywhere.*focus-visible:outline-2/);
   expect(actions[0]).toContain(m.subject_rating_control_retry_save({}, { locale: 'en' }));
   expect(html).toContain(m.subject_rating_control_uncertain({}, { locale: 'en' }));
   expect(html).toContain(m.subject_rating_control_read_separate({}, { locale: 'en' }));

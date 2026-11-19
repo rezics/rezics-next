@@ -95,9 +95,17 @@ describe('Browser relation continuation', () => {
       expect(await more.getAttribute('href')).toContain('node=side-stories&cursor=accessible-next');
       expect(await more.getAttribute('aria-describedby')).toBe('side-stories-status');
       expect(await first.getAttribute('aria-live')).toBeNull();
-      const target = await more.boundingBox();
-      expect(target!.height).toBeGreaterThanOrEqual(44);
-      expect(target!.width).toBeGreaterThanOrEqual(44);
+      await more.evaluate((link) => link.scrollIntoView({ block: 'center' }));
+      const target = await more.evaluate((link) => {
+        const { left, top, width, height } = link.getBoundingClientRect();
+        const x = left + width / 2;
+        const y = top + height / 2;
+        const hits = [-21.5, 0, 21.5].every((dx) =>
+          [-21.5, 0, 21.5].every((dy) => link.contains(document.elementFromPoint(x + dx, y + dy))),
+        );
+        return { height, hits };
+      });
+      expect(target).toEqual({ height: 28, hits: true });
 
       await page.evaluate(() => {
         const state = window as typeof window & { continuationReads?: unknown[] };
@@ -171,8 +179,9 @@ describe('Browser relation continuation', () => {
       await page.goto(url);
       await more.waitFor();
       await holdContinuation(page);
-      await more.focus();
-      await page.keyboard.press('Enter');
+      await more.evaluate((link) => link.scrollIntoView({ block: 'center' }));
+      const { x, y, width } = (await more.boundingBox())!;
+      await page.mouse.click(x + width / 2, y - 6);
       await held(page);
       await page
         .locator('[data-slot="view-tabs"]')

@@ -4,7 +4,7 @@ import { Link, useLocation, useRouter, type ErrorComponentProps } from '@tanstac
 import { useId, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 
-const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
+const actionClass = 'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere text-center';
 
 type SubjectViewRecoveryRouter = {
   invalidate: () => Promise<unknown>;
@@ -56,7 +56,7 @@ export function SubjectViewError({ reset }: ErrorComponentProps) {
       <h1 id={headingId} className="text-2xl font-semibold text-balance break-words">
         {m.subject_view_unavailable()}
       </h1>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-5">
         {/* Keep the action label stable while disabled, avoiding new locale copy for pending state. */}
         <Button
           type="button"

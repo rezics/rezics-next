@@ -175,7 +175,7 @@ function useRelationIncarnation(): string {
 }
 
 const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function failure(status: number | undefined, locale: string, retrySeconds?: number): string {
   const options = { locale: locale as never };
@@ -679,6 +679,8 @@ function StreamState({
     }
   }
 
+  const showContinuation = href && cursor && !retryWait;
+  const showRestart = base && (stopped || (visibleError && !retryWait) || !section.ok || readerUnavailable);
   return (
     <section
       data-slot="relation-stream"
@@ -772,27 +774,31 @@ function StreamState({
           )}
         </p>
       )}
-      {href && cursor && !retryWait && (
-        <a
-          data-slot="continue-group"
-          href={href}
-          rel="next"
-          onClick={more}
-          aria-disabled={visiblePending}
-          aria-describedby={`${node}-status`}
-          className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
-        >
-          {visibleError ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
-        </a>
-      )}
-      {(stopped || (visibleError && !retryWait) || !section.ok || readerUnavailable) && base && (
-        <a
-          data-slot="restart-group"
-          href={`${base}?${new URLSearchParams({ node, ...(realm ? { realm } : {}) })}`}
-          className={cn(buttonVariants({ variant: 'link' }), actionClass)}
-        >
-          {m.subject_relation_restart({}, options)}
-        </a>
+      {(showContinuation || showRestart) && (
+        <div className="flex flex-wrap items-center gap-5">
+          {showContinuation && (
+            <a
+              data-slot="continue-group"
+              href={href}
+              rel="next"
+              onClick={more}
+              aria-disabled={visiblePending}
+              aria-describedby={`${node}-status`}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
+            >
+              {visibleError ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
+            </a>
+          )}
+          {showRestart && (
+            <a
+              data-slot="restart-group"
+              href={`${base}?${new URLSearchParams({ node, ...(realm ? { realm } : {}) })}`}
+              className={cn(buttonVariants({ variant: 'link' }), actionClass)}
+            >
+              {m.subject_relation_restart({}, options)}
+            </a>
+          )}
+        </div>
       )}
     </section>
   );
