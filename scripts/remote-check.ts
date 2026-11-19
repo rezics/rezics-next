@@ -5434,27 +5434,30 @@ function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string
   const bytes = Math.round(memoryPerRunGiB * 2 ** 30);
   return `resolve_run_slice_cgroup() {
   slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null || true)
-  case "$slice_cgroup" in /*) return 0 ;; esac
+  case "$slice_cgroup" in /*/"$REZICS_CHECK_SLICE") return 0 ;; esac
+  # When systemd omits ControlGroup, use the current cgroup. The scope is a child of the same run slice.
   slice_cgroup=$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup 2>/dev/null || true)
-  case "$slice_cgroup" in /*) ;; *) slice_cgroup=; return 1 ;; esac
-  case "$REZICS_CHECK_SLICE" in ?*)
-    case "$slice_cgroup" in *"$REZICS_CHECK_SLICE"*)
-      slice_cgroup="\${slice_cgroup%%"$REZICS_CHECK_SLICE"*}$REZICS_CHECK_SLICE"
-    ;;
-    esac
-  ;;
+  case "$slice_cgroup" in
+    /*/"$REZICS_CHECK_SLICE"/*) slice_cgroup="\${slice_cgroup%%/"$REZICS_CHECK_SLICE"/*}/$REZICS_CHECK_SLICE" ;;
+    *) slice_cgroup=; return 1 ;;
   esac
 }
 apply_run_memory_limit() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
-  case "$slice_cgroup" in /*)
-    printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
-    printf '0\\n' > "/sys/fs/cgroup$slice_cgroup/memory.swap.max" 2>/dev/null || true
-    ;;
-  esac
+  resolve_run_slice_cgroup || return 1
+  page_bytes=$(getconf PAGESIZE) || return 1
+  for control in memory.max memory.swap.max; do
+    expected=$((${bytes} / page_bytes * page_bytes))
+    if [ "$control" = memory.swap.max ]; then expected=0; fi
+    file="/sys/fs/cgroup$slice_cgroup/$control"
+    actual=$(cat "$file") || return 1
+    if [ "$actual" != "$expected" ]; then
+      printf '%s\\n' "$expected" > "$file" || return 1
+      actual=$(cat "$file") || return 1
+      [ "$actual" = "$expected" ] || return 1
+    fi
+  done
 }
 run_memory_killed() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
   case "$slice_cgroup" in /*)
     oom_kill=$(awk '$1 == "oom_kill" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.events" 2>/dev/null || true)
     case "$oom_kill" in ''|*[!0-9]*) return 1 ;; esac
@@ -5482,7 +5485,6 @@ report_run_memory_kill() {
   : > ${reported}
 }
 reclaim_run_file_cache() {
-  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
   case "$slice_cgroup" in /*)
     reclaim="/sys/fs/cgroup$slice_cgroup/memory.reclaim"
     if [ -e "$reclaim" ] && [ -w "$reclaim" ]; then
@@ -5497,14 +5499,16 @@ reclaim_run_file_cache() {
   esac
 }
 reclaim_run_inactive_file() {
-  resolve_run_slice_cgroup || return 0
   inactive=$(awk '$1 == "inactive_file" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
   case "$inactive" in ''|0|*[!0-9]*) ;; *)
     printf '%s\\n' "$inactive" > "/sys/fs/cgroup$slice_cgroup/memory.reclaim" 2>/dev/null || true
   ;;
   esac
 }
-apply_run_memory_limit`;
+apply_run_memory_limit || {
+  echo "remote-check: could not enforce the run slice memory limit on $REZICS_CHECK_SLICE" >&2
+  exit 70
+}`;
 }
 
 export function runScript(
@@ -5699,7 +5703,6 @@ host=$REMOTE_CHECK_HOST
       if [ "$code" -eq 0 ]; then
         command_started=$(date +%s%N)
         touch ${quote(`${directory}/command-started`)}
-        slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
         progress_pid=
         command_pid=
         oom_watch_pid=
@@ -5776,7 +5779,6 @@ host=$REMOTE_CHECK_HOST
       fi
     fi
     run_finished=$(date +%s%N)
-    slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
     case "$slice_cgroup" in /*)
       usage=$(awk '$1 == "usage_usec" { print $2 }' "/sys/fs/cgroup$slice_cgroup/cpu.stat" 2>/dev/null)
       peak=$(cat "/sys/fs/cgroup$slice_cgroup/memory.peak" 2>/dev/null)
