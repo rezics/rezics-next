@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { creationFixture, approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
-import { NewOrganizationPage } from '../src/routes/organizations.new';
+import { NewOrganizationPage } from '../src/organization-create-page';
 import {
   readPendingAccountOperationStepUp,
   storePendingAccountOperationStepUp,
@@ -12,7 +12,7 @@ const body = { account_id: initial.accountId, client_id: initial.clientId, scope
 test('initial read retries the saved draft; uncertain creation requires the same handle and command', async () => {
   storePendingOrganizationHandle('Team-Alpha');
   const page = await open(<NewOrganizationPage initial={{ kind: 'failure', message: 'Unavailable' }} />, body);
-  await flush(() => button(page.host, 'Check current advice')!.click());
+  await flush(() => button(page.host, 'Check current status')!.click());
   expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('Team-Alpha');
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));

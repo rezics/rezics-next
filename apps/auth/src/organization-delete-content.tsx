@@ -111,6 +111,8 @@ export function OrganizationDeleteContent({
   const alert = useRef<HTMLDivElement>(null);
   const router = useRouter({ warn: false });
   const bypassDeparture = useRef(false);
+  // Bind deliberate recovery of an interrupted review to its last verified viewer.
+  const returnViewer = useRef<{ organizationId: string; humanAccountId: string } | null>(null);
   const nativeFlight = useRef<object | null>(null);
   const focusIntent = useRef<'history' | 'retry' | 'sign-in' | 'confirmation' | null>(null);
   const departureState = useRef({ confirmation, pending, loaded, organizationId, read });
@@ -214,11 +216,12 @@ export function OrganizationDeleteContent({
           : continuation.kind === 'pending' && continuation.value.organizationId === selected
             ? continuation.value
             : undefined;
+    if (returnViewer.current?.organizationId !== selected) returnViewer.current = null;
     return returns.begin({
       selected,
       source: organizationId,
       reader: read,
-      humanAccountId: retained?.humanAccountId,
+      humanAccountId: retained?.humanAccountId ?? returnViewer.current?.humanAccountId,
       operationKey: retained?.operationKey,
     });
   }
@@ -344,6 +347,10 @@ export function OrganizationDeleteContent({
       startInitialRead(current);
     }
     const retire = () => {
+      const review = returns.current;
+      if (review?.selected && review.humanAccountId) {
+        returnViewer.current = { organizationId: review.selected, humanAccountId: review.humanAccountId };
+      }
       flushSync(() => {
         returns.retire();
         if (attempt.current && !attempt.current.unresolved) {
@@ -535,6 +542,11 @@ export function OrganizationDeleteContent({
       });
       const result = await executeOrganizationDeletion(target, key, read, current);
       if (result.ok) {
+        if (
+          returnViewer.current?.organizationId === target.organizationId &&
+          returnViewer.current.humanAccountId === target.humanAccountId
+        )
+          returnViewer.current = null;
         returns.resolveAttempt(attemptId, 'acknowledged');
         focusIntent.current = 'history';
         forgetOperationKey(operation, target.humanAccountId, key);

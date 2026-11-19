@@ -11,7 +11,7 @@ import {
   send,
   session,
 } from './creation-page-fixture';
-import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { OrganizationDeleteContent } from '../src/organization-delete-content';
 import {
   clearOrganizationDeleteStepUp,
   clearOrganizationDeleteUnknown,
@@ -73,7 +73,7 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   });
   expect(reads).toBe(3);
   expect(check.disabled).toBe(true);
-  expect(page.host.querySelector('[role="status"]')!.textContent).toContain('Reading current');
+  expect(page.host.querySelector('[role="status"]')!.textContent).toContain('Loading the review');
   expect(unload()).toBe(true);
   // Reinstall the same conservative fence before replacing the selected target.
   expect(original.kind).toBe('pending');

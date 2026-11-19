@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { creationFixture, approval, fill, flush, leave, open, send, session, dom } from './creation-page-fixture';
-import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { OrganizationDeleteContent } from '../src/organization-delete-content';
 import type { OrganizationDeletionReader } from '../src/organization-deletion';
 
 creationFixture();
@@ -68,5 +68,5 @@ test('return review, preflight and bounded write retries have explicit whole-cal
   expect(page.calls[2]!.body).toEqual(page.calls[3]!.body);
   await flush(() => page.calls[3]!.resolve(Response.json({ accountId: organization })));
   expect(reads).toBe(3);
-  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
+  expect(page.host.textContent).toContain('Deletion was committed.');
 });

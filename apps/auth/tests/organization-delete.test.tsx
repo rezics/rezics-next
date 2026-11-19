@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { creationFixture, approval, button, fill, flush, leave, open, send, session } from './creation-page-fixture';
-import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { OrganizationDeleteContent } from '../src/organization-delete-content';
 import { m } from '../src/paraglide/messages.js';
 import {
   readOrganizationDeleteStepUp,
@@ -46,8 +46,8 @@ test('unavailable review recovers the selected organization and freshly confirms
   await confirm(page.host, '@FIRST');
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
-  expect(page.host.textContent).toContain('Organization deletion committed');
-  expect(page.host.textContent).toContain('complete erasure is not confirmed');
+  expect(page.host.textContent).toContain('Deletion was committed.');
+  expect(page.host.textContent).toContain('Complete erasure is not confirmed');
   expect(page.host.querySelector('form')).toBeNull();
 });
 
@@ -66,7 +66,7 @@ test('uncertainty retains the original identity through unavailable, missing, de
     expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
     expect(page.host.querySelector('form')).toBeNull();
     expect(page.calls).toHaveLength(3);
-    expect(page.host.textContent).not.toContain('Organization deletion committed');
+    expect(page.host.textContent).not.toContain('Deletion was committed.');
   }
   await page.render(
     <OrganizationDeleteContent
@@ -81,7 +81,7 @@ test('uncertainty retains the original identity through unavailable, missing, de
 });
 
 for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
-  test(`changing organization retires old ${phase} without unlocking the newer submit`, async () => {
+  test(`changing organization retires old ${phase} and keeps replacement review single-flight`, async () => {
     const oldRead = Promise.withResolvers<OrganizationDeletionRead>();
     const newRead = Promise.withResolvers<OrganizationDeletionRead>();
     let reads = 0;
@@ -93,8 +93,12 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
     if (phase === 'execution' || phase === 'step-up') await flush(() => page.calls[0]!.resolve(approval()));
     if (phase === 'execution') await flush(leave);
     await page.render(content(second, read));
-    expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
-    await confirm(page.host, '@second');
+    const check = () => button(page.host, 'Check current organization')!;
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(check().disabled).toBe(true);
+    await flush(() => check().click());
+    expect(reads).toBe(2);
+    const previousCalls = page.calls.length;
     const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
     try {
       await flush(() =>
@@ -110,10 +114,24 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
                     : Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
               ),
       );
-      expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
-      expect(page.host.textContent).not.toContain('Organization deletion committed');
+      if (phase === 'execution') expect(page.host.textContent).toContain(m.auth_organization_delete_accepted());
+      else expect(page.host.textContent).not.toContain(m.auth_organization_delete_accepted());
+      expect(page.calls).toHaveLength(previousCalls);
       expect(assign).not.toHaveBeenCalled();
-      const previousCalls = page.calls.length;
+      expect(page.host.querySelector('form')).toBeNull();
+      await flush(() => check().click());
+      expect(reads).toBe(3);
+      expect(page.calls).toHaveLength(previousCalls);
+      if (phase === 'step-up') {
+        expect(readOrganizationDeleteUnknown(first).kind).toBe('pending');
+        expect(page.host.textContent).toContain(m.auth_organization_delete_unknown());
+        expect(page.host.querySelector('form')).toBeNull();
+        return;
+      }
+      expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
+      await confirm(page.host, '@second');
+      expect(reads).toBe(4);
+      expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
       await flush(() => newRead.resolve(ready(second)));
       expect(page.calls).toHaveLength(previousCalls + 1);
       expect(page.calls.at(-1)!.body.operation).toEqual({ kind: 'delete', accountId: second });
@@ -138,19 +156,23 @@ test('late initial reads and browser departure cannot restore private review; re
   const page = await open(content(first, read), body);
   await page.render(content(second, read));
   await flush(() => delayed.resolve(ready(first)));
+  expect(page.host.querySelector('form')).toBeNull();
+  await flush(() => button(page.host, 'Check current organization')!.click());
   expect(page.host.textContent).toContain(second);
   expect(page.host.textContent).not.toContain(first);
   await flush(leave);
   expect(page.host.querySelector('form')).toBeNull();
   expect(page.host.textContent).not.toContain(second);
-  await flush(() => button(page.host, 'Retry')!.click());
+  await flush(() => button(page.host, 'Check current organization')!.click());
   await flush(leave);
   await flush(() => recovery.resolve(ready(second)));
   expect(page.host.querySelector('form')).toBeNull();
   replaced = true;
-  await flush(() => button(page.host, 'Retry')!.click());
+  await flush(() => button(page.host, 'Check current organization')!.click());
   expect(page.host.querySelector('form')).toBeNull();
-  expect(page.host.textContent).toContain('account, organization or request changed');
+  expect(page.host.textContent).toContain(m.auth_organization_delete_changed());
+  expect(page.host.textContent).not.toContain(first);
+  expect(page.calls).toHaveLength(0);
 });
 
 test('ordinary direct navigation authenticates without private facts, then renews explicit review with the same operation', async () => {
@@ -170,7 +192,7 @@ test('ordinary direct navigation authenticates without private facts, then renew
   expect(page.host.textContent).not.toContain('@first');
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   try {
-    await flush(() => button(page.host, 'Authenticate to review')!.click());
+    await flush(() => button(page.host, 'Sign in to review')!.click());
     expect(assign).toHaveBeenCalledTimes(1);
     const saved = readOrganizationDeleteStepUp();
     expect(saved).toMatchObject({
@@ -249,8 +271,8 @@ test('current native refusal has no authentication loop or destructive control',
     body,
   );
   expect(page.host.querySelector('form')).toBeNull();
-  expect(button(page.host, 'Authenticate to review')).toBeUndefined();
-  expect(page.host.textContent).toContain('Current deletion review was denied.');
+  expect(button(page.host, 'Sign in to review')).toBeUndefined();
+  expect(page.host.textContent).toContain('Deletion review was denied.');
   expect(page.calls).toHaveLength(0);
 });
 
@@ -266,7 +288,7 @@ test('refused generic key storage preserves the exact deletion continuation with
   );
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   try {
-    await flush(() => button(page.host, 'Authenticate to review')!.click());
+    await flush(() => button(page.host, 'Sign in to review')!.click());
     expect(assign).not.toHaveBeenCalled();
     expect(page.calls).toHaveLength(0);
     expect(readOrganizationDeleteStepUp()).toEqual(continuation);
