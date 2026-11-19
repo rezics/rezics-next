@@ -88,7 +88,13 @@ export const nativeAdditionalRoles = [
   ]),
 ] as const;
 const quote = (value: string) => `"${value}"`;
-const pools = new WeakSet<Pool>();
+const pools = new WeakMap<Pool, () => Promise<PoolClient>>();
+
+/** For explicit transactions that install the producer version with SET LOCAL. */
+export async function checkoutNativeRoleTransaction(pool: Pool) {
+  const connect = pools.get(pool);
+  return { connection: await (connect ? connect() : pool.connect()), producer: connect !== undefined };
+}
 
 /** A producer version belongs to a leased connection, never to public input or
  * an idle shared socket. Reset completes BEFORE the real pool release. Existing
@@ -96,8 +102,8 @@ const pools = new WeakSet<Pool>();
  * Install only on the Auth-owned pool, before composing its native producers. */
 export function installNativeRoleProducer(pool: Pool): void {
   if (pools.has(pool)) return;
-  pools.add(pool);
   const connect = pool.connect.bind(pool);
+  pools.set(pool, connect);
   const lease = async (): Promise<PoolClient> => {
     const client = await connect();
     const release = client.release.bind(client);

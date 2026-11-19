@@ -651,10 +651,10 @@ CREATE FUNCTION public.auth_erasure_guard_auth_client_reduction() RETURNS trigge
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP='UPDATE' THEN
-  PERFORM auth_erasure_admit_client(OLD."client_id");
+  IF TG_OP='UPDATE' AND OLD.client_id IS DISTINCT FROM NEW.client_id THEN
+    PERFORM auth_erasure_admit_client(OLD.client_id);
   END IF;
-  PERFORM auth_erasure_admit_client(NEW."client_id");
+  PERFORM auth_erasure_admit_client(NEW.client_id);
   RETURN NEW;
 END $$;
 
@@ -667,10 +667,10 @@ CREATE FUNCTION public.auth_erasure_guard_auth_client_reduction_progress() RETUR
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP='UPDATE' THEN
-  PERFORM auth_erasure_admit_client(OLD."client_id");
+  IF TG_OP='UPDATE' AND OLD.client_id IS DISTINCT FROM NEW.client_id THEN
+    PERFORM auth_erasure_admit_client(OLD.client_id);
   END IF;
-  PERFORM auth_erasure_admit_client(NEW."client_id");
+  PERFORM auth_erasure_admit_client(NEW.client_id);
   RETURN NEW;
 END $$;
 
@@ -5654,6 +5654,20 @@ CREATE INDEX auth_barrier_proof_expiry ON public.auth_barrier_proof USING btree 
 
 
 --
+-- Name: auth_client_id_point; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_client_id_point ON public.auth_client USING hash (client_id) WITH (fillfactor='50');
+
+
+--
+-- Name: auth_client_reduction_progress_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_client_reduction_progress_open ON public.auth_client_reduction_progress USING btree (operation_id) WHERE (NOT completed);
+
+
+--
 -- Name: auth_client_userId_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6021,21 +6035,21 @@ CREATE INDEX erasure_auth_effect_receipt_0 ON public.auth_effect_receipt USING b
 -- Name: erasure_auth_effect_receipt_1; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX erasure_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (acting_human_id, receipt_id);
+CREATE INDEX erasure_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (acting_human_id, receipt_id) WHERE (acting_human_id IS NOT NULL);
 
 
 --
 -- Name: erasure_auth_effect_receipt_2; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX erasure_auth_effect_receipt_2 ON public.auth_effect_receipt USING btree (client_id, receipt_id);
+CREATE INDEX erasure_auth_effect_receipt_2 ON public.auth_effect_receipt USING btree (client_id, receipt_id) WHERE (client_id IS NOT NULL);
 
 
 --
 -- Name: erasure_auth_effect_receipt_3; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX erasure_auth_effect_receipt_3 ON public.auth_effect_receipt USING btree (erasure_operator_id, receipt_id);
+CREATE INDEX erasure_auth_effect_receipt_3 ON public.auth_effect_receipt USING btree (erasure_operator_id, receipt_id) WHERE (erasure_operator_id IS NOT NULL);
 
 
 --
@@ -6623,14 +6637,14 @@ CREATE INDEX native_role_auth_consent_pending ON public.auth_consent USING btree
 -- Name: native_role_auth_effect_receipt_0; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_role_auth_effect_receipt_0 ON public.auth_effect_receipt USING btree (erasure_client_owner_id, receipt_id);
+CREATE INDEX native_role_auth_effect_receipt_0 ON public.auth_effect_receipt USING btree (erasure_client_owner_id, receipt_id) WHERE (erasure_client_owner_id IS NOT NULL);
 
 
 --
 -- Name: native_role_auth_effect_receipt_1; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX native_role_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (erasure_source_client_owner_id, receipt_id);
+CREATE INDEX native_role_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (erasure_source_client_owner_id, receipt_id) WHERE (erasure_source_client_owner_id IS NOT NULL);
 
 
 --
