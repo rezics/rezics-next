@@ -1,5 +1,6 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -252,9 +253,12 @@ beforeAll(async () => {
       async authorizeProvisioning(id) {
         return { accountId: id };
       },
-      async approveCredentialEffect({ stage }) {
+      async approveCredentialEffect({ stage, human }) {
         if (outage) throw new Error('Access unavailable');
-        const reference = `credential-approval-${++sequence}`;
+        const subject = accounts.get(stage.subjectAccountId);
+        if (!subject || human.account_id !== (subject.automated ? 'effects-human' : subject.accountId))
+          throw new Error('Access denied');
+        const reference = `${Buffer.from(stage.effectReference).toString('base64url')}.${randomBytes(32).toString('base64url')}`;
         const expiresAt = new Date(Date.now() + 60000).toISOString();
         credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
         return { reference, expiresAt };
@@ -409,6 +413,8 @@ beforeAll(async () => {
   await service.internal.registerClient({ clientId: 'effects-web', firstParty: true, scopes: ['read', 'write'] });
   await service.internal.registerClient({ clientId: 'effects-external', firstParty: false, scopes: ['read', 'write'] });
   await provision('effects-human');
+  const agent = actor('effects-agent', true);
+  accounts.set('effects-org', { ...agent, accountId: 'effects-org', kind: 'organization' });
 }, 30000);
 afterAll(async () => {
   await pool?.end();
@@ -416,7 +422,6 @@ afterAll(async () => {
 }, 30000);
 
 test('automated opening consumes its own durable purpose-bound Access receipt before a real Better Auth session', async () => {
-  actor('effects-agent', true);
   const headers = new Headers({ cookie: await login('effects-human') });
   const ref = await authorization('effects-agent', 'session', headers);
   const response = await service.internal.openAutomatedSession({
@@ -479,12 +484,6 @@ test('opening denies missing forged expired wrong-subject wrong-purpose and inva
       );
     if (mode === 'inactive') accounts.get('effects-agent')!.state = 'suspended';
     if (mode === 'outage') outage = true;
-    if (mode === 'organization')
-      accounts.set('effects-org', {
-        ...accounts.get('effects-agent')!,
-        accountId: 'effects-org',
-        kind: 'organization',
-      });
     const before = (await pool.query('SELECT count(*) FROM session')).rows;
     await expect(
       service.internal.openAutomatedSession({
@@ -558,21 +557,27 @@ test('key assertion unknown key owner audience lifetime algorithm and unsigned c
 });
 
 test('approved credential effects toggle independent automated signin and enforce owner and organization guards', async () => {
+  const { accountId } = actor('effects-credential-agent', true);
   let headers = new Headers({ cookie: await login('effects-human') });
-  await credential('effects-agent', headers, { kind: 'password', password });
-  const sign = () =>
-    request('/signin', { account_id: 'effects-agent', password, client_id: 'effects-web', scope: ['read'] });
+  await credential(accountId, headers, { kind: 'password', password });
+  const sign = () => request('/signin', { account_id: accountId, password, client_id: 'effects-web', scope: ['read'] });
   const signed = await sign();
   expect(signed.status).toBe(200);
-  expect(await signed.json()).toMatchObject({ account_id: 'effects-agent', amr: ['pwd'] });
+  expect(await signed.json()).toMatchObject({ account_id: accountId, amr: ['pwd'] });
   const old = await issued(cookie(signed));
   headers = new Headers({ cookie: await login('effects-human') });
-  await credential('effects-agent', headers, { kind: 'password', password: null });
+  await credential(accountId, headers, { kind: 'password', password: null });
   expect(await kernelAccepts(old)).toBe(false);
   expect((await sign()).status).toBeGreaterThanOrEqual(400);
-  await credential('effects-agent', headers, { kind: 'key', kid: 'own-key', remove: true });
-  expect((await keySignin('effects-agent', await assertion('effects-agent'))).status).toBeGreaterThanOrEqual(400);
+  await credential(accountId, headers, { kind: 'key', publicJwk, kid: 'own-key' });
+  expect((await keySignin(accountId, await assertion(accountId))).status).toBe(200);
+  await credential(accountId, headers, { kind: 'key', kid: 'own-key', remove: true });
+  expect((await keySignin(accountId, await assertion(accountId))).status).toBeGreaterThanOrEqual(400);
   expect(service.internal).not.toHaveProperty('setCredential');
+  await provision('effects-other-human');
+  await expect(credential('effects-other-human', headers, { kind: 'password', password })).rejects.toThrow(
+    'Access denied',
+  );
   await expect(credential('effects-org', headers, { kind: 'password', password })).rejects.toThrow();
   expect((await pool.query('SELECT id FROM "user" WHERE id=$1', ['effects-org'])).rows).toEqual([]);
   const noPorts = await createAuthService({
@@ -584,7 +589,7 @@ test('approved credential effects toggle independent automated signin and enforc
     }),
   });
   await expect(
-    noPorts.internal.openAutomatedSession({ subjectAccountId: 'effects-agent', authorization: 'unused', headers }),
+    noPorts.internal.openAutomatedSession({ subjectAccountId: accountId, authorization: 'unused', headers }),
   ).rejects.toThrow();
 });
 
