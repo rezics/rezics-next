@@ -418,7 +418,7 @@ test('cancellation leaves no completed marker and construction stays within reco
 });
 
 test('32/128/512 comparison growth keeps pages indexed and admission exact', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'plan-compare-growth-'));
+  const directory = await mkdtemp('/dev/shm/plan-compare-growth-');
   const check: CountedCheck = {
     read: (value) => value as { 'sqlite statements': number; 'sqlite returned rows': number },
     bounds: { 'sqlite statements': 'constant', 'sqlite returned rows': 'constant' },
@@ -456,12 +456,14 @@ test('32/128/512 comparison growth keeps pages indexed and admission exact', asy
       await built.close();
 
       const database = new Database(join(output, 'comparison.sqlite'));
-      database.exec('CREATE TABLE IF NOT EXISTS unrelated_history (id INTEGER PRIMARY KEY, payload TEXT)');
-      const insert = database.query('INSERT INTO unrelated_history(payload) VALUES (?)');
-      for (let index = 0; index < scale * 4; index++) insert.run(`history-${index}`);
       const probe = createSqliteProbe(database, { growingTables: [...COMPARISON_TABLES, 'unrelated_history'] });
       const store = new PlanComparisonStore(probe.database);
       try {
+        database.exec('CREATE TABLE unrelated_history (id INTEGER PRIMARY KEY, payload TEXT)');
+        const insert = database.query('INSERT INTO unrelated_history(payload) VALUES (?)');
+        database.transaction(() => {
+          for (let index = 0; index < scale * 4; index++) insert.run(`history-${index}`);
+        })();
         const plan = store.loadPlan();
         expect(plan?.complete).toBe(true);
         const measured = probe.measure(() => store.pageRecords(plan!.comparisonId, 'changed', { limit: 20 }));

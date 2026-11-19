@@ -349,8 +349,12 @@ test('after-create reads retain the failed GET and retry only while the native p
     ['overloaded', 1],
   ] as const) {
     let requests = 0;
+    const waits: number[] = [];
     const client = createPublicBulkClient({
       origin: 'https://api.importer.test',
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init);
         expect(request.method).toBe('GET');
@@ -364,6 +368,7 @@ test('after-create reads retain the failed GET and retry only while the native p
     });
     const error = await client.readSubject(original, undefined, 'after-create').catch((error: unknown) => error);
     expect(requests).toBe(attempts);
+    expect(waits).toEqual(Array.from({ length: attempts - 1 }, () => 0));
     expect(error).toBeInstanceOf(ImportTransportError);
     expect(remainingRequestFromTransport(error as ImportTransportError)).toMatchObject({
       method: 'GET',

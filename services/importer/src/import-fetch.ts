@@ -578,7 +578,10 @@ export function createBoundedPublicGet(options: PublicGetOptions) {
 }
 
 /** Publication reads following a write may wait for its projection under the same GET budget. */
-export function createBoundedPublicSubjectGet(options: Pick<PublicGetOptions, 'origin' | 'fetch'>, afterWrite = false) {
+export function createBoundedPublicSubjectGet(
+  options: Pick<PublicGetOptions, 'origin' | 'fetch' | 'sleep'>,
+  afterWrite = false,
+) {
   return createBoundedGet(
     { ...options, pathPrefix: '/v1/subjects/', maxAttempts: afterWrite ? MAX_IMPORT_ATTEMPTS : 1 },
     { protocols: ['http:', 'https:'], redirect: 'manual', cache: 'no-store', retryProjectionOnly: afterWrite },
