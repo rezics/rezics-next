@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { observeComposedReads, observeEngineRequest } from './composed-page-cost.ts';
 import type { Pool } from 'pg';
 import type { Access } from '../../../src/request/access.ts';
+import { createKernelCreditSearchSource } from '../../../src/composition/runtime-defaults.ts';
+import { startRelays } from '../../../src/events/relays.ts';
+import { subjectListingSource } from '../../../src/library/listing-counts.ts';
+import { createSubjectIndexer } from '../../../src/search/indexer.ts';
+import { createSearchWriterGuard } from '../../../src/search/writer-guard.ts';
 import { composeSearchNativePorts } from '../../../src/composition/search-native.ts';
 import {
   createDefaultPublicFilterRuntime,
@@ -13,7 +18,7 @@ import type { OpenSearch } from '../../../src/search/opensearch.ts';
 import { createOutcomeWorker, type WorkerStats } from './outcome-worker.ts';
 import type { HttpResponse } from '../../../../../specs/semantic-driver.ts';
 import type { createKernel } from '../../../src/http/kernel.ts';
-import { subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
+import { readSubjectIndexUuid, subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import { createOpenSearch, OpenSearchError, SearchUnavailableError } from '../../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
 import { createSearchService } from '../../../src/search/service.ts';
@@ -62,6 +67,7 @@ export interface ReleasedDiscoveryRuntime extends ReleasedNativeConsumers {
   readonly workerKind: ReleasedDiscoveryWorkerKind;
   indexing(state: 'paused' | 'running'): Promise<void>;
   backgroundWork(state: 'paused' | 'running'): Promise<void>;
+  pauseAfterSubjectReplay(published: { generation: number; uuid: string }, deadline: number): Promise<void>;
   converge(subjects: readonly CreatedSubject[]): Promise<void>;
   rebuild(): Promise<{ generation: number; previous: number | null }>;
   barrier(boundary: ReleasedTransportBoundary): ReleasedTransportBarrier;
@@ -247,6 +253,45 @@ export function releasedDiscoveryRuntime(
           if (state === 'paused') {
             await worker.close();
           } else if (worker.exited) await startOwnedWorker(initialInstant);
+        }),
+      );
+    },
+    pauseAfterSubjectReplay(published, deadline) {
+      ownership.requireOwnedChild();
+      return operation(() =>
+        workerOperation(async () => {
+          if (!worker || !config) throw new Error('Owned worker has not started');
+          // Services can commit envelopes during shutdown, after the Subject relay has stopped.
+          await worker.close();
+          const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+          const { active } = await subjectGenerations(search, prefix, undefined, signal);
+          if (
+            active !== published.generation ||
+            (await readSubjectIndexUuid(search, prefix, active)) !== published.uuid
+          )
+            throw new Error('Published Subject generation changed before replay');
+          const { pool, routeKey } = config;
+          const consumer = subjectConsumer(prefix, active);
+          const current = () => readFreshness(pool, consumer, { deadline });
+          if ((await current()).behind === 0) return;
+          // Replay the remaining envelopes through the same Source, guarded writer and checkpoint CAS.
+          const credit = createKernelCreditSearchSource(pool, routeKey);
+          const options = {
+            pool,
+            search,
+            consumer,
+            index: subjectIndexName(prefix, active),
+            source: createRatedSubjectSource(pool, routeKey, credit, searchPorts()).source,
+            listing: subjectListingSource(pool),
+          };
+          const relay = createSubjectIndexer({ ...options, writer: createSearchWriterGuard(options) });
+          const replay = startRelays(pool, [relay]);
+          try {
+            while ((await current()).behind > 0) await Bun.sleep(Math.min(250, Math.max(0, deadline - Date.now())));
+          } finally {
+            await replay.stop();
+          }
+          if ((await current()).behind > 0) throw new Error('Subject checkpoint moved behind during replay shutdown');
         }),
       );
     },
