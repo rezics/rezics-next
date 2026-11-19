@@ -252,6 +252,7 @@
         "services/kernel/src/access/adapters/reading.ts",
         "services/kernel/src/access/creation-manifest.ts",
         "services/kernel/src/access/eligibility.ts",
+        "services/kernel/src/access/global-read-preparation.ts",
         "services/kernel/src/access/factory.ts",
         "services/kernel/src/access/parent-creation.ts",
         "services/kernel/src/access/public-eligibility.ts",
