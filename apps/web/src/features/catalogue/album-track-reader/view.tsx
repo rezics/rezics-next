@@ -9,8 +9,7 @@ import { contextHref } from '../../pages/context-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import type { AlbumTrackAddress, AlbumTrackRead, AlbumTrackTransport } from './model';
 
-const action =
-  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<AlbumTrackRead, { ok: true }>;
 type Failure = Extract<AlbumTrackRead, { ok: false }>;

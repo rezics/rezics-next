@@ -42,8 +42,7 @@ export {
 };
 export type { EpisodeJourney, MembershipDraft };
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 type Ready = Extract<ScreenRead, { ok: true }>;
 

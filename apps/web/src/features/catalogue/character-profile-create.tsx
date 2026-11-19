@@ -788,11 +788,7 @@ function CharacterProfileCreateLive({
                           });
                         }}
                       >
-                        <SelectTrigger
-                          id={`${address}-rank`}
-                          className="w-full"
-                          {...feedback(`${address}-rank`)}
-                        >
+                        <SelectTrigger id={`${address}-rank`} className="w-full" {...feedback(`${address}-rank`)}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -898,9 +894,7 @@ function CharacterProfileCreateLive({
                   <>
                     <EditorFailure reason="stale" locale={locale} />
                     <details className="min-w-0 text-sm">
-                      <summary className="cursor-pointer">
-                        {m.catalogue_creation_technical_details({}, o)}
-                      </summary>
+                      <summary className="cursor-pointer">{m.catalogue_creation_technical_details({}, o)}</summary>
                       <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
                         <code>{JSON.stringify(fact, null, 2)}</code>
                       </pre>

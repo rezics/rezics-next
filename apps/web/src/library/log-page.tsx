@@ -44,7 +44,10 @@ function PublishedLogBack({
   return (
     <a
       href={href}
-      className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal px-0')}
+      className={cn(
+        buttonVariants({ variant: 'link', size: 'sm' }),
+        'h-auto min-h-6 max-w-full whitespace-normal px-0',
+      )}
       onClick={(event) => logsReturnBackClick(event, logId, locale, sessionSubject ?? null)}
     >
       {m.library_logs_back()}
@@ -482,9 +485,7 @@ export function PublishedLogPageView({
         ) : null}
       </section>
       <details className="rounded-lg border px-4">
-        <summary className="cursor-pointer content-center text-sm font-medium">
-          {m.library_logs_dates()}
-        </summary>
+        <summary className="cursor-pointer content-center text-sm font-medium">{m.library_logs_dates()}</summary>
         <section aria-label={m.library_logs_dates()} className="space-y-2 border-t py-4 text-sm">
           <SnapshotTime label={m.library_logs_started()} value={log.startedAt} />
           {log.completedAt ? <SnapshotTime label={m.library_logs_completed()} value={log.completedAt} /> : null}

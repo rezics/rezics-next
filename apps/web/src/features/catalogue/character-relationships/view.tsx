@@ -13,9 +13,7 @@ import { catalogueEntries } from '../catalogue-entry';
 import type { RelationTransport, RelationDraft, RelationSlot } from '../../../subject/relation-candidates';
 import { RelationEditor } from '../relation-editor';
 import { useConsentFocus } from '../statement-consent-focus';
-import {
-  CharacterRelationshipsGroups,
-} from '../../pages/character-relationships';
+import { CharacterRelationshipsGroups } from '../../pages/character-relationships';
 import { associationCorrection } from './correction';
 import {
   advanceCharacterRelationshipsCursor,
@@ -383,15 +381,14 @@ function CharacterRelationshipsLive({
               onRestart={(event) => void load(stream?.key, undefined, event, 'restart')}
             />
             <p>
-              <a
-                className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
-                href={changes.href}
-              >
+              <a className={cn(buttonVariants({ variant: 'outline' }), actionClass)} href={changes.href}>
                 {m.character_relationships_changes({}, o)}
               </a>
             </p>
             <details className="rounded-lg border border-border p-4 text-sm">
-              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">{m.catalogue_technical_details({}, o)}</summary>
+              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">
+                {m.catalogue_technical_details({}, o)}
+              </summary>
               <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
                 <div>
                   <dt>{m.creator_editions_subject({}, o)}</dt>
@@ -414,7 +411,9 @@ function CharacterRelationshipsLive({
         {drafts.map((draft) => (
           <section key={draft.instance} className="space-y-3 border-t border-border pt-6">
             <details className="text-sm">
-              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">{m.catalogue_technical_details({}, o)}</summary>
+              <summary className="cursor-pointer font-medium [overflow-wrap:anywhere]">
+                {m.catalogue_technical_details({}, o)}
+              </summary>
               <p className="mt-3 break-all">
                 {m.character_relationships_holder({}, o)}: <code>{draft.id}</code>
               </p>

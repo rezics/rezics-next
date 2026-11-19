@@ -768,7 +768,10 @@ function SpaceSetupFormVisit({
                   onClick={(event) => advance(index, event.detail === 0 ? event.currentTarget : undefined)}
                   className="h-auto min-h-6 w-full min-w-0 justify-start gap-3 whitespace-normal text-start"
                 >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs" aria-hidden="true">
+                  <span
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs"
+                    aria-hidden="true"
+                  >
                     {completed[index] ? <Check className="size-4" /> : <Icon className="size-4" />}
                   </span>
                   <span className="min-w-0 flex-1">{label}</span>
@@ -825,10 +828,10 @@ function SpaceSetupFormVisit({
             </p>
             {space?.address ? (
               <Link
- to="/spaces/$address"
- params={{ address: space.address }}
- className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
- >
+                to="/spaces/$address"
+                params={{ address: space.address }}
+                className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
+              >
                 {m.space_setup_home()}
                 <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
               </Link>
@@ -943,10 +946,10 @@ function SpaceSetupFormVisit({
                 </dl>
                 <ListRowControl className="flex min-w-0 flex-wrap gap-2" data-content-item-slot="actions">
                   <Link
- to="/boards/$id"
- params={{ id: boardId }}
- className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
- >
+                    to="/boards/$id"
+                    params={{ id: boardId }}
+                    className="inline-flex max-w-full flex-wrap items-center gap-2 text-primary underline underline-offset-4"
+                  >
                     {m.space_setup_open_board()}
                     <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
                   </Link>

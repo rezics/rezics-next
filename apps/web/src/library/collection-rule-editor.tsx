@@ -791,11 +791,7 @@ function RuleForm({
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
-      <form
-        noValidate
-        onSubmit={(event) => void submit(event)}
-        className="min-w-0"
-      >
+      <form noValidate onSubmit={(event) => void submit(event)} className="min-w-0">
         <CollectionRuleWorkspace
           context={
             <header className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
@@ -853,7 +849,9 @@ function RuleForm({
                         />
                       </Field>
                       <Field>
-                        <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
+                        <FieldLabel htmlFor={`${metadataId}-description`}>
+                          {m.library_collection_description()}
+                        </FieldLabel>
                         <Textarea
                           id={`${metadataId}-description`}
                           {...collectionTextInputAttributes({
@@ -930,7 +928,10 @@ function RuleForm({
                               };
                               // A raw edit retires even equal normalized queries and their continuation positions.
                               choiceContext.current = { q: '', next: null, generation: -1 };
-                              setChoices((current) => ({ ...current, labels: { state: 'ready', values: [], next: null } }));
+                              setChoices((current) => ({
+                                ...current,
+                                labels: { state: 'ready', values: [], next: null },
+                              }));
                               setQuery(raw);
                             }}
                           />

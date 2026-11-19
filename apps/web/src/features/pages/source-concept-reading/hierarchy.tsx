@@ -6,8 +6,7 @@ import { validConceptCursor, type ConceptHierarchyRow } from '../../catalogue/so
 import { conceptVisitHistoryLimit } from './navigation';
 import type { ConceptVisit } from './visit';
 
-export const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+export const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 export const linkClass =
   'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 

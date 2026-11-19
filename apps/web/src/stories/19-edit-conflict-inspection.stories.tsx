@@ -138,12 +138,12 @@ function ChangedInspectionExample({
   return (
     <main className="mx-auto min-w-0 max-w-3xl space-y-4 p-4">
       <p>Prepared external-change fixture; the controller changes this reading without a native request.</p>
-      <Textarea 
- ref={origin}
- aria-label={m.thread_reply_body_label()}
- defaultValue="Prepared retained writing"
- className="min-h-32 w-full"
- />
+      <Textarea
+        ref={origin}
+        aria-label={m.thread_reply_body_label()}
+        defaultValue="Prepared retained writing"
+        className="min-h-32 w-full"
+      />
       <EditConflictRecovery
         current={result}
         presentation={{
@@ -159,7 +159,12 @@ function ChangedInspectionExample({
         }}
         returningFocus={() => origin.current}
       />
-      <Button type="button" data-prepared-change="" variant="outline" size="sm" onClick={() => {
+      <Button
+        type="button"
+        data-prepared-change=""
+        variant="outline"
+        size="sm"
+        onClick={() => {
           if (retired) {
             setExpired(true);
             controller.abort();

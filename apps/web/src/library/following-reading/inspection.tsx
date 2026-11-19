@@ -185,7 +185,6 @@ export function FollowingInspection({
       {isSpace &&
       (space.result.state === 'unavailable' || space.result.state === 'denied' || space.result.state === 'retired') ? (
         <Button
-         
           variant="outline"
           onClick={() => {
             if (!space.current()) return;
@@ -199,7 +198,10 @@ export function FollowingInspection({
       <div className="space-y-3">
         {destination ? (
           <a
-           className={buttonVariants({ variant: 'default', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
+            className={buttonVariants({
+              variant: 'default',
+              className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+            })}
             href={destination.href}
             onClick={(event) => {
               followingDestinationClick(
@@ -223,7 +225,10 @@ export function FollowingInspection({
         ) : null}
         {actionHref && actionHref !== destination?.href ? (
           <a
-           className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
+            className={buttonVariants({
+              variant: 'outline',
+              className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+            })}
             href={actionHref}
             onClick={(event) => {
               followingDestinationClick(event, () => selection.current() && space.current(), returnFrontier);

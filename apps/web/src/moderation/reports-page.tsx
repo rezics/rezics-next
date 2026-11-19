@@ -470,9 +470,7 @@ function ReportsView({
           {m.moderation_controls_details_summary({ status: selectedStatus, kind: selectedKind, order: selectedOrder })}
         </p>
         <details className="min-w-0 border-y">
-          <summary className="cursor-pointer text-sm font-medium">
-            {m.moderation_filter_label()}
-          </summary>
+          <summary className="cursor-pointer text-sm font-medium">{m.moderation_filter_label()}</summary>
           <fieldset
             className="flex min-w-0 flex-wrap items-end gap-3 py-3"
             aria-describedby={`${controlsId}-summary`}

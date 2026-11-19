@@ -5,7 +5,12 @@ import { AUTOMATED_PROFILE, createAutomatedAttempt, saveAutomatedAttempt } from 
 import { authLocale, reviewParameters, button, waitFor } from '../accounts-operations/story';
 import { m } from '../../paraglide/messages.js';
 
-export default { title: 'Account/Managed Accounts/Create Operated Actor', id: 'pages-account-create-operated-actor', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Account/Managed Accounts/Create Operated Actor',
+  id: 'pages-account-create-operated-actor',
+  parameters: reviewParameters,
+  decorators: [authLocale],
+};
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = {
   id: '22222222-2222-4222-8222-222222222222',

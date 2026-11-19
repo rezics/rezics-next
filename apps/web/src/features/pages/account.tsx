@@ -152,12 +152,10 @@ export function AccountIdentity(props: Record<string, unknown>) {
     />
   );
   const links = profile.links.filter((link) => webUrl(link.url));
-  const hasSecondaryDetails = Boolean(profile.verified && profile.subject) || profile.automated || profile.operated || links.length > 0;
+  const hasSecondaryDetails =
+    Boolean(profile.verified && profile.subject) || profile.automated || profile.operated || links.length > 0;
   return (
-    <div
-      data-slot="agent-profile-card"
-      className="rounded-lg border border-border bg-card p-4 sm:p-6"
-    >
+    <div data-slot="agent-profile-card" className="rounded-lg border border-border bg-card p-4 sm:p-6">
       <div
         data-slot="agent-header"
         className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-x-6"
@@ -181,10 +179,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
               : m.settings_verification_person({}, { locale: value.locale as never })}
           </p>
         </header>
-        <div
-          data-slot="agent-description"
-          className="col-span-full min-w-0 wrap-anywhere sm:col-span-1 sm:col-start-2"
-        >
+        <div data-slot="agent-description" className="col-span-full min-w-0 wrap-anywhere sm:col-span-1 sm:col-start-2">
           {profile.bio && (
             <p data-slot="agent-bio" className="max-w-prose leading-7 text-pretty whitespace-pre-line">
               {profile.bio}
@@ -223,7 +218,9 @@ export function AccountIdentity(props: Record<string, unknown>) {
                 <p data-slot="agent-operator" className="text-sm text-muted-foreground">
                   {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
                   {value.operator?.handle ? (
-                    <value.link href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}>
+                    <value.link
+                      href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}
+                    >
                       {value.operator.displayName || value.operator.handle}
                     </value.link>
                   ) : (

@@ -47,13 +47,8 @@ export function WorkReleaseComparison({
     { id: 'developer', label: m.game_reader_compare_developer_label({}, o), properties: ['wdt:P178'] },
   ];
   return (
-    <details
-      className="mt-4 min-w-0 space-y-3 border-t border-border pt-3"
-      data-slot="work-release-comparison"
-    >
-      <summary className={`${action} cursor-pointer font-medium`}>
-        {m.game_reader_compare_title({}, o)}
-      </summary>
+    <details className="mt-4 min-w-0 space-y-3 border-t border-border pt-3" data-slot="work-release-comparison">
+      <summary className={`${action} cursor-pointer font-medium`}>{m.game_reader_compare_title({}, o)}</summary>
       <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => {
           const fields = group.properties.map((property) => card.fields[property]);

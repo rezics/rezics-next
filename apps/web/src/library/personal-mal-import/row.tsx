@@ -12,7 +12,15 @@ import type {
 } from './contract';
 import { standardMalQuestion } from './contract';
 import { MalAction, MalCheck } from './controls';
-import { admittedFields, malKindLabel, malMatchLabel, malProgressEntries, malRetainReason, malOriginalScoreLabel, malValueLabel } from './meaning';
+import {
+  admittedFields,
+  malKindLabel,
+  malMatchLabel,
+  malProgressEntries,
+  malRetainReason,
+  malOriginalScoreLabel,
+  malValueLabel,
+} from './meaning';
 import { MalTargetSearch } from './target';
 import { MalLabelsReview } from './labels';
 
@@ -309,7 +317,6 @@ export function MalRowReview({
                 <legend className="font-medium">{m.library_mal_score_choice()}</legend>
                 <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                   
                     type="radio"
                     name={`${base}-score`}
                     checked={!draft.score}
@@ -320,7 +327,6 @@ export function MalRowReview({
                 </label>
                 <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                   
                     type="radio"
                     name={`${base}-score`}
                     checked={draft.score?.action === 'adopt' && currentScoreChoice}
@@ -353,7 +359,6 @@ export function MalRowReview({
                 </label>
                 <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                   <input
-                   
                     type="radio"
                     name={`${base}-score`}
                     checked={draft.score?.action === 'clear' && currentScoreChoice}
@@ -389,11 +394,7 @@ export function MalRowReview({
                           })
                         }
                       >
-                        <SelectTrigger
-                          id={`${base}-units`}
-                          aria-labelledby={`${base}-units-label`}
-                          className='w-full'
-                        >
+                        <SelectTrigger id={`${base}-units`} aria-labelledby={`${base}-units-label`} className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent alignItemWithTrigger={false}>

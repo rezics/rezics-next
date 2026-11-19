@@ -550,7 +550,10 @@ function BoardFeedVisit({
         <h2 ref={heading} id={headingId} tabIndex={-1} className="min-w-0 max-w-full text-lg font-semibold">
           {m.board_threads_heading()}
         </h2>
-        <div data-slot="board-sort-toolbar" className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2">
+        <div
+          data-slot="board-sort-toolbar"
+          className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2"
+        >
           <BoardSortNav boardId={boardId} sort={sort} returnTo={requestSearch.returnTo} />
           {refreshedAt ? (
             <details className="min-w-0 max-w-full text-xs text-muted-foreground sm:max-w-prose">

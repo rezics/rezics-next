@@ -227,9 +227,9 @@ function QueueGeneration({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.moderation_queue_next_hint()}</p>
           <Button
- variant="outline"
- 
- onClick={() => {
+            variant="outline"
+
+            onClick={() => {
               if (!controller.isCurrent()) return;
               requestNavigation(() => onNext?.(next));
             }}

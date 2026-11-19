@@ -8,8 +8,7 @@ import {
   type KnowledgeTransferSaver,
 } from './transfer-visit';
 
-const control =
-  'h-auto min-h-7 max-w-full whitespace-normal text-start leading-snug [overflow-wrap:anywhere]';
+const control = 'h-auto min-h-7 max-w-full whitespace-normal text-start leading-snug [overflow-wrap:anywhere]';
 
 /** The caller keys this entry by its complete reading lifetime, including source, session and locale. */
 export function KnowledgeTransferEntry({
@@ -40,10 +39,7 @@ export function KnowledgeTransferEntry({
   const heading = useId();
   const region = useRef<HTMLElement>(null);
   const presentationFocus = useRef<HTMLElement | null>(null);
-  const destinationAction = (
-    event: { detail: number; currentTarget: HTMLElement },
-    action: () => void,
-  ) => {
+  const destinationAction = (event: { detail: number; currentTarget: HTMLElement }, action: () => void) => {
     presentationFocus.current = null;
     if (event.detail === 0 && document.activeElement === event.currentTarget && event.currentTarget.isConnected)
       presentationFocus.current = event.currentTarget;
@@ -62,8 +58,7 @@ export function KnowledgeTransferEntry({
     page?.kind === 'outline' && ['review', 'pending', 'uncertain', 'conflict'].includes(snapshot.copyState)
       ? page
       : null;
-  const visiblePage =
-    page && !locked && !snapshot.receipt && snapshot.copyState === 'choosing' ? page : null;
+  const visiblePage = page && !locked && !snapshot.receipt && snapshot.copyState === 'choosing' ? page : null;
   const canReview = visiblePage?.kind === 'outline' && snapshot.navigationState === 'ready';
   useEffect(() => visit.connect(), [visit]);
   useEffect(() => {
@@ -295,9 +290,8 @@ export function KnowledgeTransferEntry({
                             </li>
                           ))}
                     </ul>
-                    {(visiblePage.kind === 'owned'
-                      ? visiblePage.notebooks.length
-                      : visiblePage.placements.length) === 0 ? (
+                    {(visiblePage.kind === 'owned' ? visiblePage.notebooks.length : visiblePage.placements.length) ===
+                    0 ? (
                       <p className="text-sm text-muted-foreground">
                         {visiblePage.kind === 'owned'
                           ? m.knowledge_transfer_empty({}, options)

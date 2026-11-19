@@ -45,7 +45,10 @@ export function AniListWorkspace({
       {children}
 
       {primaryAction ? (
-        <div className="flex flex-col items-start gap-3 border-t pt-5 sm:flex-row sm:items-center" data-anilist-primary-action>
+        <div
+          className="flex flex-col items-start gap-3 border-t pt-5 sm:flex-row sm:items-center"
+          data-anilist-primary-action
+        >
           {primaryAction}
         </div>
       ) : null}

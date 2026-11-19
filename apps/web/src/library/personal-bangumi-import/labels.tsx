@@ -532,9 +532,7 @@ export function BangumiLabelAdoption({
               type="button"
               variant="outline"
               disabled={disabled || current.busy || held}
-              onClick={() =>
-                void loadTags(failedTagRead?.after === page.next ? failedTagRead.after : page.next!)
-              }
+              onClick={() => void loadTags(failedTagRead?.after === page.next ? failedTagRead.after : page.next!)}
             >
               {failedTagRead?.after === page.next ? m.library_import_page_retry() : m.library_bangumi_label_next_page()}
             </BangumiAction>
@@ -565,9 +563,7 @@ export function BangumiLabelAdoption({
             </BangumiAction>
           ) : null}
         </div>
-        {failedTagRead?.readFailure ? (
-          <p role="status">{m.library_import_page_read_failed()}</p>
-        ) : null}
+        {failedTagRead?.readFailure ? <p role="status">{m.library_import_page_read_failed()}</p> : null}
         {current.notice ? (
           <p role="status">
             {current.notice.kind === 'conflict'
@@ -613,7 +609,7 @@ export function BangumiLabelAdoption({
                           </label>
                           <Input
                             id={`bangumi-new-label-${ordinal}-${tag.index}`}
-                            className='w-full'
+                            className="w-full"
                             value={current.newNames[tag.index] ?? tag.proposedName ?? ''}
                             disabled={disabled || current.busy || held}
                             onChange={(event) =>
@@ -655,7 +651,7 @@ export function BangumiLabelAdoption({
                           </label>
                           <Input
                             id={`bangumi-label-query-${ordinal}-${tag.index}`}
-                            className='w-full'
+                            className="w-full"
                             value={query}
                             disabled={disabled || current.busy || held}
                             onChange={(event) => {

@@ -548,9 +548,7 @@ export function OwnVotesWorkspace({
         >
           <p>{message}</p>
           {visibleState === 'unavailable' ? (
-            <Button onClick={() => void onRefresh()}>
-              {m.library_my_ratings_retry_page()}
-            </Button>
+            <Button onClick={() => void onRefresh()}>{m.library_my_ratings_retry_page()}</Button>
           ) : null}
           {visibleState === 'invalid-cursor' && firstAvailable ? (
             <Link

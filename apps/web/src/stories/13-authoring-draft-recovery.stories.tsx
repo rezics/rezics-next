@@ -108,18 +108,14 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
           <>
             <label className="block">
               {m.thread_title_label()}
-              <Input 
- className="w-full"
- value={title}
- onChange={(event) => setTitle(event.target.value)}
-              />
+              <Input className="w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
             </label>
             <label className="block">
               {m.thread_new_body_label()}
-              <Textarea 
- className="min-h-40 w-full"
- value={documentText(body)}
- onChange={(event) => setBody(fromPlainText(event.target.value, 'blocks'))}
+              <Textarea
+                className="min-h-40 w-full"
+                value={documentText(body)}
+                onChange={(event) => setBody(fromPlainText(event.target.value, 'blocks'))}
               />
             </label>
             {draft ? (
@@ -140,12 +136,9 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
             ) : null}
             {notice ? <p role="status">{m.thread_draft_attachments()}</p> : null}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={reload}>
-                Prepared reload
-              </Button>
+              <Button onClick={reload}>Prepared reload</Button>
               <Button
- 
- onClick={() => {
+                onClick={() => {
                   if (draft?.beginSubmission()) {
                     draft.settle('success');
                     setBody(fromPlainText('', 'blocks'));
@@ -157,8 +150,7 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
                 Prepared confirmed submit
               </Button>
               <Button
- 
- onClick={() => {
+                onClick={() => {
                   if (draft?.beginSubmission()) {
                     draft.settle('unknown');
                     setUnknown(true);
@@ -168,16 +160,14 @@ function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
                 Prepared lost response
               </Button>
               <Button
- 
- onClick={() => {
+                onClick={() => {
                   if (draft?.beginSubmission()) draft.settle('refused');
                 }}
               >
                 Prepared refusal
               </Button>
               <Button
- 
- onClick={() => {
+                onClick={() => {
                   owner.abort();
                   setRetired(true);
                 }}

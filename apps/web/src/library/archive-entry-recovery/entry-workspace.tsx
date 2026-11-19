@@ -62,13 +62,7 @@ export function ArchiveEntryWorkspace({
 }
 
 /** Keeps a record's evidence before its controls on narrow screens and beside them on wide screens. */
-export function ArchiveEntryRecordLayout({
-  context,
-  operation,
-}: {
-  context: ReactNode;
-  operation: ReactNode;
-}) {
+export function ArchiveEntryRecordLayout({ context, operation }: { context: ReactNode; operation: ReactNode }) {
   const hasContext = context !== null && context !== undefined && context !== false;
   return (
     <article
@@ -79,9 +73,7 @@ export function ArchiveEntryRecordLayout({
     >
       {hasContext ? <div className="min-w-0 space-y-3">{context}</div> : null}
       <div
-        className={
-          'min-w-0 space-y-3 ' + (hasContext ? 'border-t pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0' : '')
-        }
+        className={'min-w-0 space-y-3 ' + (hasContext ? 'border-t pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0' : '')}
       >
         {operation}
       </div>

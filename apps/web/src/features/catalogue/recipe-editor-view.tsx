@@ -1930,7 +1930,7 @@ function RecipeFieldLive({
               <Checkbox
                 id={`${fieldId}-original`}
                 {...recipeInvalid(corrections, `${fieldId}-original`)}
-               
+
                 checked={row.original ?? false}
                 onCheckedChange={(checked) => {
                   if (!canEdit() || editing.current.row.original !== row.original) return;

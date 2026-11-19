@@ -234,7 +234,7 @@ export function CreatorSalesComparisonSelection({
               <span className="block select-text font-mono [overflow-wrap:anywhere]">{sale.orderId}</span>
               <Button
                 variant="ghost"
-               
+
                 onClick={() => reading.toggleComparison(sale.orderId)}
                 aria-label={`${m.creator_review_remove()}: ${sale.orderId}`}
               >

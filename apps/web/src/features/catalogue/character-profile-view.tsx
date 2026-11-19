@@ -75,8 +75,7 @@ function CharacterProfileLive({
 }: CharacterProfileProps) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
-  const createActionClass =
-    'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+  const createActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
   const identityActionsClass =
     'flex min-w-0 max-w-full flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-7 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:[overflow-wrap:anywhere]';
   const [id, setId] = useState(initialId);
@@ -306,10 +305,7 @@ function CharacterProfileLive({
             </p>
             {character ? (
               <>
-                <p
-                  className="min-w-0 max-w-full text-lg font-medium [overflow-wrap:anywhere]"
-                  lang={label.lang}
-                >
+                <p className="min-w-0 max-w-full text-lg font-medium [overflow-wrap:anywhere]" lang={label.lang}>
                   {label.text || m.subject_value_unlabelled({}, o)}
                 </p>
                 {Object.entries(character.subject.descriptions).map(([language, text]) => (

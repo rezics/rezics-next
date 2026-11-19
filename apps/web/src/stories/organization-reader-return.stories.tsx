@@ -45,8 +45,7 @@ function ReturnStory({ state }: { state: 'changed' | 'retry' }) {
       <AppShell>
         <main className="mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6">
           {state === 'changed' && (
-            <Button type="button" variant="link" size="sm" onClick={() => setReplacement((value) => !value)}
-            >
+            <Button type="button" variant="link" size="sm" onClick={() => setReplacement((value) => !value)}>
               {m.organization_reader_refresh({}, o)}
             </Button>
           )}

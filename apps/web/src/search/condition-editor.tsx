@@ -492,8 +492,14 @@ function EditorField({
   const firstError = errors[0];
   const fieldSpecific = firstError && !exact && firstError.pointer === pointer && firstError.code !== 'out_of_range';
   return (
-    <Field className="min-w-0 flex-1" data-invalid={errors.length > 0 || undefined} data-condition-field-pointer={pointer}>
-      <FieldLabel htmlFor={id} className="wrap-anywhere">{label}</FieldLabel>
+    <Field
+      className="min-w-0 flex-1"
+      data-invalid={errors.length > 0 || undefined}
+      data-condition-field-pointer={pointer}
+    >
+      <FieldLabel htmlFor={id} className="wrap-anywhere">
+        {label}
+      </FieldLabel>
       {children({
         id,
         'aria-invalid': errors.length > 0,
@@ -773,11 +779,17 @@ function NodeEditor({
     ? [
         {
           value: 'direct',
-          label: m.condition_relation_direct({ property: relationPropertyLabel, values: relationOperandLabel }, options),
+          label: m.condition_relation_direct(
+            { property: relationPropertyLabel, values: relationOperandLabel },
+            options,
+          ),
         },
         {
           value: 'inverse',
-          label: m.condition_relation_inverse({ property: relationPropertyLabel, values: relationOperandLabel }, options),
+          label: m.condition_relation_inverse(
+            { property: relationPropertyLabel, values: relationOperandLabel },
+            options,
+          ),
         },
       ]
     : [];
@@ -855,7 +867,9 @@ function NodeEditor({
     ];
   };
   const statementPropertyChoices = statementValue ? fieldChoices(properties, statementValue.property) : [];
-  const qualifierPropertyChoices = qualifiers.map(({ property }) => fieldChoices(definition?.qualifiers ?? [], property));
+  const qualifierPropertyChoices = qualifiers.map(({ property }) =>
+    fieldChoices(definition?.qualifiers ?? [], property),
+  );
   const replaceStatement = (
     next: Partial<{
       property: string;
@@ -932,7 +946,9 @@ function NodeEditor({
       data-condition-node={draft.key}
       tabIndex={-1}
     >
-      <FieldLegend variant="label" className="min-w-0 wrap-anywhere">{label}</FieldLegend>
+      <FieldLegend variant="label" className="min-w-0 wrap-anywhere">
+        {label}
+      </FieldLegend>
       <div className="flex flex-wrap items-end gap-2">
         <EditorField context={context} pointer={pointer} label={m.condition_group({}, options)} exact>
           {(props) => (
@@ -1508,9 +1524,13 @@ function NodeEditor({
             )}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            <code title={pendingUnitChange.from} className="wrap-anywhere">{pendingUnitChange.from ?? ''}</code>
+            <code title={pendingUnitChange.from} className="wrap-anywhere">
+              {pendingUnitChange.from ?? ''}
+            </code>
             {' → '}
-            <code title={pendingUnitChange.to} className="wrap-anywhere">{pendingUnitChange.to ?? ''}</code>
+            <code title={pendingUnitChange.to} className="wrap-anywhere">
+              {pendingUnitChange.to ?? ''}
+            </code>
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingUnitChange(false)}>

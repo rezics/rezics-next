@@ -64,9 +64,7 @@ export function OfferPurchaseWorkspace({
               {m.offer_full_titles()}
             </Button>
           </div>
-          <div className="min-w-0">
-            {benefitReview}
-          </div>
+          <div className="min-w-0">{benefitReview}</div>
         </div>
 
         <section

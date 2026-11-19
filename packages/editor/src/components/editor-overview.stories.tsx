@@ -84,7 +84,10 @@ const reviewEntries = [
         id: 'editor-notation-review--mixed-script-ruby-language-and-direction',
         name: 'Mixed-script ruby, language and direction',
       },
-      { id: 'editor-notation-review--footnote-references-and-definitions', name: 'Footnote references and definitions' },
+      {
+        id: 'editor-notation-review--footnote-references-and-definitions',
+        name: 'Footnote references and definitions',
+      },
       { id: 'editor-notation-review--structured-table', name: 'Structured table' },
     ],
   },
@@ -175,12 +178,7 @@ function EditorOverview() {
           separately scheduled.
         </p>
       </header>
-      <RichTextEditor
-        value={document}
-        onChange={setDocument}
-        label="Synthetic review chapter"
-        preset="writing"
-      />
+      <RichTextEditor value={document} onChange={setDocument} label="Synthetic review chapter" preset="writing" />
       <Separator />
       <nav aria-labelledby="editor-review-entries-heading" className="flex flex-col gap-8">
         <h2 id="editor-review-entries-heading" className="text-xl font-semibold">

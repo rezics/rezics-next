@@ -208,7 +208,9 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
       focusRef={stageFocus}
       completeness={snap.completeness}
       primaryAction={primaryAction}
-      secondaryActions={snap.stage === 'removed' || (snap.stage === 'cancelled' && !snap.importId) ? null : secondaryActions}
+      secondaryActions={
+        snap.stage === 'removed' || (snap.stage === 'cancelled' && !snap.importId) ? null : secondaryActions
+      }
     >
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">

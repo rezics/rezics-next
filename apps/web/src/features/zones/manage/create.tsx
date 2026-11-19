@@ -7,13 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import {
-  pickText,
-  pickZoneName,
-  UI_LOCALES,
-  type ZoneConfiguration,
-  type ZoneLanguage,
-} from '@rezics/composition';
+import { pickText, pickZoneName, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -36,8 +30,7 @@ export type CreateProps = {
   onNavigate: (href: string) => void;
 };
 
-const actionClassName =
-  'h-auto min-h-7 min-w-0 max-w-full whitespace-normal break-words text-start';
+const actionClassName = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal break-words text-start';
 
 const noSubscription = () => () => {};
 const fixtureSnapshot = () => null;
@@ -119,7 +112,12 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         clearBlockedDeparture.current?.();
         if (!leftVisit.current) onNavigate(zonePaths(locale, saved.zone.id).edit);
       }
-    } else settlementFocus.focusResult(() => alert.current, activation, () => isCurrent(admission));
+    } else
+      settlementFocus.focusResult(
+        () => alert.current,
+        activation,
+        () => isCurrent(admission),
+      );
   }
 
   function submit(event: FormEvent, activation: KeyboardActivation | null) {
@@ -128,13 +126,21 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
     if (frozen || !canWrite || !isCurrent(capture)) return;
     if (!starter || !labels) {
       setResult({ kind: 'invalid' });
-      settlementFocus.focusResult(() => choose.current, activation, () => isCurrent(capture));
+      settlementFocus.focusResult(
+        () => choose.current,
+        activation,
+        () => isCurrent(capture),
+      );
       return;
     }
     const fields = invalidLabels(labels, primaryLanguage);
     if (fields.length) {
       setResult({ kind: 'invalid', fields });
-      settlementFocus.focusResult(() => alert.current, activation, () => isCurrent(capture));
+      settlementFocus.focusResult(
+        () => alert.current,
+        activation,
+        () => isCurrent(capture),
+      );
       return;
     }
     void send({ starter, primaryLanguage, labels: structuredClone(labels), key: crypto.randomUUID() }, activation);
@@ -176,10 +182,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         }}
         clearBlockedDeparture={clearBlockedDeparture}
       />
-      <a
-        className={cn(buttonVariants({ variant: 'link' }), actionClassName)}
-        href={zonePaths(locale).list}
-      >
+      <a className={cn(buttonVariants({ variant: 'link' }), actionClassName)} href={zonePaths(locale).list}>
         {m.zones_owner_title({}, options)}
       </a>
       <header className="space-y-3">
@@ -239,9 +242,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
           <ContentItemFrame as="div" className="min-w-0 p-3 sm:p-4">
             <div
               className={
-                labels
-                  ? 'grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]'
-                  : 'grid min-w-0 gap-6'
+                labels ? 'grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : 'grid min-w-0 gap-6'
               }
             >
               <section className="min-w-0 space-y-4">
@@ -278,7 +279,9 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                     </SharedSelect.SelectTrigger>
                     <SharedSelect.SelectContent>
                       <SharedSelect.SelectGroup>
-                        <SharedSelect.SelectItem value={null}>{m.zones_create_choose({}, options)}</SharedSelect.SelectItem>
+                        <SharedSelect.SelectItem value={null}>
+                          {m.zones_create_choose({}, options)}
+                        </SharedSelect.SelectItem>
                         {starterChoices.map((choice) => (
                           <SharedSelect.SelectItem
                             key={choice.id}
@@ -357,7 +360,11 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                       retained.current = null;
                       setCommand(null);
                       setResult(null);
-                      settlementFocus.focusResult(() => choose.current, activation, () => isCurrent(capture));
+                      settlementFocus.focusResult(
+                        () => choose.current,
+                        activation,
+                        () => isCurrent(capture),
+                      );
                     }}
                   >
                     {m.zones_create_review({}, options)}

@@ -113,7 +113,11 @@ function CreatorPaymentScenario({
         refreshFailed={refreshFailed}
       />
       {retireControl && (
-        <Button type="button" variant="outline" size="sm" onClick={() => {
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
             authority.current = false;
             updateAuthority((version) => version + 1);
           }}

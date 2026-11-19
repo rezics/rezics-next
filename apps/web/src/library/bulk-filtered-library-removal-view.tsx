@@ -272,10 +272,7 @@ export function FilteredLibraryRemovalReview({
           {phase === 'review' ? (
             <>
               <label className="flex items-center gap-3">
-                <NativeCheckbox
-                  checked={acknowledged}
-                  onChange={(event) => setAcknowledged(event.target.checked)}
-                />
+                <NativeCheckbox checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
                 {m.library_filtered_entry_remove_acknowledge()}
               </label>
               <Button

@@ -109,7 +109,12 @@ function Connected({
         <PresentationPreviewContext.Provider value={{ read: async () => ({ ok: false, reason: 'unavailable' }) }}>
           <div className="mx-auto max-w-6xl p-4 sm:p-8">
             {admissionReplacement && (
-              <Button type="button" className="mb-4" variant="outline" size="sm" onClick={() => {
+              <Button
+                type="button"
+                className="mb-4"
+                variant="outline"
+                size="sm"
+                onClick={() => {
                   const next = !signedOut;
                   client.setQueryData(
                     ['session'],

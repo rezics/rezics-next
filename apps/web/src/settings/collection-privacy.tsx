@@ -509,7 +509,12 @@ export function CollectionPrivacyView({
     };
     const onFocusIn = (event: FocusEvent) => {
       const intent = focusIntent.current;
-      if (!intent || event.target === intent.opener || event.target === doc.body || event.target === doc.documentElement)
+      if (
+        !intent ||
+        event.target === intent.opener ||
+        event.target === doc.body ||
+        event.target === doc.documentElement
+      )
         return;
       retireIntent();
     };
@@ -560,9 +565,10 @@ export function CollectionPrivacyView({
       break;
     }
   }, [state.collections.length, state.failure, state.loading, state.nativeFailure, state.next, state.window]);
-  const failureTitle = state.loaded && state.next !== null && !pager.retryStartsAtFirstPage()
-    ? m.settings_privacy_page_load_failed()
-    : m.settings_privacy_list_load_failed();
+  const failureTitle =
+    state.loaded && state.next !== null && !pager.retryStartsAtFirstPage()
+      ? m.settings_privacy_page_load_failed()
+      : m.settings_privacy_list_load_failed();
   const failureAnnouncement = state.failure
     ? [
         failureTitle,
@@ -570,11 +576,13 @@ export function CollectionPrivacyView({
         ...(state.nativeFailure?.code === 'invalid_cursor' ? [m.settings_privacy_list_restart()] : []),
       ].join(' ')
     : '';
-  const resultAnnouncement = failureAnnouncement || (state.loaded && !state.loading
-    ? state.collections.length === 0 && state.next === null
-      ? m.settings_privacy_empty()
-      : `${m.settings_privacy_heading()}: ${state.collections.length}`
-    : '');
+  const resultAnnouncement =
+    failureAnnouncement ||
+    (state.loaded && !state.loading
+      ? state.collections.length === 0 && state.next === null
+        ? m.settings_privacy_empty()
+        : `${m.settings_privacy_heading()}: ${state.collections.length}`
+      : '');
   return (
     <section ref={section} id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
       <ContentSection className="min-w-0 max-w-full">
@@ -593,9 +601,7 @@ export function CollectionPrivacyView({
           </p>
           {state.failure ? (
             <Alert variant="destructive">
-              <AlertTitle>
-                {failureTitle}
-              </AlertTitle>
+              <AlertTitle>{failureTitle}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>
                   {state.failure === 'unavailable' && !state.loaded

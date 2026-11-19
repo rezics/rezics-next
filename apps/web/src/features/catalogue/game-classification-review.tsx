@@ -25,8 +25,7 @@ import {
 } from './subject-facts';
 import { GameClassificationReuseNotes } from './game-classification-view';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export type GameReuseSession = {
   source: ReuseSource;

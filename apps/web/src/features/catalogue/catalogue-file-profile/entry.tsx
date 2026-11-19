@@ -7,7 +7,10 @@ import type { Release } from '@rezics/definitions';
 import { catalogueFileCorrectionHref } from '../catalogue-file-reader/navigation';
 import { catalogueFileCorrectionOriginParam, type CatalogueFileCorrectionOrigin } from './origin';
 
-const entryClass = cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere] break-words');
+const entryClass = cn(
+  buttonVariants({ variant: 'outline', size: 'sm' }),
+  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere] break-words',
+);
 
 function admittedFileType(
   type: string | undefined,

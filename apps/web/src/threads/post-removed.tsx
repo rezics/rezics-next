@@ -118,12 +118,7 @@ export function RemovedPost({
                 title={m.thread_content_more_actions()}
                 backLabel={m.thread_delete_cancel()}
                 trigger={
-                  <Button
-                    aria-label={m.thread_content_more_actions()}
-                    ref={menuButton}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
+                  <Button aria-label={m.thread_content_more_actions()} ref={menuButton} size="icon-sm" variant="ghost">
                     <EllipsisIcon aria-hidden="true" />
                   </Button>
                 }

@@ -9,7 +9,11 @@ import { mangaRelatedLabels, type MangaReaderRow } from './model';
 import { mangaCorrectionAddress } from './navigation';
 
 export type MangaPropertyLabels = Record<string, { labels?: Record<string, string> }>;
-const action = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const action = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 
 /** A selection reads this occurrence's assertion. The target's ordinary facts are never substituted. */
 export function MangaOccurrenceEvidence({

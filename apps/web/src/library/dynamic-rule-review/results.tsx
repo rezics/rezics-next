@@ -151,7 +151,8 @@ export function DynamicRuleResultsReview({
           ) : (
             <Button
               type="button"
-              variant="outline" className={buttonClass}
+              variant="outline"
+              className={buttonClass}
               disabled={visible.phase === 'reading' || !ownerCurrentRef.current()}
               onClick={() => void openReview()}
             >

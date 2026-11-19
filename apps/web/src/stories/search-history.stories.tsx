@@ -6,7 +6,11 @@ import { HeaderSearchView } from '../search/header-search/header-search';
 import { initialHeaderSearchState, reduceHeaderSearchState } from '../search/header-search/state';
 import { m } from '../paraglide/messages.js';
 
-const meta = { title: 'Discovery/Search/History', id: 'patterns-search-history', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = {
+  title: 'Discovery/Search/History',
+  id: 'patterns-search-history',
+  parameters: { layout: 'padded' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const local = localChange(

@@ -77,12 +77,13 @@ export type ReleaseFidelityTransport = {
 
 const actionClass =
   'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
-const actionSm =
-  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
-const linkClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
-const summaryClass =
-  'cursor-pointer font-medium [overflow-wrap:anywhere]';
+const actionSm = 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
+const linkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+const summaryClass = 'cursor-pointer font-medium [overflow-wrap:anywhere]';
 
 function relationSlot(row: ReleaseRow, stream: ReleaseStream, context: string): RelationSlot | undefined {
   if (!row.statement) return;
@@ -902,11 +903,7 @@ function ReleaseFidelityLive({
                 )}
               </section>
               <section className="min-w-0 space-y-3" data-slot="release-related">
-                <h2
-                  ref={listHeading}
-                  tabIndex={-1}
-                  className="text-lg font-semibold "
-                >
+                <h2 ref={listHeading} tabIndex={-1} className="text-lg font-semibold ">
                   {m.release_fidelity_related({}, o)}
                 </h2>
                 {read.streamState === 'unsupported' && <p>{m.release_fidelity_related_unsupported({}, o)}</p>}

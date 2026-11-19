@@ -276,7 +276,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const contextIdentity =
     page.status === 'ready'
       ? page.account
-      : confirmation?.identity ?? (initial.status === 'ready' ? initial.account : null);
+      : (confirmation?.identity ?? (initial.status === 'ready' ? initial.account : null));
 
   if (retired || !authorized) {
     const revoked = authorityLost(initial) ? initial : page;

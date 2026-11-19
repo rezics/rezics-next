@@ -31,11 +31,7 @@ export function FollowingWorkspace({
   headingRef: Ref<HTMLHeadingElement>;
   kind: FollowingKind;
   kindChangeDisabled: boolean;
-  onMove?: (
-    event: ReactMouseEvent<HTMLAnchorElement>,
-    target: FollowingWindow,
-    movement: FollowingMovement,
-  ) => void;
+  onMove?: (event: ReactMouseEvent<HTMLAnchorElement>, target: FollowingWindow, movement: FollowingMovement) => void;
   onRefresh?: (() => void) | undefined;
   refreshDisabled: boolean;
   windowStatus: ReactNode;
@@ -76,7 +72,7 @@ export function FollowingWorkspace({
             <Button
               key={value}
               variant={variant}
-             
+
               disabled
               aria-current={kind === value ? 'page' : undefined}
             >
@@ -115,18 +111,14 @@ export function FollowingWorkspace({
 
       <div
         className={
-          selection
-            ? 'grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8'
-            : 'max-w-4xl'
+          selection ? 'grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8' : 'max-w-4xl'
         }
       >
         <div className="min-w-0 space-y-6">
           {directory}
           {windowNavigation}
         </div>
-        {selection ? (
-          <aside className="min-w-0 xl:sticky xl:top-4">{selection.inspection}</aside>
-        ) : null}
+        {selection ? <aside className="min-w-0 xl:sticky xl:top-4">{selection.inspection}</aside> : null}
       </div>
     </article>
   );

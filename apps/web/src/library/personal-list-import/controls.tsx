@@ -24,12 +24,7 @@ export function VndbCheck({
 }) {
   return (
     <Field orientation="horizontal" className="min-w-0">
-      <Checkbox
-        id={id}
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={(value) => onToggle(value === true)}
-      />
+      <Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={(value) => onToggle(value === true)} />
       <FieldLabel className="h-auto min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]" htmlFor={id}>
         {label}
       </FieldLabel>

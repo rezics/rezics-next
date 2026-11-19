@@ -59,10 +59,7 @@ export function EntitlementsAddressRecovery({
       <Alert role="alert">
         <AlertDescription className="space-y-4">
           <p>{m.buyer_entitlements_address_invalid()}</p>
-          <a
-            href={entitlementHistoryRepairHref(locale, history)}
-            className={buttonVariants({ variant: 'outline' })}
-          >
+          <a href={entitlementHistoryRepairHref(locale, history)} className={buttonVariants({ variant: 'outline' })}>
             {m.buyer_entitlements_address_first_page()}
           </a>
         </AlertDescription>

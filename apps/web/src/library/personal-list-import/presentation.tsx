@@ -76,10 +76,7 @@ export function ImportEmpty({ results = false }: { results?: boolean }) {
 
 export function ImportReturn() {
   return (
-    <a
-     className={buttonVariants({ variant: 'link' })}
-      href={importLibraryReturnHref(getLocale())}
-    >
+    <a className={buttonVariants({ variant: 'link' })} href={importLibraryReturnHref(getLocale())}>
       {m.library_anilist_return_library()}
     </a>
   );

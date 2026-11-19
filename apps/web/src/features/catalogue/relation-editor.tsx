@@ -1854,7 +1854,6 @@ function RelationEditorLive({
                             </p>
                             <Field orientation="horizontal">
                               <Checkbox
-                               
                                 id={`${formId}-own-consent`}
                                 checked={ownConsent}
                                 onCheckedChange={(checked) => editable() && setOwnConsent(checked === true)}
@@ -2115,7 +2114,6 @@ function RelationEditorLive({
                               )}
                               <div className="flex flex-wrap gap-2">
                                 <Button
-                                 
                                   disabled={
                                     frozen ||
                                     candidate.retracted !== null ||
@@ -2133,7 +2131,6 @@ function RelationEditorLive({
                                 </Button>
                                 {candidate.decision !== 'rejected' && (
                                   <Button
-                                   
                                     variant="outline"
                                     disabled={frozen || !allows('reject')}
                                     onClick={() => editable() && allows('reject') && setConfirmation('reject')}
@@ -2198,14 +2195,12 @@ function RelationEditorLive({
           )}
           <div className="flex flex-wrap gap-2">
             <Button
-             
               disabled={busy || targetChecking || (!!failure && failure.reason !== 'unavailable')}
               onClick={confirm}
             >
               {action}
             </Button>
             <Button
-             
               variant="outline"
               disabled={busy || !!request.current}
               onClick={() => lifetime.active() && !running.current && !request.current && setConfirmation(undefined)}

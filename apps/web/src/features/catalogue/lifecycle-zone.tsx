@@ -42,9 +42,7 @@ export function ZoneLifecycleControls(props: {
       ) : null}
       {props.last && !props.last.ok ? (
         <p role="status" aria-live="polite">
-          {props.last.reason === 'denied'
-            ? m.zone_lifecycle_denied({}, options)
-            : m.zone_lifecycle_failed({}, options)}
+          {props.last.reason === 'denied' ? m.zone_lifecycle_denied({}, options) : m.zone_lifecycle_failed({}, options)}
         </p>
       ) : null}
     </div>

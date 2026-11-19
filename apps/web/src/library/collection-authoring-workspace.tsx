@@ -19,11 +19,7 @@ export function CollectionAuthoringWorkspace({
   if (!editing) return memberCanvas;
 
   return (
-    <div
-      className="min-w-0 space-y-5"
-      data-collection-authoring-workspace
-      data-collection-workbench
-    >
+    <div className="min-w-0 space-y-5" data-collection-authoring-workspace data-collection-workbench>
       {heading}
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
         <div className="min-w-0 xl:pb-32" data-collection-member-canvas-slot>

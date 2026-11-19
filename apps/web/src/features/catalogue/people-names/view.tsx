@@ -16,8 +16,11 @@ import {
   type PeopleNames,
 } from './model';
 
-const control =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const control = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 const wrapTarget = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const live = () => true;
 

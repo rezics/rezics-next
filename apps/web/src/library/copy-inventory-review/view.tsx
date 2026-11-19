@@ -246,7 +246,8 @@ function ReceivedCopy({
       <footer className="min-w-0 space-y-2 border-t border-border pt-3">
         <Button
           type="button"
-          variant="outline" className="w-full"
+          variant="outline"
+          className="w-full"
           onClick={onEdit}
           disabled={editorOpen}
           aria-label={m.library_copy_compare_edit_named({
@@ -314,7 +315,8 @@ function RetiredObservation({
       {current ? (
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           onClick={() => selection.returnToRow(current, `${regionId}-select-${current.id}`)}
         >
           {m.library_copy_compare_find_row()}
@@ -379,7 +381,8 @@ export function CopyInventoryReview({
           {!selection.open ? (
             <Button
               type="button"
-              variant="outline" className={control}
+              variant="outline"
+              className={control}
               onClick={selection.show}
               aria-expanded={false}
               aria-controls={`${id}-body`}
@@ -389,7 +392,8 @@ export function CopyInventoryReview({
           ) : (
             <Button
               type="button"
-              variant="outline" className={control}
+              variant="outline"
+              className={control}
               onClick={selection.close}
               aria-expanded={true}
               aria-controls={`${id}-body`}
@@ -399,7 +403,8 @@ export function CopyInventoryReview({
           )}
           <Button
             type="button"
-            variant="outline" className={control}
+            variant="outline"
+            className={control}
             disabled={!selection.count && !selection.retired.length}
             onClick={() => {
               selection.reset();

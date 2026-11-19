@@ -148,7 +148,10 @@ export function ReadingPeriod({
         <nav aria-label={m.library_diary_period_navigation()} className="flex min-w-0 flex-wrap gap-2">
           {!allTimeSelected && month !== undefined ? (
             <Link
-              className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]',
+              })}
               to="/library/history"
               search={{ year: address.year, returnTo }}
             >
@@ -157,7 +160,10 @@ export function ReadingPeriod({
           ) : null}
           {!allTimeSelected ? (
             <Link
-              className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]',
+              })}
               to="/library/history"
               search={{ returnTo }}
             >
@@ -193,7 +199,8 @@ export function ReadingPeriod({
             </p>
             <Button
               type="button"
-              variant="outline" className='h-auto min-h-7 mt-2 max-w-full [overflow-wrap:anywhere]'
+              variant="outline"
+              className="h-auto min-h-7 mt-2 max-w-full [overflow-wrap:anywhere]"
               onClick={retry}
             >
               {m.library_selection_retry()}

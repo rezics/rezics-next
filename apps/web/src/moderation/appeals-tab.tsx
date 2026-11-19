@@ -393,11 +393,7 @@ function AppealsView({
     >
       <header className="space-y-4">
         {boardHref ? (
-          <a
-            className={moderationLink}
-            href={boardHref}
-            onClick={(event) => navigateOrdinaryLink(event, boardHref)}
-          >
+          <a className={moderationLink} href={boardHref} onClick={(event) => navigateOrdinaryLink(event, boardHref)}>
             {m.moderation_queue_back()}
           </a>
         ) : null}

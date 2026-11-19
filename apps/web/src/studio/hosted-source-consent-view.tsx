@@ -67,12 +67,7 @@ export function HostedSourceConsentView({
             {m.studio_source_consent_revoke({}, options)}
           </Button>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || busy}
-            onClick={() => void visit.issue()}
-          >
+          <Button type="button" variant="outline" disabled={disabled || busy} onClick={() => void visit.issue()}>
             {m.studio_source_consent_issue({}, options)}
           </Button>
         )}

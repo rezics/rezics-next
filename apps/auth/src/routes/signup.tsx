@@ -975,10 +975,7 @@ function SignupForm({
             </span>
             <span>{m.auth_signup_turnstile_required()}</span>
           </div>
-          <Field
-            className="min-w-0 gap-3"
-            data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}
-          >
+          <Field className="min-w-0 gap-3" data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
             <div
               id="signup-turnstile"
               tabIndex={-1}

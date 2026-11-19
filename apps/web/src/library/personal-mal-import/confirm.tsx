@@ -137,7 +137,7 @@ export function MalConfirmPage({
                   {scoreAvailable && scoreKey ? (
                     <label className="h-auto flex items-center gap-3 whitespace-normal [overflow-wrap:anywhere]">
                       <NativeCheckbox
-                        className='shrink-0'
+                        className="shrink-0"
                         checked={scoreConsents.has(scoreKey)}
                         disabled={busy || review.skip}
                         onChange={(event) => {

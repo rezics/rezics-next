@@ -27,8 +27,11 @@ import {
   type PeopleBiographyKind,
 } from './index';
 
-const actionClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const actionClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 
 function groupTitle(kind: PeopleBiographyKind, locale: string) {
   const o = { locale: locale as never };

@@ -39,7 +39,10 @@ export function CollectionLayoutSelect({
               key={option.value}
               href={href(option.value)}
               aria-current={value === option.value ? 'page' : undefined}
-              className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]')}
+              className={cn(
+                buttonVariants({ variant: 'link' }),
+                'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+              )}
             >
               {option.label}
             </a>

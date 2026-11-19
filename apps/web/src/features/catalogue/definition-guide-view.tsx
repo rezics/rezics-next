@@ -47,8 +47,7 @@ import {
   type GuideTransport,
 } from './definition-guide';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal';
 const recoveryClassName = 'rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring';
 const linkClassName = buttonVariants({
   variant: 'link',
@@ -497,7 +496,6 @@ function ComparisonGuide({
           {m.guide_retry({}, o)}
         </Button>
       )}
-
     </section>
   );
 }

@@ -12,7 +12,16 @@ import type { ShelfMutationLease } from '../shelf-rows';
 import { AnnotationNote, AnnotationPriority } from '../rich-private-entry/annotation-review';
 import { readPrivateEntryForSubject } from '../rich-private-entry/server';
 import { SelectedCorrection } from './controller';
-import { captureSelection, correctionInput, correctionIssues, initialDraft, intended, annotationNoteBytes, type CorrectionDraft, type SelectedEntry } from './contract';
+import {
+  captureSelection,
+  correctionInput,
+  correctionIssues,
+  initialDraft,
+  intended,
+  annotationNoteBytes,
+  type CorrectionDraft,
+  type SelectedEntry,
+} from './contract';
 import { captureCorrectionSender, readSelectedCorrection, sendSelectedCorrection } from './server';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -48,7 +57,8 @@ export function SelectedEntryCorrection({
     <div className="min-w-0 space-y-3">
       <Button
         ref={launcher}
-        variant="outline" className={button}
+        variant="outline"
+        className={button}
         disabled={
           selected.length === 0 ||
           selected.length > 16 ||
@@ -205,7 +215,8 @@ export function CorrectionVisit({
           {issues.note ? <p role="alert">{m.library_selected_correction_note_error()}</p> : null}
           {issues.priority ? <p role="alert">{m.library_annotation_priority_error()}</p> : null}
           <Button
-            variant="outline" className={button}
+            variant="outline"
+            className={button}
             disabled={preparing || issues.note || issues.priority}
             onClick={() => void review()}
           >
@@ -216,7 +227,8 @@ export function CorrectionVisit({
         <CorrectionReview controller={controller} lease={lease} />
       )}
       <Button
-        variant="outline" className={button}
+        variant="outline"
+        className={button}
         disabled={preparing || (!!state?.command && state.command.kind !== 'create') || !!state?.busy}
         onClick={() => departure.requestDiscard(discard)}
       >
@@ -257,11 +269,7 @@ function OperationField({
             if (value !== null) onChange({ ...draft, [field]: value });
           }}
         >
-          <SelectTrigger
-            id={id}
-            aria-labelledby={`${id}-label`}
-            className='w-full'
-          >
+          <SelectTrigger id={id} aria-labelledby={`${id}-label`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
@@ -281,7 +289,7 @@ function OperationField({
             <label htmlFor={id + '-value'}>{m.library_annotation_proposed()}</label>
             <Textarea
               id={id + '-value'}
-              className='min-h-32 w-full'
+              className="min-h-32 w-full"
               value={draft.noteValue}
               disabled={disabled}
               onChange={(event) => onChange({ ...draft, noteValue: event.target.value })}
@@ -293,7 +301,7 @@ function OperationField({
             <label htmlFor={id + '-value'}>{m.library_annotation_proposed()}</label>
             <Input
               id={id + '-value'}
-              className='w-full'
+              className="w-full"
               inputMode="numeric"
               value={draft.priorityValue}
               disabled={disabled}
@@ -343,7 +351,12 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
         </p>
       ) : null}
       {state.command && state.command.kind !== 'create' ? (
-        <Button variant="outline" className={button} disabled={state.busy} onClick={() => void run(() => controller.retry())}>
+        <Button
+          variant="outline"
+          className={button}
+          disabled={state.busy}
+          onClick={() => void run(() => controller.retry())}
+        >
           {m.library_selected_correction_retry()}
         </Button>
       ) : null}
@@ -371,7 +384,8 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
               <Button
                 key={number}
                 aria-current={number === page.page ? 'page' : undefined}
-                variant="outline" className={button}
+                variant="outline"
+                className={button}
                 disabled={state.busy}
                 onClick={() => void controller.reopen(number)}
               >
@@ -384,7 +398,8 @@ export function CorrectionReview({ controller, lease }: { controller: SelectedCo
               {m.library_selected_correction_reopen()}
             </Button>
             <Button
-              variant="outline" className={button}
+              variant="outline"
+              className={button}
               disabled={state.busy || page.state !== 'open' || !!state.cancellation}
               onClick={() => void run(() => controller.cancel())}
             >
@@ -466,7 +481,8 @@ function Comparison({
       )}
       {item.eligibility !== 'ready' ? <p>{m.library_selected_correction_fresh_review()}</p> : null}
       <Button
-        variant="outline" className={button}
+        variant="outline"
+        className={button}
         disabled={disabled || page.state !== 'open' || item.eligibility !== 'ready' || item.outcome !== 'not-started'}
         onClick={confirm}
       >

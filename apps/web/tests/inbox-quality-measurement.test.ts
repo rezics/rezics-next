@@ -247,7 +247,11 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
   const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   assertTrue(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Captures bind to a full source commit');
   const visualStories: ReviewStory[] = [
-    { key: 'empty', family: 'page', entry: findStory('Account/Inbox/Inbox Page', '/stories/inbox.stories.tsx', ['Empty']) },
+    {
+      key: 'empty',
+      family: 'page',
+      entry: findStory('Account/Inbox/Inbox Page', '/stories/inbox.stories.tsx', ['Empty']),
+    },
     {
       key: 'mixed',
       family: 'page',

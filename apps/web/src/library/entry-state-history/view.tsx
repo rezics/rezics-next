@@ -53,7 +53,9 @@ export function EntryStateHistory({
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; };
+    return () => {
+      alive.current = false;
+    };
   }, []);
   const [epoch, setEpoch] = useState(0);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -83,7 +85,8 @@ export function EntryStateHistory({
     if (
       latest.current.entry.incarnationId !== original.command.incarnationId ||
       (!replay && latest.current.basis !== original.reviewedBasis)
-    ) return;
+    )
+      return;
     const dispatchBasis = latest.current.basis;
     running.current = true;
     setAttemptStatus('sending');
@@ -172,7 +175,7 @@ export function EntryStateHistory({
 
   function startRestore(review: EntryStateReview, credential: string, reviewedBasis: string) {
     if (
-      (attemptRef.current?.command.incarnationId === entry.incarnationId) ||
+      attemptRef.current?.command.incarnationId === entry.incarnationId ||
       running.current ||
       !canRestore ||
       !readable(reviewedBasis, 'library_entry_state_history.review', 'library_entry_state_history.restore') ||
@@ -180,7 +183,8 @@ export function EntryStateHistory({
       !review.current.incarnationId ||
       review.current.incarnationId !== (entry.incarnationId ?? null) ||
       review.current.revision !== entry.revision
-    ) return;
+    )
+      return;
     const original: Attempt = {
       command: {
         subjectId: entry.subjectId,
@@ -201,18 +205,20 @@ export function EntryStateHistory({
 
   const visibleReceipt = receipt?.entry.incarnationId === (entry.incarnationId ?? null) ? receipt : null;
   const activeAttempt = attempt?.command.incarnationId === entry.incarnationId ? attempt : null;
-  const visibleReadback = visibleReceipt?.readback.kind === 'ready' &&
+  const visibleReadback =
+    visibleReceipt?.readback.kind === 'ready' &&
     (entry.revision > visibleReceipt.readback.entry.revision ||
-      (entry.revision === visibleReceipt.readback.entry.revision && entry.state !== visibleReceipt.readback.entry.state))
-    ? { kind: 'different' as const }
-    : visibleReceipt?.readback;
+      (entry.revision === visibleReceipt.readback.entry.revision &&
+        entry.state !== visibleReceipt.readback.entry.state))
+      ? { kind: 'different' as const }
+      : visibleReceipt?.readback;
   const retryCurrent =
-    !!activeAttempt &&
-    attemptStatus === 'uncertain' &&
-    current('library_entry_state_history.restore') &&
-    canRestore;
+    !!activeAttempt && attemptStatus === 'uncertain' && current('library_entry_state_history.restore') && canRestore;
   return (
-    <section aria-label={m.library_entry_history_title()} className="h-auto basis-full min-w-0 space-y-3 rounded-md border p-3 [overflow-wrap:anywhere]">
+    <section
+      aria-label={m.library_entry_history_title()}
+      className="h-auto basis-full min-w-0 space-y-3 rounded-md border p-3 [overflow-wrap:anywhere]"
+    >
       <h3 className="font-semibold">{m.library_entry_history_title()}</h3>
       <p className="text-sm text-muted-foreground">{m.library_entry_history_intro()}</p>
       <HistoryPage
@@ -223,10 +229,7 @@ export function EntryStateHistory({
         provenance={provenance}
         canReview={canReview}
         canRestore={canRestore}
-        commandPending={
-          !!activeAttempt ||
-          (visibleReceipt?.readback.kind === 'pending')
-        }
+        commandPending={!!activeAttempt || visibleReceipt?.readback.kind === 'pending'}
         isCurrent={readable}
         onRestore={startRestore}
         onRefresh={onRefresh}
@@ -239,14 +242,18 @@ export function EntryStateHistory({
             <Button variant="outline" className={button} onClick={() => void dispatch(activeAttempt, true)}>
               {m.library_entry_history_retry_original()}
             </Button>
-          ) : <p>{m.library_entry_history_fresh_review()}</p>}
+          ) : (
+            <p>{m.library_entry_history_fresh_review()}</p>
+          )}
         </div>
       ) : null}
       {restoreNotice ? (
         <div className="space-y-2" role="alert">
           <p>{restoreMessage(restoreNotice)}</p>
           {restoreNotice === 'stale' ? (
-            <Button variant="outline" className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</Button>
+            <Button variant="outline" className={button} onClick={onRefresh}>
+              {m.library_entry_history_refresh_entry()}
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -302,7 +309,10 @@ function HistoryPage({
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; flight.current++; };
+    return () => {
+      mounted.current = false;
+      flight.current++;
+    };
   }, []);
   const current = (id: number, ...operations: Parameters<SlotLifetime['current']>) =>
     mounted.current && flight.current === id && isCurrent(basis, ...operations);
@@ -346,7 +356,8 @@ function HistoryPage({
   }
 
   async function address(change: EntryStateChange) {
-    if (!page || busy || commandPending || !canReview || !isCurrent(basis, 'library_entry_state_history.review')) return;
+    if (!page || busy || commandPending || !canReview || !isCurrent(basis, 'library_entry_state_history.review'))
+      return;
     const id = ++flight.current;
     setBusy('review');
     setReview(null);
@@ -385,9 +396,8 @@ function HistoryPage({
     }
   }
 
-  const coverage = page?.changes.length === 0 && page.coverage === 'complete'
-    ? 'unknown'
-    : (page?.coverage ?? 'unknown');
+  const coverage =
+    page?.changes.length === 0 && page.coverage === 'complete' ? 'unknown' : (page?.coverage ?? 'unknown');
   return (
     <div className="space-y-3">
       <label className="flex flex-wrap items-center gap-2">
@@ -418,20 +428,28 @@ function HistoryPage({
           </SelectContent>
         </Select>
       </label>
-      {!page && !busy ? <Button variant="outline" className={button} disabled={commandPending} onClick={() => void load()}>{m.library_entry_history_open()}</Button> : null}
+      {!page && !busy ? (
+        <Button variant="outline" className={button} disabled={commandPending} onClick={() => void load()}>
+          {m.library_entry_history_open()}
+        </Button>
+      ) : null}
       {busy === 'page' ? <p role="status">{m.library_entry_history_loading()}</p> : null}
       {notice ? (
         <div role="status" className="space-y-2">
           <p>{readMessage(notice)}</p>
           {notice === 'changed' || notice === 'stale' ? (
-            <Button variant="outline" className={button} onClick={onRefresh}>{m.library_entry_history_refresh_entry()}</Button>
+            <Button variant="outline" className={button} onClick={onRefresh}>
+              {m.library_entry_history_refresh_entry()}
+            </Button>
           ) : null}
         </div>
       ) : null}
       {page ? (
         <>
           {page.incarnationId ? (
-            <p>{m.library_entry_history_incarnation_id()} <code className="break-all">{page.incarnationId}</code></p>
+            <p>
+              {m.library_entry_history_incarnation_id()} <code className="break-all">{page.incarnationId}</code>
+            </p>
           ) : null}
           <p>{m.library_entry_history_current_revision({ revision: page.currentRevision })}</p>
           <p>{coverageMessage(coverage)}</p>
@@ -444,7 +462,8 @@ function HistoryPage({
                 <ChangeEvidence change={change} options={stateOptions} />
                 {canReview ? (
                   <Button
-                    variant="outline" className={button}
+                    variant="outline"
+                    className={button}
                     disabled={!!busy || commandPending}
                     onClick={() => void address(change)}
                   >
@@ -456,11 +475,21 @@ function HistoryPage({
           </ol>
           <div className="flex flex-wrap gap-2">
             {page.next ? (
-              <Button variant="outline" className={button} disabled={!!busy || commandPending} onClick={() => void load(page.next!)}>
+              <Button
+                variant="outline"
+                className={button}
+                disabled={!!busy || commandPending}
+                onClick={() => void load(page.next!)}
+              >
                 {m.library_entry_history_next()}
               </Button>
             ) : null}
-            <Button variant="outline" className={button} disabled={!!busy || commandPending} onClick={() => void load()}>
+            <Button
+              variant="outline"
+              className={button}
+              disabled={!!busy || commandPending}
+              onClick={() => void load()}
+            >
               {m.library_entry_history_restart()}
             </Button>
           </div>
@@ -475,11 +504,16 @@ function HistoryPage({
             <p>{m.library_entry_history_current_state()}</p>
             <StateEvidence state={review.value.current.state} options={stateOptions} />
           </div>
-          <ChangeEvidence change={review.value.change} options={stateOptions} beforeLabel={m.library_entry_history_restore_target()} />
+          <ChangeEvidence
+            change={review.value.change}
+            options={stateOptions}
+            beforeLabel={m.library_entry_history_restore_target()}
+          />
           <p>{availabilityMessage(review.value.availability)}</p>
           {review.value.availability === 'available' && canRestore ? (
             <Button
-              variant="outline" className={button}
+              variant="outline"
+              className={button}
               disabled={!!busy || commandPending}
               onClick={() => onRestore(review.value, review.credential, basis)}
             >
@@ -498,7 +532,11 @@ function StateEvidence({ state, options }: { state: string | null; options: read
   return (
     <span className="inline-flex min-w-0 flex-wrap items-baseline gap-2">
       <code className="break-all">{state}</code>
-      {label ? <span lang={label.lang}>({m.library_entry_history_released_label()}: {label.text})</span> : null}
+      {label ? (
+        <span lang={label.lang}>
+          ({m.library_entry_history_released_label()}: {label.text})
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -510,13 +548,22 @@ function ProfilePinEvidence({
   pin: EntryStateChange['beforeProfilePin'];
   missing: 'no_prior' | 'unavailable';
 }) {
-  if (pin === null) return <p>{missing === 'no_prior' ? m.library_entry_history_pin_no_prior() : m.library_entry_history_pin_unavailable()}</p>;
+  if (pin === null)
+    return (
+      <p>
+        {missing === 'no_prior' ? m.library_entry_history_pin_no_prior() : m.library_entry_history_pin_unavailable()}
+      </p>
+    );
   const field = (label: string, value: string | null) => (
     <div>
       <dt>{label}</dt>
-      <dd>{value === null
-        ? m.library_entry_history_pin_not_applicable()
-        : <code className="block max-h-24 overflow-auto break-all whitespace-pre-wrap">{value}</code>}</dd>
+      <dd>
+        {value === null ? (
+          m.library_entry_history_pin_not_applicable()
+        ) : (
+          <code className="block max-h-24 overflow-auto break-all whitespace-pre-wrap">{value}</code>
+        )}
+      </dd>
     </div>
   );
   return (
@@ -543,12 +590,45 @@ function ChangeEvidence({
 }) {
   return (
     <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
-      <div><dt>{beforeLabel ?? m.library_entry_history_before()}</dt><dd className="space-y-2"><StateEvidence state={change.beforeState} options={options} /><ProfilePinEvidence pin={change.beforeProfilePin} missing={change.beforeState === null ? 'no_prior' : 'unavailable'} /></dd></div>
-      <div><dt>{m.library_entry_history_after()}</dt><dd className="space-y-2"><StateEvidence state={change.afterState} options={options} /><ProfilePinEvidence pin={change.afterProfilePin} missing="unavailable" /></dd></div>
-      <div><dt>{m.library_entry_history_prior_revision()}</dt><dd>{change.priorRevision ?? m.library_entry_history_absent()}</dd></div>
-      <div><dt>{m.library_entry_history_changed_at()}</dt><dd><time dateTime={change.changedAt}>{change.changedAt}</time></dd></div>
-      <div><dt>{m.library_entry_history_command_kind()}</dt><dd><code className="break-all">{change.commandKind}</code></dd></div>
-      <div><dt>{m.library_entry_history_command_id()}</dt><dd><code className="break-all">{change.commandId}</code></dd></div>
+      <div>
+        <dt>{beforeLabel ?? m.library_entry_history_before()}</dt>
+        <dd className="space-y-2">
+          <StateEvidence state={change.beforeState} options={options} />
+          <ProfilePinEvidence
+            pin={change.beforeProfilePin}
+            missing={change.beforeState === null ? 'no_prior' : 'unavailable'}
+          />
+        </dd>
+      </div>
+      <div>
+        <dt>{m.library_entry_history_after()}</dt>
+        <dd className="space-y-2">
+          <StateEvidence state={change.afterState} options={options} />
+          <ProfilePinEvidence pin={change.afterProfilePin} missing="unavailable" />
+        </dd>
+      </div>
+      <div>
+        <dt>{m.library_entry_history_prior_revision()}</dt>
+        <dd>{change.priorRevision ?? m.library_entry_history_absent()}</dd>
+      </div>
+      <div>
+        <dt>{m.library_entry_history_changed_at()}</dt>
+        <dd>
+          <time dateTime={change.changedAt}>{change.changedAt}</time>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.library_entry_history_command_kind()}</dt>
+        <dd>
+          <code className="break-all">{change.commandKind}</code>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.library_entry_history_command_id()}</dt>
+        <dd>
+          <code className="break-all">{change.commandId}</code>
+        </dd>
+      </div>
     </dl>
   );
 }

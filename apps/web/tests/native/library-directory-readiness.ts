@@ -44,7 +44,10 @@ export async function prepareLibraryDirectory(stack: NativeWebStack, accountId: 
           { workflowName, queueName: 'workflows', workflowID: `${workflowName}:native-web:${crypto.randomUUID()}` },
           { accounts: [accountId], frontier, metadata },
         );
-        const completed = await settledWithin(handle.getResult().then(() => true), Math.max(0, deadline - Date.now()));
+        const completed = await settledWithin(
+          handle.getResult().then(() => true),
+          Math.max(0, deadline - Date.now()),
+        );
         if (!completed) throw new Error(`Collections setup timed out in ${workflowName} at ${stage}`);
       }
       throw new Error(`Collections setup timed out checking ${workflowName} readiness`);

@@ -1,6 +1,9 @@
 import type { JournalDraft } from '@rezics/progress';
 import type { ReactNode } from 'react';
-import { PublicationNoteDraftNavigation, usePublicationNoteDraftNavigation } from '../publication-note-draft-navigation';
+import {
+  PublicationNoteDraftNavigation,
+  usePublicationNoteDraftNavigation,
+} from '../publication-note-draft-navigation';
 
 /** Field selection is intent: a deliberate Clear, empty reflection or incomplete date is still a draft. */
 function hasJournalDraft(draft: JournalDraft) {

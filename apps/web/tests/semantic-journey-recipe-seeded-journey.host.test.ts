@@ -92,7 +92,10 @@ async function served(subject: Subject, persona?: string, locale = 'en') {
       return [value, ...(value['@graph'] ?? [])];
     },
   );
-  return { html: html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''), recipe: jsonld.find((node) => node['@type'] === 'Recipe') };
+  return {
+    html: html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''),
+    recipe: jsonld.find((node) => node['@type'] === 'Recipe'),
+  };
 }
 
 async function publicRead(id: string) {
@@ -114,7 +117,10 @@ test('the authored Recipe exists through the real API with diet, duration, yield
   expect(document.language).toBe('en');
   const digest = [
     ...new Uint8Array(
-      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serializeDocument(fromPlainText(steps.join('\n'))))),
+      await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(serializeDocument(fromPlainText(steps.join('\n')))),
+      ),
     ),
   ]
     .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -147,9 +153,13 @@ test('a linked Subject serves, the Recipe serves again after returning, and the 
 });
 
 test('a signed-in cook-time correction is proposed and listed without changing the public reading', async () => {
-  const proposed = await write(`/v1/subjects/${recipe.id}/candidates`, {
-    statement: source('schema:cookTime', { amount: '+30', unit: minute }),
-  }, 'alice');
+  const proposed = await write(
+    `/v1/subjects/${recipe.id}/candidates`,
+    {
+      statement: source('schema:cookTime', { amount: '+30', unit: minute }),
+    },
+    'alice',
+  );
   correction = proposed.candidate as string;
   const listed = await stack.kernel(`/v1/subjects/${recipe.id}/candidates?property=schema:cookTime`, {}, 'alice');
   expect(listed.status).toBe(200);

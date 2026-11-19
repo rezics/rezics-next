@@ -46,7 +46,12 @@ export function ReceivedAssignmentObservation({
     >
       <header className="min-w-0 space-y-2 border-b pb-4">
         <p className="text-sm text-muted-foreground">{m.library_received_reading_assignment({ position })}</p>
-        <h3 id={titleId} lang={title?.lang} dir="auto" className="h-auto text-lg font-semibold [overflow-wrap:anywhere]">
+        <h3
+          id={titleId}
+          lang={title?.lang}
+          dir="auto"
+          className="h-auto text-lg font-semibold [overflow-wrap:anywhere]"
+        >
           {title?.text ?? m.library_subject_unavailable()}
         </h3>
         {row.subject?.typeLabel ? <p className="text-sm text-muted-foreground">{row.subject.typeLabel}</p> : null}
@@ -129,7 +134,10 @@ export function ReceivedAssignmentObservation({
           {workHref ? (
             <a
               href={workHref}
-             className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+              })}
               aria-describedby={titleId}
               data-received-work-destination=""
               onClick={(event) => {

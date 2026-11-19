@@ -1,6 +1,15 @@
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListScoreFormat, AniListSourceField } from './contract';
-import { aniListEmptyFields, aniListFieldLabel, aniListFieldValue, aniListIdentifierLabel, aniListMediaType, aniListPrivateNote, aniListUnsupportedFields, aniListValidityLabel } from './meaning';
+import {
+  aniListEmptyFields,
+  aniListFieldLabel,
+  aniListFieldValue,
+  aniListIdentifierLabel,
+  aniListMediaType,
+  aniListPrivateNote,
+  aniListUnsupportedFields,
+  aniListValidityLabel,
+} from './meaning';
 
 function Fact({ label, value, reason }: { label: string; value: string; reason?: string }) {
   return (
@@ -141,7 +150,9 @@ export function AniListEvidencePanel({
       {note ? (
         <details className="rounded-md border p-3">
           <summary className="cursor-pointer py-2 font-medium">{m.library_anilist_notes_summary()}</summary>
-          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{aniListFieldValue(source.evidence, note)}</p>
+          <p className="h-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {aniListFieldValue(source.evidence, note)}
+          </p>
           <p className="mt-2 text-sm text-muted-foreground">{note.reason}</p>
           <p className="mt-2 text-sm text-muted-foreground">{m.library_anilist_not_review()}</p>
         </details>

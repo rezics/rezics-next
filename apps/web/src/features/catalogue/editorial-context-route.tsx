@@ -4,7 +4,6 @@ import { getLocale } from '../../paraglide/runtime';
 import { EditorialContextSession } from './editorial-context-session';
 import { editorialCreateHref } from './editorial-context-location';
 
-
 export function EditorialContextPage({ id, subject, slug }: { id?: string; subject?: string; slug?: string }) {
   const locale = getLocale();
   return (

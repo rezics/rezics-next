@@ -132,7 +132,13 @@ function DocumentImageDisclosure({ image, alt, locale, mediaId, occurrence, insp
             {alt ? <span className="mt-1 block whitespace-pre-wrap [overflow-wrap:anywhere]">{alt}</span> : null}
           </div>
           {admitted && (phase === 'failed' || recovering) ? (
-            <Button type="button" variant="link" size="sm" onClick={(event) => retry(event.currentTarget)} disabled={recovering}>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              onClick={(event) => retry(event.currentTarget)}
+              disabled={recovering}
+            >
               {m.document_image_retry({}, options)}
             </Button>
           ) : null}

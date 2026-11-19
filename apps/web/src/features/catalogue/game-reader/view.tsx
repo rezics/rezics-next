@@ -130,12 +130,7 @@ export function GameReader({ compact = false, ...props }: Props) {
           focused.current = keyboard.current ? event.target : null;
         }}
       >
-        <h2
-          id={id}
-          ref={heading}
-          tabIndex={-1}
-          className="text-xl font-semibold "
-        >
+        <h2 id={id} ref={heading} tabIndex={-1} className="text-xl font-semibold ">
           {m.game_reader_overview_title({}, o)}
         </h2>
         {reading.available ? (
@@ -405,9 +400,7 @@ function GameWindow({
                       }
                       className="min-w-0 border-t border-border pt-3"
                     >
-                      <summary className={`${action} cursor-pointer font-medium`}>
-                        {groups[group.id]}
-                      </summary>
+                      <summary className={`${action} cursor-pointer font-medium`}>{groups[group.id]}</summary>
                       <div className="pt-3">{content}</div>
                     </details>
                   ) : (
@@ -419,9 +412,7 @@ function GameWindow({
                 data-slot="game-release-destination"
                 className="min-w-0 overflow-hidden rounded-xl border border-border bg-card"
               >
-                <summary className={`${action} cursor-pointer font-semibold`}>
-                  {m.subject_editions({}, o)}
-                </summary>
+                <summary className={`${action} cursor-pointer font-semibold`}>{m.subject_editions({}, o)}</summary>
                 <section
                   key={window.revision}
                   aria-label={m.subject_editions({}, o)}
@@ -620,9 +611,7 @@ function GameWindow({
             </Link>
           </nav>
           <details data-slot="game-reading-details" className="min-w-0 border-t border-border pt-3">
-            <summary className={`${action} cursor-pointer`}>
-              {m.literary_reader_about_reading({}, o)}
-            </summary>
+            <summary className={`${action} cursor-pointer`}>{m.literary_reader_about_reading({}, o)}</summary>
             <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
             <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
             <div className="rounded-lg border border-border p-3 space-y-2" data-slot="game-window-address">

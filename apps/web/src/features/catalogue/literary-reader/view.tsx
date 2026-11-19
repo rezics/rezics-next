@@ -138,7 +138,7 @@ export function LiteraryReader({
   const headingText = retired
     ? m.literary_reader_title({}, o)
     : composed
-      ? viewLabel ?? m.literary_reader_title({}, o)
+      ? (viewLabel ?? m.literary_reader_title({}, o))
       : title;
   return (
     <section

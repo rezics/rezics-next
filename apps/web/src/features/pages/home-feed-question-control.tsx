@@ -111,11 +111,7 @@ export function HomeFeedQuestionControl({
         </Button>
         {selected || selectedId ? (
           <>
-            <Button
-              className="whitespace-normal"
-              variant="outline"
-              onClick={() => void choices.select(undefined)}
-            >
+            <Button className="whitespace-normal" variant="outline" onClick={() => void choices.select(undefined)}>
               {m.home_question_clear({}, options)}
             </Button>
             <Button
@@ -132,9 +128,7 @@ export function HomeFeedQuestionControl({
       <p className="text-sm text-muted-foreground">{m.home_question_help({}, options)}</p>
       {selected ? (
         <details className="text-sm text-muted-foreground">
-          <summary className="cursor-pointer">
-            {m.home_presentation_question_information({}, options)}
-          </summary>
+          <summary className="cursor-pointer">{m.home_presentation_question_information({}, options)}</summary>
           <p className="pb-2">
             {m.home_question_metadata(
               {

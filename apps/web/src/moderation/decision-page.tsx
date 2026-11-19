@@ -833,7 +833,8 @@ function DecisionVisit({
                     className={`${moderationControl} w-full sm:w-auto`}
                     disabled={busy}
                     onClick={(event) => {
-                      const keyboardControl = keyboardClick.current === event.currentTarget ? event.currentTarget : null;
+                      const keyboardControl =
+                        keyboardClick.current === event.currentTarget ? event.currentTarget : null;
                       keyboardClick.current = null;
                       void submit(true, keyboardControl);
                     }}

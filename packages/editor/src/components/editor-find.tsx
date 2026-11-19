@@ -185,8 +185,7 @@ export type EditorFindHandle = {
   activate: (intent: EditorFindIntent) => boolean;
 };
 
-const findActionClassName =
-  'h-auto min-h-7 min-w-0 max-w-full shrink whitespace-normal wrap-break-word text-start';
+const findActionClassName = 'h-auto min-h-7 min-w-0 max-w-full shrink whitespace-normal wrap-break-word text-start';
 
 export function EditorFind({
   editor,
@@ -215,9 +214,7 @@ export function EditorFind({
   const search = useRef<HTMLInputElement>(null);
   const replacementInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(() => {
-    const selected = editor.state.doc
-      .textBetween(editor.state.selection.from, editor.state.selection.to)
-      .slice(0, 256);
+    const selected = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to).slice(0, 256);
     const prior = (defaultQuery ?? '').slice(0, 256);
     return initialIntent === 'next' || initialIntent === 'previous' ? prior || selected : selected || prior;
   });
@@ -469,7 +466,9 @@ export function EditorFind({
               replace();
             }}
           />
-          <FieldDescription id={descriptionId} className="sr-only">{labels.findDescription}</FieldDescription>
+          <FieldDescription id={descriptionId} className="sr-only">
+            {labels.findDescription}
+          </FieldDescription>
           <div className="flex flex-wrap gap-1">
             <Button
               type="button"

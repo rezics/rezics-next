@@ -18,7 +18,12 @@ function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
           Inspect a code sample or comparison table, then return to the same published post.
         </p>
         {retirement ? (
-          <Button type="button" data-story-replace-reader="true" variant="outline" size="sm" onClick={() => setReaderKey((current) => (current === 'reader-a' ? 'reader-b' : 'reader-a'))}
+          <Button
+            type="button"
+            data-story-replace-reader="true"
+            variant="outline"
+            size="sm"
+            onClick={() => setReaderKey((current) => (current === 'reader-a' ? 'reader-b' : 'reader-a'))}
           >
             Replace reader visit
           </Button>

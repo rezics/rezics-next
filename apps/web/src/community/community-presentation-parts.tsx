@@ -227,11 +227,7 @@ export function ImageCredit({ image, loaded = true }: { image: RealmPresentation
   return (
     <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
       © {credit.rightsHolder} ·{' '}
-      <a
-        href={credit.via.url}
-        rel="noopener noreferrer nofollow"
-        className="max-w-full whitespace-normal underline"
-      >
+      <a href={credit.via.url} rel="noopener noreferrer nofollow" className="max-w-full whitespace-normal underline">
         {credit.via.name}
       </a>{' '}
       · {credit.license}

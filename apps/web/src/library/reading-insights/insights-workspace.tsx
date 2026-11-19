@@ -26,7 +26,10 @@ export function InsightsWorkspace({
     <article className="mx-auto min-w-0 max-w-7xl space-y-8 px-4 py-8 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-5">
         {intro}
-        <section aria-label={m.library_insights_year()} className="rounded-xl border border-border bg-muted/20 p-4 sm:p-6">
+        <section
+          aria-label={m.library_insights_year()}
+          className="rounded-xl border border-border bg-muted/20 p-4 sm:p-6"
+        >
           <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(9rem,0.8fr)_minmax(0,2fr)] lg:items-center">
             <div className="min-w-0">
               <p className="text-sm text-muted-foreground">{m.library_insights_year()}</p>

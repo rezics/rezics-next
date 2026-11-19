@@ -14,7 +14,11 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
   const scoreReason = score && typeof score.reason === 'string' ? score.reason : null;
   const readback = currentScoreReadback(row?.currentScore);
   return (
-    <li className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
+    <li
+      className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      data-anilist-outcome={outcome.status}
+      data-anilist-row={outcome.ordinal}
+    >
       <header className="min-w-0 space-y-1">
         <h3 className="h-auto font-semibold [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</h3>
         <ImportTarget target={row?.target} />
@@ -183,7 +187,9 @@ export function AniListResultPage({
             data-anilist-outcome="unattempted"
             data-anilist-row={ordinal}
           >
-            <h3 className="h-auto font-semibold [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</h3>
+            <h3 className="h-auto font-semibold [overflow-wrap:anywhere]">
+              {rows.get(ordinal)?.title ?? `#${ordinal + 1}`}
+            </h3>
             <p>{m.library_anilist_result_unattempted()}</p>
           </li>
         ))}

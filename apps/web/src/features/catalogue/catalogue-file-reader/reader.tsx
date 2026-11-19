@@ -49,10 +49,15 @@ import {
 } from './model';
 import { useCatalogueFileReading } from './reading/current';
 
-const readerLinkClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
-const readerControlClass =
-  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
+const readerLinkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+const readerControlClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+);
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 type FilePart = Statement | Statement['qualifiers'][number];
@@ -247,11 +252,7 @@ function FileValue({
     if (!href) return <span lang={picked.lang ?? undefined}>{label}</span>;
     const Link = link;
     return (
-      <Link
-        className={readerLinkClass}
-        href={href}
-        {...(picked.lang ? { lang: picked.lang } : {})}
-      >
+      <Link className={readerLinkClass} href={href} {...(picked.lang ? { lang: picked.lang } : {})}>
         {label}
       </Link>
     );
@@ -366,11 +367,7 @@ function AssociationList({
   const currentTitle = current.text || m.subject_value_unlabelled({}, o);
   return (
     <section className="min-w-0 space-y-3" data-slot="catalogue-file-reader-associations">
-      <h2
-        ref={heading}
-        tabIndex={-1}
-        className="text-lg font-semibold "
-      >
+      <h2 ref={heading} tabIndex={-1} className="text-lg font-semibold ">
         {m.catalogue_file_related({}, o)}
       </h2>
       {!visit.associations.length && <p>{m.catalogue_file_empty({}, o)}</p>}
@@ -646,12 +643,7 @@ function InspectionPanel({
         className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/30 p-4"
       >
         <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <h2
-            id="catalogue-file-inspection-heading"
-            ref={heading}
-            tabIndex={-1}
-            className="text-lg font-semibold "
-          >
+          <h2 id="catalogue-file-inspection-heading" ref={heading} tabIndex={-1} className="text-lg font-semibold ">
             {m.catalogue_file_inspection_title({}, o)}
           </h2>
           <button type="button" className={readerControlClass} onClick={() => reading.close(fallback())}>
@@ -673,12 +665,7 @@ function InspectionPanel({
     >
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <h2
-            ref={heading}
-            id="catalogue-file-inspection-heading"
-            tabIndex={-1}
-            className="text-lg font-semibold "
-          >
+          <h2 ref={heading} id="catalogue-file-inspection-heading" tabIndex={-1} className="text-lg font-semibold ">
             {m.catalogue_file_inspection_title({}, o)}
           </h2>
           <p
@@ -1131,10 +1118,7 @@ export function CatalogueFileReader({
                   : m.catalogue_file_reader_retry({}, o)}
               </button>
               {currentHref ? (
-                <a
-                  className={`${readerControlClass} w-full sm:w-auto`}
-                  href={currentHref}
-                >
+                <a className={`${readerControlClass} w-full sm:w-auto`} href={currentHref}>
                   {m.catalogue_file_reader_open_again({}, o)}
                 </a>
               ) : null}
@@ -1163,11 +1147,7 @@ export function CatalogueFileReader({
             {(['identifiers', 'technical', 'language', 'facts', 'group', 'credits'] as const).map((group) =>
               visit.groups[group].length ? (
                 <section key={group} className="min-w-0 space-y-3" data-slot={`catalogue-file-reader-${group}`}>
-                  <h2
-                    ref={(element) => setHeading(group, element)}
-                    tabIndex={-1}
-                    className="text-lg font-semibold "
-                  >
+                  <h2 ref={(element) => setHeading(group, element)} tabIndex={-1} className="text-lg font-semibold ">
                     {factGroupTitle(group, visit.locale)}
                   </h2>
                   {visit.groups[group].map((fact) => (

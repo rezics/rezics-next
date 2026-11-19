@@ -49,8 +49,7 @@ export type AddonProfileProps = AddonAddress & {
 };
 type AddonReadyRead = Extract<AddonRead, { ok: true }>;
 
-const addonActionTarget =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const addonActionTarget = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const addonLinkTarget =
   'inline-flex max-w-full items-center whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 

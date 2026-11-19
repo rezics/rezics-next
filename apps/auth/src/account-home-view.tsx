@@ -41,11 +41,7 @@ export function AccountHomeView({
   return (
     <AuthPage heading={m.auth_home_heading()}>
       <div className="auth-account-home">
-        <section
-          className="auth-account-identity"
-          data-state={state.kind}
-          aria-labelledby="auth-home-identity-heading"
-        >
+        <section className="auth-account-identity" data-state={state.kind} aria-labelledby="auth-home-identity-heading">
           <div className="auth-home-identity-copy">
             <h2 id="auth-home-identity-heading">{m.auth_home_identity_heading()}</h2>
             <p ref={status} className="auth-account-home-status" role="status" tabIndex={-1}>
@@ -63,9 +59,7 @@ export function AccountHomeView({
               <dl className="auth-account-home-email">
                 <div>
                   <dt>{m.auth_home_email()}</dt>
-                  <dd>
-                    {state.email ? <bdi dir="auto">{state.email}</bdi> : m.auth_home_identity_missing_email()}
-                  </dd>
+                  <dd>{state.email ? <bdi dir="auto">{state.email}</bdi> : m.auth_home_identity_missing_email()}</dd>
                 </div>
               </dl>
               <details>

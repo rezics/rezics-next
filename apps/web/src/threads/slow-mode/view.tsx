@@ -19,8 +19,7 @@ import {
 } from './contract';
 import { rememberSlowModeRead, useSlowModePort, useSlowModeRead, type SlowModeVisit } from './caller';
 
-const actionClass =
-  'h-auto min-h-7 max-w-full shrink leading-snug whitespace-normal [overflow-wrap:anywhere]';
+const actionClass = 'h-auto min-h-7 max-w-full shrink leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function intervalLabel(seconds: SlowModeInterval): string {
   return seconds === 0 ? m.slow_mode_interval_off() : m.slow_mode_interval_seconds({ seconds });

@@ -98,7 +98,9 @@ export function InboxUnreadSummary() {
       className="mt-4 min-w-0 space-y-2"
     >
       <p className="wrap-anywhere text-sm text-muted-foreground">{copy.status}</p>
-      {copy.zero ? <p className="wrap-anywhere text-sm text-muted-foreground">{m.inbox_unread_none_not_empty()}</p> : null}
+      {copy.zero ? (
+        <p className="wrap-anywhere text-sm text-muted-foreground">{m.inbox_unread_none_not_empty()}</p>
+      ) : null}
       {blocked ? <p className="wrap-anywhere text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}
       {copy.retry ? (
         <Button

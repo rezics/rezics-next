@@ -28,8 +28,7 @@ type Current = Extract<PeopleRead, { ok: true }>;
 type Created = Extract<CreateResult, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 
-const peopleActionTarget =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const peopleActionTarget = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function createdIdentity(result: Created): CreatedCreditIdentity | undefined {
   const identity = result.reader.state === 'ready' ? result.reader.identity : undefined;

@@ -63,7 +63,10 @@ function browserPort(visit: RecoveryVisit): RecoveryPort {
     apply: (command) =>
       call(async ({ data, headers }) => {
         const { applyArchiveCollectionRecovery } = await import('./server');
-        return applyArchiveCollectionRecovery({ data: { ...data, uploadId: command.uploadId, ...command.body }, headers });
+        return applyArchiveCollectionRecovery({
+          data: { ...data, uploadId: command.uploadId, ...command.body },
+          headers,
+        });
       }),
     outcomes: (uploadId, query) =>
       call(async ({ data, headers }) => {

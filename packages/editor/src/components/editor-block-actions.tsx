@@ -86,7 +86,9 @@ function duplicateNode(node: Node, copiedLabels: ReadonlyMap<string, string>): N
       ...(identified.has(node.type.name) ? { id: crypto.randomUUID() } : {}),
       ...(note ? { label: note } : {}),
     },
-    Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => duplicateNode(node.child(index), copiedLabels))),
+    Fragment.fromArray(
+      Array.from({ length: node.childCount }, (_, index) => duplicateNode(node.child(index), copiedLabels)),
+    ),
     node.marks,
   );
 }
@@ -104,7 +106,11 @@ export function runBlockAction(editor: Editor, name: BlockActionName, isCurrent:
     const sibling = doc.child(before ? block.first - 1 : block.last + 1);
     const from = before ? block.from - sibling.nodeSize : block.from;
     const to = before ? block.to : block.to + sibling.nodeSize;
-    transaction.replaceWith(from, to, Fragment.fromArray(before ? [...block.nodes, sibling] : [sibling, ...block.nodes]));
+    transaction.replaceWith(
+      from,
+      to,
+      Fragment.fromArray(before ? [...block.nodes, sibling] : [sibling, ...block.nodes]),
+    );
     newPos += before ? -sibling.nodeSize : sibling.nodeSize;
   } else if (name === 'duplicateBlock') {
     const labels = new Set<string>();
@@ -192,7 +198,10 @@ export function BlockActions({
             }
           : undefined,
         can: Object.fromEntries(
-          blockActionNames.map((name) => [name, editable && block !== null && canApplyBlockRange(current, block, name)]),
+          blockActionNames.map((name) => [
+            name,
+            editable && block !== null && canApplyBlockRange(current, block, name),
+          ]),
         ) as Record<BlockActionName, boolean>,
         list: {
           indentList: indentList(current, false),

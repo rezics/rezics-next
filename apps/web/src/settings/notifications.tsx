@@ -1,12 +1,4 @@
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type FormEvent,
-  type MouseEvent,
-} from 'react';
+import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -80,7 +72,7 @@ function focusDestination(
   const needsCurrentRead = readFailed || state.phase === 'conflict' || state.phase === 'failed';
 
   if (action === 'keep-current') {
-    return needsCurrentRead ? reload ?? switchControl ?? status : switchControl ?? reload ?? restore ?? status;
+    return needsCurrentRead ? (reload ?? switchControl ?? status) : (switchControl ?? reload ?? restore ?? status);
   }
   if (action === 'restore') {
     if (pending) return retry ?? reload ?? status ?? switchControl;
@@ -298,12 +290,7 @@ export function NotificationsCard({
         </ContentSectionDescription>
       </ContentSectionHeader>
       <ContentSectionBody className="min-w-0 space-y-4">
-        <div
-          ref={focusRoot}
-          role="group"
-          aria-label={m.settings_notifications_heading()}
-          className="space-y-4"
-        >
+        <div ref={focusRoot} role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
           <WatchNotificationGuide />
           <FieldGroup>
             <div className="flex flex-col gap-3">

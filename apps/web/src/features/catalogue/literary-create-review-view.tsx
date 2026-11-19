@@ -7,8 +7,7 @@ import { literaryFields, type LiteraryItem } from './literary-profile';
 import { EditorFailure, type StatementFieldsRead } from './statement-editor-view';
 import { StatementSummary } from './statement-summary';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function LiteraryCreateReview({
   item,

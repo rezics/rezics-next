@@ -188,8 +188,9 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]) 
 }
 
 function validId(value: unknown): value is string {
-  return typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+  return (
+    typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+  );
 }
 
 function validTitle(value: unknown): value is string {
@@ -202,14 +203,22 @@ function validNullableTitle(value: unknown): value is string | null {
 
 function decodePlace(value: unknown, kind: WatchKind) {
   if (kind === 'thread') {
-    if (!isRecord(value) || !exactKeys(value, ['boardId', 'title']) ||
-        !validId(value.boardId) || !validNullableTitle(value.title))
+    if (
+      !isRecord(value) ||
+      !exactKeys(value, ['boardId', 'title']) ||
+      !validId(value.boardId) ||
+      !validNullableTitle(value.title)
+    )
       throw new Error('Invalid native watch place');
     return { boardId: value.boardId, title: value.title };
   }
   if (value === null) return null;
-  if (!isRecord(value) || !exactKeys(value, ['realmId', 'title']) ||
-      !validId(value.realmId) || !validTitle(value.title))
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['realmId', 'title']) ||
+    !validId(value.realmId) ||
+    !validTitle(value.title)
+  )
     throw new Error('Invalid native watch place');
   return { realmId: value.realmId, title: value.title };
 }

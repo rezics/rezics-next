@@ -473,7 +473,10 @@ function RefinementInstance({
                 return (
                   <li key={`${property}:${value}`} className="min-w-0 max-w-full">
                     <a
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')}
+                      className={cn(
+                        buttonVariants({ variant: 'outline', size: 'sm' }),
+                        'h-auto min-h-6 max-w-full whitespace-normal',
+                      )}
                       aria-label={m.refinement_remove({ value: chip }, options)}
                       href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
                     >
@@ -488,7 +491,10 @@ function RefinementInstance({
                 return (
                   <li key={property} className="min-w-0 max-w-full">
                     <a
-                      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere')}
+                      className={cn(
+                        buttonVariants({ variant: 'outline', size: 'sm' }),
+                        'h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere',
+                      )}
                       aria-label={m.refinement_remove(
                         {
                           value: label(definition?.labels ?? {}) || m.refinement_range({}, options),
@@ -502,8 +508,8 @@ function RefinementInstance({
                         ),
                       })}
                     >
-                      {label(definition?.labels ?? {}) || property}: {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
-                      {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
+                      {label(definition?.labels ?? {}) || property}: {range.gte === undefined ? '…' : `≥ ${range.gte}`}{' '}
+                      – {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
                       {definition?.datatype === 'quantity' && (
                         <span title={range.unit} data-unit-id={range.unit}>
                           {searchQuantityUnitText(range.unit, definition.units ?? [], locale, unitMessages)}
@@ -647,7 +653,9 @@ function RefinementInstance({
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={propertyDisabled}
           >
-            <FieldLegend variant="label" className="min-w-0 wrap-anywhere">{title}</FieldLegend>
+            <FieldLegend variant="label" className="min-w-0 wrap-anywhere">
+              {title}
+            </FieldLegend>
             {definition.help && <p className="text-sm text-muted-foreground wrap-anywhere">{definition.help}</p>}
             {definition.mode === 'types' && (
               <p className="text-sm text-muted-foreground">{m.search_subject_types_help({}, options)}</p>
@@ -683,7 +691,7 @@ function RefinementInstance({
                   const text =
                     picked.text.trim() ||
                     (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
-                    ((selectedValueFallbacks.includes(property) || selectedValues.includes(entry.value))
+                    (selectedValueFallbacks.includes(property) || selectedValues.includes(entry.value)
                       ? entry.value
                       : undefined) ||
                     (perPropertyState ? entry.value : m.refinement_selected_value({}, options));

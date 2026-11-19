@@ -111,20 +111,12 @@ export const SaveFailureOnNextSave: Story = {
   name: 'Save failure on next save',
   beforeEach: isolateEditorStorage,
   render: () => (
-    <EditorSettingsReview
-      scenario="lost"
-      instruction="Choose Account, change an editor preference and save."
-    />
+    <EditorSettingsReview scenario="lost" instruction="Choose Account, change an editor preference and save." />
   ),
 };
 
 export const VersionConflictOnNextSave: Story = {
   name: 'Version conflict on next save',
   beforeEach: isolateEditorStorage,
-  render: () => (
-    <EditorSettingsReview
-      concurrent
-      instruction="Choose Account, change an editor preference and save."
-    />
-  ),
+  render: () => <EditorSettingsReview concurrent instruction="Choose Account, change an editor preference and save." />,
 };

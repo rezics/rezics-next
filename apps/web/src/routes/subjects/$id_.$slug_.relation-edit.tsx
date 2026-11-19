@@ -136,10 +136,7 @@ function RelationEditRoute() {
     return (
       <article className="mx-auto w-full max-w-4xl space-y-8">
         <p role="alert">{m.relation_public_unsupported()}</p>
-        <a
-          className="text-primary underline underline-offset-4"
-          href={origin.returnHref}
-        >
+        <a className="text-primary underline underline-offset-4" href={origin.returnHref}>
           {general ? m.relation_public_general_return() : m.relation_public_return()}
         </a>
         <a
@@ -175,10 +172,7 @@ function RelationEditRoute() {
     <article className="mx-auto w-full max-w-4xl space-y-8">
       {publicReturn ? (
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <a
-            className="text-primary underline underline-offset-4"
-            href={publicReturn}
-          >
+          <a className="text-primary underline underline-offset-4" href={publicReturn}>
             {generalPublicReturn ? m.relation_public_general_return() : m.relation_public_return()}
           </a>
           {visit.kind === 'fresh' ? <p>{m.relation_public_fresh_notice()}</p> : null}

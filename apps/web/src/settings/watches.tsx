@@ -253,8 +253,7 @@ function OwnedWatches({
         ? m.settings_watches_conflict()
         : m.settings_watches_rejected();
   const confirmedBoard =
-    state.read === 'ready' && state.kind === 'board' &&
-    (state.write === 'removed' || state.write === 'removed_current')
+    state.read === 'ready' && state.kind === 'board' && (state.write === 'removed' || state.write === 'removed_current')
       ? boardConfirmation.current
       : null;
   return (
@@ -505,7 +504,9 @@ function OwnedWatches({
                                 </a>
                               )}
                               {placeLabel !== null ? (
-                                <p id={placeId} className="text-sm text-muted-foreground">{placeLabel}</p>
+                                <p id={placeId} className="text-sm text-muted-foreground">
+                                  {placeLabel}
+                                </p>
                               ) : null}
                             </div>
                           ) : (
@@ -529,7 +530,9 @@ function OwnedWatches({
                           }}
                           className={controlClass}
                           variant="outline"
-                          aria-labelledby={target && placeLabel !== null ? `${stopLabelId} ${titleId} ${placeId}` : undefined}
+                          aria-labelledby={
+                            target && placeLabel !== null ? `${stopLabelId} ${titleId} ${placeId}` : undefined
+                          }
                           disabled={disabled}
                           onClick={(event) => {
                             rememberStopFocus(event, row.subscriptionId);

@@ -585,7 +585,6 @@ function CreatorOfferForm({
                     setTitle(event.target.value);
                   }
                 }}
-               
               />
             </Field>
             <CreatorPriceFields
@@ -620,7 +619,6 @@ function CreatorOfferForm({
                     setTaxCode(event.target.value);
                   }
                 }}
-               
               />
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>
             </Field>
@@ -630,7 +628,7 @@ function CreatorOfferForm({
                 <Button
                   type="button"
                   variant="outline"
-                 
+
                   disabled={checking}
                   onClick={() => void reviewCurrent()}
                 >
@@ -647,7 +645,7 @@ function CreatorOfferForm({
               ) : (
                 <Button
                   type="submit"
-                 
+
                   disabled={
                     busy ||
                     checking ||

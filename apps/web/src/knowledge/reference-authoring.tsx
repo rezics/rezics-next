@@ -90,11 +90,13 @@ export function KnowledgeReferenceAuthoring({
     focusToken.current++;
   }, []);
   function focusable(target: HTMLElement | null): target is HTMLElement {
-    return !!target?.isConnected &&
+    return (
+      !!target?.isConnected &&
       target.getClientRects().length > 0 &&
       !target.hasAttribute('hidden') &&
       target.getAttribute('aria-disabled') !== 'true' &&
-      !target.matches(':disabled');
+      !target.matches(':disabled')
+    );
   }
   function requestFocus(resolve: () => HTMLElement | null) {
     cancelFocusRequest();
@@ -289,10 +291,7 @@ export function KnowledgeReferenceAuthoring({
     } else cancelFocusRequest();
   }
   return (
-    <section
-      className="min-w-0 space-y-4 border-t border-border pt-5"
-      aria-labelledby={heading}
-    >
+    <section className="min-w-0 space-y-4 border-t border-border pt-5" aria-labelledby={heading}>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <h3 id={heading} ref={headingRef} tabIndex={-1} className="text-base font-semibold">
           {copy.title} ({draft.references.length}/{referenceLimit})
@@ -318,7 +317,10 @@ export function KnowledgeReferenceAuthoring({
               </h4>
               <ul className="min-w-0 space-y-3">
                 {issues.map((issue) => (
-                  <li key={`${issue.kind}:${issue.id}`} className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+                  <li
+                    key={`${issue.kind}:${issue.id}`}
+                    className="min-w-0 space-y-2 rounded-lg border border-border p-3"
+                  >
                     <details className="min-w-0">
                       <summary className={`${referenceControl} cursor-pointer`}>{copy.inspect}</summary>
                       <p className="break-all pt-2 text-sm text-muted-foreground">{issue.id}</p>
@@ -410,13 +412,16 @@ export function KnowledgeReferenceAuthoring({
                     <div className="min-w-0 space-y-2">
                       {label ? (
                         <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-                          <span className="font-medium">{copy.label}: </span>{label}
+                          <span className="font-medium">{copy.label}: </span>
+                          {label}
                         </p>
                       ) : null}
                       <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-                        <span className="font-medium">{copy.role}: </span>{copy.roles[reference.role]}
+                        <span className="font-medium">{copy.role}: </span>
+                        {copy.roles[reference.role]}
                         <span aria-hidden="true"> · </span>
-                        <span className="font-medium">{copy.kind}: </span>{targetName}
+                        <span className="font-medium">{copy.kind}: </span>
+                        {targetName}
                       </p>
                       <details className="min-w-0">
                         <summary className={`${referenceControl} cursor-pointer`}>{copy.inspect}</summary>

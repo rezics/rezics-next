@@ -20,12 +20,10 @@ import {
 } from './publication-editor-guidance';
 import { publicationTarget, type PublicationProfile } from './publication-editor';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 const selectClassName = 'w-full min-w-0 max-w-full';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
-const linkClassName =
-  'inline-flex max-w-full items-center underline [overflow-wrap:anywhere]';
+const linkClassName = 'inline-flex max-w-full items-center underline [overflow-wrap:anywhere]';
 
 function hasContent(value: unknown): boolean {
   if (typeof value === 'string') return !!value.trim();

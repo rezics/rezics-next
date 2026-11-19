@@ -1,6 +1,9 @@
 import { useId } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { publicCollectionDirectoryHref, type PublicCollectionDirectorySelection } from '../../search/contracts/collection-directory';
+import {
+  publicCollectionDirectoryHref,
+  type PublicCollectionDirectorySelection,
+} from '../../search/contracts/collection-directory';
 import type { FormEvent, MouseEvent, Ref, ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
@@ -10,7 +13,11 @@ import type { PublicCollectionDiscoveryState } from './read';
 import type { Coordinate, Movement } from './window-navigation';
 import { PublicCollectionDiscoveryWorkspace } from './discovery-workspace';
 import { Input } from '@rezics/ui/shadcn/input';
-import { continuePublicCollectionDirectory, parsePublicCollectionDirectoryAddress, selectPublicCollectionDirectory } from '../../search/contracts/collection-directory';
+import {
+  continuePublicCollectionDirectory,
+  parsePublicCollectionDirectoryAddress,
+  selectPublicCollectionDirectory,
+} from '../../search/contracts/collection-directory';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -70,7 +77,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
       href={hrefFor(coordinate)}
       aria-disabled={navigation?.pending || retrying || undefined}
       onClick={navigation ? (event) => navigation.move(event, movement, coordinate) : undefined}
-     className={buttonVariants({ variant: 'outline', className: controlClass })}
+      className={buttonVariants({ variant: 'outline', className: controlClass })}
     >
       {label}
     </a>
@@ -96,7 +103,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             defaultValue={selection.presentationKind ?? ''}
             maxLength={256}
             placeholder={m.collection_discovery_kind_placeholder({}, options)}
-            className='min-w-0'
+            className="min-w-0"
           />
         </label>
         <Field className="grid min-w-0 gap-1 text-sm font-medium">
@@ -104,11 +111,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             {m.collection_discovery_order_label({}, options)}
           </FieldLabel>
           <Select<string, false> items={orderOptions} name="order" defaultValue={selection.order ?? 'recent'}>
-            <SelectTrigger
-              id={orderSelectId}
-              aria-labelledby={`${orderSelectId}-label`}
-              className='min-w-0'
-            >
+            <SelectTrigger id={orderSelectId} aria-labelledby={`${orderSelectId}-label`} className="min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
@@ -146,7 +149,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
               maxLength={36}
               pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
               placeholder={m.collection_discovery_identity_placeholder({}, options)}
-              className='min-w-0'
+              className="min-w-0"
             />
           </label>
           <label className="grid min-w-0 gap-1 text-sm font-medium">
@@ -157,7 +160,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
               maxLength={36}
               pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
               placeholder={m.collection_discovery_identity_placeholder({}, options)}
-              className='min-w-0'
+              className="min-w-0"
             />
           </label>
         </div>
@@ -221,13 +224,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
           state.status === 'not-ready' ||
           state.status === 'unavailable' ||
           state.status === 'closed') && (
-          <Button
-            data-slot="retry"
-            type="button"
-            variant="outline"
-            disabled={retrying}
-            onClick={onRetry}
-          >
+          <Button data-slot="retry" type="button" variant="outline" disabled={retrying} onClick={onRetry}>
             {m.collection_discovery_retry({}, options)}
           </Button>
         )}

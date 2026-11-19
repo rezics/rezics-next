@@ -116,7 +116,11 @@ export function useAuthoringSelection(canvas: RefObject<HTMLElement | null>, gen
       const currentCanvas = canvas.current;
       if (!visibleWorkbenchTarget(currentCanvas)) return;
       // Copying a saved version deliberately replaces the editor; its detached caret must not be restored.
-      if (!selection || selection.generation !== generation || !visibleWorkbenchTarget(selection.target, currentCanvas)) {
+      if (
+        !selection ||
+        selection.generation !== generation ||
+        !visibleWorkbenchTarget(selection.target, currentCanvas)
+      ) {
         const fallback = [...currentCanvas.querySelectorAll<HTMLElement>('[role="textbox"], input, textarea')].find(
           (target) =>
             visibleWorkbenchTarget(target, currentCanvas) &&

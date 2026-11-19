@@ -91,8 +91,12 @@ export async function loadDocumentMedia(
     if (!page.success) return { kind: 'unavailable' };
     const images = new Map<string, DocumentImagePresentation>();
     for (const image of page.output.images) {
-      if (!ids.includes(image.id) || images.has(image.id) ||
-          (knowledge !== undefined && image.containerId !== knowledge.documentId)) return { kind: 'unavailable' };
+      if (
+        !ids.includes(image.id) ||
+        images.has(image.id) ||
+        (knowledge !== undefined && image.containerId !== knowledge.documentId)
+      )
+        return { kind: 'unavailable' };
       const variants = new Set(image.variants.map((variant) => `${variant.format}:${variant.width}`));
       if (variants.size !== image.variants.length) return { kind: 'unavailable' };
       images.set(image.id, image);

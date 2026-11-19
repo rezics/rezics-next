@@ -7,7 +7,16 @@ import { useInsightsReading, type InsightsReader, type InsightsState } from './c
 import { InsightsWorkspace } from './insights-workspace';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { AllTimePanel, AssessmentsPanel, InsightsPanel, ProfilesPanel, ProgressPanel, YearPanel, insightLink, monthName } from './panels';
+import {
+  AllTimePanel,
+  AssessmentsPanel,
+  InsightsPanel,
+  ProfilesPanel,
+  ProgressPanel,
+  YearPanel,
+  insightLink,
+  monthName,
+} from './panels';
 
 const control = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
@@ -76,7 +85,8 @@ export function ReadingInsightsView({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             aria-invalid={invalid || state.kind === 'invalid'}
-            aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined} className="w-28"
+            aria-describedby={invalid || state.kind === 'invalid' ? 'insights-year-error' : undefined}
+            className="w-28"
           />
         </div>
         <Button type="submit" variant="outline" className={control}>
@@ -84,7 +94,8 @@ export function ReadingInsightsView({
         </Button>
         <Button
           type="button"
-          variant="outline" className={control}
+          variant="outline"
+          className={control}
           onClick={onRefresh}
           disabled={!canRefresh || state.kind === 'loading' || year === undefined}
         >
@@ -110,7 +121,7 @@ export function ReadingInsightsView({
       ) : null}
       {state.kind === 'signed-out' || state.kind === 'retired' ? (
         <a
-         className={insightLink}
+          className={insightLink}
           href={`/auth/sign-in?return_to=${encodeURIComponent(year === undefined ? `/${locale}/library/insights` : insightsHref(year, locale))}`}
         >
           {m.account_sign_in()}
@@ -126,11 +137,7 @@ export function ReadingInsightsView({
       status={status}
       allTime={
         value ? (
-          <InsightsPanel
-            id="insights-all-time"
-            title={m.library_insights_all_time()}
-            value={value.panels.allTime}
-          >
+          <InsightsPanel id="insights-all-time" title={m.library_insights_all_time()} value={value.panels.allTime}>
             {(panel) => <AllTimePanel value={panel} />}
           </InsightsPanel>
         ) : null
@@ -146,7 +153,7 @@ export function ReadingInsightsView({
                 <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
                   <a
                     href={insightsDiaryHref(value.actions.diary, locale)}
-                   className={insightLink}
+                    className={insightLink}
                     onClick={(event) => {
                       if (!current()) event.preventDefault();
                     }}
@@ -159,7 +166,7 @@ export function ReadingInsightsView({
                   ].map(({ action, label }) => (
                     <a
                       key={label}
-                     className={insightLink}
+                      className={insightLink}
                       href={insightsDiaryHref(action, locale)}
                       onClick={(event) => {
                         if (!current()) event.preventDefault();

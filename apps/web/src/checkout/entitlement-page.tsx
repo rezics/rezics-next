@@ -9,13 +9,7 @@ import { capturedBenefit } from './benefit';
 import { BenefitDetails } from './benefit-details';
 import { EntitlementRecordFrame } from './entitlement-workspace';
 
-function EntitlementCurrentContext({
-  record,
-  subject,
-}: {
-  record: BuyerEntitlement;
-  subject: SubjectCoverData;
-}) {
+function EntitlementCurrentContext({ record, subject }: { record: BuyerEntitlement; subject: SubjectCoverData }) {
   return (
     <div className="min-w-0">
       <div className="grid min-w-0 gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-7">

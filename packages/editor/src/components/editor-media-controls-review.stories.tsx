@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 import { richTextEditorLabels } from './editor-labels.ts';
-import {
-  EditorMediaPropertiesDialog,
-  type EditorMediaPropertiesDraft,
-} from './editor-media-views.tsx';
+import { EditorMediaPropertiesDialog, type EditorMediaPropertiesDraft } from './editor-media-views.tsx';
 
 /** Contract-shaped synthetic occurrence drafts for review; not stored media or an authorized upload. */
 const longAlt: EditorMediaPropertiesDraft = {

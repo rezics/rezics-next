@@ -228,7 +228,7 @@ function StatementListPagination({
       {hasPrevious && (
         <Button
           variant="outline"
-         
+
           nativeButton={false}
           render={
             <Link
@@ -245,7 +245,7 @@ function StatementListPagination({
       {restart && (
         <Button
           variant="outline"
-         
+
           nativeButton={false}
           render={<Link preload={false} to="/creator/statements" search={{}} onClick={onMovement} />}
         >
@@ -255,7 +255,7 @@ function StatementListPagination({
       {next && (
         <Button
           variant="outline"
-         
+
           nativeButton={false}
           render={<Link preload={false} to="/creator/statements" search={{ cursor: next }} onClick={onMovement} />}
         >

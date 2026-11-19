@@ -77,7 +77,10 @@ export function DiscoveryPersonalControls({
   })();
   if (capability.state === 'signed-out')
     return (
-      <a className={buttonVariants({ variant: 'outline' })} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
+      <a
+        className={buttonVariants({ variant: 'outline' })}
+        href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+      >
         {m.account_sign_in({}, options)}
       </a>
     );

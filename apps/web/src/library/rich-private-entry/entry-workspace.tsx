@@ -1,9 +1,5 @@
 import type { MouseEvent, RefObject } from 'react';
-import type {
-  PersonalEntry,
-  PersonalEntryObservation,
-  PersonalEntrySourceCorrection,
-} from '@rezics/client';
+import type { PersonalEntry, PersonalEntryObservation, PersonalEntrySourceCorrection } from '@rezics/client';
 import { m } from '../../paraglide/messages.js';
 import type { AnnotationDraft, AnnotationConfirmation, AnnotationField, AnnotationIssues } from './contract';
 import { AnnotationEditor, type AnnotationEditorRefs } from './annotation-editor';
@@ -156,7 +152,7 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
           <p className="mt-1 text-sm text-muted-foreground">{m.library_rich_entry_private_help()}</p>
         </div>
         <a
-         className={buttonVariants({ variant: 'outline', className: 'w-full shrink-0 sm:w-auto' })}
+          className={buttonVariants({ variant: 'outline', className: 'w-full shrink-0 sm:w-auto' })}
           href={diaryHref}
           onClick={onDiaryClick}
         >
@@ -195,7 +191,9 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
           {annotation.savedEntry ? <AnnotationSaved entry={annotation.savedEntry} /> : null}
           {annotation.localOutcome ? (
             <p role="status" className="rounded-md border p-3 text-sm">
-              {annotation.localOutcome === 'unchanged' ? m.library_annotation_no_change() : m.library_annotation_discarded()}
+              {annotation.localOutcome === 'unchanged'
+                ? m.library_annotation_no_change()
+                : m.library_annotation_discarded()}
             </p>
           ) : null}
           {annotation.pending ? (
@@ -203,11 +201,7 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               <p>{annotation.uncertain ? m.library_rich_entry_uncertain() : m.library_annotation_saving()}</p>
               <p className="text-sm text-muted-foreground">{m.library_annotation_pending_help()}</p>
               {annotation.uncertain ? (
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={annotation.onRetry}
-                >
+                <Button type="button" variant="default" onClick={annotation.onRetry}>
                   {m.library_rich_entry_retry()}
                 </Button>
               ) : null}
@@ -242,7 +236,8 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               ) : annotation.reviewLatestAvailable ? (
                 <Button
                   type="button"
-                  variant="default" className='w-full sm:w-auto'
+                  variant="default"
+                  className="w-full sm:w-auto"
                   onClick={annotation.onReviewLatest}
                 >
                   {m.library_rich_entry_review_latest()}
@@ -250,7 +245,8 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
               ) : (
                 <Button
                   type="button"
-                  variant="outline" className='w-full sm:w-auto'
+                  variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={annotation.onRefreshConflict}
                 >
                   {m.library_selection_retry()}
@@ -327,7 +323,9 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
                           <dd className="mt-1 break-all">{observation.recordId}</dd>
                         </div>
                         <div className="min-w-0 sm:col-span-2">
-                          <dt className="font-medium text-muted-foreground">{m.library_rich_entry_native_recorded()}</dt>
+                          <dt className="font-medium text-muted-foreground">
+                            {m.library_rich_entry_native_recorded()}
+                          </dt>
                           <dd className="h-auto mt-1 break-words">{observation.recordedAt}</dd>
                         </div>
                       </dl>
@@ -335,7 +333,8 @@ export function EntryWorkspace({ subject, entry, diaryHref, onDiaryClick, annota
 
                     <Button
                       type="button"
-                      variant="outline" className='mt-3 w-full sm:w-auto'
+                      variant="outline"
+                      className="mt-3 w-full sm:w-auto"
                       disabled={!source.writeAllowed || annotation.pending || source.pending}
                       onClick={(event) => source.onOpen(observation, event)}
                     >

@@ -457,9 +457,7 @@ function RetiredReader() {
   }, [signedIn, fixture]);
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <Button onClick={() => setSignedIn(false)}>
-        {m.account_sign_out()}
-      </Button>
+      <Button onClick={() => setSignedIn(false)}>{m.account_sign_out()}</Button>
       <CandidateReaderBoundary
         address="candidate-comparison-example"
         observed={

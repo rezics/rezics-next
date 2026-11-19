@@ -253,7 +253,9 @@ export function TableControls({
         >
           {toolbar}
         </BubbleMenu>
-      ) : toolbar}
+      ) : (
+        toolbar
+      )}
     </TooltipProvider>
   );
 }

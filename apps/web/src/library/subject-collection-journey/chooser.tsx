@@ -3,7 +3,19 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { m } from '../../paraglide/messages.js';
 import { SubjectRef, type SubjectReference } from '../subject-ref';
 import { ReceivedCollectionDetails } from '../subject-collection-choice-reading/details';
-import { collectionReadFailure, emptyCollectionPage, firstCollectionVisit, isCuratedWriteDestination, nextCollectionVisit, previousCollectionVisit, replaceCollectionPage, type BoundCollectionPage, type CapturedChooserTarget, type ChooserCollectionRow, type SubjectCollectionVisit } from './model';
+import {
+  collectionReadFailure,
+  emptyCollectionPage,
+  firstCollectionVisit,
+  isCuratedWriteDestination,
+  nextCollectionVisit,
+  previousCollectionVisit,
+  replaceCollectionPage,
+  type BoundCollectionPage,
+  type CapturedChooserTarget,
+  type ChooserCollectionRow,
+  type SubjectCollectionVisit,
+} from './model';
 
 const rowClass = 'h-auto min-h-7 w-full min-w-0 justify-between gap-2 text-start whitespace-normal';
 
@@ -184,9 +196,7 @@ export function CollectionChooserPanel({
       const intent = focusIntent.current;
       if (!intent || intent.episode !== version.current || intent.mount !== mountEpisode.current) return;
       const focusMovedToRetiredDocument =
-        targetIsDocumentFocus &&
-        !isVisibleAndExposed(intent.startingFocus) &&
-        !isVisibleAndExposed(intent.control);
+        targetIsDocumentFocus && !isVisibleAndExposed(intent.startingFocus) && !isVisibleAndExposed(intent.control);
       if (target !== intent.startingFocus && target !== intent.control && !focusMovedToRetiredDocument)
         focusIntent.current = null;
     };
@@ -246,9 +256,7 @@ export function CollectionChooserPanel({
     const activeElement = document.activeElement;
     const activeIsDocumentFocus = activeElement === document.body || activeElement === document.documentElement;
     const sourceLostFocus =
-      activeIsDocumentFocus &&
-      !isVisibleAndExposed(intent.startingFocus) &&
-      !isVisibleAndExposed(intent.control);
+      activeIsDocumentFocus && !isVisibleAndExposed(intent.startingFocus) && !isVisibleAndExposed(intent.control);
     if (
       live.current &&
       intent.mount === mountEpisode.current &&
@@ -279,8 +287,7 @@ export function CollectionChooserPanel({
   function closeInspection(receivedRow: InspectedDestination) {
     if (inspectionRef.current !== receivedRow) return;
     const restoreTrigger =
-      rowCurrent(receivedRow.page, receivedRow.row, receivedRow.episode) &&
-      isVisibleAndExposed(receivedRow.trigger);
+      rowCurrent(receivedRow.page, receivedRow.row, receivedRow.episode) && isVisibleAndExposed(receivedRow.trigger);
     retireInspection();
     if (restoreTrigger) receivedRow.trigger.focus();
     else focusVisibleHeading();
@@ -412,7 +419,8 @@ export function CollectionChooserPanel({
               {destinations.map((collection) => (
                 <li key={collection.id}>
                   <Button
-                    variant="outline" className={rowClass}
+                    variant="outline"
+                    className={rowClass}
                     type="button"
                     aria-pressed={selectedStill?.id === collection.id}
                     disabled={!hydrated || !csrfToken || !admitted}
@@ -484,7 +492,9 @@ export function CollectionChooserPanel({
                   type="button"
                   variant="outline"
                   disabled={busy || !hydrated}
-                  onClick={(event) => void load(nextCollectionVisit(page.visit, page.next), event.currentTarget, event.detail === 0)}
+                  onClick={(event) =>
+                    void load(nextCollectionVisit(page.visit, page.next), event.currentTarget, event.detail === 0)
+                  }
                 >
                   {m.library_subject_continuation_next()}
                 </Button>
@@ -514,7 +524,7 @@ export function CollectionChooserPanel({
       {addedId ? (
         <nav className="mt-3 flex flex-col gap-2" aria-label={m.library_subject_heading()}>
           <a
-           className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 [overflow-wrap:anywhere]' })}
+            className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 [overflow-wrap:anywhere]' })}
             href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(addedId)}`}
           >
             {m.library_subject_collection_open({

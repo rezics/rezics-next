@@ -182,12 +182,7 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                         </Button>
                       </>
                     ) : issue.key === 'cursor' ? (
-                      <Button
-                        variant="outline"
-                        data-search-input-control
-                        type="button"
-                        onClick={() => remove(issue)}
-                      >
+                      <Button variant="outline" data-search-input-control type="button" onClick={() => remove(issue)}>
                         {removalLabel(issue, field, options)}
                       </Button>
                     ) : (
@@ -215,9 +210,7 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                           />
                         </label>
                         <div className="flex flex-wrap gap-3">
-                          <Button type="submit">
-                            {m.search_input_recovery_apply({}, options)}
-                          </Button>
+                          <Button type="submit">{m.search_input_recovery_apply({}, options)}</Button>
                           <Button variant="outline" type="button" onClick={() => remove(issue)}>
                             {removalLabel(issue, field, options)}
                           </Button>

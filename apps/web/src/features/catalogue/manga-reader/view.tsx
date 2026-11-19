@@ -36,8 +36,7 @@ const textLink = cn(
   'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
   'underline',
 );
-const compactWrap =
-  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
+const compactWrap = 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function options(locale: string) {
   return { locale: locale as never };
@@ -264,10 +263,7 @@ export function MangaReader({
             <a className={textLink} href={recoveryHref}>
               {m.manga_reader_recover({}, options(locale))}
             </a>
-            <a
-              className={textLink}
-              href={mangaRestartAddress(recoveryHref)}
-            >
+            <a className={textLink} href={mangaRestartAddress(recoveryHref)}>
               {m.manga_reader_restart({}, options(locale))}
             </a>
           </div>
@@ -276,10 +272,7 @@ export function MangaReader({
             {missingOrigin ? (
               <div role="status" className="space-y-1 text-sm text-muted-foreground">
                 <p>{m.manga_reader_origin_missing({}, options(locale))}</p>
-                <a
-                  className={textLink}
-                  href={mangaRestartAddress(recoveryHref)}
-                >
+                <a className={textLink} href={mangaRestartAddress(recoveryHref)}>
                   {m.manga_reader_restart({}, options(locale))}
                 </a>
               </div>
@@ -302,18 +295,13 @@ export function MangaReader({
                         : m.manga_reader_parts({}, options(locale)))}
                     {label ? ` · ${label}` : ''}
                   </h3>
-                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-                    {statusText(status, locale)}
-                  </p>
+                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{statusText(status, locale)}</p>
                   {status === 'unavailable' ? (
                     <div className="flex flex-wrap gap-x-4">
                       <a href={recoveryHref} className={textLink}>
                         {m.manga_reader_retry({}, options(locale))}
                       </a>
-                      <a
-                        href={mangaRestartAddress(recoveryHref)}
-                        className={textLink}
-                      >
+                      <a href={mangaRestartAddress(recoveryHref)} className={textLink}>
                         {m.manga_reader_restart({}, options(locale))}
                       </a>
                     </div>
@@ -412,7 +400,11 @@ export function MangaReader({
                                   locale,
                                 )}
                                 lang={row.labelLanguage}
-                                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), compactWrap, 'w-full')}
+                                className={cn(
+                                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                                  compactWrap,
+                                  'w-full',
+                                )}
                               >
                                 {label}
                               </Link>

@@ -533,9 +533,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
   }
   return (
     <details className="border-t pt-3">
-      <summary className=" cursor-pointer text-sm font-medium ">
-        {m.reporter_status_reference()}
-      </summary>
+      <summary className=" cursor-pointer text-sm font-medium ">{m.reporter_status_reference()}</summary>
       <div className="space-y-4 py-3">
         <dl className="space-y-4 text-sm">
           {reference.map(({ label, value }) => (

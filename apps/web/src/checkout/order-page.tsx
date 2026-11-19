@@ -330,7 +330,8 @@ function OrderLifetime({
     (order.settlement === 'failed' && !canceled) ||
     order.settlement === 'paid' ||
     canceled ||
-    ((gaveUp && pending) || order.entitlement.kind === 'refresh');
+    (gaveUp && pending) ||
+    order.entitlement.kind === 'refresh';
   return (
     <OrderHistoryReceiptFrame
       heading={heading}

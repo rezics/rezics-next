@@ -612,12 +612,7 @@ function ActionVisit({
                   title={m.report_more({}, options)}
                   entries={entries}
                   trigger={
-                    <Button
-                      ref={menuButton}
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={m.report_more({}, options)}
-                    >
+                    <Button ref={menuButton} variant="ghost" size="icon-sm" aria-label={m.report_more({}, options)}>
                       <EllipsisIcon aria-hidden />
                     </Button>
                   }
@@ -634,12 +629,7 @@ function ActionVisit({
                 title={m.report_more({}, options)}
                 entries={entries}
                 trigger={
-                  <Button
-                    ref={menuButton}
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={m.report_more({}, options)}
-                  >
+                  <Button ref={menuButton} variant="ghost" size="icon-sm" aria-label={m.report_more({}, options)}>
                     <EllipsisIcon aria-hidden />
                   </Button>
                 }

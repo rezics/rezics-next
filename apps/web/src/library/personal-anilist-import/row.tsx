@@ -4,7 +4,16 @@ import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListRowMeta, AniListScoreFormat } from './contract';
 import { AniListAction, AniListCheck } from './controls';
 import { AniListEvidencePanel } from './fields';
-import { aniListCanChooseTarget, aniListHasAdmittedStatus, aniListMatchLabel, aniListMediaLabel, aniListMediaType, aniListNeedsReplace, aniListTitle, aniListValidityLabel } from './meaning';
+import {
+  aniListCanChooseTarget,
+  aniListHasAdmittedStatus,
+  aniListMatchLabel,
+  aniListMediaLabel,
+  aniListMediaType,
+  aniListNeedsReplace,
+  aniListTitle,
+  aniListValidityLabel,
+} from './meaning';
 import { AniListTargetSearch } from './target';
 import type { AniListQuestion } from './contract';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -283,7 +292,7 @@ export function AniListRowReview({
                   min={question.scale.min}
                   max={question.scale.max}
                   step={question.scale.displayStep}
-                 
+
                   value={draft.scoreUnits ?? ''}
                   placeholder={m.library_anilist_choose_native_units()}
                   onChange={(event) =>

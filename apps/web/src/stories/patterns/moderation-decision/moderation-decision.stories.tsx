@@ -187,7 +187,11 @@ function ReplacedOperation() {
   const refresh = useRef(async () => openDecision).current;
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => {
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
           setPage({ ...openDecision, nativeSourceFingerprint: 'replacement-native-source' });
           queueMicrotask(() => finish.current?.({ state: 'acknowledged', readback: pendingReadback }));
         }}
@@ -217,7 +221,11 @@ function ContextReturn() {
   return away ? (
     <article className="space-y-4">
       <h1>Current context after reversal</h1>
-      <Button type="button" variant="outline" size="sm" onClick={() => {
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
           focusReturn.current = true;
           setAway(false);
         }}

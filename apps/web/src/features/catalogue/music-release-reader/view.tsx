@@ -30,8 +30,7 @@ import {
   type MusicReleaseWindowIntent,
 } from './model';
 
-const action =
-  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<MusicReleaseRead, { ok: true }>;
 type Failure = Extract<MusicReleaseRead, { ok: false }>;

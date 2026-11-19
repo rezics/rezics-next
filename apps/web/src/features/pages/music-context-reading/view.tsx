@@ -19,8 +19,7 @@ import {
 } from '../../catalogue/music-context-profile/navigation';
 import { ViewHeading } from '../view-heading';
 
-const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClass =
   'inline-flex max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const HISTORY_CAP = 8;
@@ -575,10 +574,7 @@ function MusicContextReadingBound({
                 ]}
                 onValueChange={(value) => selectStream(value ?? '')}
               >
-                <SharedSelect.SelectTrigger
-                  id="music-context-stream"
-                  className="w-full min-w-0 px-3 text-foreground"
-                >
+                <SharedSelect.SelectTrigger id="music-context-stream" className="w-full min-w-0 px-3 text-foreground">
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>

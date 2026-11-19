@@ -20,8 +20,11 @@ import { ValueExplanationSession } from '../value-explanation-session';
 import type { ValueRead } from '../value-explanation';
 import { admitFacts, factAddress, factFieldAnchor, sameFactReading, type FactProjection } from './model';
 
-export const factControl =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+export const factControl = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 type Visit = { statement: PersonStatement; source: HTMLAnchorElement; field: string };
 type Facts = {
   projection: FactProjection | undefined;
@@ -160,7 +163,14 @@ function FactVisit({
             }
           }}
         >
-          <button type="button" className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]')} onClick={close}>
+          <button
+            type="button"
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+            )}
+            onClick={close}
+          >
             {m.people_facts_return({}, o)}
           </button>
           <ValueExplanationSession

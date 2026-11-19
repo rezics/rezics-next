@@ -33,10 +33,10 @@ export function RealmHomeHeader({
   const RulesHeading = distinctSpace ? 'h3' : 'h2';
   const hasPresentationDetails = Boolean(
     community &&
-      (community.avatar.state !== 'available' ||
-        community.banner.state !== 'available' ||
-        avatar?.credit ||
-        banner?.credit),
+    (community.avatar.state !== 'available' ||
+      community.banner.state !== 'available' ||
+      avatar?.credit ||
+      banner?.credit),
   );
   const title = distinctSpace ? (
     <h2 id={headingId} className="min-w-0 max-w-full text-3xl leading-tight font-semibold sm:text-4xl">

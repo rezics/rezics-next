@@ -102,7 +102,7 @@ export function OrganizationMembershipRoster({
                           <Button
                             type="button"
                             size="sm"
-              variant="outline"
+                            variant="outline"
                             disabled={busy || pending}
                             onClick={() => onSelect(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')}
                           >
@@ -112,15 +112,20 @@ export function OrganizationMembershipRoster({
                           <Button
                             type="button"
                             size="sm"
-              variant="outline"
+                            variant="outline"
                             disabled
                             aria-describedby={`member-last-owner-${holder.accountId}`}
                           >
                             {m.auth_members_change_role()}
                           </Button>
                         ) : (
-                          <Button type="button" size="sm"
-              variant="outline" disabled title={m.auth_members_actions_unavailable()}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title={m.auth_members_actions_unavailable()}
+                          >
                             {m.auth_members_change_role()}
                           </Button>
                         )}
@@ -128,7 +133,7 @@ export function OrganizationMembershipRoster({
                           <Button
                             type="button"
                             size="sm"
-              variant="outline"
+                            variant="outline"
                             disabled={busy || pending}
                             onClick={() => onSelect(holder.accountId, null)}
                           >
@@ -138,15 +143,20 @@ export function OrganizationMembershipRoster({
                           <Button
                             type="button"
                             size="sm"
-              variant="outline"
+                            variant="outline"
                             disabled
                             aria-describedby={`member-last-owner-${holder.accountId}`}
                           >
                             {m.auth_members_remove()}
                           </Button>
                         ) : (
-                          <Button type="button" size="sm"
-              variant="outline" disabled title={m.auth_members_actions_unavailable()}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title={m.auth_members_actions_unavailable()}
+                          >
                             {m.auth_members_remove()}
                           </Button>
                         )}
@@ -202,8 +212,7 @@ export function RosterPageControls({
     <nav className="space-y-2" aria-label={m.auth_members_holders()}>
       <div className="flex flex-wrap items-center gap-2">
         {failed ? (
-          <Button type="button" size="sm"
-              variant="outline" disabled={busy} onClick={() => onNavigate('retry')}>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onNavigate('retry')}>
             {m.auth_members_recovery_retry()}
           </Button>
         ) : (
@@ -228,15 +237,19 @@ export function RosterPageControls({
               {m.auth_inventory_reload()}
             </Button>
             {next ? (
-              <Button type="button" size="sm"
-              variant="outline" disabled={busy} onClick={() => onNavigate('next', next)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => onNavigate('next', next)}
+              >
                 {m.auth_inventory_next()}
               </Button>
             ) : null}
           </>
         )}
-        <Button type="button" size="sm"
-              variant="outline" disabled={busy} onClick={() => onNavigate('first')}>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onNavigate('first')}>
           {m.auth_members_first_page()}
         </Button>
       </div>

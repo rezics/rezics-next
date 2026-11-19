@@ -558,14 +558,21 @@ export type KnowledgeImageUploadOptions = Readonly<{
 
 function knowledgeReservation(documentId: string, options: KnowledgeImageUploadOptions) {
   const intent = options.reservation;
-  if (intent.body.purpose !== 'knowledge-image' || !('containerId' in intent.body) ||
-      intent.body.containerId !== documentId) throw new UploadRefusal('unavailable');
+  if (
+    intent.body.purpose !== 'knowledge-image' ||
+    !('containerId' in intent.body) ||
+    intent.body.containerId !== documentId
+  )
+    throw new UploadRefusal('unavailable');
   return intent;
 }
 
 function knowledgeImage(image: UploadedImage): UploadedImage {
-  try { return { ...image, src: knowledgeMediaSource(image.src) }; }
-  catch { throw new UploadRefusal('unavailable'); }
+  try {
+    return { ...image, src: knowledgeMediaSource(image.src) };
+  } catch {
+    throw new UploadRefusal('unavailable');
+  }
 }
 
 /** The original immutable command, File and credential use ordinary Media transport.
@@ -578,8 +585,18 @@ export async function uploadKnowledgeImage(
   options: KnowledgeImageUploadOptions,
 ): Promise<UploadedImage> {
   const intent = knowledgeReservation(documentId, options);
-  return knowledgeImage(await uploadImage({ containerId: documentId }, file, signal, 'knowledge-image',
-    intent, options.onStage, undefined, options.onResponseWait));
+  return knowledgeImage(
+    await uploadImage(
+      { containerId: documentId },
+      file,
+      signal,
+      'knowledge-image',
+      intent,
+      options.onStage,
+      undefined,
+      options.onResponseWait,
+    ),
+  );
 }
 
 export async function resumeKnowledgeImageUpload(
@@ -590,7 +607,9 @@ export async function resumeKnowledgeImageUpload(
   options: KnowledgeImageUploadOptions,
 ): Promise<UploadedImage> {
   const intent = knowledgeReservation(documentId, options);
-  return knowledgeImage(await resumeImageUpload(mediaId, file, signal, options.onStage, intent, options.onResponseWait));
+  return knowledgeImage(
+    await resumeImageUpload(mediaId, file, signal, options.onStage, intent, options.onResponseWait),
+  );
 }
 
 export function uploadAvatar(

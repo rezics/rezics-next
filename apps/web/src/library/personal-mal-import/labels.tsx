@@ -106,7 +106,7 @@ function LabelTarget({
               onChange({ ...selection, target: value === 'new' ? { name: '' } : { labelId: '', revision: 1 } });
           }}
         >
-          <SelectTrigger id={`${id}-mode`} aria-labelledby={`${id}-mode-label`} className='w-full'>
+          <SelectTrigger id={`${id}-mode`} aria-labelledby={`${id}-mode-label`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
@@ -125,7 +125,7 @@ function LabelTarget({
           <label htmlFor={`${id}-name`}>{m.library_mal_label_name()}</label>
           <Input
             id={`${id}-name`}
-            className='min-w-0'
+            className="min-w-0"
             value={target.name}
             onChange={(e) => onChange({ ...selection, target: { name: e.target.value } })}
           />
@@ -135,14 +135,14 @@ function LabelTarget({
           <label htmlFor={`${id}-identity`}>{m.library_mal_label_id()}</label>
           <Input
             id={`${id}-identity`}
-            className='min-w-0'
+            className="min-w-0"
             value={target.labelId}
             onChange={(e) => onChange({ ...selection, target: { ...target, labelId: e.target.value } })}
           />
           <label htmlFor={`${id}-revision`}>{m.library_mal_label_revision()}</label>
           <Input
             id={`${id}-revision`}
-            className='min-w-0'
+            className="min-w-0"
             type="number"
             min={1}
             value={target.revision}

@@ -45,7 +45,7 @@ export function BangumiTargetSearch({
           data-bangumi-target
           value={typed}
           disabled={disabled}
-         
+
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

@@ -12,8 +12,7 @@ import {
   type WritingScope,
 } from './local-writing-draft';
 
-const action =
-  'h-auto min-h-7 max-w-full whitespace-normal text-left leading-snug [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full whitespace-normal text-left leading-snug [overflow-wrap:anywhere]';
 const date = (value: number) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(value);
 
@@ -282,13 +281,7 @@ export function LocalWritingDraftControls({
           <label className="block" htmlFor={exportId}>
             {m.thread_draft_export_hint()}
           </label>
-          <Textarea
-            ref={exportField}
-            id={exportId}
-            className="min-h-32 w-full min-w-0"
-            readOnly
-            value={exportText}
-          />
+          <Textarea ref={exportField} id={exportId} className="min-h-32 w-full min-w-0" readOnly value={exportText} />
           <Button
             type="button"
             variant="outline"

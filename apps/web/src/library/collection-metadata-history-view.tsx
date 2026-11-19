@@ -448,17 +448,13 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
                                 <dt className="mb-1 text-muted-foreground">
                                   {m.library_collection_metadata_history_before()}
                                 </dt>
-                                <dd className="whitespace-pre-wrap break-words">
-                                  {value(change.before, field)}
-                                </dd>
+                                <dd className="whitespace-pre-wrap break-words">{value(change.before, field)}</dd>
                               </div>
                               <div className="min-w-0">
                                 <dt className="mb-1 text-muted-foreground">
                                   {m.library_collection_metadata_history_after()}
                                 </dt>
-                                <dd className="whitespace-pre-wrap break-words">
-                                  {value(change.after, field)}
-                                </dd>
+                                <dd className="whitespace-pre-wrap break-words">{value(change.after, field)}</dd>
                               </div>
                             </dl>
                           </section>

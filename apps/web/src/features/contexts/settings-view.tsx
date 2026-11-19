@@ -21,11 +21,9 @@ import {
   type SettingsSnapshot,
 } from './settings';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const formControlClass = 'min-w-0 max-w-full';
-const languageControlClass =
-  'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit';
+const languageControlClass = 'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit';
 const summaryClassName =
   'cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });

@@ -3,7 +3,10 @@ import { isOrdinarySavedQuery } from '../saved-query-results';
 import { PublicationLink } from '../collection-publication-link';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 
-export const savedQueryPublicationActionClassName = buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal break-words' });
+export const savedQueryPublicationActionClassName = buttonVariants({
+  variant: 'outline',
+  className: 'h-auto min-h-7 max-w-full whitespace-normal break-words',
+});
 
 export type SavedQueryPublicationCollection = {
   id: string;

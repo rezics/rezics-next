@@ -16,8 +16,7 @@ import {
   type TermPresence,
 } from './subject-terms-resolution';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
 const selectClassName = 'w-full min-w-0 max-w-full';
 

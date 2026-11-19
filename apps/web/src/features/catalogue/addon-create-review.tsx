@@ -12,8 +12,7 @@ import type { GameItem } from './game-profile';
 import type { StatementFieldsRead } from './statement-editor-view';
 import { StatementSummary } from './statement-summary';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function holderFor(
   property: string,

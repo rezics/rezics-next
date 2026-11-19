@@ -157,7 +157,9 @@ export function VndbScoreReview({
         <p role="status">{m.library_vndb_score_question_unavailable()}</p>
       )}
       <p className="h-auto break-words text-sm">{currentVoteLabel(row)}</p>
-      {previewTarget ? <p className="h-auto break-words text-sm">{m.library_vndb_target_id({ id: previewTarget })}</p> : null}
+      {previewTarget ? (
+        <p className="h-auto break-words text-sm">{m.library_vndb_target_id({ id: previewTarget })}</p>
+      ) : null}
       {row.kind === 'vn' && source.kind === 'value' && !sourceSupported ? (
         <p className="h-auto break-words text-sm text-muted-foreground">{m.library_vndb_score_source_unsupported()}</p>
       ) : null}
@@ -242,11 +244,7 @@ export function VndbScoreReview({
                   setConsent(false);
                 }}
               >
-                <SelectTrigger
-                  id={`${id}-units`}
-                  aria-labelledby={`${id}-units-label`}
-                  className='w-full'
-                >
+                <SelectTrigger id={`${id}-units`} aria-labelledby={`${id}-units-label`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>

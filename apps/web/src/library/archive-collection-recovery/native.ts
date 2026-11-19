@@ -170,8 +170,7 @@ export function kernelArchiveCollectionRecoveryPort(
       if (!isId(command.uploadId)) return Promise.resolve({ kind: 'not-found' });
       return call({
         mutation: command,
-        send: (api, authorization) =>
-          api({ id: command.uploadId }).delete(undefined, readOptions(authorization)),
+        send: (api, authorization) => api({ id: command.uploadId }).delete(undefined, readOptions(authorization)),
       });
     },
     receivingCollection(collectionId, cursor) {

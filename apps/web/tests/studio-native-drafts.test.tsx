@@ -270,7 +270,9 @@ test('Studio leaves sidebar placement and the phone drawer to Shell', () => {
 
 test('a saved text opening exposes the native image tool in the mounted account editor', async () => {
   const opening = await selection({ body: fromPlainText('Saved text opening', 'text') });
-  const mounted = await mountAuthoringFixture(createElement(StudioWorkspace, { input: input(opening), port: port().value }));
+  const mounted = await mountAuthoringFixture(
+    createElement(StudioWorkspace, { input: input(opening), port: port().value }),
+  );
   try {
     await waitFor(() => expect(getByRole(mounted.host, 'button', { name: 'Image', exact: true })).toBeTruthy());
   } finally {

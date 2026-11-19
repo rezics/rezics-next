@@ -82,9 +82,7 @@ export function GameEvidence({
         data-slot="game-fact-evidence"
         className="min-w-0 overflow-hidden rounded-md border border-border text-sm"
       >
-        <summary className={`${action} cursor-pointer`}>
-          {m.game_reader_evidence({}, o)}
-        </summary>
+        <summary className={`${action} cursor-pointer`}>{m.game_reader_evidence({}, o)}</summary>
         <div className="min-w-0 space-y-3 border-t border-border bg-muted/20 p-3">
           {qualifiers}
           {statement.property.data_type === 'time' ? (

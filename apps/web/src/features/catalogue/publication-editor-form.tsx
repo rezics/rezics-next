@@ -48,13 +48,11 @@ import { PublicationTerms } from './publication-editor-terms';
 import type { StatementInput } from './statement-editor';
 import type { StatementFieldsRead } from './statement-editor-view';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 const recoveryFocusClassName = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const selectClassName = 'w-full min-w-0 max-w-full';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
-const linkClassName =
-  'inline-flex max-w-full items-center underline [overflow-wrap:anywhere]';
+const linkClassName = 'inline-flex max-w-full items-center underline [overflow-wrap:anywhere]';
 const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
 
@@ -866,10 +864,7 @@ function PublicationEditorLive({
                           aria-invalid={hasControlError(`${id}-independent`) || undefined}
                           onCheckedChange={(value) => edit(() => setIndependent(value))}
                         />
-                        <FieldLabel
-                          className={`${labelClassName} items-center`}
-                          htmlFor={`${id}-independent`}
-                        >
+                        <FieldLabel className={`${labelClassName} items-center`} htmlFor={`${id}-independent`}>
                           {m.publication_independent({}, o)}
                         </FieldLabel>
                       </Field>

@@ -106,7 +106,12 @@ import { useSearchQuery } from './use-search-query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import { conditionAdmission, conditionSearchState } from './condition-editor-model';
 import { conditionConceptSuggestionFilter } from './condition-concept-model';
-import { createFilterDraft, resetFilterDraft, type FilterDraftBaseline, type FilterScopeDraft } from './filter-draft-reset';
+import {
+  createFilterDraft,
+  resetFilterDraft,
+  type FilterDraftBaseline,
+  type FilterScopeDraft,
+} from './filter-draft-reset';
 import { filterApplicationCopy } from './filter-application-copy';
 import { useFilterSurfaceFocus } from './filter-surface-focus';
 import { useConditionComposition } from './condition-composition';
@@ -310,7 +315,12 @@ function AdvancedScope({
         </Field>
       )}
       {kind && (
-        <Button type="button" variant="ghost" onClick={() => onChange({ kind: '', id: '' })} className="max-w-full whitespace-normal wrap-anywhere">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => onChange({ kind: '', id: '' })}
+          className="max-w-full whitespace-normal wrap-anywhere"
+        >
           {m.header_search_remove_scope({ scope: `${kind} ${id}` }, options)}
         </Button>
       )}
@@ -475,12 +485,16 @@ export function SearchPage({
   const draftFacets = draft.facets ?? {};
   const draftRanges = { ...committedState.ranges };
   const invalidRanges: string[] = [];
-  for (const [property, rangeDraft] of Object.entries(rangeDraftState.key === stateKey ? rangeDraftState.properties : {})) {
+  for (const [property, rangeDraft] of Object.entries(
+    rangeDraftState.key === stateKey ? rangeDraftState.properties : {},
+  )) {
     if (rangeDraft.removed) {
       delete draftRanges[property];
       continue;
     }
-    const definition = data?.refinement?.properties.find((entry) => entry.property === property && entry.mode === 'range');
+    const definition = data?.refinement?.properties.find(
+      (entry) => entry.property === property && entry.mode === 'range',
+    );
     const range = definition ? rangeFromDraft(rangeDraft, definition) : undefined;
     if (range) draftRanges[property] = range;
     else invalidRanges.push(property);
@@ -512,7 +526,8 @@ export function SearchPage({
     if (issues.length > 0 && advancedDetails.current) advancedDetails.current.open = true;
   }, [issues.length, data?.problem, filterSurface]);
   const editing =
-    discoverySearchHref(locale, editedState) !== discoverySearchHref(locale, { ...committedState, cursor: undefined }) ||
+    discoverySearchHref(locale, editedState) !==
+      discoverySearchHref(locale, { ...committedState, cursor: undefined }) ||
     JSON.stringify(draftScope) !== JSON.stringify(baseline.scope) ||
     Object.keys(rangeDraftState.properties).length > 0 ||
     conditionEditorHasRawEdits(conditionDraftState.current);
@@ -679,16 +694,15 @@ export function SearchPage({
       ...committedState,
       languages: committedState.languages?.filter((entry) => entry !== tag),
     });
-  if (committedState.condition) add('condition', m.condition_heading({}, options), { ...committedState, condition: undefined });
+  if (committedState.condition)
+    add('condition', m.condition_heading({}, options), { ...committedState, condition: undefined });
   const filterWithoutScope = committedState.resourceScope
     ? removeSearchResourceScope(committedState.filter)
     : committedState.filter;
   if (filterWithoutScope)
     add('filter', m.search_existing_filter({}, options), {
       ...committedState,
-      filter: committedState.resourceScope
-        ? searchFilterWithScope(undefined, committedState.resourceScope)
-        : undefined,
+      filter: committedState.resourceScope ? searchFilterWithScope(undefined, committedState.resourceScope) : undefined,
     });
   const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
@@ -824,7 +838,9 @@ export function SearchPage({
       const form = event.currentTarget;
       if (advancedDetails.current) advancedDetails.current.open = true;
       requestAnimationFrame(() =>
-        form.querySelector<HTMLElement>('[data-condition-errors], [data-search-range-error], [aria-invalid="true"]')?.focus(),
+        form
+          .querySelector<HTMLElement>('[data-condition-errors], [data-search-range-error], [aria-invalid="true"]')
+          ?.focus(),
       );
       return;
     }
@@ -886,7 +902,11 @@ export function SearchPage({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium text-muted-foreground">{m.search_heading({}, options)}</p>
-          {query && <p className="text-base font-medium wrap-anywhere"><bdi>{query}</bdi></p>}
+          {query && (
+            <p className="text-base font-medium wrap-anywhere">
+              <bdi>{query}</bdi>
+            </p>
+          )}
           <p className="text-sm text-muted-foreground wrap-anywhere">
             {m.access_resource({}, options)}:{' '}
             {currentScope ? (
@@ -909,7 +929,11 @@ export function SearchPage({
           {m.search_filters({}, options)} ({number.format(activeFilterCount)})
         </Button>
       </div>
-      {editing && <p role="status" className="text-sm text-muted-foreground">{filterCopy.pending}</p>}
+      {editing && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {filterCopy.pending}
+        </p>
+      )}
       {draft.attempted && localIssues.length > 0 && !filterSurface && (
         <p
           role="alert"
@@ -921,7 +945,11 @@ export function SearchPage({
         </p>
       )}
       {constraints.length > 0 && (
-        <ul aria-label={filterCopy.current} data-search-constraints className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
+        <ul
+          aria-label={filterCopy.current}
+          data-search-constraints
+          className="flex flex-wrap gap-2 border-t border-border/60 pt-3"
+        >
           {constraints.map(({ key, text, state, lang, description, descriptionLang }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
@@ -1054,7 +1082,9 @@ export function SearchPage({
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="min-w-0 space-y-5 pt-4">
-      <p id={`${applyDescriptionId}-${surface}`} className="text-sm text-muted-foreground">{filterCopy.help}</p>
+      <p id={`${applyDescriptionId}-${surface}`} className="text-sm text-muted-foreground">
+        {filterCopy.help}
+      </p>
       <input type="hidden" name="q" value={query} />
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {committedState.ratingPopulation && (
@@ -1062,7 +1092,11 @@ export function SearchPage({
       )}
       <div className="space-y-1 rounded-lg bg-muted/40 p-3 lg:hidden">
         <p className="text-xs font-medium text-muted-foreground">{m.search_heading({}, options)}</p>
-        {query && <p className="font-medium wrap-anywhere"><bdi>{query}</bdi></p>}
+        {query && (
+          <p className="font-medium wrap-anywhere">
+            <bdi>{query}</bdi>
+          </p>
+        )}
       </div>
       {constraints.length > 0 && (
         <details className="min-w-0 rounded-lg border border-border/60 p-3 lg:hidden">
@@ -1071,26 +1105,26 @@ export function SearchPage({
           </summary>
           <ul className="space-y-2 pt-2 text-sm text-muted-foreground">
             {constraints.map(({ key, text, lang }) => (
-              <li key={key} lang={lang} className="wrap-anywhere">{text}</li>
+              <li key={key} lang={lang} className="wrap-anywhere">
+                {text}
+              </li>
             ))}
           </ul>
         </details>
       )}
       <section aria-label={m.access_resource({}, options)} className="min-w-0 space-y-4">
         <input type="hidden" name="filter" value={editedState.filter ?? ''} />
-        {!fixedResourceScope && (
-          <AdvancedScope
-            scope={draftScope}
-            locale={locale}
-            onChange={changeScope}
-          />
-        )}
+        {!fixedResourceScope && <AdvancedScope scope={draftScope} locale={locale} onChange={changeScope} />}
         {fixedResourceScope && (
           <p className="text-sm text-muted-foreground wrap-anywhere">
             {m.access_resource({}, options)}: <bdi>{`${fixedResourceScope.kind} ${fixedResourceScope.id}`}</bdi>
           </p>
         )}
-        {scopeChanged && <p role="status" className="text-sm text-muted-foreground">{filterCopy.scope}</p>}
+        {scopeChanged && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {filterCopy.scope}
+          </p>
+        )}
       </section>
       {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -1157,7 +1191,8 @@ export function SearchPage({
           }
         />
       )}
-      {(!data?.refinement || scopeChanged ||
+      {(!data?.refinement ||
+        scopeChanged ||
         Object.entries(draftFacets).some(
           ([property]) => !filterRefinementProperties.some((entry) => entry.property === property),
         )) &&
@@ -1170,7 +1205,10 @@ export function SearchPage({
         )}
       {!typeRefinementAvailable && draft.type && <input type="hidden" name="type" value={draft.type} />}
       {(kindDirectory || typeRefinementAvailable) && (
-        <section aria-label={m.home_kind_label({}, options)} className="min-w-0 space-y-4 border-t border-border/60 pt-5">
+        <section
+          aria-label={m.home_kind_label({}, options)}
+          className="min-w-0 space-y-4 border-t border-border/60 pt-5"
+        >
           {kindDirectory && data?.queryState && (
             <DiscoveryKinds
               key={JSON.stringify([data.queryState, locale, session, readerOwner, kindDirectory])}
@@ -1239,10 +1277,7 @@ export function SearchPage({
         </section>
       )}
       {data?.refinement && filterRefinementProperties.length > 0 && (
-        <section
-          aria-label={m.refinement_property({}, options)}
-          className="min-w-0 border-t border-border/60 pt-5"
-        >
+        <section aria-label={m.refinement_property({}, options)} className="min-w-0 border-t border-border/60 pt-5">
           <h2 className="mb-3 text-sm font-medium">{m.refinement_property({}, options)}</h2>
           <Refinement
             key={`${surface}-${data.refinement.key}`}
@@ -1300,7 +1335,9 @@ export function SearchPage({
                     ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
                     ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
                     ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
-                    ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
+                    ...(data.queryState?.ratingPopulation
+                      ? { ratingPopulation: data.queryState.ratingPopulation }
+                      : {}),
                     ...(data.ranges ? { ranges: data.ranges } : {}),
                     ...(data.condition ? { condition: data.condition } : {}),
                   },
@@ -1392,7 +1429,9 @@ export function SearchPage({
         aria-label={filterCopy.apply}
         className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:px-0"
       >
-        <Button type="submit" aria-describedby={`${applyDescriptionId}-${surface}`}>{filterCopy.apply}</Button>
+        <Button type="submit" aria-describedby={`${applyDescriptionId}-${surface}`}>
+          {filterCopy.apply}
+        </Button>
         {(editing || draft.attempted) && (
           <Button type="button" variant="outline" onClick={revertDraft}>
             {m.search_filter_revert_action({}, options)}
@@ -1519,7 +1558,12 @@ export function SearchPage({
       {hasFilterPanel ? (
         <>
           {filterEntrance}
-          <div className={cn('grid min-w-0 items-start gap-6', desktopOpen && 'lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]')}>
+          <div
+            className={cn(
+              'grid min-w-0 items-start gap-6',
+              desktopOpen && 'lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]',
+            )}
+          >
             {filterControls}
             <div className="min-w-0 space-y-4">
               {!embedded && data?.recovery?.status === 'ready' && data.queryState && (

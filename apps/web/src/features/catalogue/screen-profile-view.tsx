@@ -88,8 +88,7 @@ export type ScreenTransport = {
   createdRelations?: (id: string) => RelationTransport;
 };
 
-const screenActionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const screenActionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const screenSummaryClassName =
   'max-w-full cursor-pointer font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 

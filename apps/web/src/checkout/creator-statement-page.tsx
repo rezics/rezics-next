@@ -7,10 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatementData, CreatorStatementLine } from './creator-statements';
 import type { StatementWindowControls } from './creator-statement-windows';
-import {
-  StatementAccountingSummaryFrame,
-  StatementLineHistoryFrame,
-} from './creator-statement-workspace';
+import { StatementAccountingSummaryFrame, StatementLineHistoryFrame } from './creator-statement-workspace';
 import { recordedMoneyUnit } from './money-schema';
 import {
   StatementAmount,
@@ -123,7 +120,10 @@ export function CreatorStatementPage({
               <p className="text-sm leading-relaxed text-muted-foreground">{m.statements_amount_note()}</p>
               <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
                 {summary.map(([label, value]) => (
-                  <div key={label} className="min-w-0 space-y-1 border-b pb-3 last:border-0 last:pb-0 sm:border-0 sm:pb-0">
+                  <div
+                    key={label}
+                    className="min-w-0 space-y-1 border-b pb-3 last:border-0 last:pb-0 sm:border-0 sm:pb-0"
+                  >
                     <dt className="text-sm text-muted-foreground">{label}</dt>
                     <dd className="break-words text-base font-semibold tabular-nums">
                       <StatementAmount
@@ -196,9 +196,7 @@ export function CreatorStatementPage({
                             </dl>
                             <Accordion className="min-w-0">
                               <AccordionItem value="source">
-                                <AccordionTrigger>
-                                  {m.statements_line_source_details()}
-                                </AccordionTrigger>
+                                <AccordionTrigger>{m.statements_line_source_details()}</AccordionTrigger>
                                 <AccordionContent keepMounted>
                                   <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">
                                     <div className="min-w-0">

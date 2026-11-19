@@ -20,7 +20,11 @@ export function DocumentImageInspectionControls({
       : m.document_image_inspection_actual_state({}, options);
   return (
     <div className="min-w-0 space-y-1">
-      <div role="group" aria-label={m.document_image_inspection_title({}, options)} className="flex flex-wrap items-center gap-2">
+      <div
+        role="group"
+        aria-label={m.document_image_inspection_title({}, options)}
+        className="flex flex-wrap items-center gap-2"
+      >
         <Button
           type="button"
           size="sm"

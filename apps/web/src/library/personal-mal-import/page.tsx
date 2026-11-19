@@ -5,8 +5,26 @@ import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
-import { captureStageFocusHandoff, consumeStageFocusHandoff, createStageFocusTracker, watchStageFocusMovement, type StageFocusTracker } from '../personal-import-stage-focus';
-import { MAL_UPLOAD_BYTES, newCommandKey, sameCommand, type MalApplyPage, type MalCommand, type MalFailure, type MalOutcome, type MalPage, type MalPreviewRow, type MalScoreReviewInput, type MalUnknown } from './contract';
+import {
+  captureStageFocusHandoff,
+  consumeStageFocusHandoff,
+  createStageFocusTracker,
+  watchStageFocusMovement,
+  type StageFocusTracker,
+} from '../personal-import-stage-focus';
+import {
+  MAL_UPLOAD_BYTES,
+  newCommandKey,
+  sameCommand,
+  type MalApplyPage,
+  type MalCommand,
+  type MalFailure,
+  type MalOutcome,
+  type MalPage,
+  type MalPreviewRow,
+  type MalScoreReviewInput,
+  type MalUnknown,
+} from './contract';
 import { MalConfirmPage, scoreConsentKey } from './confirm';
 import { MalAction } from './controls';
 import { MalDeparture } from './departure';
@@ -717,17 +735,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     ) {
       next = 'results';
     } else if (stage !== 'upload' && label === m.library_mal_discard()) next = 'upload';
-    else if (
-      stage !== 'upload' &&
-      unknownCommand?.kind === 'delete' &&
-      label === m.library_mal_retry_command()
-    ) {
+    else if (stage !== 'upload' && unknownCommand?.kind === 'delete' && label === m.library_mal_retry_command()) {
       next = 'upload';
-    } else if (
-      stage === 'confirm' &&
-      unknownCommand?.kind === 'apply' &&
-      label === m.library_mal_retry_command()
-    ) {
+    } else if (stage === 'confirm' && unknownCommand?.kind === 'apply' && label === m.library_mal_retry_command()) {
       next = 'results';
     }
 

@@ -185,8 +185,10 @@ test('Knowledge source coordinates reach native authorization before conditional
       const response = await value.send({ ...request, variant: 'webp-320', query });
       expect(response.status).toBe(request.status);
       expect(value.authorizationCalls.at(-1)?.knowledge).toEqual({
-        knowledgeRepresentation: 'public', knowledgeDocumentId: selection.documentId,
-        knowledgeRevisionId: selection.revisionId, knowledgeSourceSha256: selection.sourceSha256,
+        knowledgeRepresentation: 'public',
+        knowledgeDocumentId: selection.documentId,
+        knowledgeRevisionId: selection.revisionId,
+        knowledgeSourceSha256: selection.sourceSha256,
         knowledgePublicationId: selection.publicationId,
       });
     }
@@ -207,7 +209,8 @@ test('incomplete or duplicated Knowledge coordinates cannot fall through to a ba
       `knowledgeDocumentId=${documentId}`,
       `knowledgeRepresentation=public&knowledgeDocumentId=${documentId}`,
       `knowledgeDocumentId=${documentId}&knowledgeDocumentId=${documentId}`,
-    ]) expect((await value.send({ query })).status).toBe(404);
+    ])
+      expect((await value.send({ query })).status).toBe(404);
     expect(value.authorizationCalls).toEqual([]);
     expect(value.headCalls).toEqual([]);
     expect(value.getCalls).toEqual([]);

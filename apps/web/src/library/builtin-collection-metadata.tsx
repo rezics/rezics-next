@@ -181,7 +181,9 @@ export function BuiltinCollectionMetadata({
             type="checkbox"
             checked={draft.visibility === 'private'}
             disabled={locked}
-            onChange={(event) => setDraft({ ...draft, visibility: event.currentTarget.checked ? 'private' : visibility })}
+            onChange={(event) =>
+              setDraft({ ...draft, visibility: event.currentTarget.checked ? 'private' : visibility })
+            }
           />
           <span>{m.library_visibility_private_note()}</span>
         </label>

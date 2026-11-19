@@ -66,7 +66,7 @@ export function AnnotationEditor({
           <Textarea
             ref={refs.note}
             id={id + '-note'}
-            className='min-h-40 w-full'
+            className="min-h-40 w-full"
             value={draft.note}
             readOnly={disabled}
             aria-invalid={!!issues.note}
@@ -104,7 +104,7 @@ export function AnnotationEditor({
           <Input
             ref={refs.priority}
             id={id + '-priority'}
-            className='w-full'
+            className="w-full"
             type="text"
             autoComplete="off"
             inputMode="numeric"
@@ -141,14 +141,16 @@ export function AnnotationEditor({
         <Button
           ref={refs.review}
           type="submit"
-          variant="default" className='w-full sm:w-auto'
+          variant="default"
+          className="w-full sm:w-auto"
           disabled={disabled || reviewDisabled}
         >
           {m.library_annotation_review()}
         </Button>
         <Button
           type="button"
-          variant="outline" className='w-full sm:w-auto'
+          variant="outline"
+          className="w-full sm:w-auto"
           disabled={disabled}
           aria-disabled={!canDiscard}
           onClick={(event) => {

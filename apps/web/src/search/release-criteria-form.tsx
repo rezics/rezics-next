@@ -230,7 +230,9 @@ function ReleaseSearchSubjectPicker({
 
   return (
     <div className="grid gap-1 text-sm">
-      <label htmlFor={inputId} className="font-medium">{label}</label>
+      <label htmlFor={inputId} className="font-medium">
+        {label}
+      </label>
       <Input
         ref={inputRef}
         id={inputId}
@@ -285,11 +287,7 @@ function ReleaseSearchSubjectPicker({
         {help}
       </span>
       {selection && (
-        <div
-          role="group"
-          aria-label={label}
-          className="flex flex-wrap items-center gap-2 rounded-md border p-2"
-        >
+        <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2 rounded-md border p-2">
           <span>{selection.label ?? m.search_suggestions_unavailable({}, options)}</span>
           {selection.type && <span className="text-muted-foreground">{selection.type}</span>}
           <code className="text-xs text-muted-foreground">{selection.id}</code>
@@ -548,7 +546,9 @@ export function ReleaseSearchFormView({
     const precisionText = dateText ? calendarPrecision(draft.form[name], locale) : undefined;
     return (
       <div className="grid gap-1 text-sm">
-        <label htmlFor={id} className="font-medium">{label}</label>
+        <label htmlFor={id} className="font-medium">
+          {label}
+        </label>
         <Input
           id={id}
           name={name}
@@ -575,7 +575,13 @@ export function ReleaseSearchFormView({
           </p>
         )}
         {invalid && draft.form[name] !== '' && (
-          <Button type="button" variant="link" size="sm" className="h-auto min-h-6 justify-self-start whitespace-normal" onClick={() => clear(name)}>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto min-h-6 justify-self-start whitespace-normal"
+            onClick={() => clear(name)}
+          >
             {m.library_subject_clear({}, options)}
           </Button>
         )}
@@ -703,7 +709,9 @@ export function ReleaseSearchFormView({
       )}
       {(controls?.language || controls?.platform?.languageQualifier || draft.form.releaseLanguage) && (
         <div className="grid gap-1 text-sm">
-          <label htmlFor="release-search-releaseLanguage" className="font-medium">{m.release_search_languages({}, options)}</label>
+          <label htmlFor="release-search-releaseLanguage" className="font-medium">
+            {m.release_search_languages({}, options)}
+          </label>
           <Input
             id="release-search-releaseLanguage"
             name="releaseLanguage"
@@ -773,7 +781,9 @@ export function ReleaseSearchFormView({
             'decimal',
           )}
           <div className="grid gap-1 text-sm">
-            <label htmlFor="release-search-ageUnit" className="font-medium">{m.release_search_age_unit({}, options)}</label>
+            <label htmlFor="release-search-ageUnit" className="font-medium">
+              {m.release_search_age_unit({}, options)}
+            </label>
             <Select
               name="ageUnit"
               value={draft.form.ageUnit === '' ? null : draft.form.ageUnit}
@@ -879,7 +889,9 @@ export function ReleaseSearchFormView({
       </label>
       {draft.form.condition && (
         <div className="grid gap-1 text-sm sm:col-span-2">
-          <label htmlFor="release-search-condition" className="font-medium">{m.release_search_condition({}, options)}</label>
+          <label htmlFor="release-search-condition" className="font-medium">
+            {m.release_search_condition({}, options)}
+          </label>
           <Textarea
             id="release-search-condition"
             className="min-h-20"
@@ -936,9 +948,7 @@ export function ReleaseSearchFormView({
         </div>
       )}
       <div className="sm:col-span-2">
-        <Button type="submit">
-          {m.release_search_apply({}, options)}
-        </Button>
+        <Button type="submit">{m.release_search_apply({}, options)}</Button>
       </div>
     </form>
   );

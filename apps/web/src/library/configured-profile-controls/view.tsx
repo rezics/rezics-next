@@ -32,24 +32,26 @@ const operations = [
 
 const target = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const quiet = `shrink-0`;
-const linkClass = buttonVariants({ variant: 'link', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' });
+const linkClass = buttonVariants({
+  variant: 'link',
+  className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+});
 
-function ConfiguredRetry({
-  message,
-  disabled,
-  onRetry,
-}: {
-  message: string;
-  disabled?: boolean;
-  onRetry: () => void;
-}) {
+function ConfiguredRetry({ message, disabled, onRetry }: { message: string; disabled?: boolean; onRetry: () => void }) {
   const statusId = useId();
   return (
     <div className="min-w-0 space-y-2">
       <p role="status" id={statusId} className="h-auto min-w-0 text-sm [overflow-wrap:anywhere]">
         {message}
       </p>
-      <Button type="button" variant="outline" className={quiet} disabled={disabled} aria-describedby={statusId} onClick={onRetry}>
+      <Button
+        type="button"
+        variant="outline"
+        className={quiet}
+        disabled={disabled}
+        aria-describedby={statusId}
+        onClick={onRetry}
+      >
         {m.library_configured_retry()}
       </Button>
     </div>

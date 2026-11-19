@@ -632,7 +632,8 @@ function MineFollowingPageState({
   const refreshAction =
     !addressRejected && page.signedIn && onRefresh
       ? () => {
-          if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
+          if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent())
+            return;
           reading.close(false);
           onRefresh();
         }
@@ -656,10 +657,7 @@ function MineFollowingPageState({
           <p role="alert">
             {page.kindUnavailable ? m.following_kind_unavailable() : m.library_directory_address_invalid()}
           </p>
-          <a
-            href={`/${getLocale()}/library/following`}
-            className={buttonVariants({ variant: 'outline' })}
-          >
+          <a href={`/${getLocale()}/library/following`} className={buttonVariants({ variant: 'outline' })}>
             {m.library_directory_address_first_page()}
           </a>
         </div>
@@ -676,70 +674,71 @@ function MineFollowingPageState({
       ) : null}
     </>
   );
-  const directory = !addressRejected && !page.forbidden && active.length ? (
-    <ul className="min-w-0 list-none space-y-1" aria-label={m.library_following_heading()}>
-      {active.map((row) => {
-        const { follow, title } = row;
-        return (
-          <FollowingReadingRow
-            key={follow.targetId}
-            row={row}
-            selected={reading.selection?.row.follow.targetId === follow.targetId}
-            suspended={reading.suspended}
-            disabled={!!status}
-            canReadCollection={canReadCollection}
-            current={reading.current}
-            frontier={
-              readingOrigin.subject
-                ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
-                : null
-            }
-            inspect={(trigger) => {
-              const current = prepared.byId.get(follow.targetId);
-              if (current) reading.select(current, trigger);
-            }}
-            controls={
-              <span hidden={!canUnfollow}>
-                <FollowTargetControl
-                  origin={origin}
-                  intentOwner={intentOwnerFor(follow.targetId)}
-                  targetId={follow.targetId}
-                  following
-                  disabled={!!status}
-                  idempotencyKey={follow.idempotencyKey}
-                  menuTitle={m.library_follow_more_actions({ title: title.text })}
-                  {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
-                  onReview={onReview ? () => onReview(follow.targetId) : undefined}
-                  onRemoved={() => {
-                    if (!origin.isCurrent()) return;
-                    if (reading.selection?.row.follow.targetId === follow.targetId) {
-                      reading.close(false);
-                      listHeading.current?.focus();
-                    }
-                    setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
-                    setRemoved(true);
-                  }}
-                />
-              </span>
-            }
-          />
-        );
-      })}
-    </ul>
-  ) : !addressRejected && !page.forbidden && page.signedIn ? (
-    <Empty>
-      <EmptyHeader>
-        <EmptyDescription>
-          {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
-          {m.search_heading()}
-        </a>
-      </EmptyContent>
-    </Empty>
-  ) : null;
+  const directory =
+    !addressRejected && !page.forbidden && active.length ? (
+      <ul className="min-w-0 list-none space-y-1" aria-label={m.library_following_heading()}>
+        {active.map((row) => {
+          const { follow, title } = row;
+          return (
+            <FollowingReadingRow
+              key={follow.targetId}
+              row={row}
+              selected={reading.selection?.row.follow.targetId === follow.targetId}
+              suspended={reading.suspended}
+              disabled={!!status}
+              canReadCollection={canReadCollection}
+              current={reading.current}
+              frontier={
+                readingOrigin.subject
+                  ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
+                  : null
+              }
+              inspect={(trigger) => {
+                const current = prepared.byId.get(follow.targetId);
+                if (current) reading.select(current, trigger);
+              }}
+              controls={
+                <span hidden={!canUnfollow}>
+                  <FollowTargetControl
+                    origin={origin}
+                    intentOwner={intentOwnerFor(follow.targetId)}
+                    targetId={follow.targetId}
+                    following
+                    disabled={!!status}
+                    idempotencyKey={follow.idempotencyKey}
+                    menuTitle={m.library_follow_more_actions({ title: title.text })}
+                    {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
+                    onReview={onReview ? () => onReview(follow.targetId) : undefined}
+                    onRemoved={() => {
+                      if (!origin.isCurrent()) return;
+                      if (reading.selection?.row.follow.targetId === follow.targetId) {
+                        reading.close(false);
+                        listHeading.current?.focus();
+                      }
+                      setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
+                      setRemoved(true);
+                    }}
+                  />
+                </span>
+              }
+            />
+          );
+        })}
+      </ul>
+    ) : !addressRejected && !page.forbidden && page.signedIn ? (
+      <Empty>
+        <EmptyHeader>
+          <EmptyDescription>
+            {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
+            {m.search_heading()}
+          </a>
+        </EmptyContent>
+      </Empty>
+    ) : null;
   const windowNavigation =
     !addressRejected && !page.forbidden && page.signedIn && (nextCursor || restart || navigation?.previous) ? (
       <Exposure operation="follow.list">
@@ -769,9 +768,7 @@ function MineFollowingPageState({
           ) : null}
           {nextCursor ? (
             navigationDisabled ? (
-              <Button disabled>
-                {m.library_collection_more()}
-              </Button>
+              <Button disabled>{m.library_collection_more()}</Button>
             ) : (
               <Link
                 to="/library/following"
@@ -819,13 +816,7 @@ function MineFollowingPageState({
             readSpace={readSpace}
             returnFrontier={
               readingOrigin.subject
-                ? followingReturnFrontier(
-                    locale,
-                    readingOrigin.subject,
-                    cursor,
-                    kind,
-                    selected.row.follow.targetId,
-                  )
+                ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, selected.row.follow.targetId)
                 : null
             }
           />

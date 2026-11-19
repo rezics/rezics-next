@@ -111,7 +111,16 @@ export function createCatalogueReportsJourney({
     if (result.state === 'loaded' && !owner.available()) return { state: 'loading', reports: [], next: null };
     if (pageRecoveryLoading) return { state: 'loading', reports: [], next: null };
     if (result.state !== 'loaded') return { state: result.state, reports: [], next: null };
-    return { state: 'loaded', reports, next, selectedId, subject, reason, action: actionState, command: commandContext };
+    return {
+      state: 'loaded',
+      reports,
+      next,
+      selectedId,
+      subject,
+      reason,
+      action: actionState,
+      command: commandContext,
+    };
   }
 
   function clearPage(nextResult: CatalogueReportsRead['result']) {

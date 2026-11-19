@@ -14,8 +14,7 @@ const longQuery = 'Supercalifragilisticexpialidocious'.repeat(8).slice(0, 256);
 const unmatchedQuery = 'unmatched-inspection-query';
 const longHeading =
   'A synthetic chapter title that keeps wrapping Supercalifragilisticexpialidocious headings for inspection review';
-const nestedHeading =
-  'Nested synthetic heading 星を越えて彼方の記憶をたどる旅 Supercalifragilisticexpialidocious';
+const nestedHeading = 'Nested synthetic heading 星を越えて彼方の記憶をたどる旅 Supercalifragilisticexpialidocious';
 const longQueryDocument = fromPlainText(`${longQuery}\n\nThe sea is quiet.`, 'blocks');
 const emptyFindDocument = fromPlainText('The sea is quiet. The voyage continues.', 'blocks');
 const longHeadingDocument = fromMarkdown(

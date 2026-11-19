@@ -22,8 +22,11 @@ import {
 } from './model';
 
 const wrapTarget = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
-const wrapLink =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const wrapLink = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 
 /** Independent destinations keep the bounded original credit window mounted in its original tab. */
 function DisclosedTarget({ children, ...props }: LinkProps) {

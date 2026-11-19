@@ -1123,7 +1123,8 @@ function LoadedCopiesPage({
   }, []);
   const currentPage = (operation?: GatedOperation) =>
     active.current && (!originating || originating.isCurrent(operation));
-  const headingReturn = () => connectedReturn(root.current?.querySelector<HTMLElement>('#copies-inventory-heading') ?? null);
+  const headingReturn = () =>
+    connectedReturn(root.current?.querySelector<HTMLElement>('#copies-inventory-heading') ?? null);
   // The restored row mounts as Undo leaves; only return focus if Undo still owns it.
   useLayoutEffect(() => {
     const intent = restoreFocus.current;
@@ -1315,7 +1316,10 @@ function LoadedCopiesPage({
                   onClick={(event) => {
                     if (!currentPage()) event.preventDefault();
                   }}
-                  search={{ ...(page.kind ? { kind: page.kind } : {}), ...(page.status ? { status: page.status } : {}) }}
+                  search={{
+                    ...(page.kind ? { kind: page.kind } : {}),
+                    ...(page.status ? { status: page.status } : {}),
+                  }}
                 />
               }
             >

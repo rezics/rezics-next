@@ -55,11 +55,7 @@ function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; 
           <div className="flex flex-wrap gap-2">
             <label className="grid gap-1">
               Prepared source state
-              <select 
- 
- value={state}
- onChange={(event) => setState(event.target.value as State)}
-              >
+              <select value={state} onChange={(event) => setState(event.target.value as State)}>
                 {(['ready', 'preparing', 'denied', 'lost', 'delayed'] as const).map((value) => (
                   <option key={value}>{value}</option>
                 ))}
@@ -68,7 +64,10 @@ function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; 
             <Button type="button" variant="outline" onClick={() => setAccount(account === 'A' ? 'B' : 'A')}>
               Prepared account {account}: replace
             </Button>
-            <Button type="button" variant="outline" onClick={() => {
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
                 setState('ready');
                 for (const release of pending.current.splice(0)) release();
               }}

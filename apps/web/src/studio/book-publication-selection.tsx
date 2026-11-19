@@ -8,13 +8,7 @@ import type { StudioController, StudioState } from './controller';
 import './book-publication-selection.css';
 
 /** Publication inclusion stays separate from opening or organizing a draft. */
-export function BookPublicationSelection({
-  controller,
-  state,
-}: {
-  controller: StudioController;
-  state: StudioState;
-}) {
+export function BookPublicationSelection({ controller, state }: { controller: StudioController; state: StudioState }) {
   const structure = state.structure;
   const adapter = useMemo(() => {
     if (!structure) return { outline: null, error: false };

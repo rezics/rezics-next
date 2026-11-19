@@ -374,7 +374,6 @@ function OfferCommands({
                   if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
                 }}
                 disabled={busy || !editable}
-               
               >
                 {m.creator_retry()}
               </Button>
@@ -383,7 +382,6 @@ function OfferCommands({
                 <Button
                   type="submit"
                   disabled={!editable || frozen || requiresReview || parsedPrice(text, rule) === null}
-                 
                 >
                   {m.creator_reprice()}
                 </Button>
@@ -391,7 +389,7 @@ function OfferCommands({
                   type="button"
                   variant="outline"
                   disabled={!editable || frozen}
-                 
+
                   onClick={() => void change('delist')}
                 >
                   {m.creator_delist()}
@@ -405,7 +403,7 @@ function OfferCommands({
           <Button
             type="button"
             variant="outline"
-           
+
             disabled={checking}
             onClick={() => void refreshSaved(requiresReview)}
           >
@@ -490,15 +488,15 @@ export function CreatorOffersPage({
   return (
     <CreatorOfferDraftNavigation>
       <CreatorOfferWorkspace>
-        <section className="mx-auto max-w-5xl min-w-0 space-y-6 text-foreground" aria-labelledby="creator-offers-heading">
+        <section
+          className="mx-auto max-w-5xl min-w-0 space-y-6 text-foreground"
+          aria-labelledby="creator-offers-heading"
+        >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <PageHeading id="creator-offers-heading">{m.creator_offers_heading()}</PageHeading>
             <div className="flex min-w-0 flex-wrap gap-2">
               {data && (
-                <a
-                  href={`/${locale}/creator/offers/new`}
-                  className={buttonVariants({ variant: 'outline' })}
-                >
+                <a href={`/${locale}/creator/offers/new`} className={buttonVariants({ variant: 'outline' })}>
                   {m.creator_new_offer()}
                 </a>
               )}
@@ -519,10 +517,7 @@ export function CreatorOffersPage({
             <CreatorOfferWorkspacePanel role={page.kind === 'preparing' ? 'status' : 'alert'} className="space-y-3">
               <p>{notice}</p>
               {page.kind !== 'preparing' && (
-                <a
-                  href={restart ? creatorOffersHref(locale) : href}
-                  className={buttonVariants({ variant: 'outline' })}
-                >
+                <a href={restart ? creatorOffersHref(locale) : href} className={buttonVariants({ variant: 'outline' })}>
                   {restart ? m.creator_offers_restart({}, messageOptions) : m.creator_offers_retry({}, messageOptions)}
                 </a>
               )}
@@ -568,7 +563,9 @@ export function CreatorOffersPage({
                                   : m.commerce_tax_unknown()}
                               </p>
                               <p className="leading-relaxed">
-                                {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
+                                {offer.contentEdition === null
+                                  ? m.creator_offers_unknown()
+                                  : m.creator_offers_captured()}
                               </p>
                             </div>
                           }
@@ -640,18 +637,12 @@ export function CreatorOffersPage({
               />
               <nav aria-label={m.creator_offers_pagination({}, messageOptions)} className="flex flex-wrap gap-3">
                 {cursor && (
-                  <a
-                    href={creatorOffersHref(locale)}
-                    className={buttonVariants({ variant: 'outline' })}
-                  >
+                  <a href={creatorOffersHref(locale)} className={buttonVariants({ variant: 'outline' })}>
                     {m.creator_offers_restart({}, messageOptions)}
                   </a>
                 )}
                 {page.next && (
-                  <a
-                    href={creatorOffersHref(locale, page.next)}
-                    className={buttonVariants({ variant: 'outline' })}
-                  >
+                  <a href={creatorOffersHref(locale, page.next)} className={buttonVariants({ variant: 'outline' })}>
                     {m.creator_offers_next({}, messageOptions)}
                   </a>
                 )}

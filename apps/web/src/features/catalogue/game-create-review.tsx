@@ -13,8 +13,7 @@ import {
 } from './game-create-review-model';
 import type { SnakInput, StatementInput } from './statement-editor';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function rankLabel(rank: string | undefined, locale: string) {
   const o = { locale: locale as never };

@@ -58,7 +58,9 @@ export function SideNav({
           })}
         </ul>
       ) : null}
-      <div data-community-footer className="min-w-0 empty:hidden">{footer}</div>
+      <div data-community-footer className="min-w-0 empty:hidden">
+        {footer}
+      </div>
       <a
         href={`/${locale}/library/following`}
         title={m.shell_manage_following()}

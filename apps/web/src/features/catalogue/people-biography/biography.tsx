@@ -50,7 +50,7 @@ export function PeopleBiographyDocuments({
     field.editor === 'authored' ? field.id : undefined,
   );
   const authoredAction = (
-    <a className={cn(buttonVariants({ variant: 'outline' }), actionClass + ' self-start' )} href={href}>
+    <a className={cn(buttonVariants({ variant: 'outline' }), actionClass + ' self-start')} href={href}>
       {m.people_biography_edit({}, o)}
     </a>
   );
@@ -76,11 +76,7 @@ export function PeopleBiographyDocuments({
       {field.status === 'unreadable' ? <p role="status">{m.people_biography_unreadable({}, o)}</p> : null}
       {field.facts.map((fact) => {
         const content = (
-          <article
-            id={peopleBiographyAssertionAnchor(fact.id)}
-            tabIndex={-1}
-            className="min-w-0 space-y-2 "
-          >
+          <article id={peopleBiographyAssertionAnchor(fact.id)} tabIndex={-1} className="min-w-0 space-y-2 ">
             <PartValue part={fact.statement} read={read} locale={locale} />
             <p className="text-sm text-muted-foreground">
               {m.people_biography_document_id({}, o)} <code className="break-all">{fact.id}</code>

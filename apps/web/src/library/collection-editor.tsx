@@ -201,13 +201,7 @@ export function CollectionSubjectList({
                 <Menu
                   title={actionsLabel}
                   trigger={
-                    <Button
-                      type="button"
-                      aria-label={actionsLabel}
-                      title={actionsLabel}
-                      size="icon"
-                      variant="ghost"
-                    >
+                    <Button type="button" aria-label={actionsLabel} title={actionsLabel} size="icon" variant="ghost">
                       <EllipsisIcon aria-hidden="true" />
                     </Button>
                   }

@@ -56,10 +56,7 @@ export function CreatorOfferAddressPage({
             </Button>
           </form>
         ) : (
-          <a
-            href={`/${locale}/creator/offers`}
-            className={buttonVariants({ variant: 'outline' })}
-          >
+          <a href={`/${locale}/creator/offers`} className={buttonVariants({ variant: 'outline' })}>
             {m.creator_offer_address_first_page()}
           </a>
         ))}

@@ -19,8 +19,7 @@ import type { Reader } from '../../../subject/reader';
 import type { Stmt } from '../../pages/shared';
 import { ArtworkReaderContext } from './session';
 
-const compactWrap =
-  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
+const compactWrap = 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 import { canonicalMediaId, type ArtworkResult, type ArtworkTransport } from './read';
 
 type Selection = { key: string; id: string };
@@ -84,13 +83,7 @@ export function SubjectArtworkBoundary({
   };
   const fallback = useRef<HTMLDivElement>(null);
   return (
-    <div
-      ref={fallback}
-      tabIndex={-1}
-      role="group"
-      aria-label={label}
-      className="min-w-0 "
-    >
+    <div ref={fallback} tabIndex={-1} role="group" aria-label={label} className="min-w-0 ">
       <ArtworkVisit
         generation={previous.current.generation}
         read={admission.current.retired ? undefined : reader.read}
@@ -181,15 +174,7 @@ function ArtworkDisclosure({ spoilerLevel, gated, label, hideLabel, children }: 
   return (
     <Collapsible open={open} onOpenChange={setValue} className="space-y-2">
       {gated ? (
-        <CollapsibleTrigger
-          render={
-            <Button
-              variant="outline"
-              size="sm"
-              className={compactWrap}
-            />
-          }
-        >
+        <CollapsibleTrigger render={<Button variant="outline" size="sm" className={compactWrap} />}>
           <Eye aria-hidden="true" />
           {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
         </CollapsibleTrigger>
@@ -296,13 +281,7 @@ function ArtworkFact({
         </Button>
       )}
       {revealed && suitability === 'blur' ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={compactWrap}
-          onClick={() => setDisclosure('hidden')}
-        >
+        <Button type="button" variant="ghost" size="sm" className={compactWrap} onClick={() => setDisclosure('hidden')}>
           {m.subject_artwork_hide({}, options)}
         </Button>
       ) : null}

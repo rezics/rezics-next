@@ -231,10 +231,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
               setCopy('idle');
             }}
           >
-            <SelectTrigger
-              id="creator-sale-reference-kind"
-              className="w-full min-w-0"
-            >
+            <SelectTrigger id="creator-sale-reference-kind" className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -248,9 +245,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
           </Select>
         </Field>
         <details className="min-w-0 rounded-lg border p-3">
-          <summary className="cursor-pointer text-sm font-medium">
-            {m.creator_review_reference_preview()}
-          </summary>
+          <summary className="cursor-pointer text-sm font-medium">{m.creator_review_reference_preview()}</summary>
           <pre className="min-w-0 select-text whitespace-pre-wrap pt-3 font-mono text-sm [overflow-wrap:anywhere]">
             {referenceText}
           </pre>

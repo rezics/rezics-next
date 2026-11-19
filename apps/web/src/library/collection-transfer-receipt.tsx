@@ -4,7 +4,10 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { CollectionTransferReceipt } from './collection-placement-journey/transfer';
 
-const link = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]');
+const link = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]',
+);
 
 function admissionStatus(receipt: CollectionTransferReceipt) {
   if (receipt.state === 'reading') return m.library_collection_move_reconciling();

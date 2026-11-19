@@ -5,7 +5,10 @@ import type { PanelValue, ReadingInsightsOverview } from './native';
 import { insightsDiaryHref } from './address';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 
-export const insightLink = buttonVariants({ variant: 'link', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' });
+export const insightLink = buttonVariants({
+  variant: 'link',
+  className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+});
 const cell = 'border-b border-border px-3 py-3 text-start align-top tabular-nums';
 export function Facts({ values }: { values: readonly (readonly [string, ReactNode])[] }) {
   return (
@@ -155,7 +158,7 @@ export function YearPanel({
       <nav aria-label={m.library_insights_diary()} className="flex flex-wrap gap-x-4">
         <a
           href={insightsDiaryHref(actions.diary, locale)}
-         className={insightLink}
+          className={insightLink}
           onClick={(event) => {
             if (!current()) event.preventDefault();
           }}
@@ -193,7 +196,7 @@ export function YearPanel({
               <tr key={label}>
                 <th scope="row" className={cell}>
                   <a
-                   className={insightLink}
+                    className={insightLink}
                     href={insightsDiaryHref(action, locale)}
                     onClick={(event) => {
                       if (!current()) event.preventDefault();

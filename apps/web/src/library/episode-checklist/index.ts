@@ -64,12 +64,7 @@ export {
   type BoundEpisodeCommand,
   type EpisodeSender,
 } from './commands';
-export {
-  inspectEpisodes,
-  mapEpisodeStatus,
-  recordBody,
-  recordEpisodes,
-} from './native';
+export { inspectEpisodes, mapEpisodeStatus, recordBody, recordEpisodes } from './native';
 export {
   isCanonicalEpisodeType,
   labelledRows,

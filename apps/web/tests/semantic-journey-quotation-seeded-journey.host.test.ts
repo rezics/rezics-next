@@ -175,7 +175,11 @@ test('an accepted creator credit names the author publicly and on the served Quo
     'alice',
   );
   const candidate = proposed.candidate as string;
-  await write(`/v1/subjects/${quotation.id}/candidates/${candidate}:accept`, { context: GLOBAL_CONTEXT, expected_head: null }, 'steward');
+  await write(
+    `/v1/subjects/${quotation.id}/candidates/${candidate}:accept`,
+    { context: GLOBAL_CONTEXT, expected_head: null },
+    'steward',
+  );
   await write(
     `/v1/subjects/${quotation.id}:adopt`,
     {

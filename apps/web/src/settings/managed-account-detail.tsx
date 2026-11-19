@@ -26,8 +26,7 @@ import {
 } from './managed-account-detail-read';
 
 // These controls grow with localized labels instead of clipping at the shared button height.
-const recoveryButtonClassName =
-  'h-auto max-w-full shrink whitespace-normal wrap-anywhere text-center min-h-7';
+const recoveryButtonClassName = 'h-auto max-w-full shrink whitespace-normal wrap-anywhere text-center min-h-7';
 const statusCardClassName =
   'min-w-0 max-w-full rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground wrap-anywhere';
 
@@ -106,9 +105,7 @@ function IdentityRow({
       title={identityName(account)}
       visual={<IdentityAvatar account={account} initials={initials} />}
       metadata={
-        account?.displayName && account.handle ? (
-          <p className="min-w-0 wrap-anywhere">@{account.handle}</p>
-        ) : null
+        account?.displayName && account.handle ? <p className="min-w-0 wrap-anywhere">@{account.handle}</p> : null
       }
       preview={<AccountDetails accountId={accountId} />}
       state={state}

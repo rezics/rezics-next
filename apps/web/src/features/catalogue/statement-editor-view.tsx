@@ -67,8 +67,7 @@ const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 const julian = 'http://www.wikidata.org/entity/Q1985786';
 
 // Caller sizing keeps fields usable on phones and coarse pointers, with dense fine-pointer desktops.
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-center';
 const inputClassName = 'min-w-0';
 // Size shared Select triggers with their neighboring editable fields.
 const selectClassName = 'w-full min-w-0 max-w-full';

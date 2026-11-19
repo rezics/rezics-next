@@ -133,15 +133,30 @@ function extension(type: string): string {
 export async function download(request: Request, id: string, variant: string, env: MediaEnv): Promise<Response> {
   const source = new URL(request.url).searchParams;
   const query: Record<string, string> = {};
-  for (const key of ['knowledgeRepresentation', 'knowledgeDocumentId', 'knowledgeRevisionId',
-    'knowledgeSourceSha256', 'knowledgePublicationId']) {
+  for (const key of [
+    'knowledgeRepresentation',
+    'knowledgeDocumentId',
+    'knowledgeRevisionId',
+    'knowledgeSourceSha256',
+    'knowledgePublicationId',
+  ]) {
     const values = source.getAll(key);
     if (values.length > 1) throw notFound();
     if (values.length === 1) query[key] = values[0]!;
   }
   let knowledge: KnowledgeMediaSelection | undefined;
-  try { knowledge = parseKnowledgeMediaQuery(query); } catch { throw notFound(); }
-  const decision = await authorizeDownload(mediaClient(env.KERNEL_ORIGIN), id, variant, viewerCredential(request), knowledge);
+  try {
+    knowledge = parseKnowledgeMediaQuery(query);
+  } catch {
+    throw notFound();
+  }
+  const decision = await authorizeDownload(
+    mediaClient(env.KERNEL_ORIGIN),
+    id,
+    variant,
+    viewerCredential(request),
+    knowledge,
+  );
   if (decision.allowed !== true) throw notFound();
   const etag = `"${decision.sha256}"`;
   const headers = new Headers({ etag, 'cache-control': decision.cacheControl });

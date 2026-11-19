@@ -99,7 +99,10 @@ export function ReceivedEntryRecord({
           {workHref ? (
             <a
               href={workHref}
-             className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 whitespace-normal break-words' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-7 whitespace-normal break-words',
+              })}
               aria-label={m.library_entry_reading_open_work_named({ title: title!.text }, options)}
               data-received-entry-work-destination=""
               onClick={(event) => {

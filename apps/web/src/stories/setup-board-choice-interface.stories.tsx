@@ -99,8 +99,8 @@ function BoardChoiceExample({
             Replace display source
           </Button>
           <Button
- className="h-auto min-h-7 whitespace-normal"
- onClick={() => setScheme((value) => (value === schemeId ? otherSchemeId : schemeId))}
+            className="h-auto min-h-7 whitespace-normal"
+            onClick={() => setScheme((value) => (value === schemeId ? otherSchemeId : schemeId))}
           >
             Change supplied scheme
           </Button>

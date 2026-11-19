@@ -151,9 +151,7 @@ export function ProviderPersonReview({
               </fieldset>
             ))}
           </div>
-          <Button type="submit">
-            {m.person_review_compare({}, o)}
-          </Button>
+          <Button type="submit">{m.person_review_compare({}, o)}</Button>
         </fieldset>
       </form>
       {comparison &&
@@ -215,12 +213,7 @@ export function ProviderPersonReview({
               />
             </label>
             {/^https?:\/\//.test(citation) && (
-              <a
-                className="underline underline-offset-4"
-                href={citation}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a className="underline underline-offset-4" href={citation} target="_blank" rel="noreferrer">
                 {m.person_review_open_evidence({}, o)}
               </a>
             )}

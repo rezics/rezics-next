@@ -42,10 +42,7 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
               <>
                 {m.discovery_collection_curator({}, options)}{' '}
                 {card.curator.destination ? (
-                  <a
-                    className="text-primary underline"
-                    href={`/${locale}${card.curator.destination}`}
-                  >
+                  <a className="text-primary underline" href={`/${locale}${card.curator.destination}`}>
                     {card.curator.label || m.discovery_unnamed_account({}, options)}
                   </a>
                 ) : (

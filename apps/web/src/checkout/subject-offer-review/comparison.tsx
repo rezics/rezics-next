@@ -37,11 +37,7 @@ function SuppliedDifferences({ first, second, locale }: { first: SubjectOffer; s
       </p>
       <div className="space-y-2">
         <label htmlFor={filterId} className="flex cursor-pointer items-center gap-3 text-sm font-medium">
-          <Checkbox
-            id={filterId}
-            checked={showMatches}
-            onCheckedChange={(checked) => setShowMatches(checked)}
-          />
+          <Checkbox id={filterId} checked={showMatches} onCheckedChange={(checked) => setShowMatches(checked)} />
           {m.subject_choice_show_matches({}, { locale })}
         </label>
         <p className="max-w-prose text-sm text-muted-foreground">{m.subject_choice_filter_meaning({}, { locale })}</p>

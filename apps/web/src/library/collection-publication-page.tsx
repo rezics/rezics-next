@@ -478,17 +478,18 @@ function PublicationIntentView({
     </div>
   ) : undefined;
 
-  const continuation = ready && source.page.next && !locked ? (
-    <div className="space-y-1" data-publication-continuation>
-      <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
-      <a
-        className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
-        href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
-      >
-        {m.library_publication_next()}
-      </a>
-    </div>
-  ) : undefined;
+  const continuation =
+    ready && source.page.next && !locked ? (
+      <div className="space-y-1" data-publication-continuation>
+        <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
+        <a
+          className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
+          href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
+        >
+          {m.library_publication_next()}
+        </a>
+      </div>
+    ) : undefined;
 
   const sourceIdentity = ready ? (
     <div className="min-w-0 space-y-2" data-publication-source>
@@ -512,7 +513,10 @@ function PublicationIntentView({
               m.library_publication_complete,
             )}
           </p>
-          <a className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')} href={base}>
+          <a
+            className={cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal')}
+            href={base}
+          >
             {m.library_publication_view()}
           </a>
           {publishedReview ? (
@@ -569,7 +573,13 @@ function PublicationIntentView({
       modeNavigation={modeNavigation}
       backLink={
         mode === 'selected' ? (
-          <a className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'h-auto min-h-6 max-w-full whitespace-normal')} href={base}>
+          <a
+            className={cn(
+              buttonVariants({ variant: 'link', size: 'sm' }),
+              'h-auto min-h-6 max-w-full whitespace-normal',
+            )}
+            href={base}
+          >
             {m.library_publication_back()}
           </a>
         ) : undefined
@@ -667,9 +677,7 @@ function CurrentPublicationPage({
       current?.viewer?.subject === subject &&
       current.address.id === address.id &&
       current.address.cursor === address.cursor &&
-      ((mode === 'query' &&
-        current.builtin?.id === address.id &&
-        owner.operationCurrent('collection.update', true)) ||
+      ((mode === 'query' && current.builtin?.id === address.id && owner.operationCurrent('collection.update', true)) ||
         (current.source.state === 'ready' &&
           current.source.page.id === address.id &&
           current.source.page.curatorAccountId === subject &&
@@ -703,33 +711,34 @@ function CurrentPublicationPage({
     (mode === 'query' && page.source.state === 'ready'
       ? { revision: page.source.revision, visibility: page.source.page.visibility }
       : null);
-  const modeNavigation = page.source.state === 'ready' ? (
-    <div
-      className="flex min-w-0 flex-wrap items-center gap-2"
-      role="group"
-      aria-label={m.library_publication_heading()}
-      data-publication-mode-navigation
-    >
-      <Button
-        type="button"
-        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
-        variant={wholeQuery ? 'default' : 'outline'}
-        aria-pressed={wholeQuery}
-        onClick={() => setWholeQuery(true)}
+  const modeNavigation =
+    page.source.state === 'ready' ? (
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-2"
+        role="group"
+        aria-label={m.library_publication_heading()}
+        data-publication-mode-navigation
       >
-        {m.library_query_publication_heading()}
-      </Button>
-      <Button
-        type="button"
-        className="h-auto min-h-7 max-w-full whitespace-normal text-start"
-        variant={!wholeQuery ? 'default' : 'outline'}
-        aria-pressed={!wholeQuery}
-        onClick={() => setWholeQuery(false)}
-      >
-        {m.library_publication_choose()}
-      </Button>
-    </div>
-  ) : undefined;
+        <Button
+          type="button"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+          variant={wholeQuery ? 'default' : 'outline'}
+          aria-pressed={wholeQuery}
+          onClick={() => setWholeQuery(true)}
+        >
+          {m.library_query_publication_heading()}
+        </Button>
+        <Button
+          type="button"
+          className="h-auto min-h-7 max-w-full whitespace-normal text-start"
+          variant={!wholeQuery ? 'default' : 'outline'}
+          aria-pressed={!wholeQuery}
+          onClick={() => setWholeQuery(false)}
+        >
+          {m.library_publication_choose()}
+        </Button>
+      </div>
+    ) : undefined;
   return (
     <>
       {query.isFetching ? (

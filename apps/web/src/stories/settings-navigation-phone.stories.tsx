@@ -29,7 +29,12 @@ type Story = StoryObj<typeof meta>;
 function ChangeStoryViewer() {
   const client = useQueryClient();
   return (
-    <Button type="button" variant="outline" size="sm" onClick={() => client.setQueryData(sessionQuery.queryKey, {
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() =>
+        client.setQueryData(sessionQuery.queryKey, {
           state: 'signed-in',
           subject: 'next-phone-viewer',
           csrfToken: 'next-phone-session',

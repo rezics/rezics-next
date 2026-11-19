@@ -591,7 +591,6 @@ function StatementConsentPageLive({
                             className="min-w-0 items-start focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
                           >
                             <Checkbox
-                             
                               id={ownershipId}
                               checked={own}
                               disabled={busy || uncertain}

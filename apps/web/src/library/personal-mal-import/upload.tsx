@@ -50,7 +50,7 @@ export function MalUploadForm({
           accept=".xml,text/xml,application/xml"
           aria-describedby={helpId}
           disabled={busy || disabled}
-          className='w-full max-w-full file:me-3'
+          className="w-full max-w-full file:me-3"
         />
       </Field>
       <MalAction type="submit" disabled={busy || disabled} aria-busy={busy}>
@@ -80,7 +80,7 @@ export function MalRetainedUpload({ busy, onOpen }: { busy: boolean; onOpen: (id
         <Input
           ref={input}
           id={id}
-          className='w-full min-w-0'
+          className="w-full min-w-0"
           required
           pattern="[0-9a-fA-F-]{36}"
           autoComplete="off"

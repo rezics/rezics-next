@@ -18,9 +18,7 @@ export function CreatorSaleReturn({ close, returned, locale, cursor, orderId }: 
         {returned ? m.creator_review_returned_hint() : m.creator_review_departure_hint()}
       </p>
       <details className="min-w-0 rounded-lg border p-3">
-        <summary className="cursor-pointer text-sm font-medium">
-          {m.creator_review_return_context()}
-        </summary>
+        <summary className="cursor-pointer text-sm font-medium">{m.creator_review_return_context()}</summary>
         <div className="min-w-0 space-y-4 pt-3">
           <dl className="min-w-0 space-y-3 text-sm">
             <div className="min-w-0 space-y-1">

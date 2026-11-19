@@ -42,56 +42,57 @@ export function OrdersPage({
   navigation?: BuyerHistoryNavigation | undefined;
   history?: PurchaseHistoryPosition;
 }) {
-  const records = page.orders.length === 0 ? (
-    <Empty className="border border-border">
-      <EmptyHeader>
-        <EmptyTitle>{continuation || page.next ? m.orders_page_empty() : m.orders_empty()}</EmptyTitle>
-        <EmptyDescription>{m.orders_empty_hint()}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
-  ) : (
-    <ul className="divide-y rounded-xl border border-border bg-card text-card-foreground">
-      {page.orders.map((order) => (
-        <ContentItem
-          key={order.id}
-          title={order.title}
-          headingLevel={2}
-          href={purchaseHistoryHref(locale, `orders/${order.id}`, history)}
-          data-order-row
-          data-order-id={order.id}
-          data-settlement={order.settlement}
-          data-entitlement={order.entitlementId ?? ''}
-          className="min-w-0 p-4 sm:p-5"
-          trailing={
-            <p className="min-w-0 break-words font-serif text-lg tabular-nums sm:max-w-64">
-              <span className="mb-1 block font-sans text-xs font-normal text-muted-foreground">
-                {m.order_recorded_price()}
-              </span>
-              {price(order, locale)}
-              <span className="block font-sans text-sm text-muted-foreground">
-                {order.currency.toUpperCase()} ·{' '}
-                {recordedTaxBehavior(order) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
-              </span>
-            </p>
-          }
-          metadata={
-            <dl className="grid min-w-0 w-full grid-cols-1 gap-x-4 gap-y-1.5 text-sm break-words sm:grid-cols-[auto_minmax(0,1fr)]">
-              <dt className="text-muted-foreground">{m.orders_status_label()}</dt>
-              <dd className="min-w-0 text-card-foreground">{settlementLabel(order.settlement)}</dd>
-              <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
-              <dd className="min-w-0 text-card-foreground">
-                <time dateTime={order.createdAt}>
-                  {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(order.createdAt))}
-                </time>
-              </dd>
-              <dt className="text-muted-foreground">{m.orders_entitlement_label()}</dt>
-              <dd className="min-w-0 text-card-foreground">{entitlementLabel(order)}</dd>
-            </dl>
-          }
-        />
-      ))}
-    </ul>
-  );
+  const records =
+    page.orders.length === 0 ? (
+      <Empty className="border border-border">
+        <EmptyHeader>
+          <EmptyTitle>{continuation || page.next ? m.orders_page_empty() : m.orders_empty()}</EmptyTitle>
+          <EmptyDescription>{m.orders_empty_hint()}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : (
+      <ul className="divide-y rounded-xl border border-border bg-card text-card-foreground">
+        {page.orders.map((order) => (
+          <ContentItem
+            key={order.id}
+            title={order.title}
+            headingLevel={2}
+            href={purchaseHistoryHref(locale, `orders/${order.id}`, history)}
+            data-order-row
+            data-order-id={order.id}
+            data-settlement={order.settlement}
+            data-entitlement={order.entitlementId ?? ''}
+            className="min-w-0 p-4 sm:p-5"
+            trailing={
+              <p className="min-w-0 break-words font-serif text-lg tabular-nums sm:max-w-64">
+                <span className="mb-1 block font-sans text-xs font-normal text-muted-foreground">
+                  {m.order_recorded_price()}
+                </span>
+                {price(order, locale)}
+                <span className="block font-sans text-sm text-muted-foreground">
+                  {order.currency.toUpperCase()} ·{' '}
+                  {recordedTaxBehavior(order) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+                </span>
+              </p>
+            }
+            metadata={
+              <dl className="grid min-w-0 w-full grid-cols-1 gap-x-4 gap-y-1.5 text-sm break-words sm:grid-cols-[auto_minmax(0,1fr)]">
+                <dt className="text-muted-foreground">{m.orders_status_label()}</dt>
+                <dd className="min-w-0 text-card-foreground">{settlementLabel(order.settlement)}</dd>
+                <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
+                <dd className="min-w-0 text-card-foreground">
+                  <time dateTime={order.createdAt}>
+                    {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(order.createdAt))}
+                  </time>
+                </dd>
+                <dt className="text-muted-foreground">{m.orders_entitlement_label()}</dt>
+                <dd className="min-w-0 text-card-foreground">{entitlementLabel(order)}</dd>
+              </dl>
+            }
+          />
+        ))}
+      </ul>
+    );
   return (
     <OrderHistoryDirectoryFrame
       heading={m.orders_heading()}

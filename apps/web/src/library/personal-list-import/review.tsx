@@ -51,11 +51,7 @@ export function VndbReviewPage({
               {m.library_vndb_next_page()}
             </VndbAction>
           ) : null}
-          <VndbAction
-            type="button"
-            disabled={busy || snap.cancelled || snap.selectedEffects === 0}
-            onClick={onConfirm}
-          >
+          <VndbAction type="button" disabled={busy || snap.cancelled || snap.selectedEffects === 0} onClick={onConfirm}>
             {m.library_vndb_confirm_selection({ count: snap.selectedEffects })}
           </VndbAction>
         </div>
