@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
-import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
+import {
+  commandNeedsSharedDevServer,
+  isSharedBrowserCommand,
+  privateNetworkCommand,
+  webTestPrivateNetworkEnvName,
+} from './with-dev-server.ts';
 import {
   admitWebHostTestCommand,
   appendTestFiles,
@@ -84,6 +89,10 @@ function isHostLaneTest(file: string): boolean {
   return isWebHostTestFile(file) || recorderPattern.test(file);
 }
 
+export function usesSharedBrowserServer(file: string): boolean {
+  return !isHostLaneTest(file) && commandNeedsSharedDevServer(['bun', 'test', file]);
+}
+
 function listTestFiles(directory: string, parent = ''): string[] {
   return readdirSync(join(directory, parent), { withFileTypes: true }).flatMap((entry) => {
     if (entry.isDirectory()) {
@@ -138,7 +147,7 @@ async function main(): Promise<void> {
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },
     async (slotEnvironment) => {
-      if (appCommand[0] === 'bun' && appCommand[1] === 'test') {
+      if ((appCommand[0] === 'bun' && appCommand[1] === 'test') || isSharedBrowserCommand(appCommand)) {
         const messageCode = await ensureMessagesReady(app, slotEnvironment);
         if (messageCode !== 0) return messageCode;
       }
@@ -197,7 +206,7 @@ async function main(): Promise<void> {
             'KERNEL_ORIGIN',
           ])
             delete testEnvironment[name];
-          if (run.args[0] === 'bun' && run.args[1] === 'test')
+          if (wrapShared || (run.args[0] === 'bun' && run.args[1] === 'test'))
             delete testEnvironment[webTestSelectionContextEnvironment];
           const child = Bun.spawn(invocation, {
             cwd: app,

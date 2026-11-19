@@ -82,8 +82,13 @@ const serverIndependentTests = [
   'tests/with-dev-server.test.ts',
 ];
 
+export function isSharedBrowserCommand(command: string[]): boolean {
+  return command[0] === 'bun' && command[1] === 'scripts/check.ts' && command[2] === '--shared-browser';
+}
+
 /** These explicit selections own their fixtures; other page or mixed selections still start Vite. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
+  if (isSharedBrowserCommand(command)) return true;
   if (command[0] !== 'bun' || command[1] !== 'test') return false;
   const files = command.filter((argument) => testFileArgument.test(argument));
   return (
@@ -95,11 +100,12 @@ export function commandNeedsSharedDevServer(command: string[]): boolean {
   );
 }
 
-export function privateNetworkCommand(command: string[]): string[] {
+export function privateNetworkCommand(command: string[], keepCheckHostUid = false): string[] {
   return [
     'unshare',
     '--user',
-    '--map-root-user',
+    // The shared scheduler verifies the check-host supervisor's uid inside the namespace.
+    ...(keepCheckHostUid ? ['--map-current-user', '--keep-caps'] : ['--map-root-user']),
     '--net',
     'sh',
     '-c',
@@ -200,8 +206,7 @@ export async function startSharedWebDevServer(
 }
 
 function parseArguments(args: string[]): string[] {
-  const separator = args.indexOf('--');
-  const command = separator < 0 ? args : args.slice(separator + 1);
+  const command = args[0] === '--' ? args.slice(1) : args;
   if (command.length === 0) throw new Error('Usage: bun scripts/with-dev-server.ts -- <command...>');
   return command;
 }
@@ -263,16 +268,19 @@ async function main(command: string[]): Promise<void> {
   try {
     const childEnvironment: NodeJS.ProcessEnv = { ...process.env, REZICS_TEST_RUNTIME: '1' };
     const privateNetwork = childEnvironment[webTestPrivateNetworkEnvName] === '1';
-    const cacheReady = childEnvironment[webTestDepCacheReadyEnvName] === '1';
     if (commandNeedsSharedDevServer(command) && !childEnvironment[sharedDevServerEnvName]) {
-      if (privateNetwork && !cacheReady) {
+      if (privateNetwork) {
+        delete childEnvironment[webTestPrivateNetworkEnvName];
         const cache = await prepareSharedWebDevCache(childEnvironment);
         childEnvironment.WEB_VITE_CACHE_DIR = cache.directory;
         childEnvironment[webTestDepCacheReadyEnvName] = '1';
         childEnvironment.WEB_TEST_DEV_SERVER_CACHE = cache.reused ? 'reuse' : 'build';
         childEnvironment.WEB_TEST_DEV_SERVER_LOCK = cache.lockHash;
         process.exitCode = await runOwnedCommand(
-          privateNetworkCommand([process.execPath, import.meta.path, '--', ...command]),
+          privateNetworkCommand(
+            [process.execPath, import.meta.path, '--', ...command],
+            isSharedBrowserCommand(command),
+          ),
           {
             cwd: app,
             env: childEnvironment,

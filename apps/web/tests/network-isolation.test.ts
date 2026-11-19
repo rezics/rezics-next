@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planTestCommandLanes } from '../scripts/isolated.ts';
+import { planTestCommandLanes, usesSharedBrowserServer } from '../scripts/isolated.ts';
 import { resolveWebTestSelection } from '../scripts/selection.ts';
 
 // Containers starting and stopping on the host add and remove network interfaces while tests run. Chromium aborts
@@ -33,6 +33,14 @@ function run(pkg: string, command: string[], env: Record<string, string | undefi
   });
   return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 }
+
+test('only isolated server consumers join the shared browser group', () => {
+  expect(usesSharedBrowserServer('tests/scaffold.test.ts')).toBe(true);
+  expect(usesSharedBrowserServer('tests/hydration.test.ts')).toBe(true);
+  expect(usesSharedBrowserServer('tests/post-editing.test.ts')).toBe(false);
+  expect(usesSharedBrowserServer('tests/record-script.test.ts')).toBe(false);
+  expect(usesSharedBrowserServer('tests/native/stack.host.test.ts')).toBe(false);
+});
 
 test('UI-only selections stay in the private lane with every CLI argument preserved', () => {
   const command = ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts'];

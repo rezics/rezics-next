@@ -175,6 +175,8 @@ test('a placed browser worker keeps the selected Bun filter through per-file exe
   expect(command.slice(-(testArgs.length + 2))).toEqual([selectedFile, '--', ...testArgs]);
 
   const worker = browserWorkerRequest(command.slice(2));
+  const grouped = browserWorkerCommand({ files: [selectedFile], report, testArgs }, '--shared-browser');
+  expect(browserWorkerRequest(grouped.slice(2))).toEqual(worker);
   expect(worker).toEqual({ files: [selectedFile], report, testScript: 'bun run test', testArgs });
   if (!worker) throw new Error('placed browser command was not recognized by its receiving route');
   try {

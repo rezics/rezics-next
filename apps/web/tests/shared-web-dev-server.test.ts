@@ -24,7 +24,7 @@ test('migrated Web files acquire the helper and no longer copy a Vite spawn/read
   expect(missingHelper, missingHelper.join('\n')).toEqual([]);
 }, 30_000);
 
-test('a composed run advertises one server that files acquire with independent fixture overlay', async () => {
+test('a composed run borrows the default server and gives a conflicting fixture its own server', async () => {
   const record = readSharedDevServer();
   if (!record) return;
   const first = await startDevServer({ warmUpPaths: [], firstPath: '/en' });
@@ -40,11 +40,15 @@ test('a composed run advertises one server that files acquire with independent f
     firstPath: '/en',
     env: { KERNEL_ORIGIN: 'http://overlay.example.test' },
   });
-  expect(second.shared).toBe(true);
-  expect(second.pid).toBe(record.pid);
-  await second.stop();
+  try {
+    expect(second.shared).toBe(false);
+    expect(second.pid).not.toBe(record.pid);
+    expect(second.workerBindings.KERNEL_ORIGIN).toBe('http://overlay.example.test');
+  } finally {
+    await second.stop();
+  }
   expect(readSharedDevServer()?.pid).toBe(record.pid);
-});
+}, 300_000);
 
 test('the owning warm launch records a monotonic /en time under 20 seconds', () => {
   const measured = process.env.WEB_TEST_DEV_SERVER_FIRST_EN_MS;
