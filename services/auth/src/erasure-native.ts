@@ -23,7 +23,7 @@ import {
   closeCredentialConsumer,
   registrationTerminal,
   recoveryTerminal,
-  nativeRequestTerminal,
+  nativeRequestConsumer,
   continueNativeConsumer,
   type NativeConsumerRuntime,
   type NativeConsumerLocator,
@@ -442,7 +442,9 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     if (store.table === 'auth_workflow_request') {
       // A historical unknown row may be disposed of as a whole only after its
       // actual native reader retires. terminal_at alone is not that witness.
-      if (!(await nativeRequestTerminal(connection, key))) return { after, keys, blocked: 'native-request' };
+      const consumer = await nativeRequestConsumer(connection, key);
+      if (!consumer?.ready)
+        return { after, keys, blocked: 'native-request', held: consumer && { store: store.table, key } };
     }
     if (store.table === 'auth_client_reduction_progress') {
       const held = await connection.query(
@@ -816,6 +818,7 @@ export async function nativeErasurePage(
     if (phase.kind === 'request') {
       const store = nativeErasureStores.find((store) => store.table === phase.table)!;
       const page = await drainStore(connection, store, phase.role, row.account_id, row.after_key);
+      held = page.held;
       await checkpoint(connection, row, {
         phase: row.phase + (page.keys || page.blocked ? 0 : 1),
         after: page.keys || page.blocked ? page.after : '',

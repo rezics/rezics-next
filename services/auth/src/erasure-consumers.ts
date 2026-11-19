@@ -5,6 +5,8 @@ import type {
   OriginalLifecycleResult,
   OriginalLifecycleResultPort,
 } from '@rezics/auth-contract';
+import { completeCopy } from './erasure-copy.ts';
+import { createAuthSdkRetirementInvocation } from './sdk-retirement-fence.ts';
 import type { AuthService } from './index.ts';
 import { isRefusal } from './workflows.ts';
 import {
@@ -367,8 +369,7 @@ async function continueRecovery(
     // A deleted account or a completed (unfenced) source cannot replace a missing
     // original result. The live port retains its establishment and expiry checks.
     const current = await runtime.access.readAccount(row.account_id);
-    if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced)
-      return false;
+    if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced) return false;
     if (!runtime.completeRecovery) return false;
     await runtime.completeRecovery(reference);
     // A successful effect reply is not this consumer's terminal proof. Read the
@@ -454,6 +455,8 @@ export async function continueNativeConsumer(
   runtime: NativeConsumerRuntime,
 ): Promise<boolean> {
   try {
+    if (locator.store === 'auth_workflow_request')
+      return await completeCopy(pool, locator.key, undefined, createAuthSdkRetirementInvocation());
     if (locator.store === 'auth_registration_stage')
       return await continueRegistration(pool, obligationId, locator.key, runtime);
     if (locator.store === 'auth_provisioning_receipt') {
@@ -485,19 +488,22 @@ export async function continueNativeConsumer(
 // operation uses the original finishCopyResult/completeCopy native return reader:
 // its committed digest must actually be consumed. terminal_at/SDK status alone
 // and historical missing attribution remain insufficient.
+export async function nativeRequestConsumer(connection: PoolClient, workflowId: string) {
+  const result = await connection.query<{ ready: boolean }>(
+    `SELECT (r.erasure_stage_id IS NOT NULL OR w.ready) AS ready FROM auth_workflow_request r
+     LEFT JOIN auth_copy_work w ON r.erasure_stage_id IS NULL AND w.workflow_id=r.workflow_id
+     WHERE r.workflow_id=$1 AND (
+       EXISTS (SELECT 1 FROM auth_native_consumer_proof p
+         WHERE p.store='registration' AND p.key=r.erasure_stage_id AND p.binding->>1=r.workflow_id
+           AND p.result->>'outcome' IN ('activated','expired'))
+       OR (r.erasure_stage_id IS NULL AND r.terminal_at IS NOT NULL
+         AND r.request_party_version=1 AND r.request_context_version=1 AND r.erasure_actor_version=1
+         AND w.source_key=r.workflow_id AND w.result_digest IS NOT NULL AND w.result_finished_at IS NOT NULL))`,
+    [workflowId],
+  );
+  return result.rows[0];
+}
+
 export async function nativeRequestTerminal(connection: PoolClient, workflowId: string): Promise<boolean> {
-  return !!(
-    await connection.query(
-      `SELECT 1 FROM auth_workflow_request r WHERE r.workflow_id=$1 AND (
-        EXISTS (SELECT 1 FROM auth_native_consumer_proof p
-          WHERE p.store='registration' AND p.key=r.erasure_stage_id
-            AND p.binding->>1=r.workflow_id AND p.result->>'outcome' IN ('activated','expired'))
-        OR (r.erasure_stage_id IS NULL AND r.terminal_at IS NOT NULL
-          AND r.request_party_version=1 AND r.request_context_version=1 AND r.erasure_actor_version=1
-          AND EXISTS (SELECT 1 FROM auth_copy_work w WHERE w.workflow_id=r.workflow_id
-            AND w.source_key=r.workflow_id AND w.result_digest IS NOT NULL
-            AND w.result_finished_at IS NOT NULL AND w.ready)))`,
-      [workflowId],
-    )
-  ).rowCount;
+  return (await nativeRequestConsumer(connection, workflowId))?.ready === true;
 }

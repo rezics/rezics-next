@@ -200,6 +200,7 @@ END $$;
 
 CREATE FUNCTION public.auth_copy_record() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'public', 'pg_temp'
     AS $$
 DECLARE work text; locator text; size integer; old_size integer; existed boolean; current_work auth_copy_work; cap integer;
 BEGIN
