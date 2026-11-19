@@ -24,6 +24,7 @@ import {
   TEMPLATE_DATABASE,
 } from '../../../services/auth/scripts/database.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
+import { withCommandPhase } from '../../../services/kernel/scripts/command-phases.ts';
 import { compileWebPrograms } from './typecheck.ts';
 import {
   admitWebHostTestCommand,
@@ -45,7 +46,7 @@ const defaultTimingsFile = join(app, '.cache', 'check-timings.json');
 const seedTimingsFile = join(app, 'check-timings.json');
 export const webCheckTimingsFile = defaultTimingsFile;
 const browserTest =
-  /from\s+['"](?:playwright|@playwright\/|@vitest\/browser)|\b(?:chromium|browser)\.launch\b|\.goto\s*\(|\b(?:spawn|createServer|Bun\.serve)\s*\(/;
+  /from\s+['"](?:playwright|@playwright\/|@vitest\/browser)|\b(?:chromium|browser)\.launch\b|\.goto\s*\(|from\s+['"][^'"]+\.browser(?:\.[cm]?[jt]s)?['"]|\b(?:startDevServer|spawn|createServer|Bun\.serve)\s*\(/;
 
 export type WebTestLanesOptions = {
   files: string[];
@@ -677,8 +678,8 @@ async function runTests(
     }
   };
   if (env.WEB_CHECK_SERIAL_LANES === '1') {
-    await runBrowser();
-    await runUnits();
+    await withCommandPhase('web-browser-tests', runBrowser, env);
+    await withCommandPhase('web-unit-tests', runUnits, env);
   } else {
     await Promise.all([runBrowser(), runUnits()]);
   }
@@ -827,25 +828,13 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     await runWebSelectedChecks(checks);
     return;
   }
-  const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript, testArgs)]);
-  const hostResult = await Promise.allSettled([runHostTests(env)]);
-  const failures = results
-    .flatMap((result) =>
-      result.status === 'rejected'
-        ? [result.reason instanceof Error ? result.reason.message : String(result.reason)]
-        : [],
-    )
-    .concat(
-      hostResult.flatMap((result) =>
-        result.status === 'rejected'
-          ? [result.reason instanceof Error ? result.reason.message : String(result.reason)]
-          : [],
-      ),
-    );
-  if (failures.length > 0) throw new Error(failures.join('\n'));
-
-  await runCommand('build', 'bun', ['run', 'build'], env);
-  await runCommand('Storybook stories', 'bun', ['run', 'test:stories'], env);
+  // Both compiler programs and the browser stack need the admitted run's memory to themselves.
+  await runWebSelectedChecks([
+    () => runWebTypecheck(env),
+    () => runTests(files, { ...env, WEB_CHECK_SERIAL_LANES: '1' }, testScript, testArgs),
+    () => withCommandPhase('web-host-tests', () => runHostTests(env), env),
+  ]);
+  await withCommandPhase('web-build', () => runCommand('build', 'bun', ['run', 'build'], env), env);
 }
 
 if (import.meta.main) {

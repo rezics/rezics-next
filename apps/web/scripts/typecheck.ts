@@ -23,10 +23,16 @@ export const WEB_COMPILER_PROGRAMS = [
 ] as const;
 
 /** Both programs always run; the first nonzero status is kept so a red web program cannot skip the scripts. */
-export async function compileWebPrograms(run: (args: readonly string[]) => Promise<number>): Promise<number> {
+export async function compileWebPrograms(
+  run: (args: readonly string[]) => Promise<number>,
+  env: NodeJS.ProcessEnv = process.env,
+  write: (chunk: string) => unknown = (chunk) => process.stdout.write(chunk),
+): Promise<number> {
   let result = 0;
   for (const args of WEB_COMPILER_PROGRAMS) {
-    const code = await run(args);
+    const config = args.at(-1)!;
+    const phase = config === 'tsconfig.json' ? 'web-tsconfig' : 'web-tsconfig-scripts';
+    const code = await timedPhase(phase, config, env, write, () => run(args));
     if (result === 0) result = code;
   }
   return result;
@@ -73,16 +79,7 @@ export async function compileWebProgramsWithSqlAnalysis(
       );
     const compilerEnv = { ...analysis.environment };
     if (analysis.available) delete compilerEnv.DATABASE_URL;
-    return await compileWebPrograms((args) => {
-      const scripts = args.at(-1) === 'tsconfig.scripts.json';
-      return timedPhase(
-        scripts ? 'web-tsconfig-scripts' : 'web-tsconfig',
-        scripts ? 'tsconfig.scripts.json' : 'tsconfig.json',
-        env,
-        write,
-        () => dependencies.run(args, compilerEnv),
-      );
-    });
+    return await compileWebPrograms((args) => dependencies.run(args, compilerEnv), env, write);
   } finally {
     analysis.dispose();
   }

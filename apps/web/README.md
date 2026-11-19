@@ -348,6 +348,9 @@ member, so the ban does not target a protected owner. No reference-project sourc
 Minimal verification typechecks the Web workspace only; native, browser, database and outcome proof is deferred
 to integration.
 
+The workspace gate runs both compiler programs, the browser pool, the unit pool and the native host tests in sequence
+under one memory limit. The browser pool includes the page-story suite once. A successful run then builds Web.
+
 `bun run check` runs each non-host test file in its own `bun test` process. Browser and dev-server tests run through
 `scripts/isolated.ts`, which takes a host-wide stack slot for each file. Their separate pool has six lanes by default,
 matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to change that upper bound. The host lease
