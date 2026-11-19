@@ -1,13 +1,13 @@
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { chromium, type Browser } from 'playwright';
-import offer from '../src/kernel/recorded/offer.json';
+import { slug } from '@rezics/definitions/slug';
+import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import fixtures from '../src/kernel/fixtures.json';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -21,14 +21,19 @@ const issuerKeys = await generateKeyPair('ES256', { extractable: true });
 const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
 
 const codes = new Map<string, { nonce: string; sub: string }>();
-const tokenRequests: string[] = [];
+const refreshGrants: (string | null)[] = [];
 const accessTokens: string[] = [];
 const kernelCalls: { path: string; authorization: string | null }[] = [];
 let counter = 0;
 // How Auth answers the next refresh grants; null issues new tokens.
 let refusal: (() => Response) | null = null;
-let offerOutcome: 'missing' | 'closed' | 'unavailable' | 'error' | 'ready' = 'missing';
-let offerReads = 0;
+const subject = fixtures.subjects[0]!;
+const subjectTitle = subject.labels.en;
+const subjectPath = `/en/subjects/${subject.id}/${slug(subjectTitle)}`;
+const catalogue = createFakeKernelFetch(fixtures);
+let pageFailure: { status: number; code: string; retryAfter?: string } | undefined;
+let pageFailureGate: Promise<void> | undefined;
+let pageReads = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -80,28 +85,31 @@ const fake = Bun.serve({
     if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
     if (url.pathname === '/auth/token' && request.method === 'POST') {
       const form = new URLSearchParams(await request.text());
-      tokenRequests.push(form.get('grant_type') ?? '');
       if (form.get('grant_type') === 'authorization_code') {
         const grant = codes.get(form.get('code') ?? '');
         if (!grant) return json({ error: 'invalid_grant' }, 400);
         codes.delete(form.get('code') ?? '');
         return issue(grant.sub, grant.nonce);
       }
-      if (form.get('grant_type') === 'refresh_token') return refusal ? refusal() : issue('alice');
+      if (form.get('grant_type') === 'refresh_token') {
+        refreshGrants.push(form.get('refresh_token'));
+        return refusal ? refusal() : issue('alice');
+      }
       return json({ error: 'unsupported_grant_type' }, 400);
     }
-    if (url.pathname === `/v1/offers/${offer.offer.id}`) {
-      offerReads++;
-      if (offerOutcome === 'ready') return json({ offer: { ...offer.offer, revision: 1 } });
-      const status = { missing: 404, closed: 403, unavailable: 503, error: 500 }[offerOutcome];
-      const code = offerOutcome === 'closed' ? 'platform_closed' : 'dependency_unavailable';
-      return Response.json(
-        { code, detail: 'private upstream cause' },
-        {
-          status,
-          headers: { 'cache-control': 'private, no-store', 'retry-after': '7' },
-        },
-      );
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      const body = (await request.clone().json()) as { target?: { subject?: string } };
+      if (body.target?.subject === subject.id) {
+        pageReads++;
+        if (pageFailure) {
+          const { code, status, retryAfter } = pageFailure;
+          await pageFailureGate;
+          return Response.json(
+            { code, detail: 'private upstream cause' },
+            { status, headers: retryAfter ? { 'retry-after': retryAfter } : {} },
+          );
+        }
+      }
     }
     if (url.pathname.startsWith('/v1/media/')) {
       kernelCalls.push({ path: url.pathname + url.search, authorization: request.headers.get('authorization') });
@@ -118,7 +126,7 @@ const fake = Bun.serve({
         { status: 404, headers: { 'content-type': 'application/problem+json' } },
       );
     }
-    return json({ error: 'not_found' }, 404);
+    return catalogue(request);
   },
 });
 
@@ -219,7 +227,7 @@ async function download(value: string) {
   return { response, call };
 }
 
-const refreshes = () => tokenRequests.filter((grant) => grant === 'refresh_token').length;
+const refreshes = () => refreshGrants.length;
 
 test(
   'a refresh that Auth refuses with invalid_grant ends the session',
@@ -251,13 +259,20 @@ test(
     ];
     for (const [name, answer] of failures) {
       const value = await signIn();
+      const refreshToken = `refresh-${counter}`;
       refusal = answer;
       const before = refreshes();
       const failed = await download(value);
       expect(refreshes(), name).toBe(before + 1);
       expect(failed.response.status, name).toBe(502);
       expect(failed.response.headers.get('content-type'), name).toStartWith('application/problem+json');
-      expect(((await failed.response.json()) as { code: string }).code, name).toBe('dependency_unavailable');
+      expect(failed.response.headers.get('cache-control'), name).toBe('private, no-store');
+      expect(cookieValue(failed.response, session), name).toBeUndefined();
+      expect(await failed.response.json(), name).toMatchObject({
+        type: 'https://rezics.com/problems/session_unavailable',
+        status: 502,
+        code: 'session_unavailable',
+      });
       // No kernel call is made with a missing or stale credential.
       expect(failed.call, name).toBeUndefined();
 
@@ -265,6 +280,7 @@ test(
       refusal = null;
       const recovered = await download(value);
       expect(refreshes(), name).toBe(before + 2);
+      expect(refreshGrants.slice(before), name).toEqual([refreshToken, refreshToken]);
       expect(recovered.call?.authorization, name).toBe(`Bearer ${accessTokens.at(-1)}`);
     }
   },
@@ -272,67 +288,66 @@ test(
 );
 
 test(
-  'generic route errors retain native failure status and noindex while exposing bounded real retry recovery in the sole shell main',
+  'catalogue route errors preserve native status and recover with one read per retry in a single main',
   async () => {
-    const path = `/en/offers/${offer.offer.id}`;
     const origin = await site();
-    for (const [outcome, status] of [
-      ['missing', 404],
-      ['closed', 403],
-      ['unavailable', 503],
-      ['error', 500],
-    ] as const) {
-      offerOutcome = outcome;
-      const response = await fetch(`${origin}${path}`, { redirect: 'manual' });
+    const url = `${origin}${subjectPath}`;
+    const unavailable = { status: 503, code: 'dependency_unavailable', retryAfter: '7' };
+    for (const failure of [
+      { status: 404, code: 'not_found' },
+      { status: 403, code: 'platform_closed' },
+      unavailable,
+      { status: 500, code: 'internal_error', retryAfter: '7' },
+    ]) {
+      pageFailure = failure;
+      const response = await fetch(url, { redirect: 'manual' });
       const html = await response.text();
-      expect(response.status, outcome).toBe(status);
-      expect(response.headers.get('cache-control')).toContain('no-store');
-      expect(response.headers.get('cache-control')).toContain('private');
+      expect(response.status, failure.code).toBe(failure.status);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(response.headers.get('x-robots-tag')).toBe('noindex');
       expect(html).toMatch(/name="robots"[^>]*content="noindex/);
       expect((html.match(/<main\b/g) ?? []).length).toBe(1);
       expect(html).not.toContain('private upstream cause');
-      expect(html).not.toContain(offer.offer.title);
-      if (status >= 500) expect(response.headers.get('retry-after')).toBe('7');
+      expect(html).not.toContain(subjectTitle);
+      expect(response.headers.get('retry-after')).toBe(failure.retryAfter ?? null);
     }
 
-    offerOutcome = 'unavailable';
+    pageFailure = unavailable;
     const ownedBrowser = await openBrowser();
     await withCleanup(async () => {
       const page = await ownedBrowser.newPage();
-      const response = await page.goto(`${origin}${path}`);
+      const before = pageReads;
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
       expect(response?.status()).toBe(503);
-      await page.locator('html[data-hydrated]').waitFor();
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
       const main = page.getByRole('main');
       expect(await main.count()).toBe(1);
       const retry = main.getByRole('button', { name: 'Try again', exact: true });
       await retry.waitFor();
       expect(await main.getByRole('link', { name: 'Home', exact: true }).getAttribute('href')).toBe('/en');
       expect(await main.getByRole('link', { name: 'Search', exact: true }).getAttribute('href')).toBe('/en/search');
-      const before = offerReads;
-      const failedRead = page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname.startsWith('/_serverFn/') && response.url().includes(offer.offer.id),
-      );
-      await retry.click();
-      expect((await failedRead).status()).toBe(503);
-      await page.waitForFunction(() => {
-        const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('main button')).find(
-          (button) => button.textContent === 'Try again',
-        );
-        return retry && !retry.disabled;
-      });
-      // A failed explicit attempt keeps noindex and never discloses the target or signs the reader in.
-      expect(offerReads).toBe(before + 1);
+      expect(pageReads).toBe(before + 1);
+      const { promise, resolve } = Promise.withResolvers<void>();
+      pageFailureGate = promise;
+      try {
+        await retry.click();
+        await main.getByRole('button', { name: 'Trying again…', exact: true }).waitFor();
+      } finally {
+        resolve();
+        pageFailureGate = undefined;
+      }
+      await retry.and(page.locator('button:enabled')).waitFor();
+      expect(pageReads).toBe(before + 2);
       expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');
-      expect(await main.innerText()).not.toContain(offer.offer.title);
-      expect(page.url()).toBe(`${origin}${path}`);
-      offerOutcome = 'ready';
+      expect(await main.innerText()).not.toContain(subjectTitle);
+      expect(page.url()).toBe(url);
+      pageFailure = undefined;
       await retry.click();
-      await main.getByRole('heading', { name: offer.offer.title, exact: true }).waitFor();
-      expect(offerReads).toBe(before + 2);
+      await main.getByRole('heading', { level: 1, name: subjectTitle, exact: true }).waitFor();
+      expect(pageReads).toBe(before + 3);
       expect(await main.count()).toBe(1);
       expect(await retry.count()).toBe(0);
-      expect(page.url()).toBe(`${origin}${path}`);
+      expect(page.url()).toBe(url);
     }, [{ label: 'Refresh-errors browser page', run: closeBrowser, timeoutMs: 6000 }]);
   },
   timeout,
