@@ -33,23 +33,20 @@ export type BootstrapGovernanceResult = {
   replayed: boolean;
 };
 
-/** Local-stack setup may install one direct Global Board-creation grant after
- * the governance marker is established. The grant is recorded through the
- * native command executor and a durable receipt; normal HTTP commands still
- * perform current Access checks. This helper is not mounted or used in
- * production composition.
- */
-export async function bootstrapLocalShowcaseBoardCreation(
+/** Local fixture grants are recorded by native commands after governance is established. */
+async function bootstrapLocalDeveloperGrant<const Actions extends readonly string[]>(
   pool: Pool,
   accountId: string,
-): Promise<Readonly<{ resource: typeof PLATFORM_RESOURCE; subjectId: string; actions: readonly ['board:create'] }>> {
+  kind: 'access.local-showcase.board-create' | 'access.local-catalogue.reviewed-person-merge',
+  actions: Actions,
+): Promise<Readonly<{ resource: typeof PLATFORM_RESOURCE; subjectId: string; actions: Actions }>> {
   if (routeOf(accountId) === null) throw new BootstrapGovernanceUnavailableError();
   const deadline = deadlineFor(BOOTSTRAP_GOVERNANCE_DEADLINE_MS);
   const value = {
     resource: PLATFORM_RESOURCE,
     subjectId: accountId,
     subjectRole: '' as const,
-    actions: ['board:create'] as const,
+    actions,
   };
   const authorization: CommandAuthorization = {
     action: 'access:grant',
@@ -74,7 +71,7 @@ export async function bootstrapLocalShowcaseBoardCreation(
       authorization,
       receipt: {
         actorAccountId: accountId,
-        kind: 'access.local-showcase.board-create',
+        kind,
         key: accountId,
         digest,
       },
@@ -101,6 +98,17 @@ export async function bootstrapLocalShowcaseBoardCreation(
     },
   );
   return { resource: value.resource, subjectId: value.subjectId, actions: value.actions };
+}
+
+export function bootstrapLocalShowcaseBoardCreation(pool: Pool, accountId: string) {
+  return bootstrapLocalDeveloperGrant(pool, accountId, 'access.local-showcase.board-create', ['board:create']);
+}
+
+export function bootstrapLocalReviewedPersonMerge(pool: Pool, accountId: string) {
+  return bootstrapLocalDeveloperGrant(pool, accountId, 'access.local-catalogue.reviewed-person-merge', [
+    'subject:merge',
+    'gate:subject_identity',
+  ]);
 }
 
 // Private control flow ends the native read transaction without a receipt,

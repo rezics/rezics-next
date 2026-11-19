@@ -900,8 +900,12 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
   const { host, access, kernelPool, keys, kernel } = composition;
   const catalogueOnly = importCatalogueWalk();
   const firstPublicWeb = firstPublicWebWalk();
-  const { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } =
-    await import('../../kernel/src/access/bootstrap-governance.ts');
+  const {
+    bootstrapGovernance,
+    bootstrapLocalReviewedPersonMerge,
+    bootstrapLocalShowcaseBoardCreation,
+    PLATFORM_RESOURCE,
+  } = await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
   const { createExposureCommands } = await import('../../kernel/src/access/gates/catalogue.ts');
   const seededAccountId = await readLocalDeveloperAccountId(directory);
@@ -926,6 +930,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
   const bootstrap = async (accountId: string) => {
     await bootstrapGovernance(kernelPool, accountId);
     if (!catalogueOnly) await bootstrapLocalShowcaseBoardCreation(kernelPool, accountId);
+    else if (walkStackAdmitted(process.env, root)) await bootstrapLocalReviewedPersonMerge(kernelPool, accountId);
   };
   if (reusableAccountId) {
     // A completed local registration may outlive its staging TTL. Reuse only the exact
