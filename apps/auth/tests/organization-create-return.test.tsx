@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import {
   creationFixture,
   approval,
@@ -26,31 +26,42 @@ test('a fresh signed-out page keeps its sign-in exit', async () => {
   expect(page.host.querySelector('a[href="/login"]')).not.toBeNull();
 });
 
-test('read Retry is separate from same-key command retry and a later refusal keeps unknown history', async () => {
+test('checking current status is separate from same-key command retry and a later refusal keeps unknown history', async () => {
   const page = await open(<NewOrganizationPage initial={initial} />, body);
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   const original = readPendingAccountOperationStepUp()!;
+  expect(original.submitted).toBe(true);
+  expect(page.host.textContent).toContain('creation result is still unknown');
   await flush(() => button(page.host, 'Hide explanation')!.click());
   expect(readPendingAccountOperationStepUp()).toEqual(original);
   expect(button(page.host, 'Retry this creation')).toBeDefined();
   expect(page.calls).toHaveLength(2);
   expect(page.host.textContent).not.toContain('creation result is still unknown');
-  expect(button(page.host, 'Check current advice')).not.toBeNull();
-  expect(button(page.host, 'Retry this creation')).not.toBeNull();
-
-  await flush(() => button(page.host, 'Check current advice')!.click());
+  const request = spyOn(globalThis, 'fetch');
+  try {
+    await flush(() => button(page.host, 'Check current status')!.click());
+    expect(request.mock.calls.map(([input, init]) => [String(input), init?.method ?? 'GET'])).toEqual([
+      ['/session', 'GET'],
+    ]);
+  } finally {
+    request.mockRestore();
+  }
   expect(page.calls).toHaveLength(2);
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
   expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('team-alpha');
   expect(page.host.querySelector<HTMLInputElement>('input')!.readOnly).toBe(true);
   expect(document.activeElement).toBe(page.host.querySelector('[data-organization-create-return]'));
 
   await flush(() => button(page.host, 'Retry this creation')!.click());
+  expect(page.calls[2]!.path).toBe('/account-operations/approve');
   expect(page.calls[2]!.body.operationKey).toBe(original.operationKey);
   expect(page.calls[2]!.body.operation).toEqual(original.operation);
   await flush(() => page.calls[2]!.resolve(approval()));
+  expect(page.calls[3]!.path).toBe('/account-operations/execute');
+  expect(page.calls[3]!.body).toMatchObject({ operationKey: original.operationKey, operation: original.operation });
   await flush(() =>
     page.calls[3]!.resolve(
       Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
@@ -58,7 +69,8 @@ test('read Retry is separate from same-key command retry and a later refusal kee
   );
   expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(page.host.textContent).toContain('Creation was refused');
-  expect(readPendingAccountOperationStepUp()?.operationKey).toBe(original.operationKey);
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
+  expect(page.calls).toHaveLength(4);
 });
 
 test('refused generic key storage keeps the exact unknown creation descriptor and dispatches no retry', async () => {
@@ -70,7 +82,7 @@ test('refused generic key storage keeps the exact unknown creation descriptor an
   const descriptor = readPendingAccountOperationStepUp();
   const refusedBytes = '{';
   window.sessionStorage.setItem('rezics.account-operation.pending', refusedBytes);
-  await flush(() => button(page.host, 'Check current advice')!.click());
+  await flush(() => button(page.host, 'Check current status')!.click());
   await flush(() => button(page.host, 'Retry this creation')!.click());
 
   expect(page.calls).toHaveLength(2);
@@ -122,7 +134,7 @@ for (const storageChange of ['replaced', 'missing', 'malformed'] as const)
     expect(page.host.textContent).not.toContain('team-alpha');
     expect(page.host.textContent).not.toContain('other-team');
     expect(button(page.host, 'Retry this creation')).toBeUndefined();
-    expect(button(page.host, 'Check current advice')).not.toBeNull();
+    expect(button(page.host, 'Check current status')).toBeDefined();
     if (storageChange === 'replaced')
       expect(readPendingAccountOperationStepUp()).toMatchObject({
         accountId: 'replacement-account',
