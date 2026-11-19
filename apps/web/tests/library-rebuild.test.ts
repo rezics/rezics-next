@@ -213,7 +213,7 @@ const coverSummary = {
   media: coverMedia,
   width: 600,
   height: 900,
-  placeholder: { thumbhash: 'YJqGPQw7sFlslqhFafSE+Q6oJ1h2iHB2Rw==', color: '#3a4a73' },
+  placeholder: { color: '#3a4a73' },
   variants: [
     { format: 'avif', width: 96 },
     { format: 'webp', width: 96 },
@@ -237,6 +237,8 @@ function summary(n: number, label: string, withCover: boolean) {
     cover: withCover ? coverSummary : null,
   };
 }
+const bookType = releaseRecording.release.types['schema:Book'];
+const bookProfile = releaseRecording.release.libraryProfiles['book.reading'];
 const zebra = summary(11, 'Zebra story', true);
 const apple = summary(12, 'Apple story', false);
 const hiddenSubjectId = 'unavailable-subject-should-not-appear';
@@ -521,13 +523,23 @@ const fake = Bun.serve({
       return json({
         digest: 'rebuild-1',
         release: {
-          types: {
-            'schema:Book': { labels: { en: 'book', 'zh-Hans': '书籍' }, library: { profileId: 'legacy-fixed-v1' } },
-          },
+          types: { 'schema:Book': bookType },
           properties: {},
-          libraryProfiles: { 'legacy-fixed-v1': releaseRecording.release.libraryProfiles['legacy-fixed-v1'] },
+          libraryProfiles: { [bookProfile.id]: bookProfile },
         },
       });
+    if (decodeURIComponent(url.pathname) === '/v1/definitionTypes/schema:Book') {
+      const locale = url.searchParams.get('locale') === 'zh-Hans' ? 'zh-Hans' : 'en';
+      return json({
+        typeId: 'schema:Book',
+        releaseDigest: 'rebuild-1',
+        label: bookType.labels[locale],
+        language: locale,
+        description: bookType.descriptions[locale],
+        descriptionLanguage: locale,
+        definition: bookType,
+      });
+    }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     const body = request.method === 'PUT' || request.method === 'POST' ? await request.json().catch(() => null) : null;
     calls.push({
@@ -680,7 +692,7 @@ const copyRows = 'li[data-slot="list-row"]:has([data-copy-edit-id])';
 const progressRows = '[data-progress-session-id]';
 const followingRows = 'ul[aria-label="Following"] > li';
 const covers = (markup: string) => [...markup.matchAll(/data-slot="cover"/g)].length;
-const text = (markup: string) => markup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+const text = (markup: string) => parser.parseFromString(markup, 'text/html').body.textContent.replace(/\s+/g, ' ');
 const withTitle = (list: string[], title: string) => list.find((item) => item.includes(title))!;
 /** A subject with an image draws it from the site's media route; a subject without one draws its placeholder. */
 function expectImage(markup: string) {
@@ -718,7 +730,7 @@ afterAll(async () => {
 });
 
 test(
-  'a library entry shows its cover, title and last update on a card, and as a compact row with the localized type, a status chip and an item menu with its other actions',
+  'a library entry shows its cover and title on a card and in a compact row with localized type, status, last update and an item menu',
   async () => {
     reset();
     const cookie = await alice();
@@ -730,7 +742,6 @@ test(
     expectImage(withTitle(cards, 'Zebra story'));
     expect(withTitle(cards, 'Zebra story')).toContain('data-ratio="5:7"');
     expect(withTitle(cards, 'Zebra story')).toContain(`href="/en/subjects/${zebra.id}/${slug('Zebra story')}"`);
-    expect(withTitle(cards, 'Zebra story')).toContain(`datetime="${stamp}"`);
     expectPlaceholder(withTitle(cards, 'Apple story'));
     expectPlaceholder(withTitle(cards, 'Unavailable'));
     expect(main(gridPage.html).innerHTML).not.toContain(hiddenSubjectId);
@@ -746,6 +757,7 @@ test(
     expect(first).toContain(`href="/en/subjects/${zebra.id}/${slug('Zebra story')}"`);
     expect(text(first)).toContain('Book');
     expect(text(first)).toContain('Completed');
+    expect(first).toContain(`datetime="${stamp}"`);
     expectPlaceholder(withTitle(list, 'Apple story'));
     const hidden = withTitle(list, 'Unavailable');
     expect(hidden).toContain('data-slot="tombstone"');

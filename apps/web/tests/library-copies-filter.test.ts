@@ -600,6 +600,7 @@ test(
     const { page, access } = await open(path, auth);
     try {
       const main = page.locator('main');
+      await main.getByText('First copy', { exact: true }).waitFor();
       expect(await main.locator(copyRows).count()).toBe(100);
       expect(await main.innerText()).not.toContain('Waiting');
       expect(await main.innerText()).not.toContain('Secret other copy');
@@ -629,21 +630,22 @@ test(
     const { page, origin } = await open(path, await signIn(path));
     try {
       const main = page.locator('main');
-      expect(await main.innerText()).toContain('Your copies of Zebra story');
-      await main.getByRole('button', { name: 'Add a copy', exact: true }).click();
-      const editor = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
-      expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(edition);
-      await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await main.getByText('Your copies of Zebra story', { exact: true }).waitFor();
       await main.getByRole('link', { name: 'All copies', exact: true }).click();
       await page.waitForURL(`${origin}/en/library/copies`);
       await main.getByText('Waiting', { exact: true }).waitFor();
       expect(new URLSearchParams(lists().at(-1)?.search).has('subjectId')).toBe(false);
+
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      await main.getByRole('button', { name: 'Add a copy', exact: true }).click();
+      const editor = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
+      expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(edition);
       for (const subjectId of [unownedEdition, hiddenEdition]) {
         await page.goto(`${origin}/en/library/copies?subjectId=${subjectId}`, { waitUntil: 'networkidle' });
+        await main.getByRole('link', { name: 'All copies', exact: true }).waitFor();
         expect(await main.locator(copyRows).count()).toBe(0);
         expect(await main.innerText()).toContain('Your copies of this edition');
         expect(await main.innerText()).toContain('You have no copies of this edition.');
-        expect(await main.getByRole('link', { name: 'All copies', exact: true }).count()).toBe(1);
         if (subjectId === unownedEdition) {
           await main.getByRole('button', { name: 'Add a copy', exact: true }).click();
           expect(await editor.locator('input[name="subjectId"]').inputValue()).toBe(subjectId);
