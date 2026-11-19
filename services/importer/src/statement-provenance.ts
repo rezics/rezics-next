@@ -2,7 +2,7 @@ import { sourceDigest } from '@rezics/conversion/support';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 
 /** Native read metadata is not part of a submitted statement's semantic provenance. */
-function content(value: unknown) {
+export function statementProvenance(value: unknown) {
   const row = value as BatchStatement;
   const snak = (part: Pick<BatchStatement, 'property' | 'value'>) => ({
     property: { id: typeof part.property === 'string' ? part.property : part.property.id },
@@ -20,7 +20,7 @@ export function sameStatementProvenance(actual: unknown, expected: unknown): boo
     // Keep the importer's bounded descriptor-only admission before reading projected fields.
     sourceDigest(actual);
     sourceDigest(expected);
-    return sourceDigest(content(actual)) === sourceDigest(content(expected));
+    return sourceDigest(statementProvenance(actual)) === sourceDigest(statementProvenance(expected));
   } catch {
     return false;
   }
@@ -32,8 +32,8 @@ export function showcaseStatementMatches(actual: unknown, expected: BatchStateme
   try {
     sourceDigest(actual);
     sourceDigest(expected);
-    const reviewed = content(actual);
-    const submitted = content(expected);
+    const reviewed = statementProvenance(actual);
+    const submitted = statementProvenance(expected);
     const stored = reviewed.value.type === 'value' ? reviewed.value.content : null;
     const authored = submitted.value.type === 'value' ? submitted.value.content : null;
     if (isObject(stored) && typeof stored.document === 'string' && isObject(authored) && isObject(authored.document)) {

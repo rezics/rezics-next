@@ -441,13 +441,52 @@ test('walk seed env uses native Auth transport and keeps the issuer for CSRF aud
 });
 
 test('catalogue walks read the first seed, replay on request, then mount the first selection', async () => {
+  const originalPerson = 'original-person';
+  const canonicalPerson = 'canonical-person';
   const report = {
     showcase: {
       status: 'published',
       manifest: { digest: 'a'.repeat(64) },
-      published: journeyTargets.map(({ sourceKey }) => publishedRow(sourceKey)),
+      published: [
+        ...journeyTargets.map(({ sourceKey }) => publishedRow(sourceKey)),
+        {
+          ...publishedRow('s224', 'vndb'),
+          nativeType: 'schema:Person',
+          subjectId: originalPerson,
+          readerRoute: `/subjects/${originalPerson}/name`,
+        },
+      ].map((row) => ({
+        ...row,
+        assertions: row.assertions.map(({ citations }) => ({
+          property: 'schema:name',
+          candidateId: 'candidate',
+          digest: 'candidate-digest',
+          citations,
+          adoption: { head: 1, rank: 'normal', candidateId: 'candidate' },
+          readback: {
+            id: 'candidate',
+            property: { id: 'schema:name' },
+            rank: 'normal',
+            value: { type: 'value', content: row.sourceKey },
+            references: [
+              { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citations[0] } }] },
+            ],
+            rezics: { revision: 1 },
+          },
+        })),
+      })),
     },
     sourceDigests: { 'vndb/vn.header': 'b'.repeat(64) },
+    personMerge: {
+      state: 'published',
+      identities: [
+        {
+          boundSubjectId: originalPerson,
+          currentSubjectId: canonicalPerson,
+          identity: { source: 'vndb', externalId: 's224', property: 'wdt:P3180', value: 's224' },
+        },
+      ],
+    },
   };
   const fresh = publishedWalkSeed(report);
   expect(() => publishedWalkSeed({ ...report, showcase: { ...report.showcase, status: 'incomplete' } })).toThrow(
@@ -455,8 +494,33 @@ test('catalogue walks read the first seed, replay on request, then mount the fir
   );
   expect(() => publishedWalkSeed({ ...report, sourceDigests: undefined })).toThrow('exact source digests');
   const replay = structuredClone(report);
+  replay.showcase.manifest.digest = 'c'.repeat(64);
+  replay.showcase.published.reverse();
+  const person = replay.showcase.published[0]!;
+  person.readerRoute = `/subjects/${canonicalPerson}/name`;
+  const assertion = person.assertions[0]!;
+  assertion.candidateId = assertion.readback.id = 'reissued-candidate';
+  assertion.adoption = { head: 2, rank: 'normal', candidateId: assertion.candidateId };
+  assertion.readback.rezics.revision = 2;
   assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay));
-  replay.showcase.published[0]!.subjectId = 'different-native-id';
+
+  assertion.readback.value.content = 'different name';
+  expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow(
+    'public facts or provenance for vndb:s224',
+  );
+  assertion.readback.value.content = person.sourceKey;
+  assertion.readback.references[0]!.parts[0]!.value.content = 'https://example.org/changed-source';
+  expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow(
+    'public facts or provenance for vndb:s224',
+  );
+  assertion.readback.references[0]!.parts[0]!.value.content = assertion.citations[0];
+  person.readerRoute = '/subjects/unrelated-person/name';
+  expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow('unexpected reader Subject');
+  replay.personMerge.identities[0]!.currentSubjectId = 'unrelated-person';
+  expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow(
+    'changed the public reader Subject',
+  );
+  person.subjectId = 'different-native-id';
   expect(() => assertUnchangedSeedReopen(fresh, publishedWalkSeed(replay))).toThrow('published Subject IDs');
 
   for (const [args, expected] of [
