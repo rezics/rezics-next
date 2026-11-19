@@ -12,6 +12,7 @@ import {
   sourceSpan,
 } from '../../src/search/engine-analysis.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
+import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 
 function client(
   request: (
@@ -45,6 +46,7 @@ async function unavailable(run: () => Promise<unknown>) {
   expect(error).toBeInstanceOf(SearchUnavailableError);
   expect(error).not.toBeInstanceOf(OpenSearchError);
   expect(error).not.toHaveProperty('body');
+  expect(COMMAND_STEP_RETRIES.shouldRetry(error)).toBe(false);
   return error as SearchUnavailableError;
 }
 
@@ -95,6 +97,27 @@ test('malformed analyzer replies are unavailable without retaining engine bodies
   );
   expect(wrapped.message).toBe('OpenSearch analysis returned HTTP 400');
   expect(JSON.stringify(wrapped)).not.toContain('index-internal');
+});
+
+test('only the transient breaker HTTP response enters Work backoff', async () => {
+  const type = 'circuit_breaking_exception';
+  for (const body of [
+    undefined,
+    { error: 'Too many requests' },
+    { error: { type } },
+    { error: { type, durability: 'PERMANENT' } },
+    { error: { type: 'illegal_argument_exception', durability: 'TRANSIENT' } },
+    { error: { root_cause: [{ type, durability: 'TRANSIENT' }] } },
+  ]) {
+    await unavailable(() => analyze(body, 429));
+  }
+  const transient = { error: { type, durability: 'TRANSIENT' } };
+  await unavailable(() => analyze(transient, 400));
+  await unavailable(() => analyze(transient, 200));
+  const error: unknown = await analyze(transient, 429).catch((value: unknown) => value);
+  expect(error).toBeInstanceOf(SearchUnavailableError);
+  expect(error).toMatchObject({ reason: 'overloaded' });
+  expect(COMMAND_STEP_RETRIES.shouldRetry(error)).toBe(true);
 });
 
 test('multi-value analysis restores each duplicate and empty value with local UTF-16 offsets and positions', async () => {
