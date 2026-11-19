@@ -91,11 +91,12 @@ function transition(type: 'pagehide' | 'pageshow') {
 // This exposes callbacks after route work finishes, without a parallel controller.
 function holdReads(router: ReturnType<typeof createRouter>) {
   const invalidate = router.invalidate.bind(router);
-  const completions: { resolve(): void; reject(error: Error): void }[] = [];
+  const completions: { read: Promise<void>; resolve(): void; reject(error: Error): void }[] = [];
   router.invalidate = (options) => {
     const read = invalidate(options);
     return new Promise<void>((resolve, reject) => {
       completions.push({
+        read,
         resolve: () => {
           void read.then(resolve, reject);
         },
@@ -141,7 +142,17 @@ function recoveryFixture() {
   const replacement = createRoute({
     getParentRoute: () => authRoot,
     path: '/next',
-    component: () => <h1>Next page</h1>,
+    component: function NextPage() {
+      const heading = useRef<HTMLHeadingElement>(null);
+      useLayoutEffect(() => {
+        heading.current?.focus();
+      }, []);
+      return (
+        <h1 ref={heading} tabIndex={-1}>
+          Next page
+        </h1>
+      );
+    },
   });
   const { router, history } = makeRouter('/return?token=private', [route, replacement]);
   const completions = holdReads(router);
@@ -190,11 +201,14 @@ test('cached return retires the pending read; a late completion cannot reset or 
     enabled();
     await act(async () => retry());
     expect(f.completions).toHaveLength(2);
+    await act(async () => f.completions[1]!.read);
+    expect(document.querySelectorAll('input[aria-label="Current input"]')).toHaveLength(0);
+    expect(document.activeElement === document.querySelector('.auth-route-failure [role="status"]')).toBe(true);
     await act(async () => f.completions[1]!.resolve());
-    await act(async () => waitForText(page.host, 'Current page'));
+    await waitForText(page.host, 'Current page');
     expect(document.querySelectorAll('h1')).toHaveLength(1);
     expect(document.querySelector('.auth-route-failure')).toBeNull();
-    expect(document.activeElement === document.querySelector('input')).toBe(true);
+    expect(document.activeElement === document.querySelector('input[aria-label="Current input"]')).toBe(true);
     expect(f.reads()).toBe(3);
     expect(f.commands()).toBe(0);
   } finally {
@@ -202,7 +216,7 @@ test('cached return retires the pending read; a late completion cannot reset or 
   }
 });
 
-test('old rejection cannot clear a fresh read gate; failed render uses the latest mounted reset and later recovers', async () => {
+test('old rejection cannot clear a fresh read gate; a repeated render failure stays retryable', async () => {
   const f = recoveryFixture();
   const page = await mount(f.router);
   try {
@@ -217,13 +231,13 @@ test('old rejection cannot clear a fresh read gate; failed render uses the lates
     await act(async () => retry());
     expect(f.completions).toHaveLength(2);
     await act(async () => f.completions[1]!.resolve());
-    await act(async () => waitForText(page.host, m.auth_route_failure_failed_title()));
+    await waitForText(page.host, m.auth_route_failure_failed_title());
     enabled();
     expect(document.documentElement.textContent).not.toContain('private');
     f.repair();
     await act(async () => retry());
     await act(async () => f.completions[2]!.resolve());
-    await act(async () => waitForText(page.host, 'Current page'));
+    await waitForText(page.host, 'Current page');
     expect(document.querySelector('.auth-route-failure')).toBeNull();
     expect(f.commands()).toBe(0);
   } finally {
@@ -243,7 +257,9 @@ test('navigation after suspension owns the page even when a retired invalidation
       transition('pageshow');
     });
     await act(async () => f.completions[0]!.reject(new Error('late private failure')));
-    expect(document.querySelector('h1')?.textContent).toBe('Next page');
+    const heading = document.querySelector('h1');
+    expect(heading?.textContent).toBe('Next page');
+    expect(document.activeElement === heading).toBe(true);
     expect(document.querySelector('.auth-route-failure')).toBeNull();
     expect(f.completions).toHaveLength(1);
     expect(f.commands()).toBe(0);
