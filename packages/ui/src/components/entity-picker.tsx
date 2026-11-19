@@ -324,6 +324,7 @@ export function EntityPicker({
           }
         }}
         itemToStringLabel={(subject: EntityPickerSubject) => subject.title}
+        itemToStringValue={(subject: EntityPickerSubject) => subject.title}
         isItemEqualToValue={(a: EntityPickerSubject, b: EntityPickerSubject) => a.id === b.id}
       >
         <ComboboxInput
