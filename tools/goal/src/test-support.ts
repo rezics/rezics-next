@@ -905,20 +905,21 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     }).run();
     await job.drain();
   }
-  function advanceDev(file: string, content = file) {
-    ensureDev();
-    const tree = join(h.settings.stateDirectory, `dev-${crypto.randomUUID()}`);
-    repositoryGit(h.root, 'worktree', 'add', '--detach', tree, 'dev');
+  function advanceBranch(branch: 'dev' | 'stabilize', file: string, content = file) {
+    const base = head(branch);
+    const tree = join(h.settings.stateDirectory, `${branch}-${crypto.randomUUID()}`);
+    repositoryGit(h.root, 'worktree', 'add', '--detach', tree, base);
     try {
       mkdirSync(dirname(join(tree, file)), { recursive: true });
       writeFileSync(join(tree, file), content);
       repositoryGit(tree, 'add', '--', file);
       repositoryGit(tree, 'commit', '-qm', `Change ${file}`);
-      repositoryGit(h.root, 'update-ref', 'refs/heads/dev', repositoryGit(tree, 'rev-parse', 'HEAD'), head());
+      const commit = repositoryGit(tree, 'rev-parse', 'HEAD');
+      repositoryGit(h.root, 'update-ref', `refs/heads/${branch}`, commit, base);
+      return commit;
     } finally {
       repositoryGit(h.root, 'worktree', 'remove', '--force', tree);
     }
-    return head();
   }
   return {
     ...h,
@@ -931,7 +932,11 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     dispatch,
     seed,
     train,
-    advanceDev,
+    advanceBranch,
+    advanceDev(file: string, content = file) {
+      ensureDev();
+      return advanceBranch('dev', file, content);
+    },
     async start(task: Task) {
       await job.start(task.id);
       await job.drain();
