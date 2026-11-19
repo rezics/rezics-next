@@ -1,6 +1,4 @@
 import { useMemo, useState } from 'react';
-import { createKernelClient } from '@rezics/client';
-import { changeContribution, readContributionAvailability } from '../features/catalogue/contribution-lifecycle';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ContributionLifecycle } from '../features/catalogue/contribution-lifecycle-view';
@@ -14,10 +12,14 @@ import { m } from '../paraglide/messages.js';
 import recording from '../kernel/recorded/subject-page.json';
 import { AppShell } from '../shell/shell';
 import { pagePaths, PatternStory } from './page';
+import { openReadingOverviewTools } from './reading-overview-tools';
 
 function ContributionStory({ scenario = 'ready' }: { scenario?: ContributionScenario }) {
   const locale = getLocale();
-  const fixture = useMemo(() => contributionFixture(scenario, locale), [scenario, locale]);
+  const fixture = useMemo(
+    () => contributionFixture(scenario, locale, { admitInitialWithdrawal: true }),
+    [scenario, locale],
+  );
   const [clearedFor, setClearedFor] = useState<string>();
   const identity = `${scenario}:${locale}`;
   const cleared = clearedFor === identity;
@@ -84,10 +86,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function withdraw(canvasElement: HTMLElement) {
+  await openReadingOverviewTools(canvasElement);
   const canvas = within(canvasElement);
-  const region = within(await canvas.findByRole('region', { name: m.contribution_title() }));
-  const button = region.getByRole('button', { name: m.contribution_withdraw() });
-  await expect(button).toBeVisible();
+  const title = m.contribution_title();
+  const region = within(
+    await canvas.findByRole('region', { name: (name) => name === title || name.startsWith(`${title} `) }),
+  );
+  const button = await region.findByRole('button', { name: m.contribution_withdraw() });
+  await waitFor(() => expect(button).toBeEnabled());
   await userEvent.click(button);
   const dialog = await confirmationDialog(canvasElement);
   expect(dialog.getByText(m.contribution_confirm_delete())).toBeTruthy();
@@ -142,7 +148,7 @@ export const Expired: Story = {
   play: async ({ canvasElement }) => {
     const { region } = await withdraw(canvasElement);
     await restore(canvasElement, region);
-    expect((await region.findAllByText(m.contribution_expired())).length).toBeGreaterThan(0);
+    expect(await region.findByRole('alert')).toHaveTextContent(m.contribution_conflict());
     expect(region.queryByRole('button', { name: m.contribution_restore() })).toBeNull();
     expect(region.queryByRole('button', { name: m.contribution_retry() })).toBeNull();
   },
@@ -173,8 +179,10 @@ export const UncertainRetry: Story = {
 export const Loading: Story = {
   args: { scenario: 'loading' },
   play: async ({ canvasElement }) => {
-    const { region } = await withdraw(canvasElement);
-    expect(region.getByText(m.contribution_loading())).toBeTruthy();
+    await openReadingOverviewTools(canvasElement);
+    const region = within(await within(canvasElement).findByRole('region', { name: m.contribution_title() }));
+    expect(await region.findByText(m.contribution_loading())).toBeVisible();
+    expect(region.queryByRole('button', { name: m.contribution_withdraw() })).toBeNull();
   },
 };
 export const Empty: Story = { args: { scenario: 'empty' } };
@@ -185,35 +193,16 @@ export const CurrentWithholding: Story = {
     await restore(canvasElement, region);
     expect(await region.findByText(m.contribution_restored())).toBeTruthy();
     expect(region.getByText(m.contribution_candidate_unconfirmed())).toBeTruthy();
+    expect(region.queryByRole('button', { name: m.contribution_withdraw() })).toBeNull();
   },
 };
 
-// Additional constructed interface examples. All plays, native and geometry assertions are UNRUN.
-// Bounded absence and withholding deliberately share the same honest unconfirmed presentation.
-type FamilyScenario = ContributionScenario | 'bounded-absence';
-function FamilyPanel({ scenario }: { scenario: FamilyScenario }) {
+function FamilyPanel({ scenario, position }: { scenario: ContributionScenario; position: number }) {
   const locale = getLocale();
-  const fixture = useMemo(() => {
-    const base = contributionFixture(scenario === 'bounded-absence' ? 'ready' : scenario, locale);
-    if (scenario !== 'bounded-absence') return base;
-    const client = createKernelClient('https://contribution.test', {
-      fetch: (async (input, init) => {
-        const request = input instanceof Request ? input : new Request(String(input), init);
-        if (request.method === 'GET' && new URL(request.url).pathname.endsWith('/candidates'))
-          return Response.json({ candidates: [], adoption: null, next: null });
-        return base.fetcher(request);
-      }) as typeof fetch,
-    });
-    return {
-      ...base,
-      transport: {
-        change: (command: Parameters<typeof changeContribution>[2]) =>
-          changeContribution(client, 'Bearer fixture', command),
-        read: (address: Parameters<typeof readContributionAvailability>[2]) =>
-          readContributionAvailability(client, 'Bearer fixture', address),
-      },
-    };
-  }, [scenario, locale]);
+  const fixture = useMemo(
+    () => contributionFixture(scenario, locale, { admitInitialWithdrawal: true }),
+    [scenario, locale],
+  );
   const [cleared, setCleared] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid={`family-${scenario}`}>
@@ -227,11 +216,12 @@ function FamilyPanel({ scenario }: { scenario: FamilyScenario }) {
         locale={locale}
         transport={fixture.transport}
         onClear={() => setCleared(true)}
+        landmarkLabel={`${m.contribution_title()} ${position}`}
       />
     </div>
   );
 }
-function ContributionFamilyStory({ scenarios }: { scenarios: FamilyScenario[] }) {
+function ContributionFamilyStory({ scenarios }: { scenarios: ContributionScenario[] }) {
   const page = structuredClone(recording) as unknown as SubjectPageData;
   return (
     <SubjectPage
@@ -242,8 +232,8 @@ function ContributionFamilyStory({ scenarios }: { scenarios: FamilyScenario[] })
       tabLabels={viewTabLabels()}
       curation={
         <div className="grid min-w-0 gap-6">
-          {scenarios.map((scenario) => (
-            <FamilyPanel key={`${scenario}:${getLocale()}`} scenario={scenario} />
+          {scenarios.map((scenario, index) => (
+            <FamilyPanel key={`${scenario}:${getLocale()}`} scenario={scenario} position={index + 1} />
           ))}
         </div>
       }
@@ -254,10 +244,11 @@ function ContributionFamilyStory({ scenarios }: { scenarios: FamilyScenario[] })
 export const IndependentPanels: Story = {
   render: () => <ContributionFamilyStory scenarios={['uncertain', 'ready']} />,
   play: async ({ canvasElement }) => {
+    await openReadingOverviewTools(canvasElement);
     const canvas = within(canvasElement);
     const first = canvas.getByTestId('family-uncertain');
     const second = canvas.getByTestId('family-ready');
-    await userEvent.click(within(first).getByRole('button', { name: m.contribution_withdraw() }));
+    await userEvent.click(await within(first).findByRole('button', { name: m.contribution_withdraw() }));
     await userEvent.click(
       (await confirmationDialog(canvasElement)).getByRole('button', { name: m.candidate_cancel() }),
     );
@@ -301,33 +292,37 @@ export const LongLocalizedRecoveryAndConfirmation: Story = {
 };
 
 export const DistinctAvailabilityOutcomes: Story = {
-  render: () => <ContributionFamilyStory scenarios={['ready', 'bounded-absence', 'withheld', 'expired']} />,
+  render: () => <ContributionFamilyStory scenarios={['ready', 'withheld', 'expired']} />,
   parameters: {
     docs: {
       description: {
-        story:
-          'Available, bounded-page absence, current withholding and expired restoration use independent native-shaped fixture seams. Absence and withholding disclose no private value and neither asserts deletion. All assertions UNRUN.',
+        story: 'Available, withheld and conflicting restoration outcomes use independent native lifecycle fixtures.',
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    for (const scenario of ['ready', 'bounded-absence', 'withheld', 'expired']) {
+    for (const scenario of ['ready', 'withheld', 'expired']) {
       const panel = canvas.getByTestId(`family-${scenario}`);
       const { region } = await withdraw(panel);
       await restore(panel, region);
       if (scenario === 'expired') {
-        expect((await region.findAllByText(m.contribution_expired())).length).toBeGreaterThan(0);
+        expect(await region.findByRole('alert')).toHaveTextContent(m.contribution_conflict());
         expect(region.queryByRole('button', { name: m.contribution_restore() })).toBeNull();
       } else {
         expect(await region.findByText(m.contribution_restored())).toBeTruthy();
-        expect(region.getByText(m.contribution_subject_available())).toBeTruthy();
+        expect(
+          region.getByText(
+            scenario === 'ready' ? m.contribution_subject_available() : m.contribution_read_unavailable(),
+          ),
+        ).toBeTruthy();
         expect(
           region.getByText(
             scenario === 'ready' ? m.contribution_candidate_available() : m.contribution_candidate_unconfirmed(),
           ),
         ).toBeTruthy();
-        expect(region.getByText(m.contribution_unselected())).toBeTruthy();
+        if (scenario === 'ready') expect(region.getByText(m.contribution_unselected())).toBeTruthy();
+        else expect(region.queryByRole('button', { name: m.contribution_withdraw() })).toBeNull();
       }
       expect(within(panel).queryByTestId('contribution-private-value')).toBeNull();
     }

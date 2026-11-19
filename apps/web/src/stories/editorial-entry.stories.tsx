@@ -5,13 +5,16 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { SubjectFrame } from '../features/pages/subject-frame';
 import { viewTabLabels } from '../features/pages/route-support';
 import { SubjectTermsPage } from '../features/catalogue/subject-terms-page';
+import { prepareBookShowcase } from '../kernel/fake/book-showcase';
 import { editorialEntryFailure, editorialSubject } from '../kernel/fake/editorial-entry';
+import { book } from '../kernel/fixtures/book-showcase';
 import { pageText } from '../features/pages/data';
 import { AppShell } from '../shell/shell';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { openReadingOverviewTools } from './reading-overview-tools';
 
 type Scenario = 'ready' | 'signed-out' | 'denied' | 'unavailable';
 function ContributeStory({ scenario = 'ready' }: { scenario?: Scenario }) {
@@ -65,28 +68,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function open(canvasElement: HTMLElement) {
+async function open(canvasElement: HTMLElement, visitor: 'signed-in' | 'signed-out' = 'signed-in') {
   await pageReady({ canvasElement });
   const canvas = within(canvasElement);
-  const trigger = await canvas.findByRole('button', { name: m.contribute_title() });
+  if (visitor === 'signed-in') {
+    await waitFor(() => expect(canvasElement.querySelector('[data-session-slot]')).toBeInTheDocument());
+  } else {
+    await canvas.findByRole('link', { name: m.account_sign_in(), exact: true });
+  }
+  await openReadingOverviewTools(canvasElement);
+  const findTrigger = () => canvas.findByRole('button', { name: m.contribute_title(), exact: true });
+  const trigger = await findTrigger();
   trigger.focus();
+  await expect(trigger).toHaveFocus();
   await userEvent.keyboard('{Enter}');
   const body = within(canvasElement.ownerDocument.body);
-  await waitFor(() =>
-    expect(body.queryByRole('dialog', { name: m.contribute_title() }) ?? body.queryByRole('menu')).toBeVisible(),
+  const panel = await waitFor(
+    () => body.queryByRole('dialog', { name: m.contribute_title() }) ?? body.getByRole('menu'),
   );
-  return { trigger, body };
+  return { body, panel, findTrigger };
 }
-async function group(canvasElement: HTMLElement, label: string) {
-  const { body, trigger } = await open(canvasElement);
-  const sheet = body.queryByRole('dialog', { name: m.contribute_title() });
-  const control = sheet
-    ? within(sheet).getByRole('button', { name: label })
-    : body.getByRole('menuitem', { name: label });
+async function group(canvasElement: HTMLElement, label: string, visitor?: 'signed-in' | 'signed-out') {
+  const { body, panel } = await open(canvasElement, visitor);
+  const sheet = panel.getAttribute('role') === 'dialog';
+  const control = within(panel).getByRole(sheet ? 'button' : 'menuitem', { name: label });
   control.focus();
   if (sheet) await userEvent.keyboard('{Enter}');
   else await userEvent.keyboard('{ArrowRight}');
-  return { body, trigger };
+  return { body };
 }
 export const Ready: Story = {};
 export const Creation: Story = {
@@ -114,6 +123,9 @@ export const Editing: Story = {
   },
 };
 export const Review: Story = {
+  render: () => (
+    <PageStory visitor="Signed In" path={subjectHref(book, getLocale()).href} prepareFixture={prepareBookShowcase} />
+  ),
   play: async ({ canvasElement }) => {
     const { body } = await group(canvasElement, m.contribute_review());
     await waitFor(() =>
@@ -143,15 +155,17 @@ export const Explanation: Story = {
 };
 export const Keyboard: Story = {
   play: async ({ canvasElement }) => {
-    const { trigger } = await open(canvasElement);
+    const { panel, findTrigger } = await open(canvasElement);
+    await waitFor(() => expect(panel).not.toHaveAttribute('data-starting-style'));
     await userEvent.keyboard('{Escape}');
+    const trigger = await findTrigger();
     await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 export const SignedOut: Story = {
   args: { scenario: 'signed-out' },
   play: async ({ canvasElement }) => {
-    const { body } = await group(canvasElement, m.contribute_edit());
+    const { body } = await group(canvasElement, m.contribute_edit(), 'signed-out');
     await waitFor(() => {
       const entry =
         body.queryByRole('link', { name: m.catalogue_terms_title() }) ??
