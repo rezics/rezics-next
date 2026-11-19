@@ -415,13 +415,15 @@ export function Menu({
                 return;
               }
               if (ignoreOpeningDismiss(details.reason)) return;
-              const target = details.event.target;
-              if (details.reason === 'outside-press' && target instanceof Element && target.closest('nav a[href]')) {
-                details.cancel();
+              if (details.reason === 'outside-press' || details.reason === 'focus-out') {
+                // A focus-out event starts inside the popup. Its related target already owns focus.
+                const target =
+                  details.reason === 'focus-out' ? (details.event as FocusEvent).relatedTarget : details.event.target;
+                if (target instanceof Element && target.closest('nav a[href]')) details.cancel();
+                else close(false, false);
                 return;
               }
-              if (details.reason === 'outside-press') close(false, false);
-              else close();
+              close();
             }}
           >
             <PopoverTrigger

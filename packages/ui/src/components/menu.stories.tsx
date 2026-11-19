@@ -72,7 +72,7 @@ export const SubmenuPage: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     await userEvent.click(await screen.findByRole(sheetPresentation() ? 'button' : 'menuitem', { name: 'Status' }));
-    await expect(await screen.findByText('Completed')).toBeVisible();
+    await waitFor(() => expect(screen.getByText('Completed')).toBeVisible());
     if (sheetPresentation()) {
       await userEvent.click(await screen.findByRole('button', { name: 'Back' }));
       await expect(await screen.findByRole('button', { name: 'Status' })).toBeVisible();
@@ -155,7 +155,7 @@ export const DisabledCurrentLink: Story = {
       await expect(disabled).toHaveAttribute('aria-current', 'page');
       await expect(disabled).toHaveAttribute('tabindex', '-1');
       await expect(disabled).not.toHaveAttribute('href');
-      await expect(disabled.querySelector('[data-slot="menu-current-indicator"]')).toBeVisible();
+      await waitFor(() => expect(disabled.querySelector('[data-slot="menu-current-indicator"]')).toBeVisible());
       await expect(getComputedStyle(disabled).opacity).toBe('0.5');
       await userEvent.pointer(
         { target: disabled, keys: sheet ? '[TouchA]' : '[MouseLeft]' },
@@ -170,15 +170,18 @@ export const DisabledCurrentLink: Story = {
       await expect(panel).toBeVisible();
       await expect(window.location.href).toBe(route);
       await expect(enabled).toHaveAttribute('href', '#menu-enabled-destination');
+      // Observe native link activation without navigating Vitest's test iframe.
+      const activate = fn((event: MouseEvent) => event.preventDefault());
+      enabled.addEventListener('click', activate, { once: true });
       enabled.focus();
       await userEvent.keyboard('{Enter}');
+      await expect(activate).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(panel).not.toBeVisible());
-      await waitFor(() => expect(window.location.hash).toBe('#menu-enabled-destination'));
     } finally {
       window.history.replaceState(window.history.state, '', route);
     }
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    await expect(await screen.findByRole(sheet ? 'dialog' : 'menu')).toBeVisible();
+    await waitFor(() => expect(screen.getByRole(sheet ? 'dialog' : 'menu')).toBeVisible());
   },
 };
 
@@ -229,7 +232,7 @@ export const CurrentAndLocalizedEntries: Story = {
       await expect(row).toHaveAccessibleName(name);
       await expect(row).not.toHaveAttribute('aria-checked');
       const marker = row.querySelector('[data-slot="menu-current-indicator"]');
-      await expect(marker).toBeVisible();
+      await waitFor(() => expect(marker).toBeVisible());
       await expect(marker).toHaveAttribute('aria-hidden', 'true');
       return row;
     };
@@ -575,6 +578,8 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
     const outsideControl = canvas.getByRole('button', { name: 'Outside control' });
     await userEvent.click(outsideControl);
     await waitFor(() => expect(reopenedFilter).not.toBeInTheDocument());
+    // Check after any deferred return to the opener has had time to run.
+    await new Promise<void>((resolve) => browser.requestAnimationFrame(() => resolve()));
     await expect(outsideControl).toHaveFocus();
   } finally {
     for (const [button, descriptor] of triggerRects) {

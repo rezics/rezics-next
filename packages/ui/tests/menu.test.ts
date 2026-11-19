@@ -40,11 +40,12 @@ test('package menus share the responsive menu implementation', () => {
 
 test('the menu story demonstrates sheet and dropdown states in both themes', () => {
   const story = read('src/components/menu.stories.tsx');
-  for (const state of ['PlainEntries', 'SubmenuPage', 'RadioEntries', 'DestructiveEntry', 'DesktopDropdown'])
-    expect(story).toContain(state);
-  expect(story).toContain('dark');
-  expect(story).toContain('390');
-  expect(story).toContain('1280');
+  for (const state of ['PlainEntries', 'SubmenuPage', 'RadioEntries', 'DestructiveEntry'])
+    expect(story).toContain(`export const ${state}: Story`);
+  expect(story).toContain("sheetPresentation() ? 'dialog' : 'menu'");
+  expect(story).toContain("value: 'desktop1280'");
+  expect(story).toContain("value: 'phone390'");
+  expect(read('.storybook/preview.tsx')).toContain("items: ['light', 'dark']");
 });
 
 test('menu callers document device, history, selection and destructive behaviour', () => {
