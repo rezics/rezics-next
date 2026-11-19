@@ -1103,13 +1103,13 @@ END; $$;
 
 
 --
--- Name: identity_original_sum(bigint[], bigint[], bigint[], bigint[]); Type: FUNCTION; Schema: core; Owner: -
+-- Name: identity_original_sum(bigint[], bigint[], bigint[], bigint[], bigint[]); Type: FUNCTION; Schema: core; Owner: -
 --
 
-CREATE FUNCTION core.identity_original_sum(a bigint[], b bigint[], c bigint[], d bigint[]) RETURNS bigint[]
+CREATE FUNCTION core.identity_original_sum(a bigint[], b bigint[], c bigint[], d bigint[], e bigint[]) RETURNS bigint[]
     LANGUAGE sql IMMUTABLE
     AS $$
- SELECT array_agg(a[i]+coalesce(b[i],0)+coalesce(c[i],0)+d[i] ORDER BY i)
+ SELECT array_agg(a[i]+coalesce(b[i],0)+coalesce(c[i],0)+d[i]+coalesce(e[i],0) ORDER BY i)
  FROM generate_series(1,8) i
 $$;
 
@@ -2258,7 +2258,9 @@ CREATE TABLE core.identity_history_allocation (
     child_entered boolean DEFAULT false NOT NULL,
     child_ended boolean DEFAULT false NOT NULL,
     next_binding jsonb,
-    CONSTRAINT identity_history_allocation_check CHECK ((parent_work = core.identity_original_sum(local_work, source_work, library_work, transfer_work))),
+    accounts_work bigint[],
+    CONSTRAINT identity_history_allocation_accounts_work_check CHECK (((accounts_work IS NULL) OR (core.identity_original_vector_valid(accounts_work) IS TRUE))),
+    CONSTRAINT identity_history_allocation_check CHECK ((parent_work = core.identity_original_sum(local_work, source_work, library_work, transfer_work, accounts_work))),
     CONSTRAINT identity_history_allocation_check1 CHECK (((NOT child_entered) OR (local_entered AND (source_work IS NOT NULL) AND (library_work IS NOT NULL)))),
     CONSTRAINT identity_history_allocation_check2 CHECK (((NOT child_ended) OR child_entered)),
     CONSTRAINT identity_history_allocation_check3 CHECK (((next_binding IS NULL) OR local_entered)),

@@ -21,6 +21,8 @@ import {
   sumOriginalControl,
   originalWorkVector,
 } from '../../src/access/identity-original-admission.ts';
+import { ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION } from '../../src/access/agent-verification-identity-work.ts';
+import { accessApplication } from '../../src/access/adapters/index.ts';
 
 const f = await createDeletionFixture();
 const single = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 1 });
@@ -60,13 +62,14 @@ async function create() {
 }
 
 test('Changed selected native cursor refuses before affected dispatch and failed validation cannot refill admission', async () => {
-  const account = newId(0x9d20);
+  const account = newId(0);
   const home = partitionOf(routeOf(account)!);
   const job = randomUUID();
   const registry = new HistoryRegistry();
-  await f.admin.query("INSERT INTO core.partition(partition_no,node) VALUES($1,'local') ON CONFLICT DO NOTHING", [
-    home,
-  ]);
+  await f.admin.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES($1,$2,'actor','deleted',$2)",
+    [routeOf(account), account],
+  );
   await f.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now())', [
     routeOf(account),
     account,
@@ -103,15 +106,31 @@ test('Changed selected native cursor refuses before affected dispatch and failed
   const snapshot = async () =>
     (
       await f.admin.query(
-        `SELECT original_id,deadline::text,spent,dispatched,advanced
-    FROM core.identity_history_original WHERE job_id=$1 ORDER BY ordinal`,
+        `SELECT original_id,deadline::text,spent,accounts_work,dispatched,advanced
+    FROM core.identity_history_original JOIN core.identity_history_allocation USING(original_id)
+    WHERE job_id=$1 ORDER BY ordinal`,
         [job],
       )
     ).rows;
   const before = await snapshot();
   expect(before).toHaveLength(1);
+  const accounts = ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION().work;
+  const ports = accessApplication().ports.originalWork;
+  const source = await ports.readHistoryOriginalSourceDeclaration();
+  const library = await ports.readHistoryOriginalLibraryDeclaration();
+  expect(source).not.toBeNull();
+  expect(library).not.toBeNull();
+  expect(before[0]!.accounts_work.map(Number)).toEqual(originalWorkVector(accounts));
   expect(before[0]!.spent.map(Number)).toEqual(
-    originalWorkVector(sumOriginalControl(HISTORY_ORIGINAL_LOCAL_ALLOWANCE, ADDITIONAL_ORIGINAL_TRANSFER_CONTROL)),
+    originalWorkVector(
+      sumOriginalControl(
+        HISTORY_ORIGINAL_LOCAL_ALLOWANCE,
+        ADDITIONAL_ORIGINAL_TRANSFER_CONTROL,
+        accounts,
+        source!.work,
+        library!.work,
+      ),
+    ),
   );
   expect(before[0]!.dispatched).toBe(true);
   await f.admin.query("UPDATE core.preference_history_job SET next_run='-infinity' WHERE job_id=$1", [job]);
