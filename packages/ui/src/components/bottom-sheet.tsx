@@ -62,7 +62,9 @@ export function BottomSheet({
             <DrawerDescription className="min-w-0 px-4 pt-2 [overflow-wrap:anywhere]">{description}</DrawerDescription>
           ) : null}
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${className ?? ''}`}
+            data-slot="bottom-sheet-body"
+            tabIndex={0}
+            className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring ${className ?? ''}`}
           >
             {children}
           </div>

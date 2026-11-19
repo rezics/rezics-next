@@ -54,10 +54,17 @@ function story(kind: Kind, locale: 'en' | 'ja', theme: 'light' | 'dark'): Story 
       await userEvent.click(
         await screen.findByRole('button', { name: locale === 'ja' ? 'シートを開く' : 'Open sheet' }),
       );
-      await expect(
-        await screen.findByRole('dialog', { name: locale === 'ja' ? 'フィルター' : 'Filters' }),
-      ).toBeVisible();
-      await expect(screen.getByRole('button', { name: locale === 'ja' ? '完了' : 'Done' })).toBeVisible();
+      const sheet = await screen.findByRole('dialog', { name: locale === 'ja' ? 'フィルター' : 'Filters' });
+      await expect(sheet).toBeVisible();
+      const done = screen.getByRole('button', { name: locale === 'ja' ? '完了' : 'Done' });
+      await expect(done).toBeVisible();
+      if (kind === 'tall') {
+        const body = sheet.querySelector<HTMLElement>('[data-slot="bottom-sheet-body"]')!;
+        await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+        done.focus();
+        await userEvent.tab();
+        await expect(document.activeElement === body).toBe(true);
+      }
     },
   };
 }
