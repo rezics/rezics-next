@@ -179,7 +179,15 @@ export const SectionHierarchy: Story = {
     const region = canvas.getByRole('region', { name: m.realm_membership_label() });
     await expect(within(region).getByRole('heading', { level: 2, name: m.realm_membership_label() })).toBeVisible();
     const leave = within(region).getByRole('button', { name: m.realm_leave() });
-    await expect(leave).toHaveClass('min-h-11', 'h-auto', 'whitespace-normal');
+    leave.scrollIntoView({ block: 'center' });
+    const bounds = leave.getBoundingClientRect();
+    await expect(getComputedStyle(leave).minHeight).toBe('28px');
+    await expect(bounds.height).toBeGreaterThanOrEqual(28);
+    const centerX = (bounds.left + bounds.right) / 2;
+    for (const y of [bounds.top + 1, bounds.bottom - 1]) {
+      await expect(leave.contains(leave.ownerDocument.elementFromPoint(centerX, y))).toBe(true);
+    }
+    await expect(leave).toHaveClass('h-auto', 'whitespace-normal');
     leave.focus();
     await expect(leave).toHaveFocus();
     await expect(region.querySelector('details')).toBeNull();
