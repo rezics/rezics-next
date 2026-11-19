@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { StackFixtureLifetime } from '../scripts/dev-stack-lifetime.ts';
 import { processIdentity } from '../../../scripts/check-custody.ts';
@@ -9,6 +10,8 @@ import { dirname, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   developmentKeys,
+  resolveFrontendProcess,
+  origins,
   authSecurityScopeConfiguration,
   developmentAuthPageBindings,
   developmentWebsiteScopeConfiguration,
@@ -512,6 +515,24 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
       developmentWebsiteBindings({ website: key }, selected, { AUTH_MANAGEMENT_PAGE_ROUTES: '[]' })
         .AUTH_MANAGEMENT_PAGE_ROUTES,
     ).toBe('[]');
+    const setup = {
+      ...developmentWebsiteBindings({ website: key }, selected),
+      LOCAL_MEDIA_ORIGIN: origins.native,
+      LOCAL_MEDIA_TOKEN: 'media-token',
+    };
+    const webFile = resolve(directory, '.dev.vars');
+    const text = developmentBindings(setup);
+    await privateFile(webFile, text);
+    const env = {
+      REZICS_WALK_IMPORT_CATALOGUE: '1',
+      REZICS_WALK_WEB_BINDINGS_SHA256: createHash('sha256').update(text).digest('hex'),
+    };
+    // An admitted post-replay launch must work without a live database or native SQL preparation.
+    const launch = await resolveFrontendProcess('web', [], true, env, webFile);
+    expect(launch.environment).toMatchObject({ ...setup, AUTH_ORIGIN: origins.native, PUBLIC_ORIGIN: origins.web });
+    expect(launch.command).toContain('apps/web');
+    await privateFile(webFile, developmentBindings({ ...setup, WEBSITE_SCOPES: 'openid' }));
+    await expect(resolveFrontendProcess('web', [], true, env, webFile)).rejects.toThrow('differ from walk setup');
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });
