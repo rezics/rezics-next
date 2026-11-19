@@ -91,7 +91,9 @@ export function OrganizationMembershipRoster({
                           details.querySelector('summary')?.focus();
                       }}
                     >
-                      <summary className="cursor-pointer">{m.auth_members_account_address()}</summary>
+                      <summary className="auth-disclosure pointer-coarse:hitbox-y-2">
+                        {m.auth_members_account_address()}
+                      </summary>
                       <code className="break-all">{holder.accountId}</code>
                     </details>
                   </div>

@@ -41,7 +41,7 @@ export function AccountIdentitySummary({
       {accountId ? (
         email ? (
           <details>
-            <summary>{m.auth_account_identity_details()}</summary>
+            <summary className="auth-disclosure pointer-coarse:hitbox-y-2">{m.auth_account_identity_details()}</summary>
             <p>{m.auth_account_identity_account_id({ accountId })}</p>
           </details>
         ) : (
@@ -49,7 +49,7 @@ export function AccountIdentitySummary({
         )
       ) : null}
       {state.kind === 'unavailable' ? (
-        <Button type="button" variant="outline" onClick={retry}>
+        <Button type="button" variant="outline" className="pointer-coarse:hitbox-y-[9px]" onClick={retry}>
           {m.auth_account_identity_retry()}
         </Button>
       ) : null}

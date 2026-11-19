@@ -49,7 +49,7 @@ export function AccountHomeView({
             </p>
             <p className="auth-home-identity-note">{m.auth_home_identity_note()}</p>
             {state.kind === 'unavailable' ? (
-              <AuthButton type="button" variant="outline" onClick={retry}>
+              <AuthButton type="button" variant="outline" className="pointer-coarse:hitbox-y-[9px]" onClick={retry}>
                 {m.auth_home_identity_retry()}
               </AuthButton>
             ) : null}
@@ -63,7 +63,7 @@ export function AccountHomeView({
                 </div>
               </dl>
               <details>
-                <summary>{m.auth_home_account_id()}</summary>
+                <summary className="auth-disclosure pointer-coarse:hitbox-y-2">{m.auth_home_account_id()}</summary>
                 <p>
                   <code dir="ltr">{state.accountId}</code>
                 </p>
