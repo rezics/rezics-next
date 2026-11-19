@@ -54,8 +54,8 @@ export function startRelays(
   const inFlight = new Set<string>();
   // Each consumer retains its oldest-first scan. A slow consumer can drain that scan
   // while another discovers positions committed since its own last scan.
-  const pending = new Map<Relay, Iterator<RelayHome>>();
-  const priority = new Map<Relay, Iterator<RelayHome>>();
+  const pending = new Map<Relay, IterableIterator<RelayHome>>();
+  const priority = new Map<Relay, IterableIterator<RelayHome>>();
   let preferPriority = true;
   const stopPositions = new Map<string, string>();
   const waiters: (() => void)[] = [];
@@ -126,14 +126,26 @@ export function startRelays(
         if (stopped || paused) break;
         const scanPriority = relay.scanPriority?.bind(relay);
         if (scanPriority) {
-          priority.delete(relay);
           const homes = await withConnection(pool, scanPriority).catch((error: unknown) => {
             if (!(max <= 1 && isPoolAcquireTimeout(error)))
               console.error(`Relay ${relay.consumer} priority scan failed`, error);
             return [];
           });
           if (stopped || paused) break;
-          if (homes.length) priority.set(relay, homes.values());
+          // A batch may outlast several scans. Keep live homes that still await
+          // a turn ahead of homes whose previous batch has already started.
+          const live = new Map(homes.map((home) => [home.partition_no, home]));
+          const waiting: RelayHome[] = [];
+          for (const previous of priority.get(relay) ?? []) {
+            const home = live.get(previous.partition_no);
+            if (home) {
+              waiting.push(home);
+              live.delete(home.partition_no);
+            }
+          }
+          waiting.push(...live.values());
+          if (waiting.length) priority.set(relay, waiting.values());
+          else priority.delete(relay);
           dispatch();
         }
         if (pending.has(relay)) continue;

@@ -622,7 +622,8 @@ per topology home. The native links relay discards expired hints and alternates 
 work while both queues have work. Hints affect scheduling only. The normal event validation, checkpoint advancement,
 freshness checks and final authorization still determine the response.
 A failed hint write can be retried within the original wait. An ordinary relay yields at a committed batch boundary
-when a hint arrives, then resumes from its checkpoint.
+when a hint arrives, then resumes from its checkpoint. When a hinted batch spans several scans, other live hints
+keep their place ahead of a second batch for that home.
 
 Semantic keeps its logical snapshot registry and child deadline narrowing; the shared Kernel bounded read-only lifetime
 owns physical checkout, guarded SQL, transaction cleanup and uncertain-connection discard.

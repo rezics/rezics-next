@@ -114,3 +114,39 @@ test('a newer envelope in a low partition waits behind older pending envelopes w
   expect(order.at(-1)).toBe(newer);
   expect(order.slice(0, older.length)).toEqual(older);
 });
+
+test('refreshing read demand gives a waiting home its turn before repeating a busy home', async () => {
+  const consumer = await consumerAtHead();
+  const homes = [3100, 3101].map((partition_no) => ({ partition_no, position: 1n }));
+  const release = Promise.withResolvers<void>();
+  const order: number[] = [];
+  let scans = 0;
+  const relay = startRelays(
+    pool,
+    [
+      {
+        consumer,
+        async scanPriority() {
+          scans++;
+          return homes;
+        },
+        async run(partition) {
+          order.push(partition);
+          await release.promise;
+          return { status: 'busy' };
+        },
+      },
+    ],
+    { intervalMs: 1, concurrency: 1 },
+  );
+  try {
+    // The first batch still owns the only slot through two complete refreshes.
+    await until(() => scans >= 3);
+    release.resolve();
+    await until(() => order.length >= 2);
+    expect(order.slice(0, 2)).toEqual([3100, 3101]);
+  } finally {
+    release.resolve();
+    await relay.stop();
+  }
+});
