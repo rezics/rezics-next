@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import recording from '../src/kernel/recorded/definitions-release.json';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
+import { parseSearch, stringifySearch } from '../src/router-search';
 import {
   characterPersonHref,
   characterPersonRequest,
@@ -26,6 +27,12 @@ mock.module('../src/search/character-person-selection/server', () => ({
     characterPersonSelectionMetadata({ ...recording.release, digest: 'release' }),
 }));
 mock.module('../src/search/character-person-window-server', () => ({
+  readCharacterPersonKinds: () => {
+    throw new Error('Unexpected kind directory read');
+  },
+  prepareCharacterPersonShare: () => {
+    throw new Error('Unexpected share preparation');
+  },
   readCharacterPerson: ({ data, signal }: { data: { search: CharacterPersonSearch }; signal: AbortSignal }) =>
     new Promise((resolve) =>
       reads.push({
@@ -46,6 +53,11 @@ const globals = {
   Element: window.Element,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   scrollTo: window.scrollTo,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
@@ -54,7 +66,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
-const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, defaultParseSearch } =
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { CharacterPersonSearchPage } = await import('../src/search/character-person-search');
 const { sessionQuery } = await import('../src/session/query');
@@ -69,13 +81,14 @@ let router: ReturnType<typeof createRouter>;
 let pageLocale = 'en';
 const originalFetch = globalThis.fetch;
 const work = '018f0000-0000-7000-8000-00a000000001';
+const secondWork = '018f0000-0000-7000-8000-00a000000002';
 const role = '018f0000-0000-7000-8000-00a000000003';
 const operand = (mode = 'people') =>
   parseCharacterPersonSearch(
     {
       mode,
       name: 'Aki',
-      work: [work],
+      work: [secondWork, work],
       ...(mode === 'people' ? { role } : {}),
       language: ['ja', 'en'],
       threshold: '2',
@@ -142,6 +155,8 @@ async function show(href = characterPersonHref('en', operand().search)) {
   router = createRouter({
     routeTree: parent.addChildren([route, subject]),
     history: createBrowserHistory({ window: window as unknown as globalThis.Window }),
+    parseSearch,
+    stringifySearch,
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     defaultViewTransition: false,
   });
@@ -178,14 +193,16 @@ test.each(['people', 'characters'])(
     expect(reads).toHaveLength(1);
     await finish();
     const next = host.querySelector<HTMLAnchorElement>('[data-window-action="next"]')!;
-    const target = parseCharacterPersonSearch(defaultParseSearch(new URL(next.href).search), 'en');
+    const target = parseCharacterPersonSearch(parseSearch(new URL(next.href).search), 'en');
     expect(target.search).toEqual({ ...parsed.search, cursor: 'next' });
     await activateWindow('next');
     expect(reads).toHaveLength(2);
+    expect(reads.at(-1)!.search).toEqual(target.search);
     await finish({ ...ready, page: { ...ready.page, next: null } });
     expect(host.querySelector('[data-search-window-current]')?.textContent).toContain(
       m.search_window_current({ number: new Intl.NumberFormat('en').format(2) }, { locale: 'en' }),
     );
+    expect(document.activeElement).toBe(host.querySelector('[data-character-person-results]'));
     const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
     expect(previous.href).toBe(`https://search.test${characterPersonHref('en', parsed.search)}`);
     await activateWindow('previous');
@@ -222,10 +239,14 @@ test.each(['people', 'characters'])(
 test('failed forward reads hide old rows and keep the admitted Previous address available', async () => {
   await show();
   await finish({ ...ready, page: { ...ready.page, hits: [discoveryExample.hits[0]!], next: 'next' } });
-  await activateWindow('next');
+  await activateWindow('next', true);
   expect(reads).toHaveLength(2);
+  const results = host.querySelector('[data-character-person-results]')!;
+  expect(results.getAttribute('aria-busy')).toBe('true');
+  expect(results.querySelector('[data-slot="discovery-results"]')).toBeNull();
   await finish({ status: 'unavailable' });
-  expect(host.querySelector('[data-character-person-results] [data-slot="discovery-results"]')).toBeNull();
+  expect(results.querySelector('[data-slot="discovery-results"]')).toBeNull();
+  expect(document.activeElement).toBe(results.querySelector('button'));
   const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
   expect(previous.href).toBe(`https://search.test${characterPersonHref('en', operand().search)}`);
   await activateWindow('previous');
