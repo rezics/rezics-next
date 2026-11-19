@@ -140,6 +140,7 @@ export function CoverCard({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                className="hitbox-0.75"
                 aria-label={menuLabel ?? `More actions for ${title}`}
               >
                 <EllipsisIcon aria-hidden />

@@ -146,9 +146,12 @@ test('Shelf adapters leave explicit and configured cover geometry to Cover for i
           cover?.withheld ? 'data-state="withheld"' : cover ? 'data-state="loading"' : 'data-state="placeholder"',
         );
         if (cover?.withheld) {
-          expect(html).toContain('min-h-11 min-w-11');
-          expect(html).toContain('aria-label="Show cover"');
-          expect(html).not.toContain('<img');
+          const reveal = html.match(/(<div\b[^>]*>)\s*(<button\b[^>]*aria-label="Show cover"[^>]*>)/);
+          expect(reveal?.[1]).toContain('pointer-events-none');
+          expect(reveal?.[2]).toContain('pointer-events-auto');
+          expect(reveal?.[2]).toContain('min-h-6');
+          expect(html).not.toMatch(/<(?:img|source|picture)\b/);
+          expect(html).not.toContain('/supplied-art');
         }
       }
     }
