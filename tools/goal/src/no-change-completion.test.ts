@@ -113,10 +113,14 @@ test('dirty or changed source and contract refuse an unchanged claim before acce
       }
       if (change === 'contract') writeFileSync(task.briefPath, `${task.brief.markdown}\nchanged\n`);
 
-      await h.train();
+      const branch = h.head(task.branch);
+      const status = git(task.worktree, ['status', '--porcelain']);
+      await h.train(undefined, false);
 
       expect(h.outcomes[0]?.passed).toBe(false);
       expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).not.toContain('Retained-source acceptance task=');
+      expect(h.head(task.branch)).toBe(branch);
+      expect(git(task.worktree, ['status', '--porcelain'])).toBe(status);
     } finally {
       h.dispose();
     }

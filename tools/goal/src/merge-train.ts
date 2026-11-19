@@ -4015,6 +4015,51 @@ export class MergeTrain {
         integratesIntoDev = false;
       }
       const mayRepairFrozen = devMayRepairFrozenAcceptance(integrationTarget, recorded.kind, controlPlane);
+      const unchangedClaimProblem = (originalBase: string, worked: boolean): string | undefined => {
+        const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
+        if (
+          !task ||
+          task.currentAttempt !== request.attempt ||
+          task.branch !== request.branch ||
+          task.worktree !== request.worktree ||
+          task.workspace ||
+          request.managerLanding
+        )
+          return 'Unchanged claim no longer matches its task and current attempt';
+        if (request.sourceDirtyAtSettlement) return 'Unchanged claim source was dirty at settlement';
+        if (!request.workerCommit || workerCommit !== request.workerCommit || tip !== workerCommit || worked)
+          return 'Unchanged claim source changed after settlement';
+        if (
+          !request.contractHash ||
+          createHash('sha256').update(task.brief.markdown).digest('hex') !== request.contractHash
+        )
+          return 'Unchanged claim contract changed after settlement';
+        if (
+          readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
+          JSON.stringify(task.brief.acceptance.command) !== JSON.stringify(request.gate)
+        )
+          return 'Unchanged claim acceptance contract changed after settlement';
+        if (
+          this.git(request.worktree, 'rev-parse', 'HEAD') !== workerCommit ||
+          this.git(request.worktree, 'status', '--porcelain', '--untracked-files=all')
+        )
+          return 'Unchanged claim source worktree is dirty or changed';
+        if (this.git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== workerCommit)
+          return 'Unchanged claim source ref changed after settlement';
+        try {
+          this.git(o.mainCheckout, 'merge-base', '--is-ancestor', originalBase, target());
+        } catch {
+          return 'Unchanged claim source is no longer represented on the landing target';
+        }
+        return undefined;
+      };
+      const refuseUnchangedClaim = (message: string): GateOutcome => {
+        result.stage = 'rebase';
+        result.firstFailure = firstFailure(message, this.options.policy?.merge);
+        appendFileSync(logPath, `${message}\n`);
+        result.hostMs = Date.now() - started;
+        return finish();
+      };
       if (!workspace && !request.devResolution && !request.managerLanding) {
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const frozenPaths = new Set(frozen.map((file) => file.path));
@@ -4040,6 +4085,12 @@ export class MergeTrain {
           return finish();
         }
         const hasCommittedWork = committedPaths.some((path) => !frozenPaths.has(path));
+        // Validate a retained claim before auto-commit can convert it into ordinary source. A clean worktree can
+        // still hold ignored files explicitly declared by the brief, which ordinary admission must pick up.
+        if (request.unchangedClaim && !request.sourceDirtyAtSettlement) {
+          const problem = unchangedClaimProblem(sourceBase, hasCommittedWork);
+          if (problem) return refuseUnchangedClaim(problem);
+        }
         if (!hasCommittedWork) {
           const prepared = this.commitDirtySource(request, sourceTip, frozen, logPath);
           if (prepared.frozenPaths.length) {
@@ -4141,54 +4192,9 @@ export class MergeTrain {
         const worked = this.git(trainTree, 'diff', '--name-only', '-z', originalBase, tip)
           .split('\0')
           .some((path) => path && !frozenPaths.has(path));
-        const unchangedClaimProblem = (): string | undefined => {
-          const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
-          if (
-            !task ||
-            task.currentAttempt !== request.attempt ||
-            task.branch !== request.branch ||
-            task.worktree !== request.worktree ||
-            task.workspace ||
-            request.managerLanding
-          )
-            return 'Unchanged claim no longer matches its task and current attempt';
-          if (request.sourceDirtyAtSettlement) return 'Unchanged claim source was dirty at settlement';
-          if (!request.workerCommit || workerCommit !== request.workerCommit || tip !== workerCommit || worked)
-            return 'Unchanged claim source changed after settlement';
-          if (
-            !request.contractHash ||
-            createHash('sha256').update(task.brief.markdown).digest('hex') !== request.contractHash
-          )
-            return 'Unchanged claim contract changed after settlement';
-          if (
-            readFileSync(task.briefPath, 'utf8') !== task.brief.markdown ||
-            JSON.stringify(task.brief.acceptance.command) !== JSON.stringify(request.gate)
-          )
-            return 'Unchanged claim acceptance contract changed after settlement';
-          if (
-            this.git(request.worktree, 'rev-parse', 'HEAD') !== workerCommit ||
-            this.git(request.worktree, 'status', '--porcelain', '--untracked-files=all')
-          )
-            return 'Unchanged claim source worktree is dirty or changed';
-          if (this.git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== workerCommit)
-            return 'Unchanged claim source ref changed after settlement';
-          try {
-            this.git(o.mainCheckout, 'merge-base', '--is-ancestor', originalBase, target());
-          } catch {
-            return 'Unchanged claim source is no longer represented on the landing target';
-          }
-          return undefined;
-        };
         if (request.unchangedClaim) {
-          const refuse = (message: string): GateOutcome => {
-            result.stage = 'rebase';
-            result.firstFailure = firstFailure(message, this.options.policy?.merge);
-            appendFileSync(logPath, `${message}\n`);
-            result.hostMs = Date.now() - started;
-            return finish();
-          };
-          const problem = unchangedClaimProblem();
-          if (problem) return refuse(problem);
+          const problem = unchangedClaimProblem(originalBase, worked);
+          if (problem) return refuseUnchangedClaim(problem);
           const retainedSourceAcceptance: NonNullable<GateOutcome['retainedSourceAcceptance']> = {
             sourceCommit: workerCommit!,
             command: [...request.gate],
@@ -4225,8 +4231,8 @@ export class MergeTrain {
             if (this.git(trainTree, 'status', '--porcelain', '--untracked-files=all'))
               throw new Error('Retained-source acceptance left a dirty source worktree');
             o.fence.assertCurrent(request);
-            const afterProblem = unchangedClaimProblem();
-            if (afterProblem) return refuse(afterProblem);
+            const afterProblem = unchangedClaimProblem(originalBase, worked);
+            if (afterProblem) return refuseUnchangedClaim(afterProblem);
             if (!checked.passed) {
               result.stage = 'gate';
               result.firstFailure = firstFailure(
