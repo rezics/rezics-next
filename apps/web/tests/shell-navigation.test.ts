@@ -10,11 +10,12 @@ const app = join(import.meta.dir, '..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const desktop = { width: 1280, height: 860 };
 const phone = { width: 390, height: 844 };
+const drawerInset = 8;
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const sessionCookie = '__Host-rezics_session';
 const resource = 'https://api.rezics.test';
-const scopes = ['media:create', 'media:read_reservation', 'media:read', 'media:complete', 'media:erase'];
+const scopes = ['library_entry:list', 'collection:read', 'follow:list'];
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 
 type Messages = Record<string, string>;
@@ -32,6 +33,7 @@ type Grant = { challenge: string; nonce: string; redirectUri: string };
 const codes = new Map<string, Grant>();
 let counter = 0;
 const liveRefreshTokens = new Set<string>();
+const issuedAccessTokens = new Set<string>();
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -41,7 +43,13 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['personal_library', 'collections'] });
+    if (url.pathname === '/v1/platform/exposure') {
+      const authorization = request.headers.get('authorization');
+      if (!authorization) return json({ admitted: [] });
+      return issuedAccessTokens.has(authorization)
+        ? json({ admitted: ['personal_library', 'collections'] })
+        : json({ error: 'invalid_token' }, 401);
+    }
     const issuer = `${url.origin}/auth`;
     const authenticated = async (form: URLSearchParams) => {
       try {
@@ -121,6 +129,7 @@ const fake = Bun.serve({
         !liveRefreshTokens.delete(form.get('refresh_token') ?? '')
       )
         return json({ error: 'invalid_grant' }, 400);
+      issuedAccessTokens.add(`Bearer ${tokens.access_token}`);
       liveRefreshTokens.add(tokens.refresh_token as string);
       return json(tokens);
     }
@@ -143,6 +152,7 @@ let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= startDevServer({
     env: {
+      KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
       WEBSITE_CLIENT_ID: clientId,
       WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
@@ -158,21 +168,17 @@ function site(): Promise<string> {
 }
 
 async function open(path: string, options: BrowserContextOptions = {}): Promise<Page> {
-  const origin = await site();
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (options.javaScriptEnabled !== false) {
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-    await waitForPersonalRead(page, ['session']);
-  }
+  await visit(page, path, options.javaScriptEnabled);
   return page;
 }
 
 async function visit(page: Page, path: string, javaScriptEnabled = true): Promise<void> {
   const origin = await site();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  expect(new URL(page.url()).pathname).toBe(path);
   if (javaScriptEnabled) {
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     await waitForPersonalRead(page, ['session']);
@@ -188,31 +194,24 @@ afterAll(async () => {
 type Destination = { name: string; href: string };
 type FoundLink = Destination & { current: string | null; icon: boolean };
 
-function shellDestinations(own: Messages, locale: string, signed: boolean, desktop = true): Destination[] {
+function shellDestinations(own: Messages, locale: string, signed: boolean): Destination[] {
   const entry = (key: string, path: string) => ({ name: own[key]!, href: `/${locale}${path}` });
   return [
     entry('nav_home', ''),
+    entry('books_catalogue_title', '/books'),
     entry('nav_search', '/search'),
-    entry('board_directory_heading', '/boards'),
-    ...(signed
-      ? [
-          entry('nav_library', '/library'),
-          ...(desktop ? [entry('nav_inbox', '/inbox')] : []),
-          entry('moderation_workbench_heading', '/moderation/workbench'),
-          entry('ctxw_title', '/my/contexts'),
-          entry('zones_owner_title', '/my/zones'),
-          entry('library_collection_new', '/collections/new'),
-          entry('ctxw_create', '/my/contexts/new'),
-          entry('zones_owner_create', '/my/zones/new'),
-        ]
-      : []),
+    ...(signed ? [entry('nav_library', '/library')] : []),
   ];
 }
 
-async function navigationLinks(page: Page, name: string): Promise<FoundLink[]> {
+async function navigationLinks(page: Page, name: string, expected: Destination[]): Promise<FoundLink[]> {
   const navigation = page.getByRole('navigation', { name, exact: true });
-  expect(await navigation.count()).toBe(1);
-  return navigation.locator('a').evaluateAll((anchors) =>
+  await navigation.waitFor();
+  const destinations = isPhone(page) ? navigation : navigation.locator('[data-sidebar="menu"]');
+  // Library becomes an anchor once the signed-in viewer's exposure read admits it.
+  for (const { name } of expected) await destinations.getByRole('link', { name, exact: true }).waitFor();
+  expect(await destinations.getByRole('link').count()).toBe(expected.length);
+  return destinations.locator('a').evaluateAll((anchors) =>
     anchors.map((anchor) => ({
       name: (anchor.textContent ?? '').replace(/\s+/g, ' ').trim(),
       href: new URL(anchor.getAttribute('href') ?? '', location.origin).pathname,
@@ -245,13 +244,13 @@ async function expectDestinations(
 ): Promise<void> {
   const sheet = openName !== undefined && isPhone(page);
   if (sheet) await openSheet(page, openName);
-  const found = await navigationLinks(page, navigationName);
+  const found = await navigationLinks(page, navigationName, expected);
   expect(
     found.map(({ name, href }) => ({ name, href })),
     where,
   ).toEqual(expected);
   expect(
-    found.filter(({ href }) => !href.includes('/my/')).every((item) => item.icon),
+    found.every((item) => item.icon),
     where,
   ).toBe(true);
   expect(
@@ -261,21 +260,19 @@ async function expectDestinations(
   if (sheet) await closeSheet(page);
 }
 
-function headerSearch(page: Page, label: string) {
-  return page.locator('header').locator(`input[aria-label="${label}"]`);
-}
-
 let signedIn: Promise<NonNullable<BrowserContextOptions['storageState']>> | undefined;
 function signedInState(): Promise<NonNullable<BrowserContextOptions['storageState']>> {
   signedIn ??= (async () => {
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
-    await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
-    await Promise.all([
+    const banner = page.getByRole('banner');
+    expect(await banner.getByRole('link', { name: en.settings_notifications_heading! }).count()).toBe(0);
+    const [callback] = await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
-      page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
+      banner.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
     ]);
+    expect(callback.status()).toBe(303);
     await page.waitForURL(`${origin}/en`);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     const cookies = (await page.context().cookies()).filter((cookie) => cookie.name === sessionCookie);
@@ -307,21 +304,22 @@ test.serial(
       '/en/library',
     );
     expect(await menu.getByRole('link', { name: en.library_nav_collections!, exact: true }).getAttribute('href')).toBe(
-      '/en/collections',
+      '/en/library/collections',
     );
     expect(await menu.getByRole('link', { name: en.library_nav_following!, exact: true }).getAttribute('href')).toBe(
-      '/en/following',
+      '/en/library/following',
     );
     await menuPage.context().close();
 
     for (const locale of ['en', 'ja'] as const) {
       const own = await messages(locale);
       const home = { name: own.nav_home!, href: `/${locale}` };
+      const books = { name: own.books_catalogue_title!, href: `/${locale}/books` };
       const search = { name: own.nav_search!, href: `/${locale}/search` };
       const library = { name: own.nav_library!, href: `/${locale}/library` };
       for (const viewport of [desktop, phone])
         for (const signed of [false, true]) {
-          const expected = shellDestinations(own, locale, signed, viewport === desktop);
+          const expected = shellDestinations(own, locale, signed);
           const where = `${locale} ${viewport.width}px ${signed ? 'signed in' : 'signed out'}`;
           const page = await open(`/${locale}`, {
             viewport,
@@ -335,26 +333,19 @@ test.serial(
             `${where} home`,
             own.shell_open_navigation!,
           );
-          await visit(page, `/${locale}/search`);
-          await expectDestinations(
-            page,
-            own.shell_navigation!,
-            expected,
-            search.name,
-            `${where} search`,
-            own.shell_open_navigation!,
-          );
-          await visit(page, `/${locale}/no-such-page`);
-          await expectDestinations(
-            page,
-            own.shell_navigation!,
-            expected,
-            null,
-            `${where} other`,
-            own.shell_open_navigation!,
-          );
-          if (signed)
-            for (const path of [`/${locale}/library`, `/${locale}/library/shelf`]) {
+          for (const destination of [books, search, { href: `/${locale}/no-such-page`, name: null }]) {
+            await visit(page, destination.href);
+            await expectDestinations(
+              page,
+              own.shell_navigation!,
+              expected,
+              destination.name,
+              `${where} ${destination.href}`,
+              own.shell_open_navigation!,
+            );
+          }
+          if (signed) {
+            for (const path of [library.href, `${library.href}/collections`]) {
               await visit(page, path);
               await expectDestinations(
                 page,
@@ -365,6 +356,7 @@ test.serial(
                 own.shell_open_navigation!,
               );
             }
+          }
           await page.context().close();
         }
 
@@ -378,7 +370,7 @@ test.serial(
         home.name,
         `${locale} collapsed`,
       );
-      await visit(collapsed, `/${locale}/library/shelf`);
+      await visit(collapsed, `/${locale}/library/collections`);
       await expectDestinations(
         collapsed,
         own.shell_navigation!,
@@ -399,12 +391,11 @@ test.serial(
     for (const locale of ['en', 'ja'] as const) {
       const own = await messages(locale);
       for (const signed of [false, true]) {
-        const expected = shellDestinations(own, locale, signed, false);
+        const expected = shellDestinations(own, locale, signed);
         const storageState = signed ? session : undefined;
         const where = `${locale} ${signed ? 'signed in' : 'signed out'}`;
         const wide = await open(`/${locale}/no-such-page`, storageState ? { storageState } : {});
-        const rail = (await navigationLinks(wide, own.shell_navigation!)).map(({ name, href }) => ({ name, href }));
-        expect(rail, `${where} rail`).toEqual(shellDestinations(own, locale, signed));
+        const rail = await navigationLinks(wide, own.shell_navigation!, expected);
         await wide.context().close();
 
         const narrow = await open(`/${locale}/no-such-page`, {
@@ -412,16 +403,13 @@ test.serial(
           ...(storageState ? { storageState } : {}),
         });
         await openSheet(narrow, own.shell_open_navigation!);
-        const sheet = await navigationLinks(narrow, own.shell_navigation!);
-        expect(
-          sheet.map(({ name, href }) => ({ name, href })),
-          where,
-        ).toEqual(expected);
+        const sheet = await navigationLinks(narrow, own.shell_navigation!, expected);
+        expect(sheet, where).toEqual(rail);
         const box = await narrow.getByRole('dialog').boundingBox();
         expect(box, where).not.toBeNull();
         expect(box!.x, where).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width, where).toBeLessThanOrEqual(phone.width);
-        expect(box!.y + box!.height, where).toBeCloseTo(phone.height, 0);
+        expect(box!.y + box!.height, where).toBeCloseTo(phone.height - drawerInset, 0);
         expect(box!.height, where).toBeLessThan(phone.height);
         await narrow.context().close();
       }
@@ -431,73 +419,80 @@ test.serial(
 );
 
 test.serial(
-  'the header search is left out on the home and search pages and shown on every other page',
+  'the header search keeps a single responsive composer on Home, Search and other pages',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
-      const label = (await messages(locale)).search_label!;
-      expect(label.trim(), locale).toBeTruthy();
+      const own = await messages(locale);
       for (const javaScriptEnabled of [true, false])
         for (const viewport of [desktop, phone]) {
           const where = `${locale} ${viewport.width}px ${javaScriptEnabled ? 'script' : 'first paint'}`;
-          const page = await open(`/${locale}`, { javaScriptEnabled, viewport });
-          expect(await headerSearch(page, label).count(), `${where} home`).toBe(0);
-          await visit(page, `/${locale}/search`, javaScriptEnabled);
-          expect(await headerSearch(page, label).count(), `${where} search`).toBe(0);
-          expect(
-            await page.getByRole('main').getByRole('textbox', { name: label, exact: true }).count(),
-            `${where} search field`,
-          ).toBe(1);
-          await visit(page, `/${locale}/no-such-page`, javaScriptEnabled);
-          const other = headerSearch(page, label);
-          expect(await other.count(), `${where} other`).toBe(1);
-          expect(await other.isVisible(), `${where} other`).toBe(viewport === desktop);
-          if (viewport === desktop) {
-            await visit(page, `/${locale}/subjects/${subjectId}`, javaScriptEnabled);
-            const subject = headerSearch(page, label);
-            expect(await subject.count(), `${where} subject`).toBe(1);
-            expect(await subject.isVisible(), `${where} subject`).toBe(true);
+          const page = await open(`/${locale}`, {
+            javaScriptEnabled,
+            viewport,
+            ...(locale === 'en' ? { storageState: session } : {}),
+          });
+          const banner = page.getByRole('banner');
+          const composer = banner.locator('[data-header-search]');
+          const field = composer.locator('input[role="combobox"]');
+          const trigger = composer.getByRole('button', { name: `${own.header_search_global} Ctrl/⌘ K`, exact: true });
+          for (const path of ['', '/search', '/no-such-page', `/subjects/${subjectId}`]) {
+            if (path) await visit(page, `/${locale}${path}`, javaScriptEnabled);
+            expect(await composer.count(), `${where} ${path || '/'}`).toBe(1);
+            expect(await field.getAttribute('aria-label'), where).toBe(own.search_label!);
+            expect(await field.isVisible(), where).toBe(viewport === desktop);
+            expect(await trigger.isVisible(), where).toBe(viewport === phone);
+            if (path === '/search') {
+              const main = page.getByRole('main');
+              expect(await main.getByRole('heading', { name: own.search_heading!, exact: true }).count()).toBe(1);
+              expect(await main.getByRole('textbox', { name: own.search_label!, exact: true }).count()).toBe(0);
+            }
+          }
+          if (javaScriptEnabled && viewport === phone) {
+            await trigger.click();
+            await page
+              .getByRole('dialog', { name: own.search_label!, exact: true })
+              .getByRole('combobox', { name: own.search_label!, exact: true })
+              .waitFor();
           }
           await page.context().close();
         }
-    }
-
-    const en = (await messages('en')).search_label!;
-    for (const javaScriptEnabled of [true, false]) {
-      const where = `signed in ${javaScriptEnabled ? 'script' : 'first paint'}`;
-      const page = await open('/en', { javaScriptEnabled, storageState: session });
-      expect(await headerSearch(page, en).count(), `${where} home`).toBe(0);
-      await visit(page, '/en/search', javaScriptEnabled);
-      expect(await headerSearch(page, en).count(), `${where} search`).toBe(0);
-      await visit(page, '/en/no-such-page', javaScriptEnabled);
-      expect(await headerSearch(page, en).count(), `${where} other`).toBe(1);
-      await page.context().close();
     }
   },
   timeout,
 );
 
 test.serial(
-  'signed-in desktop navigation retains Library and Inbox',
+  'signed-in desktop navigation retains Library in the rail and Inbox in the header',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
       const own = await messages(locale);
-      const page = await open(`/${locale}`, { viewport: desktop, storageState: session });
+      const page = await open(`/${locale}`, { storageState: session });
       const navigation = page.getByRole('navigation', { name: own.shell_navigation!, exact: true });
-      const library = navigation.locator(`a[href="/${locale}/library"]`);
-      const inbox = navigation.locator(`a[href="/${locale}/inbox"]`);
-      await library.waitFor();
-      expect(await library.textContent()).toBe(own.nav_library!);
-      expect(await inbox.isVisible()).toBe(true);
-      expect(await inbox.textContent()).toContain(own.nav_inbox!);
-      for (const path of [`/${locale}/library/shelf`, `/${locale}/inbox`]) {
-        await visit(page, path);
-        const current = path.endsWith('/inbox') ? inbox : library;
+      const library = navigation.getByRole('link', { name: own.nav_library!, exact: true });
+      // The unread badge can add a status to the notification link's accessible name.
+      const inbox = page.getByRole('banner').getByRole('link', { name: own.settings_notifications_heading! });
+      for (const [link, href] of [
+        [library, `/${locale}/library`],
+        [inbox, `/${locale}/inbox`],
+      ] as const) {
+        await link.waitFor();
+        expect(await link.getAttribute('href')).toBe(href);
+        expect(await link.getAttribute('aria-current')).toBeNull();
+      }
+      for (const [path, current, other] of [
+        ['/library/collections', library, inbox],
+        ['/inbox', inbox, library],
+      ] as const) {
+        await visit(page, `/${locale}${path}`);
+        await current.waitFor();
         expect(await current.getAttribute('aria-current')).toBe('page');
-        expect(await (path.endsWith('/inbox') ? library : inbox).getAttribute('aria-current')).toBeNull();
+        await other.waitFor();
+        expect(await other.getAttribute('aria-current')).toBeNull();
       }
       await page.getByRole('button', { name: own.shell_collapse_navigation!, exact: true }).click();
+      await page.getByRole('button', { name: own.shell_expand_navigation!, exact: true }).waitFor();
       expect(await library.isVisible()).toBe(true);
       expect(await inbox.isVisible()).toBe(true);
       await page.context().close();
