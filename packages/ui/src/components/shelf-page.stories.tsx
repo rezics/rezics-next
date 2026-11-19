@@ -146,16 +146,16 @@ export const MenuOpen: Story = {
   render: () => <Page />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const view = canvas.queryByRole('button', { name: labels.view, exact: true });
-    const opener = view ?? canvas.getByRole('button', { name: labels.sort, exact: true });
+    const view = canvas.queryByRole('button', { name: labels.view });
+    const opener = view ?? canvas.getByRole('button', { name: labels.sort });
     await expect(opener).toBeVisible();
     await userEvent.click(opener);
 
     await waitFor(async () => {
-      const dialog = screen.getByRole('dialog', { name: view ? labels.view : labels.sort, exact: true });
-      const sort = view ? within(dialog).getByRole('tabpanel', { name: labels.sort, exact: true }) : dialog;
-      await expect(within(sort).getByRole('combobox', { name: labels.sort, exact: true })).toBeVisible();
-      await expect(within(sort).getByRole('combobox', { name: labels.direction, exact: true })).toBeVisible();
+      const dialog = screen.getByRole('dialog', { name: view ? labels.view : labels.sort });
+      const sort = view ? within(dialog).getByRole('tabpanel', { name: labels.sort }) : dialog;
+      await expect(within(sort).getByRole('combobox', { name: labels.sort })).toBeVisible();
+      await expect(within(sort).getByRole('combobox', { name: labels.direction })).toBeVisible();
     });
   },
 };
