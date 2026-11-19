@@ -33,12 +33,28 @@ afterEach(async () => {
   await current?.close();
 });
 const native = () => driver!;
+// These mounted operations use the Collection's update authority. The advice
+// does not resolve revisions, retained deletions, publication episodes, or a
+// transfer destination. Commands and private reads still check those inputs.
 const updateOperations = [
+  'collection.metadata_history_change',
+  'collection.metadata_history_list',
+  'collection.publish_query',
+  'collection.publish_selected',
+  'collection.restore',
+  'collection.structure_history_compare',
+  'collection.structure_history_list',
   'collection.update',
+  'collection_member.batch_remove',
   'collection_member.create',
   'collection_member.delete',
   'collection_member.move',
+  'collection_member.restore',
+  'collection_member.transfer',
   'collection_member.update',
+  'collection_publication.get',
+  'collection_rule.get',
+  'collection_rule.update',
 ];
 const sortedUnique = (values: string[]) => [...new Set(values)].sort();
 
