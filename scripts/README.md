@@ -528,6 +528,12 @@ It partitions eligible hosts between groups when at least two qualify by configu
 Otherwise both groups use the original hosts file. Admission still checks actual slice capacity.
 `GATE_CONCURRENCY` controls workspace concurrency inside each group. Group results return to `.temp/gate/`.
 
+For a full Kernel check across bounded physical runs, run `node_modules/.bin/bun scripts/kernel-check-groups.ts a`
+from the candidate checkout. The coordinator reserves 8 GiB on the named performance host for each serial group
+of up to 32 files and runs one file at a time. The first group also runs global Kernel typecheck, lint and format.
+The plan and each physical settlement are retained under the printed `.temp/kernel-groups-*` directory. Only the
+coordinator's successful exit covers the entire Kernel workspace. Gate's other workspaces require their own outcomes.
+
 `stack-run.ts` and worker-check use a nonempty `KERNEL_CHECK_REMOTE` first. Otherwise they look for the readable shared file
 `<main checkout>/.temp/goal/remote-check-hosts.json`. An unreadable explicit path does not use that fallback.
 Once a host answers, a busy run queues. Later probe silence does not send it back locally.
