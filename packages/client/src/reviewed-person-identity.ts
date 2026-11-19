@@ -62,7 +62,7 @@ export function isReviewedPersonEndpoint(value: unknown): value is ReviewedPerso
     Number.isSafeInteger(v.revision) &&
     v.revision > 0 &&
     typeof v.securityRevision === 'string' &&
-    /^[1-9][0-9]*$(?![\s\S])/.test(v.securityRevision) &&
+    /^(?:0|[1-9][0-9]*)$(?![\s\S])/.test(v.securityRevision) &&
     typeof v.claimTransactionId === 'string' &&
     uuid.test(v.claimTransactionId) &&
     typeof v.value === 'string' &&

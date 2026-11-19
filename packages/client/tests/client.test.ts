@@ -525,6 +525,9 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   expect(() => identityOperationLocation(new Headers(), ID)).toThrow('Invalid native identity admission');
   expect(JSON.parse(remote.sent[1]!.body!)).toEqual(body);
   expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
+  expect(isReviewedPersonEndpoint({ ...endpoint, securityRevision: '0' })).toBe(true);
+  for (const securityRevision of ['00', '01', '-1', '0\n'])
+    expect(isReviewedPersonEndpoint({ ...endpoint, securityRevision })).toBe(false);
   expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);
 });
 

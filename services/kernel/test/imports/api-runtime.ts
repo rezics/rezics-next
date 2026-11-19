@@ -141,6 +141,7 @@ afterAll(async () => {
 export async function openApiRuntime(
   options: DriverOptions & {
     readonly additionalAccounts?: ImportIdentityOptions['additionalAccounts'];
+    readonly routeKey?: ImportIdentityOptions['routeKey'];
     readonly workerStartup?: 'eager' | 'on-demand';
     readonly sourceStatistics?: 'vndb';
     readonly classificationAdmission?: ClassificationAdmission;
@@ -235,6 +236,7 @@ export async function openApiRuntime(
         additionalAccounts: options.additionalAccounts ?? [],
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
+        ...(options.routeKey === undefined ? {} : { routeKey: options.routeKey }),
         clock: () => new Date(),
         ...(options.sourceStatistics === undefined ? {} : { sourceStatistics: options.sourceStatistics }),
         async configured(configuration) {

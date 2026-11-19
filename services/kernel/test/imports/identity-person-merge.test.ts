@@ -11,13 +11,17 @@ import {
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
 import '../support/native-history-composition.ts';
 
 test('a reviewed Person pair merges once through the native contract and both originals read the canonical Person', async () => {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  // These two exact imported claims share a partition under this fixture's route key.
+  const routeKey = new Uint8Array(32);
+  new DataView(routeKey.buffer).setUint32(0, 4209);
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536, routeKey });
   const directory = await mkdtemp(join(tmpdir(), 'identity-person-merge-native-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
@@ -53,6 +57,7 @@ test('a reviewed Person pair merges once through the native contract and both or
     const pair = first.personReview!.pair;
     expect(pair.state).toBe('selected');
     if (pair.state !== 'selected') throw new Error('Expected the selected Person pair');
+    expect(pair.sources.map(({ boundSubjectId }) => partitionOf(routeOf(boundSubjectId)!))).toEqual([692, 692]);
     const grant = await editor.http('/v1/grants', {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: runtime.identity.bulk.accountId },
@@ -92,13 +97,42 @@ test('a reviewed Person pair merges once through the native contract and both or
       pair.sources.map((source) => source.boundSubjectId).sort(),
     );
     // A reopened run replays the journaled intent: the admitted operation is not sent again.
-    expect(await merge()).toMatchObject({
-      state: 'published',
-      operation: published.operation,
-      survivor: published.survivor,
+    expect(await merge()).toEqual(published);
+    const reviews = runtime.captures.filter(({ request }) =>
+      new URL(request.url).searchParams.has('reviewIdentitySource'),
+    );
+    expect(reviews.map(({ response }) => response.status)).toEqual([200, 200]);
+    expect(reviews.map(({ response }) => response.headers.get('cache-control'))).toEqual([
+      'private, no-store',
+      'private, no-store',
+    ]);
+    const endpoints = await Promise.all(reviews.map(async ({ response }) => (await response.json()).reviewedIdentity));
+    expect(endpoints.map(({ source, externalId, securityRevision }) => [source, externalId, securityRevision])).toEqual(
+      [
+        ['bangumi_cross_media', 'person:1916', '0'],
+        ['vndb_cross_media', 's224', '0'],
+      ],
+    );
+    const admissions = runtime.captures.filter(({ request }) => new URL(request.url).pathname === '/v1/subjects:merge');
+    expect(admissions.map(({ response }) => response.status)).toEqual([202]);
+    const location = `/v1/subjectIdentityOperations/${published.operation}`;
+    expect(admissions[0]!.response.headers.get('location')).toBe(location);
+    expect(await admissions[0]!.response.json()).toEqual({ operation: { id: published.operation } });
+    const poll = runtime.captures.findLast(({ request }) => new URL(request.url).pathname === location);
+    expect(poll?.response.status).toBe(200);
+    expect(await poll!.response.json()).toEqual({
+      operation: {
+        id: published.operation,
+        done: true,
+        result: { survivor: published.survivor, redirected: published.redirected, revision: published.revision },
+      },
     });
   } finally {
     journal.close();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await runtime.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }, 600_000);

@@ -25,7 +25,7 @@ export const ReviewedPersonEndpointSchema = t.Object(
   {
     subject: t.String({ format: 'uuid' }),
     revision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-    securityRevision: t.String({ pattern: String.raw`^[1-9][0-9]*$(?![\s\S])` }),
+    securityRevision: t.String({ pattern: String.raw`^(?:0|[1-9][0-9]*)$(?![\s\S])` }),
     source: t.Union([
       t.Literal('bangumi'),
       t.Literal('vndb'),

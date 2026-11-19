@@ -95,6 +95,8 @@ export interface ImportIdentityOptions {
   readonly clock: NonNullable<AccountWorkflowOptions['clock']>;
   /** Optional migrated, credential-free Auth template owned by the composition. */
   readonly authTemplate?: string;
+  /** Fixed deployment key for cases that require exact source tuples on one native home. */
+  readonly routeKey?: KernelDependencies['routeKey'];
   /** Start independent deployment services once their native configuration exists. */
   readonly configured?: (
     identity: Pick<ImportIdentity, 'access' | 'accessConfig' | 'routeKey' | 'tokenKeys'>,
@@ -379,7 +381,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const kid = randomUUID();
     const issuer = `https://${randomUUID()}.identity.test`;
     const audience = `${issuer}/kernel`;
-    const routeKey = new Uint8Array(randomBytes(32));
+    const routeKey = options.routeKey ?? new Uint8Array(randomBytes(32));
     const tokenKeys = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
     let auth: AuthService;
     const actions = new Map([...importActionCatalogue(database, routeKey), ...LIFECYCLE_ACTIONS]);

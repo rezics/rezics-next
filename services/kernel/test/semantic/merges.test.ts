@@ -478,7 +478,7 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
     expect(read.body.reviewedIdentity).toEqual({
       subject: subjects[index],
       revision: expect.any(Number),
-      securityRevision: expect.stringMatching(/^[1-9][0-9]*$/),
+      securityRevision: '0',
       ...sources[index],
       property: properties[index],
       value: values[index],
@@ -646,7 +646,7 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
     expect(answer.body.reviewedIdentity).toEqual({
       subject: ids[index],
       revision: 1,
-      securityRevision: expect.stringMatching(/^[1-9][0-9]*$/),
+      securityRevision: '0',
       ...claims[index]!,
       claimTransactionId: expect.any(String),
     });
