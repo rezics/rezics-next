@@ -1,6 +1,11 @@
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Client } from 'pg';
+import { migrate } from '../../scripts/database.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import {
   readAccountDiscoveryReductionBinding,
   type AccountDiscoveryReductionBinding,
@@ -13,14 +18,14 @@ import {
   retainedAccountDiscoveryRepairCurrent,
 } from '../../src/access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 
 const pool = createReceiptTestPool(process.env.DATABASE_URL!);
 const source = accountDiscoverySource(pool);
-const read = (partitions: readonly number[]) =>
-  readAccountDiscoveryReductionBinding(pool, partitions, { deadline: Date.now() + 2000 });
+const read = (partitions: readonly number[], database = pool) =>
+  readAccountDiscoveryReductionBinding(database, partitions, { deadline: Date.now() + 2000 });
 const head = (binding: AccountDiscoveryReductionBinding, partition: number) =>
   binding.heads.find((entry) => entry.partition === partition)!;
 afterAll(() => pool.end());
@@ -206,66 +211,95 @@ test('exact-claim reductions advance their foreign home before delivery and repa
 });
 
 test('missing, moved, fenced, partial and uninstalled claim homes refuse instead of returning partial evidence', async () => {
-  const partition = 3889;
   const other = 3888;
-  const native = (
-    await pool.query<{
-      node: string;
-      write_state: string;
-      moved_to: string | null;
-      epoch: number;
-      position: string;
-    }>('SELECT node,write_state,moved_to,epoch,position::text FROM core.partition WHERE partition_no=$1', [partition])
-  ).rows[0]!;
-  const population = (
-    await pool.query<{ population: string; revision: string; claim_revision: string }>(
-      'SELECT population::text,revision::text,claim_revision::text FROM access.account_discovery_population WHERE partition_no=$1',
-      [partition],
-    )
-  ).rows[0]!;
+  const partition = 3889;
+  const missing = 3890;
   const original = await read([partition]);
+  const epoch = head(original, partition).epoch;
+  const name = `account_reduction_${randomUUID().replaceAll('-', '')}`;
+  const url = new URL(process.env.DATABASE_URL!);
+  url.pathname = '/postgres';
+  const owner = new Client({ connectionString: url.href });
+  url.pathname = `/${name}`;
+  await owner.connect();
+
+  const temporary = resolve(import.meta.dir, '../../../../.temp');
+  let bootstrap: string | undefined;
+  const receiver = createReceiptTestPool(url.href);
   try {
-    for (const state of ['moved', 'fenced']) {
-      await pool.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
-        partition,
-        state,
-        state === 'moved' ? 'elsewhere' : null,
-      ]);
-      await expect(read([other, partition])).rejects.toMatchObject({
-        name: 'CommandUnavailableError',
-        reason: state,
-        partition,
-      });
-    }
-    await pool.query(
-      "UPDATE core.partition SET write_state='active',moved_to=NULL,epoch=epoch+1 WHERE partition_no=$1",
-      [partition],
+    // Stage the receiving topology before the native migrations admit its lineage.
+    // The missing home has never been registered in this deployment.
+    mkdirSync(temporary, { recursive: true });
+    bootstrap = mkdtempSync(resolve(temporary, 'account-reduction-'));
+    const initialMigrations = resolve(bootstrap, 'db/migrations');
+    mkdirSync(initialMigrations, { recursive: true });
+    const initialMigration = '0001_core_partition.sql';
+    symlinkSync(
+      resolve(import.meta.dir, '../../db/migrations', initialMigration),
+      resolve(initialMigrations, initialMigration),
     );
-    const movedBack = await read([partition]);
-    expect(head(movedBack, partition).epoch).toBe(native.epoch + 1);
-    expect(movedBack).not.toEqual(original);
-    await pool.query('DELETE FROM core.partition WHERE partition_no=$1', [partition]);
-    await expect(read([other, partition])).rejects.toBeInstanceOf(CommandUnavailableError);
-  } finally {
-    await pool.query(
-      `INSERT INTO core.partition(partition_no,node,write_state,moved_to,epoch,position) VALUES($1,$2,$3,$4,$5,$6::bigint)
-       ON CONFLICT(partition_no) DO UPDATE SET node=EXCLUDED.node,write_state=EXCLUDED.write_state,
-       moved_to=EXCLUDED.moved_to,epoch=EXCLUDED.epoch,position=EXCLUDED.position`,
-      [partition, native.node, native.write_state, native.moved_to, native.epoch, native.position],
+    migrate(url.href, bootstrap);
+    await withConnection(receiver, async (client) => {
+      await client.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [partition, epoch + 1]);
+      await client.query('DELETE FROM core.partition WHERE partition_no=$1', [missing]);
+    });
+    migrate(url.href);
+
+    // The receiving deployment has admitted the next epoch. Its outgoing route
+    // stays at the old epoch until activation matches that admitted lineage.
+    await receiver.query(
+      "UPDATE core.partition SET write_state='moved',moved_to='elsewhere',epoch=$2 WHERE partition_no=$1",
+      [partition, epoch],
     );
-  }
-  try {
-    await pool.query('UPDATE access.account_discovery_population SET claim_revision=0 WHERE partition_no=$1', [
+    await expect(read([other, partition], receiver)).rejects.toMatchObject({
+      name: 'CommandUnavailableError',
+      reason: 'moved',
+      partition,
+      movedTo: 'elsewhere',
+    });
+    await receiver.query("UPDATE core.partition SET write_state='fenced',moved_to=NULL WHERE partition_no=$1", [
       partition,
     ]);
-    await expect(read([other, partition])).rejects.toBeInstanceOf(CommandUnavailableError);
-    await pool.query('DELETE FROM access.account_discovery_population WHERE partition_no=$1', [partition]);
-    await expect(read([other, partition])).rejects.toBeInstanceOf(CommandUnavailableError);
+    await expect(read([other, partition], receiver)).rejects.toMatchObject({
+      name: 'CommandUnavailableError',
+      reason: 'fenced',
+      partition,
+    });
+    await expect(
+      receiver.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [partition]),
+    ).rejects.toMatchObject({ code: '23514' });
+    await receiver.query("UPDATE core.partition SET write_state='active',epoch=$2 WHERE partition_no=$1", [
+      partition,
+      epoch + 1,
+    ]);
+    const movedBack = await read([partition], receiver);
+    expect(head(movedBack, partition).epoch).toBe(epoch + 1);
+    expect(movedBack).not.toEqual(original);
+    expect((await read([other, partition], receiver)).heads.map((entry) => entry.partition)).toEqual([
+      other,
+      partition,
+    ]);
+    const unavailable = { name: 'AccessUnavailableError', reason: 'contention' };
+    const missingHome = await receiver.query('SELECT 1 FROM core.partition WHERE partition_no=$1', [missing]);
+    expect(missingHome.rowCount).toBe(0);
+    await expect(read([other, missing], receiver)).rejects.toMatchObject(unavailable);
+
+    await receiver.query('UPDATE access.account_discovery_population SET claim_revision=0 WHERE partition_no=$1', [
+      partition,
+    ]);
+    await expect(read([other, partition], receiver)).rejects.toMatchObject(unavailable);
+    const removed = await receiver.query('DELETE FROM access.account_discovery_population WHERE partition_no=$1', [
+      partition,
+    ]);
+    expect(removed.rowCount).toBe(1);
+    await expect(read([other, partition], receiver)).rejects.toMatchObject(unavailable);
   } finally {
-    await pool.query(
-      `INSERT INTO access.account_discovery_population(partition_no,population,revision,claim_revision) VALUES($1,$2::bigint,$3::bigint,$4::bigint)
-       ON CONFLICT(partition_no) DO UPDATE SET population=EXCLUDED.population,revision=EXCLUDED.revision,claim_revision=EXCLUDED.claim_revision`,
-      [partition, population.population, population.revision, population.claim_revision],
-    );
+    try {
+      await receiver.end();
+      await dropTestDatabase(owner, name);
+    } finally {
+      await owner.end();
+      if (bootstrap) rmSync(bootstrap, { recursive: true, force: true });
+    }
   }
-});
+}, 60_000);
