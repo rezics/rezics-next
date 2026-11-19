@@ -165068,6 +165068,13 @@
                       "maxItems": 16,
                       "type": "array"
                     },
+                    "reason": {
+                      "enum": [
+                        "catalogue_not_public",
+                        "chapter_not_eligible"
+                      ],
+                      "type": "string"
+                    },
                     "request_id": {
                       "type": "string"
                     },
@@ -167346,6 +167353,13 @@
                       },
                       "maxItems": 16,
                       "type": "array"
+                    },
+                    "reason": {
+                      "enum": [
+                        "catalogue_not_public",
+                        "chapter_not_eligible"
+                      ],
+                      "type": "string"
                     },
                     "request_id": {
                       "type": "string"
@@ -174471,6 +174485,13 @@
                       },
                       "maxItems": 16,
                       "type": "array"
+                    },
+                    "reason": {
+                      "enum": [
+                        "catalogue_not_public",
+                        "chapter_not_eligible"
+                      ],
+                      "type": "string"
                     },
                     "request_id": {
                       "type": "string"
@@ -489235,7 +489256,7 @@
                           "type": "integer"
                         },
                         "securityRevision": {
-                          "pattern": "^[1-9][0-9]*$(?![\\s\\S])",
+                          "pattern": "^(?:0|[1-9][0-9]*)$(?![\\s\\S])",
                           "type": "string"
                         },
                         "source": {
@@ -490829,6 +490850,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "overloaded",
                         "deadline_exceeded"
                       ],
@@ -490881,6 +490903,7 @@
                     "retryable": {
                       "enum": [
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -490891,6 +490914,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Service Overloaded",
                         "Deadline Exceeded"
                       ],
@@ -490898,6 +490922,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/deadline_exceeded"
                       ],
@@ -490917,7 +490942,7 @@
                 }
               }
             },
-            "description": "Overloaded; Deadline exceeded"
+            "description": "Semantic not ready; Overloaded; Deadline exceeded"
           }
         },
         "security": [
@@ -542676,7 +542701,7 @@
                                 "type": "integer"
                               },
                               "securityRevision": {
-                                "pattern": "^[1-9][0-9]*$(?![\\s\\S])",
+                                "pattern": "^(?:0|[1-9][0-9]*)$(?![\\s\\S])",
                                 "type": "string"
                               },
                               "source": {
@@ -542733,7 +542758,7 @@
                                 "type": "integer"
                               },
                               "securityRevision": {
-                                "pattern": "^[1-9][0-9]*$(?![\\s\\S])",
+                                "pattern": "^(?:0|[1-9][0-9]*)$(?![\\s\\S])",
                                 "type": "string"
                               },
                               "source": {
