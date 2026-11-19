@@ -10852,40 +10852,53 @@ test('real caller cancellation uses exact remote stop before releasing its lease
   expect(slotMarkers(fixture.env, 'a')).toEqual([]);
 });
 
-
-test.each([false, true])('lifetime settlement with lost lease acknowledgement and exact cleanup proof %s', async (verified) => {
-  const fixture = scenario({
-    a: {
-      available: 8e9,
-      exit: 124,
-      lifetimeFailure: true,
-      slotReleaseExit: 255,
-      slotStderr: 'mux peer closed',
-      verifyUnacknowledgedLease: verified,
-    },
-  });
-  const directory = workspace();
-  const child = Bun.spawn([process.execPath, '--eval', `
+test.each([false, true])(
+  'lifetime settlement with lost lease acknowledgement and exact cleanup proof %s',
+  async (verified) => {
+    const fixture = scenario({
+      a: {
+        available: 8e9,
+        exit: 124,
+        lifetimeFailure: true,
+        slotReleaseExit: 255,
+        slotStderr: 'mux peer closed',
+        verifyUnacknowledgedLease: verified,
+      },
+    });
+    const directory = workspace();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        '--eval',
+        `
     import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
     try {
       process.exitCode = await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
         command: ['true'], returns: ['artifact'], settled: async value => console.log('SETTLED '+JSON.stringify(value)),
       }, new AbortController().signal);
     } catch (error) { console.error(String(error)); process.exitCode=1; }
-  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
-  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-  expect(code, stderr).toBe(verified ? 124 : 1);
-  const settlement = JSON.parse(stdout.split('SETTLED ')[1]!.trim());
-  expect(settlement.native).toMatchObject({ exitCode: 124, lifetimeFailure: { phase: 'run-lifetime' } });
-  expect(settlement.returns).toMatchObject({ status: 'missing', missing: ['artifact'] });
-  expect(settlement.transportChildReaped).toBe(true);
-  expect(settlement.cleanup.status).toBe(verified ? 'verified' : 'unknown');
-  if (verified) expect(settlement.cleanup.failures).toEqual([]);
-  else {
-    const failures = settlement.cleanup.failures.join(' ');
-    expect(failures).toContain('slot lease release failed');
-    expect(failures).toContain('exit 255, diagnostic "mux peer closed"');
-    expect(failures).toContain('run cleanup verification before a result; exit 75');
-  }
-  expect(fixture.events().filter(({ kind }) => kind === 'run')).toHaveLength(1);
-});
+  `,
+      ],
+      { env: fixture.env, stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, stderr).toBe(verified ? 124 : 1);
+    const settlement = JSON.parse(stdout.split('SETTLED ')[1]!.trim());
+    expect(settlement.native).toMatchObject({ exitCode: 124, lifetimeFailure: { phase: 'run-lifetime' } });
+    expect(settlement.returns).toMatchObject({ status: 'missing', missing: ['artifact'] });
+    expect(settlement.transportChildReaped).toBe(true);
+    expect(settlement.cleanup.status).toBe(verified ? 'verified' : 'unknown');
+    if (verified) expect(settlement.cleanup.failures).toEqual([]);
+    else {
+      const failures = settlement.cleanup.failures.join(' ');
+      expect(failures).toContain('slot lease release failed');
+      expect(failures).toContain('exit 255, diagnostic "mux peer closed"');
+      expect(failures).toContain('run cleanup verification before a result; exit 75');
+    }
+    expect(fixture.events().filter(({ kind }) => kind === 'run')).toHaveLength(1);
+  },
+);
