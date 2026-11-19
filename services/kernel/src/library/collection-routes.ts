@@ -497,7 +497,7 @@ function detail(operationId: string, action: string, anonymous = false) {
     operationId,
     'x-exposure': 'gate:collections',
     'x-action': action,
-    ...(operationId.startsWith('collection_member.')
+    ...(operationId.startsWith('collection_member.') || operationId === 'collection_publication.get'
       ? { 'x-authority-resource-types': ['library.collection'] }
       : { 'x-resource-types': ['library.collection'] }),
     security: anonymous ? [{ bearerAuth: [] }, {}] : [{ bearerAuth: [] }],
