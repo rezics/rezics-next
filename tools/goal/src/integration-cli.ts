@@ -23,6 +23,7 @@ import { WorkerStore } from './store.ts';
 import { ensureServiceHost } from './service.ts';
 import { desktopCodexCaller } from './native-unit-context.ts';
 import { readNativeGoal } from './native-units.ts';
+import { configuredCodexPool } from './agents.ts';
 
 export type { HostRequest, IntegrationRuntime };
 export { authenticatedCallingManager, recordManagerCommand };
@@ -305,7 +306,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
 
     if (values.desktop !== undefined) {
       const threadId = desktopCodexCaller(env);
-      const pool = runtime.pools?.find((candidate) => candidate.name === values.desktop && candidate.cli === 'codex');
+      const pool = configuredCodexPool(runtime.pools ?? [], values.desktop);
       if (!pool) throw new Error('Desktop resident registration needs an existing configured Codex pool');
       const { thread } = readNativeGoal(pool.configDirectory, threadId, true);
       if (realpathSync(thread.cwd) !== realpathSync(runtime.mainCheckout))

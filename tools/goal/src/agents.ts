@@ -58,6 +58,7 @@ export type AgentAdapter = {
   readSessionPath?(configDirectory: string, session: string): string | null;
   readAllowance?(pool: Pool, now: number, policy?: ControlPolicy['provider']): PoolReading;
   signals?(text: string): { allowance: boolean; usageLimit: boolean; capacity: boolean };
+  requiresFreshSession?(stderr: string): boolean;
   isUsageLimit?(event: Record<string, any>): boolean;
   pinProfile?(model: string, effort: string | undefined, route: Profile): Profile;
   supportsConsultation?(profile: Profile): boolean;
@@ -87,6 +88,9 @@ export function withAgentAdapter<T>(adapter: AgentAdapter, run: () => T): T {
 }
 export function isAgentCli(cli: unknown): cli is Cli {
   return typeof cli === 'string' && Object.hasOwn(adapters, cli);
+}
+export function configuredCodexPool(pools: readonly Pool[], name: string): Pool | undefined {
+  return pools.find((pool) => pool.name === name && pool.cli === codexAdapter.cli);
 }
 /** Reporting classification belongs with provider identities, including unrecognized historical values. */
 export function agentReportingEvidence(cli: unknown): { codex: boolean; unknown: boolean } {

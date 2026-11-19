@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import type { Settings } from './types.ts';
+import { configuredCodexPool } from './agents.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import {
   nativeUnitEnvironment,
@@ -138,7 +139,7 @@ export async function runNativeUnitCommand(
       Boolean(values.desktop) === Boolean(values.pane)
     )
       throw new Error('Native unit registration needs thread, worktree, brief, pool and either --desktop or --pane');
-    const pool = settings.pools.find((candidate) => candidate.name === values.pool && candidate.cli === 'codex');
+    const pool = configuredCodexPool(settings.pools, values.pool);
     if (!pool) throw new Error('Native units use an existing configured Codex pool');
     unitCaller(db, settings, undefined, values.desktop);
     const viewer = values.desktop
