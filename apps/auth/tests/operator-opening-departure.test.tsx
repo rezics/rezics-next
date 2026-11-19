@@ -1,4 +1,5 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
+import { managementOperationProfile } from '@rezics/auth-contract';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -6,13 +7,24 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
-import { OperatorSessionOpeningPage } from '../src/routes/automated.open';
-import * as opening from '../src/operator-session-opening';
+import {
+  creationFixture,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  nativeApprovalReference,
+  open,
+  send,
+} from './creation-page-fixture';
 import { readPendingManagementOperationStepUp } from '../src/management-operation-step-up';
 import * as operationStepUp from '../src/management-operation-step-up';
-import { managementOperationProfile } from '../src/management-operations';
+
 creationFixture();
+// Load the route after the fixture installs the Start server-function bridge.
+const { OperatorSessionOpeningPage } = await import('../src/routes/automated.open');
+const opening = await import('../src/operator-session-opening');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = '22222222-2222-4222-8222-222222222222';
 const subject = '33333333-3333-4333-8333-333333333333';
@@ -25,11 +37,11 @@ const metadata = {
     relation: { reservationId: '44444444-4444-4444-8444-444444444444', version: '7' },
   },
 };
-let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>>;
+let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
 let history: ReturnType<typeof createBrowserHistory>;
 afterEach(() => {
-  read.mockRestore();
-  history.destroy();
+  read?.mockRestore();
+  history?.destroy();
 });
 async function setup(scopes = ['account:manage']) {
   const session = {
@@ -102,7 +114,7 @@ test('clean input leaves freely; invalid input, feedback and keyboard focus surv
 test('Stay keeps the confirmed tuple and key; submitted departure returns through readback alone', async () => {
   const p = await setup();
   await p.review();
-  const selected = read.mock.calls[0]![0];
+  const selected = read!.mock.calls[0]![0];
   await flush(() => p.input('confirm').click());
   p.input('confirm').focus();
   await p.navigate();
@@ -113,6 +125,7 @@ test('Stay keeps the confirmed tuple and key; submitted departure returns throug
   await flush(() => send(p.host));
   expect(p.calls[0]!.body).toEqual(selected);
   await flush(() => p.calls[0]!.resolve(approval()));
+  expect(p.calls[1]!.body).toEqual({ ...selected, reference: nativeApprovalReference });
   const saved = readPendingManagementOperationStepUp();
   expect(saved).toMatchObject({ ...selected, phase: 'submitted' });
   await p.navigate();
@@ -126,10 +139,18 @@ test('Stay keeps the confirmed tuple and key; submitted departure returns throug
   await flush(() => p.calls[1]!.resolve(new Response(null, { status: 503 })));
   expect(readPendingManagementOperationStepUp()).toEqual(saved);
   Object.assign(p.session, { account_id: subject, amr: ['operator'] });
+  const readsBeforeReturn = p.sessionReads.length;
   await p.navigate('/automated/open');
   expect(p.host.querySelector('#opening-current-state-heading')?.parentElement?.textContent).toContain(subject);
-  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain('outcome remains unconfirmed');
-  expect(p.calls).toHaveLength(2);
+  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain(
+    'The request outcome is still unknown.',
+  );
+  expect(p.sessionReads.slice(readsBeforeReturn)).toEqual([{ method: 'GET', cookie: 'auth_session=original' }]);
+  expect(p.calls.map((call) => call.path)).toEqual([
+    '/account-operations/approve',
+    'https://auth.test/operator-sessions/open',
+  ]);
+  expect(readPendingManagementOperationStepUp()).toEqual(saved);
   expect(p.unload()).toBe(true);
 });
 test('Leave retires pending approval without starting issuance', async () => {
@@ -139,7 +160,7 @@ test('Leave retires pending approval without starting issuance', async () => {
   await flush(() => send(p.host));
   await p.navigate();
   await p.click('Leave');
-  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain('Preflight or approval was underway');
+  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain('No session opening was sent.');
   await flush(() => p.calls[0]!.resolve(approval()));
   expect(p.calls).toHaveLength(1);
 });
@@ -147,12 +168,15 @@ for (const change of ['caller', 'scope'] as const)
   test(`${change} replacement invalidates an open review prompt without offering old authority`, async () => {
     const p = await setup();
     await p.review();
+    expect(p.input('confirm')).not.toBeNull();
     await p.navigate();
+    expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
     Object.assign(p.session, change === 'caller' ? { account_id: operator } : { scope: [] });
     await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
     expect(p.router.history.location.pathname).toBe('/security');
     expect(p.unload()).toBe(false);
     expect(p.host.querySelector('#opening-confirm')).toBeNull();
+    expect(p.calls).toHaveLength(0);
   });
 test('deliberate fresh-human authentication bypasses unload warnings and retains the original tuple', async () => {
   const p = await setup([]);
@@ -205,13 +229,13 @@ test('blocked continuation storage keeps current-session Retry read-only', async
   const blocked = spyOn(operationStepUp, 'storePendingManagementOperationStepUp').mockReturnValue(false);
   try {
     await p.click('Sign in again for a new opening');
-    expect(p.host.querySelector('[role="alert"]')?.textContent).toContain(
-      'Current authorized account details are unavailable',
-    );
+    expect(p.host.querySelector('[role="alert"]')?.textContent).toContain('The account details are unavailable.');
     expect(blocked).toHaveBeenCalledTimes(1);
     expect(p.calls).toHaveLength(2);
     expect(readPendingManagementOperationStepUp()).toEqual(saved);
+    const readsBeforeRetry = p.sessionReads.length;
     await p.click('Check current session');
+    expect(p.sessionReads).toHaveLength(readsBeforeRetry + 1);
     expect(p.calls).toHaveLength(2);
     expect(readPendingManagementOperationStepUp()).toEqual(saved);
   } finally {

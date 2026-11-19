@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import { ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES } from '@rezics/auth-contract';
+import { ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES, managementOperationProfile } from '@rezics/auth-contract';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -8,21 +8,21 @@ import {
   RouterContextProvider,
 } from '@tanstack/react-router';
 import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
-import { OperatorSessionOpeningPage } from '../src/routes/automated.open';
-import * as opening from '../src/operator-session-opening';
 import {
   markManagementOperationReturned,
   readPendingManagementOperationStepUp,
 } from '../src/management-operation-step-up';
-import * as management from '../src/management-operations';
-import { managementOperationProfile } from '../src/management-operations';
-import { openingReadbackFixture } from './operator-opening-read-fixture';
 
 creationFixture();
+const { OperatorSessionOpeningPage } = await import('../src/routes/automated.open');
+const opening = await import('../src/operator-session-opening');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = '22222222-2222-4222-8222-222222222222';
 const subject = '33333333-3333-4333-8333-333333333333';
 const operation = { kind: 'opening' as const, operatorAccountId: operator, subjectAccountId: subject };
+const openingRequests = ['/account-operations/approve', 'https://auth.test/operator-sessions/open'];
+const unknownHistory =
+  'The request outcome is still unknown. Checking your session cannot show which request created it.';
 const metadata = {
   kind: 'ready' as const,
   metadata: {
@@ -41,14 +41,8 @@ const proof = (accountId: string) => ({
   amr: ['operator'],
 });
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
-let sessionRead: ReturnType<typeof spyOn<typeof management, 'loadManagementSession'>> | undefined;
-let readback: ReturnType<typeof openingReadbackFixture> | undefined;
-let issuance: ReturnType<typeof spyOn<typeof opening.operatorOpeningBrowserTransport, 'issue'>> | undefined;
 let browser: ReturnType<typeof createBrowserHistory> | undefined;
 afterEach(() => {
-  sessionRead?.mockRestore();
-  issuance?.mockRestore();
-  readback?.mockRestore();
   read?.mockRestore();
   read = undefined;
   browser?.destroy();
@@ -65,25 +59,6 @@ async function setup() {
     authn_epoch: 0,
     amr: ['pwd'],
   };
-  readback = openingReadbackFixture();
-  issuance = spyOn(opening.operatorOpeningBrowserTransport, 'issue').mockImplementation(async (input, signal) => {
-    const response = await fetch('/operator-sessions/open', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...input.input, reference: input.reference }),
-      signal,
-    });
-    return opening.receiveOperatorOpeningSessionResponse(response, input.input, 4, undefined, signal);
-  });
-  sessionRead = spyOn(management, 'loadManagementSession').mockResolvedValue({
-    kind: 'ready',
-    accountId: human,
-    clientId: session.client_id,
-    scopes: session.scope,
-    authTime: session.auth_time,
-    authnEpoch: session.authn_epoch,
-    amr: ['pwd'],
-  });
   read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const root = createRootRoute();
   const routeTree = root.addChildren(
@@ -131,7 +106,9 @@ test('oversized native approval is unavailable and never crosses the submission 
   );
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   expect(readPendingManagementOperationStepUp()?.phase).not.toBe('submitted');
-  expect(page.host.textContent).toContain('Current authorized account details are unavailable. Opening is disabled.');
+  expect(page.host.querySelector('[role="alert"]')?.textContent).toContain(
+    'The account details are unavailable. Opening is disabled.',
+  );
 });
 
 test('native acknowledgement stays as generic history after cached retirement', async () => {
@@ -144,7 +121,7 @@ test('native acknowledgement stays as generic history after cached retirement', 
   expect(page.host.querySelector('#opening-current-state-heading')).not.toBeNull();
   await flush(() => transition('pagehide'));
   const summary = page.host.querySelector('#opening-return-heading')?.parentElement;
-  expect(summary?.textContent).toContain('native response to the opening acknowledged the request');
+  expect(summary?.textContent).toContain('The opening request was acknowledged.');
   expect(summary?.textContent).not.toContain(subject);
   expect(summary?.textContent).not.toContain('account:manage');
   expect(page.host.querySelector('#opening-current-state-heading')).toBeNull();
@@ -165,11 +142,11 @@ test('fresh review refusal leaves the earlier unknown opening in mounted history
     await flush(() => transition('pagehide'));
     await flush(() => transition('pageshow'));
     const summary = page.host.querySelector('#opening-return-heading')?.parentElement?.textContent;
-    expect(summary).toContain('outcome remains unconfirmed');
-    expect(summary).toContain('opening was refused');
+    expect(summary).toContain(unknownHistory);
+    expect(summary).toContain('The opening was refused.');
     expect(summary).not.toContain(subject);
     expect(page.host.querySelector('#opening-confirm')).toBeNull();
-    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/operator-sessions/open']);
+    expect(page.calls.map((call) => call.path)).toEqual(openingRequests);
   } finally {
     assign.mockRestore();
   }
@@ -187,7 +164,7 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   expect(saved).toMatchObject({ phase: 'submitted', operation });
   await flush(() => transition('pagehide'));
   const summary = page.host.querySelector('#opening-return-heading')?.parentElement;
-  expect(summary?.textContent).toContain('outcome remains unconfirmed');
+  expect(summary?.textContent).toContain(unknownHistory);
   expect(document.activeElement).toBe(summary);
   expect(summary?.textContent).not.toContain(human);
   expect(summary?.textContent).not.toContain(operator);
@@ -201,7 +178,7 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   const readSignals: AbortSignal[] = [];
   let readbacks = 0;
   globalThis.fetch = ((path, init) => {
-    if (String(path) === '/session') {
+    if (String(path) === 'https://auth.test/session' && init?.method === 'GET') {
       readSignals.push(init?.signal as AbortSignal);
       readbacks++;
       if (readbacks === 1) return late.promise;
@@ -222,7 +199,7 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   expect(readbacks).toBe(2);
   expect(readSignals[1]!.aborted).toBe(false);
   expect(readPendingManagementOperationStepUp()).toEqual(saved);
-  expect(page.host.textContent).toContain('outcome remains unconfirmed');
+  expect(page.host.querySelector('#opening-return-history')?.textContent).toContain(unknownHistory);
   expect(page.host.querySelector('#opening-current-state-heading')).toBeNull();
   expect(page.host.textContent).toContain('Check current session');
   await page.click('Check current session');
@@ -230,11 +207,12 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   expect(readSignals[2]!.aborted).toBe(false);
   expect(page.host.querySelector('#opening-current-state-heading')?.textContent).toContain('Current operated session');
   expect(page.host.textContent).toContain('does not prove that the earlier request created it');
-  expect(page.host.querySelector('#opening-return-heading')?.textContent).not.toContain(subject);
+  const currentHistory = page.host.querySelector('#opening-return-history')?.textContent;
+  expect(currentHistory).toContain(unknownHistory);
+  expect(currentHistory).not.toContain(subject);
   expect(read).toHaveBeenCalledTimes(2);
-  expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/operator-sessions/open']);
+  expect(page.calls.map((call) => call.path)).toEqual(openingRequests);
   expect(readPendingManagementOperationStepUp()).toEqual(saved);
-  expect(page.host.textContent).toContain('outcome remains unconfirmed');
   await page.click('Dismiss history');
   expect(page.host.querySelector('#opening-return-heading')).toBeNull();
   const currentState = page.host.querySelector('#opening-current-state-heading');
@@ -256,5 +234,5 @@ for (const marker of ['absent', 'malformed'] as const)
     expect(page.host.querySelector<HTMLInputElement>('#opening-operator')?.value).toBe('');
     expect(page.host.querySelector('#opening-return-heading')?.textContent).not.toContain(subject);
     expect(read).toHaveBeenCalledTimes(2);
-    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/operator-sessions/open']);
+    expect(page.calls.map((call) => call.path)).toEqual(openingRequests);
   });

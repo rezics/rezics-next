@@ -1,4 +1,5 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
+import { managementOperationProfile } from '@rezics/auth-contract';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -7,12 +8,11 @@ import {
   RouterContextProvider,
 } from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
-import { OperatorSessionOpeningPage } from '../src/routes/automated.open';
-import * as opening from '../src/operator-session-opening';
-import * as management from '../src/management-operations';
-import { managementOperationProfile } from '../src/management-operations';
+import type { OpeningRead } from '../src/operator-session-opening';
 
 creationFixture();
+const { OperatorSessionOpeningPage } = await import('../src/routes/automated.open');
+const opening = await import('../src/operator-session-opening');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = '22222222-2222-4222-8222-222222222222';
 const subject = '33333333-3333-4333-8333-333333333333';
@@ -26,18 +26,16 @@ const metadata = {
   },
 };
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
-let sessionRead: ReturnType<typeof spyOn<typeof management, 'loadManagementSession'>> | undefined;
 let browser: ReturnType<typeof createBrowserHistory> | undefined;
 afterEach(() => {
-  sessionRead?.mockRestore();
   read?.mockRestore();
   browser?.destroy();
 });
 
 async function setup() {
-  const pending: { signal: AbortSignal; resolve: (value: opening.OpeningRead) => void }[] = [];
+  const pending: { signal: AbortSignal; resolve: (value: OpeningRead) => void }[] = [];
   read = spyOn(opening, 'loadOpeningMetadata').mockImplementation((_input, signal) => {
-    const result = Promise.withResolvers<opening.OpeningRead>();
+    const result = Promise.withResolvers<OpeningRead>();
     pending.push({ signal: signal!, resolve: result.resolve });
     return result.promise;
   });
@@ -49,15 +47,6 @@ async function setup() {
     authn_epoch: 0,
     amr: ['pwd'],
   };
-  sessionRead = spyOn(management, 'loadManagementSession').mockResolvedValue({
-    kind: 'ready',
-    accountId: human,
-    clientId: session.client_id,
-    scopes: session.scope,
-    authTime: session.auth_time,
-    authnEpoch: session.authn_epoch,
-    amr: ['pwd'],
-  });
   const root = createRootRoute();
   const routeTree = root.addChildren(
     ['/automated/open', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
