@@ -167,6 +167,11 @@ test(
     expect(cookies.filter((cookie) => !before.some((old) => old.name === cookie.name)).length).toBe(1);
     const again = await open('/en', { storageState: { cookies, origins: [] } }, true);
     expect(await navigationWidth(again, nav)).toBeLessThanOrEqual(96);
+    const compactHome = again
+      .getByRole('navigation', { name: nav })
+      .getByRole('link', { name: en.nav_home!, exact: true });
+    expect(await compactHome.isVisible()).toBe(true);
+    expect(await compactHome.getAttribute('aria-current')).toBe('page');
     expect(await again.locator('html[data-hydrated]').count()).toBe(0);
     await again.context().close();
     const hydrated = await open('/en', { storageState: { cookies, origins: [] } });
