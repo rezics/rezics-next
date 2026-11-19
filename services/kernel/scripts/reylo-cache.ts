@@ -301,17 +301,10 @@ function entryCount(queries: string): number {
   }
 }
 
-/**
- * Reylo names an entry by its statement and by its server's URL, host and port included. Every throwaway database has
- * a new port, so the copied entries are renamed to this server's name: an unchanged statement then finds its own entry,
- * which is reused while the schema matches, and a changed statement adds one entry.
- */
-function rekeyEntries(queries: string, url: string): void {
-  const database = new URL(url);
-  const server = createHash('sha256')
-    .update(`${database.protocol}//${database.username}@${database.host}${database.pathname}`)
-    .digest('hex')
-    .slice(0, 16);
+/** Reylo hashes an empty server name when the compiler or test process reads its project offline. */
+function rekeyEntries(queries: string, database: URL | null): void {
+  const identity = database ? `${database.protocol}//${database.username}@${database.host}${database.pathname}` : '';
+  const server = createHash('sha256').update(identity).digest('hex').slice(0, 16);
   let names: string[];
   try {
     names = readdirSync(queries);
@@ -415,13 +408,11 @@ export async function prepareReyloAnalysisCache(
         inherited = true;
       }
     }
-    if (inherited && changed.length === 0)
-      await phase('database-binding', () => rekeyEntries(join(privateRoot, '.reylo', 'queries'), env.DATABASE_URL!));
+    const queries = join(privateRoot, '.reylo', 'queries');
     let written = 0;
     if (changed.length > 0) {
       writeFileSync(configFile, `direct_url: ${JSON.stringify(env.DATABASE_URL)}\n`);
-      const queries = join(privateRoot, '.reylo', 'queries');
-      await phase('database-binding', () => rekeyEntries(queries, env.DATABASE_URL!));
+      await phase('database-binding', () => rekeyEntries(queries, new URL(env.DATABASE_URL!)));
       const before = entryCount(queries);
       const generated = await phase('generate', () =>
         (dependencies.generate ?? generateReyloAnalysis)(
@@ -439,6 +430,7 @@ export async function prepareReyloAnalysisCache(
       }
       written = entryCount(queries) - before;
     }
+    await phase('offline-binding', () => rekeyEntries(queries, null));
     writeFileSync(configFile, 'direct_url: ""\n');
     if (changed.length > 0 || inherited) {
       const manifest = JSON.stringify({ version: 1, files: hashes } satisfies ReyloCacheManifest) + '\n';

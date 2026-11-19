@@ -469,7 +469,10 @@ test('a focused check compiles on the host analysis: a statement is analysed onc
           const config = environment.REYLO_CONFIG!;
           expect(readFileSync(config, 'utf8')).toBe('direct_url: ""\n');
           const queries = join(dirname(config), '.reylo', 'queries');
-          return readdirSync(queries)
+          const entries = readdirSync(queries);
+          const offlineServer = createHash('sha256').update('').digest('hex').slice(0, 16);
+          expect(entries.every((name) => name.endsWith(`-${offlineServer}.json`))).toBe(true);
+          return entries
             .map((name) => (JSON.parse(readFileSync(join(queries, name), 'utf8')) as { statement: string }).statement)
             .filter((statement) => statement.includes('error'))
             .sort();
