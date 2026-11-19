@@ -2,10 +2,12 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { ACCESS_EVIDENCE_TTL_MS } from '../../src/access/evidence-deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
-import { capture, openGrowthDatabase } from '../support/growth.ts';
+import { captureWithFoldedCost, openGrowthDatabase } from '../support/growth.ts';
+import '../support/native-history-composition.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -24,16 +26,21 @@ import { createRealAccess } from './real-access.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
 import readLinkCheckpoint from '../../src/semantic/read-link-checkpoint.sql';
 import readPendingMember from '../../src/semantic/links-read-pending-member.sql';
+import readPartitionBatch from '../../src/partition/read-batch.sql';
 import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
+import readSubjectReference from '../../src/semantic/read-subject-reference.sql';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
+import readSummaries from '../../src/semantic/summaries-read.sql';
 import readPermissionTime from '../../src/access/permission-time.sql';
-import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 
 const checkpointSql = readLinkCheckpoint['~standard'].query.text;
 const pendingMemberSql = readPendingMember['~standard'].query.text;
 const identitySql = readSubjectIdentity['~standard'].query.text;
 const subjectSql = readSubjectStatement['~standard'].query.text;
 const permissionTimeSql = readPermissionTime['~standard'].query.text;
+const partitionBatchSql = readPartitionBatch['~standard'].query.text;
+const referenceSql = readSubjectReference['~standard'].query.text;
+const summarySql = readSummaries['~standard'].query.text;
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -43,7 +50,7 @@ const admin = new pg.Pool({ connectionString: databaseUrl, max: 3 });
 const projection = linkProjection(pool);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) };
 const routeKey = new Uint8Array(32).fill(43);
-const actions = ['subject:create', 'subject:read', 'subject:merge', 'moderation:hide'] as const;
+const actions = ['subject:create', 'subject:read', 'subject:merge', 'statement:propose', 'moderation:hide'] as const;
 const accounts = {
   writer: newId(randomInt(65_536)),
   reader: newId(randomInt(65_536)),
@@ -65,6 +72,7 @@ beforeAll(async () => {
   await bootstrapRelease(pool, bundledRelease);
   await realAccess.grant(globalSubjectResource, 'writer', 'subject:create');
   await realAccess.grant(globalSubjectResource, 'writer', 'subject:merge');
+  await realAccess.grant(globalSubjectResource, 'writer', 'statement:propose');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
 });
 
@@ -188,11 +196,12 @@ async function catchUpLinks(partition: number): Promise<void> {
 async function call(
   method: string,
   path: string,
-  options: { token?: keyof typeof accounts; key?: string; body?: unknown; session?: string } = {},
+  options: { token?: keyof typeof accounts; key?: string; ifMatch?: string; body?: unknown; session?: string } = {},
 ) {
   const headers: Record<string, string> = {};
   if (options.token) headers.authorization = `Bearer ${realAccess.bearer(options.token)}`;
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
+  if (options.ifMatch !== undefined) headers['if-match'] = options.ifMatch;
   if (options.session) headers[SESSION_HEADER] = options.session;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -242,42 +251,9 @@ async function readDuringStaleProjection(
   return request;
 }
 
-async function readFullViewDuringStaleProjection(
-  observer: SqlObserver,
-  id: string,
-  reader: AccountActor,
-  whileWaiting: () => Promise<void>,
-) {
-  const barrier = observer.hold({ statement: checkpointSql }, 'after');
-  const request = withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
-    fullView({ routeKey: routeKey, pool, access: libraryAccess, tokens }, reader, 'FULL', {
-      entries: [{ subjectId: id }],
-    }),
-  );
-  try {
-    await Promise.race([
-      barrier.entered,
-      request.then(
-        (view) => {
-          throw new Error(`FULL view completed before reaching the projection checkpoint: ${JSON.stringify(view)}`);
-        },
-        (error) => {
-          throw error;
-        },
-      ),
-    ]);
-    await whileWaiting();
-  } finally {
-    barrier.release();
-  }
-  return request;
-}
-
-async function waitPastPreparedAccessEvidence(observer: SqlObserver, from: number): Promise<void> {
-  const preparedAt = observer.records.slice(from).find(({ statement }) => statement === permissionTimeSql)?.executedAt;
-  expect(preparedAt).toBeDefined();
-  const expiresAt = Date.parse(preparedAt!) + 1_100;
-  while (Date.now() < expiresAt) await Bun.sleep(Math.min(20, expiresAt - Date.now()));
+function accessExpiryWitness(preparedAt: string): number {
+  // The native time query runs after Access starts its evidence lifetime.
+  return Date.parse(preparedAt) + ACCESS_EVIDENCE_TTL_MS + 25;
 }
 
 test('missing and unreadable subject resolution do not wait for link projection', async () => {
@@ -611,6 +587,7 @@ test('a live identity change during projection wait retries against its current 
       },
     ],
   });
+  await realAccess.grant({ route: live.route, id: live.id }, 'writer', 'subject:read');
   await realAccess.grant({ route: live.route, id: live.id }, 'reader', 'subject:read');
   await realAccess.grant({ route: target.route, id: target.id }, 'reader', 'subject:read');
   await leaveProjectionBehind(partition);
@@ -618,19 +595,21 @@ test('a live identity change during projection wait retries against its current 
   const observer = observeSql(pool);
   try {
     const current = await readDuringStaleProjection(observer, live.id, live.component, async () => {
-      await updateSubjectIdentity(pool, {
-        subject: live.id,
-        labels: { en: 'After identity race' },
-        release: { digest: bundledDigest, release: bundledRelease },
-        authorize: async () => true,
+      const revised = await call('PATCH', `/v1/subjects/${live.id}/terms`, {
+        token: 'writer',
+        key: `"${randomUUID()}"`,
+        ifMatch: '"1"',
+        body: { labels: { en: 'After identity race' } },
       });
+      expect(revised.response.status, JSON.stringify(revised.body)).toBe(200);
+      expect(revised.body).toEqual({ subject: live.id, revision: 2 });
       await catchUpLinks(partition);
     });
     expect(current.response.status).toBe(200);
     expect(current.body.subject.labels).toMatchObject({ en: 'After identity race' });
     expect(current.body.subject.revision).toBe(2);
-    expect(current.body.subject.relationCounts['schema:author']).toBe(1);
     expect(current.body.subject.statements['schema:author']).toHaveLength(1);
+    expect(current.body.subject.statements['schema:author'][0].value.content).toBe(target.id);
   } finally {
     await observer.close();
   }
@@ -654,61 +633,90 @@ test('live subject authorization is freshly prepared after an actual projection 
   await leaveProjectionBehind(partition);
 
   const observer = observeSql(pool);
-  const before = observer.records.length;
+  const identity = observer.hold({ statement: identitySql }, 'after');
   try {
-    const current = await readDuringStaleProjection(observer, live.id, live.component, async () => {
+    const request = readDuringStaleProjection(observer, live.id, live.component, async () => {
+      const identityRead = observer.records.findIndex(({ statement }) => statement === identitySql);
+      const initial = observer.records
+        .slice(0, identityRead)
+        .findLast(({ statement }) => statement === permissionTimeSql);
+      expect(initial).toBeDefined();
       await catchUpLinks(partition);
-      await waitPastPreparedAccessEvidence(observer, before);
+      await Bun.sleep(Math.max(0, accessExpiryWitness(initial!.executedAt) - Date.now()));
     });
+    try {
+      await Promise.race([identity.entered, request]);
+      // Age the preflight proof before the projection wait starts. The wait has at most half the remaining request budget.
+      await Bun.sleep(650);
+    } finally {
+      identity.release();
+    }
+    const current = await request;
     expect(current.response.status).toBe(200);
-    expect(current.body.subject.relationCounts['schema:author']).toBe(1);
     expect(current.body.subject.statements['schema:author']).toHaveLength(1);
-    const preparations = observer.records.slice(before).filter(({ statement }) => statement === permissionTimeSql);
-    expect(preparations.length).toBeGreaterThan(3);
-    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === checkpointSql)).toBe(true);
+    expect(current.body.subject.statements['schema:author'][0].value.content).toBe(target.id);
+    const detail = observer.records.findIndex(({ statement }) => statement === subjectSql);
+    const checkpoint = observer.records.slice(0, detail).findLastIndex(({ statement }) => statement === checkpointSql);
+    expect(detail).toBeGreaterThan(checkpoint);
+    expect(checkpoint).toBeGreaterThan(0);
+    expect(
+      observer.records.slice(checkpoint + 1, detail).filter(({ statement }) => statement === permissionTimeSql),
+    ).toHaveLength(2);
   } finally {
     await observer.close();
   }
 }, 60_000);
 
-test('FULL subject display refreshes its Access proof after an actual projection wait outlives evidence', async () => {
+test('Library FULL refreshes its Access proof before final summary disclosure when initial evidence expires', async () => {
   const partition = freshPartition();
-  const target = await createFixed(partition, 'schema:Person', 'FULL evidence target');
-  const live = await createFixed(partition, 'schema:Book', 'FULL evidence lifetime read', {
-    'schema:author': [
-      {
-        property: { id: 'schema:author' },
-        value: { type: 'value', content: target.id },
-        qualifiers: [],
-        references: [],
-      },
-    ],
-  });
+  const live = await createProjected(partition, 'FULL evidence lifetime read');
   await realAccess.grant({ route: live.route, id: live.id }, 'reader', 'subject:read');
-  await realAccess.grant({ route: target.route, id: target.id }, 'reader', 'subject:read');
   await leaveProjectionBehind(partition);
 
   const reader = await libraryActor('reader');
   const observer = observeSql(pool);
-  const before = observer.records.length;
+  // This is the summary observation's final source-home query, after its initial Access check.
+  const source = observer.hold({ statement: partitionBatchSql, occurrence: 2 }, 'after');
+  const request = withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
+    fullView({ routeKey, pool, access: libraryAccess, tokens }, reader, 'FULL', { entries: [{ subjectId: live.id }] }),
+  );
   try {
-    const view = await readFullViewDuringStaleProjection(observer, live.id, reader, async () => {
-      await catchUpLinks(partition);
-      await waitPastPreparedAccessEvidence(observer, before);
-    });
+    const observed = await Promise.race([
+      source.entered,
+      request.then(() => {
+        throw new Error('FULL view completed before observing its summary source homes');
+      }),
+    ]);
+    const observedAt = observer.records.indexOf(observed);
+    const summary = observer.records.findIndex(({ statement }) => statement === summarySql);
+    const initial = observer.records.slice(0, summary).findLast(({ statement }) => statement === permissionTimeSql);
+    expect(summary).toBeGreaterThan(0);
+    expect(observedAt).toBeGreaterThan(summary);
+    expect(initial).toBeDefined();
+    const expiredBy = accessExpiryWitness(initial!.executedAt);
+    await Bun.sleep(Math.max(0, expiredBy - Date.now()));
+    source.release();
+
+    const view = await request;
     expect(view.entries[0]!.subject).toMatchObject({
       id: live.id,
       label: { value: 'FULL evidence lifetime read', language: 'en' },
     });
-    const preparations = observer.records.slice(before).filter(({ statement }) => statement === permissionTimeSql);
-    expect(preparations.length).toBeGreaterThan(2);
-    expect(projectionWaitReads(observer, before).some(({ statement }) => statement === checkpointSql)).toBe(true);
+    const afterObservation = observer.records.slice(observedAt + 1);
+    const current = afterObservation.findIndex(({ statement }) => statement === partitionBatchSql);
+    expect(current).toBeGreaterThan(0);
+    const refreshed = afterObservation.slice(0, current).filter(({ statement }) => statement === permissionTimeSql);
+    expect(refreshed).toHaveLength(1);
+    expect(Date.parse(refreshed[0]!.executedAt)).toBeGreaterThanOrEqual(expiredBy);
+    expect(projectionWaitReads(observer)).toHaveLength(0);
   } finally {
+    source.release();
+    await request.catch(() => undefined);
     await observer.close();
   }
 }, 60_000);
 
-test('FULL display classifies one late Access preparation SQL point per live subject across captured pools', async () => {
+test('Library FULL classifies one late summary Access SQL point per live subject across captured pools', async () => {
   const growth = await openGrowthDatabase(databaseUrl);
   try {
     const partition = freshPartition();
@@ -720,7 +728,7 @@ test('FULL display classifies one late Access preparation SQL point per live sub
     await catchUpLinks(partition);
     const reader = await libraryActor('reader', growth.pool);
 
-    const captured = await capture(
+    const captured = await captureWithFoldedCost(
       growth,
       async () => {
         for (const subject of subjects) {
@@ -737,21 +745,27 @@ test('FULL display classifies one late Access preparation SQL point per live sub
     const statements = captured.capture.statements;
     const indices = (statement: string) =>
       statements.flatMap((candidate, index) => (candidate === statement ? [index] : []));
-    const identityReads = indices(identitySql);
-    const subjectReads = indices(subjectSql);
-    const checkpoints = indices(checkpointSql);
-    const permissionPreparations = indices(permissionTimeSql);
+    const referenceReads = indices(referenceSql);
+    const summaryReads = indices(summarySql);
+    const sourceReads = indices(partitionBatchSql);
+    const permissionTimes = indices(permissionTimeSql);
 
     expect(captured.capture.statementBackends).toHaveLength(statements.length);
-    expect(identityReads).toHaveLength(subjects.length);
-    expect(subjectReads).toHaveLength(subjects.length);
-    expect(permissionPreparations.length).toBeGreaterThanOrEqual(subjects.length * 2);
-    for (const identityRead of identityReads) {
-      const subjectRead = subjectReads.find((index) => index > identityRead);
-      expect(subjectRead).toBeDefined();
-      const checkpoint = checkpoints.find((index) => index > identityRead && index < subjectRead!);
-      expect(checkpoint).toBeDefined();
-      expect(permissionPreparations.filter((index) => index > checkpoint! && index < subjectRead!)).toHaveLength(1);
+    expect(referenceReads).toHaveLength(subjects.length * 4);
+    expect(summaryReads).toHaveLength(subjects.length);
+    // Initial and final summary snapshots each bind homes and read their components.
+    expect(sourceReads).toHaveLength(subjects.length * 4);
+    // Two references and one summary check per phase each prepare and authorize at native time.
+    expect(permissionTimes).toHaveLength(subjects.length * 12);
+    for (const [index, summary] of summaryReads.entries()) {
+      const bound = sourceReads[index * 4]!;
+      const observed = sourceReads[index * 4 + 1]!;
+      const current = sourceReads[index * 4 + 2]!;
+      const checked = sourceReads[index * 4 + 3]!;
+      expect(summary).toBeGreaterThan(referenceReads[index * 4 + 1]!);
+      expect(bound).toBeGreaterThan(summary);
+      expect(checked).toBeLessThan(referenceReads[index * 4 + 2]!);
+      expect(permissionTimes.filter((position) => position > observed && position < current)).toHaveLength(1);
     }
   } finally {
     await growth.close();
