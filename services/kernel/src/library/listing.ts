@@ -29,6 +29,7 @@ import {
   liveCopyLocator,
   readLiveCopy,
   readLiveCopyResult,
+  advanceListingBootstrap,
   admitLiveCopyRoles,
   observeLiveCopyAdmissions,
   openLiveCopyGate,
@@ -417,23 +418,7 @@ export async function bootstrapSubjectListingHome(
   await runOperationalTransaction(
     deps.pool,
     { mode: 'work-step', partition, kind: 'library.listing.bootstrap', accounts: [], workClient: deps.client },
-    async (tx) => {
-      const next = selected.row;
-      await tx.query(
-        `UPDATE access.live_copy_bootstrap SET after_route=$5,after_subject=$6,after_collection=$7,covered=$8
-      WHERE partition_no=$1 AND (after_route,after_subject,after_collection)=($2,$3::uuid,$4::uuid) AND NOT covered`,
-        [
-          partition,
-          selected.frontier.after_route,
-          selected.frontier.after_subject,
-          selected.frontier.after_collection,
-          next?.route ?? selected.frontier.after_route,
-          next?.subject_id ?? selected.frontier.after_subject,
-          next?.collection_id ?? selected.frontier.after_collection,
-          !next,
-        ],
-      );
-    },
+    (tx) => advanceListingBootstrap(tx, partition, selected.frontier, selected.row),
   );
   return !!selected.row;
 }

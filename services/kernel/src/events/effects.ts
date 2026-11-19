@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
-import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
+import { completeLocatorWork, ERASURE_LOCATOR_EFFECTS, openLocatorWork } from '../access/erasure.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { LOCATOR_EFFECTS_QUEUE, MEDIA_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -102,10 +102,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   };
   const done = DBOS.registerStep(
     async (workflowId: string) => {
-      await locatorPool().query(
-        "UPDATE access.erasure_locator_work SET state='done' WHERE workflow_id=$1 AND state='open'",
-        [workflowId],
-      );
+      await completeLocatorWork(locatorPool(), workflowId);
     },
     { name: 'effect.locator.done', retriesAllowed: true, maxAttempts: 10 },
   );
@@ -206,13 +203,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       );
       if (locatorRows.length > 0) {
         // A separate autocommit transaction precedes every enqueue, including partial batch failure.
-        await locatorPool().query(
-          `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at)
-           SELECT workflow_id,effect,ceil(extract(epoch FROM clock_timestamp()) * 1000)::bigint
-           FROM jsonb_to_recordset($1::jsonb) AS x(workflow_id text,effect text)
-           ON CONFLICT (workflow_id) DO NOTHING`,
-          [JSON.stringify(locatorRows)],
-        );
+        await openLocatorWork(locatorPool(), locatorRows);
       }
       await Promise.all(
         [...partitions.entries()].map(async ([partition, jobs]) => {

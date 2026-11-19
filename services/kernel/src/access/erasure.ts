@@ -444,6 +444,26 @@ export const erasureWorkModule: WorkModule = {
   },
 };
 
+/** Commit the locator batch before the relay enqueues any workflow. */
+export async function openLocatorWork(
+  pool: Pool,
+  rows: readonly { workflow_id: string; effect: string }[],
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at)
+     SELECT workflow_id,effect,ceil(extract(epoch FROM clock_timestamp()) * 1000)::bigint
+     FROM jsonb_to_recordset($1::jsonb) AS x(workflow_id text,effect text)
+     ON CONFLICT (workflow_id) DO NOTHING`,
+    [JSON.stringify(rows)],
+  );
+}
+
+export async function completeLocatorWork(pool: Pool, workflowId: string): Promise<void> {
+  await pool.query("UPDATE access.erasure_locator_work SET state='done' WHERE workflow_id=$1 AND state='open'", [
+    workflowId,
+  ]);
+}
+
 /** Explicit platform resolution, after the owner has handled the copy. The caller emits its command event. */
 export async function resolveLocatorWork(tx: CommandTransaction, workflowId: string): Promise<void> {
   if (!hasLiveCommandTransaction(tx)) throw new LifecycleDeniedError();
