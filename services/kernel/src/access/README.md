@@ -1841,8 +1841,9 @@ recorded version's list.
 Every listed owner registers an effect, including an owner with no per-account data. After its final purge step
 has committed, the owner calls `acknowledgeErasure({ pool }, { accountId, participant, outcome })` in a separate
 command transaction in the account's partition: `erased` attests to actual cleanup and `none` attests that no data
-applies. This mechanical work runs as the platform and restores no initiator. New acknowledgements use the existing
-`account-updated` event; there is no new event type. Dispatch success is not completion.
+applies. This mechanical work runs as the platform and restores no initiator. Shared history emits
+`com.rezics.history.erasure-acknowledged.v1` with the protocol version and outcome. Other participants emit the
+existing `account-updated` event. Dispatch success is not completion.
 
 Only `erased` may name optional `retained` exceptions, at most 16, each with `store`, `fields`, `purpose` and
 `expiresAt: Date`. A store is one identifier or two identifiers separated by one dot; each component matches
