@@ -497,19 +497,15 @@ function vocabularyCommands(input: {
   }));
 }
 
-function ackedCreates(journal: ShowcaseJournal): Map<string, string> {
-  return new Map(
-    journal
-      .acknowledgedCommands()
-      .flatMap((ack) =>
-        ack.command.op === 'create' &&
-        ack.subjectId &&
-        ack.command.source.source === 'vndb_cross_media' &&
-        ack.command.source.converter_revision === adapterRevision
-          ? [[ack.command.source.external_id, ack.subjectId] as const]
-          : [],
-      ),
-  );
+function ackedCreates(
+  journal: ShowcaseJournal,
+  requirements: VndbCharacterVocabularyRequirements,
+): Map<string, string> {
+  return journal.vocabularyCreateIds('vndb_cross_media', adapterRevision, [
+    characterTraitTaxonomy,
+    appearanceRoleTaxonomy,
+    ...requirements.terms.map((term) => vocabularyKey(term.taxonomy, term.code)),
+  ]);
 }
 
 async function sendMissing(input: {
@@ -538,11 +534,11 @@ function neededSchemes(terms: readonly ShowcaseCharacterTerm[]): CharacterTaxono
   return [...seen].sort();
 }
 
-function identityProfile(
+export function journalCharacterVocabularyProfile(
   requirements: VndbCharacterVocabularyRequirements,
   journal: ShowcaseJournal,
 ): VndbCharacterVocabularyProfile {
-  const creates = ackedCreates(journal);
+  const creates = ackedCreates(journal, requirements);
   const traitSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(characterTraitTaxonomy)));
   const roleSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(appearanceRoleTaxonomy)));
   const traits = requirements.terms.flatMap((term) => {
@@ -636,7 +632,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
     }),
   );
   if (schemeCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: schemeCommands });
-  const schemeCreates = ackedCreates(input.journal);
+  const schemeCreates = ackedCreates(input.journal, requirements);
   const schemeProposals = schemes.flatMap((taxonomy) => {
     const subjectId = schemeCreates.get(showcaseVocabularyExternalId(vocabularyKey(taxonomy)));
     return subjectId
@@ -661,7 +657,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
       'skos:ConceptScheme',
     ),
   );
-  const profile = identityProfile(requirements, input.journal);
+  const profile = journalCharacterVocabularyProfile(requirements, input.journal);
   if (input.stage === 'schemes')
     return {
       requirements: schemeRequirements,
@@ -689,7 +685,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
   );
   if (conceptCommands.length)
     await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
-  const conceptCreates = ackedCreates(input.journal);
+  const conceptCreates = ackedCreates(input.journal, requirements);
   const parentIds = new Map<string, string[]>();
   for (const edge of requirements.parents) {
     const parentId = conceptCreates.get(
@@ -728,7 +724,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
       currentSchemes.get(term.taxonomy),
     ),
   );
-  const resolved = identityProfile(vocabulary.requirements, input.journal);
+  const resolved = journalCharacterVocabularyProfile(vocabulary.requirements, input.journal);
   return {
     requirements: [...schemeRequirements, ...conceptRequirements],
     bindings: await composeVndbCharacterVocabularyBindings(input.port, resolved, requirements),
@@ -746,7 +742,7 @@ export async function readShowcaseCharacterVocabulary(input: {
   const vocabulary = await planShowcaseCharacterVocabulary(input.tables, input.selectedPlan);
   return composeVndbCharacterVocabularyBindings(
     input.port,
-    identityProfile(vocabulary.requirements, input.journal),
+    journalCharacterVocabularyProfile(vocabulary.requirements, input.journal),
     vocabulary.requirements,
   );
 }

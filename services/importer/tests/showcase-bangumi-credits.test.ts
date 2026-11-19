@@ -573,8 +573,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         acknowledgements: journal.acknowledgedCommands(),
         read: readSubject,
       });
-    const roleCodes = (value: BangumiCreditVocabularyResolution) =>
-      value.roles.map((item) => item.code).sort((left, right) => left.localeCompare(right));
+    const roleCodes = (value: BangumiCreditVocabularyResolution) => value.roles.map((item) => item.code);
 
     setRoleEvidence({ 'schema:url': 'preferred', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });
     expect(roleCodes(await readBindings())).toEqual(['155', '2', '20', '2001', '2004', '2007', '21', '32', '41']);
@@ -662,6 +661,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       read: async (id) => publicClient.readSubject(id),
     });
     expect(roleCodes(recovered)).toEqual(['155', '2', '20', '21', '32', '41']);
+    expect(recovered.requirements).toEqual(reopened.requirements);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

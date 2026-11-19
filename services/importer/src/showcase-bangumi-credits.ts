@@ -556,7 +556,6 @@ export async function prepareBangumiCreatorCreditBindings(
   let schemeManifest = input.prior?.manifest;
   let activePublication = input.prior;
   let endpointsPublished = false;
-  let allRequirements: ShowcaseVocabularyRequirement[] = scheme ? [schemeRequirement] : [];
 
   if (!scheme && !schemeMustNotRestore) {
     const port = captureShowcaseCommands(input.port, input.journal);
@@ -620,7 +619,6 @@ export async function prepareBangumiCreatorCreditBindings(
     });
     if (fresh) {
       scheme = fresh;
-      allRequirements = [schemeRequirement];
     } else {
       schemeMustNotRestore = true;
     }
@@ -634,7 +632,7 @@ export async function prepareBangumiCreatorCreditBindings(
   const roleBindings: ResolvedConcept[] = [];
   const reachedRoles: BangumiCreditRoleBinding[] = [];
   const missing: RequiredRole[] = [];
-  const existingRoleRequirements: ShowcaseVocabularyRequirement[] = [];
+  const existingRoleRequirements = new Set<ShowcaseVocabularyRequirement>();
   for (let index = 0; index < roles.length; index++) {
     const role = roles[index]!;
     const requirement = roleRequirements[index]!;
@@ -671,7 +669,7 @@ export async function prepareBangumiCreatorCreditBindings(
         conceptId: bound.id,
         schemeId: scheme.id,
       });
-      existingRoleRequirements.push(requirement);
+      existingRoleRequirements.add(requirement);
     } else {
       if (wasPublished) continue;
       if (previousRecord) {
@@ -732,7 +730,7 @@ export async function prepareBangumiCreatorCreditBindings(
         );
     }
     await writeBangumiStaffVocabularyCommands({ port, journal: input.journal, commands: candidates, read });
-    allRequirements = [...allRequirements, ...existingRoleRequirements, ...newRequirements];
+    const publishable = new Set([...existingRoleRequirements, ...newRequirements]);
     // The Scheme pass read back the selected credit endpoints. The new commands only affect role vocabulary.
     const publishRoles = endpointsPublished ? publishShowcaseVocabulary : publishShowcase;
     const publication = await publishRoles({
@@ -742,7 +740,10 @@ export async function prepareBangumiCreatorCreditBindings(
       journal: input.journal,
       review: input.review,
       publicClient: input.publicClient,
-      vocabularyRequirements: allRequirements,
+      vocabularyRequirements: [
+        schemeRequirement,
+        ...roleRequirements.filter((requirement) => publishable.has(requirement)),
+      ],
     });
     schemeManifest = publication.manifest;
     activePublication = publication;
@@ -778,7 +779,7 @@ export async function prepareBangumiCreatorCreditBindings(
         conceptId: bound.id,
         schemeId: scheme.id,
       });
-      existingRoleRequirements.push(requirement);
+      existingRoleRequirements.add(requirement);
     }
   }
 
@@ -791,7 +792,13 @@ export async function prepareBangumiCreatorCreditBindings(
       releaseDigest: bundledDigest,
     },
   ];
-  const requirements = [schemeRequirement, ...existingRoleRequirements];
+  // Reused and newly published roles share the same source-code order on reopen.
+  reachedRoles.sort((left, right) => left.code.localeCompare(right.code));
+  roleBindings.sort((left, right) => left.code.localeCompare(right.code));
+  const requirements = [
+    schemeRequirement,
+    ...roleRequirements.filter((requirement) => existingRoleRequirements.has(requirement)),
+  ];
   return {
     bindings: { releaseDigest: bundledDigest, schemes, concepts: roleBindings },
     requirements,

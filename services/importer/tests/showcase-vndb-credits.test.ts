@@ -13,6 +13,7 @@ import {
 } from '../src/vndb-staff-credits.ts';
 import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import {
+  journalVndbCreditReferences,
   prepareShowcaseVndbCreditVocabulary,
   planShowcaseVndbCredits,
   publishedShowcaseVndbCreditReferences,
@@ -371,6 +372,8 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       expect.objectContaining({ code: 'scenario' }),
     ]);
 
+    expect(journalVndbCreditReferences(plan, journal)).toEqual(references);
+
     // The public membership changed after the publication result was recorded.
     const designRead = publicReads.get(design.subjectId)!;
     designRead.subject.statements['skos:inScheme'] = [
@@ -441,6 +444,26 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       expect.arrayContaining(['schema:author', 'wdt:P725']),
     );
     expect(work.assertions.map((assertion) => assertion.property)).not.toContain('schema:illustrator');
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    captured = captureShowcaseCommands(rawPort, journal);
+    const beforeReplay = commands.length;
+    const replay = await seedCrossMedia(plan, statePath, captured, undefined, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: journalVndbCreditReferences(plan, journal)!,
+      readPublicSubject: async (id) => publicReads.get(id)!,
+    });
+    expect(commands.slice(beforeReplay).filter((command) => command.source.external_id === 'v1')).toEqual([]);
+    expect(
+      buildShowcaseManifest({
+        plan,
+        readings: replay.readings,
+        acknowledgements: journal.acknowledgedCommands(),
+        aliases: crossMediaAliases,
+        vndbCreditCandidateDigests: replay.vndbCreditCandidateDigests!,
+        vocabularyRequirements: concepts.requirements,
+      }),
+    ).toEqual(creditManifest);
     if (!author || author.op !== 'propose') throw new Error('Expected selected VNDB author proposal');
     const stale = {
       ...author,

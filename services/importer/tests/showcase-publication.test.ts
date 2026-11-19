@@ -1695,7 +1695,19 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     });
     const canonical = await publishShowcase({
       plan,
-      result,
+      result: {
+        ...result,
+        readings: result.readings.map((reading) =>
+          reading.subject.subject.id === workId
+            ? {
+                ...reading,
+                boundSubjectId: workId,
+                subject: canonicalRead(reading.subject),
+                route: `/subjects/${canonicalId}/steins-gate`,
+              }
+            : reading,
+        ),
+      },
       aliases: crossMediaAliases,
       journal,
       review: { ...review, readReviewedSubject: async (id) => canonicalRead(await review.readReviewedSubject(id)) },
@@ -1707,6 +1719,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     const canonicalWork = canonical.published.find((record) => record.subjectId === workId);
+    expect(canonical.manifest.records.find((record) => record.subjectId === workId)?.readerRoute).toBe(
+      resumed.manifest.records.find((record) => record.subjectId === workId)?.readerRoute,
+    );
     expect(canonicalWork?.readerRoute).toBe(`/subjects/${canonicalId}/steins-gate`);
     expect(canonicalWork?.assertions.map((assertion) => assertion.candidateId)).toEqual(
       resumed.published

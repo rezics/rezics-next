@@ -259,7 +259,7 @@ function vocabularyCommands(
 }
 
 function acknowledgedCreates(journal: ShowcaseJournal, requirements: readonly ShowcaseVocabularyRequirement[]) {
-  const acknowledgements = journal.acknowledgedCommands();
+  const acknowledgements = journal.acknowledgedCommands(requirements.map(({ source }) => source));
   const ids = new Map<string, string>();
   for (const requirement of requirements) {
     const acknowledgement = acknowledgements.find(
@@ -329,6 +329,22 @@ async function sendMissingVocabularyCommands(input: {
   });
   await send(proposals);
   return issues;
+}
+
+/** Journal identities are lookup hints for the reviewed and public reads in prepareShowcaseVndbCredits. */
+export function journalVndbCreditReferences(
+  plan: CrossMediaPlan,
+  journal: ShowcaseJournal,
+): VndbCreditVocabularyReferences | undefined {
+  const selected = planShowcaseVndbCredits(plan);
+  const ids = acknowledgedCreates(journal, vocabularyRequirements(plan, selected));
+  const schemeId = ids.get(creditTypeTaxonomy);
+  if (!schemeId) return undefined;
+  const concepts = selected.requirements.flatMap(({ code }) => {
+    const id = ids.get(`${creditTypeTaxonomy}:${code}`);
+    return id ? [{ code, id }] : [];
+  });
+  return { schemeId, concepts };
 }
 
 /** Stage selected credit types through the existing local journal and common publisher. */

@@ -12,6 +12,7 @@ import {
   proposalIdentity,
   showcaseDigest,
   showcaseLimits,
+  showcaseSubjectRoute,
   showcaseSourceMatches,
   showcaseVocabularyExternalId,
   type CrossMediaPlan,
@@ -48,7 +49,6 @@ import {
   mapSourceEnumeration,
 } from '@rezics/conversion/cross-media-entities';
 import { admitBoundProposals, createSelectedFamilySourceRegistration } from './source-registry.ts';
-import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '@rezics/conversion/support';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
@@ -3244,15 +3244,7 @@ async function publishShowcasePhases(
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'selected-facts-not-public' });
       continue;
     }
-    const publicIdentity = read.subject as { labels?: Record<string, string> } | undefined;
-    const label =
-      publicIdentity?.labels?.und ??
-      publicIdentity?.labels?.en ??
-      publicIdentity?.labels?.ja ??
-      publicIdentity?.labels?.zh ??
-      Object.values(publicIdentity?.labels ?? {})[0] ??
-      'subject';
-    const route = `/subjects/${subjectId(read)}/${subjectSlug(label)}`;
+    const route = showcaseSubjectRoute(read.subject.id, read.subject.labels);
     if (imageVisible && imageAssertion && cover) {
       readHandoffs.set(`${record.sourceAlias}\0${record.sourceKey}`, {
         subjectId: record.subjectId,

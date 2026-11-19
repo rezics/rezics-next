@@ -273,6 +273,10 @@ test('default showcase without a profile file publishes selected blood types and
     expect(JSON.stringify(heroine?.subject.statements['wdt:P1853']?.[0]?.references)).toContain('/chars/bloodt');
     expect(JSON.stringify(heroine?.subject.statements['schema:height'])).toContain('157');
     expect(JSON.stringify(heroine?.subject.statements['schema:name'])).toContain('Authored heroine');
+    const beforeReplay = commands.length;
+    const replayBindings = await readShowcaseVndbCharacterProfileVocabulary({ plan, port: captured, journal });
+    await seedShowcaseVndbReleases(seedArgs(tables, plan, statePath, captured, replayBindings));
+    expect(commands.slice(beforeReplay).filter((command) => command.source.external_id === 'c1')).toEqual([]);
     expect(second.vndbCharacterProfileRequirements).toEqual([
       expect.objectContaining({ taxonomy: vndbCharacterBloodTypeTaxonomy, code: 'a' }),
     ]);
