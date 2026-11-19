@@ -3,6 +3,7 @@ import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import type { PasskeySignInResult } from '../src/passkeys';
 import { nativeSignInProof } from './sign-in-fixture';
+import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
 let cleanup = () => {};
@@ -44,7 +45,7 @@ async function setup(query = signInQuery) {
       navigation = router.navigate({ href });
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    return navigation;
+    return { navigation };
   };
   const choose = (label: 'Stay' | 'Leave') =>
     flush(() => document.body.querySelector<HTMLButtonElement>(`[data-${label.toLowerCase()}]`)!.click());
@@ -91,8 +92,9 @@ test('Stay keeps validation and masked input; replacement starts a clean request
     'password',
     'true',
   ]);
-  expect(document.activeElement).toBe(email);
-  await page.navigate('/step-up?return_to=%2Fsecurity&nonce=replaced');
+  expect(document.activeElement === email, 'Stay restores focus to the email input').toBe(true);
+  const replacement = await page.navigate('/step-up?return_to=%2Fsecurity&nonce=replaced');
+  await replacement.navigation;
   expect(page.router.history.location.pathname).toBe('/step-up');
   expect(page.host.querySelector<HTMLInputElement>('[name=email]')!.value).toBe('');
   expect(page.unload()).toBe(false);
@@ -107,8 +109,9 @@ test('Leave retires a dispatched password continuation without cancelling its si
   });
   expect(page.calls[0]?.path).toBe('/signin');
   expect(page.unload()).toBe(true);
-  await page.navigate('/away');
+  const { navigation } = await page.navigate('/away');
   await page.choose('Leave');
+  await navigation;
   expect(page.cancel).not.toHaveBeenCalled();
   page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await flush(() => Promise.resolve());
@@ -119,8 +122,9 @@ test('Leave cancels an unfinished browser passkey ceremony', async () => {
   const page = await setup();
   await flush(() => button(page.host, 'Verify with a passkey')!.click());
   expect(page.unload()).toBe(true);
-  await page.navigate('/away');
+  const { navigation } = await page.navigate('/away');
   await page.choose('Leave');
+  await navigation;
   expect(page.cancel).toHaveBeenCalledTimes(1);
   expect(page.calls).toHaveLength(0);
   page.ceremony.resolve({ ok: false, reason: 'cancelled' });
@@ -198,9 +202,11 @@ for (const method of ['password', 'passkey'] as const)
           const observing = Promise.withResolvers<void>();
           const paths: string[] = [];
           const profile = accountOperationProfile(kind === 'organization' ? kind : 'delete');
-          const request = spyOn(globalThis, 'fetch').mockImplementation((path) => {
-            paths.push(String(path));
-            if (path === '/session') {
+          const request = spyOn(globalThis, 'fetch').mockImplementation((input) => {
+            const url = new URL(input instanceof Request ? input.url : String(input), 'https://auth.test');
+            expect(url.origin).toBe('https://auth.test');
+            paths.push(url.pathname);
+            if (url.pathname === '/session') {
               observing.resolve();
               return observed.promise;
             }
@@ -209,7 +215,7 @@ for (const method of ['password', 'passkey'] as const)
           const passkey = Promise.withResolvers<PasskeySignInResult>();
           const ceremony = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => passkey.promise);
           const authenticate = () => {
-            authentication.resolve(Response.json(nativeSignInProof(profile)));
+            authentication.resolve(Response.json(nativeSignInProof(profile, 'pwd', accountId)));
             passkey.resolve({ ok: true });
           };
           try {
@@ -225,9 +231,9 @@ for (const method of ['password', 'passkey'] as const)
             else window.sessionStorage.setItem(storageKey, replacement);
             authenticate();
             observed.resolve(
-              Response.json({ account_id: accountId, client_id: profile.client_id, scope: profile.scope }),
+              Response.json(nativeSignInProof(profile, method === 'passkey' ? 'pop' : 'pwd', accountId)),
             );
-            expect(await outcome).toEqual({ ok: false, message: expect.stringContaining('saved request changed') });
+            expect(await outcome).toEqual({ ok: false, message: m.auth_step_up_continuation_changed() });
             expect(window.sessionStorage.getItem(storageKey)).toBe(replacement);
             expect(paths.every((path) => path === '/signin' || path === '/session')).toBe(true);
             if (phase === 'authentication') expect(paths).not.toContain('/session');

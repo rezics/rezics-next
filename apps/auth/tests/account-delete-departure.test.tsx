@@ -1,5 +1,6 @@
 import type { AccountDeletionPage } from '../src/account-deletion-page';
 import { expect, spyOn, test } from 'bun:test';
+import { createContext, useContext } from 'react';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -29,30 +30,31 @@ const props = {
   inventorySource: emptyInventory,
 };
 async function setup() {
-  let current: AccountDeletionPage = initial;
+  const Review = createContext<AccountDeletionPage>(initial);
   const root = createRootRoute({ component: Outlet });
   const routeTree = root.addChildren([
     createRoute({
       getParentRoute: () => root,
       path: '/account/delete',
-      component: () => <DeleteAccountContent {...props} initial={current} />,
+      component: () => <DeleteAccountContent {...props} initial={useContext(Review)} />,
     }),
     createRoute({ getParentRoute: () => root, path: '/security', component: () => 'Security' }),
   ]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/delete'] }) });
   await router.load();
-  const view = (value: AccountDeletionPage = initial) => {
-    current = value;
-    return <RouterProvider router={router} />;
-  };
+  const view = (value: AccountDeletionPage = initial) => (
+    <Review.Provider value={value}>
+      <RouterProvider router={router} />
+    </Review.Provider>
+  );
   const page = await open(view(), body);
-  const navigate = async () => {
+  const navigate = async (to: '/security' | '/account/delete' = '/security') => {
     let navigation!: Promise<unknown>;
     await flush(async () => {
-      navigation = router.navigate({ to: '/security' });
+      navigation = router.navigate({ to });
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    return navigation;
+    return { navigation };
   };
   const choose = (label: string) =>
     flush(() => document.body.querySelector<HTMLButtonElement>(`[data-${label.toLowerCase()}]`)!.click());
@@ -68,7 +70,8 @@ test('clean confirmation leaves freely', async () => {
   const page = await setup();
   await page.type('   ');
   expect(page.unload()).toBe(false);
-  await page.navigate();
+  const departure = await page.navigate();
+  await departure.navigation;
   expect(page.router.history.location.pathname).toBe('/security');
   expect(document.body.querySelector('[data-stay]')).toBeNull();
 });
@@ -90,9 +93,10 @@ test('Stay keeps the exact invalid confirmation, feedback and keyboard focus; Le
   await page.choose('Stay');
   expect(input.value).toBe('  unfinished DELETE  ');
   expect(input.getAttribute('aria-describedby')).toBe(feedback);
-  expect(document.activeElement).toBe(input);
-  await page.navigate();
+  expect(document.activeElement === input, 'Stay restores focus to the confirmation input').toBe(true);
+  const { navigation } = await page.navigate();
   await page.choose('Leave');
+  await navigation;
   expect(page.router.history.location.pathname).toBe('/security');
   expect(page.host.querySelector('input')).toBeNull();
   expect(page.unload()).toBe(false);
@@ -105,17 +109,20 @@ test('Stay preserves unresolved deletion; Leave retires late execution and recov
   const original = readPendingAccountOperationStepUp()!;
   await page.navigate();
   await page.choose('Stay');
-  expect(document.activeElement).toBe(page.host.querySelector('form'));
+  expect(document.activeElement === page.host.querySelector('form'), 'Stay restores focus to the form').toBe(true);
   expect(page.host.querySelector('input')!.value).toBe('delete my account');
   expect(readPendingAccountOperationStepUp()).toEqual(original);
   await flush(() => page.calls[0]!.resolve(approval()));
   expect(readPendingAccountOperationStepUp()?.submitted).toBe(true);
-  await page.navigate();
+  const leaving = await page.navigate();
   await page.choose('Leave');
+  await leaving.navigation;
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   expect(page.calls).toHaveLength(2);
   expect(readPendingAccountOperationStepUp()).toMatchObject({ ...original, submitted: true });
   await page.render(page.view({ ...initial }));
+  const returned = await page.navigate('/account/delete');
+  await returned.navigation;
   expect(page.host.querySelector('input')!.value).toBe('');
   expect(page.unload()).toBe(true);
   await page.type();
@@ -136,7 +143,11 @@ test('intended step-up and accepted deletion leave freely; unknown outcomes warn
     expect(assign).toHaveBeenCalledTimes(1);
     expect(page.unload()).toBe(false);
     const original = readPendingAccountOperationStepUp()!;
+    const departed = await page.navigate();
+    await departed.navigation;
     await page.render(page.view({ ...initial }));
+    const returned = await page.navigate('/account/delete');
+    await returned.navigation;
     await page.type();
     await flush(() => send(page.host));
     expect(page.calls[1]!.body.operationKey).toBe(original.operationKey);
@@ -151,7 +162,8 @@ test('intended step-up and accepted deletion leave freely; unknown outcomes warn
     await flush(() => page.calls[3]!.resolve(approval()));
     await flush(() => page.calls[4]!.resolve(Response.json({ accountId: initial.accountId })));
     expect(page.unload()).toBe(false);
-    await page.navigate();
+    const departure = await page.navigate();
+    await departure.navigation;
     expect(page.router.history.location.pathname).toBe('/security');
     expect(readPendingAccountOperationStepUp()).toBeNull();
   } finally {
@@ -164,9 +176,10 @@ test.each(['replacement', 'permission'] as const)(
     const page = await setup();
     await page.type();
     await flush(() => send(page.host));
-    await page.navigate();
+    const { navigation } = await page.navigate();
     if (kind === 'replacement') await page.render(page.view({ kind: 'signed-out' }));
     else await page.render(page.view({ kind: 'refused' }));
+    await navigation;
     expect(page.unload()).toBe(false);
     expect(page.router.history.location.pathname).toBe('/security');
     await flush(() => page.calls[0]!.resolve(approval()));
