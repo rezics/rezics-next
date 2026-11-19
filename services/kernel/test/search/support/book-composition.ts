@@ -368,10 +368,9 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
           const end = Math.min(start + seedWindow, to);
           const seeded: string[] = [];
           for (let ordinal = start; ordinal < end; ordinal++) {
-            const subject = await createSubject(
-              BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!,
-              `ZZZ catalogue ${ordinal}`,
-            );
+            // Independently grow the tail without inserting new lookahead keys ahead of the same measured page.
+            const label = `ZZZ catalogue ${String(ordinal).padStart(10, '0')}`;
+            const subject = await createSubject(BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!, label);
             population.add(subject.id);
             seeded.push(subject.id);
           }
