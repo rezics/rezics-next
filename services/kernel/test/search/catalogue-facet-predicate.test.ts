@@ -24,7 +24,8 @@ const release = (types: string[]): Release => ({
 
 test('the default catalogue facet predicate covers every pinned concrete type in stable order', () => {
   expect(catalogueFacetPredicate(release(['schema:Movie', 'schema:Book']), undefined)).toEqual({
-    kind: 'predicate', predicate: { type: { in: ['schema:Book', 'schema:Movie'] } },
+    kind: 'predicate',
+    predicate: { type: { in: ['schema:Book', 'schema:Movie'] } },
   });
 });
 
@@ -36,7 +37,7 @@ test('a 65-type catalogue uses bounded existing OR and type leaves without trunc
   const admitted = admitFilter(parseFilter(result.predicate), catalogue);
   const leaves = [...walkFilter(admitted)].filter((node) => 'type' in node);
   expect(leaves).toHaveLength(2);
-  expect(leaves.flatMap((node) => 'type' in node ? node.type.in : [])).toEqual(types);
+  expect(leaves.flatMap((node) => ('type' in node ? node.type.in : []))).toEqual(types);
   expect(leaves.every((node) => 'type' in node && node.type.in.length <= FILTER_LIMITS.in)).toBe(true);
 });
 

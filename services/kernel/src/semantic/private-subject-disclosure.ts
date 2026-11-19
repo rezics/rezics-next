@@ -46,13 +46,22 @@ export function privateSubjectDisclosureFootprint(sql: string, values: readonly 
   if (sql !== disclosure.sql || values.length !== 8) return undefined;
   const [route, owner, floor, version, routes, ids, at, firstAt] = values;
   if (
-    typeof owner !== 'string' || routeOf(owner) === null || routeOf(owner) !== route ||
-    typeof floor !== 'string' || !/^[0-9]{1,19}$/.test(floor) ||
-    typeof version !== 'string' || !/^[0-9a-f-]{36}$/.test(version) ||
-    typeof at !== 'string' || Buffer.byteLength(at) > 64 ||
-    typeof firstAt !== 'string' || Buffer.byteLength(firstAt) > 64 ||
-    !Array.isArray(routes) || !Array.isArray(ids) ||
-    ids.length > 2 * LIBRARY_SUBJECT_PAGE_LIMIT || ids.length % 2 !== 0 || routes.length !== ids.length ||
+    typeof owner !== 'string' ||
+    routeOf(owner) === null ||
+    routeOf(owner) !== route ||
+    typeof floor !== 'string' ||
+    !/^[0-9]{1,19}$/.test(floor) ||
+    typeof version !== 'string' ||
+    !/^[0-9a-f-]{36}$/.test(version) ||
+    typeof at !== 'string' ||
+    Buffer.byteLength(at) > 64 ||
+    typeof firstAt !== 'string' ||
+    Buffer.byteLength(firstAt) > 64 ||
+    !Array.isArray(routes) ||
+    !Array.isArray(ids) ||
+    ids.length > 2 * LIBRARY_SUBJECT_PAGE_LIMIT ||
+    ids.length % 2 !== 0 ||
+    routes.length !== ids.length ||
     ids.some((id, index) => typeof id !== 'string' || routeOf(id) === null || routeOf(id) !== routes[index])
   )
     return undefined;
@@ -138,15 +147,16 @@ export async function observePrivateSubjectDisclosure(
     if (!keys.length && (rows.length !== 1 || rows[0]?.id !== null)) return null;
     const byId = new Map(rows.map((row) => [row.id, row]));
     if (
-      keys.length && (
-        rows.length !== keys.length ||
+      keys.length &&
+      (rows.length !== keys.length ||
         byId.size !== keys.length ||
         keys.some((key) => !byId.has(key)) ||
-        rows.some((row) =>
-          row.visibility === null || !['visible', 'hidden', 'taken_down'].includes(row.visibility) ||
-          typeof row.denied !== 'boolean',
-        )
-      )
+        rows.some(
+          (row) =>
+            row.visibility === null ||
+            !['visible', 'hidden', 'taken_down'].includes(row.visibility) ||
+            typeof row.denied !== 'boolean',
+        ))
     )
       return null;
 
@@ -163,10 +173,19 @@ export async function observePrivateSubjectDisclosure(
     }
     // The empty vector still binds the viewer row. Nonempty vectors include withheld and order-only keys.
     const basis = createHash('sha256')
-      .update(JSON.stringify([
-        ownerId, actor.clientId, actor.requestedBy, actor.scopes, actor.authnEpoch, reader.accountVersion, reader.floor,
-        pairs, keys.length ? keys.map((id) => byId.get(id)) : rows,
-      ]))
+      .update(
+        JSON.stringify([
+          ownerId,
+          actor.clientId,
+          actor.requestedBy,
+          actor.scopes,
+          actor.authnEpoch,
+          reader.accountVersion,
+          reader.floor,
+          pairs,
+          keys.length ? keys.map((id) => byId.get(id)) : rows,
+        ]),
+      )
       .digest('hex');
     return { decisions: Object.freeze(decisions), basis };
   }

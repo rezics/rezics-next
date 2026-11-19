@@ -1,4 +1,11 @@
-import { admitFilter, parseFilter, FilterError, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import {
+  admitFilter,
+  parseFilter,
+  FilterError,
+  FILTER_LIMITS,
+  type FilterDocument,
+  type FilterRelease,
+} from '@rezics/filter';
 import type { SearchFilterDocument } from './service-contract.ts';
 
 export type CatalogueFacetPredicate =

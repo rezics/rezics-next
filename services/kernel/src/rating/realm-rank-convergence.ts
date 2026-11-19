@@ -24,8 +24,13 @@ export async function rebuildRealmRankCanonicalOrder(
 > {
   const { partition, limit, restart = false } = input;
   if (
-    !Number.isInteger(partition) || partition < 0 || partition > 4095 ||
-    !Number.isInteger(limit) || limit < 1 || limit > 200 || typeof restart !== 'boolean'
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition > 4095 ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 200 ||
+    typeof restart !== 'boolean'
   )
     throw new TypeError('Invalid Realm rank canonical rebuild page');
   const result = await tx.query<{
@@ -40,10 +45,15 @@ export async function rebuildRealmRankCanonicalOrder(
   );
   const page = result.rows[0];
   if (
-    result.rows.length !== 1 || !page || typeof page.complete !== 'boolean' ||
-    !Number.isInteger(page.consumed) || page.consumed < 0 || page.consumed > limit ||
-    page.complete !== (page.consumed < limit) ||
-    !/^[1-9][0-9]*$/.test(page.canonicalGeneration) || !/^[1-9][0-9]*$/.test(page.revision)
+    result.rows.length !== 1 ||
+    !page ||
+    typeof page.complete !== 'boolean' ||
+    !Number.isInteger(page.consumed) ||
+    page.consumed < 0 ||
+    page.consumed > limit ||
+    page.complete !== page.consumed < limit ||
+    !/^[1-9][0-9]*$/.test(page.canonicalGeneration) ||
+    !/^[1-9][0-9]*$/.test(page.revision)
   )
     throw new Error('Realm rank canonical rebuild did not return a complete page result');
   return { partition, ...page };

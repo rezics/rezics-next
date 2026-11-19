@@ -9,7 +9,7 @@ import { PageCursorError } from './page.ts';
 import { SubjectNotFoundError } from './contract/subject-errors.ts';
 import type { PageOptions } from './candidate-contract.ts';
 
-const listed = <T>(result: T[] | T | null): T[] => result == null ? [] : Array.isArray(result) ? result : [result];
+const listed = <T>(result: T[] | T | null): T[] => (result == null ? [] : Array.isArray(result) ? result : [result]);
 
 export async function page<T>(
   pool: Pool,

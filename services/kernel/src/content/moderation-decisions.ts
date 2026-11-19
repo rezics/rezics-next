@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
-import { deadlineClient, within, notificationAllowed } from './access-port.ts';
+import { deadlineClient, notificationAllowed } from './access-port.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
@@ -277,23 +277,28 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
       const authorAccountId = decision.author_account_id;
       if (authorAccountId === null) return;
       const recipientRoute = routeOf(authorAccountId)!;
-      await withWritableNoticeRoute(pool, recipientRoute, async (client) => {
-        if (await notificationAllowed(client, { recipient: authorAccountId, kind: 'moderation_decision' }))
-          await writeNotices(client, [
-            {
-              recipientId: authorAccountId,
-              noticeId: newId(recipientRoute),
-              kind: 'moderation_decision',
-              actorId: null,
-              threadId: decision.thread_id,
-              postId: decision.post_id,
-              decisionId: decision.decision_id,
-              reportId: null,
-              sourceId: decision.decision_id,
-              createdAt: new Date(decidedAt),
-            },
-          ]);
-      }, deadline);
+      await withWritableNoticeRoute(
+        pool,
+        recipientRoute,
+        async (client) => {
+          if (await notificationAllowed(client, { recipient: authorAccountId, kind: 'moderation_decision' }))
+            await writeNotices(client, [
+              {
+                recipientId: authorAccountId,
+                noticeId: newId(recipientRoute),
+                kind: 'moderation_decision',
+                actorId: null,
+                threadId: decision.thread_id,
+                postId: decision.post_id,
+                decisionId: decision.decision_id,
+                reportId: null,
+                sourceId: decision.decision_id,
+                createdAt: new Date(decidedAt),
+              },
+            ]);
+        },
+        deadline,
+      );
     },
   };
 }

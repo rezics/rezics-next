@@ -1477,34 +1477,37 @@ export function createSearchWriterGuard(options: {
     home: number,
   ) {
     // Core retains checkout, commit and rollback custody for the home command.
-    const result = await runCommand(options.pool, { partition: home, deadline: context.deadline }, async (tx, command) => {
-      publicationDeadline(context);
-      const receipt = await native(tx, command.transactionId);
-      publicationDeadline(context);
-      await lockWriterPublicationAdmission(tx, options.index);
-      publicationDeadline(context);
-      const retained = await publicationRetained(tx, input, context);
-      if (retained.publication_revision !== before.publication_revision) return pendingPublication();
-      const copies = publicationQueries(tx, context);
-      cost.dependencyPoints++;
-      if ((await copies.query(readSearchIdentityHomePendingSql, [home, options.index])).rowCount)
-        return pendingPublication();
-      const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
-      publicationDeadline(context);
-      const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
-      publicationDeadline(context);
-      const page = (
-        await tx.query<{
-          copies: {
-            original_id: string;
-            dispatch_state: string;
-            writer_token: string | null;
-            incarnation: string;
-            owner_epoch: number;
-          }[];
-          more: boolean;
-        }>(
-          `WITH page AS MATERIALIZED (
+    const result = await runCommand(
+      options.pool,
+      { partition: home, deadline: context.deadline },
+      async (tx, command) => {
+        publicationDeadline(context);
+        const receipt = await native(tx, command.transactionId);
+        publicationDeadline(context);
+        await lockWriterPublicationAdmission(tx, options.index);
+        publicationDeadline(context);
+        const retained = await publicationRetained(tx, input, context);
+        if (retained.publication_revision !== before.publication_revision) return pendingPublication();
+        const copies = publicationQueries(tx, context);
+        cost.dependencyPoints++;
+        if ((await copies.query(readSearchIdentityHomePendingSql, [home, options.index])).rowCount)
+          return pendingPublication();
+        const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
+        publicationDeadline(context);
+        const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
+        publicationDeadline(context);
+        const page = (
+          await tx.query<{
+            copies: {
+              original_id: string;
+              dispatch_state: string;
+              writer_token: string | null;
+              incarnation: string;
+              owner_epoch: number;
+            }[];
+            more: boolean;
+          }>(
+            `WITH page AS MATERIALIZED (
            SELECT original_id,dispatch_state,writer_token,incarnation,owner_epoch FROM search.identity_writer
            WHERE partition_no=$1 AND physical_target=$2 AND ($3::uuid IS NULL OR original_id>$3)
            ORDER BY original_id LIMIT 32 FOR UPDATE
@@ -1512,37 +1515,36 @@ export function createSearchWriterGuard(options: {
            EXISTS(SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
              AND original_id>COALESCE((SELECT max(original_id::text)::uuid FROM page),$3::uuid)
              LIMIT 1) AS more FROM page`,
-          [home, options.index, before.publication_after],
+            [home, options.index, before.publication_after],
+          )
+        ).rows[0]!;
+        cost.inputKeys += page.copies.length + Number(page.more);
+        publicationDeadline(context);
+        if (
+          page.copies.some((row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch)
         )
-      ).rows[0]!;
-      cost.inputKeys += page.copies.length + Number(page.more);
-      publicationDeadline(context);
-      if (
-        page.copies.some(
-          (row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch,
-        )
-      )
-        return pendingPublication();
-      const revocable = page.copies
-        .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
-        .map((row) => row.original_id);
-      cost.resultWrites += revocable.length;
-      if (revocable.length)
-        await tx.query(
-          `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
+          return pendingPublication();
+        const revocable = page.copies
+          .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
+          .map((row) => row.original_id);
+        cost.resultWrites += revocable.length;
+        if (revocable.length)
+          await tx.query(
+            `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
          settled_position=$5 WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])
          AND dispatch_state='enrolled'`,
-          [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
-        );
-      publicationDeadline(context);
-      const progress = {
-        after: page.more ? page.copies.at(-1)!.original_id : null,
-        changed: revocable.length > 0 || proofDrained,
-        uncertain:
-          copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
-      };
-      return progress.changed ? { value: progress, events: changed() } : noEffect(progress);
-    });
+            [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
+          );
+        publicationDeadline(context);
+        const progress = {
+          after: page.more ? page.copies.at(-1)!.original_id : null,
+          changed: revocable.length > 0 || proofDrained,
+          uncertain:
+            copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
+        };
+        return progress.changed ? { value: progress, events: changed() } : noEffect(progress);
+      },
+    );
     return result.value;
   }
   async function confirmDrainedPublication(
@@ -1662,7 +1664,7 @@ export function createSearchWriterGuard(options: {
         const progress = home === 4096 ? null : await drainPublicationHome(input, context, cost, before, home);
         publicationDeadline(context);
         const nextHome = home === 4096 || progress?.uncertain || progress?.after ? home : home + 1;
-        const after = progress?.uncertain ? before.publication_after : progress?.after ?? null;
+        const after = progress?.uncertain ? before.publication_after : (progress?.after ?? null);
         const moved = nextHome !== before.publication_home || after !== before.publication_after;
         if (moved) {
           await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
@@ -1810,7 +1812,8 @@ export function createSearchWriterGuard(options: {
       const target = await gate(tx, receipt, allocation.incarnation, allocation.writeAlias);
       const row = (
         await tx.query<{ incarnation: string; owner_epoch: number; closed_transaction_id: string | null }>(
-          lockOriginalWriterSql, [receipt.partition, options.index, original],
+          lockOriginalWriterSql,
+          [receipt.partition, options.index, original],
         )
       ).rows[0];
       if (!/^(0|[1-9][0-9]*)$/.test(target.enrollment_generation) || !/^(0|[1-9][0-9]*)$/.test(target.fence_generation))

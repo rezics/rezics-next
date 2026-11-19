@@ -457,7 +457,8 @@ export function createCopyApplication<N extends CopyNativeTypes>(ports: CopyAppl
           const inventoryValues = await ports.inventoryValues(client, accountRoute, owner.accountId);
           return {
             copies,
-            continuation: more && last && partition ? { epoch: partition.epoch, after: [last.createdAt, last.id] } : null,
+            continuation:
+              more && last && partition ? { epoch: partition.epoch, after: [last.createdAt, last.id] } : null,
             accountEpoch: partition?.epoch ?? null,
             inventoryValues,
           };

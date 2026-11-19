@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { Pool } from 'pg';
-import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';

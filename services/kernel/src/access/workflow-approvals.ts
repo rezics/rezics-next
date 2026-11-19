@@ -484,8 +484,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         withBoundedReadConnection(
           context.pool,
           context.deadline,
-          (client) =>
-            approvalResolutionNativeWork(context.work, 'owners', input, () => ownersRead.run(client, input)),
+          (client) => approvalResolutionNativeWork(context.work, 'owners', input, () => ownersRead.run(client, input)),
           approvalResolutionReadOptions,
         ),
       );
@@ -544,11 +543,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null);
   }
 
-  async function authorizeActor(
-    actor: AccountActor,
-    descriptor: Descriptor,
-    context: AccessContext,
-  ): Promise<void> {
+  async function authorizeActor(actor: AccountActor, descriptor: Descriptor, context: AccessContext): Promise<void> {
     const { deadline } = context;
     requireAccessDeadline(deadline);
     requireAllowed(config.actions.has(descriptor.action) && config.access.prepare);

@@ -82,7 +82,6 @@ import {
   type IdentityReceipt,
   type IdentityStepProgress,
   type IdentityStepReceipt,
-  type IdentityIntent,
   type IdentityChange,
 } from './identity-epoch-contract.ts';
 

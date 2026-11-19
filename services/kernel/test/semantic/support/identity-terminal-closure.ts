@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { runCommand } from '../../../src/command/command.ts';
+import '../../../src/command/command.ts';
 import {
   admitIdentityTerminalCapture,
   runIdentityTerminalCommand,
@@ -224,7 +224,10 @@ export async function atBoundary<T>(
         };
         const dispatch = () => Reflect.apply(query, client, nativeArgs);
         if (!before) return dispatch();
-        void Promise.resolve().then(action).then(dispatch).catch((error: unknown) => callback(error));
+        void Promise.resolve()
+          .then(action)
+          .then(dispatch)
+          .catch((error: unknown) => callback(error));
         return undefined;
       }
       return (async () => {
@@ -256,7 +259,10 @@ function statementOf(args: unknown[]): { sql: string; values: unknown[] } {
     if (config.values && typeof config.values === 'object') {
       const named = config.values as Record<string, unknown>;
       const partition = named.partition_no ?? named.partition;
-      return { sql: config.text, values: typeof partition === 'number' || typeof partition === 'string' ? [partition] : [] };
+      return {
+        sql: config.text,
+        values: typeof partition === 'number' || typeof partition === 'string' ? [partition] : [],
+      };
     }
     return { sql: config.text, values: [] };
   }
@@ -279,10 +285,15 @@ function homeOf(values: unknown[]): number {
   else if (typeof first === 'string' && first.startsWith('{')) {
     // Standard Query encodes integer[] as quoted Postgres array elements; pg also accepts bare integers.
     if (
-      !/^\{(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3})(?:,(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3}))*\}$/.test(first)
+      !/^\{(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3})(?:,(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3}))*\}$/.test(
+        first,
+      )
     )
       throw invalid();
-    operands = first.slice(1, -1).split(',').map((entry) => (entry.startsWith('"') ? entry.slice(1, -1) : entry));
+    operands = first
+      .slice(1, -1)
+      .split(',')
+      .map((entry) => (entry.startsWith('"') ? entry.slice(1, -1) : entry));
   } else operands = [first];
   const homes = operands.map(canonicalHome);
   const partition = homes[0];
@@ -458,7 +469,10 @@ export async function isolatedDeployment() {
             expect(enforcedTransactions).toBeGreaterThan(0);
           } catch (error) {
             if (firstBindingError)
-              throw new AggregateError([firstBindingError.error, error], 'Native home binding failed before enforcement');
+              throw new AggregateError(
+                [firstBindingError.error, error],
+                'Native home binding failed before enforcement',
+              );
             throw error;
           }
         });

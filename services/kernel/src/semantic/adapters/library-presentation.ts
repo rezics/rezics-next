@@ -9,7 +9,6 @@ import { subjectReadEligibility } from '../eligibility.ts';
 import type { SummaryReaderDependencies } from '../summaries.ts';
 import type {
   LibrarySemanticObservationCapability,
-  LibrarySemanticObservationResult,
   LibrarySemanticSummaryContext,
 } from '../../library/contract/semantic-observation.ts';
 import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';

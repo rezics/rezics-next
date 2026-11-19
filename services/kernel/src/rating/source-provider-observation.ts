@@ -17,7 +17,12 @@ export type ObservationHead = {
   lastOrder: string;
   lastSeekOrder: string;
 };
-export type ObservationOrder = Readonly<{ localOrder: string; lastOrder: string; seekOrder: string; lastSeekOrder: string }>;
+export type ObservationOrder = Readonly<{
+  localOrder: string;
+  lastOrder: string;
+  seekOrder: string;
+  lastSeekOrder: string;
+}>;
 
 /** The head is one indexed subject/provider lookup, never a history selection or source-home join. */
 export async function lockSourceObservation(tx: CommandTransaction, input: ObservationBinding) {

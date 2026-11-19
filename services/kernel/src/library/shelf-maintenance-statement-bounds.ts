@@ -1,15 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
 /** Library-owned declarations. A declaration prices dispatch; it is never run authority. */
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
-import commandTime from '../command/time.sql';
-import commandFence from '../command/fence.sql';
-import commandNoEffect from '../command/no-effect-fence.sql';
-import commandReceipt from '../command/read-receipt.sql';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import sourceSize from './shelf-maintenance-source-size.sql';
 import rootSize from './shelf-maintenance-root-size.sql';
 import retirementSize from './shelf-maintenance-retirement-size.sql';
-import partitionRead from '../partition/read.sql';
 import counterDelta from './shelf-counter-delta.sql';
 import counterInitialize from './shelf-counter-owner-initialize.sql';
 import counterRead from './shelf-counter-owner-read.sql';

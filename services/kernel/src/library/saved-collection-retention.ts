@@ -169,8 +169,7 @@ export async function purgeSavedCollectionPage(
     const successor =
       frozen &&
       (await tx.query('SELECT 1 WHERE library.may_deidentify_frozen_output($1,$2,$3)', [...keys, frozen])).rowCount;
-    if (!successor)
-      return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
+    if (!successor) return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
   }
   // Either the hold is gone or the frozen successor can resolve its publication without the curator.
   const history = await tx.query(

@@ -16,8 +16,7 @@ export async function readFeedViewerFollows(
       type === 'space'
         ? source === 'discovery' && key.owner === 'content'
         : type === 'collection' &&
-          ((source === 'discovery' && key.owner === 'commerce') ||
-            (source === 'following' && key.owner === 'library'));
+          ((source === 'discovery' && key.owner === 'commerce') || (source === 'following' && key.owner === 'library'));
     if (
       !eligible ||
       (type !== 'space' && type !== 'collection') ||

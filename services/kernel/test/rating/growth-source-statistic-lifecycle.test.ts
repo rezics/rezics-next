@@ -124,7 +124,11 @@ async function seedProbe(db: GrowthDatabase, scale: number, repetition: number):
 }
 
 function expectedStatistic(subjectId: string, value: ReturnType<typeof statisticValue> & { sourceAlias?: string }) {
-  return { source: 'vndb', ...value, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest } };
+  return {
+    source: 'vndb',
+    ...value,
+    observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest },
+  };
 }
 
 async function exercise(subjectId: string, scale: number, repetition: number) {
@@ -143,7 +147,12 @@ async function exercise(subjectId: string, scale: number, repetition: number) {
   expect(await put.json()).toEqual(expectedStatistic(subjectId, value));
 
   const clear = await request('POST', clearPath(subjectId), {
-    body: { sourceRecordId, count: 0, asOf: value.asOf, expectedObservation: sourceObservation(subjectId, 'vndb', value).digest },
+    body: {
+      sourceRecordId,
+      count: 0,
+      asOf: value.asOf,
+      expectedObservation: sourceObservation(subjectId, 'vndb', value).digest,
+    },
     key: randomUUID(),
   });
   expect(clear.status).toBe(204);
@@ -176,7 +185,13 @@ async function exerciseWithAliases(subjectId: string, scale: number, repetition:
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(expectedStatistic(subjectId, value));
   const cleared = await request('POST', clearPath(subjectId), {
-    body: { sourceRecordId, sourceAlias: value.sourceAlias, count: 0, asOf: value.asOf, expectedObservation: sourceObservation(subjectId, 'vndb', value).digest },
+    body: {
+      sourceRecordId,
+      sourceAlias: value.sourceAlias,
+      count: 0,
+      asOf: value.asOf,
+      expectedObservation: sourceObservation(subjectId, 'vndb', value).digest,
+    },
     key: randomUUID(),
   });
   expect(cleared.status).toBe(204);
@@ -202,10 +217,13 @@ async function seedStatisticHistory(db: GrowthDatabase, scale: number, previous:
      SELECT $1, subject_id, 'schema:Book', subject_id FROM history`,
     [sourceRoute, unrelatedIds],
   );
-  await seedStatistics(db, unrelatedIds.map((n) => ({
-    subjectId: id(sourceRoute, 2_000_000 + n),
-    sourceRecordId: `growth-unrelated-${n}`,
-  })));
+  await seedStatistics(
+    db,
+    unrelatedIds.map((n) => ({
+      subjectId: id(sourceRoute, 2_000_000 + n),
+      sourceRecordId: `growth-unrelated-${n}`,
+    })),
+  );
 
   const fenceIds = unrelatedIds.map((n) => `growth-fence-history-${n}`);
   const fenceRoutes = fenceIds.map((externalId) => tupleRoute(routeKey, 'vndb', externalId));

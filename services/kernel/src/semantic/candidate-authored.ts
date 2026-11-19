@@ -1,6 +1,6 @@
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
-import { SubjectInputError, type Violation } from './item.ts';
+import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -8,7 +8,6 @@ const record = (value: unknown): value is Record<string, unknown> =>
 
 /** Only authored values are checked before the receipt; other proposal errors retain receipt ordering. */
 export function checkAuthoredValues(statement: unknown, release: Release) {
-
   const snaks: [unknown, string][] = [[statement, '/statement']];
   if (record(statement)) {
     if (Array.isArray(statement.qualifiers))
@@ -33,5 +32,4 @@ export function checkAuthoredValues(statement: unknown, release: Release) {
     paths.some((path) => error.pointer === path || error.pointer.startsWith(`${path}/`)),
   );
   if (errors.length) throw new SubjectInputError(errors);
-
 }

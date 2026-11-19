@@ -281,8 +281,7 @@ async function currentTuple(
 }
 
 async function frozenOrigin(client: Client, ref: CollectionOutputRef, lock: boolean) {
-  if (lock && !(await client.query(frozenOwnerLockSQL.sql, [ref.route, ref.collectionId])).rows.length)
-    return null;
+  if (lock && !(await client.query(frozenOwnerLockSQL.sql, [ref.route, ref.collectionId])).rows.length) return null;
   const row = (
     await client.query<CollectionOutputPublication & { incarnation: string; epoch: number; currentPosition: string }>(
       frozenOriginSQL.sql,
@@ -438,8 +437,7 @@ async function bindAndHoldNativePublicCollectionOutput(
       throw new TypeError('Invalid public output binding selection');
     const current = command(tx, context, partitionOf(ref.route));
     const client = nativePublicOutputClient(tx, work, context.deadline, context.pool);
-    if (selection.frozen && (current.basis !== null || selection.captureId !== ref.generation))
-      return refusal(work);
+    if (selection.frozen && (current.basis !== null || selection.captureId !== ref.generation)) return refusal(work);
     const frozen = selection.frozen ? await frozenOrigin(client, ref, true) : null;
     const live = selection.frozen ? null : await owner(client, ref.route, ref.collectionId);
     const original = frozen ?? live;
@@ -613,7 +611,8 @@ async function lockNativeFrozenCollectionOutput(
       return { status: 'locked' as const, binding: stored.binding, work: work.receipt() };
     }
     // Lock the Collection and Core partition before reading or locking its hold.
-    if (!(await frozenOrigin(client, { ...id, generation: id.outputGeneration }, true))) return refusal(work, 'changed');
+    if (!(await frozenOrigin(client, { ...id, generation: id.outputGeneration }, true)))
+      return refusal(work, 'changed');
     const stored = await load(client, selected.accepted.partition, selected.captureId, true);
     if (!stored || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
       return refusal(work);
@@ -709,7 +708,8 @@ async function transition(
     const located = await load(client, current.partition, selection.captureId, false);
     if (!located) return refusal(work);
     const id = located.binding.tuple.identity;
-    const original = await owner(client, id.route, id.collectionId) ??
+    const original =
+      (await owner(client, id.route, id.collectionId)) ??
       (kind === 'applied' ? await frozenOrigin(client, { ...id, generation: id.outputGeneration }, true) : null);
     if (!original || original.epoch !== id.ownerEpoch || original.incarnation !== id.incarnation)
       return refusal(work, 'changed');

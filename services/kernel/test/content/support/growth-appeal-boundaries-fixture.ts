@@ -2,7 +2,6 @@ import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.t
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
-import type { Pool } from 'pg';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';

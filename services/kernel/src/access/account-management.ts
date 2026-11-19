@@ -259,7 +259,11 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       }),
     );
     const page = rows.slice(0, limit);
-    const publicAccounts = await identities(deps.pool, deadline, page.map((item) => item.subjectAccountId));
+    const publicAccounts = await identities(
+      deps.pool,
+      deadline,
+      page.map((item) => item.subjectAccountId),
+    );
     const items: Static<typeof responsibility>[] = [];
     for (const row of page) {
       const relation = await boundedRead(deps.pool, deadline, (client) =>
@@ -377,7 +381,11 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
           }),
         );
         const page = rows.slice(0, limit);
-        const accounts = await identities(deps.pool, deadline, page.map((item) => item.accountId));
+        const accounts = await identities(
+          deps.pool,
+          deadline,
+          page.map((item) => item.accountId),
+        );
         for (const row of page) {
           const held = await boundedRead(deps.pool, deadline, (client) =>
             readOrganizationRole(client, routeOf(accountId)!, accountId, row.accountId, at),

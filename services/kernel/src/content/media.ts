@@ -314,9 +314,12 @@ export async function reserveMedia(
     parent: {
       resource: knowledge ? ownerResource : (board ?? { route: r, id: containerId }),
       async validate(client, time) {
-        if (knowledge) return (
-          await knowledgeMediaReservationParent(client, containerId, owner.accountId)
-        ) && !!knowledgeUpdate && await knowledgeUpdate(client, time);
+        if (knowledge)
+          return (
+            (await knowledgeMediaReservationParent(client, containerId, owner.accountId)) &&
+            !!knowledgeUpdate &&
+            (await knowledgeUpdate(client, time))
+          );
         if (realm)
           return (
             (await readRealmHead.run(client, { route: r, id: containerId, at: authoritativeTimeValue(time) })) !== null
@@ -383,8 +386,13 @@ export async function reserveMedia(
     ...base,
     async prepare(attempt) {
       if (knowledge) {
-        knowledgeUpdate = await accessCheck(dependencies.access, actor, 'account:update', ownerResource,
-          commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt));
+        knowledgeUpdate = await accessCheck(
+          dependencies.access,
+          actor,
+          'account:update',
+          ownerResource,
+          commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+        );
         return base.prepare!(attempt);
       }
       if (avatar || realm) return base.prepare!(attempt);
@@ -463,8 +471,12 @@ export async function reserveMedia(
     },
     async authorize(tx, attempt, evidence) {
       const mode = await base.authorize(tx, attempt, evidence);
-      if (knowledge && (!knowledgeUpdate || !(await knowledgeUpdate(tx, attempt.time)) ||
-          !(await knowledgeMediaReservationParent(tx, containerId, owner.accountId, true))))
+      if (
+        knowledge &&
+        (!knowledgeUpdate ||
+          !(await knowledgeUpdate(tx, attempt.time)) ||
+          !(await knowledgeMediaReservationParent(tx, containerId, owner.accountId, true)))
+      )
         throw new GrantDeniedError();
       if (newThreadTarget) {
         const target = await readThreadTarget.run(tx, { route: r, id: containerId });
@@ -606,15 +618,16 @@ export async function completeMedia(
     async prepare(attempt) {
       const evidence = await base.prepare?.(attempt);
       const initial = await read(dependencies.pool, mediaId);
-      knowledgeOwnerUpdate = initial?.purpose === 'knowledge-image'
-        ? await accessCheck(
-            dependencies.access,
-            actor,
-            'account:update',
-            { route: route(owner.accountId), id: owner.accountId },
-            commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
-          )
-        : null;
+      knowledgeOwnerUpdate =
+        initial?.purpose === 'knowledge-image'
+          ? await accessCheck(
+              dependencies.access,
+              actor,
+              'account:update',
+              { route: route(owner.accountId), id: owner.accountId },
+              commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+            )
+          : null;
       realmManagement =
         initial?.purpose === 'realm-icon' || initial?.purpose === 'realm-banner'
           ? await accessCheck(
@@ -649,9 +662,12 @@ export async function completeMedia(
       )
         throw new GrantDeniedError();
       if (row.purpose === 'knowledge-image') {
-        if (partitionOf(route(owner.accountId)) !== partitionOf(r) ||
-            !knowledgeOwnerUpdate || !(await knowledgeOwnerUpdate(tx, attempt.time)) ||
-            !(await knowledgeMediaReservationParent(tx, body.containerId, owner.accountId, true)))
+        if (
+          partitionOf(route(owner.accountId)) !== partitionOf(r) ||
+          !knowledgeOwnerUpdate ||
+          !(await knowledgeOwnerUpdate(tx, attempt.time)) ||
+          !(await knowledgeMediaReservationParent(tx, body.containerId, owner.accountId, true))
+        )
           throw new GrantDeniedError();
       }
       if (row.purpose === 'realm-icon' || row.purpose === 'realm-banner') {

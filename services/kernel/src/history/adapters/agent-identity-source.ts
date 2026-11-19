@@ -14,7 +14,6 @@ import {
 import { historyDeadline, readHistoryReceivingReceipt } from '../application/receiving.ts';
 import { commandHistoryIdentityAccounts, commandHistoryKind, guardHistoryAccounts } from '../application/records.ts';
 import {
-  ACCOUNT_ROLE_BITS,
   type AccountReference,
   type AgentIdentityCopyCursor,
   type AgentIdentityCopyPage,

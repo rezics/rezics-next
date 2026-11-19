@@ -221,18 +221,10 @@ async function readCurrentMembers(
   return result;
 }
 
-async function readTransaction<T>(
-  pool: Pool,
-  deadline: number,
-  run: (client: PoolClient) => Promise<T>,
-): Promise<T> {
-  return withBoundedReadLifetime(
-    (work) => withConnection(pool, work),
-    discardConnection,
-    deadline,
-    run,
-    { transaction: 'repeatable-read-read-only' },
-  );
+async function readTransaction<T>(pool: Pool, deadline: number, run: (client: PoolClient) => Promise<T>): Promise<T> {
+  return withBoundedReadLifetime((work) => withConnection(pool, work), discardConnection, deadline, run, {
+    transaction: 'repeatable-read-read-only',
+  });
 }
 
 /** Selects a bounded raw frontier and its exact current source episodes before identity hydration. */

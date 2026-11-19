@@ -619,7 +619,12 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     [
       partitionOf(routeOf(main.actor.accountId)!),
       main.actor.accountId,
-      nativeReceiptKeyCandidates(f.pool, 'library.entry.source-observation.admit', main.actor.accountId, observationKey),
+      nativeReceiptKeyCandidates(
+        f.pool,
+        'library.entry.source-observation.admit',
+        main.actor.accountId,
+        observationKey,
+      ),
     ],
   );
   expect(observationReceipt.rows[0]?.count).toBe('1');
@@ -1284,19 +1289,12 @@ test('annotation application rejects a recreated Entry and expiry cleanup remove
       ],
     }),
   );
-  await f.commands.deleteEntry(
-    owner.actor,
-    subjects[0],
-    original.revision,
-    entryKey(),
-    original.incarnationId!,
-  );
-  const recreated = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'completed' }, entryKey()))
-    .value.entry;
+  await f.commands.deleteEntry(owner.actor, subjects[0], original.revision, entryKey(), original.incarnationId!);
+  const recreated = (await f.commands.putEntry(owner.actor, subjects[0], { state: 'completed' }, entryKey())).value
+    .entry;
   expect(recreated.incarnationId).not.toBe(original.incarnationId);
   expect(
-    (await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
-      .applied,
+    (await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal])))).applied,
   ).toMatchObject([{ status: 'stale' }]);
 
   const expiring = await makeUpload(pruneOwner);
@@ -1826,7 +1824,10 @@ test('a merged canonical target invalidates the reviewed observation identity', 
     await f.drainIdentityMerge(admission.operation.id);
   } else expect(admission).toMatchObject({ survivor, redirected });
   for (const id of [survivor, redirected]) await f.awaitCurrentIdentity(id);
-  expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: survivor });
+  expect(await identityEpochStore().readMapping(f.pool, redirected)).toMatchObject({
+    state: 'mapped',
+    terminal: survivor,
+  });
   const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
   expect(applied.applied).toMatchObject([{ status: 'stale' }]);
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });

@@ -28,13 +28,15 @@ test('empty type catalogues cannot configure a Source while a compiled catalogue
       status: 'unavailable',
       reason: 'binding_mismatch',
     });
-    await expect(source.readPublicFilterProjectionPage({
-      subject,
-      meaning: emptyMeaning,
-      inputLimit: 16,
-      frontier: null,
-      context: readContext(),
-    })).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      source.readPublicFilterProjectionPage({
+        subject,
+        meaning: emptyMeaning,
+        inputLimit: 16,
+        frontier: null,
+        context: readContext(),
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
     expect(await snapshot()).toEqual(before);
 
     const resolved = await binding.resolve({ source, meaning: f.meaning, capture }, readContext());

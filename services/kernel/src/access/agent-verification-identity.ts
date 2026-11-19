@@ -15,7 +15,6 @@ import {
   authoritativeTimeValue,
   currentCommand,
   noEffect,
-  runCommand,
   currentCommandResources,
   currentCommandReceipt,
   DEFAULT_REQUEST_DEADLINE_MS,

@@ -49,8 +49,9 @@ test('bootstrap and admission replay preserve PREPARE-pinned native births besid
       },
     };
     const admitted = await admitMergeSubjects(db.pool, options);
-    const birthCustody = () => db.admin.query(
-      `SELECT to_jsonb(m) AS mapping,to_jsonb(g) AS gate,to_jsonb(o) AS original,to_jsonb(b) AS bridge
+    const birthCustody = () =>
+      db.admin.query(
+        `SELECT to_jsonb(m) AS mapping,to_jsonb(g) AS gate,to_jsonb(o) AS original,to_jsonb(b) AS bridge
        FROM semantic.identity_epoch_mapping m
        JOIN semantic.identity_epoch_home_gate g
          ON (g.route,g.destination,g.original)=(m.route,m.original,m.original)
@@ -59,8 +60,8 @@ test('bootstrap and admission replay preserve PREPARE-pinned native births besid
          ON o.partition_no=h.partition_no AND o.generation=h.generation AND o.original=m.original
        JOIN semantic.identity_epoch_prearm_bridge b ON b.partition_no=h.partition_no AND b.generation=h.generation
        WHERE m.route=$1 AND m.original=$2 AND b.job_id=$3`,
-      [route, born.id, admitted.operation.id],
-    );
+        [route, born.id, admitted.operation.id],
+      );
     const before = (await birthCustody()).rows;
     expect(before).toHaveLength(1);
     expect(await admitMergeSubjects(db.pool, options)).toEqual(admitted);
@@ -68,14 +69,22 @@ test('bootstrap and admission replay preserve PREPARE-pinned native births besid
     await db.install();
     await stepIdentityEpochBootstrap(db.pool, home(born.id));
     expect((await birthCustody()).rows).toEqual(before);
-    expect((await db.admin.query(
-      'SELECT 1 FROM semantic.identity_epoch_bootstrap_row WHERE partition_no=$1 AND original=ANY($2::uuid[])',
-      [home(born.id), [born.id, destination.id]],
-    )).rows).toEqual([]);
-    expect((await db.admin.query(
-      'SELECT origin FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2',
-      [route, legacy],
-    )).rows).toEqual([{ origin: 'published' }]);
+    expect(
+      (
+        await db.admin.query(
+          'SELECT 1 FROM semantic.identity_epoch_bootstrap_row WHERE partition_no=$1 AND original=ANY($2::uuid[])',
+          [home(born.id), [born.id, destination.id]],
+        )
+      ).rows,
+    ).toEqual([]);
+    expect(
+      (
+        await db.admin.query('SELECT origin FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2', [
+          route,
+          legacy,
+        ])
+      ).rows,
+    ).toEqual([{ origin: 'published' }]);
   } finally {
     try {
       await fixture?.close();
@@ -147,14 +156,15 @@ test('registered owner deletion is refused before terminal enrollment without lo
     const ids = await seedChain(db, 2);
     const [a, b, terminal] = ids as [string, string, string];
     await db.install();
-    const owner = () => db.admin.query(
-      `SELECT p.node,p.epoch,p.write_state,p.moved_to,p.position::text,
+    const owner = () =>
+      db.admin.query(
+        `SELECT p.node,p.epoch,p.write_state,p.moved_to,p.position::text,
          d.domain_id::text,d.node AS domain_node,d.epoch AS domain_epoch,
          d.admitted_position::text,d.state AS domain_state
        FROM core.partition p JOIN access.live_copy_domain d USING(partition_no)
        WHERE p.partition_no=$1`,
-      [home(b)],
-    );
+        [home(b)],
+      );
     const before = (await owner()).rows;
     expect(before).toHaveLength(1);
     // Observe the real unbootstrapped source through the enforced native home before attempting owner deletion.
@@ -272,7 +282,11 @@ for (const boundary of [
       expect(failure.cause).toBe(lost);
       expect(injections).toBe(1);
       const committed = await db.admin.query<{
-        partition_no: number; transaction_id: string; epoch: number; position: string; purpose: string;
+        partition_no: number;
+        transaction_id: string;
+        epoch: number;
+        position: string;
+        purpose: string;
         effect_committed: boolean;
       }>(
         `SELECT n.partition_no,n.transaction_id::text,n.epoch,n.position::text,n.purpose,
@@ -312,17 +326,27 @@ for (const boundary of [
       if (before) expect(after.closure_enrollment).toBe(before.closure_enrollment);
       await stepIdentityEpochBootstrap(db.pool, home(a));
       expect((await readIdentityMappings(db.pool, [a]))[0]).toMatchObject({ state: 'mapped', original: a, terminal });
-      expect((await db.admin.query(
-        'SELECT closure_enrollment FROM semantic.identity_epoch_mapping WHERE original=$1', [a],
-      )).rows).toEqual([after]);
-      expect((await db.admin.query(
-        `SELECT partition_no,transaction_id::text,epoch,position::text,purpose
+      expect(
+        (await db.admin.query('SELECT closure_enrollment FROM semantic.identity_epoch_mapping WHERE original=$1', [a]))
+          .rows,
+      ).toEqual([after]);
+      expect(
+        (
+          await db.admin.query(
+            `SELECT partition_no,transaction_id::text,epoch,position::text,purpose
          FROM semantic.identity_epoch_native_commit WHERE partition_no=$1 AND transaction_id=$2`,
-        [native.partition_no, native.transaction_id],
-      )).rows).toEqual([{
-        partition_no: native.partition_no, transaction_id: native.transaction_id,
-        epoch: native.epoch, position: native.position, purpose: native.purpose,
-      }]);
+            [native.partition_no, native.transaction_id],
+          )
+        ).rows,
+      ).toEqual([
+        {
+          partition_no: native.partition_no,
+          transaction_id: native.transaction_id,
+          epoch: native.epoch,
+          position: native.position,
+          purpose: native.purpose,
+        },
+      ]);
       expect(injections).toBe(1);
       expect(
         (

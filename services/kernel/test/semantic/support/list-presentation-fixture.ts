@@ -209,12 +209,20 @@ export async function createListPresentationFixture(options: { poolMax?: number;
         const qualifierValue = (name: string) => {
           for (const qualifier of qualifiers) {
             if (!record(qualifier) || !record(qualifier.property) || qualifier.property.id !== name) continue;
-            if (record(qualifier.value) && qualifier.value.type === 'value' && typeof qualifier.value.content === 'string')
+            if (
+              record(qualifier.value) &&
+              qualifier.value.type === 'value' &&
+              typeof qualifier.value.content === 'string'
+            )
               return qualifier.value.content;
           }
           return undefined;
         };
-        if (statement.value.type === 'value' && typeof statement.value.content === 'string' && routeOf(statement.value.content) !== null) {
+        if (
+          statement.value.type === 'value' &&
+          typeof statement.value.content === 'string' &&
+          routeOf(statement.value.content) !== null
+        ) {
           address.target = statement.value.content;
           const key = relation?.slotKey && qualifierValue(relation.slotKey);
           if (typeof key === 'string') address.key = key;
@@ -228,20 +236,20 @@ export async function createListPresentationFixture(options: { poolMax?: number;
       group.candidates.push(candidate);
       groups.set(slot, group);
     }
-    if (!groups.size)
-      groups.set(relationSlotForApi(id, property, relation, {}), { address: {}, candidates: [] });
+    if (!groups.size) groups.set(relationSlotForApi(id, property, relation, {}), { address: {}, candidates: [] });
     for (const [slot, group] of groups) {
       for (const candidate of group.candidates)
         await checked('POST', `/v1/subjects/${id}/candidates/${candidate}:accept`, {
           context: GLOBAL_CONTEXT,
           expected_head: null,
         });
-      const current = expectedHead === undefined ? await latestAdoption(pool, id, property, GLOBAL_CONTEXT, slot) : null;
+      const current =
+        expectedHead === undefined ? await latestAdoption(pool, id, property, GLOBAL_CONTEXT, slot) : null;
       await checked('POST', `/v1/subjects/${id}:adopt`, {
         context: GLOBAL_CONTEXT,
         property,
         ...group.address,
-        expected_head: expectedHead === undefined ? current?.head ?? null : expectedHead,
+        expected_head: expectedHead === undefined ? (current?.head ?? null) : expectedHead,
         mode: 'replace',
         selection: group.candidates.map((candidate) => ({ candidate, rank: 'normal' })),
       });
@@ -252,7 +260,9 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     await checked('POST', `/v1/subjects/${id}:hide`, { reason: 'List disclosure test' });
   }
   async function batch(command: Extract<BatchCommand, { op: 'create' }>): Promise<{ id: string; revision: number }>;
-  async function batch(command: Extract<BatchCommand, { op: 'propose' }>): Promise<{ candidate: string; revision: number }>;
+  async function batch(
+    command: Extract<BatchCommand, { op: 'propose' }>,
+  ): Promise<{ candidate: string; revision: number }>;
   async function batch(command: Extract<BatchCommand, { op: 'retract' }>): Promise<{ revision: number }>;
   async function batch(command: BatchCommand): Promise<{ id?: string; candidate?: string; revision: number }>;
   async function batch(command: BatchCommand): Promise<{ id?: string; candidate?: string; revision: number }> {
@@ -269,7 +279,8 @@ export async function createListPresentationFixture(options: { poolMax?: number;
       throw new Error('List batch returned an invalid revision');
     const revision = value.revision;
     if (command.op === 'create') {
-      if (typeof value.id !== 'string' || routeOf(value.id) === null) throw new Error('List batch returned no native subject');
+      if (typeof value.id !== 'string' || routeOf(value.id) === null)
+        throw new Error('List batch returned no native subject');
       return { id: value.id, revision };
     }
     if (command.op === 'propose') {

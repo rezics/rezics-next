@@ -299,11 +299,7 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
     return { actor, route };
   }
 
-  async function readHead(
-    client: Pick<PoolClient, 'query'>,
-    route: number,
-    collectionId: string,
-  ): Promise<Head> {
+  async function readHead(client: Pick<PoolClient, 'query'>, route: number, collectionId: string): Promise<Head> {
     return currentHead(await historyHead.run(client, { route, collection_id: collectionId }));
   }
 

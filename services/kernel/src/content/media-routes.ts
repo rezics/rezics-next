@@ -408,11 +408,14 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
             throw error;
           }
           const decision = await decideDownload(
-            { ...dependencies, downloadContext: {
-              deadline: job.deadline,
-              routeKey: dependencies.routeKey,
-              ...(knowledge === undefined ? {} : { knowledge }),
-            } },
+            {
+              ...dependencies,
+              downloadContext: {
+                deadline: job.deadline,
+                routeKey: dependencies.routeKey,
+                ...(knowledge === undefined ? {} : { knowledge }),
+              },
+            },
             id,
             actor,
             query.variant as DownloadVariant,

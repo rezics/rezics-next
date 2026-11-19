@@ -4,7 +4,6 @@ import {
   qualifyReviewContextWitnesses,
   resolveRatingQuestionSelection,
   assertCurrentRatingQuestionSelection,
-  type RatingQuestionSelection,
   type ReviewContextCandidate,
 } from './review-context-eligibility.ts';
 import type { ContentReadDependencies } from './reads.ts';
@@ -46,10 +45,7 @@ async function readSubjectReviewCandidates(
   if (subjectIds.length === 0) return { candidates: new Map(), overflow: new Set() };
   const unique = [...new Set(subjectIds)];
   const result = await withBoundedReadConnection(dependencies.pool, deadline, (client) =>
-    client.query<SubjectReviewCandidate>(subjectReviewCandidatesSql, [
-      unique,
-      perSubjectLimit + 1,
-    ]),
+    client.query<SubjectReviewCandidate>(subjectReviewCandidatesSql, [unique, perSubjectLimit + 1]),
   );
   const candidates = new Map<string, string[]>();
   for (const { subjectId, threadId } of result.rows) {

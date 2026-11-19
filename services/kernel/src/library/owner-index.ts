@@ -119,7 +119,10 @@ export type OwnerIndexWorkFrontier = Readonly<{
 }>;
 
 /** Older owner directories need one additional pass even if their family bootstrap already completed. */
-export async function readOwnerIndexWorkFrontier(client: Client, accountId: string): Promise<OwnerIndexWorkFrontier | null> {
+export async function readOwnerIndexWorkFrontier(
+  client: Client,
+  accountId: string,
+): Promise<OwnerIndexWorkFrontier | null> {
   const { rows } = await client.query<OwnerIndexWorkFrontier>(
     `SELECT CASE WHEN repair.label_id IS NOT NULL THEN 'label-repair'
             WHEN phase='ready' AND NOT personal_coverage_ready THEN 'personal' ELSE phase END AS phase,
@@ -160,7 +163,10 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
       [...args, current.subject],
     );
     for (const row of rows)
-      await tx.query("SELECT library.refresh_owner_member_scope($1,$2,$3,'entry','{}'::jsonb)", [...args, row.subject_id]);
+      await tx.query("SELECT library.refresh_owner_member_scope($1,$2,$3,'entry','{}'::jsonb)", [
+        ...args,
+        row.subject_id,
+      ]);
     const after = rows.length === 100 ? rows[99]!.subject_id : null;
     await tx.query(
       'UPDATE library.owner_index_control SET personal_coverage_ready=$3,personal_coverage_after=$4 WHERE route=$1 AND account_id=$2',
@@ -170,7 +176,9 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   }
   // Parent transitions invalidate the source head immediately. Indexed child repair catches up in raw100 steps.
   if (current.phase === 'label-repair') {
-    const { rows: [repair] } = await tx.query<{ label: string; after: string | null }>(
+    const {
+      rows: [repair],
+    } = await tx.query<{ label: string; after: string | null }>(
       `SELECT label_id AS label,after_subject AS after FROM library.owner_index_label_repair
        WHERE route=$1 AND account_id=$2 AND label_id=$3 FOR UPDATE`,
       [...args, current.fact],

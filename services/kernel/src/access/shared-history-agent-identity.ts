@@ -7,7 +7,6 @@ import {
   nativeWork,
   readAgentIdentityCopyReceiving,
   readAgentIdentityInventory,
-  readAgentIdentityReceivingArtifact,
   readAgentIdentityRecoveryInventory,
   readAgentIdentityRecoveryInventoryInTransaction,
   readAgentIdentitySDKRetirementGap,

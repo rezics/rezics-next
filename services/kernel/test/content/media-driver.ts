@@ -253,10 +253,20 @@ export function createContentMediaDriver(): Promise<ContentMediaDriver> {
   return createMediaDriver(true);
 }
 
-export type KnowledgeMediaDriver = Pick<ContentMediaDriver,
-  | 'authorId' | 'close' | 'reserve' | 'complete' | 'authenticationEvidence'
-  | 'process' | 'inspect' | 'derivatives' | 'decode' | 'processingEvidence'
-  | 'source' | 'placeOriginal'
+export type KnowledgeMediaDriver = Pick<
+  ContentMediaDriver,
+  | 'authorId'
+  | 'close'
+  | 'reserve'
+  | 'complete'
+  | 'authenticationEvidence'
+  | 'process'
+  | 'inspect'
+  | 'derivatives'
+  | 'decode'
+  | 'processingEvidence'
+  | 'source'
+  | 'placeOriginal'
 >;
 
 /** Share the existing lifecycle engine while provisioning only native identities.
@@ -265,11 +275,18 @@ export type KnowledgeMediaDriver = Pick<ContentMediaDriver,
 export async function createKnowledgeMediaDriver(): Promise<KnowledgeMediaDriver> {
   const driver = await createMediaDriver(false);
   return {
-    authorId: driver.authorId, close: driver.close, reserve: driver.reserve,
-    complete: driver.complete, authenticationEvidence: driver.authenticationEvidence,
-    process: driver.process, inspect: driver.inspect, derivatives: driver.derivatives,
-    decode: driver.decode, processingEvidence: driver.processingEvidence,
-    source: driver.source, placeOriginal: driver.placeOriginal,
+    authorId: driver.authorId,
+    close: driver.close,
+    reserve: driver.reserve,
+    complete: driver.complete,
+    authenticationEvidence: driver.authenticationEvidence,
+    process: driver.process,
+    inspect: driver.inspect,
+    derivatives: driver.derivatives,
+    decode: driver.decode,
+    processingEvidence: driver.processingEvidence,
+    source: driver.source,
+    placeOriginal: driver.placeOriginal,
   };
 }
 
@@ -500,7 +517,9 @@ async function createMediaDriver(withPostContainers: boolean): Promise<ContentMe
 
     const driver: ContentMediaDriver = {
       authorId: system.actors.author.actor.accountId,
-      get containers() { return contentAnchors().containers; },
+      get containers() {
+        return contentAnchors().containers;
+      },
       close,
       async reserve(as, input) {
         const mark = observer.records.length;
@@ -762,7 +781,11 @@ async function createMediaDriver(withPostContainers: boolean): Promise<ContentMe
       async setParentVisibility(value) {
         await pool.query(
           'UPDATE content.thread SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
-          [contentAnchors().containers.thread.route, contentAnchors().containers.thread.id, value === 'private' ? 'protected' : 'taken_down'],
+          [
+            contentAnchors().containers.thread.route,
+            contentAnchors().containers.thread.id,
+            value === 'private' ? 'protected' : 'taken_down',
+          ],
         );
       },
       async erase(objectId) {

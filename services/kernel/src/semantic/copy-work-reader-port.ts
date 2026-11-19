@@ -8,7 +8,7 @@ import type { IdentityMapping } from './identity-epoch-contract.ts';
 import type { SubjectSummary, SubjectSummaryObservation, SummaryDependencies } from './summaries.ts';
 import type { Statement } from './item.ts';
 import type { WorkReleaseCards } from './work-release-cards.ts';
-import type { FacetPopulationSource, FacetPopulationSourceFactory } from './facet-population-contract.ts';
+import type { FacetPopulationSourceFactory } from './facet-population-contract.ts';
 
 /** Native request authority supplied by the mounted Semantic caller. */
 export type CopyWorkDisclosureDependencies = Readonly<{

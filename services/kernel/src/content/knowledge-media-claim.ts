@@ -29,8 +29,12 @@ export async function claimKnowledgeMedia(
     command.authorization.resource.id !== input.author.accountId
   )
     throw new GrantDeniedError();
-  if (!Array.isArray(input.mediaIds) || input.mediaIds.length > 32 ||
-    new Set(input.mediaIds).size !== input.mediaIds.length) throw new InvalidMediaClaimError();
+  if (
+    !Array.isArray(input.mediaIds) ||
+    input.mediaIds.length > 32 ||
+    new Set(input.mediaIds).size !== input.mediaIds.length
+  )
+    throw new InvalidMediaClaimError();
   if (routeOf(input.revisionId) !== route || input.mediaIds.some((id) => routeOf(id) !== route))
     throw new MediaUnavailableError();
   const result = await claim.run(tx, {

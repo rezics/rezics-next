@@ -1,10 +1,7 @@
-import type {
-  IdentitySourceConsumerCustody,
-  IdentitySourceConsumerReference,
-} from '../../semantic/identity-source-consumer-custody.ts';
+import type { IdentitySourceConsumerReference } from '../../semantic/identity-source-consumer-custody.ts';
 import canonicalize from 'canonicalize';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import './agent-identity-inventory-work.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../../clock.ts';
 import type { WorkClient } from '../../work/client.ts';
@@ -38,14 +35,10 @@ import {
   identityHistoryAccountsLocalWork,
   identityHistoryCommand,
   identityHistoryConnection,
-  lockRecordedAgentIdentityHistory,
   nativeWork,
-  readAgentIdentityReceivingArtifact,
   readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,
   reserveIdentityHistoryWork,
-  resolveAgentIdentitySDKWork,
-  retireAgentIdentitySDKWork,
   unpricedIdentityHistoryWork,
 } from '../application/identity.ts';
 import { historyDeadline, lockHistoryBarrier, readHistoryReceivingReceipt } from '../application/receiving.ts';

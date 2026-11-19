@@ -68,81 +68,86 @@ export async function listCreatorOffers(
   }
   requireAccessDeadline(input.deadline);
   let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'committed' | 'rolling-back' | 'rolled-back' = 'none';
-  return withBoundedReadConnection(pool, input.deadline, async (connection) => {
-    const client = deadlineClient(connection, input.deadline);
-    const source = async () => {
-      const partition = await readPartition(client, home);
-      if (!partition || partition.writeState !== 'active')
-        throw new CommandUnavailableError(
-          partition?.writeState === 'moved' ? 'moved' : 'fenced',
-          home,
-          partition?.movedTo,
-        );
-      if (epoch !== undefined && epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-      const seen = input.seen.find((entry) => entry.partition === home);
-      if (
-        seen &&
-        (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
-      )
-        throw new CommandUnavailableError('fenced', home);
-      return partition;
-    };
-    try {
-      transaction = 'beginning';
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      transaction = 'open';
-      // The mounted metadata prepares the sole native formula on the actual acting account.
-      if (!(await check(client))) throw new ProblemError('forbidden');
-      const partition = await source();
-      const rows = await pageRead.run(client, { route, creator_account_id: actor.accountId, after, limit: size + 1 });
-      const offers: CreatorOffer[] = rows.slice(0, size).map((row) => {
-        const amount = Number(row.unitAmountMinor);
-        if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
-        return {
-          ...row,
-          moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
-          taxBehavior: row.taxBehavior as 'exclusive' | null,
-          unitAmountMinor: amount,
-          contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),
-          contentPost: contentPostTermsView(decodeCapturedContentPost(row.contentPost)),
-        };
-      });
-      transaction = 'committing';
-      await client.query('COMMIT');
-      transaction = 'committed';
-      // Leave the snapshot before the final current account/formula and native source fence.
-      if (!(await check(client))) throw new ProblemError('forbidden');
-      epoch = partition.epoch;
-      await source();
-      requireAccessDeadline(input.deadline);
-      const last = offers.at(-1);
-      return {
-        offers,
-        next:
-          rows.length > size && last
-            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
-            : null,
+  return withBoundedReadConnection(
+    pool,
+    input.deadline,
+    async (connection) => {
+      const client = deadlineClient(connection, input.deadline);
+      const source = async () => {
+        const partition = await readPartition(client, home);
+        if (!partition || partition.writeState !== 'active')
+          throw new CommandUnavailableError(
+            partition?.writeState === 'moved' ? 'moved' : 'fenced',
+            home,
+            partition?.movedTo,
+          );
+        if (epoch !== undefined && epoch !== partition.epoch) throw new ProblemError('stale_cursor');
+        const seen = input.seen.find((entry) => entry.partition === home);
+        if (
+          seen &&
+          (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
+        )
+          throw new CommandUnavailableError('fenced', home);
+        return partition;
       };
-    } catch (error) {
-      if (transaction === 'open') {
-        transaction = 'rolling-back';
-        try {
-          await client.query('ROLLBACK');
-          transaction = 'rolled-back';
-        } catch {
-          // Keep the original domain or query failure; the bounded reader retires unresolved cleanup.
+      try {
+        transaction = 'beginning';
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        transaction = 'open';
+        // The mounted metadata prepares the sole native formula on the actual acting account.
+        if (!(await check(client))) throw new ProblemError('forbidden');
+        const partition = await source();
+        const rows = await pageRead.run(client, { route, creator_account_id: actor.accountId, after, limit: size + 1 });
+        const offers: CreatorOffer[] = rows.slice(0, size).map((row) => {
+          const amount = Number(row.unitAmountMinor);
+          if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
+          return {
+            ...row,
+            moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
+            taxBehavior: row.taxBehavior as 'exclusive' | null,
+            unitAmountMinor: amount,
+            contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),
+            contentPost: contentPostTermsView(decodeCapturedContentPost(row.contentPost)),
+          };
+        });
+        transaction = 'committing';
+        await client.query('COMMIT');
+        transaction = 'committed';
+        // Leave the snapshot before the final current account/formula and native source fence.
+        if (!(await check(client))) throw new ProblemError('forbidden');
+        epoch = partition.epoch;
+        await source();
+        requireAccessDeadline(input.deadline);
+        const last = offers.at(-1);
+        return {
+          offers,
+          next:
+            rows.length > size && last
+              ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
+              : null,
+        };
+      } catch (error) {
+        if (transaction === 'open') {
+          transaction = 'rolling-back';
+          try {
+            await client.query('ROLLBACK');
+            transaction = 'rolled-back';
+          } catch {
+            // Keep the original domain or query failure; the bounded reader retires unresolved cleanup.
+          }
         }
+        throw error;
       }
-      throw error;
-    }
-  }, {
-    deadlineError: () => new AccessUnavailableError('deadline'),
-    // The primitive already exempts settled PostgreSQL server errors; other query failures leave IO uncertain.
-    isUncertainError: () => true,
-    isUncertainWorkError: () =>
-      transaction === 'beginning' ||
-      transaction === 'open' ||
-      transaction === 'committing' ||
-      transaction === 'rolling-back',
-  });
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      // The primitive already exempts settled PostgreSQL server errors; other query failures leave IO uncertain.
+      isUncertainError: () => true,
+      isUncertainWorkError: () =>
+        transaction === 'beginning' ||
+        transaction === 'open' ||
+        transaction === 'committing' ||
+        transaction === 'rolling-back',
+    },
+  );
 }

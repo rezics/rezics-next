@@ -471,7 +471,9 @@ export async function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, c
       return advanced
         ? {
             value,
-            events: [event(CATALOGUE_PROGRESS, { rootDigest: parsed.rootDigest, state: value.state, steps: value.steps })],
+            events: [
+              event(CATALOGUE_PROGRESS, { rootDigest: parsed.rootDigest, state: value.state, steps: value.steps }),
+            ],
           }
         : noEffect(value);
     })

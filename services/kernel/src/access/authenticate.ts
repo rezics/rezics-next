@@ -1,5 +1,5 @@
 export { readNativeAccessTime } from './native-time.ts';
-import { deadlineClient, within, remaining } from './deadline.ts';
+import { within, remaining } from './deadline.ts';
 export { deadlineClient, within } from './deadline.ts';
 import {
   accessCheckout,

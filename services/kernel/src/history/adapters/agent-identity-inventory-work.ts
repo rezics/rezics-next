@@ -8,7 +8,6 @@ import type { WorkDimensions } from '../../library/contract/work-dimensions.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../../command/dispatch-lifetime.ts';
 import type { IdentityUnit } from './agent-identity-retirement.ts';
 import { historyComposition } from '../application/composition.ts';
-import { withPrepaidAgentIdentityHistoryUnit } from '../application/identity.ts';
 import {
   type HistoryReceivingContext,
   type IdentityHistoryAccountsDeclaration,

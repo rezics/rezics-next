@@ -22,23 +22,14 @@ import readAdoptionSubject from './candidates-read-adoption-subject.sql';
 import readCompactCandidate from './candidates-read-compact-candidate.sql';
 import readDecisionCandidate from './candidates-read-decision-candidate.sql';
 import readHidden from './candidates-read-hidden.sql';
-import {
-  currentAcceptance,
-  expandSlot,
-  insertAcceptance,
-  latestAdoption,
-  slotView,
-} from './slots.ts';
+import { expandSlot, insertAcceptance, latestAdoption, slotView } from './slots.ts';
 import { declareCommandHistory } from '../history/application/index.ts';
 import { appendEditorialRevision, retryEditorialUniqueness } from './candidate-command.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './contract/subject-errors.ts';
 
-const listed = <T>(result: T[] | T | null): T[] => result == null ? [] : Array.isArray(result) ? result : [result];
+const listed = <T>(result: T[] | T | null): T[] => (result == null ? [] : Array.isArray(result) ? result : [result]);
 
-export async function decideCandidate(
-  pool: Pool,
-  options: CandidateDecisionOptions,
-) {
+export async function decideCandidate(pool: Pool, options: CandidateDecisionOptions) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
   const defaults =

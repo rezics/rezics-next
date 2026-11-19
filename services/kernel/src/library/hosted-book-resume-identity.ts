@@ -16,9 +16,7 @@ export type HostedBookResumeAddress = Readonly<{
 
 type ObjectValue = Record<string, unknown>;
 function object(value: unknown): ObjectValue | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as ObjectValue)
-    : null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as ObjectValue) : null;
 }
 
 function fields(value: ObjectValue, names: readonly string[]): boolean {
@@ -44,10 +42,14 @@ export function normalizeHostedBookResumeAddress(value: unknown): HostedBookResu
   const selection = object(address.selection);
   const body = selection && object(selection.body);
   if (
-    !publication || !fields(publication, ['id', 'structureRevisionId', 'releaseRevisionId']) ||
-    !selection || !fields(selection, ['occurrenceId', 'body']) ||
-    !body || !fields(body, ['postId', 'revisionId', 'sha256'])
-  ) return null;
+    !publication ||
+    !fields(publication, ['id', 'structureRevisionId', 'releaseRevisionId']) ||
+    !selection ||
+    !fields(selection, ['occurrenceId', 'body']) ||
+    !body ||
+    !fields(body, ['postId', 'revisionId', 'sha256'])
+  )
+    return null;
   const catalogueId = id(publication.id);
   const structureRevisionId = id(publication.structureRevisionId);
   const releaseRevisionId = id(publication.releaseRevisionId);
@@ -59,10 +61,13 @@ export function normalizeHostedBookResumeAddress(value: unknown): HostedBookResu
     return null;
   const route = routeOf(catalogueId);
   if (
-    routeOf(structureRevisionId) !== route || routeOf(releaseRevisionId) !== route ||
-    routeOf(occurrenceId) !== route || routeOf(postId) !== routeOf(revisionId) ||
+    routeOf(structureRevisionId) !== route ||
+    routeOf(releaseRevisionId) !== route ||
+    routeOf(occurrenceId) !== route ||
+    routeOf(postId) !== routeOf(revisionId) ||
     structureRevisionId === releaseRevisionId
-  ) return null;
+  )
+    return null;
   return {
     kind: 'chapter',
     publication: { id: catalogueId, structureRevisionId, releaseRevisionId },
@@ -76,12 +81,14 @@ export function sameHostedBookResumeOccurrence(a: HostedBookResumeAddress, b: Ho
 }
 
 export function sameHostedBookResumeAddress(a: HostedBookResumeAddress, b: HostedBookResumeAddress): boolean {
-  return sameHostedBookResumeOccurrence(a, b) &&
+  return (
+    sameHostedBookResumeOccurrence(a, b) &&
     a.publication.structureRevisionId === b.publication.structureRevisionId &&
     a.publication.releaseRevisionId === b.publication.releaseRevisionId &&
     a.selection.body.postId === b.selection.body.postId &&
     a.selection.body.revisionId === b.selection.body.revisionId &&
-    a.selection.body.sha256 === b.selection.body.sha256;
+    a.selection.body.sha256 === b.selection.body.sha256
+  );
 }
 
 export type HostedBookResumeSelection =
@@ -119,13 +126,15 @@ export function resolveHostedBookResumeIdentity(
 ): HostedBookResumeResolution {
   const view = object(value);
   if (
-    !view || view.kind !== 'publication' || id(view.catalogueId) !== expected.publication.id ||
+    !view ||
+    view.kind !== 'publication' ||
+    id(view.catalogueId) !== expected.publication.id ||
     id(view.revisionId) !== expected.publication.releaseRevisionId ||
     id(view.sourceRevisionId) !== expected.publication.structureRevisionId
-  ) return { state: 'changed' };
-  const occurrence = object(view.occurrence);
-  if (!occurrence || id(occurrence.occurrenceId) !== expected.selection.occurrenceId)
+  )
     return { state: 'changed' };
+  const occurrence = object(view.occurrence);
+  if (!occurrence || id(occurrence.occurrenceId) !== expected.selection.occurrenceId) return { state: 'changed' };
   if (occurrence.availability === 'unavailable') return { state: 'unavailable' };
   if (occurrence.availability !== 'available' || occurrence.kind !== 'chapter') return { state: 'changed' };
   const target = object(occurrence.target);
@@ -141,9 +150,13 @@ export function resolveHostedBookResumeIdentity(
     },
   });
   if (
-    !address || !threadId || routeOf(threadId) !== routeOf(address.selection.body.postId) ||
-    document.encoding !== 'base64' || digest(document.sha256) !== address.selection.body.sha256 ||
+    !address ||
+    !threadId ||
+    routeOf(threadId) !== routeOf(address.selection.body.postId) ||
+    document.encoding !== 'base64' ||
+    digest(document.sha256) !== address.selection.body.sha256 ||
     !sameHostedBookResumeAddress(expected, address)
-  ) return { state: 'changed' };
+  )
+    return { state: 'changed' };
   return { state: 'available', address };
 }

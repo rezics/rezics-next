@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
-import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchWriteRequest } from '@rezics/definitions/bulk';
 import { converter_revision } from '../../../../packages/conversion/src/open-library.ts';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';

@@ -2,7 +2,8 @@
 export class SubjectNotFoundError extends Error {}
 export type MissingCheckpointOwner = 'absent' | 'inactive' | 'epoch' | 'empty' | 'behind' | 'covers';
 type MissingCheckpointSource = `${'global' | 'nonroot'}/required-positive/owner-${MissingCheckpointOwner}`;
-type MissingCheckpointScan = `first-${'present' | 'absent'}/scan-${'unseen' | 'recorded' | 'before-first' | 'since-first'}`;
+type MissingCheckpointScan =
+  `first-${'present' | 'absent'}/scan-${'unseen' | 'recorded' | 'before-first' | 'since-first'}`;
 type EffectsCheckpoint = 'covers' | 'behind' | 'absent';
 export type SubjectLinkWaitReason =
   | 'deadline'

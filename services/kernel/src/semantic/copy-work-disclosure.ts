@@ -12,12 +12,7 @@ import {
   COPY_WORK_DISCLOSURE_LOOKAHEAD,
   COPY_WORK_PROPERTY,
 } from './copy-work-disclosure-contract.ts';
-import type {
-  CopyWorkDisclosureObservation,
-  CopyWorkDisclosureRequest,
-  CopyWorkDisclosureState,
-  CopyWorkReference,
-} from './copy-work-disclosure-contract.ts';
+import type { CopyWorkDisclosureObservation, CopyWorkDisclosureState } from './copy-work-disclosure-contract.ts';
 import readCopyWorkLocators from './copy-work-disclosure.sql';
 import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate } from './current-relations.ts';
 import { activeRelease } from './definition-release-read.ts';

@@ -64,47 +64,52 @@ export async function readNoticeActors(
   const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
   if (!unique.length) return new Map();
   return within(deadline, () =>
-    withBoundedReadConnection(pool, deadline, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const read = () => readPublicIdentityObservations(client, unique);
-      const before = new Map((await read()).map((row) => [row.id, row]));
-      const mediaIds = [
-        ...new Set(
-          [...before.values()].flatMap((row) =>
-            row.state === 'active' &&
-            row.kind === 'actor' &&
-            row.nativeState === 'active' &&
-            !row.authnFenced &&
-            row.avatarMediaId
-              ? [row.avatarMediaId]
-              : [],
+    withBoundedReadConnection(
+      pool,
+      deadline,
+      async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        const read = () => readPublicIdentityObservations(client, unique);
+        const before = new Map((await read()).map((row) => [row.id, row]));
+        const mediaIds = [
+          ...new Set(
+            [...before.values()].flatMap((row) =>
+              row.state === 'active' &&
+              row.kind === 'actor' &&
+              row.nativeState === 'active' &&
+              !row.authnFenced &&
+              row.avatarMediaId
+                ? [row.avatarMediaId]
+                : [],
+            ),
           ),
-        ),
-      ];
-      const avatars = mediaIds.length
-        ? await readAvatarSummaries(client, mediaIds)
-        : new Map<string, AvatarSummary | null>();
-      const after = new Map((await read()).map((row) => [row.id, row]));
-      const result = new Map<string, NoticeActor>();
-      for (const id of unique) {
-        const current = after.get(id);
-        if (!current || current.state !== 'active' || current.kind !== 'actor' || !unchanged(before.get(id), current))
-          continue;
-        const avatar =
-          current.nativeState === 'active' && !current.authnFenced && current.avatarMediaId
-            ? (avatars.get(current.avatarMediaId) ?? null)
-            : null;
-        result.set(id, {
-          state: 'available',
-          accountId: id,
-          displayName: current.displayName?.trim() || current.handle || 'Member',
-          handle: current.handle,
-          automated: current.automated,
-          avatar: avatar ? { ...avatar, variants: [...avatar.variants] } : null,
-          avatarUrl: null,
-        });
-      }
-      return result;
-    }, { isUncertainError: () => true }),
+        ];
+        const avatars = mediaIds.length
+          ? await readAvatarSummaries(client, mediaIds)
+          : new Map<string, AvatarSummary | null>();
+        const after = new Map((await read()).map((row) => [row.id, row]));
+        const result = new Map<string, NoticeActor>();
+        for (const id of unique) {
+          const current = after.get(id);
+          if (!current || current.state !== 'active' || current.kind !== 'actor' || !unchanged(before.get(id), current))
+            continue;
+          const avatar =
+            current.nativeState === 'active' && !current.authnFenced && current.avatarMediaId
+              ? (avatars.get(current.avatarMediaId) ?? null)
+              : null;
+          result.set(id, {
+            state: 'available',
+            accountId: id,
+            displayName: current.displayName?.trim() || current.handle || 'Member',
+            handle: current.handle,
+            automated: current.automated,
+            avatar: avatar ? { ...avatar, variants: [...avatar.variants] } : null,
+            avatarUrl: null,
+          });
+        }
+        return result;
+      },
+      { isUncertainError: () => true },
+    ),
   );
 }

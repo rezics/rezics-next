@@ -24,10 +24,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { eraseAccountNoticesPage, type NoticeErasureCursor } from './notices.ts';
 import { eraseBoardSlowModeAccountPage } from './board-slow.ts';
 import { markAccountErasureFound } from './account-erasure-progress.ts';
-import {
-  advanceKnowledgeAccountErasure,
-  isKnowledgeAccountErasureCursor,
-} from './knowledge-account-erasure.ts';
+import { advanceKnowledgeAccountErasure, isKnowledgeAccountErasureCursor } from './knowledge-account-erasure.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
@@ -317,14 +314,10 @@ async function step(
              AND NOT EXISTS (SELECT 1 FROM access.erasure_acknowledgement a
                WHERE a.route=p.route AND a.account_id=p.account_id AND a.participant='content')
            FOR SHARE OF e FOR UPDATE OF p`,
-          [
-            home,
-            accountId,
-            expectedStep,
-            progress.cursor === null ? null : JSON.stringify(progress.cursor),
-          ],
+          [home, accountId, expectedStep, progress.cursor === null ? null : JSON.stringify(progress.cursor)],
         );
-        if (!proof.rowCount) throw new Error('Knowledge account erasure requires its current committed participant step');
+        if (!proof.rowCount)
+          throw new Error('Knowledge account erasure requires its current committed participant step');
         const result = await advanceKnowledgeAccountErasure(tx, accountId, progress.cursor, 100);
         if (result.found > 0) await markAccountErasureFound(tx, accountId, 'content');
         return noEffect(result);

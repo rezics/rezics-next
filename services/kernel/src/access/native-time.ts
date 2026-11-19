@@ -17,10 +17,7 @@ export async function readNativeAccessTime(
     withBoundedReadConnection(
       context.pool,
       context.deadline,
-      (client) =>
-        accessNativeWork(context.work, 'time', input, {}, () =>
-          timeRead.run(client, input),
-        ),
+      (client) => accessNativeWork(context.work, 'time', input, {}, () => timeRead.run(client, input)),
       {
         deadlineError: () => new AccessUnavailableError('deadline'),
         mapError(error) {

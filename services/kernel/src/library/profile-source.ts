@@ -168,14 +168,19 @@ export async function readLibraryProfileAnchor(
     );
     let acceptingType: string | undefined;
     try {
-      const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
-        requireAccessDeadline(deadline);
-        if (!(await check(client, at))) return false;
-        acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(
-          resolved.subjectId,
-        );
-        return acceptingType !== undefined;
-      }, deadline);
+      const reference = await readSubjectReference(
+        pool,
+        resolved.subjectId,
+        async (client) => {
+          requireAccessDeadline(deadline);
+          if (!(await check(client, at))) return false;
+          acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(
+            resolved.subjectId,
+          );
+          return acceptingType !== undefined;
+        },
+        deadline,
+      );
       if (!reference || acceptingType === undefined) return null;
       const after = await identityEpochStore().readMapping(pool, subjectId);
       requireAccessDeadline(deadline);

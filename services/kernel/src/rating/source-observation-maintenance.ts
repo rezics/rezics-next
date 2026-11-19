@@ -50,27 +50,47 @@ export function validMaterializedSourceObservation(source: SourceProvider, value
   const text = (part: unknown, max: number): part is string =>
     typeof part === 'string' && part.length > 0 && Buffer.byteLength(part, 'utf8') <= max;
   if (
-    typeof payload.sourceAlias !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(payload.sourceAlias) ||
-    !text(payload.sourceRecordId, 1024) || /[\u0000-\u001f\u007f-\u009f]/.test(payload.sourceRecordId) ||
+    typeof payload.sourceAlias !== 'string' ||
+    !/^[a-z][a-z0-9_-]{0,31}$/.test(payload.sourceAlias) ||
+    !text(payload.sourceRecordId, 1024) ||
+    /[\u0000-\u001f\u007f-\u009f]/.test(payload.sourceRecordId) ||
     !sourceProvider(source)?.record(payload.sourceRecordId) ||
-    typeof payload.asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.asOf)
-  ) return false;
+    typeof payload.asOf !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(payload.asOf)
+  )
+    return false;
   const date = new Date(`${payload.asOf}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== payload.asOf) return false;
   const shared = ['sourceAlias', 'sourceRecordId', 'count', 'asOf'];
   if (payload.count === 0) return Object.keys(payload).every((key) => shared.includes(key));
-  if (!Number.isSafeInteger(payload.count) || (payload.count as number) < 1 ||
-    (payload.count as number) > 2_147_483_647 || payload.scale === null ||
-    typeof payload.scale !== 'object' || Array.isArray(payload.scale)) return false;
+  if (
+    !Number.isSafeInteger(payload.count) ||
+    (payload.count as number) < 1 ||
+    (payload.count as number) > 2_147_483_647 ||
+    payload.scale === null ||
+    typeof payload.scale !== 'object' ||
+    Array.isArray(payload.scale)
+  )
+    return false;
   const scale = payload.scale as Record<string, unknown>;
-  if (Object.keys(scale).length !== 2 || !Number.isSafeInteger(scale.min) || !Number.isSafeInteger(scale.max) ||
+  if (
+    Object.keys(scale).length !== 2 ||
+    !Number.isSafeInteger(scale.min) ||
+    !Number.isSafeInteger(scale.max) ||
     !sourceProvider(source)!.scale(scale.min as number, scale.max as number) ||
-    typeof payload.mean !== 'number' || !Number.isFinite(payload.mean) ||
-    payload.mean < (scale.min as number) || payload.mean > (scale.max as number) ||
-    !text(payload.licence, 1024) || !text(payload.attribution, 2000)) return false;
+    typeof payload.mean !== 'number' ||
+    !Number.isFinite(payload.mean) ||
+    payload.mean < (scale.min as number) ||
+    payload.mean > (scale.max as number) ||
+    !text(payload.licence, 1024) ||
+    !text(payload.attribution, 2000)
+  )
+    return false;
   const fields = [...shared, 'scale', 'mean', 'licence', 'attribution', 'figures'];
-  return Object.keys(payload).every((key) => fields.includes(key)) &&
-    (payload.figures === undefined || validSourceFigures(source, payload.figures, payload.count as number));
+  return (
+    Object.keys(payload).every((key) => fields.includes(key)) &&
+    (payload.figures === undefined || validSourceFigures(source, payload.figures, payload.count as number))
+  );
 }
 
 function verifyEnvelope(row: Envelope, subjectId: string, source: SourceProvider) {
@@ -191,21 +211,32 @@ export async function prepareSourceObservationMaterialization(pool: Pool) {
 }
 
 async function currentEnvelope(client: PoolClient, key: SlotKey, digest: string) {
-  return (await client.query<Envelope>(
-    'SELECT ' + envelopeColumns + ` FROM rating.source_statistic_observation
-     WHERE route=$1 AND subject_id=$2 AND source=$3 AND digest=$4`, [...key, digest],
-  )).rows[0];
+  return (
+    await client.query<Envelope>(
+      'SELECT ' +
+        envelopeColumns +
+        ` FROM rating.source_statistic_observation
+     WHERE route=$1 AND subject_id=$2 AND source=$3 AND digest=$4`,
+      [...key, digest],
+    )
+  ).rows[0];
 }
 
 async function currentHead(client: PoolClient, key: SlotKey) {
-  return (await client.query<Head>(
-    `SELECT digest, last_order::text AS "lastOrder", last_seek_order::text AS "lastSeekOrder"
-     FROM rating.source_statistic_head WHERE route=$1 AND subject_id=$2 AND source=$3`, key,
-  )).rows[0];
+  return (
+    await client.query<Head>(
+      `SELECT digest, last_order::text AS "lastOrder", last_seek_order::text AS "lastSeekOrder"
+     FROM rating.source_statistic_head WHERE route=$1 AND subject_id=$2 AND source=$3`,
+      key,
+    )
+  ).rows[0];
 }
 
 function verifyProjection(
-  current: Envelope, projection: Projection | undefined, subjectId: string, source: SourceProvider,
+  current: Envelope,
+  projection: Projection | undefined,
+  subjectId: string,
+  source: SourceProvider,
 ) {
   if (current.payload.count === 0) {
     if (projection !== undefined) fail('cleared head retains a projection');
@@ -222,9 +253,14 @@ function verifyProjection(
 function result(progress: Progress | null, examined: number) {
   return {
     done: progress === null || progress.phase === 'done',
-    cursor: progress === null || progress.phase === 'done' ? null : {
-      phase: progress.phase, digest: progress.cursorDigest, nativeOrder: progress.cursorOrder,
-    },
+    cursor:
+      progress === null || progress.phase === 'done'
+        ? null
+        : {
+            phase: progress.phase,
+            digest: progress.cursorDigest,
+            nativeOrder: progress.cursorOrder,
+          },
     examined,
     observations: progress?.processed ?? '0',
     head: progress?.headDigest ?? null,
@@ -235,31 +271,49 @@ function result(progress: Progress | null, examined: number) {
 async function start(client: PoolClient, key: SlotKey): Promise<Progress | null> {
   let head = await currentHead(client, key);
   const projection = await currentProjection(client, key);
-  const firstUnkeyed = (await client.query(
-    `SELECT 1 FROM rating.source_statistic_observation
-     WHERE route=$1 AND subject_id=$2 AND source=$3 AND seek_order IS NULL LIMIT 1`, key,
-  )).rows[0];
+  const firstUnkeyed = (
+    await client.query(
+      `SELECT 1 FROM rating.source_statistic_observation
+     WHERE route=$1 AND subject_id=$2 AND source=$3 AND seek_order IS NULL LIMIT 1`,
+      key,
+    )
+  ).rows[0];
   let current = head ? await currentEnvelope(client, key, head.digest) : undefined;
   if (head && !current) invalidated('head has no retained envelope');
   if (current) {
     verifyEnvelope(current, key[1], key[2]);
     verifyProjection(current, projection, key[1], key[2]);
     // Keep issued cursors and immutable seek keys for already canonical slots.
-    if (!firstUnkeyed && head!.lastSeekOrder !== '0' &&
-      (projection === undefined || projection.observationDigest === head!.digest)) {
+    if (
+      !firstUnkeyed &&
+      head!.lastSeekOrder !== '0' &&
+      (projection === undefined || projection.observationDigest === head!.digest)
+    ) {
       return {
-        phase: 'done', cursorDigest: null, cursorOrder: null, allocated: head!.lastSeekOrder,
-        processed: '0', nativeMax: head!.lastOrder, headDigest: head!.digest,
-        headTransaction: current.transactionId, projectionTransaction: projection?.transactionId ?? null,
-        projectionDigest: projection?.observationDigest ?? null, adoptedDigest: null, materialized: false,
+        phase: 'done',
+        cursorDigest: null,
+        cursorOrder: null,
+        allocated: head!.lastSeekOrder,
+        processed: '0',
+        nativeMax: head!.lastOrder,
+        headDigest: head!.digest,
+        headTransaction: current.transactionId,
+        projectionTransaction: projection?.transactionId ?? null,
+        projectionDigest: projection?.observationDigest ?? null,
+        adoptedDigest: null,
+        materialized: false,
       };
     }
   }
-  const lastSeek = (await client.query<{ seekOrder: string }>(
-    `SELECT seek_order::text AS "seekOrder" FROM rating.source_statistic_observation
+  const lastSeek =
+    (
+      await client.query<{ seekOrder: string }>(
+        `SELECT seek_order::text AS "seekOrder" FROM rating.source_statistic_observation
      WHERE route=$1 AND subject_id=$2 AND source=$3 AND seek_order IS NOT NULL
-     ORDER BY seek_order DESC LIMIT 1`, key,
-  )).rows[0]?.seekOrder ?? '0';
+     ORDER BY seek_order DESC LIMIT 1`,
+        key,
+      )
+    ).rows[0]?.seekOrder ?? '0';
   let allocated = BigInt(lastSeek);
   if (head && BigInt(head.lastSeekOrder) > allocated) allocated = BigInt(head.lastSeekOrder);
   let adoptedDigest: string | null = null;
@@ -274,14 +328,23 @@ async function start(client: PoolClient, key: SlotKey): Promise<Progress | null>
       allocated++;
       // A positive temporary key also works against the final NOT NULL baseline.
       // This unpublished position is reassigned in the bounded unknown phase.
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO rating.source_statistic_observation
           (route,subject_id,source,digest,source_alias,source_record_id,as_of,payload,
            transaction_id,payload_version,local_order,seek_order)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,NULL,$11)`,
-        [...key, adopted.digest, projection.sourceAlias, projection.sourceRecordId, projection.asOf,
-          JSON.stringify(adopted.payload), projection.transactionId, SOURCE_OBSERVATION_PAYLOAD_VERSION,
-          String(allocated)],
+        [
+          ...key,
+          adopted.digest,
+          projection.sourceAlias,
+          projection.sourceRecordId,
+          projection.asOf,
+          JSON.stringify(adopted.payload),
+          projection.transactionId,
+          SOURCE_OBSERVATION_PAYLOAD_VERSION,
+          String(allocated),
+        ],
       );
       adoptedDigest = adopted.digest;
       current = await currentEnvelope(client, key, adopted.digest);
@@ -290,35 +353,61 @@ async function start(client: PoolClient, key: SlotKey): Promise<Progress | null>
     verifyEnvelope(current, key[1], key[2]);
     verifyProjection(current, projection, key[1], key[2]);
     head = { digest: adopted.digest, lastOrder: '0', lastSeekOrder: '0' };
-    await client.query(`
+    await client.query(
+      `
       INSERT INTO rating.source_statistic_head (route,subject_id,source,digest,last_order,last_seek_order)
-      VALUES ($1,$2,$3,$4,0,0)`, [...key, head.digest],
+      VALUES ($1,$2,$3,$4,0,0)`,
+      [...key, head.digest],
     );
     materialized = true;
   }
   if (!head || !current) {
-    const retained = (await client.query(
-      `SELECT 1 FROM rating.source_statistic_observation
-       WHERE route=$1 AND subject_id=$2 AND source=$3 LIMIT 1`, key,
-    )).rows[0];
+    const retained = (
+      await client.query(
+        `SELECT 1 FROM rating.source_statistic_observation
+       WHERE route=$1 AND subject_id=$2 AND source=$3 LIMIT 1`,
+        key,
+      )
+    ).rows[0];
     if (retained) invalidated('retained observations have no authoritative head');
     return null;
   }
-  await client.query(`UPDATE rating.source_statistic_head SET last_seek_order=0
-    WHERE route=$1 AND subject_id=$2 AND source=$3`, key);
+  await client.query(
+    `UPDATE rating.source_statistic_head SET last_seek_order=0
+    WHERE route=$1 AND subject_id=$2 AND source=$3`,
+    key,
+  );
   const progress: Progress = {
-    phase: 'unknown', cursorDigest: null, cursorOrder: null, allocated: String(allocated),
-    processed: '0', nativeMax: head.lastOrder, headDigest: head.digest,
-    headTransaction: current.transactionId, projectionTransaction: projection?.transactionId ?? null,
-    projectionDigest: projection?.observationDigest ?? null, adoptedDigest, materialized,
+    phase: 'unknown',
+    cursorDigest: null,
+    cursorOrder: null,
+    allocated: String(allocated),
+    processed: '0',
+    nativeMax: head.lastOrder,
+    headDigest: head.digest,
+    headTransaction: current.transactionId,
+    projectionTransaction: projection?.transactionId ?? null,
+    projectionDigest: projection?.observationDigest ?? null,
+    adoptedDigest,
+    materialized,
   };
-  await client.query(`
+  await client.query(
+    `
     INSERT INTO rating.source_observation_materialization
       (route,subject_id,source,phase,allocated,processed,native_max,head_digest,head_transaction,
        projection_transaction,projection_digest,adopted_digest,materialized)
     VALUES ($1,$2,$3,'unknown',$4,0,$5,$6,$7,$8,$9,$10,$11)`,
-    [...key, progress.allocated, progress.nativeMax, progress.headDigest, progress.headTransaction,
-      progress.projectionTransaction, progress.projectionDigest, progress.adoptedDigest, materialized],
+    [
+      ...key,
+      progress.allocated,
+      progress.nativeMax,
+      progress.headDigest,
+      progress.headTransaction,
+      progress.projectionTransaction,
+      progress.projectionDigest,
+      progress.adoptedDigest,
+      materialized,
+    ],
   );
   return progress;
 }
@@ -341,11 +430,16 @@ async function page(client: PoolClient, key: SlotKey, progress: Progress, limit:
     }
   }
   parameters.push(take);
-  const sql = 'SELECT ' + envelopeColumns + ` FROM rating.source_statistic_observation
+  const sql =
+    'SELECT ' +
+    envelopeColumns +
+    ` FROM rating.source_statistic_observation
     WHERE route=$1 AND subject_id=$2 AND source=$3 AND seek_order IS NULL AND local_order ` +
-    (unknown ? 'IS NULL' : 'IS NOT NULL') + boundary +
+    (unknown ? 'IS NULL' : 'IS NOT NULL') +
+    boundary +
     (unknown ? ' ORDER BY digest' : ' ORDER BY local_order,digest') +
-    ' LIMIT $' + parameters.length;
+    ' LIMIT $' +
+    parameters.length;
   const candidates = (await client.query<Envelope>(sql, parameters)).rows;
   let examined = candidates.length;
   if (unknown && progress.adoptedDigest !== null) {
@@ -355,7 +449,7 @@ async function page(client: PoolClient, key: SlotKey, progress: Progress, limit:
     const last = candidates[candidates.length - 1];
     if (candidates.length < take || (last && adopted.digest <= last.digest)) {
       candidates.push(adopted);
-      candidates.sort((left, right) => left.digest < right.digest ? -1 : left.digest > right.digest ? 1 : 0);
+      candidates.sort((left, right) => (left.digest < right.digest ? -1 : left.digest > right.digest ? 1 : 0));
     }
   }
   return { candidates, examined };
@@ -365,28 +459,42 @@ async function finish(client: PoolClient, key: SlotKey, progress: Progress) {
   const head = await currentHead(client, key);
   const current = await currentEnvelope(client, key, progress.headDigest);
   const projection = await currentProjection(client, key);
-  if (!head || head.digest !== progress.headDigest || head.lastSeekOrder !== '0' ||
-    !current || current.transactionId !== progress.headTransaction)
+  if (
+    !head ||
+    head.digest !== progress.headDigest ||
+    head.lastSeekOrder !== '0' ||
+    !current ||
+    current.transactionId !== progress.headTransaction
+  )
     invalidated('original head or retained envelope changed');
-  if ((projection?.transactionId ?? null) !== progress.projectionTransaction ||
-    (projection?.observationDigest ?? null) !== progress.projectionDigest)
+  if (
+    (projection?.transactionId ?? null) !== progress.projectionTransaction ||
+    (projection?.observationDigest ?? null) !== progress.projectionDigest
+  )
     invalidated('original projection changed');
   verifyEnvelope(current, key[1], key[2]);
   verifyProjection(current, projection, key[1], key[2]);
   if (current.seekOrder === null) invalidated('head was not materialized');
   if (projection && projection.observationDigest === null) {
-    await client.query(`UPDATE rating.source_statistic SET observation_digest=$4
-      WHERE route=$1 AND subject_id=$2 AND source=$3`, [...key, head.digest]);
+    await client.query(
+      `UPDATE rating.source_statistic SET observation_digest=$4
+      WHERE route=$1 AND subject_id=$2 AND source=$3`,
+      [...key, head.digest],
+    );
   }
-  await client.query(`UPDATE rating.source_statistic_head
+  await client.query(
+    `UPDATE rating.source_statistic_head
     SET last_order=GREATEST(last_order,$4),last_seek_order=$5
     WHERE route=$1 AND subject_id=$2 AND source=$3`,
     [...key, progress.nativeMax, progress.allocated],
   );
   const readback = await currentHead(client, key);
   const projected = await currentProjection(client, key);
-  if (readback?.digest !== progress.headDigest || readback.lastSeekOrder !== progress.allocated ||
-    (projected !== undefined && projected.observationDigest !== progress.headDigest))
+  if (
+    readback?.digest !== progress.headDigest ||
+    readback.lastSeekOrder !== progress.allocated ||
+    (projected !== undefined && projected.observationDigest !== progress.headDigest)
+  )
     fail('head or projection readback differs');
   progress.phase = 'done';
   progress.cursorDigest = null;
@@ -406,19 +514,28 @@ export async function materializeSourceObservations(pool: Pool, input: Maintenan
   try {
     await client.query('BEGIN');
     const subject = await client.query(
-      'SELECT 1 FROM semantic.subject WHERE route=$1 AND subject_id=$2 FOR UPDATE', key.slice(0, 2),
+      'SELECT 1 FROM semantic.subject WHERE route=$1 AND subject_id=$2 FOR UPDATE',
+      key.slice(0, 2),
     );
     if (subject.rowCount !== 1) invalidated('subject no longer exists');
-    let progress: Progress | undefined = (await client.query<Progress>(
-      'SELECT ' + progressColumns + ` FROM rating.source_observation_materialization
-       WHERE route=$1 AND subject_id=$2 AND source=$3 FOR UPDATE`, key,
-    )).rows[0];
+    let progress: Progress | undefined = (
+      await client.query<Progress>(
+        'SELECT ' +
+          progressColumns +
+          ` FROM rating.source_observation_materialization
+       WHERE route=$1 AND subject_id=$2 AND source=$3 FOR UPDATE`,
+        key,
+      )
+    ).rows[0];
     if (progress?.phase === 'done') {
-      await client.query(`DELETE FROM rating.source_observation_materialization
-        WHERE route=$1 AND subject_id=$2 AND source=$3`, key);
+      await client.query(
+        `DELETE FROM rating.source_observation_materialization
+        WHERE route=$1 AND subject_id=$2 AND source=$3`,
+        key,
+      );
       progress = undefined;
     }
-    progress ??= await start(client, key) ?? undefined;
+    progress ??= (await start(client, key)) ?? undefined;
     if (!progress || progress.phase === 'done') {
       await client.query('COMMIT');
       return result(progress ?? null, 0);
@@ -431,14 +548,15 @@ export async function materializeSourceObservations(pool: Pool, input: Maintenan
     for (const row of selected.candidates) {
       const allocated = BigInt(progress.allocated) + 1n;
       if (allocated > 9_223_372_036_854_775_807n) fail('seek order exhausted');
-      const updated = await client.query(`UPDATE rating.source_statistic_observation SET seek_order=$5
+      const updated = await client.query(
+        `UPDATE rating.source_statistic_observation SET seek_order=$5
         WHERE route=$1 AND subject_id=$2 AND source=$3 AND digest=$4
           AND seek_order IS NOT DISTINCT FROM $6::bigint`,
         [...key, row.digest, String(allocated), row.seekOrder],
       );
       if (updated.rowCount !== 1) invalidated('selected envelope disappeared');
       const readback = await currentEnvelope(client, key, row.digest);
-      if (!readback || canonicalize(readback) !== canonicalize({ ...row,seekOrder: String(allocated) }))
+      if (!readback || canonicalize(readback) !== canonicalize({ ...row, seekOrder: String(allocated) }))
         fail('observation readback differs');
       progress.allocated = String(allocated);
       progress.processed = String(BigInt(progress.processed) + 1n);
@@ -455,28 +573,45 @@ export async function materializeSourceObservations(pool: Pool, input: Maintenan
         progress.cursorOrder = null;
       } else await finish(client, key, progress);
     }
-    await client.query(`UPDATE rating.source_observation_materialization
+    await client.query(
+      `UPDATE rating.source_observation_materialization
       SET phase=$4,cursor_digest=$5,cursor_order=$6,allocated=$7,processed=$8,native_max=$9,adopted_digest=$10
       WHERE route=$1 AND subject_id=$2 AND source=$3`,
-      [...key, progress.phase, progress.cursorDigest, progress.cursorOrder, progress.allocated,
-        progress.processed, progress.nativeMax, progress.adoptedDigest],
+      [
+        ...key,
+        progress.phase,
+        progress.cursorDigest,
+        progress.cursorOrder,
+        progress.allocated,
+        progress.processed,
+        progress.nativeMax,
+        progress.adoptedDigest,
+      ],
     );
     await client.query('COMMIT');
     return result(progress, selected.examined);
   } catch (error) {
     if (error instanceof InvalidatedMaterialization) {
-      await client.query(`DELETE FROM rating.source_observation_materialization
-        WHERE route=$1 AND subject_id=$2 AND source=$3`, key);
+      await client.query(
+        `DELETE FROM rating.source_observation_materialization
+        WHERE route=$1 AND subject_id=$2 AND source=$3`,
+        key,
+      );
       await client.query('COMMIT');
     } else await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally {
+    client.release();
+  }
 }
 
 /** Operator reset discards only an obsolete operational cursor. It never restores
  * erased heads, observations or projection facts, and never marks a slot ready.
  */
 export async function resetSourceObservationMaterialization(pool: Pool, input: MaintenanceInput) {
-  await pool.query(`DELETE FROM rating.source_observation_materialization
-    WHERE route=$1 AND subject_id=$2 AND source=$3`, [input.route,input.subjectId,input.source]);
+  await pool.query(
+    `DELETE FROM rating.source_observation_materialization
+    WHERE route=$1 AND subject_id=$2 AND source=$3`,
+    [input.route, input.subjectId, input.source],
+  );
 }

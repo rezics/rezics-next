@@ -314,9 +314,7 @@ async function eligible(
   const lockFrozen = async (role: 'predecessor' | 'successor') => {
     const lock = nativeOutput.lockNativeFrozenCollectionOutput;
     if (!lock) return false;
-    const frozen = await work.compose((allowance) =>
-      lock(tx, a.binding, context(tx, pool, deadline, allowance), role),
-    );
+    const frozen = await work.compose((allowance) => lock(tx, a.binding, context(tx, pool, deadline, allowance), role));
     return frozen.status === 'locked' && equal(frozen.binding, a.binding);
   };
   const fence = await one<{ kind: string }>(tx, fenceSQL, [l.partition, l.captureId]);
@@ -593,7 +591,11 @@ export function createPublicIdentityOutputCapture(
         );
         if (definition.status !== 'resolved') return refuse('binding');
         const accepted = await work.compose((allowance) =>
-          captureAcceptance({ captureId, definition: definition.definition, publication }, { ...options, allowance }, frozen),
+          captureAcceptance(
+            { captureId, definition: definition.definition, publication },
+            { ...options, allowance },
+            frozen,
+          ),
         );
         if (accepted.status !== 'accepted') return refuse(accepted.reason, accepted.status, accepted.dependency);
         return { status: 'more' as const };
@@ -1569,13 +1571,7 @@ export async function readSelectedPublicIdentityOutput(
 ) {
   const { collectionId, sourceGeneration, after, limit, accountFree } = selection;
   const route = routeOf(collectionId);
-  if (
-    route === null ||
-    !/^[1-9][0-9]*$/.test(sourceGeneration) ||
-    !Number.isInteger(limit) ||
-    limit < 0 ||
-    limit > 100
-  )
+  if (route === null || !/^[1-9][0-9]*$/.test(sourceGeneration) || !Number.isInteger(limit) || limit < 0 || limit > 100)
     throw new TypeError('Invalid selected public Collection output');
   if (after) {
     id(after.terminal);
@@ -1652,8 +1648,7 @@ export async function readSelectedPublicIdentityOutput(
     );
     return { ...result, work: work.receipt() };
   } catch (error) {
-    if (error instanceof Refusal)
-      return { status: error.status, reason: error.reason, work: work.receipt() };
+    if (error instanceof Refusal) return { status: error.status, reason: error.reason, work: work.receipt() };
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }

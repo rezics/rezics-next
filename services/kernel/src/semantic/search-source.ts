@@ -236,137 +236,143 @@ export function subjectSource(
 
       // Keep the original cut for the snapshot, any selection repair, and relation disclosure.
       const deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-      const snapshot = await withReadTransaction(pool, async (client) => {
-        const positionRow = await readPosition.run(client, { partition_no: partition });
-        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
-        if (positionRow.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
-        const position = BigInt(positionRow.position);
-        if (pairs.length === 0) return { partition, position, subjects: [] };
+      const snapshot = await withReadTransaction(
+        pool,
+        async (client) => {
+          const positionRow = await readPosition.run(client, { partition_no: partition });
+          if (!positionRow) throw new CommandUnavailableError('fenced', partition);
+          if (positionRow.writeState === 'moved')
+            throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
+          const position = BigInt(positionRow.position);
+          if (pairs.length === 0) return { partition, position, subjects: [] };
 
-        const rows = (await readSubjects.run(client, {
-          partition_no: partition,
-          routes: pairs.map(({ route }) => route),
-          subject_ids: pairs.map(({ id }) => id),
-        })) as SubjectRow[];
-        if (rows.length === 0) return { partition, position, subjects: [] };
+          const rows = (await readSubjects.run(client, {
+            partition_no: partition,
+            routes: pairs.map(({ route }) => route),
+            subject_ids: pairs.map(({ id }) => id),
+          })) as SubjectRow[];
+          if (rows.length === 0) return { partition, position, subjects: [] };
 
-        const found = new Map(rows.map((row) => [row.id, row]));
-        const unreadied = rows.find((row) => !row.selection_ready);
-        if (unreadied)
-          return { partition, position, subjects: [] as IndexedSubject[], pending: unreadied, rebuild: true };
-        const present = rows.map(({ id, route }) => ({ id, route }));
-        const factRows = (await readFacts.run(client, {
-          partition_no: partition,
-          routes: present.map(({ route }) => route),
-          subject_ids: present.map(({ id }) => id),
-        })) as FactRow[];
-        const currentRows = (await readCurrentStatements.run(client, {
-          partition_no: partition,
-          routes: present.map(({ route }) => route),
-          subject_ids: present.map(({ id }) => id),
-          subject_limit: CURRENT_STATEMENT_LIMIT,
-        })) as FactRow[];
-        const currentCounts = new Map<string, number>();
-        for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
-        const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);
-        if (overflow)
-          return { partition, position, subjects: [] as IndexedSubject[], pending: overflow, rebuild: false };
+          const found = new Map(rows.map((row) => [row.id, row]));
+          const unreadied = rows.find((row) => !row.selection_ready);
+          if (unreadied)
+            return { partition, position, subjects: [] as IndexedSubject[], pending: unreadied, rebuild: true };
+          const present = rows.map(({ id, route }) => ({ id, route }));
+          const factRows = (await readFacts.run(client, {
+            partition_no: partition,
+            routes: present.map(({ route }) => route),
+            subject_ids: present.map(({ id }) => id),
+          })) as FactRow[];
+          const currentRows = (await readCurrentStatements.run(client, {
+            partition_no: partition,
+            routes: present.map(({ route }) => route),
+            subject_ids: present.map(({ id }) => id),
+            subject_limit: CURRENT_STATEMENT_LIMIT,
+          })) as FactRow[];
+          const currentCounts = new Map<string, number>();
+          for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
+          const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);
+          if (overflow)
+            return { partition, position, subjects: [] as IndexedSubject[], pending: overflow, rebuild: false };
 
-        const entries: StatementEntry[] = currentRows.flatMap((row) => {
-          if (!row.candidate_id || !row.property || !row.release) return [];
-          const body = object(row.body) ? row.body : {};
-          const rank = selectedRank(row.rank) ?? selectedRank(body.rank);
-          if (rank === null) return [];
-          return [
-            {
-              source: 'compact' as const,
-              route: row.route,
-              subject_id: row.id,
-              slot_id: row.slot_id,
-              property: row.property,
-              candidate_id: row.candidate_id,
-              rank,
-              ordinal: row.log_seq,
-              body: row.body,
-              release: row.release,
-            },
-          ];
-        });
-
-        const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
-        const statements = visible.length
-          ? ((await readStatements.run(client, {
-              partition_no: partition,
-              entries: jsonParameter(visible),
-            })) as StatementRow[])
-          : [];
-        const digests = new Set<string>();
-        for (const row of rows) if (row.currentRelease) digests.add(row.currentRelease);
-        for (const row of statements) digests.add(row.release);
-        const storedReleases = await readBaseReleases(client, [...digests]);
-        const releases = new Map<string, Release>();
-        // A statement of a Context's own relation type was written with a composed release.
-        for (const digest of digests) {
-          const release = storedReleases.has(digest) ? storedReleases.get(digest) : await readRelease(client, digest);
-          if (release) releases.set(digest, release);
-        }
-
-        const termRows = new Map<string, FactRow[]>();
-        for (const row of factRows) {
-          if (row.entry_kind !== 'term') continue;
-          const values = termRows.get(row.id) ?? [];
-          values.push(row);
-          termRows.set(row.id, values);
-        }
-        for (const values of termRows.values())
-          values.sort((left, right) => ASCII(left.slot_id, right.slot_id) || left.log_seq - right.log_seq);
-        const indexed = new Map<string, Map<string, { ordinal: number; statement: IndexedStatement }[]>>();
-        for (const row of statements) {
-          const release = releases.get(row.release);
-          if (!release) throw new Error(`Statement definition release ${row.release} is missing`);
-          const statement = indexedStatement(row, release);
-          if (!statement) continue;
-          const properties = indexed.get(row.subject_id) ?? new Map();
-          const values = properties.get(row.property) ?? [];
-          values.push({ ordinal: row.ordinal, statement });
-          properties.set(row.property, values);
-          indexed.set(row.subject_id, properties);
-        }
-
-        const relation = await relations.prepare(client, rows, releases, partition);
-        const subjects: IndexedSubject[] = [];
-        for (const { id } of pairs) {
-          const row = found.get(id);
-          if (!row) continue;
-          const facts = termRows.get(id) ?? [];
-          const release = row.currentRelease ? releases.get(row.currentRelease) : undefined;
-          const properties: Map<string, { ordinal: number; statement: IndexedStatement }[]> =
-            indexed.get(id) ?? new Map();
-          const order = release?.types[row.type]?.properties ?? [...properties.keys()].sort(ASCII);
-          const orderedProperties = [
-            ...order,
-            ...[...properties.keys()].filter((name) => !order.includes(name)).sort(ASCII),
-          ];
-          const indexedStatements = orderedProperties.flatMap((property) =>
-            (properties.get(property) ?? [])
-              .sort((left, right) => left.ordinal - right.ordinal)
-              .map(({ statement }) => statement),
-          );
-          subjects.push({
-            id,
-            type: row.type,
-            visibility: row.redirect ? 'hidden' : row.visibility,
-            redirect: row.redirect,
-            securityRevision: Number(row.securityRevision),
-            labels: termValues(facts, 'label').sort((left, right) => ASCII(left.language, right.language)),
-            aliases: termValues(facts, 'alias').sort((left, right) => ASCII(left.language, right.language)),
-            descriptions: termValues(facts, 'description').sort((left, right) => ASCII(left.language, right.language)),
-            statements: indexedStatements,
+          const entries: StatementEntry[] = currentRows.flatMap((row) => {
+            if (!row.candidate_id || !row.property || !row.release) return [];
+            const body = object(row.body) ? row.body : {};
+            const rank = selectedRank(row.rank) ?? selectedRank(body.rank);
+            if (rank === null) return [];
+            return [
+              {
+                source: 'compact' as const,
+                route: row.route,
+                subject_id: row.id,
+                slot_id: row.slot_id,
+                property: row.property,
+                candidate_id: row.candidate_id,
+                rank,
+                ordinal: row.log_seq,
+                body: row.body,
+                release: row.release,
+              },
+            ];
           });
-        }
-        return { partition, position, subjects, relation };
-      }, deadline);
+
+          const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
+          const statements = visible.length
+            ? ((await readStatements.run(client, {
+                partition_no: partition,
+                entries: jsonParameter(visible),
+              })) as StatementRow[])
+            : [];
+          const digests = new Set<string>();
+          for (const row of rows) if (row.currentRelease) digests.add(row.currentRelease);
+          for (const row of statements) digests.add(row.release);
+          const storedReleases = await readBaseReleases(client, [...digests]);
+          const releases = new Map<string, Release>();
+          // A statement of a Context's own relation type was written with a composed release.
+          for (const digest of digests) {
+            const release = storedReleases.has(digest) ? storedReleases.get(digest) : await readRelease(client, digest);
+            if (release) releases.set(digest, release);
+          }
+
+          const termRows = new Map<string, FactRow[]>();
+          for (const row of factRows) {
+            if (row.entry_kind !== 'term') continue;
+            const values = termRows.get(row.id) ?? [];
+            values.push(row);
+            termRows.set(row.id, values);
+          }
+          for (const values of termRows.values())
+            values.sort((left, right) => ASCII(left.slot_id, right.slot_id) || left.log_seq - right.log_seq);
+          const indexed = new Map<string, Map<string, { ordinal: number; statement: IndexedStatement }[]>>();
+          for (const row of statements) {
+            const release = releases.get(row.release);
+            if (!release) throw new Error(`Statement definition release ${row.release} is missing`);
+            const statement = indexedStatement(row, release);
+            if (!statement) continue;
+            const properties = indexed.get(row.subject_id) ?? new Map();
+            const values = properties.get(row.property) ?? [];
+            values.push({ ordinal: row.ordinal, statement });
+            properties.set(row.property, values);
+            indexed.set(row.subject_id, properties);
+          }
+
+          const relation = await relations.prepare(client, rows, releases, partition);
+          const subjects: IndexedSubject[] = [];
+          for (const { id } of pairs) {
+            const row = found.get(id);
+            if (!row) continue;
+            const facts = termRows.get(id) ?? [];
+            const release = row.currentRelease ? releases.get(row.currentRelease) : undefined;
+            const properties: Map<string, { ordinal: number; statement: IndexedStatement }[]> =
+              indexed.get(id) ?? new Map();
+            const order = release?.types[row.type]?.properties ?? [...properties.keys()].sort(ASCII);
+            const orderedProperties = [
+              ...order,
+              ...[...properties.keys()].filter((name) => !order.includes(name)).sort(ASCII),
+            ];
+            const indexedStatements = orderedProperties.flatMap((property) =>
+              (properties.get(property) ?? [])
+                .sort((left, right) => left.ordinal - right.ordinal)
+                .map(({ statement }) => statement),
+            );
+            subjects.push({
+              id,
+              type: row.type,
+              visibility: row.redirect ? 'hidden' : row.visibility,
+              redirect: row.redirect,
+              securityRevision: Number(row.securityRevision),
+              labels: termValues(facts, 'label').sort((left, right) => ASCII(left.language, right.language)),
+              aliases: termValues(facts, 'alias').sort((left, right) => ASCII(left.language, right.language)),
+              descriptions: termValues(facts, 'description').sort((left, right) =>
+                ASCII(left.language, right.language),
+              ),
+              statements: indexedStatements,
+            });
+          }
+          return { partition, position, subjects, relation };
+        },
+        deadline,
+      );
       if ('pending' in snapshot && snapshot.pending) {
         if (snapshot.rebuild) await resumeSelection(pool, deadline, snapshot.pending);
         throw new CommandUnavailableError('contention', partition);
@@ -592,64 +598,71 @@ export async function readIdentitySourceProjection(
     );
     let checked = false;
     return await withPublicStatementReader(() =>
-      withIdentitySourceSupportJob(request.job, async () => {
-        // A resumed cursor authenticates the retained build. A complete page still
-        // rechecks the live job mapping before it can support any writer action.
-        const page = await source.readPublicFilterProjectionPage({
-          subject: request.original,
-          meaning: request.meaning,
-          frontier: request.frontier,
-          inputLimit: request.inputLimit,
-          context: request.context,
-        });
-        cost = Object.fromEntries(
-          Object.entries(cost).map(([key, value]) => [key, value + page.cost[key as keyof PublicFilterCost]]),
-        ) as PublicFilterCost;
-        if (page.status === 'unready' && page.retirement)
-          return { status: page.status, cost, retirement: page.retirement };
-        if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
-        if (!checked) return { status: 'unavailable', cost };
-        if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
-          return { status: 'changed', cost };
-        if (page.status === 'progress') {
+      withIdentitySourceSupportJob(
+        request.job,
+        async () => {
+          // A resumed cursor authenticates the retained build. A complete page still
+          // rechecks the live job mapping before it can support any writer action.
+          const page = await source.readPublicFilterProjectionPage({
+            subject: request.original,
+            meaning: request.meaning,
+            frontier: request.frontier,
+            inputLimit: request.inputLimit,
+            context: request.context,
+          });
+          cost = Object.fromEntries(
+            Object.entries(cost).map(([key, value]) => [key, value + page.cost[key as keyof PublicFilterCost]]),
+          ) as PublicFilterCost;
+          if (page.status === 'unready' && page.retirement)
+            return { status: page.status, cost, retirement: page.retirement };
+          if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
+          if (!checked) return { status: 'unavailable', cost };
+          if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
+            return { status: 'changed', cost };
+          if (page.status === 'progress') {
+            requireAccessDeadline(request.context.deadline);
+            return { status: 'projected', projection: page, cost };
+          }
+          charge('dependencyPoints');
+          const [current] = await withReadTransaction(
+            config.pool,
+            (tx) => readIdentitySupportMappingsInSnapshot(tx, [request.original], request.job),
+            request.context.deadline,
+          );
+          if (
+            current?.state !== 'mapped' ||
+            current.epoch !== request.job.epoch ||
+            current.terminal !== request.terminal
+          )
+            return { status: 'changed', cost };
           requireAccessDeadline(request.context.deadline);
           return { status: 'projected', projection: page, cost };
-        }
-        charge('dependencyPoints');
-        const [current] = await withReadTransaction(
-          config.pool,
-          (tx) => readIdentitySupportMappingsInSnapshot(tx, [request.original], request.job),
-          request.context.deadline,
-        );
-        if (
-          current?.state !== 'mapped' ||
-          current.epoch !== request.job.epoch ||
-          current.terminal !== request.terminal
-        )
-          return { status: 'changed', cost };
-        requireAccessDeadline(request.context.deadline);
-        return { status: 'projected', projection: page, cost };
-      }, {
-        original: request.original,
-        async check(tx, owner, visibility, time) {
-          if (owner.partitionNo !== partitionOf(route) || owner.writeState !== 'active')
-            throw new IdentityProjectionRefusal('unavailable');
-          if (visibility !== 'visible') throw new IdentityProjectionRefusal('withheld');
-          if (!time) throw new IdentityProjectionRefusal('unavailable');
-          if (!(await authorize(tx, time))) throw new IdentityProjectionRefusal('withheld');
-          if (!request.frontier) {
-            charge('dependencyPoints');
-            const [mapping] = await readIdentitySupportMappingsInSnapshot(
-              tx, [request.original], request.job, new Map([[owner.partitionNo, owner]]),
-            );
-            if (mapping?.state === 'pending') throw new IdentityProjectionRefusal('unready');
-            if (mapping?.state !== 'mapped') throw new IdentityProjectionRefusal('unavailable');
-            if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
-              throw new IdentityProjectionRefusal('changed');
-          }
-          checked = true;
         },
-      }),
+        {
+          original: request.original,
+          async check(tx, owner, visibility, time) {
+            if (owner.partitionNo !== partitionOf(route) || owner.writeState !== 'active')
+              throw new IdentityProjectionRefusal('unavailable');
+            if (visibility !== 'visible') throw new IdentityProjectionRefusal('withheld');
+            if (!time) throw new IdentityProjectionRefusal('unavailable');
+            if (!(await authorize(tx, time))) throw new IdentityProjectionRefusal('withheld');
+            if (!request.frontier) {
+              charge('dependencyPoints');
+              const [mapping] = await readIdentitySupportMappingsInSnapshot(
+                tx,
+                [request.original],
+                request.job,
+                new Map([[owner.partitionNo, owner]]),
+              );
+              if (mapping?.state === 'pending') throw new IdentityProjectionRefusal('unready');
+              if (mapping?.state !== 'mapped') throw new IdentityProjectionRefusal('unavailable');
+              if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
+                throw new IdentityProjectionRefusal('changed');
+            }
+            checked = true;
+          },
+        },
+      ),
     );
   } catch (error) {
     if (error instanceof IdentityProjectionRefusal) {

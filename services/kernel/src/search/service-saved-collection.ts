@@ -1,4 +1,4 @@
-import type { PublicSearchPage, SavedCatalogueMembersInput, SearchServiceContract } from './service-contract.ts';
+import type { SavedCatalogueMembersInput, SearchServiceContract } from './service-contract.ts';
 import type { SavedCatalogueMembersPage } from './service-contract.ts';
 
 export type {

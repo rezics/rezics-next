@@ -217,11 +217,7 @@ const transitionParameters = (input: HandleTransition) => ({
 function uncertainLifecycleQueryError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return true;
   const details = error as { code?: unknown; severity?: unknown };
-  return !(
-    typeof details.code === 'string' &&
-    /^[0-9A-Z]{5}$/.test(details.code) &&
-    details.severity === 'ERROR'
-  );
+  return !(typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR');
 }
 
 function withLifecycleReadConnection<T>(
@@ -260,11 +256,7 @@ function matchesOperation(operation: Awaited<ReturnType<typeof readOperation>>, 
     operation.expectedHandle === input.expectedHandle
   );
 }
-async function publicationEvidence(
-  pool: Pool,
-  input: HandleTransition,
-  boundary?: LifecycleReadBoundary,
-) {
+async function publicationEvidence(pool: Pool, input: HandleTransition, boundary?: LifecycleReadBoundary) {
   // Every separately anchored read ends before checkout of the account anchor.
   const claim = await readClaim(pool, input.handle, boundary);
   const old = input.expectedHandle === null ? null : await readClaim(pool, input.expectedHandle, boundary);

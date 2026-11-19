@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
-import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, BatchWriteRequest } from '@rezics/definitions/bulk';
 import { converter_revision as bangumiRevision } from '../../../../packages/conversion/src/bangumi.ts';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';

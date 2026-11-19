@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../../src/access/index.ts';
 import { GLOBAL_CONTEXT } from '../../../src/access/gates/catalogue.ts';
@@ -7,7 +7,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
-import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { openGrowthDatabase } from '../../support/growth.ts';
 
 export const QUESTION_DIRECTORY_SCALES = [256, 1024, 4096] as const;
 export const QUESTION_DIRECTORY_STANDARD_ID = '00000000-0000-7000-8000-000000000001';

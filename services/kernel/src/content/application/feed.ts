@@ -6,7 +6,6 @@ import {
   type FeedActor,
   type FeedApplicationPorts,
   type FeedContinuationSubject,
-  type FeedItem,
   type FeedLane,
   type FeedLaneCandidate,
   type FeedLaneLoad,

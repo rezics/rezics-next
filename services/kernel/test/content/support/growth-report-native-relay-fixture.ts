@@ -21,11 +21,7 @@ import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { seedReportGrowth, type ReportGrowthRow } from './report-growth.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import {
-  createReactionRelayBase,
-  type CreatedRealmTarget,
-  type ReactionTarget,
-} from '../reaction-relay-convergence-fixture.ts';
+import { createReactionRelayBase, type ReactionTarget } from '../reaction-relay-convergence-fixture.ts';
 
 const reportEventType = 'com.rezics.content.report.created.v1';
 const projectedEventType = 'com.rezics.content.report-target.projected.v1';

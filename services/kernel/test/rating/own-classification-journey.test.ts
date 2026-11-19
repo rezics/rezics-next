@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createRealAccess, type RealAccessFixture } from '../semantic/real-access.ts';
-import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

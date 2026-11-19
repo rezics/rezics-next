@@ -423,258 +423,253 @@ export async function readNativeListPresentationFacts(
   const result: CopyWorkListPresentationResult = new Map(input.map((id) => [id, null]));
   requireAccessDeadline(deps.deadline);
   if (!input.length) return result;
-  return withRequestDeadline(
-    deps.deadline,
-    () =>
-      withPublicStatementReader(async () => {
-        try {
-          const valid = input.filter((id) => routeOf(id) !== null);
-          if (!valid.length) return result;
-          const active = await snapshot(deps, 0, (client) => activeRelease(client));
-          if (!active) unready();
-          const directionResolver = createReleasedRelationDirectionResolver(active.release, active.digest);
-          const sources = await observeSubjects(deps, valid, active.release, false, evidence);
-          const admitted = valid.filter((id) => sources.get(id) !== null);
-          const mapping = await readIdentityMappings(deps.pool, admitted);
-          if (mapping.some((value) => value.state === 'pending' || value.state === 'unavailable')) unready();
-          const terminals = [
-            ...new Set(mapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : []))),
-          ];
-          const subjects = await observeSubjects(
-            deps,
-            terminals,
-            active.release,
-            true,
-            evidence,
-            false,
-            options.workContext === true,
-            directionResolver,
-          );
-          const allSelected = [...subjects.values()].flatMap((value) => value?.selected ?? []);
-          const sourceTuples = allSelected.flatMap(({ origin }) => {
-            const tuple = tupleFor(deps, origin.source);
-            return tuple ? [tuple] : [];
-          });
-          const fences = await tuples(deps, sourceTuples);
-          const accountIds = [
-            ...new Set([
-              ...[...sources.values(), ...subjects.values()].flatMap((value) =>
-                value?.header.account ? [value.header.account] : [],
-              ),
-              ...allSelected.flatMap(({ origin }) =>
-                [origin.author, origin.consent_account].filter((id): id is string => id !== null),
-              ),
-            ]),
-          ];
-          let authorStates = await accounts(deps, accountIds);
-          if (accountIds.some((id) => !authorStates.has(id))) unready();
-          const liveAccount = (id: string | null) => id === null || authorStates.get(id)?.state !== 'deleted';
-          const workDrafts = new Map<string, ReturnType<typeof prepareListWorkContext>>();
-          const projected = new Map(
-            [...subjects].flatMap(([id, subject]) => {
-              if (!subject) return [];
-              const allowed: FactRow[] = [];
-              const withheld = new Set(subject.withheld);
-              const statements = subject.selected.flatMap(({ fact, origin }) => {
-                if (
-                  origin.retracted ||
-                  (origin.consent_account && (!origin.disclosed || !liveAccount(origin.consent_account)))
-                ) {
-                  withheld.add(fact.property!);
-                  return [];
-                }
-                const tuple = tupleFor(deps, origin.source);
-                if (tuple && fences.get(fenceKey(tuple))?.takenDown) {
-                  withheld.add(fact.property!);
-                  return [];
-                }
-                allowed.push(fact);
-                const value = representable(fact, active.release);
-                return value ? [value] : [];
-              });
-              if (options.workContext)
-                workDrafts.set(
-                  id,
-                  prepareListWorkContext(
-                    id,
-                    subject.header.type,
-                    active.release,
-                    allowed,
-                    withheld,
-                    evidence,
-                    languages,
-                    directionResolver,
-                  ),
-                );
-              return [
-                [
-                  id,
-                  evidence.pendingFacts(
-                    { statements },
-                    active.release.types[subject.header.type]!.listPresentation?.keyFacts ?? [],
-                  ),
-                ] as const,
-              ];
-            }),
-          );
-          // Generic facts retain their independent availability. Work-only pending identities are explicit below.
-          const genericItemIds = new Set(
-            [...projected.values()].flatMap((properties) =>
-              [...properties.values()].flatMap((values) =>
-                values.flatMap((value) => (value.kind === 'item' ? [value.id] : [])),
-              ),
+  return withRequestDeadline(deps.deadline, () =>
+    withPublicStatementReader(async () => {
+      try {
+        const valid = input.filter((id) => routeOf(id) !== null);
+        if (!valid.length) return result;
+        const active = await snapshot(deps, 0, (client) => activeRelease(client));
+        if (!active) unready();
+        const directionResolver = createReleasedRelationDirectionResolver(active.release, active.digest);
+        const sources = await observeSubjects(deps, valid, active.release, false, evidence);
+        const admitted = valid.filter((id) => sources.get(id) !== null);
+        const mapping = await readIdentityMappings(deps.pool, admitted);
+        if (mapping.some((value) => value.state === 'pending' || value.state === 'unavailable')) unready();
+        const terminals = [...new Set(mapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : [])))];
+        const subjects = await observeSubjects(
+          deps,
+          terminals,
+          active.release,
+          true,
+          evidence,
+          false,
+          options.workContext === true,
+          directionResolver,
+        );
+        const allSelected = [...subjects.values()].flatMap((value) => value?.selected ?? []);
+        const sourceTuples = allSelected.flatMap(({ origin }) => {
+          const tuple = tupleFor(deps, origin.source);
+          return tuple ? [tuple] : [];
+        });
+        const fences = await tuples(deps, sourceTuples);
+        const accountIds = [
+          ...new Set([
+            ...[...sources.values(), ...subjects.values()].flatMap((value) =>
+              value?.header.account ? [value.header.account] : [],
             ),
-          );
-          const itemIds = [...new Set([...[...workDrafts.values()].flatMap(listWorkTargets), ...genericItemIds])];
-          const itemMapping: IdentityMapping[] = [];
-          for (let offset = 0; offset < itemIds.length; offset += 100)
-            itemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
-          if (
-            itemMapping.some(
-              (value, index) =>
-                genericItemIds.has(itemIds[index]!) && (value.state === 'pending' || value.state === 'unavailable'),
-            )
-          )
-            unready();
-          const relatedIds = [
-            ...new Set([
-              ...itemIds,
-              ...itemMapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : [])),
-            ]),
-          ];
-          const related = await observeSubjects(deps, relatedIds, active.release, false, evidence, true);
-          const relatedAccounts = [
-            ...new Set([...related.values()].flatMap((value) => (value?.header.account ? [value.header.account] : []))),
-          ].filter((id) => !accountIds.includes(id));
-          accountIds.push(...relatedAccounts);
-          authorStates = new Map([...authorStates, ...(await accounts(deps, relatedAccounts))]);
-          if (accountIds.some((id) => !authorStates.has(id))) unready();
-
-          // Double collection of the complete finite dependency set proves a common current cut.
-          if (!equal(mapping, await readIdentityMappings(deps.pool, admitted))) unready();
-          if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false, evidence))]))
-            unready();
-          if (
-            !equal(
-              [...subjects],
-              [
-                ...(await observeSubjects(
-                  deps,
-                  terminals,
+            ...allSelected.flatMap(({ origin }) =>
+              [origin.author, origin.consent_account].filter((id): id is string => id !== null),
+            ),
+          ]),
+        ];
+        let authorStates = await accounts(deps, accountIds);
+        if (accountIds.some((id) => !authorStates.has(id))) unready();
+        const liveAccount = (id: string | null) => id === null || authorStates.get(id)?.state !== 'deleted';
+        const workDrafts = new Map<string, ReturnType<typeof prepareListWorkContext>>();
+        const projected = new Map(
+          [...subjects].flatMap(([id, subject]) => {
+            if (!subject) return [];
+            const allowed: FactRow[] = [];
+            const withheld = new Set(subject.withheld);
+            const statements = subject.selected.flatMap(({ fact, origin }) => {
+              if (
+                origin.retracted ||
+                (origin.consent_account && (!origin.disclosed || !liveAccount(origin.consent_account)))
+              ) {
+                withheld.add(fact.property!);
+                return [];
+              }
+              const tuple = tupleFor(deps, origin.source);
+              if (tuple && fences.get(fenceKey(tuple))?.takenDown) {
+                withheld.add(fact.property!);
+                return [];
+              }
+              allowed.push(fact);
+              const value = representable(fact, active.release);
+              return value ? [value] : [];
+            });
+            if (options.workContext)
+              workDrafts.set(
+                id,
+                prepareListWorkContext(
+                  id,
+                  subject.header.type,
                   active.release,
-                  true,
+                  allowed,
+                  withheld,
                   evidence,
-                  false,
-                  options.workContext === true,
-                )),
-              ],
-            )
+                  languages,
+                  directionResolver,
+                ),
+              );
+            return [
+              [
+                id,
+                evidence.pendingFacts(
+                  { statements },
+                  active.release.types[subject.header.type]!.listPresentation?.keyFacts ?? [],
+                ),
+              ] as const,
+            ];
+          }),
+        );
+        // Generic facts retain their independent availability. Work-only pending identities are explicit below.
+        const genericItemIds = new Set(
+          [...projected.values()].flatMap((properties) =>
+            [...properties.values()].flatMap((values) =>
+              values.flatMap((value) => (value.kind === 'item' ? [value.id] : [])),
+            ),
+          ),
+        );
+        const itemIds = [...new Set([...[...workDrafts.values()].flatMap(listWorkTargets), ...genericItemIds])];
+        const itemMapping: IdentityMapping[] = [];
+        for (let offset = 0; offset < itemIds.length; offset += 100)
+          itemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
+        if (
+          itemMapping.some(
+            (value, index) =>
+              genericItemIds.has(itemIds[index]!) && (value.state === 'pending' || value.state === 'unavailable'),
           )
-            unready();
-          const finalItemMapping: IdentityMapping[] = [];
-          for (let offset = 0; offset < itemIds.length; offset += 100)
-            finalItemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
-          if (
-            !equal(itemMapping, finalItemMapping) ||
-            !equal([...related], [...(await observeSubjects(deps, relatedIds, active.release, false, evidence, true))])
+        )
+          unready();
+        const relatedIds = [
+          ...new Set([
+            ...itemIds,
+            ...itemMapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : [])),
+          ]),
+        ];
+        const related = await observeSubjects(deps, relatedIds, active.release, false, evidence, true);
+        const relatedAccounts = [
+          ...new Set([...related.values()].flatMap((value) => (value?.header.account ? [value.header.account] : []))),
+        ].filter((id) => !accountIds.includes(id));
+        accountIds.push(...relatedAccounts);
+        authorStates = new Map([...authorStates, ...(await accounts(deps, relatedAccounts))]);
+        if (accountIds.some((id) => !authorStates.has(id))) unready();
+
+        // Double collection of the complete finite dependency set proves a common current cut.
+        if (!equal(mapping, await readIdentityMappings(deps.pool, admitted))) unready();
+        if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false, evidence))])) unready();
+        if (
+          !equal(
+            [...subjects],
+            [
+              ...(await observeSubjects(
+                deps,
+                terminals,
+                active.release,
+                true,
+                evidence,
+                false,
+                options.workContext === true,
+              )),
+            ],
           )
-            unready();
-          if (
-            !equal(entries(authorStates), entries(await accounts(deps, accountIds))) ||
-            !equal([...fences], [...(await tuples(deps, sourceTuples))])
-          )
-            unready();
-          const finalActive = await snapshot(deps, 0, (client) => activeRelease(client));
-          if (finalActive?.digest !== active.digest) unready();
-          const workTargets = new Map<string, WorkTarget | null>();
-          for (const [index, id] of itemIds.entries()) {
-            const identity = itemMapping[index];
-            if (identity?.state === 'pending' || identity?.state === 'unavailable') {
-              workTargets.set(id, { state: 'unavailable' });
-              continue;
-            }
-            const original = related.get(id);
-            const terminal = identity?.state === 'mapped' ? related.get(identity.terminal) : null;
-            if (
-              !original ||
-              !terminal ||
-              !liveAccount(original.header.account) ||
-              !liveAccount(terminal.header.account)
-            ) {
-              workTargets.set(id, null);
-              continue;
-            }
-            if (
-              identity?.state !== 'mapped' ||
-              original.header.redirect !== (id === identity.terminal ? null : identity.terminal) ||
-              terminal.header.redirect
-            )
-              unready();
-            workTargets.set(id, { id: identity.terminal, type: terminal.header.type, labels: terminal.labels ?? {} });
+        )
+          unready();
+        const finalItemMapping: IdentityMapping[] = [];
+        for (let offset = 0; offset < itemIds.length; offset += 100)
+          finalItemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
+        if (
+          !equal(itemMapping, finalItemMapping) ||
+          !equal([...related], [...(await observeSubjects(deps, relatedIds, active.release, false, evidence, true))])
+        )
+          unready();
+        if (
+          !equal(entries(authorStates), entries(await accounts(deps, accountIds))) ||
+          !equal([...fences], [...(await tuples(deps, sourceTuples))])
+        )
+          unready();
+        const finalActive = await snapshot(deps, 0, (client) => activeRelease(client));
+        if (finalActive?.digest !== active.digest) unready();
+        const workTargets = new Map<string, WorkTarget | null>();
+        for (const [index, id] of itemIds.entries()) {
+          const identity = itemMapping[index];
+          if (identity?.state === 'pending' || identity?.state === 'unavailable') {
+            workTargets.set(id, { state: 'unavailable' });
+            continue;
           }
-          for (const [index, original] of admitted.entries()) {
-            const identity = mapping[index]!;
-            if (identity.state !== 'mapped') continue;
-            const source = sources.get(original),
-              subject = subjects.get(identity.terminal);
-            if (!source || !subject || !liveAccount(source.header.account) || !liveAccount(subject.header.account))
-              continue;
-            if (
-              source.header.redirect !== (original === identity.terminal ? null : identity.terminal) ||
-              subject.header.redirect
-            )
-              unready();
-            const facts: Record<string, CopyWorkListFact[]> = {};
-            for (const [property, values] of projected.get(identity.terminal)!) {
-              const disclosed = values.flatMap((value): CopyWorkListFact[] => {
-                if (value.kind !== 'item') return [value];
-                const identity = itemMapping[itemIds.indexOf(value.id)];
-                const original = related.get(value.id);
-                const terminal = identity?.state === 'mapped' ? related.get(identity.terminal) : null;
-                if (
-                  !original ||
-                  !terminal ||
-                  !liveAccount(original.header.account) ||
-                  !liveAccount(terminal.header.account)
-                )
-                  return [];
-                if (
-                  original.header.redirect !==
-                    (identity!.state === 'mapped' && identity!.terminal !== value.id ? identity!.terminal : null) ||
-                  terminal.header.redirect
-                )
-                  unready();
-                return [
-                  {
-                    kind: 'item',
-                    id: identity!.state === 'mapped' ? identity!.terminal : value.id,
-                    labels: evidence.chooseTexts(
-                      Object.entries(terminal.labels ?? {}).map(([language, value]) => ({ language, value })),
-                      languages,
-                      undefined,
-                    ),
-                  },
-                ];
-              });
-              if (disclosed.length) facts[property] = disclosed;
-            }
-            const workContext = finishListWorkContext(
-              identity.terminal,
-              workDrafts.get(identity.terminal),
-              workTargets,
-              active.release,
-              evidence,
-              languages,
-            );
-            result.set(original, { id: identity.terminal, facts, ...(workContext ? { workContext } : {}) });
+          const original = related.get(id);
+          const terminal = identity?.state === 'mapped' ? related.get(identity.terminal) : null;
+          if (
+            !original ||
+            !terminal ||
+            !liveAccount(original.header.account) ||
+            !liveAccount(terminal.header.account)
+          ) {
+            workTargets.set(id, null);
+            continue;
           }
-          requireAccessDeadline(deps.deadline);
-          return result;
-        } catch (error) {
-          throwAccessUnavailable(error);
-          throw error;
+          if (
+            identity?.state !== 'mapped' ||
+            original.header.redirect !== (id === identity.terminal ? null : identity.terminal) ||
+            terminal.header.redirect
+          )
+            unready();
+          workTargets.set(id, { id: identity.terminal, type: terminal.header.type, labels: terminal.labels ?? {} });
         }
-      }),
+        for (const [index, original] of admitted.entries()) {
+          const identity = mapping[index]!;
+          if (identity.state !== 'mapped') continue;
+          const source = sources.get(original),
+            subject = subjects.get(identity.terminal);
+          if (!source || !subject || !liveAccount(source.header.account) || !liveAccount(subject.header.account))
+            continue;
+          if (
+            source.header.redirect !== (original === identity.terminal ? null : identity.terminal) ||
+            subject.header.redirect
+          )
+            unready();
+          const facts: Record<string, CopyWorkListFact[]> = {};
+          for (const [property, values] of projected.get(identity.terminal)!) {
+            const disclosed = values.flatMap((value): CopyWorkListFact[] => {
+              if (value.kind !== 'item') return [value];
+              const identity = itemMapping[itemIds.indexOf(value.id)];
+              const original = related.get(value.id);
+              const terminal = identity?.state === 'mapped' ? related.get(identity.terminal) : null;
+              if (
+                !original ||
+                !terminal ||
+                !liveAccount(original.header.account) ||
+                !liveAccount(terminal.header.account)
+              )
+                return [];
+              if (
+                original.header.redirect !==
+                  (identity!.state === 'mapped' && identity!.terminal !== value.id ? identity!.terminal : null) ||
+                terminal.header.redirect
+              )
+                unready();
+              return [
+                {
+                  kind: 'item',
+                  id: identity!.state === 'mapped' ? identity!.terminal : value.id,
+                  labels: evidence.chooseTexts(
+                    Object.entries(terminal.labels ?? {}).map(([language, value]) => ({ language, value })),
+                    languages,
+                    undefined,
+                  ),
+                },
+              ];
+            });
+            if (disclosed.length) facts[property] = disclosed;
+          }
+          const workContext = finishListWorkContext(
+            identity.terminal,
+            workDrafts.get(identity.terminal),
+            workTargets,
+            active.release,
+            evidence,
+            languages,
+          );
+          result.set(original, { id: identity.terminal, facts, ...(workContext ? { workContext } : {}) });
+        }
+        requireAccessDeadline(deps.deadline);
+        return result;
+      } catch (error) {
+        throwAccessUnavailable(error);
+        throw error;
+      }
+    }),
   );
 }
 

@@ -83,7 +83,9 @@ export async function readSpaceForViewer(
         final.lifecycleVersion !== current.space.lifecycleVersion
       )
         return null;
-      const binding = realm ? await bindingRead.run(client, { route, id: realm.realmId, at: time, subject: null }) : null;
+      const binding = realm
+        ? await bindingRead.run(client, { route, id: realm.realmId, at: time, subject: null })
+        : null;
       return {
         ...final,
         realmId: binding && canonicalize(binding) === canonicalize(current.binding) ? (realm?.realmId ?? null) : null,

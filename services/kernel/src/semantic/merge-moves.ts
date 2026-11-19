@@ -7,7 +7,7 @@ import {
 } from './subject-page-publication-store.ts';
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';

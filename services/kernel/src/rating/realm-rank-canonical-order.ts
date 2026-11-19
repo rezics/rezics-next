@@ -180,8 +180,10 @@ export async function readScoredCanonicalPartition(
         !validName(row.name) ||
         !storedScore.test(row.score) ||
         !storedScore.test(row.mean) ||
-        !Number.isSafeInteger(count) || count < 5 ||
-        !Number.isSafeInteger(securityRevision) || securityRevision < 0 ||
+        !Number.isSafeInteger(count) ||
+        count < 5 ||
+        !Number.isSafeInteger(securityRevision) ||
+        securityRevision < 0 ||
         !/^[1-9][0-9]{0,18}$/.test(row.revision) ||
         !Number.isFinite(row.asOf.getTime()) ||
         row.priorEpoch !== observation.priorEpoch ||

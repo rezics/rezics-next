@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
+import '../../src/access/durable-initiator.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { runCollectionBulkPage } from '../../src/library/collection-bulk-work.ts';
 import { pageCollectionBulkManifest, readCollectionBulk } from '../../src/library/collection-bulk-store.ts';

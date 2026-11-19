@@ -151,12 +151,7 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
       candidateLimit: number;
     }
   >();
-  const work = (
-    query: RealmRatingQuery,
-    context: RealmRatingContext,
-    phase: 'scored' | 'unscored',
-    size: number,
-  ) => {
+  const work = (query: RealmRatingQuery, context: RealmRatingContext, phase: 'scored' | 'unscored', size: number) => {
     if (!Number.isInteger(size) || size < 1 || size > 200) throw notReady();
     let budget = budgets.get(query);
     if (!budget) {
@@ -204,10 +199,7 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
     if (query.release !== undefined || query.meaningDigest !== undefined || query.filter !== undefined) {
       const current = await readRealmRatingRelease(deps.pool, query.deadline);
       if (!current || !query.release || !query.meaningDigest) throw notReady();
-      if (
-        current.digest !== query.meaningDigest ||
-        !isDeepStrictEqual(current.release, query.release)
-      )
+      if (current.digest !== query.meaningDigest || !isDeepStrictEqual(current.release, query.release))
         throw new ProblemError('search_restart_required');
       meaning = { digest: current.digest, head: current.head };
       if (
@@ -244,92 +236,99 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
     if ((query.text !== undefined || query.filter !== undefined) && !deps.source) throw notReady();
   };
   return {
-    observe: (query) => run(query, async () => {
-      const value = await observe(query);
-      // The public observation brackets an outer page invocation. Internal
-      // current() observations never renew its refill allowance or authority.
-      budgets.delete(query);
-      return value.context;
-    }),
-    readScoredFrontiers: (query, context, request) => run(query, async () => {
-      const { native, observed } = await current(query, context);
-      const after = scoredRequest(request);
-      predicateReady(query);
-      const budget = work(query, context, 'scored', request.size);
-      const hits: RealmRatingHit[] = [];
-      if (observed.priorActive) {
-        const read = createRealmRatingScoredReader({
-          native,
-          observed,
-          query,
-          context,
-          after,
-          size: request.size,
-          prefix: deps.prefix,
-          reserve: budget.reserve,
-        });
-        while (hits.length < request.size) {
-          const raw = await read(budget.window(request.size - hits.length));
-          budget.consume(raw.length);
-          if (raw.length === 0) break;
-          hits.push(...(await discloseRealmRatingWindow({
-            pool: deps.pool,
-            search: requestSearch(deps.search, query),
-            source: deps.source,
-            prefix: deps.prefix,
+    observe: (query) =>
+      run(query, async () => {
+        const value = await observe(query);
+        // The public observation brackets an outer page invocation. Internal
+        // current() observations never renew its refill allowance or authority.
+        budgets.delete(query);
+        return value.context;
+      }),
+    readScoredFrontiers: (query, context, request) =>
+      run(query, async () => {
+        const { native, observed } = await current(query, context);
+        const after = scoredRequest(request);
+        predicateReady(query);
+        const budget = work(query, context, 'scored', request.size);
+        const hits: RealmRatingHit[] = [];
+        if (observed.priorActive) {
+          const read = createRealmRatingScoredReader({
+            native,
+            observed,
             query,
             context,
-            observed,
-            hits: raw,
-          })));
+            after,
+            size: request.size,
+            prefix: deps.prefix,
+            reserve: budget.reserve,
+          });
+          while (hits.length < request.size) {
+            const raw = await read(budget.window(request.size - hits.length));
+            budget.consume(raw.length);
+            if (raw.length === 0) break;
+            hits.push(
+              ...(await discloseRealmRatingWindow({
+                pool: deps.pool,
+                search: requestSearch(deps.search, query),
+                source: deps.source,
+                prefix: deps.prefix,
+                query,
+                context,
+                observed,
+                hits: raw,
+              })),
+            );
+          }
         }
-      }
-      const partitions = new Map<number, RealmRatingHit[]>();
-      for (const hit of hits) {
-        const partition = partitions.get(hit.partition) ?? [];
-        partition.push(hit);
-        partitions.set(hit.partition, partition);
-      }
-      const refreshed = await current(query, context);
-      return {
-        context: refreshed.context,
-        partitions: [...partitions].map(([partition, hits]) => ({ partition, hits })),
-      };
-    }),
-    readUnscored: (query, context, request) => run(query, async () => {
-      const { native, observed } = await current(query, context);
-      predicateReady(query);
-      const budget = work(query, context, 'unscored', request.size);
-      const hits: RealmRatingHit[] = [];
-      let frontier: SearchFrontier = request;
-      while (hits.length < request.size) {
-        const raw = await readRealmRatingCanonical({
-          native,
-          observed,
-          query,
-          context,
-          request: { ...frontier, size: budget.window(request.size - hits.length) },
-          prefix: deps.prefix,
-          reserve: budget.reserve,
-        });
-        budget.consume(raw.length);
-        // Only a complete empty canonical seek certifies exhaustion. Predicate
-        // rejects continue internally under the SAME allowance and source cut.
-        if (raw.length === 0) break;
-        hits.push(...(await discloseRealmRatingWindow({
-          pool: deps.pool,
-          search: requestSearch(deps.search, query),
-          source: deps.source,
-          prefix: deps.prefix,
-          query,
-          context,
-          observed,
-          hits: raw,
-        })));
-        frontier = { ratingPhase: 'unscored', after: raw.at(-1)!.sort };
-      }
-      const refreshed = await current(query, context);
-      return { context: refreshed.context, hits };
-    }),
+        const partitions = new Map<number, RealmRatingHit[]>();
+        for (const hit of hits) {
+          const partition = partitions.get(hit.partition) ?? [];
+          partition.push(hit);
+          partitions.set(hit.partition, partition);
+        }
+        const refreshed = await current(query, context);
+        return {
+          context: refreshed.context,
+          partitions: [...partitions].map(([partition, hits]) => ({ partition, hits })),
+        };
+      }),
+    readUnscored: (query, context, request) =>
+      run(query, async () => {
+        const { native, observed } = await current(query, context);
+        predicateReady(query);
+        const budget = work(query, context, 'unscored', request.size);
+        const hits: RealmRatingHit[] = [];
+        let frontier: SearchFrontier = request;
+        while (hits.length < request.size) {
+          const raw = await readRealmRatingCanonical({
+            native,
+            observed,
+            query,
+            context,
+            request: { ...frontier, size: budget.window(request.size - hits.length) },
+            prefix: deps.prefix,
+            reserve: budget.reserve,
+          });
+          budget.consume(raw.length);
+          // Only a complete empty canonical seek certifies exhaustion. Predicate
+          // rejects continue internally under the SAME allowance and source cut.
+          if (raw.length === 0) break;
+          hits.push(
+            ...(await discloseRealmRatingWindow({
+              pool: deps.pool,
+              search: requestSearch(deps.search, query),
+              source: deps.source,
+              prefix: deps.prefix,
+              query,
+              context,
+              observed,
+              hits: raw,
+            })),
+          );
+          frontier = { ratingPhase: 'unscored', after: raw.at(-1)!.sort };
+        }
+        const refreshed = await current(query, context);
+        return { context: refreshed.context, hits };
+      }),
   };
 }

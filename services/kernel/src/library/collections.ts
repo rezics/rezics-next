@@ -1131,12 +1131,7 @@ export function createCollectionCommands(config: {
           },
           undefined,
           async (time) => {
-            subject = await resolveSubject(
-              { pool, access, ...(clock ? { clock } : {}) },
-              owner,
-              draft.subjectId,
-              time,
-            );
+            subject = await resolveSubject({ pool, access, ...(clock ? { clock } : {}) }, owner, draft.subjectId, time);
           },
         ),
       (dispatch) => withCollectionOrderDeclaration('edit', dispatch),

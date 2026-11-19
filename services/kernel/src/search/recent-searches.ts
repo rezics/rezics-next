@@ -166,8 +166,7 @@ async function authorizeRead(d: RecentDependencies, actor: AccountActor, deadlin
     { route: routeOf(actor.accountId)!, id: actor.accountId },
     { pool: d.pool, deadline },
   );
-  if (!(await withBoundedReadConnection(d.pool, deadline, (c) => check(c))))
-    throw new ProblemError('forbidden');
+  if (!(await withBoundedReadConnection(d.pool, deadline, (c) => check(c)))) throw new ProblemError('forbidden');
 }
 export async function listRecentSearches(
   d: RecentDependencies,

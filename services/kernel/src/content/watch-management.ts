@@ -275,8 +275,7 @@ async function observeTarget(
       if (!finishThread) throw new ProblemError('dependency_unavailable');
       const current = await finishThread();
       if (!current.value) return { presentation: null, witness: null };
-      if (nativeTargetWitness('thread', current) !== targetWitness)
-        throw new ProblemError('dependency_unavailable');
+      if (nativeTargetWitness('thread', current) !== targetWitness) throw new ProblemError('dependency_unavailable');
       // Both page rounds compare these originals; the finalizer never replaces their anchors.
       return { presentation, witness: JSON.stringify([targetWitness, placeWitness]) };
     }

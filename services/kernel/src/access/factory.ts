@@ -51,7 +51,6 @@ import type {
   ResolveKindAudienceInput,
   VerifyKindAudienceSourceInput,
 } from './kind-audience.ts';
-import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';

@@ -453,7 +453,8 @@ const preferenceAction = t.Union([
 ]);
 function editorPreferenceSchema(patch = false) {
   const choice = <S extends TSchema>(schema: S) => t.Optional(patch ? nullable(schema) : schema);
-  const commandList = () => t.Array(literals(editorCommandIds), { maxItems: editorCommandIds.length, uniqueItems: true });
+  const commandList = () =>
+    t.Array(literals(editorCommandIds), { maxItems: editorCommandIds.length, uniqueItems: true });
   const bindings = t.Object(
     Object.fromEntries(editorCommandIds.map((id) => [id, choice(t.String({ maxLength: 80 }))])),
     closed,

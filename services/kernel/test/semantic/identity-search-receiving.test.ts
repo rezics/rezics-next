@@ -1115,7 +1115,9 @@ test('the installed receiving declaration covers Semantic Source support and pro
 
   const { footprint } = receivingWorkDeclaration(searchReceivingProductionDeclaration());
   const rawHeads = (count: number) =>
-    JSON.stringify(Array.from({ length: count }, (_, partition_no) => ({ partition_no, owner_epoch: 1, position: '0' })));
+    JSON.stringify(
+      Array.from({ length: count }, (_, partition_no) => ({ partition_no, owner_epoch: 1, position: '0' })),
+    );
   const build = crypto.randomUUID();
   const bindHeads = (heads: string) => projectionHeadUpsert.params.map((key) => (key === 'build_id' ? build : heads));
   const { sql } = projectionHeadUpsert;

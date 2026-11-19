@@ -603,12 +603,21 @@ test('deleting an account with no content acknowledges content none', async () =
 test('Content erasure waits for held Knowledge and leaves unrelated late work pending', async () => {
   const person = await createPerson();
   const notebook = await call<{ notebookId: string; structureRevisionId: string }>(
-    person, 'POST', '/v1/knowledge/notebooks', { subjectId: boardSubjectId, title: 'Held private notebook' },
+    person,
+    'POST',
+    '/v1/knowledge/notebooks',
+    { subjectId: boardSubjectId, title: 'Held private notebook' },
   );
   const document = await call<{ documentId: string }>(
-    person, 'POST', `/v1/knowledge/notebooks/${notebook.notebookId}/documents`, {
-      title: 'Held private document', body: fromPlainText('Private Knowledge must precede upload erasure'),
-      licence: 'MIT', subjectIds: [], parentPlacementId: null,
+    person,
+    'POST',
+    `/v1/knowledge/notebooks/${notebook.notebookId}/documents`,
+    {
+      title: 'Held private document',
+      body: fromPlainText('Private Knowledge must precede upload erasure'),
+      licence: 'MIT',
+      subjectIds: [],
+      parentPlacementId: null,
       expectedStructureRevisionId: notebook.structureRevisionId,
     },
   );
@@ -638,23 +647,35 @@ test('Content erasure waits for held Knowledge and leaves unrelated late work pe
   expect(admission.rows).toEqual([{ state: 'transferred', queue_name: 'governance', native: true }]);
 
   type Progress = { step: string; phase: string; cursor: unknown; phase_pending: boolean; content_found: boolean };
-  const progress = async () => (await system.database.pool.query<Progress>(
-    `SELECT step::text,phase,cursor,phase_pending,content_found
+  const progress = async () =>
+    (
+      await system.database.pool.query<Progress>(
+        `SELECT step::text,phase,cursor,phase_pending,content_found
      FROM content.account_erasure_progress WHERE route=$1 AND account_id=$2`,
-    [routeOf(person.accountId), person.accountId],
-  )).rows[0];
+        [routeOf(person.accountId), person.accountId],
+      )
+    ).rows[0];
   await waitUntil(async () => {
     const row = await progress();
     return row?.phase === 'knowledge' && row.phase_pending && row.cursor !== null;
   }, 'held Knowledge to withhold the upload phase');
   const first = (await progress())!;
   expect(first.content_found).toBe(true);
-  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.content?.outcome).toBe('pending');
-  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.delivery?.outcome).toBe('pending');
+  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.content?.outcome).toBe(
+    'pending',
+  );
+  expect((await readErasureStatus(system.database.pool, person.accountId))?.participants.delivery?.outcome).toBe(
+    'pending',
+  );
   expect(fake.objects.has(`m/${avatar}/original`)).toBe(true);
-  expect((await system.database.pool.query(
-    'SELECT erased FROM content.media WHERE route=$1 AND media_id=$2', [routeOf(avatar), avatar],
-  )).rows[0].erased).toBe(false);
+  expect(
+    (
+      await system.database.pool.query('SELECT erased FROM content.media WHERE route=$1 AND media_id=$2', [
+        routeOf(avatar),
+        avatar,
+      ])
+    ).rows[0].erased,
+  ).toBe(false);
 
   // Hold a separate participant's locator open through the Content acknowledgement.
   await beginSemanticErasure(pool, person.accountId);
@@ -678,7 +699,10 @@ test('Content erasure waits for held Knowledge and leaves unrelated late work pe
   await waitUntil(async () => BigInt((await progress())!.step) > BigInt(first.step), 'fresh held Knowledge step');
   const second = (await progress())!;
   expect(second).toMatchObject({
-    phase: 'knowledge', cursor: first.cursor, phase_pending: true, content_found: true,
+    phase: 'knowledge',
+    cursor: first.cursor,
+    phase_pending: true,
+    content_found: true,
   });
   for (const step of [first.step, second.step]) {
     const key = `${person.accountId}:${BigInt(step) - 1n}`;
@@ -691,11 +715,15 @@ test('Content erasure waits for held Knowledge and leaves unrelated late work pe
       expect(rowCount).toBe(1);
     }
   }
-  expect((await system.database.pool.query(
-    `SELECT 1 FROM access.erasure_acknowledgement
+  expect(
+    (
+      await system.database.pool.query(
+        `SELECT 1 FROM access.erasure_acknowledgement
      WHERE route=$1 AND account_id=$2 AND participant IN ('content','delivery')`,
-    [routeOf(person.accountId), person.accountId],
-  )).rows).toEqual([]);
+        [routeOf(person.accountId), person.accountId],
+      )
+    ).rows,
+  ).toEqual([]);
   expect(fake.objects.has(`m/${avatar}/original`)).toBe(true);
 
   await system.database.pool.query(
@@ -711,17 +739,24 @@ test('Content erasure waits for held Knowledge and leaves unrelated late work pe
     outstanding: { lateItems: true },
     participants: { content: { outcome: 'erased' }, semantic: { outcome: 'pending' } },
   });
-  expect((await system.database.pool.query(
-    'SELECT 1 FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2',
-    [routeOf(person.accountId), notebook.notebookId],
-  )).rows).toEqual([]);
+  expect(
+    (
+      await system.database.pool.query('SELECT 1 FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2', [
+        routeOf(person.accountId),
+        notebook.notebookId,
+      ])
+    ).rows,
+  ).toEqual([]);
   expect([...fake.objects.keys()].some((key) => key.startsWith(`m/${avatar}/`))).toBe(false);
 
-  const acknowledgement = async () => (await system.database.pool.query(
-    `SELECT to_jsonb(a) AS value,a.xmin::text AS version FROM access.erasure_acknowledgement a
+  const acknowledgement = async () =>
+    (
+      await system.database.pool.query(
+        `SELECT to_jsonb(a) AS value,a.xmin::text AS version FROM access.erasure_acknowledgement a
      WHERE route=$1 AND account_id=$2 AND participant='content'`,
-    [routeOf(person.accountId), person.accountId],
-  )).rows;
+        [routeOf(person.accountId), person.accountId],
+      )
+    ).rows;
   const committed = await acknowledgement();
   expect(committed).toHaveLength(1);
   expect(committed[0].value.outcome).toBe('erased');

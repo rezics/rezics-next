@@ -237,12 +237,15 @@ test('local and Episode unit facts retain equal IDs and independent counters und
     expect(matching).toHaveLength(2);
     expect(matching.map((row) => row.unit_kind)).toEqual(['local', 'episode']);
     expect(matching.map((row) => row.unit_id)).toEqual([unitId, unitId]);
-    expect(decoded.records.find((row) => row.session_id === sparse && row.section === 'sessions'))
-      .toMatchObject({ completed_unit_count: 19, episode_completed_count: 17 });
+    expect(decoded.records.find((row) => row.session_id === sparse && row.section === 'sessions')).toMatchObject({
+      completed_unit_count: 19,
+      episode_completed_count: 17,
+    });
     await sql`UPDATE library.progress_episode SET added_at=added_at+interval '1 second' WHERE route=${route} AND session_id=${sparse} AND episode_subject_id=${unitId}`;
     expect(await get(`/v1/libraryExports/${selected.exportId}`)).toMatchObject({ state: 'stale', first: null });
-    expect(await get(`/v1/libraryExports/${selected.exportId}/pages?cursor=${encodeURIComponent(selected.first)}`))
-      .toMatchObject({ state: 'stale', records: [], manifest: null });
+    expect(
+      await get(`/v1/libraryExports/${selected.exportId}/pages?cursor=${encodeURIComponent(selected.first)}`),
+    ).toMatchObject({ state: 'stale', records: [], manifest: null });
   } finally {
     if (captured) expect((await request('DELETE', `/v1/libraryExports/${captured.exportId}`)).status).toBe(200);
     await sql`DELETE FROM library.progress_unit WHERE route=${route} AND session_id=${sparse} AND unit_id=ANY(${unitIds}::text[])`;

@@ -3,7 +3,6 @@ import {
   admitDiscoveryFilter,
   FilterError,
   parseDiscoveryFilter,
-  parseFilter,
   positiveDiscoveryFilter,
   positiveFilter,
   relationFacetProperty,
@@ -30,7 +29,6 @@ import {
   encodeSearchCursor,
   encodeRetainedSearchCursor,
   retainedSearchContinuation,
-  type SearchCursorBinding,
   type SearchSortValue,
 } from './cursor.ts';
 import { composedBookCandidates, composedBookCurrent, composedBookFigures } from './composed-book-reads.ts';
@@ -66,14 +64,10 @@ import {
   type ReleaseGroupingBasis,
   type ReleaseGroupingRequest,
 } from './release-search-grouping.ts';
-import {
-  readReleaseSearchChildren,
-  readReleaseSearchGroups,
-  type ReleaseSearchGroupsResult,
-} from './release-search-source.ts';
+import { readReleaseSearchChildren, readReleaseSearchGroups } from './release-search-source.ts';
 import { bindReleaseSearchText } from './release-search-text.ts';
 import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
 import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
 import { observeSearchIdentityEpoch, resolveCanonicalKeyset } from './canonical-keyset.ts';

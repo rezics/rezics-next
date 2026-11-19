@@ -125,7 +125,11 @@ async function withErasureTurn<T>(
   const now = Date.now();
   if (input && !Number.isFinite(input.deadline)) throw new TypeError('Invalid Search erasure deadline');
   const context = Object.freeze({
-    deadline: Math.min(now + 5000, deadlineFor(5000, () => now), input?.deadline ?? Infinity),
+    deadline: Math.min(
+      now + 5000,
+      deadlineFor(5000, () => now),
+      input?.deadline ?? Infinity,
+    ),
   });
   if (!Number.isFinite(context.deadline)) throw new TypeError('Invalid Search erasure deadline');
   const controller = new AbortController();

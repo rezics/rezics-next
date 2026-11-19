@@ -10,7 +10,7 @@ import type { NativeLibraryPresentationPorts } from './presentation.ts';
 import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../../access/unavailable.ts';
 import { withBoundedReadOnlyTransaction, withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import type { Access, Actor, AccountActor } from '../../request/access.ts';
+import type { Access, Actor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from '../builtin-identity.ts';

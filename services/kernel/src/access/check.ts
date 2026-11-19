@@ -1,7 +1,6 @@
 import type {
   Access,
   AccessCheck,
-  AccessClient,
   AccessContext,
   AccessExplicitCheck,
   ActionCatalogue,

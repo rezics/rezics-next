@@ -480,7 +480,9 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
         hits: hits.map((h) => Buffer.from(JSON.stringify(h))),
       };
       work.consume({ ...zeroScopeWork(), statements: 1, bytes: Buffer.byteLength(JSON.stringify(values)) });
-      const saved = await withScopePreparationConnection(pool, deadline, (client) => orderedSaveSql.run(client, values));
+      const saved = await withScopePreparationConnection(pool, deadline, (client) =>
+        orderedSaveSql.run(client, values),
+      );
       work.consume({ ...zeroScopeWork(), nativeRows: 1 + hits.length });
       if (!saved) throw new ProblemError('semantic_not_ready');
     },

@@ -21,7 +21,7 @@ import type {
 } from '../library/identity-scope-effects.ts';
 import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-native-work.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
-import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
+import { identityScopeAddress } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
 import type {
@@ -95,11 +95,7 @@ import storeSelectStep from './identity-epoch-store-select-step.sql';
 import storeSelectJob from './identity-epoch-store-select-job.sql';
 import storeSelectEffectReceipt from './identity-epoch-store-select-effect-receipt.sql';
 import storeSelectAck2 from './identity-epoch-store-select-ack-2.sql';
-import {
-  historyComposition,
-  readAgentIdentitySDKReceivingBinding,
-  verifyAgentIdentityRetirementStage,
-} from '../history/application/index.ts';
+import { historyComposition } from '../history/application/index.ts';
 import {
   type AgentIdentityRetirementStage,
   type AgentIdentitySDKReceivingBinding,

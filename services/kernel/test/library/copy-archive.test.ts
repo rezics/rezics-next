@@ -11,7 +11,6 @@ import {
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { ProblemError } from '../../src/http/problem-error.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
-import { exportSections } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
 import { createNativeLibraryWorkClient } from './support/native-library-fixture-binding.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
@@ -420,8 +419,11 @@ test('actual installed export retains independent holdings, all pins and exact d
   expect(primary.evidence.additional_measures?.every((measure) => measure.amount === '4.125000')).toBe(true);
   const units = parsed.progress.filter((row) => row.evidence.section === 'units');
   expect(units.every((row) => row.evidence.section === 'units' && row.evidence.unit_kind === 'episode')).toBe(true);
-  expect(parsed.progress.find((row) => row.sourceSessionId === archivedUnits.sessionId && row.evidence.section === 'sessions'))
-    .toMatchObject({ evidence: { completed_unit_count: 0, episode_completed_count: 2 } });
+  expect(
+    parsed.progress.find(
+      (row) => row.sourceSessionId === archivedUnits.sessionId && row.evidence.section === 'sessions',
+    ),
+  ).toMatchObject({ evidence: { completed_unit_count: 0, episode_completed_count: 2 } });
   expect(units.map((row) => row.evidence.section === 'units' && row.evidence.unit_id).sort()).toEqual(
     [archivedUnits.detachedId, archivedUnits.memberId].sort(),
   );
@@ -448,10 +450,12 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
     if (recount) {
       a.manifest.rows = a.records.length;
       a.manifest.recordBytes = a.records.reduce((n, r) => n + bytes(r).length, 0);
-      a.manifest.sectionTotals = Object.fromEntries(a.manifest.sections.map((section) => {
-        const rows = a.records.filter((row) => row.section === section);
-        return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
-      }));
+      a.manifest.sectionTotals = Object.fromEntries(
+        a.manifest.sections.map((section) => {
+          const rows = a.records.filter((row) => row.section === section);
+          return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
+        }),
+      );
     }
     refusesArchive(bytes(a), 'invalid_request');
   };
@@ -727,8 +731,9 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
     state: 'completed',
     completedUnitCount: 0,
   });
-  expect(unitResult.completedEpisodes.episodes.filter((episode: { completed: boolean | null }) => episode.completed))
-    .toHaveLength(1);
+  expect(
+    unitResult.completedEpisodes.episodes.filter((episode: { completed: boolean | null }) => episode.completed),
+  ).toHaveLength(1);
   const reopenedUnits = await json(
     await f.send(
       owner.bearer,

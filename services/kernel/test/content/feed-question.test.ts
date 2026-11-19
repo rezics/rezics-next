@@ -4,7 +4,7 @@ import { createFeedQuestionSession } from '../../src/content/feed-question.ts';
 import type { FeedItem, FeedLaneCandidate, FeedPublicSummary } from '../../src/content/contract/index.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createReviewLifecycleFixture, requestKey } from './review-native-lifecycle-fixture.ts';
+import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
 
 function publicSubject(id: string): FeedPublicSummary {
   return {

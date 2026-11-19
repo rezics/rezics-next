@@ -5,7 +5,6 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definiti
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import {
   MEDIA_NATIVE_GROWTH_BASE,
-  composeNativeCollectionRuntime,
   imageWorkflowIds,
   uploadedEvent,
   type MediaObjectStore,

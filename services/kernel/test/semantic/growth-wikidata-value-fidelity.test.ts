@@ -8,7 +8,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { proposeStatement } from '../../src/semantic/candidates.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   captureUnforcedIndexes,

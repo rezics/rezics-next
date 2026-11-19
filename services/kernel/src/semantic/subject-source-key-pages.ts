@@ -75,20 +75,23 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
   const source: SubjectCanonicalNames = {
     async observe({ deadline }) {
       requireAccessDeadline(deadline);
-      const result = await withBoundedReadConnection(pool, deadline, (connection) =>
-        deadlineClient(connection, deadline).query<{
-          partition: number;
-          generation: string;
-          epoch: number | null;
-          position: string | null;
-          state: string | null;
-        }>(
-          `SELECT population.partition_no AS partition,population.canonical_generation::text AS generation,
+      const result = await withBoundedReadConnection(
+        pool,
+        deadline,
+        (connection) =>
+          deadlineClient(connection, deadline).query<{
+            partition: number;
+            generation: string;
+            epoch: number | null;
+            position: string | null;
+            state: string | null;
+          }>(
+            `SELECT population.partition_no AS partition,population.canonical_generation::text AS generation,
                 home.epoch,home.position::text,home.write_state AS state
          FROM semantic.partition_subjects population
          LEFT JOIN core.partition home ON home.partition_no=population.partition_no
          WHERE population.canonical_count>0 ORDER BY population.partition_no LIMIT 4097`,
-        ),
+          ),
         canonicalReadOptions(deadline),
       );
       requireAccessDeadline(deadline);

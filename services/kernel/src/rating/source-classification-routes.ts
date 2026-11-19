@@ -1,5 +1,4 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
-import { ratingCapabilities } from './adapters/ambient.ts';
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';

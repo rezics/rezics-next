@@ -249,8 +249,15 @@ test('duplicate native rows and names cannot select repeated effects or guess la
 });
 
 test('equal unit ID text stays independent across native fact families', () => {
-  const sessionId = randomUUID(), unitId = randomUUID();
-  const local = { section: 'units', session_id: sessionId, unit_id: unitId, unit_kind: 'local', added_at: at } as ArchiveRecord;
+  const sessionId = randomUUID(),
+    unitId = randomUUID();
+  const local = {
+    section: 'units',
+    session_id: sessionId,
+    unit_id: unitId,
+    unit_kind: 'local',
+    added_at: at,
+  } as ArchiveRecord;
   const episode = { ...local, unit_kind: 'episode' } as ArchiveRecord;
   expect(decode(archiveFacts([local, episode])).records).toEqual([local, episode]);
   refuses(archiveFacts([local, { ...local }]), 'duplicate_record');

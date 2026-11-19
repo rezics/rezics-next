@@ -9,7 +9,6 @@ import {
 } from './versioned-outline-sequence.ts';
 import {
   HostedVersionPublicationWriteError,
-  type HostedVersionPublicationIndexRoots,
   type HostedVersionPublicationIndexes,
   type HostedVersionPublicationInsertion,
   type HostedVersionPublicationOccurrence,

@@ -7,10 +7,7 @@ import {
   libraryLabels,
   unitData,
 } from '../../../../packages/definitions/test/support/library-profiles';
-import {
-  archiveBase64,
-  ProgressRecoveryJourney,
-} from '../../../../apps/web/src/library/archive-progress-recovery/controller';
+import { ProgressRecoveryJourney } from '../../../../apps/web/src/library/archive-progress-recovery/controller';
 import {
   progressRecoveryNative,
   type Reply,
@@ -19,7 +16,6 @@ import {
 import type { ProgressRecoveryPort as Port } from '../../../../apps/web/src/library/archive-progress-recovery/native';
 import { createCopyArchive } from '../../src/library/copy-archive';
 import { createNativeLibraryWorkClient } from './support/native-library-fixture-binding.ts';
-import { routeOf } from '../../src/route/route';
 import { testRouteKey } from '../support/test-kernel';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture';
 

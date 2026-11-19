@@ -7,9 +7,8 @@ import {
   type SemanticRecordSourceSet,
 } from './record-source-set.ts';
 import { currentCommand, type CommandTransaction } from '../../command/command.ts';
-import { routeOf } from '../../route/route.ts';
 import { beginAgentIdentitySerialization } from '../application/identity.ts';
-import { type RecordHistorySourceReference, encodeLocator, recordHistorySourceKey } from '../contract/index.ts';
+import { type RecordHistorySourceReference, recordHistorySourceKey } from '../contract/index.ts';
 
 export const MAX_COMMAND_RECORD_SOURCES = 16;
 const declarations = new WeakMap<CommandTransaction, readonly RecordHistorySourceReference[]>();

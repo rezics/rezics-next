@@ -11,7 +11,6 @@ import type {
   CopyWorkWorkKind,
   CopyWorkWorkQualifier,
   CopyWorkWorkStatement,
-  CopyWorkWorkTerm,
   CopyWorkWorkValue,
 } from './copy-work-reader-port.ts';
 import type { FactRow } from './item.ts';

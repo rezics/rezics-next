@@ -46,7 +46,7 @@ The remaining per-primitive work is bounded as follows, independently of unrelat
 | -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | Scored partition inventory | 4                                 | One home point and at most 4,097 generation rows; the 4,097th fails closed                                                   | At most 4,096 partitions |
 | Scored partition seek      | 5                                 | One home, one generation, at most B rank rows with exact figure and subject point joins (at most 3B physical candidate rows) | B, with B <= 200         |
-| Scored canonical seek      | 5                                 | One home, one generation, one canonical coverage row, at most B rank rows and 2B exact figure/Subject point joins             | B, with B <= 200         |
+| Scored canonical seek      | 5                                 | One home, one generation, one canonical coverage row, at most B rank rows and 2B exact figure/Subject point joins            | B, with B <= 200         |
 | Exact figure proof         | 4 (3 when empty)                  | One home and at most two physical figure/rank rows per requested ID, at most 256 IDs                                         | At most 256 proofs       |
 
 The scored seek's exact B-tree equality prefix is

@@ -16,15 +16,12 @@ import {
 } from './record-source.ts';
 import { commandAgentIdentitySource } from '../application/identity.ts';
 import {
-  ACCOUNT_ROLE_BITS,
-  type AccountReference,
   COMMAND_HISTORY_KINDS,
   type CommandHistoryKind,
   type CommandHistoryScopes,
   type HistoryScope,
   MAX_HISTORY_PAYLOAD_BYTES,
   classifyEvent,
-  decodeLocator,
   encodeLocator,
   unionHistoryScope,
   validateScope,

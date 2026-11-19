@@ -28,8 +28,7 @@ export async function publishKnowledgeMedia(
     command.authorization.resource.id !== input.author.accountId
   )
     throw new GrantDeniedError();
-  if (routeOf(input.revisionId) !== route || routeOf(input.publicationId) !== route)
-    throw new MediaUnavailableError();
+  if (routeOf(input.revisionId) !== route || routeOf(input.publicationId) !== route) throw new MediaUnavailableError();
   const result = await publish.run(tx, {
     route,
     document_id: input.documentId,

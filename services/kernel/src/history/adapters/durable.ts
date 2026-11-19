@@ -32,11 +32,7 @@ import { isOperationalWorkCustodyId } from './operational-work.ts';
 import { inspectOperationalWorkRetirement } from './operational-work-receiving.ts';
 import { nativeWriterState } from './handles.ts';
 import type { IdentityUnit } from './agent-identity-retirement.ts';
-import {
-  currentAgentIdentityHistoryUnit,
-  lockRecordedAgentIdentityHistory,
-  resolveAgentIdentitySDKWork,
-} from '../application/identity.ts';
+import { currentAgentIdentityHistoryUnit, lockRecordedAgentIdentityHistory } from '../application/identity.ts';
 import { historyDeadline, lockHistoryBarrier } from '../application/receiving.ts';
 import {
   AGENT_IDENTITY_SDK_RETIREMENT,

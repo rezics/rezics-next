@@ -249,7 +249,9 @@ export function withBoundedReadLifetime<T>(
 
       const transactionAfter = transactionStateAfter(config.text);
       if (transactionAfter === 'none' && pendingQueries > 0)
-        return completeWithCallback(Promise.reject(new Error('A terminal transaction query cannot follow unsettled SQL')));
+        return completeWithCallback(
+          Promise.reject(new Error('A terminal transaction query cannot follow unsettled SQL')),
+        );
       pendingQueries += 1;
       let dispatched = false;
       let settled = false;
@@ -325,7 +327,8 @@ export function withBoundedReadLifetime<T>(
         const mapped = mapError(error, options);
         remember(mapped);
         if (
-          (!settledServerErrors.has(error) || options.isUncertainSettledQueryError?.(error) ||
+          (!settledServerErrors.has(error) ||
+            options.isUncertainSettledQueryError?.(error) ||
             options.isUncertainSettledQueryError?.(mapped)) &&
           (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped))
         )

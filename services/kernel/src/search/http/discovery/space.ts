@@ -5,7 +5,7 @@ import type { DiscoveryUnionHit } from '../../discovery.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { MatchEvidenceSchema } from '../match-evidence-schema.ts';
-import { closed, id, nullableText, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
+import { closed, id, nullableText, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
 function spaceKey() {
   return memoizedValue(spaceKey, () =>
     t.Object(

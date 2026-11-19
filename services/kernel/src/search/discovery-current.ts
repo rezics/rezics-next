@@ -3,7 +3,6 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { validateAccountSnapshot } from './account-discovery.ts';
 import {
   MAX_ACCOUNT_DISCOVERY_BATCH,
-  type DiscoveryHit,
   type DiscoveryReadContext,
   type DiscoveryRegistry,
   type DiscoveryOwnerRegistry,

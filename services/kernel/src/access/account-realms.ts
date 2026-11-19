@@ -108,8 +108,10 @@ export async function readAccountRealms(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
 
   const readOptions = boundedReadOptions(deadline);
-  const view = await withBoundedReadConnection(dependencies.pool, deadline, (client) =>
-    publicRealmsRead.run(client, { route: accountRoute, account_id: accountId }),
+  const view = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    (client) => publicRealmsRead.run(client, { route: accountRoute, account_id: accountId }),
     readOptions,
   );
   if (!view?.enabled) return empty;

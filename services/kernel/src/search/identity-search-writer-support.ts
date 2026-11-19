@@ -199,10 +199,7 @@ export function createSearchIdentityWriterSupport(configuration: SearchReceiving
             state: 'progress',
             async advance(tx) {
               await compare(tx);
-              if (
-                (await retained(tx, basis, 'terms'))?.transactionId !== terms?.transactionId ||
-                !(await verify(tx))
-              )
+              if ((await retained(tx, basis, 'terms'))?.transactionId !== terms?.transactionId || !(await verify(tx)))
                 throw unavailable('Search writer canonical terms lost their Source build');
               const next = await readIdentitySearchIndexTermSlot(
                 tx,

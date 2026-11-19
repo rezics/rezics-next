@@ -121,21 +121,26 @@ async function readableSubject(deps: ReviewContextDependencies, id: string, cont
     { ...identity, eligibility: subjectReadEligibility(identity) },
     { pool: deps.pool, deadline: context.deadline },
   );
-  return withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    return !!(await subjectExists.run(bounded, { route, subject_id: id })) && (await check(bounded));
-  }, {
-    deadlineError: () => new AccessUnavailableError('deadline'),
-    mapError(error: unknown) {
-      try {
-        throwAccessUnavailable(error, context.deadline);
-      } catch (mapped) {
-        return mapped;
-      }
-      return error;
+  return withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (client) => {
+      const bounded = deadlineClient(client, context.deadline);
+      return !!(await subjectExists.run(bounded, { route, subject_id: id })) && (await check(bounded));
     },
-    isUncertainSettledQueryError: () => true,
-  });
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error: unknown) {
+        try {
+          throwAccessUnavailable(error, context.deadline);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainSettledQueryError: () => true,
+    },
+  );
 }
 
 type ReviewThreadWitness = Readonly<{ state: 'current' | 'absent'; anchor: string }> | Readonly<{ state: 'refused' }>;

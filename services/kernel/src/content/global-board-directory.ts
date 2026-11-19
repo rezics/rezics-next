@@ -1,9 +1,5 @@
 import { withBoundedReadConnection } from '../database/pool.ts';
-import {
-  AccessUnavailableError,
-  classifyUnavailability,
-  throwAccessUnavailable,
-} from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { ContentBoardDependencies } from './boards.ts';

@@ -719,8 +719,13 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
             const currentSubject = await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time);
             const profileGuard = parsed.entryGuard?.profileGuard;
             if (profileGuard)
-              await verifyPersonalProfileGuard(dependencies, account, attempt.time, currentSubject, profileGuard, () =>
-                new ProblemError('unsupported_library_profile'),
+              await verifyPersonalProfileGuard(
+                dependencies,
+                account,
+                attempt.time,
+                currentSubject,
+                profileGuard,
+                () => new ProblemError('unsupported_library_profile'),
               );
             return {
               subjectId: currentSubject,

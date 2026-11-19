@@ -737,7 +737,10 @@ for (const code of ['40001', '40P01']) {
       denied: () => new Error('denied'),
     };
     const receipt = {
-      actorAccountId: randomUUID(), kind: 'test.dispatch.commit-abort', key: randomUUID(), digest: new Uint8Array(32),
+      actorAccountId: randomUUID(),
+      kind: 'test.dispatch.commit-abort',
+      key: randomUUID(),
+      digest: new Uint8Array(32),
     };
     const options = { partition, deadline, receipt, authorization };
     const result = await runCommand(pool, options, async (tx) => {
@@ -754,11 +757,21 @@ for (const code of ['40001', '40P01']) {
     expect(new Set(transactions).size).toBe(2);
     expect(texts(observer).filter((sql) => sql === begin)).toHaveLength(2);
     expect(texts(observer).filter((sql) => sql === 'ROLLBACK')).toHaveLength(1);
-    expect((await admin.query('SELECT id FROM public.dispatch_commit_abort_probe WHERE id=$1', [id])).rows).toEqual([{ id }]);
-    expect((await admin.query(`SELECT transaction_id FROM core.receipt
+    expect((await admin.query('SELECT id FROM public.dispatch_commit_abort_probe WHERE id=$1', [id])).rows).toEqual([
+      { id },
+    ]);
+    expect(
+      (
+        await admin.query(
+          `SELECT transaction_id FROM core.receipt
       WHERE partition_no=$1 AND principal_id=$2 AND command_kind=$3`,
-      [partition, receipt.actorAccountId, receipt.kind])).rows).toEqual([{ transaction_id: result.transactionId }]);
-    const replay = await runCommand(pool, options, async () => { throw new Error('replayed body'); });
+          [partition, receipt.actorAccountId, receipt.kind],
+        )
+      ).rows,
+    ).toEqual([{ transaction_id: result.transactionId }]);
+    const replay = await runCommand(pool, options, async () => {
+      throw new Error('replayed body');
+    });
     expect(replay).toEqual({ ...result, replayed: true });
     expect(transactions).toHaveLength(2);
     expect(authorized).toBe(3);
@@ -771,11 +784,13 @@ test('ordinary lost COMMIT response stays uncertain without retry after the real
   observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error });
   const id = randomUUID();
   let bodies = 0;
-  const failure = await failed(runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
-    bodies++;
-    await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
-    return noEffect(id);
-  }));
+  const failure = await failed(
+    runCommand(pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
+      bodies++;
+      await tx.query('INSERT INTO public.dispatch_lifetime_probe VALUES($1)', [id]);
+      return noEffect(id);
+    }),
+  );
   expect(failure).toBeInstanceOf(CommandCommitUncertainError);
   expect(failure).toMatchObject({ cause: error });
   expect(bodies).toBe(1);

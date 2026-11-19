@@ -12,12 +12,7 @@ afterAll(f.close);
 
 test('persisted Context defaults agree across correction readings and rebuilt relation layers', async () => {
   const property = 'schema:author';
-  async function request(
-    method: string,
-    path: string,
-    body?: unknown,
-    persona: 'owner' | 'platform' = 'owner',
-  ) {
+  async function request(method: string, path: string, body?: unknown, persona: 'owner' | 'platform' = 'owner') {
     const answer = await f.call(method, path, persona, body);
     expect([200, 201], JSON.stringify(answer.body)).toContain(answer.status);
     return answer.body;
@@ -53,8 +48,8 @@ test('persisted Context defaults agree across correction readings and rebuilt re
   expect(inherited).toMatchObject({ settings: { release: nextRelease }, defaults: { [property]: 'inherit' } });
 
   const target = await f.person();
-  const subject = (await request('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Correction' } }))
-    .subject.id as string;
+  const subject = (await request('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Correction' } })).subject
+    .id as string;
   const candidatePath = `/v1/subjects/${subject}/candidates`;
   const propose = async (evidence: string) => {
     const result = await request('POST', candidatePath, {
@@ -168,7 +163,8 @@ test('persisted Context defaults agree across correction readings and rebuilt re
     expect(forward.relations.map((row: { statement: { id: string } }) => row.statement.id)).toEqual(expected);
     const inverse = await request('GET', `/v1/subjects/${target}/links?${query}`);
     expect(
-      inverse.links.filter((row: { subject: string }) => row.subject === subject)
+      inverse.links
+        .filter((row: { subject: string }) => row.subject === subject)
         .map((row: { statement: string }) => row.statement),
     ).toEqual(expected);
   }

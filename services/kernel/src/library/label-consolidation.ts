@@ -1204,8 +1204,10 @@ export function createLabelConsolidationCommands(deps: {
   }
 
   // Internal callers receive the same operation lifetime as HTTP callers, including resume and status readback.
-  const operation = <Args extends unknown[], Result>(run: (...args: Args) => Promise<Result>) =>
-    (...args: Args) => withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => run(...args));
+  const operation =
+    <Args extends unknown[], Result>(run: (...args: Args) => Promise<Result>) =>
+    (...args: Args) =>
+      withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => run(...args));
 
   return {
     confirm: operation(confirm),

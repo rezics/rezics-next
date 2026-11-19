@@ -63,7 +63,10 @@ export async function eraseAccountUploadItem(
     if (source.purpose === 'knowledge-image') {
       const decision = await runCommand(deps.pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
         // Publication acquires this same row lock before setting retention evidence.
-        await tx.query('SELECT media_id FROM content.media WHERE route=$1 AND media_id=$2 FOR UPDATE', [sourceRoute, id]);
+        await tx.query('SELECT media_id FROM content.media WHERE route=$1 AND media_id=$2 FOR UPDATE', [
+          sourceRoute,
+          id,
+        ]);
         const current = await readMedia.run(tx, { route: sourceRoute, id });
         if (!current || current.uploader_id !== accountId) return noEffect('absent' as const);
         if (current.erased) return noEffect('erased' as const);
@@ -71,12 +74,16 @@ export async function eraseAccountUploadItem(
         const selection = await knowledgeMediaRetentionSelection(tx, sourceRoute, current.container_id);
         if (selection?.disposition === 'pending') return noEffect('pending' as const);
         if (
-          selection?.disposition === 'retained' && current.knowledge_publication_generation !== null &&
+          selection?.disposition === 'retained' &&
+          current.knowledge_publication_generation !== null &&
           current.knowledge_publication_generation === String(selection.lifecycle_generation)
         )
           return noEffect('retained' as const);
         const parameters = { kind: 'media', route: sourceRoute, id, deleted_at: null };
-        await tx.query(erase.sql, erase.params.map((name) => parameters[name as keyof typeof parameters]));
+        await tx.query(
+          erase.sql,
+          erase.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
         return noEffect('erased' as const);
       });
       if (decision.value !== 'erased') return decision.value;

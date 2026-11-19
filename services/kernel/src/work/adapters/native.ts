@@ -29,7 +29,6 @@ import type {
   WorkSdkConfig,
   WorkSelectedIdentity,
   WorkSelectedLocator,
-  WorkWriterState,
 } from '../contract/index.ts';
 
 type BoundedSdk = DBOSClient & {

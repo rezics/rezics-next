@@ -1,11 +1,6 @@
 import { managementOperationProfile } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
-import {
-  authoritativeTimeValue,
-  mintReadTime,
-  releaseOperationalTime,
-  type AuthoritativeTime,
-} from '../command/command.ts';
+import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

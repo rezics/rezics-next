@@ -76,14 +76,7 @@ export async function listCreatorSales(
     epoch = cursor.epoch;
   }
   requireAccessDeadline(input.deadline);
-  let transaction:
-    | 'none'
-    | 'beginning'
-    | 'open'
-    | 'committing'
-    | 'committed'
-    | 'rolling-back'
-    | 'rolled-back' = 'none';
+  let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'committed' | 'rolling-back' | 'rolled-back' = 'none';
   return withBoundedReadConnection(
     pool,
     input.deadline,
@@ -174,9 +167,7 @@ export async function listCreatorSales(
         const reason = classifyUnavailability(error);
         if (reason === 'deadline' || reason === 'overloaded') return true;
         if (typeof error !== 'object' || error === null || !('code' in error)) return false;
-        return ['ECONNABORTED', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(
-          String(error.code),
-        );
+        return ['ECONNABORTED', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(String(error.code));
       },
       isUncertainWorkError: () =>
         transaction === 'beginning' ||
