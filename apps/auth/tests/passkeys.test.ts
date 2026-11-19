@@ -1,10 +1,11 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { readRegistrationPage } from '../../../services/auth/src/registration-page';
+import { startNativeAuthIssuerProxy } from '../../web/tests/native/native-auth-security-fixture';
 import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { nativeSignInOptions, nativeSignInProof } from './sign-in-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, X509Certificate } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type CDPSession, type Page } from 'playwright';
@@ -40,6 +41,7 @@ let fresh = true;
 let sessionCookieSet = false;
 let sessionClientId = 'login';
 let sessionScopes: string[] = [];
+let sessionMethod: 'pwd' | 'pop' = 'pwd';
 let sessionAccountId = accountId;
 
 function reset(options: { passkeys?: Passkey[]; hasPassword?: boolean; fresh?: boolean; accountId?: string } = {}) {
@@ -51,6 +53,7 @@ function reset(options: { passkeys?: Passkey[]; hasPassword?: boolean; fresh?: b
   sessionCookieSet = false;
   sessionClientId = 'login';
   sessionScopes = [];
+  sessionMethod = 'pwd';
   sessionAccountId = accountId;
   if (options.accountId) sessionAccountId = options.accountId;
 }
@@ -88,7 +91,7 @@ const fake = Bun.serve({
         }),
       );
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
-    const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {
+    const issueSession = (profile: { client_id?: unknown; scope?: unknown }, method: 'pwd' | 'pop') => {
       const scopes = profile.scope;
       const valid =
         (profile.client_id === 'login' && Array.isArray(scopes) && scopes.length === 0) ||
@@ -102,6 +105,7 @@ const fake = Bun.serve({
       sessionCookieSet = true;
       sessionClientId = profile.client_id as string;
       sessionScopes = scopes as string[];
+      sessionMethod = method;
       headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);
       return true;
     };
@@ -133,7 +137,9 @@ const fake = Bun.serve({
     if (url.pathname === '/security-page' && request.method === 'GET')
       return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], passkeys, fresh));
     if (url.pathname === '/session' && request.method === 'GET')
-      return json({ account_id: sessionAccountId, client_id: sessionClientId, scope: sessionScopes });
+      return json(
+        nativeSignInProof({ client_id: sessionClientId, scope: sessionScopes }, sessionMethod, sessionAccountId),
+      );
     if (url.pathname === '/sessions' && request.method === 'GET')
       return json({
         sessions: [
@@ -151,7 +157,7 @@ const fake = Bun.serve({
     if (url.pathname === '/signin' && request.method === 'POST') {
       const body = parsed();
       if (body.email !== email || body.password !== password) return json({ error: 'authentication_denied' }, 401);
-      if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
+      if (!issueSession(body, 'pwd')) return json({ error: 'invalid_scope' }, 400);
       return json(nativeSignInProof(body, 'pwd', sessionAccountId));
     }
 
@@ -163,7 +169,7 @@ const fake = Bun.serve({
     if (url.pathname === '/signin/passkey' && request.method === 'POST') {
       const body = parsed();
       if (!acceptsResponse(body.response)) return json({ error: 'authentication_denied' }, 401);
-      if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
+      if (!issueSession(body, 'pop')) return json({ error: 'invalid_scope' }, 400);
       return json(nativeSignInProof(body, 'pop', sessionAccountId));
     }
 
@@ -240,49 +246,53 @@ function freePort(): Promise<number> {
 }
 
 let child: ChildProcess | undefined;
-let started: Promise<number> | undefined;
-let browser: Browser | undefined;
+let browser: Browser;
+let issuer: Awaited<ReturnType<typeof startNativeAuthIssuerProxy>> | undefined;
+let origin: string;
 
 // Copied from apps/auth/tests/security.test.ts's dev-server startup and readiness check.
-function site(): Promise<number> {
-  started ??= (async () => {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const port = await freePort();
-      let output = '';
-      const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000));
-      child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, AUTH_ORIGIN: fake.url.origin },
-      });
-      let startError: Error | undefined;
-      child.on('error', (error) => {
-        startError = error;
-      });
-      child.stdout!.on('data', keep);
-      child.stderr!.on('data', keep);
-      const deadline = Date.now() + 150_000;
-      for (;;) {
-        if (startError) throw startError;
-        if (child.exitCode !== null) {
-          if (output.includes('Port ') && output.includes('already in use') && attempt < 3) break;
-          throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-        }
-        try {
-          const response = await fetch(`http://127.0.0.1:${port}/security`, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(60_000),
-          });
-          if (response.status === 200) return port;
-        } catch {}
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /security in time:\n${output}`);
-        await Bun.sleep(500);
+async function site(): Promise<number> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const port = await freePort();
+    let output = '';
+    const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000));
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        REZICS_TEST_RUNTIME: '1',
+        REZICS_AUTH_TEST_PAGE_ORIGIN: origin,
+        AUTH_ORIGIN: fake.url.origin,
+        AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+      },
+    });
+    let startError: Error | undefined;
+    child.on('error', (error) => {
+      startError = error;
+    });
+    child.stdout!.on('data', keep);
+    child.stderr!.on('data', keep);
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (startError) throw startError;
+      if (child.exitCode !== null) {
+        if (output.includes('Port ') && output.includes('already in use') && attempt < 3) break;
+        throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       }
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/security`, {
+          redirect: 'manual',
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (response.status === 200) return port;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`dev server did not serve /security in time:\n${output}`);
+      await Bun.sleep(500);
     }
-    throw new Error('could not start the Auth dev server after retrying occupied ports');
-  })();
-  return started;
+  }
+  throw new Error('could not start the Auth dev server after retrying occupied ports');
 }
 
 type Authenticator = { cdp: CDPSession; id: string };
@@ -301,7 +311,7 @@ async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> 
   return { cdp, id: added.authenticatorId };
 }
 
-// The native RP is rezics.com, so browser pages use that hostname while Vite binds loopback.
+// The HTTPS fixture origin is under the native rezics.com RP while Vite binds loopback.
 async function open(
   path: string,
   options: BrowserContextOptions & {
@@ -312,9 +322,6 @@ async function open(
   } = {},
 ): Promise<{ page: Page; origin: string; authenticator: Authenticator | null }> {
   const { webauthn = true, signedIn = true, pendingOperation, autofill = true, ...contextOptions } = options;
-  const port = await site();
-  const origin = `http://rezics.com:${port}`;
-  browser ??= await chromium.launch();
   const context = await browser.newContext({
     viewport: { width: 1280, height: 860 },
     reducedMotion: 'reduce',
@@ -323,9 +330,7 @@ async function open(
     javaScriptEnabled: true,
   });
   if (signedIn)
-    await context.addCookies([
-      { name: 'auth_session', value: session, domain: 'rezics.com', path: '/', httpOnly: true, sameSite: 'Lax' },
-    ]);
+    await context.addCookies([{ name: 'auth_session', value: session, url: origin, httpOnly: true, sameSite: 'Lax' }]);
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   let authenticator: Authenticator | null = null;
@@ -347,7 +352,7 @@ async function open(
       sessionStorage.setItem('rezics.account-operation.step-up', JSON.stringify(pending));
     }, pendingOperation);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, authenticator };
@@ -374,18 +379,28 @@ async function addResidentCredential({ cdp, id }: Authenticator) {
 }
 
 beforeAll(async () => {
+  const proxy = await startNativeAuthIssuerProxy();
+  issuer = proxy;
+  origin = proxy.origin;
   const port = await site();
+  proxy.setUpstream(`http://127.0.0.1:${port}`);
+  const certificateKey = new X509Certificate(proxy.webTls.certificate).publicKey.export({
+    type: 'spki',
+    format: 'der',
+  });
+  const pin = createHash('sha256').update(certificateKey).digest('base64');
   browser = await chromium.launch({
     args: [
       '--no-proxy-server',
-      '--host-resolver-rules=MAP rezics.com 127.0.0.1',
-      `--unsafely-treat-insecure-origin-as-secure=http://rezics.com:${port}`,
+      `--host-resolver-rules=MAP ${new URL(origin).hostname} 127.0.0.1`,
+      `--ignore-certificate-errors-spki-list=${pin}`,
     ],
   });
 }, timeout);
 
 afterAll(async () => {
   await browser?.close();
+  await issuer?.stop();
   fake.stop(true);
   if (child?.pid)
     try {

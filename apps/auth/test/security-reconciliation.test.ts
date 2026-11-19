@@ -4,10 +4,12 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { securityEnvelope } from '../tests/security-page-fixture';
+import { nativeSignInProof } from '../tests/sign-in-fixture';
 
 // Presentation acceptance through the actual page/BFF and existing native HTTP DTOs.
 // This fixture does not claim native credential/floor or revocation-writer proof.
 const account = 'security-owner';
+const app = join(import.meta.dir, '..');
 const created_at = '2026-10-30T09:00:00Z';
 const current = {
   id: 'current',
@@ -37,7 +39,8 @@ const native = Bun.serve({
     if (request.method === 'GET') {
       if (signedOut) return json({ error: 'authentication_denied' }, 401);
       if (denied) return json({ error: 'authentication_denied' }, 403);
-      if (path === '/session') return json({ account_id: actor });
+      if (path === '/session')
+        return json(nativeSignInProof({ client_id: current.client_id, scope: [] }, 'pwd', actor));
       if (unavailable) return json({ error: 'unavailable' }, 503);
       if (path === '/security-page') return json(securityEnvelope(actor, sessions, passkeys));
       if (path === '/sessions') return json({ sessions });
@@ -67,6 +70,9 @@ let child: ChildProcess | undefined;
 let browser: Browser;
 let origin: string;
 beforeAll(async () => {
+  // Prepare the fixed catalogue before Vite can reload an in-progress review.
+  const messages = Bun.spawnSync([process.execPath, 'scripts/generate.ts'], { cwd: app, timeout: 30_000 });
+  if (!messages.success) throw new Error(`Auth message preparation failed: ${messages.stderr.toString()}`);
   const port = await new Promise<number>((resolve, reject) => {
     const probe = createServer();
     probe.on('error', reject);
@@ -78,10 +84,16 @@ beforeAll(async () => {
   origin = `http://127.0.0.1:${port}`;
   let output = '';
   child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: join(import.meta.dir, '..'),
+    cwd: app,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, AUTH_ORIGIN: native.url.origin },
+    env: {
+      ...process.env,
+      REZICS_TEST_RUNTIME: '1',
+      REZICS_AUTH_PREPARED_MESSAGES: '1',
+      AUTH_ORIGIN: native.url.origin,
+      AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+    },
   });
   child.stdout!.on('data', (data) => {
     output = (output + data).slice(-8000);
@@ -136,8 +148,13 @@ async function decide(page: Page, accept = true, passkey = false) {
     })
     .click();
 }
-const check = (page: Page) => page.getByRole('button', { name: 'Check current security settings', exact: true });
+const check = (page: Page) => page.getByRole('button', { name: 'Check security settings', exact: true });
 const retry = (page: Page) => page.getByRole('button', { name: 'Try this action again', exact: true });
+const unavailableReadback =
+  'Your security settings could not be verified. The result of the action is still unknown. Try checking again.';
+const absentSession = 'This session is not in the complete list. That does not show what the earlier sign-out did.';
+const unverifiedAction =
+  'Your session is no longer authorized. The result has not been verified. Sign in to check your security settings.';
 
 test('Recover uncertain credential and session actions with current native readback preserves exact native authority current-account binding explicit confirmation and unavailable states', async () => {
   const page = await open();
@@ -155,16 +172,11 @@ test('Recover uncertain credential and session actions with current native readb
     expect(await retry(page).count()).toBe(0);
     unavailable = true;
     await check(page).click();
-    await page.getByText('Current security settings could not be verified.', { exact: false }).waitFor();
+    await page.getByText(unavailableReadback, { exact: true }).waitFor();
     expect(await retry(page).count()).toBe(0);
     unavailable = false;
     await check(page).click();
-    await page
-      .getByText(
-        'This session is absent from the complete current inventory. This does not establish what the earlier command did.',
-        { exact: true },
-      )
-      .waitFor();
+    await page.getByText(absentSession, { exact: true }).waitFor();
     expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(1);
     expect(writes).toHaveLength(1);
   } finally {
@@ -185,12 +197,7 @@ test('unchanged readback allows only an explicitly confirmed exact-target retry;
     mode = 'accepted';
     await retry(page).click();
     await decide(page);
-    await page
-      .getByText(
-        'This session is absent from the complete current inventory. This does not establish what the earlier command did.',
-        { exact: true },
-      )
-      .waitFor();
+    await page.getByText(absentSession, { exact: true }).waitFor();
     expect(writes).toHaveLength(2);
     expect(writes[1]!.body).toEqual({ session_id: 'other' });
     expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(1);
@@ -205,7 +212,7 @@ test('current account switch and denied readback clear private data without disp
   try {
     actor = 'different-owner';
     await confirm(page);
-    await page.getByText('Your account or security authority changed.', { exact: false }).waitFor();
+    await page.getByText(unverifiedAction, { exact: true }).waitFor();
     expect(writes).toHaveLength(0);
     expect(await page.getByRole('heading', { name: 'Sessions', exact: true }).count()).toBe(0);
     await page.reload();
@@ -214,7 +221,7 @@ test('current account switch and denied readback clear private data without disp
     await check(page).waitFor();
     denied = true;
     await check(page).click();
-    await page.getByText('Your account or security authority changed.', { exact: false }).waitFor();
+    await page.getByText(unverifiedAction, { exact: true }).waitFor();
     expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
   } finally {
     await page.context().close();
@@ -228,7 +235,7 @@ test('lost passkey removal and current-session loss require sign-in without inve
     await decide(page, true, true);
     await check(page).waitFor();
     await check(page).click();
-    await page.getByText('The action result has not been verified.', { exact: false }).waitFor();
+    await page.getByText(unverifiedAction, { exact: true }).waitFor();
     expect(await page.getByText('Security key', { exact: true }).count()).toBe(0);
     expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
     expect(writes).toHaveLength(1);
@@ -264,13 +271,13 @@ test('actual browser BFF waiting is finite and a late acknowledgement cannot rep
       await route.fulfill({ response }).catch(() => {});
     });
     await check(page).click();
-    await page.getByText('Current security settings could not be verified.', { exact: false }).waitFor();
+    await page.getByText(unavailableReadback, { exact: true }).waitFor();
     expect(await retry(page).count()).toBe(0);
     release.resolve();
     readRelease.resolve();
     await page.unroute('**/_serverFn/**');
     await check(page).click();
-    await page.getByText('This session is absent from the complete current inventory.', { exact: false }).waitFor();
+    await page.getByText(absentSession, { exact: true }).waitFor();
     expect(writes).toHaveLength(1);
     expect(await retry(page).count()).toBe(0);
   } finally {
