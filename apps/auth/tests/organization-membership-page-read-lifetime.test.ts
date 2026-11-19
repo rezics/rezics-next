@@ -14,7 +14,7 @@ test('production browser membership read bounds ignored cancellation and preserv
         return options => { calls.push(options); return complete(options); };
       } }; return builder;
     } }));
-    const { loadMembershipPage } = await import('./apps/auth/src/organization-membership');
+    const { loadMembershipPage } = await import('./src/organization-membership');
     const [org, account] = [1, 2].map(n => '00000000-0000-4000-8000-' + String(n).padStart(12, '0'));
     const cursor = 'opaque/+cursor=';
     const ready = { kind: 'ready', organizationId: org,
@@ -52,7 +52,7 @@ test('production browser membership read bounds ignored cancellation and preserv
     timer.mockRestore();
   `,
     ],
-    { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' },
+    { cwd: `${import.meta.dir}/..`, stdout: 'pipe', stderr: 'pipe' },
   );
   const [output, error] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(await child.exited, output + error).toBe(0);
@@ -74,7 +74,7 @@ test('installed roster phases and selected receiving bound native streams before
     } }));
     mock.module('@tanstack/react-start/server', () => ({ getRequest: () => request, setResponseHeader() {} }));
     mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' } }));
-    const { loadMembershipPage, loadSelectedMembership } = await import('./apps/auth/src/organization-membership');
+    const { loadMembershipPage, loadSelectedMembership } = await import('./src/organization-membership');
     const { membershipResponseBytes } = await import('@rezics/auth-contract');
     const [org, account, reservationId] = [1,2,3].map(n => '00000000-0000-4000-8000-' + String(n).padStart(12,'0'));
     let calls = []; let mode = 'ready'; let cancel;
@@ -115,7 +115,7 @@ test('installed roster phases and selected receiving bound native streams before
     expect(await pending).toEqual({ kind: 'unavailable' }); expect(calls).toHaveLength(1);
   `,
     ],
-    { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' },
+    { cwd: `${import.meta.dir}/..`, stdout: 'pipe', stderr: 'pipe' },
   );
   const [out, err] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(await child.exited, out + err).toBe(0);

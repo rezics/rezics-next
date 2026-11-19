@@ -68,8 +68,8 @@ test('native maximum encrypted cursors pass the production inventory BFF validat
     mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' } }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityResponseLimits } = await import('@rezics/auth-contract');
-    const { securityCursors } = await import('./services/auth/src/security-cursor.ts');
-    const { loadInventory } = await import('./apps/auth/src/security-inventory.ts');
+    const { securityCursors } = await import('../../services/auth/src/security-cursor.ts');
+    const { loadInventory } = await import('./src/security-inventory.ts');
     const validateInventory = validators.find(validate => {
       try { return validate({ view: 'clients' }).view === 'clients'; }
       catch { return false; }
@@ -104,7 +104,7 @@ test('native maximum encrypted cursors pass the production inventory BFF validat
     expect(calls.length === before).toBe(true);
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -138,7 +138,7 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
     mock.module('cloudflare:workers', () => ({ env: workerEnv }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityResponseByteBudgets, securityResponseLimits } = await import('@rezics/auth-contract');
-    const { loadInventory } = await import('./apps/auth/src/security-inventory.ts');
+    const { loadInventory } = await import('./src/security-inventory.ts');
     const scopes = Array.from({ length: 4 }, (_, i) => 'x'.repeat(127) + i);
     const id = i => '\\u0000'.repeat(1024 - String(i).length) + i;
     const rows = view => Array.from({ length: 20 }, (_, i) => view === 'clients'
@@ -215,7 +215,7 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
     expect(calls.length).toBe(beforeStall + 1);
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -238,7 +238,7 @@ test('fixed Security readers apply the public byte caps before parsing and retir
       getRequest: () => new Request('https://auth.test/security', { headers: { origin: 'https://auth.test', cookie: 'fixture=session' }, signal }),
       setResponseHeader() {},
     }));
-    mock.module('./apps/auth/src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
+    mock.module('./src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
     mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:4' } }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityResponseByteBudgets, securityFixedResponseByteBudgets: fixed } = await import('@rezics/auth-contract');
@@ -270,9 +270,9 @@ test('fixed Security readers apply the public byte caps before parsing and retir
     globalThis.fetch = async (input, init) => { const path = new URL(String(input)).pathname; calls.push(path);
       if (init.headers.Cookie !== 'fixture=session' || init.cache !== 'no-store' || init.redirect !== 'manual') throw new Error('private transport changed');
       if (init.signal !== signal) throw new Error('BFF signal not forwarded'); return response(path); };
-    const { loadSecurityPage, loadPasskeyInventory } = await import('./apps/auth/src/security-inventory.ts');
-    const { readRegistrationPage } = await import('./apps/auth/src/registration-page.ts');
-    const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('./apps/auth/src/security.ts');
+    const { loadSecurityPage, loadPasskeyInventory } = await import('./src/security-inventory.ts');
+    const { readRegistrationPage } = await import('./src/registration-page.ts');
+    const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('./src/security.ts');
     expect((await loadSecurityPage()).kind).toBe('ready');
     expect((await loadPasskeyInventory()).ok).toBe(true);
     expect((await readRegistrationPage()).kind).toBe('already-signed-in');
@@ -327,7 +327,7 @@ test('fixed Security readers apply the public byte caps before parsing and retir
     globalThis.setTimeout = timer; clearTimeout(held);
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });

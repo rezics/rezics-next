@@ -29,7 +29,7 @@ test('loadManagementSession bounds the complete human proof and never approves r
     } };
     const { securityResponseByteBudgets, securityResponseLimits } = await import('@rezics/auth-contract');
     const { loadManagementSession, managementOperationProfile, managementProfileSessionMatches, approveManagementOperation } =
-      await import('./apps/auth/src/management-operations.ts');
+      await import('./src/management-operations.ts');
     const originalTimeout = globalThis.setTimeout;
     globalThis.setTimeout = (callback, delay, ...args) => originalTimeout(callback, delay === 5000 ? 10 : delay, ...args);
     const calls = [];
@@ -165,7 +165,7 @@ test('loadManagementSession bounds the complete human proof and never approves r
     console.log(JSON.stringify({ nativeGets: nativeGets.length, cap }));
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
+    cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
     stderr: 'pipe',
   });
