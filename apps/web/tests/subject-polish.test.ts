@@ -18,6 +18,7 @@ let browser: Browser | undefined;
 
 // The documented command, in its own process group so that Vite and workerd stop with it.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let subjectServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
@@ -30,20 +31,26 @@ function site(): Promise<string> {
   return started;
 }
 
-async function open(path: string, options: BrowserContextOptions = {}): Promise<Page> {
-  const origin = await site();
+async function open(path: string, options: BrowserContextOptions = {}, subjectOrigin?: string): Promise<Page> {
+  const origin = subjectOrigin ?? (await site());
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  await page.goto(
+    `${origin}${path}`,
+    subjectOrigin ? { waitUntil: 'domcontentloaded', timeout: 90_000 } : { waitUntil: 'networkidle' },
+  );
   // Actions before hydration reach server-rendered markup without handlers.
   if (options.javaScriptEnabled !== false) await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   return page;
 }
 
 afterAll(async () => {
-  await browser?.close();
-  await server?.stop();
+  try {
+    await browser?.close();
+  } finally {
+    await Promise.all([server?.stop(), subjectServer?.stop()]);
+  }
 });
 
 const bambooCutter = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e03';
@@ -51,8 +58,11 @@ const bambooCutter = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e03';
 test(
   'a subject page lists each property once, as one term followed by its values',
   async () => {
+    // This reading uses the app's fake Kernel, with its committed Subject data.
+    subjectServer = await startDevServer({ env: { KERNEL_ORIGIN: '' }, warmUpPaths: [] });
     for (const viewport of [desktop, phone]) {
-      const page = await open(`/en/subjects/${bambooCutter}`, { viewport });
+      const page = await open(`/en/subjects/${bambooCutter}`, { viewport }, subjectServer.origin);
+      await page.getByRole('heading', { name: 'The Tale of the Bamboo Cutter', level: 1, exact: true }).waitFor();
       const terms = await page.evaluate(() =>
         [...document.querySelectorAll('main dt')].map((term) => ({
           text: term.textContent?.trim() ?? '',
