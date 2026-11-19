@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 test('catalogue Web resolves compact messages and the same locale runtime in both Vite environments', async () => {
   const { mkdir, mkdtemp, rm, writeFile } = await import('node:fs/promises');
   const { createServer } = await import('vite');
-  const { catalogueParaglideImports, paraglideViteOptions } = await import('../scripts/paraglide-vite.ts');
+  const { catalogueParaglideImports, paraglideViteOptions, prepareCatalogueRuntime } =
+    await import('../scripts/paraglide-vite.ts');
   const scratch = resolve(import.meta.dir, '../../../.temp');
   await mkdir(scratch, { recursive: true });
   const root = await mkdtemp(resolve(scratch, 'catalogue-messages-'));
@@ -13,15 +14,19 @@ test('catalogue Web resolves compact messages and the same locale runtime in bot
   try {
     await mkdir(resolve(root, 'src'), { recursive: true });
     await mkdir(output, { recursive: true });
-    await writeFile(resolve(output, 'runtime.js'), "export const locale = 'ja';");
+    await writeFile(
+      resolve(output, 'runtime.js'),
+      "export let locale = 'en'; export function select(value) { locale = value; }",
+    );
     await writeFile(
       resolve(output, 'messages.js'),
       "import { locale } from './runtime.js'; export const m = { label: () => locale };",
     );
     await writeFile(
       resolve(root, 'src/visit.js'),
-      "import { m } from './paraglide/messages.js'; import { locale } from './paraglide/runtime'; export const labels = [m.label(), locale];",
+      "import { m } from './paraglide/messages.js'; import { locale, select } from './paraglide/runtime'; select('ja'); export const labels = [m.label(), locale];",
     );
+    await prepareCatalogueRuntime(root);
     server = await createServer({
       configFile: false,
       root,
@@ -30,8 +35,8 @@ test('catalogue Web resolves compact messages and the same locale runtime in bot
       optimizeDeps: { noDiscovery: true, include: [] },
     });
     const client = await server.environments.client!.transformRequest('/src/visit.js');
-    expect(client?.code).toContain('/.temp/catalogue-paraglide/messages.js');
-    expect(client?.code).toContain('/.temp/catalogue-paraglide/runtime.js');
+    expect(client?.code).toContain('/.temp/catalogue-paraglide-runtime/messages.js');
+    expect(client?.code).toContain('/.temp/catalogue-paraglide-runtime/runtime.js');
     expect((await server.ssrLoadModule('/src/visit.js')).labels).toEqual(['ja', 'ja']);
   } finally {
     await server?.close();
