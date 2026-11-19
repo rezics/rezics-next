@@ -1,52 +1,16 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
-import { afterAll, afterEach, beforeAll, mock } from 'bun:test';
+import { afterAll, afterEach, beforeAll, mock, spyOn } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useLayoutEffect, type ReactNode } from 'react';
 const { Window } = require(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))),
 );
-let currentSignal: AbortSignal | undefined;
-const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
-// Run Start's input validator before invoking the fixture's server handler.
-type ServerFnInput = { data?: unknown; signal?: AbortSignal | undefined };
-type ServerFnBuilder = {
-  validator(validate: (value: unknown) => unknown): ServerFnBuilder;
-  handler(handler: (context: ServerFnInput) => unknown): (options?: ServerFnInput) => unknown;
-};
-function serverFn(): ServerFnBuilder {
-  let validate = (value: unknown) => value;
-  const builder: ServerFnBuilder = {
-    validator: (check) => {
-      validate = check;
-      return builder;
-    },
-    handler: (handler) => (options) => {
-      currentSignal = options?.signal;
-      return handler({ data: validate(options?.data), signal: options?.signal });
-    },
-  };
-  return builder;
-}
-mock.module('@tanstack/react-start', () => ({
-  createServerFn: () => serverFn(),
-  createServerOnlyFn: <T extends (...args: never[]) => unknown>(handler: T) => handler,
-}));
 // Base UI may have been loaded by a preceding SSR test. Use the browser hook
 // for mounted tests even when Bun has cached the server-side module.
 const baseUi = Bun.resolveSync('@base-ui/react/alert-dialog', `${import.meta.dir}/../../../packages/ui`);
 mock.module(Bun.resolveSync('@base-ui/utils/useIsoLayoutEffect', dirname(baseUi)), () => ({
   useIsoLayoutEffect: useLayoutEffect,
 }));
-mock.module('cloudflare:workers', () => ({ env: nativeEnv }));
-mock.module('@tanstack/react-start/server', () => ({
-  getRequest: () =>
-    new Request('https://auth.test/_serverFn/session', {
-      headers: { origin: 'https://auth.test', cookie: 'auth_session=original' },
-      ...(currentSignal ? { signal: currentSignal } : {}),
-    }),
-  setResponseHeader() {},
-}));
-(globalThis as { __AUTH_ORIGIN__?: string }).__AUTH_ORIGIN__ = '';
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
 const globals = Object.fromEntries(
@@ -65,6 +29,7 @@ const globals = Object.fromEntries(
   ].map((key) => [key, (dom as unknown as Record<string, unknown>)[key]]),
 );
 Object.assign(globals, {
+  __AUTH_ORIGIN__: '',
   IS_REACT_ACT_ENVIRONMENT: true,
   fetch: globalThis.fetch,
   requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
@@ -76,39 +41,40 @@ for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
-// Bun does not compile Start's server-function bridge. Keep the native session
-// parser/byte reader while supplying the test's local issuer transport.
+// Mounted tests exercise browser session reads through their local transport.
 const nativeSession = await import('../src/account-session');
 const { readJsonBounded } = await import('../src/private-auth-json');
 const { securityResponseByteBudgets, securityScopeLimit } = await import('@rezics/auth-contract');
-mock.module('../src/account-session', () => ({
-  ...nativeSession,
-  requestAccountSession: async (signal: AbortSignal) => {
-    const response = await fetch('/session', { signal, credentials: 'same-origin', cache: 'no-store' });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status !== 200) return { kind: 'failure' };
-    return nativeSession.parseAccountSession(
-      await readJsonBounded(response, securityResponseByteBudgets(securityScopeLimit()).session, signal),
-      securityScopeLimit(),
-    );
-  },
-}));
+const readBrowserSession: typeof nativeSession.requestAccountSession = async (signal) => {
+  const response = await fetch('/session', { signal, credentials: 'same-origin', cache: 'no-store' });
+  if (response.status === 401) return { kind: 'signed-out' };
+  if (response.status !== 200) return { kind: 'failure' };
+  return nativeSession.parseAccountSession(
+    await readJsonBounded(response, securityResponseByteBudgets(securityScopeLimit()).session, signal),
+    securityScopeLimit(),
+  );
+};
 // Load DOM-aware UI modules only after installing the browser fixture.
 export const { fill, button, session } = await import('../src/stories/accounts-operations/story');
 const { createRoot } = await import('react-dom/client');
-const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const localeRuntime = await import('../src/paraglide/runtime.js');
 export const flush = (action: () => void) => act(async () => action());
 const roots = new Set<ReturnType<typeof createRoot>>();
 function installBrowser() {
-  overwriteGetLocale(() => 'en');
+  localeRuntime.overwriteGetLocale(() => 'en');
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
 export function creationFixture() {
   // A cached fixture module may follow a file whose afterAll restored the host realm.
   // Install now as well as in the hook: document-level setup runs during file evaluation.
+  const previousLocale = localeRuntime.getLocale;
+  let sessionRead: { mockRestore(): void } | undefined;
   installBrowser();
-  beforeAll(installBrowser);
+  beforeAll(() => {
+    installBrowser();
+    sessionRead = spyOn(nativeSession, 'requestAccountSession').mockImplementation(readBrowserSession);
+  });
   afterEach(async () => {
     try {
       await flush(() => {
@@ -121,7 +87,9 @@ export function creationFixture() {
       globalThis.fetch = globals.fetch;
     }
   });
-  afterAll(async () => {
+  afterAll(() => {
+    sessionRead?.mockRestore();
+    localeRuntime.overwriteGetLocale(previousLocale);
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
