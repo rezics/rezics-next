@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = join(import.meta.dir, '..');
 const stories = ['src/components/entity-picker.stories.tsx'];
 
 const typing = [
+  'Connected Selection Lifetime: passed',
   'Search As You Type: passed',
   'Select Several: passed',
   'Select With Keyboard: passed',
@@ -19,7 +19,7 @@ const states = [
   'Search Failed: passed',
   'Slow Search: passed',
 ];
-const layouts = ['Long Titles And Missing Data: passed', 'Phone Width: passed', 'Selected: passed'];
+const layouts = ['Long Titles And Missing Data: passed', 'Multiple Long Titles: passed', 'Selected: passed'];
 
 /** Runs the stories once for both tests. */
 const outcomes = (() => {
@@ -29,7 +29,9 @@ const outcomes = (() => {
 
 async function runStories(): Promise<string[]> {
   for (const file of stories) expect(existsSync(join(root, file)), file).toBe(true);
-  const output = mkdtempSync(join(tmpdir(), 'rezics-ui-entity-picker-'));
+  const temporary = join(root, '../../.temp');
+  mkdirSync(temporary, { recursive: true });
+  const output = mkdtempSync(join(temporary, 'entity-picker-'));
   const report = join(output, 'stories.json');
   try {
     const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`, ...stories], {
@@ -49,9 +51,7 @@ async function runStories(): Promise<string[]> {
     };
     return result.testResults
       .flatMap((file) => file.assertionResults)
-      .map((assertion) =>
-        `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
-      )
+      .map((assertion) => `${assertion.title}: ${assertion.status} ${assertion.failureMessages.join('\n')}`.trim())
       .sort();
   } finally {
     rmSync(output, { recursive: true, force: true });
