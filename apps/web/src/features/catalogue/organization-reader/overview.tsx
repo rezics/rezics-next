@@ -123,7 +123,10 @@ export function OrganizationOverview({
         />
       ) : (
         <>
-          <h2 tabIndex={-1} className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring">
+          <h2
+            tabIndex={-1}
+            className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring"
+          >
             {m.organization_reader_title({}, o)}
           </h2>
           <div className="min-w-0 max-w-3xl space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5">

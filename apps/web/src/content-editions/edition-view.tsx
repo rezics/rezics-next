@@ -40,12 +40,7 @@ export function ContentEditionReader({
   const signIn = page.state === 'refused' && page.status === 401;
   const retry =
     retryable && onRetry ? (
-      <Button
-        type="button"
-        variant={recoverable ? 'default' : 'outline'}
-        disabled={retrying}
-        onClick={onRetry}
-      >
+      <Button type="button" variant={recoverable ? 'default' : 'outline'} disabled={retrying} onClick={onRetry}>
         {m.content_edition_retry()}
       </Button>
     ) : null;

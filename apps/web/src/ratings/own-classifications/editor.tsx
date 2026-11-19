@@ -171,7 +171,11 @@ export function ClassificationEditor({
             />
             {m.subject_classification_assessment_lie({}, options)}
           </label>
-          <Button className="h-auto min-h-7 max-w-full whitespace-normal" disabled={!dirty} onClick={() => void send('PUT')}>
+          <Button
+            className="h-auto min-h-7 max-w-full whitespace-normal"
+            disabled={!dirty}
+            onClick={() => void send('PUT')}
+          >
             {m.subject_classification_assessment_change({}, options)}
           </Button>
           {dirty ? (
@@ -190,7 +194,11 @@ export function ClassificationEditor({
         </fieldset>
       ) : null}
       {clearAllowed && !locked ? (
-        <Button className="h-auto min-h-7 max-w-full whitespace-normal" variant="outline" onClick={() => current() && setConfirm(true)}>
+        <Button
+          className="h-auto min-h-7 max-w-full whitespace-normal"
+          variant="outline"
+          onClick={() => current() && setConfirm(true)}
+        >
           {m.subject_classification_assessment_withdraw({}, options)}
         </Button>
       ) : null}
@@ -200,9 +208,7 @@ export function ClassificationEditor({
           aria-label={m.subject_classification_assessment_withdraw({}, options)}
           className="flex flex-wrap items-center gap-2"
         >
-          <Button onClick={() => void send('DELETE')}>
-            {m.library_my_ratings_confirm_clear({}, options)}
-          </Button>
+          <Button onClick={() => void send('DELETE')}>{m.library_my_ratings_confirm_clear({}, options)}</Button>
           <Button variant="outline" onClick={() => current() && setConfirm(false)}>
             {m.library_my_ratings_cancel({}, options)}
           </Button>
@@ -248,9 +254,7 @@ export function ClassificationEditor({
         </div>
       ) : null}
       {feedback && feedback !== 'uncertain' ? (
-        <Button onClick={() => current() && void refresh()}>
-          {m.own_classifications_refresh({}, options)}
-        </Button>
+        <Button onClick={() => current() && void refresh()}>{m.own_classifications_refresh({}, options)}</Button>
       ) : null}
       {!setAllowed && !clearAllowed ? <p>{m.own_classifications_read_only({}, options)}</p> : null}
     </div>

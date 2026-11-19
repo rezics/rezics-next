@@ -154,7 +154,9 @@ export function VndbRowReview({
           {m.library_vndb_match({ status: row.match.status })}
         </p>
         {row.match.candidates.length ? (
-          <p className="h-auto break-words text-sm">{m.library_vndb_candidates({ ids: row.match.candidates.join(', ') })}</p>
+          <p className="h-auto break-words text-sm">
+            {m.library_vndb_candidates({ ids: row.match.candidates.join(', ') })}
+          </p>
         ) : null}
         {row.decision ? <p role="status">{m.library_vndb_review_status({ status: row.decision.status })}</p> : null}
         <ImportTarget target={targetId ?? row.decision?.targetId} />
@@ -231,11 +233,7 @@ export function VndbRowReview({
                   value={stateId || null}
                   onValueChange={(value) => setStateId(value ?? '')}
                 >
-                  <SelectTrigger
-                    id={`${id}-state`}
-                    aria-labelledby={`${id}-state-label`}
-                    className='w-full'
-                  >
+                  <SelectTrigger id={`${id}-state`} aria-labelledby={`${id}-state-label`} className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>

@@ -141,7 +141,8 @@ export function RecoveryPresentationChoices({
       {!pending && types === null ? (
         <Button
           type="button"
-          variant="outline" className="h-auto min-h-7 w-fit max-w-full text-start [overflow-wrap:anywhere]"
+          variant="outline"
+          className="h-auto min-h-7 w-fit max-w-full text-start [overflow-wrap:anywhere]"
           disabled={disabled}
           onClick={() => setAttempt((value) => value + 1)}
         >

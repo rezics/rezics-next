@@ -78,9 +78,9 @@ export function CollectionPublicationWorkspace({
           {sourceIdentity}
           {help ? <div className="max-w-prose text-sm leading-relaxed text-muted-foreground">{help}</div> : null}
         </header>
-      ) : (
-        sourceIdentity ? <header className="space-y-3">{sourceIdentity}</header> : null
-      )}
+      ) : sourceIdentity ? (
+        <header className="space-y-3">{sourceIdentity}</header>
+      ) : null}
       {modeNavigation}
 
       {mode === 'query' ? (

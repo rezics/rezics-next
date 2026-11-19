@@ -30,8 +30,7 @@ import { MusicContextCreateFields } from './music-context-create-fields';
 import { MusicContextCreateReview } from './music-context-create-review';
 
 const factsId = 'music-context-initial-facts';
-const formClass =
-  'inline-flex items-center justify-center whitespace-normal border';
+const formClass = 'inline-flex items-center justify-center whitespace-normal border';
 
 function MusicContextCreateSessionLive({ locale, initial }: { locale: string; initial: MusicContextCreateRead }) {
   const { state } = useSession();

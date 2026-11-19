@@ -50,10 +50,7 @@ export function SignupCredentials({
         aria-label={m.auth_signup_handle()}
         className="grid min-w-0 gap-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
       >
-        <Field
-          className="min-w-0 gap-2"
-          data-invalid={Boolean(errors.handle)}
-        >
+        <Field className="min-w-0 gap-2" data-invalid={Boolean(errors.handle)}>
           <FieldLabel htmlFor={ids.handle}>{m.auth_signup_handle()}</FieldLabel>
           <Input
             id={ids.handle}
@@ -87,10 +84,7 @@ export function SignupCredentials({
         <p className="max-w-prose text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {m.auth_signup_email()} · {m.auth_signup_password()}
         </p>
-        <Field
-          className="min-w-0 gap-2"
-          data-invalid={Boolean(errors.email)}
-        >
+        <Field className="min-w-0 gap-2" data-invalid={Boolean(errors.email)}>
           <FieldLabel htmlFor={ids.email}>{m.auth_signup_email()}</FieldLabel>
           <Input
             ref={emailRef}
@@ -111,10 +105,7 @@ export function SignupCredentials({
             {m.auth_signup_email_requirement({ maximum: String(requirements.email.maxLength) })}
           </p>
         </Field>
-        <Field
-          className="min-w-0 gap-2"
-          data-invalid={Boolean(errors.password)}
-        >
+        <Field className="min-w-0 gap-2" data-invalid={Boolean(errors.password)}>
           <FieldLabel htmlFor={ids.password}>{m.auth_signup_password()}</FieldLabel>
           <PasswordInput
             name="password"
@@ -137,10 +128,7 @@ export function SignupCredentials({
             })}
           </p>
         </Field>
-        <Field
-          className="min-w-0 gap-2"
-          data-invalid={Boolean(errors.confirmation)}
-        >
+        <Field className="min-w-0 gap-2" data-invalid={Boolean(errors.confirmation)}>
           <FieldLabel htmlFor={ids.confirmation}>{m.auth_signup_confirm_password()}</FieldLabel>
           <PasswordInput
             name="confirm"

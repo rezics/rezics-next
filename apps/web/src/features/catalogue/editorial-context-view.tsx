@@ -28,8 +28,7 @@ import { admits, lifecycleOperation } from '../contexts/model';
 import type { Actions, Result } from '../contexts/model';
 import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './context-settings-view';
 
-const actionControlClass =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
+const actionControlClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
 export const EditorialContextWorkspace = catalogueEditor(EditorialContextWorkspaceLive);

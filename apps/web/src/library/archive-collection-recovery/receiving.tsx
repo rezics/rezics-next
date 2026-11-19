@@ -117,12 +117,7 @@ export function ArchiveReceivingCollection({
           </Button>
         ) : null}
         {visible && visible.next !== null ? (
-          <Button
-            variant="outline"
-            type="button"
-            disabled={disabled}
-            onClick={(event) => onNext(visible.next!, event)}
-          >
+          <Button variant="outline" type="button" disabled={disabled} onClick={(event) => onNext(visible.next!, event)}>
             {m.library_archive_recovery_receiving_next()}
           </Button>
         ) : null}

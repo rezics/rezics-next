@@ -14,8 +14,7 @@ import { musicLocationSnapshot } from './model';
 import { useMusicLocationReading } from './reading/use-reading';
 import { useEndpointReturn } from './reading/focus';
 
-const action =
-  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const link = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<MusicLocationRead, { ok: true }>;
 

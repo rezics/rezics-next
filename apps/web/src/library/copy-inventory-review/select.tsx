@@ -28,7 +28,8 @@ export function CopyInventorySelect({
       aria-label={m.library_copy_compare_select_named({ position, title })}
       disabled={disabled}
       onClick={(event) => onSelect(event.currentTarget)}
-      variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+      variant="outline"
+      className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
     >
       {selected ? m.library_copy_compare_selected() : m.library_copy_compare_select()}
     </Button>

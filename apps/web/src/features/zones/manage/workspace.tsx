@@ -198,7 +198,11 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
     }
     inFlight.current = false;
     setBusy(false);
-    settlementFocus.focusResult(() => outcomeRegion.current, activation, () => !owner || owner.isCurrent(admission));
+    settlementFocus.focusResult(
+      () => outcomeRegion.current,
+      activation,
+      () => !owner || owner.isCurrent(admission),
+    );
     if (changed.kind === 'saved') {
       try {
         if (!owner || owner.isCurrent(admission)) await onReload();
@@ -435,10 +439,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
                       </div>
                     ) : (
                       <>
-                        <a
-                          className={cn(buttonVariants(), ownerControlClassName)}
-                          href={zoneLinks.edit}
-                        >
+                        <a className={cn(buttonVariants(), ownerControlClassName)} href={zoneLinks.edit}>
                           {m.zones_owner_configure_named({ title }, options)}
                         </a>
                         <a

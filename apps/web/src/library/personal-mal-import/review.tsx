@@ -1,4 +1,8 @@
-import { ImportPageNavigation, useImportPageFocus, type ImportPagePosition } from '../personal-list-import/page-navigation';
+import {
+  ImportPageNavigation,
+  useImportPageFocus,
+  type ImportPagePosition,
+} from '../personal-list-import/page-navigation';
 import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { MalOwnVoteReadback, MalPage, MalQuestion } from './contract';

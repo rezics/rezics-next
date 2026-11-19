@@ -55,7 +55,9 @@ export function SignupReturnView({
             {title}
           </h2>
           {checking ? (
-            <p className="max-w-prose" role="status">{m.auth_signup_return_checking()}</p>
+            <p className="max-w-prose" role="status">
+              {m.auth_signup_return_checking()}
+            </p>
           ) : unavailable ? (
             <ErrorAlert className="max-w-prose">{m.auth_signup_return_unavailable_body()}</ErrorAlert>
           ) : currentSession ? (
@@ -68,12 +70,7 @@ export function SignupReturnView({
             </AuthNotice>
           ) : null}
           {summary ? (
-            <AuthNotice
-              className={
-                summary.kind === 'created' ? 'max-w-prose' : 'max-w-prose'
-              }
-              role="status"
-            >
+            <AuthNotice className={summary.kind === 'created' ? 'max-w-prose' : 'max-w-prose'} role="status">
               {summary.kind === 'created' ? m.auth_signup_return_created_body() : m.auth_signup_return_unknown_body()}
             </AuthNotice>
           ) : null}

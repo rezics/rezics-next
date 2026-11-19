@@ -99,7 +99,10 @@ function OperationReader({
         <>
           <OperationDetails operation={operation} />
           {operation.action === 'remove_from_library' && (
-            <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={bulkOperationUndoHref(getLocale(), id)}>
+            <a
+              className={buttonVariants({ variant: 'link', size: 'sm' })}
+              href={bulkOperationUndoHref(getLocale(), id)}
+            >
               {m.library_bulk_undo_title()}
             </a>
           )}
@@ -125,8 +128,7 @@ function OperationReader({
               ))}
             </ul>
             {state?.page?.next && (
-              <Button type="button" variant="outline"
-        size="sm" onClick={() => void model.current?.more()}>
+              <Button type="button" variant="outline" size="sm" onClick={() => void model.current?.more()}>
                 {m.bulk_operation_more()}
               </Button>
             )}

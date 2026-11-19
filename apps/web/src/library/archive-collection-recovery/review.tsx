@@ -5,7 +5,17 @@ import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
 import { EvidenceDetails } from '../archive-progress-recovery/review';
 import { sectionLabel } from '../archive-entry-recovery/presentation';
-import { RECOVERY_SELECTED_OCCURRENCES, RECOVERY_ID, type RecoveryCollection, type RecoveryCollectionsPage, type RecoveryOccurrence, type RecoveryOccurrencesPage, type RecoveryReview, type RecoveryPresentationChoice, type RecoveryPresentationEvidence } from './contract';
+import {
+  RECOVERY_SELECTED_OCCURRENCES,
+  RECOVERY_ID,
+  type RecoveryCollection,
+  type RecoveryCollectionsPage,
+  type RecoveryOccurrence,
+  type RecoveryOccurrencesPage,
+  type RecoveryReview,
+  type RecoveryPresentationChoice,
+  type RecoveryPresentationEvidence,
+} from './contract';
 import { RecoveryPresentationChoices } from './presentation';
 import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } from './selection';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
@@ -53,7 +63,9 @@ function CollectionOption({
   return (
     <li className="grid min-w-0 gap-3 rounded-lg border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="grid min-w-0 gap-2">
-        <h3 className="h-auto break-words font-semibold">{collection.title || m.library_archive_recovery_untitled()}</h3>
+        <h3 className="h-auto break-words font-semibold">
+          {collection.title || m.library_archive_recovery_untitled()}
+        </h3>
         {collection.description ? <p className="h-auto break-words text-sm">{collection.description}</p> : null}
         <p className="text-sm text-muted-foreground">
           {m.library_archive_recovery_collection_members({ count: collection.memberCount })}
@@ -71,7 +83,8 @@ function CollectionOption({
       </div>
       <Button
         type="button"
-        variant="outline" className={actionClass}
+        variant="outline"
+        className={actionClass}
         disabled={disabled || !collection.eligible}
         onClick={() => onChoose(collection)}
       >
@@ -120,7 +133,8 @@ export function ArchiveCollectionChooser({
             </Button>
             {page.next ? (
               <Button
-                variant="outline" className={actionClass}
+                variant="outline"
+                className={actionClass}
                 type="button"
                 disabled={busy}
                 onClick={(event) => onNext(page.next!, event)}
@@ -176,7 +190,7 @@ function OccurrenceRow({
     <li className="grid min-w-0 gap-3 rounded-lg border p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
       <label className="flex items-center gap-3 sm:items-start sm:pt-1">
         <NativeCheckbox
-          className='shrink-0'
+          className="shrink-0"
           checked={selected}
           disabled={disabled || unavailable || (!selected && limitReached)}
           onChange={() => onToggle(row)}
@@ -251,7 +265,8 @@ export function ArchiveOccurrenceChooser({
           {m.library_archive_recovery_back_collections()}
         </Button>
         <Button
-          variant="outline" className={actionClass}
+          variant="outline"
+          className={actionClass}
           type="button"
           disabled={busy || !rows.some(canSelectOccurrence)}
           onClick={() => onTogglePage(rows)}
@@ -267,12 +282,24 @@ export function ArchiveOccurrenceChooser({
           </Button>
         ) : null}
         {showReviewAction && onReview ? (
-          <Button variant="outline" className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
+          <Button
+            variant="outline"
+            className={actionClass}
+            type="button"
+            disabled={busy || !selected.size}
+            onClick={onReview}
+          >
             {m.library_archive_recovery_open_review()}
           </Button>
         ) : null}
         {page.next ? (
-          <Button variant="outline" className={actionClass} type="button" disabled={busy} onClick={(event) => onPage(page.next!, event)}>
+          <Button
+            variant="outline"
+            className={actionClass}
+            type="button"
+            disabled={busy}
+            onClick={(event) => onPage(page.next!, event)}
+          >
             {m.library_archive_recovery_next_page()}
           </Button>
         ) : null}
@@ -517,19 +544,31 @@ export function ArchiveRecoveryReview({
           <EvidenceDetails value={review} title={m.library_archive_progress_exact()} />
           <label className="flex items-start gap-3 rounded-md bg-muted/40 p-3">
             <NativeCheckbox
-              className='mt-1 shrink-0'
+              className="mt-1 shrink-0"
               checked={confirmed}
               disabled={busy}
               onChange={(event) => setConfirmed(event.currentTarget.checked)}
             />
             <span>{m.library_archive_recovery_confirm_private()}</span>
           </label>
-          <Button type="button" variant="outline" className={actionClass} disabled={busy || !confirmed} onClick={onApply}>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={busy || !confirmed}
+            onClick={onApply}
+          >
             {busy ? m.library_archive_recovery_applying() : m.library_archive_recovery_apply_action()}
           </Button>
         </div>
       ) : (
-        <Button type="button" variant="outline" className={actionClass} disabled={busy || !selected.size} onClick={onSubmit}>
+        <Button
+          type="button"
+          variant="outline"
+          className={actionClass}
+          disabled={busy || !selected.size}
+          onClick={onSubmit}
+        >
           {m.library_archive_recovery_review_action()}
         </Button>
       )}

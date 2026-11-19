@@ -218,9 +218,11 @@ function AnnotationDialog({
             <p className="text-xs text-muted-foreground">
               {target.footnote
                 ? t('footnote')
-                : t(target.selection.empty || (panel === 'language' && scope === 'block')
-                  ? 'languageBlock'
-                  : 'languageSelection')}
+                : t(
+                    target.selection.empty || (panel === 'language' && scope === 'block')
+                      ? 'languageBlock'
+                      : 'languageSelection',
+                  )}
             </p>
             <bdi className="line-clamp-3 wrap-break-word">{target.footnote ?? targetText}</bdi>
           </div>

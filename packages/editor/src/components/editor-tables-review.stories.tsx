@@ -1,9 +1,4 @@
-import {
-  documentVersion,
-  normalizeDocument,
-  withDocumentIds,
-  type DocumentNode,
-} from '@rezics/document';
+import { documentVersion, normalizeDocument, withDocumentIds, type DocumentNode } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { Editor, JSONContent } from '@tiptap/core';
 import { useEditor } from '@tiptap/react';

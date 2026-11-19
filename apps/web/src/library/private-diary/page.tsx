@@ -134,13 +134,7 @@ export function PrivateDiaryPage({
       focusedReturn.current = null;
       return;
     }
-    const request = JSON.stringify([
-      address.year,
-      address.month,
-      address.cursor,
-      address.snapshot,
-      address.focus,
-    ]);
+    const request = JSON.stringify([address.year, address.month, address.cursor, address.snapshot, address.focus]);
     let focusRequest: { request: string; done: boolean };
     if (focusedReturn.current?.request === request) {
       focusRequest = focusedReturn.current;
@@ -301,12 +295,7 @@ export function PrivateDiaryPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold">{m.library_diary_heading()}</h1>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={closing}
-              onClick={() => void closeDiary()}
-            >
+            <Button type="button" variant="outline" disabled={closing} onClick={() => void closeDiary()}>
               {closing
                 ? m.library_diary_closing()
                 : activeCloseRetry
@@ -320,11 +309,7 @@ export function PrivateDiaryPage({
           <p role="status">{m.library_diary_cancel_unavailable()}</p>
         ) : null}
         {activeReplacementRetry ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void retryReplacementCancellation()}
-          >
+          <Button type="button" variant="outline" onClick={() => void retryReplacementCancellation()}>
             {m.library_selection_retry()}
           </Button>
         ) : null}
@@ -352,7 +337,7 @@ export function PrivateDiaryPage({
           <label className="block">
             <span className="mb-1 block text-sm font-medium">{m.library_diary_year_select()}</span>
             <Input
-              className='w-32'
+              className="w-32"
               inputMode="numeric"
               pattern="[0-9]{1,4}"
               required
@@ -364,7 +349,10 @@ export function PrivateDiaryPage({
             {m.library_diary_year_show()}
           </Button>
           <Link
-            className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
+            className={buttonVariants({
+              variant: 'outline',
+              className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+            })}
             to="/library/history"
             search={{ returnTo: currentReturn }}
           >
@@ -396,7 +384,13 @@ export function PrivateDiaryPage({
                       '[&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]',
                     ].join(' ')}
                   >
-                    <summary className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full cursor-pointer whitespace-normal [overflow-wrap:anywhere]' })}>
+                    <summary
+                      className={buttonVariants({
+                        variant: 'outline',
+                        className:
+                          'h-auto min-h-7 max-w-full cursor-pointer whitespace-normal [overflow-wrap:anywhere]',
+                      })}
+                    >
                       {m.library_diary_year_heading({ year: address.year })}
                     </summary>
                     <div className="mt-3 min-w-0">
@@ -433,7 +427,10 @@ export function PrivateDiaryPage({
                         </p>
                         <Link
                           to="/library"
-                          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
+                          className={buttonVariants({
+                            variant: 'outline',
+                            className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+                          })}
                         >
                           {m.library_history_open_library()}
                         </Link>
@@ -479,7 +476,10 @@ export function PrivateDiaryPage({
               <section className="min-w-0 rounded-md border p-4">
                 <p>{m.library_diary_stale()}</p>
                 <Link
-                  className={buttonVariants({ variant: 'outline', className: 'mt-2 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
+                  className={buttonVariants({
+                    variant: 'outline',
+                    className: 'mt-2 h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+                  })}
                   to="/library/history"
                   search={{
                     year: address.year,
@@ -501,7 +501,8 @@ export function PrivateDiaryPage({
                 <p>{m.library_diary_read_unavailable()}</p>
                 <Button
                   type="button"
-                  variant="outline" className='h-auto min-h-7 mt-2 max-w-full [overflow-wrap:anywhere]'
+                  variant="outline"
+                  className="h-auto min-h-7 mt-2 max-w-full [overflow-wrap:anywhere]"
                   onClick={() => void router.invalidate()}
                 >
                   {m.library_selection_retry()}
@@ -518,7 +519,8 @@ export function PrivateDiaryPage({
                       {previousAddress ? (
                         <Button
                           type="button"
-                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
+                          variant="outline"
+                          className="h-auto min-h-7 max-w-full [overflow-wrap:anywhere]"
                           onClick={(event) => moveWindow('previous', previousAddress, event.detail === 0)}
                         >
                           {m.library_continue_previous_window()}
@@ -527,7 +529,8 @@ export function PrivateDiaryPage({
                       {canStartFirst ? (
                         <Button
                           type="button"
-                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
+                          variant="outline"
+                          className="h-auto min-h-7 max-w-full [overflow-wrap:anywhere]"
                           onClick={(event) =>
                             moveWindow(
                               'first',
@@ -546,7 +549,8 @@ export function PrivateDiaryPage({
                       {visiblePage.next ? (
                         <Button
                           type="button"
-                          variant="outline" className='h-auto min-h-7 max-w-full [overflow-wrap:anywhere]'
+                          variant="outline"
+                          className="h-auto min-h-7 max-w-full [overflow-wrap:anywhere]"
                           onClick={(event) =>
                             moveWindow(
                               'next',

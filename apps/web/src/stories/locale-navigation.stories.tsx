@@ -66,8 +66,7 @@ function ReaderSurface({ journey }: { journey: Journey }) {
           {location.hash}
         </code>
       </p>
-      <Button type="button" variant="outline" size="sm" onClick={() => setDirty((value) => !value)}
-      >
+      <Button type="button" variant="outline" size="sm" onClick={() => setDirty((value) => !value)}>
         {dirty ? 'Draft is dirty' : 'Mark reader draft dirty'}
       </Button>
       {blocker.status === 'blocked' ? (
@@ -82,12 +81,10 @@ function ReaderSurface({ journey }: { journey: Journey }) {
           </h2>
           <p className="text-sm">The current editor asks before leaving this page.</p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => blocker.reset?.()}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => blocker.reset?.()}>
               Stay here
             </Button>
-            <Button type="button" variant="default" size="sm" onClick={() => blocker.proceed?.()}
-            >
+            <Button type="button" variant="default" size="sm" onClick={() => blocker.proceed?.()}>
               Leave reader
             </Button>
           </div>

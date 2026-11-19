@@ -157,7 +157,7 @@ export function AniListLabelAdoption({
             <label htmlFor={`${id}-search`}>{m.library_anilist_labels_search()}</label>
             <Input
               id={`${id}-search`}
-              className='w-full'
+              className="w-full"
               disabled={locked}
               value={query}
               onChange={(event) => {
@@ -170,7 +170,12 @@ export function AniListLabelAdoption({
               }}
             />
             <div className="flex flex-wrap gap-2">
-              <AniListAction type="button" variant="outline" disabled={locked || searching} onClick={() => void search()}>
+              <AniListAction
+                type="button"
+                variant="outline"
+                disabled={locked || searching}
+                onClick={() => void search()}
+              >
                 {m.library_anilist_labels_search()}
               </AniListAction>
               {searchFailed && failedSearch ? (
@@ -196,7 +201,10 @@ export function AniListLabelAdoption({
             </div>
             {searchFailed ? <p role="status">{m.library_anilist_labels_search_failed()}</p> : null}
             {targets ? (
-              <p className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]" data-anilist-label-search-provenance>
+              <p
+                className="h-auto text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                data-anilist-label-search-provenance
+              >
                 {m.library_anilist_labels_search()} · {query}
               </p>
             ) : null}
@@ -258,7 +266,7 @@ export function AniListLabelAdoption({
                               <SelectTrigger
                                 id={`${id}-${value.key}-target`}
                                 aria-labelledby={`${id}-${value.key}-target-label`}
-                                className='w-full'
+                                className="w-full"
                               >
                                 <SelectValue />
                               </SelectTrigger>
@@ -278,7 +286,7 @@ export function AniListLabelAdoption({
                               <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>
                               <Input
                                 id={`${id}-${value.key}-name`}
-                                className='w-full'
+                                className="w-full"
                                 disabled={locked}
                                 value={selection.target.name}
                                 onChange={(event) => target(value.key, { name: event.target.value })}

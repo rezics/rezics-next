@@ -8,7 +8,10 @@ import type { PersonField } from '../person-reader/model';
 import { factFieldAnchor, factVisitBounds } from './model';
 import { factControl, useFactVisit } from './visit';
 
-const factButton = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
+const factButton = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+);
 
 /** Read only visible assertion text: closed evidence and unrevealed spoilers never enter a filter. */
 function displayedText(node: Node): string {

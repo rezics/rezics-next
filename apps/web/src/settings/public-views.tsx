@@ -72,11 +72,7 @@ export function PublicViewsCard({
           {profile ? (
             <div className="divide-y">
               {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
-                <label
-                  key={view}
-                  htmlFor={`${ids}-${view}`}
-                  className="block w-full cursor-pointer px-3 py-2"
-                >
+                <label key={view} htmlFor={`${ids}-${view}`} className="block w-full cursor-pointer px-3 py-2">
                   <Field orientation="horizontal">
                     <FieldContent className="min-w-0 flex-1">
                       <FieldTitle className="whitespace-normal break-words">{viewLabels[view]}</FieldTitle>
@@ -94,10 +90,7 @@ export function PublicViewsCard({
                 </label>
               ))}
               {profile.kind === 'organization' ? (
-                <label
-                  htmlFor={`${ids}-speakers`}
-                  className="block w-full cursor-pointer px-3 py-2"
-                >
+                <label htmlFor={`${ids}-speakers`} className="block w-full cursor-pointer px-3 py-2">
                   <Field orientation="horizontal">
                     <FieldContent className="min-w-0 flex-1">
                       <FieldTitle className="whitespace-normal break-words">{m.settings_public_speakers()}</FieldTitle>

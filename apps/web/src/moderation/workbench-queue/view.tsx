@@ -232,7 +232,9 @@ export function WorkbenchView({
               admitted={page.state === 'ready' && isCurrent?.() !== false}
             />
           ) : (
-            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
+            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+              {m.moderation_workbench_intro()}
+            </p>
           )}
         </div>
       </header>
@@ -249,8 +251,8 @@ export function WorkbenchView({
           {m.moderation_workbench_catalogue_appeals()}
         </p>
       ) : null}
-      {((page.state === 'unavailable' && !search.history && onRetry && !(isWindowQueue && queueWindow?.retry)) ||
-        (page.state === 'stale' && !search.history && !(isWindowQueue && onWindowMove))) ? (
+      {(page.state === 'unavailable' && !search.history && onRetry && !(isWindowQueue && queueWindow?.retry)) ||
+      (page.state === 'stale' && !search.history && !(isWindowQueue && onWindowMove)) ? (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {page.state === 'unavailable' && !search.history && onRetry && !(isWindowQueue && queueWindow?.retry) ? (
             <Button data-workbench-retry type="button" className={control} onClick={onRetry}>
@@ -437,152 +439,152 @@ export function WorkbenchView({
             ) : null}
           </aside>
           <div className="min-w-0">
-          <section className="min-w-0 max-w-4xl space-y-5" aria-label={m.moderation_workbench_heading()}>
-          {!search.history ? (
-            <h2
-              tabIndex={isWindowQueue ? -1 : undefined}
-              {...(isWindowQueue ? { 'data-workbench-current-queue': '' } : {})}
-              className="text-xl font-semibold"
-            >
-              {search.queue === 'appeals'
-                ? m.moderation_workbench_queue_appeals()
-                : search.queue === 'resolved'
-                  ? m.moderation_workbench_queue_resolved()
-                  : m.moderation_workbench_queue_reports()}
-            </h2>
-          ) : null}
-          {search.history && scope.kind === 'board' ? (
-            <WorkbenchHistory
-              page={page.history ?? { state: page.state, entries: [], next: null }}
-              search={search}
-              windows={historyWindow}
-              onMove={onHistoryMove}
-              onClose={onHistoryClose}
-              onSearch={onSearch}
-              onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
-              {...(onRetry ? { onRetry } : {})}
-            />
-          ) : search.queue === 'appeals' && search.case && queueScope?.kind === 'board' ? (
-            <div className="space-y-4">
-              <WorkbenchAppeal
-                appealId={search.case}
-                {...(page.nativeSession ? { nativeSession: page.nativeSession } : {})}
-                page={{
-                  state: page.state,
-                  appeals: page.appeals ?? [],
-                  ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
-                }}
-                queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
-                {...(isCurrent ? { isCurrent } : {})}
-                {...(onRetry ? { onRetry } : {})}
-                {...(onRestart ? { onRestart } : {})}
-                {...(onReturnAppeal ? { onReturn: onReturnAppeal } : {})}
-                {...(onUnresolvedAppealChange ? { onUnresolvedChange: onUnresolvedAppealChange } : {})}
-              />
-              {onRefresh ? (
-                <Button
-                  className={control}
-                  variant="outline"
-                  disabled={refreshBlocked}
-                  onClick={() => void onRefresh()}
+            <section className="min-w-0 max-w-4xl space-y-5" aria-label={m.moderation_workbench_heading()}>
+              {!search.history ? (
+                <h2
+                  tabIndex={isWindowQueue ? -1 : undefined}
+                  {...(isWindowQueue ? { 'data-workbench-current-queue': '' } : {})}
+                  className="text-xl font-semibold"
                 >
-                  {m.moderation_queue_refresh()}
-                </Button>
+                  {search.queue === 'appeals'
+                    ? m.moderation_workbench_queue_appeals()
+                    : search.queue === 'resolved'
+                      ? m.moderation_workbench_queue_resolved()
+                      : m.moderation_workbench_queue_reports()}
+                </h2>
               ) : null}
-              {refreshBlocked ? <p role="status">{m.moderation_appeals_refresh_blocked()}</p> : null}
-            </div>
-          ) : search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
-            <p role="status" className="text-muted-foreground">
-              {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
-            </p>
-          ) : (
-            <>
-              {selection && boardId && onAction ? (
-                <div className="mb-4 rounded-xl border bg-muted/20 p-4">
-                <WorkbenchSelection
-                  controller={selection}
-                  boardId={boardId}
-                  reports={page.reports ?? []}
-                  onAction={onAction}
-                  {...(onRefresh ? { onRefresh } : {})}
+              {search.history && scope.kind === 'board' ? (
+                <WorkbenchHistory
+                  page={page.history ?? { state: page.state, entries: [], next: null }}
+                  search={search}
+                  windows={historyWindow}
+                  onMove={onHistoryMove}
+                  onClose={onHistoryClose}
+                  onSearch={onSearch}
+                  onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
+                  {...(onRetry ? { onRetry } : {})}
                 />
-                </div>
-              ) : null}
-              <ul key={identity} className="min-w-0 space-y-3">
-                {page.cases.map((item, index) => (
-                  <CaseRow
-                    key={`${item.kind}:${item.id}`}
-                    item={item}
-                    search={search}
-                    identity={identity}
-                    number={index + 1}
-                    {...(selection ? { selection } : {})}
+              ) : search.queue === 'appeals' && search.case && queueScope?.kind === 'board' ? (
+                <div className="space-y-4">
+                  <WorkbenchAppeal
+                    appealId={search.case}
+                    {...(page.nativeSession ? { nativeSession: page.nativeSession } : {})}
+                    page={{
+                      state: page.state,
+                      appeals: page.appeals ?? [],
+                      ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
+                    }}
+                    queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
                     {...(isCurrent ? { isCurrent } : {})}
-                    {...(onOpenCase ? { onOpenCase } : {})}
-                    requestDeparture={departure.requestNavigation}
+                    {...(onRetry ? { onRetry } : {})}
+                    {...(onRestart ? { onRestart } : {})}
+                    {...(onReturnAppeal ? { onReturn: onReturnAppeal } : {})}
+                    {...(onUnresolvedAppealChange ? { onUnresolvedChange: onUnresolvedAppealChange } : {})}
                   />
-                ))}
-              </ul>
-            </>
-          )}
-          {isWindowQueue ? (
-            <>
-              <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2 border-t pt-4">
-                {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
-                {next ? windowControl('next', m.threads_next_page(), true) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={control}
-                  disabled={!queueWindow?.refresh}
-                  onClick={(event) => {
-                    leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
-                  }}
-                >
-                  {m.moderation_workbench_refresh_window()}
-                </Button>
-                {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
-                {queueWindow?.retry && onRetryWindow ? (
+                  {onRefresh ? (
+                    <Button
+                      className={control}
+                      variant="outline"
+                      disabled={refreshBlocked}
+                      onClick={() => void onRefresh()}
+                    >
+                      {m.moderation_queue_refresh()}
+                    </Button>
+                  ) : null}
+                  {refreshBlocked ? <p role="status">{m.moderation_appeals_refresh_blocked()}</p> : null}
+                </div>
+              ) : search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
+                <p role="status" className="text-muted-foreground">
+                  {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
+                </p>
+              ) : (
+                <>
+                  {selection && boardId && onAction ? (
+                    <div className="mb-4 rounded-xl border bg-muted/20 p-4">
+                      <WorkbenchSelection
+                        controller={selection}
+                        boardId={boardId}
+                        reports={page.reports ?? []}
+                        onAction={onAction}
+                        {...(onRefresh ? { onRefresh } : {})}
+                      />
+                    </div>
+                  ) : null}
+                  <ul key={identity} className="min-w-0 space-y-3">
+                    {page.cases.map((item, index) => (
+                      <CaseRow
+                        key={`${item.kind}:${item.id}`}
+                        item={item}
+                        search={search}
+                        identity={identity}
+                        number={index + 1}
+                        {...(selection ? { selection } : {})}
+                        {...(isCurrent ? { isCurrent } : {})}
+                        {...(onOpenCase ? { onOpenCase } : {})}
+                        requestDeparture={departure.requestNavigation}
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+              {isWindowQueue ? (
+                <>
+                  <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2 border-t pt-4">
+                    {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
+                    {next ? windowControl('next', m.threads_next_page(), true) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={control}
+                      disabled={!queueWindow?.refresh}
+                      onClick={(event) => {
+                        leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
+                      }}
+                    >
+                      {m.moderation_workbench_refresh_window()}
+                    </Button>
+                    {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
+                    {queueWindow?.retry && onRetryWindow ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={control}
+                        data-workbench-retry
+                        onClick={(event) => {
+                          const source = event.currentTarget;
+                          const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+                          departure.requestNavigation(() => onRetryWindow(source, keyboard));
+                        }}
+                      >
+                        {queueWindow.retry === 'previous'
+                          ? m.moderation_workbench_retry_previous()
+                          : queueWindow.retry === 'next'
+                            ? m.moderation_workbench_retry_next()
+                            : queueWindow.retry === 'refresh'
+                              ? m.moderation_workbench_retry_refresh()
+                              : queueWindow.retry === 'first'
+                                ? m.moderation_workbench_retry_first()
+                                : m.moderation_workbench_retry_current()}
+                      </Button>
+                    ) : null}
+                  </nav>
+                  <p role="status" className="sr-only">
+                    {m.moderation_workbench_window_loaded()}
+                  </p>
+                </>
+              ) : null}
+              {!search.history && !search.case && next && !isWindowQueue ? (
+                <div className="border-t pt-4">
                   <Button
                     type="button"
-                    variant="outline"
                     className={control}
-                    data-workbench-retry
-                    onClick={(event) => {
-                      const source = event.currentTarget;
-                      const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-                      departure.requestNavigation(() => onRetryWindow(source, keyboard));
-                    }}
+                    onClick={() => onSearch(workbenchSearch({ ...search, cursor: next }))}
                   >
-                    {queueWindow.retry === 'previous'
-                      ? m.moderation_workbench_retry_previous()
-                      : queueWindow.retry === 'next'
-                        ? m.moderation_workbench_retry_next()
-                        : queueWindow.retry === 'refresh'
-                          ? m.moderation_workbench_retry_refresh()
-                          : queueWindow.retry === 'first'
-                            ? m.moderation_workbench_retry_first()
-                            : m.moderation_workbench_retry_current()}
+                    {m.threads_next_page()}
                   </Button>
-                ) : null}
-              </nav>
-              <p role="status" className="sr-only">
-                {m.moderation_workbench_window_loaded()}
-              </p>
-            </>
-          ) : null}
-          {!search.history && !search.case && next && !isWindowQueue ? (
-            <div className="border-t pt-4">
-              <Button
-                type="button"
-                className={control}
-                onClick={() => onSearch(workbenchSearch({ ...search, cursor: next }))}
-              >
-                {m.threads_next_page()}
-              </Button>
-            </div>
-          ) : null}
-          </section>
+                </div>
+              ) : null}
+            </section>
           </div>
         </section>
       ) : null}

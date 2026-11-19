@@ -39,7 +39,10 @@ export function BoardSortNav({
           params={{ id: boardId }}
           search={{ ...(option === 'active' ? {} : { sort: option }), ...(returnTo ? { returnTo } : {}) }}
           aria-current={option === sort ? 'page' : undefined}
-          className={cn(buttonVariants({ variant: option === sort ? 'secondary' : 'ghost', size: 'sm' }), sortLinkClass)}
+          className={cn(
+            buttonVariants({ variant: option === sort ? 'secondary' : 'ghost', size: 'sm' }),
+            sortLinkClass,
+          )}
         >
           {label(option)}
         </Link>

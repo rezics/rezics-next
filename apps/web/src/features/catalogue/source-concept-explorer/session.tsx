@@ -135,10 +135,7 @@ export function SourceConceptPublicSession({
           <a className={compactAction} href={publicVisit.origin.returnHref}>
             {m.concept_public_origin_return({}, options)}
           </a>
-          <a
-            className={compactAction}
-            href={conceptGlobalVisitHref(pathname, publicVisit.origin.returnHref)}
-          >
+          <a className={compactAction} href={conceptGlobalVisitHref(pathname, publicVisit.origin.returnHref)}>
             {m.concept_public_origin_global({}, options)}
           </a>
         </div>

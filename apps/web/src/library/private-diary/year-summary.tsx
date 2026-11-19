@@ -46,9 +46,7 @@ export function ReportedYearPanel({
   const locale = getLocale();
   const presentation = summary ? reportPresentation(summary, summary, locale) : null;
   const monthName = (month: number) =>
-    new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
-      new Date(Date.UTC(2000, month - 1, 1)),
-    );
+    new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2000, month - 1, 1)));
   return (
     <section aria-labelledby="library-diary-year-summary" className="space-y-4 rounded-lg border p-4">
       <h2 id="library-diary-year-summary" className="text-lg font-semibold">
@@ -64,8 +62,7 @@ export function ReportedYearPanel({
           <p className="text-sm">{presentation.unknownHistory}</p>
           {presentation.ownerCoverage ? <p className="text-sm">{presentation.ownerCoverage}</p> : null}
           <p className="min-w-0 break-all text-sm">
-            {presentation.snapshot.label}:{' '}
-            <bdi dir="ltr">{presentation.snapshot.revision}</bdi>
+            {presentation.snapshot.label}: <bdi dir="ltr">{presentation.snapshot.revision}</bdi>
           </p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {summary.months.map((bucket) => (

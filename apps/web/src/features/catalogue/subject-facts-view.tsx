@@ -586,7 +586,7 @@ function FactField({
               <Field orientation="horizontal" className="min-w-0">
                 <Checkbox
                   id={includeId}
-                 
+
                   checked={draft.included}
                   disabled={busy || locked}
                   onCheckedChange={(included) => onChange({ ...draft, included: included === true }, draft)}

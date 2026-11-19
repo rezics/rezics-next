@@ -259,7 +259,12 @@ function SelectedLoan({
         >
           {m.library_loans_inspect()}
         </h3>
-        <Button type="button" variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
+          onClick={onClose}
+        >
           {m.library_loans_close()}
         </Button>
       </header>

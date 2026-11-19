@@ -159,10 +159,9 @@ export function EditorTouchBar({
     .map(({ command }) => command)
     .filter(({ id }) => ['bold', 'italic', 'link', 'code'].includes(id));
   const compact = preset === 'compact';
-  const listCommands = availableCommands(schemaBlockCommands, editor).filter(({ id }) =>
-    id === 'bulletList' ||
-    (!compact && id === 'orderedList') ||
-    (preset === 'knowledge' && id === 'taskList'),
+  const listCommands = availableCommands(schemaBlockCommands, editor).filter(
+    ({ id }) =>
+      id === 'bulletList' || (!compact && id === 'orderedList') || (preset === 'knowledge' && id === 'taskList'),
   );
   const availableTabStops = [
     ...(!compact && state.canUndo ? ['undo'] : []),

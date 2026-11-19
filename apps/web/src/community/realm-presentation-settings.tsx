@@ -772,12 +772,7 @@ export function RealmAppearanceSettings({
         {state.phase === 'uploading' && state.uploadSlot === slot ? (
           <div role="status" className="flex min-w-0 flex-wrap items-center gap-3" data-upload-target={slot}>
             <p>{m.realm_appearance_uploading()}</p>
-            <Button
-              type="button"
-              variant="outline"
-              className={appearanceButtonClass}
-              onClick={control.cancelUpload}
-            >
+            <Button type="button" variant="outline" className={appearanceButtonClass} onClick={control.cancelUpload}>
               {m.editor_cancel()}
             </Button>
           </div>
@@ -795,12 +790,7 @@ export function RealmAppearanceSettings({
               >
                 {m.realm_appearance_retry_upload()}
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className={appearanceButtonClass}
-                onClick={control.cancelUpload}
-              >
+              <Button type="button" variant="ghost" className={appearanceButtonClass} onClick={control.cancelUpload}>
                 {m.editor_cancel()}
               </Button>
             </div>

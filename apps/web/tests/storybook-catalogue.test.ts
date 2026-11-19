@@ -123,7 +123,10 @@ describe('Storybook catalogue', () => {
       }
     }
     for (const title of ['Actions/Button', 'Forms/Checkbox', 'Media/Cover', 'Editor/Reading/Document Body'])
-      expect(uiStories.some((entry) => entry.title === title), title).toBe(true);
+      expect(
+        uiStories.some((entry) => entry.title === title),
+        title,
+      ).toBe(true);
     expect(Object.values(web.entries).some((entry) => entry.title === 'Overview')).toBe(true);
     expect(
       Object.values(web.entries).some((entry) => entry.title === 'Review' || entry.title.startsWith('Review/')),
@@ -382,9 +385,9 @@ describe('Storybook catalogue', () => {
     const phone = stories.find((entry) => entry.id === 'pages-discovery-search--active-facet');
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
-    expect(stories.some((entry) => entry.title === 'Library/Collections/Cover Wall' && entry.name === 'Mixed media wall')).toBe(
-      true,
-    );
+    expect(
+      stories.some((entry) => entry.title === 'Library/Collections/Cover Wall' && entry.name === 'Mixed media wall'),
+    ).toBe(true);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${server.url}index.html?path=/story/${pattern!.id}`);
     const frame = page.frameLocator('#storybook-preview-iframe');

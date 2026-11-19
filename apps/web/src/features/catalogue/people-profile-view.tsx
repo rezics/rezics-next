@@ -34,8 +34,7 @@ type Created = Extract<CreateResult, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type CorrectionReloadIntent = { opener: HTMLButtonElement; scope: string; completed: boolean };
 
-const peopleActionTarget =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const peopleActionTarget = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const peopleLinkTarget =
   'inline-flex max-w-full items-center whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 

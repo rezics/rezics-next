@@ -80,11 +80,7 @@ export function ProgressSessionWorkspace({
 
       {editing ? (
         phone ? (
-          <BottomSheet
-            open={editing}
-            onOpenChange={onEditorOpenChange}
-            title={m.library_progress_update()}
-          >
+          <BottomSheet open={editing} onOpenChange={onEditorOpenChange} title={m.library_progress_update()}>
             <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
             {alert ? (
               <p role="alert" className="rounded-lg border border-border bg-card p-3">
@@ -111,4 +107,3 @@ export function ProgressSessionWorkspace({
     </article>
   );
 }
-

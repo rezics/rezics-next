@@ -9,8 +9,7 @@ import { m } from '../../../paraglide/messages.js';
 import type { WorkTagReturnSelection } from './entry';
 import { conceptLabel, WORK_TAG_PAGE_SIZE, type WorkTagAssertion, type WorkTagProjection } from './model';
 
-const compactWrap =
-  'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
+const compactWrap = 'h-auto min-h-6 max-w-full justify-start whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function queryHref(path: string, params: URLSearchParams): string {
   const query = params.toString();

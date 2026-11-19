@@ -22,10 +22,7 @@ export function watchStageFocusMovement(tracker: StageFocusTracker): () => void 
     if (!handoff) return;
     if (event.type === 'focusin') {
       if (handoff.opener && event.target instanceof Node && handoff.opener.contains(event.target)) return;
-      if (
-        !canFocus(handoff.opener) &&
-        (event.target === document.body || event.target === document.documentElement)
-      ) {
+      if (!canFocus(handoff.opener) && (event.target === document.body || event.target === document.documentElement)) {
         return;
       }
     }
@@ -81,8 +78,7 @@ export function consumeStageFocusHandoff(
 
   const active = document.activeElement;
   const openerUnavailable = !canFocus(handoff.opener) && active === document.body;
-  const focusStayedWithAction =
-    active === handoff.opener || active === handoff.activeAtCapture || openerUnavailable;
+  const focusStayedWithAction = active === handoff.opener || active === handoff.activeAtCapture || openerUnavailable;
   if (!focusStayedWithAction) return;
 
   const focusTarget = handoff.restoreOpener && canFocus(handoff.opener) ? handoff.opener : target;

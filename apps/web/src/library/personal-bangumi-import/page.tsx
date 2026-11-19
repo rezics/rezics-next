@@ -19,7 +19,13 @@ import type { BangumiLabelPanelState } from './contract';
 import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
-import { captureStageFocusHandoff, consumeStageFocusHandoff, createStageFocusTracker, watchStageFocusMovement, type StageFocusTracker } from '../personal-import-stage-focus';
+import {
+  captureStageFocusHandoff,
+  consumeStageFocusHandoff,
+  createStageFocusTracker,
+  watchStageFocusMovement,
+  type StageFocusTracker,
+} from '../personal-import-stage-focus';
 
 function noticeText(notice: BangumiJourneySnapshot['notice']): string | null {
   if (!notice) return null;
@@ -117,7 +123,8 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
     );
   }, [visibleStage]);
   const labelPending = Object.values(labelPanels).some((panel) => panel.busy || panel.command !== null);
-  const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending || labelPending || inspectCancelled;
+  const locked =
+    snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending || labelPending || inspectCancelled;
 
   function captureStageAction(target: EventTarget | null) {
     const button = clickedButton(target);

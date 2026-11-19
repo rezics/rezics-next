@@ -445,7 +445,8 @@ function YearlyGoalScreen({
                   {m.library_yearly_goal_unavailable()}
                 </p>
                 {api && operation === null ? (
-                  <Button variant="outline"
+                  <Button
+                    variant="outline"
                     type="button"
                     className={actionClass}
                     disabled={busy}
@@ -513,7 +514,13 @@ function YearlyGoalScreen({
                         <Button variant="outline" type="submit" className={actionClass} disabled={busy}>
                           {m.library_yearly_goal_save()}
                         </Button>
-                        <Button variant="outline" type="button" className={actionClass} disabled={busy} onClick={cancel}>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className={actionClass}
+                          disabled={busy}
+                          onClick={cancel}
+                        >
                           {m.library_yearly_goal_cancel()}
                         </Button>
                       </div>
@@ -521,7 +528,8 @@ function YearlyGoalScreen({
                   ) : mode === 'clear' ? (
                     <div className="flex flex-wrap items-center gap-3">
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <Button variant="outline"
+                        <Button
+                          variant="outline"
                           ref={clearConfirmRef}
                           type="button"
                           className={actionClass}
@@ -541,7 +549,8 @@ function YearlyGoalScreen({
                   ) : (
                     <div className="flex flex-wrap gap-3">
                       {snapshot.viewer.actions.editTarget.allowed ? (
-                        <Button variant="outline"
+                        <Button
+                          variant="outline"
                           ref={editActionRef}
                           type="button"
                           className={actionClass}
@@ -552,7 +561,8 @@ function YearlyGoalScreen({
                         </Button>
                       ) : null}
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <Button variant="outline"
+                        <Button
+                          variant="outline"
                           ref={clearActionRef}
                           type="button"
                           className={actionClass}
@@ -577,7 +587,8 @@ function YearlyGoalScreen({
             {operation === 'stale' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_stale()}</p>
-                <Button variant="outline"
+                <Button
+                  variant="outline"
                   ref={refreshActionRef}
                   type="button"
                   className={actionClass}
@@ -588,7 +599,8 @@ function YearlyGoalScreen({
               </div>
             ) : null}
             {operation === 'review' ? (
-              <Button variant="outline"
+              <Button
+                variant="outline"
                 ref={refreshActionRef}
                 type="button"
                 className={actionClass}
@@ -600,14 +612,21 @@ function YearlyGoalScreen({
             {operation === 'uncertain' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_uncertain()}</p>
-                <Button variant="outline" ref={retryExactRef} type="button" className={actionClass} onClick={retryExact}>
+                <Button
+                  variant="outline"
+                  ref={retryExactRef}
+                  type="button"
+                  className={actionClass}
+                  onClick={retryExact}
+                >
                   {m.library_yearly_goal_retry_exact()}
                 </Button>
               </div>
             ) : null}
             {operation === 'denied' ? <p role="alert">{m.ctxw_denied()}</p> : null}
             {['unavailable', 'key-conflict', 'erased', 'invalid'].includes(operation ?? '') ? (
-              <Button variant="outline"
+              <Button
+                variant="outline"
                 ref={readbackRetryRef}
                 type="button"
                 className={actionClass}
@@ -632,7 +651,13 @@ function YearlyGoalScreen({
             )}
             <p className="text-sm text-muted-foreground">{m.library_yearly_goal_coverage()}</p>
             {snapshot && !pending ? (
-              <Button variant="outline" type="button" className={actionClass} disabled={busy} onClick={() => void refreshCurrent('manual')}>
+              <Button
+                variant="outline"
+                type="button"
+                className={actionClass}
+                disabled={busy}
+                onClick={() => void refreshCurrent('manual')}
+              >
                 {m.library_yearly_goal_refresh()}
               </Button>
             ) : null}

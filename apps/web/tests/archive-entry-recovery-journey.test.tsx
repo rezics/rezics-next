@@ -800,8 +800,9 @@ test('Working areas retain drafts and native confirmation, original retry, resul
     await act(async () => root.render(<ArchiveEntryRecoveryView journey={f.journey} />));
     expect(area('rows').hidden).toBe(false);
     expect(area('inventory').closest('details')!.open).toBe(false);
-    const drafts = [...area('rows').querySelectorAll<HTMLInputElement>('input:not([aria-hidden="true"])')]
-      .filter((input) => input.type === 'text');
+    const drafts = [...area('rows').querySelectorAll<HTMLInputElement>('input:not([aria-hidden="true"])')].filter(
+      (input) => input.type === 'text',
+    );
     expect(drafts.length).toBeGreaterThan(6);
     drafts.forEach((input, index) => {
       input.value = `unsent-${index}`;

@@ -45,7 +45,10 @@ const castLink = cn(
 );
 
 function optionClass(selected: boolean): string {
-  return cn(buttonVariants({ variant: selected ? 'default' : 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
+  return cn(
+    buttonVariants({ variant: selected ? 'default' : 'outline' }),
+    'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  );
 }
 
 function contextId(value: RowValue): string {
@@ -441,11 +444,7 @@ export function WorkCastWindow({
       </div>
       <p className="text-sm text-muted-foreground">{m.work_cast_window_scope({}, options)}</p>
       {previousWindowHref && (
-        <a
-          data-slot="previous-group"
-          href={previousWindowHref}
-          className={castLink}
-        >
+        <a data-slot="previous-group" href={previousWindowHref} className={castLink}>
           {m.work_cast_previous_window({}, options)}
         </a>
       )}

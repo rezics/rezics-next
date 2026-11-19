@@ -3,8 +3,22 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { LabelShelfEntry } from '../label-shelf-read';
 import { displayLibraryTitle } from '../title';
 import { m } from '../../paraglide/messages.js';
-import { beginReceivedReplacement, chooseReceivedObservation, emptyReceivedReading, receivedObservation, removeReceivedObservation, type ReceivedObservation, type ReceivedReading } from './selection';
-import { captureReceivedVisit, receivedReadingIsCurrent, receivedVisitMatches, type ReceivedReadSource, type ReceivedReadVisit } from './current';
+import {
+  beginReceivedReplacement,
+  chooseReceivedObservation,
+  emptyReceivedReading,
+  receivedObservation,
+  removeReceivedObservation,
+  type ReceivedObservation,
+  type ReceivedReading,
+} from './selection';
+import {
+  captureReceivedVisit,
+  receivedReadingIsCurrent,
+  receivedVisitMatches,
+  type ReceivedReadSource,
+  type ReceivedReadVisit,
+} from './current';
 import { ReceivedAssignmentReader } from './view';
 
 /** Local selection consumes the parent's read origin; it owns no requests, credentials or mutation selection. */

@@ -6,8 +6,7 @@ import type { Release } from '@rezics/definitions';
 import type { StoryArcInitialItem, StoryArcPreparedIdentity } from './story-arc-create-model';
 import { storyArcType } from './story-arc-profile';
 
-const action =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function StoryArcCreateReview({
   item,

@@ -15,12 +15,21 @@ import type { RecordingFact, RecordingField, RecordingGroup, RecordingVisit } fr
 import { recordingStatementDomId, recordingStatementReturnHref } from './review/navigation';
 import { useRecordingFactSelection } from './review/selection';
 
-const actionClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
-const buttonActionClass =
-  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'justify-center');
-const navigationActionClass =
-  cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'w-full justify-center sm:w-auto sm:justify-start');
+const actionClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+const buttonActionClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'justify-center',
+);
+const navigationActionClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'w-full justify-center sm:w-auto sm:justify-start',
+);
 
 const live = () => true;
 

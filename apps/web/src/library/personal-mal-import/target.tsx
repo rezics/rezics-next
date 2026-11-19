@@ -45,7 +45,7 @@ export function MalTargetSearch({
           data-mal-target
           value={typed}
           disabled={disabled}
-         
+
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

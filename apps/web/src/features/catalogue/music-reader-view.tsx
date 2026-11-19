@@ -28,8 +28,7 @@ import {
 } from './music-reader';
 import type { SubjectRead } from '@rezics/client';
 
-const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 type EditionNavigation = {
   window: AlbumEditionWindow;
@@ -153,10 +152,7 @@ export function ProfileSourceList({ sources, locale }: { sources: readonly Profi
           {sources.map((record) => (
             <li key={`${record.name}:${record.url}`} className="min-w-0 [overflow-wrap:anywhere]">
               {record.url.startsWith('https://') || record.url.startsWith('http://') ? (
-                <a
-                  href={record.url}
-                  className={`${linkClass} ${linkColor} inline-flex max-w-full items-center`}
-                >
+                <a href={record.url} className={`${linkClass} ${linkColor} inline-flex max-w-full items-center`}>
                   {record.name}
                 </a>
               ) : (

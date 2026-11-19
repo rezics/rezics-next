@@ -25,8 +25,7 @@ export function characterCreateDrafts(facts: readonly { id: number; fact: Statem
   }));
 }
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 
 export function CharacterCreateReview({
   item,

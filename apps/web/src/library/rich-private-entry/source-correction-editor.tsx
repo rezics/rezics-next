@@ -10,7 +10,20 @@ import type {
   PersonalEntrySourceCorrection,
   PersonalEntryTimestampInput,
 } from '@rezics/client';
-import { buildSourceCorrection, inspectSourceTimestamp, sourceCorrectionDraftOf, sourceCorrectionHasChanges, type CorrectionOperation, type PrivacyChoice, type PrivacyCorrectionDraft, type SourceCorrectionDraft, type SourceCorrectionIssue, type TimestampShape, type TimestampChoice, type TimestampCorrectionDraft } from './source-correction';
+import {
+  buildSourceCorrection,
+  inspectSourceTimestamp,
+  sourceCorrectionDraftOf,
+  sourceCorrectionHasChanges,
+  type CorrectionOperation,
+  type PrivacyChoice,
+  type PrivacyCorrectionDraft,
+  type SourceCorrectionDraft,
+  type SourceCorrectionIssue,
+  type TimestampShape,
+  type TimestampChoice,
+  type TimestampCorrectionDraft,
+} from './source-correction';
 
 export type SourceCorrectionNotice =
   | 'saved'
@@ -218,7 +231,7 @@ function ModeSelect({
         <SelectTrigger
           id={correctionModeSelectId}
           aria-labelledby={`${correctionModeSelectId}-label`}
-          className='w-full'
+          className="w-full"
         >
           <SelectValue />
         </SelectTrigger>
@@ -292,7 +305,7 @@ function PrivacyCorrectionField({
               <SelectTrigger
                 id={privacyKindSelectId}
                 aria-labelledby={`${privacyKindSelectId}-label`}
-                className='w-full'
+                className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -311,7 +324,7 @@ function PrivacyCorrectionField({
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_privacy_value()}</span>
               <Input
-                className='w-full'
+                className="w-full"
                 type="text"
                 maxLength={192}
                 value={draft.sourceValue}
@@ -400,7 +413,7 @@ function TimestampCorrectionField({
               <SelectTrigger
                 id={timestampKindSelectId}
                 aria-labelledby={`${timestampKindSelectId}-label`}
-                className='w-full'
+                className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -420,7 +433,7 @@ function TimestampCorrectionField({
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_timestamp_text()}</span>
               <Input
                 id={valueId}
-                className='w-full font-mono'
+                className="w-full font-mono"
                 type="text"
                 inputMode="text"
                 autoComplete="off"
@@ -440,7 +453,7 @@ function TimestampCorrectionField({
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_timestamp_value()}</span>
               <Input
-                className='w-full font-mono'
+                className="w-full font-mono"
                 type="text"
                 inputMode="text"
                 autoComplete="off"
@@ -605,12 +618,7 @@ export function SourceCorrectionEditor({
         <div className="space-y-2 rounded-md border border-amber-500/50 p-3" role="status">
           <p>{m.library_rich_entry_source_unknown_outcome()}</p>
           {pending ? (
-            <Button
-              type="button"
-              variant="default"
-              disabled={disabled}
-              onClick={onRetry}
-            >
+            <Button type="button" variant="default" disabled={disabled} onClick={onRetry}>
               {m.library_rich_entry_source_retry_original()}
             </Button>
           ) : null}
@@ -624,11 +632,7 @@ export function SourceCorrectionEditor({
             <CurrentFacts observation={current} />
           </div>
           {current && current.revision !== conflictRevision ? (
-            <Button
-              type="button"
-              variant="default"
-              onClick={onReviewLatest}
-            >
+            <Button type="button" variant="default" onClick={onReviewLatest}>
               {m.library_rich_entry_review_latest()}
             </Button>
           ) : (
@@ -644,11 +648,7 @@ export function SourceCorrectionEditor({
           <p>{m.library_rich_entry_source_revision_changed()}</p>
           <CurrentFacts observation={current} />
           {current && basisIsCurrent ? (
-            <Button
-              type="button"
-              variant="default"
-              onClick={onReviewLatest}
-            >
+            <Button type="button" variant="default" onClick={onReviewLatest}>
               {m.library_rich_entry_review_latest()}
             </Button>
           ) : null}
@@ -724,14 +724,10 @@ export function SourceCorrectionEditor({
       </section>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Button
-          type="submit"
-          variant="default" className='w-full sm:w-auto'
-          disabled={!canSubmit}
-        >
+        <Button type="submit" variant="default" className="w-full sm:w-auto" disabled={!canSubmit}>
           {m.library_rich_entry_save_source_correction()}
         </Button>
-        <Button type="button" variant="outline" className='w-full sm:w-auto' onClick={onCancel}>
+        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onCancel}>
           {m.library_rich_entry_cancel()}
         </Button>
       </div>

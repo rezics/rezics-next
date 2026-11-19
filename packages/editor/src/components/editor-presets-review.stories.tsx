@@ -93,13 +93,7 @@ function reviewLabel(preset: EditorPreset, readOnly: boolean): string {
   return 'Chapter draft';
 }
 
-function PresetReviewHost({
-  preset = 'writing',
-  readOnly = false,
-}: {
-  preset?: EditorPreset;
-  readOnly?: boolean;
-}) {
+function PresetReviewHost({ preset = 'writing', readOnly = false }: { preset?: EditorPreset; readOnly?: boolean }) {
   const [document, setDocument] = useState<DocumentSnapshot>(() => reviewDocument(preset));
   const [preferences, setPreferences] = useState<EditorPreferences>({});
   const [saves, setSaves] = useState(0);
@@ -154,9 +148,17 @@ function PresetReviewHost({
       {!readOnly ? (
         <>
           <p role="status" className="text-sm text-muted-foreground">
-            {invalid ? 'Draft needs repair' : pending ? 'Preparing draft' : document !== saved ? 'Unsaved changes' : 'Draft saved'}
+            {invalid
+              ? 'Draft needs repair'
+              : pending
+                ? 'Preparing draft'
+                : document !== saved
+                  ? 'Unsaved changes'
+                  : 'Draft saved'}
           </p>
-          <output className="sr-only" aria-label="Saved drafts">{saves}</output>
+          <output className="sr-only" aria-label="Saved drafts">
+            {saves}
+          </output>
         </>
       ) : null}
     </form>

@@ -194,7 +194,9 @@ export function CreatorOfferInspection({
           <p className="text-sm">
             {recordedTaxBehavior(offer) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
           </p>
-          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_inspect_price_meaning()}</p>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {m.creator_inspect_price_meaning()}
+          </p>
           {!recordedMoneyUnit(offer) && (
             <p className="max-w-prose text-sm leading-relaxed">{m.creator_inspect_unknown_money()}</p>
           )}

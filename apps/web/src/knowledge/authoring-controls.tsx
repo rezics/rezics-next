@@ -7,8 +7,7 @@ import {
   type KnowledgeTemplateKind,
 } from './authoring.ts';
 
-const controlClass =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words leading-snug';
+const controlClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words leading-snug';
 
 function localeOptions(locale: string) {
   return { locale: locale as never };

@@ -172,12 +172,7 @@ function CopyLink({ href, copyOnly }: { href: string; copyOnly: boolean }) {
       <Menu
         title={m.thread_content_more_actions()}
         trigger={
-          <Button
-            ref={trigger}
-            variant="ghost"
-            size="icon"
-            aria-label={m.thread_content_more_actions()}
-          >
+          <Button ref={trigger} variant="ghost" size="icon" aria-label={m.thread_content_more_actions()}>
             <EllipsisIcon />
           </Button>
         }

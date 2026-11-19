@@ -42,15 +42,7 @@ export function VndbWorkspace({
 }
 
 /** Keep native row context in reading order and its consequential action beside it on wide screens. */
-export function VndbStage({
-  stage,
-  children,
-  actions,
-}: {
-  stage: string;
-  children: ReactNode;
-  actions: ReactNode;
-}) {
+export function VndbStage({ stage, children, actions }: { stage: string; children: ReactNode; actions: ReactNode }) {
   return (
     <section
       className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)]"

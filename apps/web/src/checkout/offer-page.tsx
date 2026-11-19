@@ -161,7 +161,9 @@ function OfferPurchase({
             </span>
           </p>
           <div className="space-y-4 border-t pt-4">
-            <p className="text-sm text-muted-foreground">{m.offer_terms_revision({ revision: String(offer.revision) })}</p>
+            <p className="text-sm text-muted-foreground">
+              {m.offer_terms_revision({ revision: String(offer.revision) })}
+            </p>
             {note && (
               <Alert role="status">
                 <AlertDescription className="text-foreground">{note}</AlertDescription>

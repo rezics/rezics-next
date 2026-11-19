@@ -121,7 +121,11 @@ type StageFocusAction = {
 };
 
 function visibleHeading(heading: HTMLHeadingElement | null): heading is HTMLHeadingElement {
-  if (!heading?.isConnected || heading.getClientRects().length === 0 || heading.closest('[hidden], [aria-hidden="true"]'))
+  if (
+    !heading?.isConnected ||
+    heading.getClientRects().length === 0 ||
+    heading.closest('[hidden], [aria-hidden="true"]')
+  )
     return false;
   const style = heading.ownerDocument.defaultView?.getComputedStyle(heading);
   return style?.display !== 'none' && style?.visibility !== 'hidden';

@@ -14,8 +14,7 @@ import {
   type PublicationTerm,
 } from './publication-editor-guidance';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 
 export function PublicationReview({
   id,

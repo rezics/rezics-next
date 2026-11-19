@@ -23,7 +23,10 @@ export function OperatorTransferReturnView({
 }) {
   if (!entries.length) return null;
   return (
-    <section aria-labelledby="transfer-return-heading" className="space-y-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10">
+    <section
+      aria-labelledby="transfer-return-heading"
+      className="space-y-3 rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
+    >
       <h2
         id="transfer-return-heading"
         ref={focusRef}

@@ -259,12 +259,24 @@ export function ReporterHistoryPage({
         {result.state === 'loaded' && result.page.state === 'ready' && (onPrevious || onFirst) ? (
           <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
             {onPrevious ? (
-              <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onPrevious()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
+                onClick={() => void onPrevious()}
+              >
                 {m.library_collections_previous()}
               </Button>
             ) : null}
             {onFirst ? (
-              <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onFirst()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
+                onClick={() => void onFirst()}
+              >
                 {m.library_collections_first_page()}
               </Button>
             ) : null}
@@ -377,7 +389,13 @@ function ReporterHistoryResults({
       ) : null}
       {page.state === 'ready' && page.nextCursor !== null ? (
         <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap justify-end border-t pt-5">
-          <Button type="button" variant="outline" size="sm" className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere" onClick={() => void onContinue()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto min-h-6 max-w-full whitespace-normal wrap-anywhere"
+            onClick={() => void onContinue()}
+          >
             {m.reporter_history_continue()}
           </Button>
         </nav>
@@ -510,9 +528,7 @@ function HistoryEntry({
 function HistoryReference({ entry }: { entry: ReporterHistoryEntry }) {
   return (
     <details className="text-sm">
-      <summary className="w-fit cursor-pointer font-medium">
-        {m.reporter_status_reference()}
-      </summary>
+      <summary className="w-fit cursor-pointer font-medium">{m.reporter_status_reference()}</summary>
       <dl className="relative z-20 space-y-3 pb-2">
         <div>
           <dt className="text-muted-foreground">{m.reporter_status_report_id()}</dt>

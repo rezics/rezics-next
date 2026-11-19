@@ -283,10 +283,7 @@ function RealmClaimControlsContent({
           ) : null}
         </header>
         {orphan ? (
-          <section
-            aria-labelledby={`${id}-episode`}
-            className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4"
-          >
+          <section aria-labelledby={`${id}-episode`} className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4">
             <ContentItemHeading level={3} id={`${id}-episode`} className="text-base font-semibold">
               {m.realm_claim_orphaned()}
             </ContentItemHeading>

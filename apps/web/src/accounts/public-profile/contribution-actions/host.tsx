@@ -403,10 +403,7 @@ export function ContributionActionsHost({
         <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
           {signInHref ? (
             <p className="text-sm">
-              <a
-                href={signInHref}
-                className="inline-flex items-center text-primary underline underline-offset-4"
-              >
+              <a href={signInHref} className="inline-flex items-center text-primary underline underline-offset-4">
                 {m.profile_contribution_actions_sign_in()}
               </a>
             </p>

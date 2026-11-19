@@ -80,7 +80,9 @@ export function ReceivedEntryDates({
         <dd className="h-auto min-w-0 break-words">
           <Instant value={entry.updatedAt} locale={locale} isCurrent={isCurrent} />
         </dd>
-        <dt className="h-auto break-words text-muted-foreground">{m.library_entry_reading_last_activity({}, options)}</dt>
+        <dt className="h-auto break-words text-muted-foreground">
+          {m.library_entry_reading_last_activity({}, options)}
+        </dt>
         <dd className="h-auto min-w-0 break-words">
           <DateValue value={entry.lastActivityAt} locale={locale} isCurrent={isCurrent} />
         </dd>

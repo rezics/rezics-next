@@ -227,10 +227,15 @@ export function RelatedWorkCreate({
         if (!token || (event.key !== 'Enter' && event.key !== ' ')) return;
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
-        const submitter = target.closest<HTMLElement>('button[type="submit"], input[type="submit"], input[type="image"]');
+        const submitter = target.closest<HTMLElement>(
+          'button[type="submit"], input[type="submit"], input[type="image"]',
+        );
         if (submitter) pendingOpener.current = submitter;
-        else if (event.key === 'Enter' && target instanceof HTMLInputElement &&
-          !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'hidden'].includes(target.type))
+        else if (
+          event.key === 'Enter' &&
+          target instanceof HTMLInputElement &&
+          !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'hidden'].includes(target.type)
+        )
           pendingOpener.current = target;
       }}
       onClickCapture={(event) => {
@@ -241,14 +246,19 @@ export function RelatedWorkCreate({
           pendingOpener.current = event.detail === 0 && event.nativeEvent.isTrusted ? button : null;
       }}
     >
-      {token && loadedToken === token && !visibleHandoff && <p role="alert">{m.related_work_handoff_invalid({}, options)}</p>}
+      {token && loadedToken === token && !visibleHandoff && (
+        <p role="alert">{m.related_work_handoff_invalid({}, options)}</p>
+      )}
       {visibleHandoff && (
         <section aria-labelledby={titleId} className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
           <h2 id={titleId} className="text-lg font-semibold">
             {m.related_work_source({}, options)}
           </h2>
           <p>
-            {m.related_work_create_context({ relation: visibleHandoff.propertyLabel, source: visibleHandoff.sourceLabel }, options)}
+            {m.related_work_create_context(
+              { relation: visibleHandoff.propertyLabel, source: visibleHandoff.sourceLabel },
+              options,
+            )}
           </p>
           {sourceHref && (
             <a className={`${buttonVariants({ variant: 'outline' })}`} href={sourceHref}>
@@ -258,38 +268,49 @@ export function RelatedWorkCreate({
           <p className="text-sm text-muted-foreground">{m.related_work_distinct({}, options)}</p>
         </section>
       )}
-      {(!token || visibleHandoff) && <div ref={createRoot}><CreateSubjectForm
-        locale={locale}
-        session={session}
-        transport={transport}
-        onCreated={(result) => {
-          if (visibleHandoff) recordCreated(result);
-        }}
-        onNavigate={visibleHandoff ? () => setInlineDestination((value) => value + 1) : onNavigate}
-        {...(restoredId ? { restoredAcknowledgementId: restoredId } : {})}
-        {...(!token && identityIntake ? { identityIntake } : {})}
-        {...(visibleHandoff
-          ? {
-              typeAdmission: {
-                offered,
-                unavailable,
-                admitType: (type: CreateType) => {
-                  const admitted = relatedWorkTargetAdmitted(type.id, type.bases ?? [], visibleHandoff.targets);
-                  if (admitted) selectedBases.current = type.bases ?? [];
-                  return admitted;
-                },
-              },
-            }
-          : {})}
-      /></div>}
+      {(!token || visibleHandoff) && (
+        <div ref={createRoot}>
+          <CreateSubjectForm
+            locale={locale}
+            session={session}
+            transport={transport}
+            onCreated={(result) => {
+              if (visibleHandoff) recordCreated(result);
+            }}
+            onNavigate={visibleHandoff ? () => setInlineDestination((value) => value + 1) : onNavigate}
+            {...(restoredId ? { restoredAcknowledgementId: restoredId } : {})}
+            {...(!token && identityIntake ? { identityIntake } : {})}
+            {...(visibleHandoff
+              ? {
+                  typeAdmission: {
+                    offered,
+                    unavailable,
+                    admitType: (type: CreateType) => {
+                      const admitted = relatedWorkTargetAdmitted(type.id, type.bases ?? [], visibleHandoff.targets);
+                      if (admitted) selectedBases.current = type.bases ?? [];
+                      return admitted;
+                    },
+                  },
+                }
+              : {})}
+          />
+        </div>
+      )}
       {returnedIdentity && (
         <div className="flex flex-wrap gap-3">
-          <Button ref={returnButton} type="button" variant="outline" onClick={() => returnWithIdentity(returnedIdentity)}>
+          <Button
+            ref={returnButton}
+            type="button"
+            variant="outline"
+            onClick={() => returnWithIdentity(returnedIdentity)}
+          >
             {m.related_work_return_to_draft({}, options)}
           </Button>
-          {restoredId && <a className={buttonVariants({ variant: 'outline' })} href={subjectHref(returnedIdentity, locale).href}>
-            {m.catalogue_create_open({}, options)}
-          </a>}
+          {restoredId && (
+            <a className={buttonVariants({ variant: 'outline' })} href={subjectHref(returnedIdentity, locale).href}>
+              {m.catalogue_create_open({}, options)}
+            </a>
+          )}
         </div>
       )}
       {visibleHandoff && visibleHandoff.phase === 'creating' && !visibleHandoff.createdId && (

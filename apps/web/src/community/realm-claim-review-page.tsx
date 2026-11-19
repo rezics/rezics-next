@@ -80,10 +80,7 @@ function ClaimantName({ request }: { request: RealmClaimReviewRequest }) {
       ? request.claimant.label
       : m.realm_review_claimant();
   return request.claimant?.href ? (
-    <a
-      href={request.claimant.href}
-      className="inline-block max-w-full content-center underline underline-offset-4 "
-    >
+    <a href={request.claimant.href} className="inline-block max-w-full content-center underline underline-offset-4 ">
       <bdi>{label}</bdi>
     </a>
   ) : (

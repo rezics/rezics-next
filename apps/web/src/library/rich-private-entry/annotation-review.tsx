@@ -68,12 +68,7 @@ function ReviewField({
         </div>
       </dl>
       <p className="text-sm text-muted-foreground">{help}</p>
-      <Button
-        type="button"
-        variant="outline" className='w-full sm:w-auto'
-        disabled={disabled}
-        onClick={onEdit}
-      >
+      <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={disabled} onClick={onEdit}>
         {editLabel}
       </Button>
     </div>
@@ -155,23 +150,20 @@ export function AnnotationReview({
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           type="button"
-          variant="default" className='w-full sm:w-auto'
+          variant="default"
+          className="w-full sm:w-auto"
           disabled={blocked || submitted}
           onClick={onSave}
         >
           {m.library_rich_entry_save()}
         </Button>
-        <Button
-          type="button"
-          variant="outline" className='w-full sm:w-auto'
-          disabled={submitted}
-          onClick={onClose}
-        >
+        <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={submitted} onClick={onClose}>
           {m.library_annotation_back()}
         </Button>
         <Button
           type="button"
-          variant="outline" className='w-full sm:w-auto'
+          variant="outline"
+          className="w-full sm:w-auto"
           disabled={submitted}
           onClick={(event) => onDiscard(event.currentTarget)}
         >

@@ -1,12 +1,23 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { FilterDocument } from '@rezics/filter';
-import { collectionFacetRequest, loadCollectionFacetValues, type CollectionFacetLoader } from '../collection-facet-values';
+import {
+  collectionFacetRequest,
+  loadCollectionFacetValues,
+  type CollectionFacetLoader,
+} from '../collection-facet-values';
 import { RuleEditLink } from '../saved-query-results';
 import { useCollectionOwnerCurrent } from '../collection-owner-current';
 import { requestLanguages } from '../../kernel/languages';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
-import { disclosedValueLabel, savedFilterFacetBatches, savedFilterFacetType, savedFilterReviewTree, type CurrentFieldState, type ReviewTree } from './model';
+import {
+  disclosedValueLabel,
+  savedFilterFacetBatches,
+  savedFilterFacetType,
+  savedFilterReviewTree,
+  type CurrentFieldState,
+  type ReviewTree,
+} from './model';
 import { readSavedFilterReview, type SavedFilterReviewPage } from './read';
 import { Button } from '@rezics/ui/shadcn/button';
 
@@ -391,7 +402,8 @@ export function SavedFilterReviewPanel({
       <Button
         ref={openerRef}
         type="button"
-        variant="outline" className={reviewButtonClass}
+        variant="outline"
+        className={reviewButtonClass}
         aria-expanded={expanded}
         aria-controls={expanded ? panelId : undefined}
         disabled={!authorized || shown.phase === 'reading'}
@@ -442,7 +454,8 @@ export function SavedFilterReviewPanel({
             </div>
             <Button
               type="button"
-              variant="outline" className={reviewButtonClass}
+              variant="outline"
+              className={reviewButtonClass}
               onClick={(event) => returnUnchanged('return', event.currentTarget)}
             >
               {m.saved_filter_review_return()}
@@ -454,7 +467,8 @@ export function SavedFilterReviewPanel({
               <p>{m.saved_filter_review_denied()}</p>
               <Button
                 type="button"
-                variant="outline" className={reviewButtonClass}
+                variant="outline"
+                className={reviewButtonClass}
                 onClick={(event) => void openReview('read', event.currentTarget)}
               >
                 {m.saved_filter_review_retry()}
@@ -466,7 +480,8 @@ export function SavedFilterReviewPanel({
               <p>{m.saved_filter_review_unavailable()}</p>
               <Button
                 type="button"
-                variant="outline" className={reviewButtonClass}
+                variant="outline"
+                className={reviewButtonClass}
                 onClick={(event) => void openReview('read', event.currentTarget)}
               >
                 {m.saved_filter_review_retry()}
@@ -523,16 +538,15 @@ function ReviewContent({
             <p>{m.saved_filter_review_accepted_unavailable()}</p>
             <Button
               type="button"
-              variant="outline" className={reviewButtonClass}
+              variant="outline"
+              className={reviewButtonClass}
               onClick={(event) => onRefresh(event.currentTarget)}
             >
               {m.saved_filter_review_retry()}
             </Button>
           </div>
         ) : null}
-        {page.current.state !== 'ready' ? (
-          <p role="status">{m.saved_filter_review_current_unavailable()}</p>
-        ) : null}
+        {page.current.state !== 'ready' ? <p role="status">{m.saved_filter_review_current_unavailable()}</p> : null}
       </div>
       <details className="min-w-0">
         <summary className="cursor-pointer py-2 underline underline-offset-4 focus-visible:outline-2">
@@ -563,7 +577,8 @@ function ReviewContent({
         {!valueType ? <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p> : null}
         <Button
           type="button"
-          variant="outline" className={reviewButtonClass}
+          variant="outline"
+          className={reviewButtonClass}
           disabled={values.phase === 'loading' || !valueType || page.current.state !== 'ready'}
           onClick={(event) => onReadValues(event.currentTarget)}
         >
@@ -737,9 +752,11 @@ function ValueStatus({ values, targetRef }: { values: ValueState; targetRef: Ref
   else if (values.phase === 'empty') message = <p role="status">{m.refinement_no_values()}</p>;
   else if (values.phase === 'no-scope') message = <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p>;
   else if (values.phase === 'refused') message = <p role="alert">{m.saved_filter_review_value_labels_refused()}</p>;
-  else if (values.phase === 'preparing') message = <p role="status">{m.saved_filter_review_value_labels_preparing()}</p>;
+  else if (values.phase === 'preparing')
+    message = <p role="status">{m.saved_filter_review_value_labels_preparing()}</p>;
   else if (values.phase === 'restart') message = <p role="alert">{m.saved_filter_review_value_labels_restart()}</p>;
-  else if (values.phase === 'unavailable') message = <p role="alert">{m.saved_filter_review_value_labels_unavailable()}</p>;
+  else if (values.phase === 'unavailable')
+    message = <p role="alert">{m.saved_filter_review_value_labels_unavailable()}</p>;
   return (
     <div
       ref={targetRef}
@@ -747,9 +764,7 @@ function ValueStatus({ values, targetRef }: { values: ValueState; targetRef: Ref
       className="h-auto min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       {message}
-      {'partial' in values && values.partial ? (
-        <p role="status">{m.saved_filter_review_value_labels_ready()}</p>
-      ) : null}
+      {'partial' in values && values.partial ? <p role="status">{m.saved_filter_review_value_labels_ready()}</p> : null}
     </div>
   );
 }

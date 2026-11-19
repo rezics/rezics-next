@@ -446,10 +446,8 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                     aria-describedby={`${id}-page-error-reading`}
                     disabled={disabled}
                     onClick={(event) =>
-                      pageAction(
-                        event,
-                        undefined,
-                        () => picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
+                      pageAction(event, undefined, () =>
+                        picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
                       )
                     }
                   >

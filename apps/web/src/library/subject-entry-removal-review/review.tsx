@@ -4,7 +4,11 @@ import { m } from '../../paraglide/messages.js';
 import type { SlotLifetime } from '../subject-library-current-origin';
 import type { SubjectReference } from '../subject-ref';
 import type { SubjectSlotEntry } from '../subject-slot';
-import { captureEntryStateBasis, entryStateBasisMatches, type EntryStateBasis } from '../subject-entry-state-review/review';
+import {
+  captureEntryStateBasis,
+  entryStateBasisMatches,
+  type EntryStateBasis,
+} from '../subject-entry-state-review/review';
 
 export type ReviewedEntryRemoval = {
   subjectId: string;
@@ -93,7 +97,9 @@ export function SubjectEntryRemovalReview({
           {review.subjectLabel || m.library_subject_unavailable()}
         </dd>
         <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
-        <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{review.stateLabel}</dd>
+        <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+          {review.stateLabel}
+        </dd>
       </dl>
       {!valid ? (
         <p role="status" aria-live="polite" className="mt-3 mb-0 text-sm">
@@ -103,7 +109,8 @@ export function SubjectEntryRemovalReview({
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
         <Button
           type="button"
-          variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
+          variant="default"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           disabled={!valid || busy}
           onClick={() => onConfirm(review)}
         >
@@ -111,7 +118,8 @@ export function SubjectEntryRemovalReview({
         </Button>
         <Button
           type="button"
-          variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+          variant="outline"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={onKeep}
         >
           {m.library_entry_removal_keep()}

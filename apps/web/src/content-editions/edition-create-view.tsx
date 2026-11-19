@@ -577,9 +577,7 @@ export function EditionPublication({
               {m.edition_publication_licence()}: {previewSource.licence}
             </p>
             <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground">
-                {m.edition_identity_details()}
-              </summary>
+              <summary className="cursor-pointer text-muted-foreground">{m.edition_identity_details()}</summary>
               <dl className="space-y-3">
                 <div>
                   <dt>{m.exact_revision_post()}</dt>

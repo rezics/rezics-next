@@ -154,9 +154,7 @@ function HeaderExamples() {
           space={first.space}
           participation={
             <details>
-              <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">
-                {firstNote}
-              </summary>
+              <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">{firstNote}</summary>
               <p>First reader's supplied note.</p>
             </details>
           }
@@ -168,9 +166,7 @@ function HeaderExamples() {
           space={{ title, summary: spaceSummary }}
           participation={
             <details>
-              <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">
-                {secondNote}
-              </summary>
+              <summary className="cursor-pointer focus-visible:ring-3 focus-visible:ring-ring/30">{secondNote}</summary>
               <p>Second reader's supplied note.</p>
             </details>
           }

@@ -18,8 +18,7 @@ import type { FactDraft } from './subject-facts';
 import type { PeopleRead } from './people-profile';
 import { peopleCreateFactsRead } from './people-create-model';
 
-const action =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export type PeopleReuseState = {
   source: ReuseSource;

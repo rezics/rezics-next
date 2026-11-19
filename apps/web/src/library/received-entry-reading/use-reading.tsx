@@ -7,7 +7,13 @@ import { displayLibraryTitle } from '../title';
 import { PersonalShelfOrigin } from '../personal-shelf-origin';
 import type { PersonalLibraryEntry } from '../entries-read';
 import type { ShelfRow } from '../shelf-rows';
-import { captureReceivedEntryVisit, receivedEntryObservation, receivedEntryVisitIsCurrent, type ReceivedEntryReadSource, type ReceivedEntryVisit } from './current';
+import {
+  captureReceivedEntryVisit,
+  receivedEntryObservation,
+  receivedEntryVisitIsCurrent,
+  type ReceivedEntryReadSource,
+  type ReceivedEntryVisit,
+} from './current';
 import { ReceivedEntryReader } from './view';
 
 type Reading = { visit: ReceivedEntryVisit; row: ShelfRow };

@@ -104,7 +104,8 @@ export function SubjectLabelUnassignmentReview({
           data-subject-label-review-confirm
           ref={actionRef}
           disabled={!canConfirm}
-          variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
+          variant="default"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={() => {
             if (canConfirm) onConfirm();
           }}
@@ -114,7 +115,8 @@ export function SubjectLabelUnassignmentReview({
         <Button
           type="button"
           data-subject-label-review-cancel
-          variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+          variant="outline"
+          className="h-auto min-h-7 max-w-full whitespace-normal"
           onClick={onCancel}
         >
           {m.library_subject_label_review_keep()}

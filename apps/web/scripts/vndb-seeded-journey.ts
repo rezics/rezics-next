@@ -205,10 +205,7 @@ async function withPage<T>(
   }
 }
 
-assert(
-  walkAcceptanceId(process.env),
-  'Run through the controller-owned dev-stack.ts walk',
-);
+assert(walkAcceptanceId(process.env), 'Run through the controller-owned dev-stack.ts walk');
 await mkdir(evidence, { recursive: true });
 try {
   await run([...bun, 'services/auth/scripts/dev-stack.ts', 'persona']);

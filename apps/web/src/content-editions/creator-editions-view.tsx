@@ -374,18 +374,11 @@ export function CreatorEditionsView({ page, cursor }: CreatorEditionsViewProps) 
                   {m.creator_editions_restart()}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                nativeButton={false}
-                render={<a href={href} data-creator-origin-retry="" />}
-              >
+              <Button variant="outline" nativeButton={false} render={<a href={href} data-creator-origin-retry="" />}>
                 {m.creator_editions_refresh()}
               </Button>
               {page.next && (
-                <Button
-                  nativeButton={false}
-                  render={<a href={creatorEditionsContinuationHref(page.next)} />}
-                >
+                <Button nativeButton={false} render={<a href={creatorEditionsContinuationHref(page.next)} />}>
                   {m.creator_editions_next()}
                 </Button>
               )}

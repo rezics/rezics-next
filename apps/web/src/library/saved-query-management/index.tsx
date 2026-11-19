@@ -1,4 +1,13 @@
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@rezics/ui/shadcn/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -317,7 +326,9 @@ function SavedQueryManagementLifetime({
                 {state.intent.operation === 'collection.update' && (
                   <>
                     <dt className="font-medium">{m.library_collection_description()}</dt>
-                    <dd className="h-auto whitespace-pre-wrap break-words">{state.intent.command.request.data.description}</dd>
+                    <dd className="h-auto whitespace-pre-wrap break-words">
+                      {state.intent.command.request.data.description}
+                    </dd>
                   </>
                 )}
               </dl>
@@ -431,12 +442,10 @@ function SavedQueryManagementLifetime({
             </dl>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={state.busy}>
-              {m.library_collection_cancel()}
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={state.busy}>{m.library_collection_cancel()}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-             
+
               disabled={state.busy || !canDelete}
               aria-busy={state.busy}
               onClick={controller.confirmDelete}
@@ -467,9 +476,7 @@ function SavedQueryManagementLifetime({
             <AlertDialogDescription>{m.library_saved_query_management_leave_description()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={state.busy}>
-              {m.library_collection_cancel()}
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={state.busy}>{m.library_collection_cancel()}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={controller.confirmDeparture}>
               {m.library_saved_query_management_leave_confirm()}
             </AlertDialogAction>
@@ -497,9 +504,7 @@ function SavedQueryManagementLifetime({
             <AlertDialogDescription>{m.library_saved_query_management_reconcile_description()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={state.busy}>
-              {m.library_collection_cancel()}
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={state.busy}>{m.library_collection_cancel()}</AlertDialogCancel>
             <AlertDialogAction onClick={(event) => launchRead(event, controller.confirmReconcile)}>
               {m.library_saved_query_management_reconcile_confirm()}
             </AlertDialogAction>

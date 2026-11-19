@@ -68,17 +68,17 @@ read the resulting subject belongs with Subjects. Use Storybook tags for filters
 In the UI catalogue, use `Category/Component` and group shadcn and REZICS components by their primary use. Keep Editor under
 `Editor/Writing`, `Editor/Reading` and `Editor/Preferences`, with its existing overview as the entry point.
 
-| Folder in UI Library | Use | Examples |
-| --- | --- | --- |
-| Actions | Invoke a command | Button, Button Group, Content Actions |
-| Forms | Enter or select a value | Input, Checkbox, Native Checkbox, Entity Picker |
-| Navigation | Move between destinations or views | Breadcrumb, Pagination, Tabs |
-| Overlays | Open a temporary interactive surface | Dialog, Drawer, Dropdown Menu, Report Dialog |
-| Data Display | Read a record, list or value | Table, List Row, Meta Line |
-| Feedback | See progress, status or an outcome | Alert, Toast, Skeleton, Shelf Empty |
-| Media | Present images and covers | Cover, Cover Card, Media Image |
-| Layout | Arrange, divide or reveal content | Scroll Area, Separator, Accordion |
-| Editor | Write or read a document and configure the editor | Rich Text Editor, Document Body, Presets |
+| Folder in UI Library | Use                                               | Examples                                        |
+| -------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| Actions              | Invoke a command                                  | Button, Button Group, Content Actions           |
+| Forms                | Enter or select a value                           | Input, Checkbox, Native Checkbox, Entity Picker |
+| Navigation           | Move between destinations or views                | Breadcrumb, Pagination, Tabs                    |
+| Overlays             | Open a temporary interactive surface              | Dialog, Drawer, Dropdown Menu, Report Dialog    |
+| Data Display         | Read a record, list or value                      | Table, List Row, Meta Line                      |
+| Feedback             | See progress, status or an outcome                | Alert, Toast, Skeleton, Shelf Empty             |
+| Media                | Present images and covers                         | Cover, Cover Card, Media Image                  |
+| Layout               | Arrange, divide or reveal content                 | Scroll Area, Separator, Accordion               |
+| Editor               | Write or read a document and configure the editor | Rich Text Editor, Document Body, Presets        |
 
 Give each component one location and use its recognizable name in the leaf label, such as `Alert Dialog` or
 `Rich Text Editor`. Within a category, sort component titles alphabetically. For example, look for Button at
@@ -112,15 +112,15 @@ Use `kebab-case` for source paths and a recognizable subject for each `.stories.
 `collection-page.stories.tsx` and `collection-editor.stories.tsx` identify different surfaces. Keep ordinary states
 as named exports in the same file. See the [sidebar organization](#sidebar-organization) for display titles.
 
-| Subject | Target source path |
-| --- | --- |
-| Collection page | `apps/web/src/stories/library/collections/collection-page.stories.tsx` |
+| Subject           | Target source path                                                       |
+| ----------------- | ------------------------------------------------------------------------ |
+| Collection page   | `apps/web/src/stories/library/collections/collection-page.stories.tsx`   |
 | Collection editor | `apps/web/src/stories/library/collections/collection-editor.stories.tsx` |
-| Sign-up return | `apps/auth/src/stories/account/sign-up/sign-up-return.stories.tsx` |
-| Page heading | `apps/web/src/shell/page-heading.stories.tsx` |
-| Cover | `packages/ui/src/components/cover.stories.tsx` |
-| Button | `packages/ui/src/shadcn/button.stories.tsx` |
-| Rich-text editor | `packages/editor/src/components/rich-text-editor.stories.tsx` |
+| Sign-up return    | `apps/auth/src/stories/account/sign-up/sign-up-return.stories.tsx`       |
+| Page heading      | `apps/web/src/shell/page-heading.stories.tsx`                            |
+| Cover             | `packages/ui/src/components/cover.stories.tsx`                           |
+| Button            | `packages/ui/src/shadcn/button.stories.tsx`                              |
+| Rich-text editor  | `packages/editor/src/components/rich-text-editor.stories.tsx`            |
 
 From the sidebar back to source, look up the entry's `importPath` in that catalogue's `/index.json` (Web) or
 `/ui/index.json` (composed UI on the published site). For a new or relocated file, check its `stories` glob in the

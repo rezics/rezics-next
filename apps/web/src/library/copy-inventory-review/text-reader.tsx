@@ -37,7 +37,8 @@ export function CopyTextReader({
         type="button"
         aria-expanded={expanded}
         aria-controls={id}
-        variant="outline" className='h-auto min-h-7 max-w-full text-left whitespace-normal [overflow-wrap:anywhere]'
+        variant="outline"
+        className="h-auto min-h-7 max-w-full text-left whitespace-normal [overflow-wrap:anywhere]"
         onClick={() => setExpanded((value) => !value)}
       >
         {expanded ? collapseLabel : expandLabel}

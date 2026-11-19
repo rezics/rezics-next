@@ -41,8 +41,7 @@ import {
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoringDepartureProvider, useAuthoringDeparture } from '../../threads/authoring-departure';
 
-const albumActionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
+const albumActionClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]';
 
 export type AlbumEditors = {
   facts: FactsTransport;

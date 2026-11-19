@@ -30,7 +30,10 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { OrganizationValue, organizationControl as control } from './reading/value';
 
-const outlineControl = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]');
+const outlineControl = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+);
 
 type Selection = {
   episode: number;
@@ -414,11 +417,7 @@ function Inspection({
           <Link href={correction} className={outlineControl}>
             {m.facts_title({}, o)}
           </Link>
-          <button
-            type="button"
-            className={outlineControl}
-            onClick={close}
-          >
+          <button type="button" className={outlineControl} onClick={close}>
             {m.organization_reader_return({}, o)}
           </button>
         </div>
@@ -648,7 +647,11 @@ function OrganizationFacts({
               </div>
               <button
                 type="button"
-                className={cn(buttonVariants({ variant: 'ghost' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'w-full')}
+                className={cn(
+                  buttonVariants({ variant: 'ghost' }),
+                  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+                  'w-full',
+                )}
                 onClick={(event) => open(fact, event)}
                 aria-expanded={inspecting}
                 data-organization-property={field.id}
@@ -683,10 +686,7 @@ function OrganizationFacts({
             </div>
           );
           return (
-            <li
-              key={fact.id}
-              className="min-w-0 rounded-lg border bg-background p-3 [overflow-wrap:anywhere] sm:p-4"
-            >
+            <li key={fact.id} className="min-w-0 rounded-lg border bg-background p-3 [overflow-wrap:anywhere] sm:p-4">
               {spoilerLevel(fact) > preferences.spoilerLevel ? (
                 <OrganizationFactDisclosure
                   key={`${preferences.spoilerLevel}:${preferences.suitability}`}
@@ -716,17 +716,12 @@ function OrganizationFacts({
     <>
       {!!primary.length && <div className="grid min-w-0 gap-4 md:grid-cols-2">{primary.map(renderField)}</div>}
       {!model.fields.length && (
-        <p
-          className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm leading-relaxed text-muted-foreground"
-        >
+        <p className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm leading-relaxed text-muted-foreground">
           {m.organization_reader_no_fields({}, o)}
         </p>
       )}
       {model.limited && (
-        <p
-          role="status"
-          className="rounded-lg border border-dashed p-3 text-sm leading-relaxed text-muted-foreground"
-        >
+        <p role="status" className="rounded-lg border border-dashed p-3 text-sm leading-relaxed text-muted-foreground">
           {m.organization_reader_bounded({}, o)}
         </p>
       )}
@@ -802,13 +797,7 @@ function OrganizationFacts({
           >
             {m.facts_title({}, o)}
           </CurrentLink>
-          <div
-            className={
-              sources.length
-                ? 'min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4'
-                : 'min-w-0 space-y-3'
-            }
-          >
+          <div className={sources.length ? 'min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4' : 'min-w-0 space-y-3'}>
             <ProfileSourceList sources={sources} locale={locale} />
             {sources
               .filter((record) => record.licence)

@@ -150,7 +150,9 @@ export function ReadingOccurrence({
         <div className="min-w-0 space-y-3">
           <dl className="grid min-w-0 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div className="min-w-0">
-              <dt className="h-auto min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{m.library_diary_reported_start()}</dt>
+              <dt className="h-auto min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+                {m.library_diary_reported_start()}
+              </dt>
               <dd className="h-auto mt-0.5 min-w-0 [overflow-wrap:anywhere]">{startDate}</dd>
             </div>
             <div className="min-w-0">
@@ -174,7 +176,9 @@ export function ReadingOccurrence({
                   </div>
                 ))}
                 <div className="min-w-0">
-                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_occurrence_id()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">
+                    {m.library_diary_occurrence_id()}
+                  </dt>
                   <dd className="mt-1 break-all font-mono text-sm">{occurrence.id}</dd>
                 </div>
                 <div className="min-w-0">
@@ -184,13 +188,17 @@ export function ReadingOccurrence({
                   <dd className="mt-1 font-mono text-sm">{String(occurrence.revision)}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_revision()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">
+                    {m.library_diary_page_revision()}
+                  </dt>
                   <dd className="mt-1 break-all font-mono text-sm">
                     {page.currentness?.revision ?? m.library_diary_page_revision_unavailable()}
                   </dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_order()}</dt>
+                  <dt className="h-auto text-sm font-medium [overflow-wrap:anywhere]">
+                    {m.library_diary_page_order()}
+                  </dt>
                   <dd className="mt-1 break-all font-mono text-sm">{page.order}</dd>
                 </div>
               </dl>
@@ -201,7 +209,10 @@ export function ReadingOccurrence({
       }
       actions={
         <Link
-          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 w-full whitespace-normal sm:w-auto' })}
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'h-auto min-h-7 w-full whitespace-normal sm:w-auto',
+          })}
           id={'diary-occurrence-' + occurrence.id}
           to="/library/progress/$id"
           params={{ id: occurrence.id }}

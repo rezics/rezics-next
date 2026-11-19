@@ -460,7 +460,9 @@ function ReadingPreview({ ids, draft, confirmed }: { ids: string; draft: Reading
             {m.settings_reading_preview_cover()}
           </div>
           <p className="sr-only">
-            {values.suitability === 'blur' ? m.settings_reading_preview_cover_blur() : m.settings_reading_preview_cover()}
+            {values.suitability === 'blur'
+              ? m.settings_reading_preview_cover_blur()
+              : m.settings_reading_preview_cover()}
           </p>
         </div>
       </div>
@@ -699,10 +701,7 @@ export function ReadingCard({
                           <FieldTitle id={`${ids}-suitability-title`} className="max-w-full wrap-anywhere">
                             {m.settings_suitability_title()}
                           </FieldTitle>
-                          <FieldDescription
-                            id={`${ids}-suitability-text`}
-                            className="min-w-0 max-w-full wrap-anywhere"
-                          >
+                          <FieldDescription id={`${ids}-suitability-text`} className="min-w-0 max-w-full wrap-anywhere">
                             {m.settings_suitability_text()}
                           </FieldDescription>
                         </FieldContent>
@@ -725,10 +724,7 @@ export function ReadingCard({
                       <FieldLegend id={`${ids}-suitability-title`} className="max-w-full wrap-anywhere">
                         {m.settings_suitability_title()}
                       </FieldLegend>
-                      <FieldDescription
-                        id={`${ids}-suitability-text`}
-                        className="min-w-0 max-w-full wrap-anywhere"
-                      >
+                      <FieldDescription id={`${ids}-suitability-text`} className="min-w-0 max-w-full wrap-anywhere">
                         {m.settings_suitability_text()}
                       </FieldDescription>
                       <p
@@ -794,9 +790,7 @@ export function ReadingCard({
         ) : null}
         {choicesReady && !ownerMayChange && state.advice ? (
           <Alert className="min-w-0 max-w-full">
-            <AlertTitle className="min-w-0 max-w-full wrap-anywhere">
-              {m.settings_reading_read_only_title()}
-            </AlertTitle>
+            <AlertTitle className="min-w-0 max-w-full wrap-anywhere">{m.settings_reading_read_only_title()}</AlertTitle>
             <AlertDescription className="min-w-0 max-w-full wrap-anywhere">
               {m.settings_reading_read_only_text()}
             </AlertDescription>
@@ -867,8 +861,7 @@ export function ReadingCard({
                 <p className="min-w-0 max-w-full wrap-anywhere">
                   {(state.knownCurrent ? m.settings_reading_current : m.settings_reading_known)({
                     spoilers: levels[state.known.spoilerLevel]!.title(),
-                    images:
-                      state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+                    images: state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
                   })}
                 </p>
                 <div className="flex min-w-0 flex-wrap items-start gap-2">
@@ -897,7 +890,9 @@ export function ReadingCard({
                       <Button
                         className={preferenceActionClassName}
                         type="button"
-                        disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft) || !draftAdmitted}
+                        disabled={
+                          !mayWrite || commandWaiting || sameReading(state.known, state.draft) || !draftAdmitted
+                        }
                         onClick={() => void editor.submit()}
                       >
                         {m.settings_reading_save_draft()}

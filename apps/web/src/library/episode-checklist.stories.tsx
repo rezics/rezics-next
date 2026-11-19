@@ -77,7 +77,9 @@ function EpisodeChecklistExample({ example = 'detached' }: { example?: Example }
       <AppShell>
         <main className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-8">
           <h1 className="text-3xl font-semibold">Series progress</h1>
-          <p className="text-sm text-muted-foreground">Illustrative checklist fixture; no native response was recorded.</p>
+          <p className="text-sm text-muted-foreground">
+            Illustrative checklist fixture; no native response was recorded.
+          </p>
           <EpisodeChecklistVisit
             binding={currentBinding}
             credential={() => ({ 'X-CSRF-Token': 'illustrative-only' })}
@@ -128,10 +130,7 @@ export const SparseNextPage: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: m.library_progress_episodes_continue() }));
     await expect(canvas.queryAllByRole('listitem')).toHaveLength(0);
     await expect(canvas.getByRole('button', { name: m.library_progress_episodes_continue() })).toBeVisible();
-    await expect(canvas.getByTestId('episode-story-cursor')).toHaveAttribute(
-      'data-value',
-      'opaque:cursor/first-page',
-    );
+    await expect(canvas.getByTestId('episode-story-cursor')).toHaveAttribute('data-value', 'opaque:cursor/first-page');
   },
 };
 

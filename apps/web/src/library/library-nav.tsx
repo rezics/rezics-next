@@ -178,11 +178,7 @@ function DestinationList({ entries }: { entries: readonly LibraryNavigationEntry
             {entry.current ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : null}
           </div>
           {entry.href ? (
-            <ListRowLink
-              href={entry.href}
-              aria-current={entry.current ? 'page' : undefined}
-              className="min-w-0"
-            >
+            <ListRowLink href={entry.href} aria-current={entry.current ? 'page' : undefined} className="min-w-0">
               {entry.label}
             </ListRowLink>
           ) : null}

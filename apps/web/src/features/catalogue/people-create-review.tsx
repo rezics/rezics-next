@@ -6,8 +6,7 @@ import type { StatementFieldsRead } from './statement-editor-view';
 import { StatementSummary } from './statement-summary';
 import type { PeopleItem, PeopleRead } from './people-profile';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 export function PeopleCreateReview({
   item,

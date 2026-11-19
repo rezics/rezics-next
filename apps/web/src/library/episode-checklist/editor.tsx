@@ -120,7 +120,7 @@ export function EpisodeChecklistEditor({
                 ) : (
                   <label className="h-auto flex cursor-pointer items-center gap-3 text-sm [overflow-wrap:anywhere]">
                     <NativeCheckbox
-                      className='shrink-0'
+                      className="shrink-0"
                       checked={checked}
                       disabled={busy}
                       onChange={() => onToggle(id, row.completed === true)}
@@ -143,7 +143,13 @@ export function EpisodeChecklistEditor({
       )}
       <div className="flex flex-wrap gap-3">
         <Exposure operation="progress_session.record">
-          <Button type="button" variant="default" className={checklistPrimaryActionClass} disabled={busy || !dirty} onClick={onReview}>
+          <Button
+            type="button"
+            variant="default"
+            className={checklistPrimaryActionClass}
+            disabled={busy || !dirty}
+            onClick={onReview}
+          >
             {m.library_progress_episodes_apply()}
           </Button>
         </Exposure>
@@ -203,10 +209,22 @@ export function EpisodeChecklistReview({
       )}
       {visit.pending ? <p role="status">{m.library_progress_episodes_pending()}</p> : null}
       <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="default" className={checklistPrimaryActionClass} disabled={busy} onClick={onConfirm}>
+        <Button
+          type="button"
+          variant="default"
+          className={checklistPrimaryActionClass}
+          disabled={busy}
+          onClick={onConfirm}
+        >
           {m.library_progress_confirm_correction()}
         </Button>
-        <Button type="button" variant="outline" className={checklistActionClass} disabled={busy || !!visit.retry} onClick={onCancel}>
+        <Button
+          type="button"
+          variant="outline"
+          className={checklistActionClass}
+          disabled={busy || !!visit.retry}
+          onClick={onCancel}
+        >
           {m.library_progress_cancel()}
         </Button>
       </div>

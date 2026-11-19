@@ -169,7 +169,7 @@ export function ArchiveCollectionRecoveryUpload({
             ref={input}
             type="file"
             accept="application/json,.json"
-            className='max-w-full'
+            className="max-w-full"
             disabled={busy || locked || preparing}
             onChange={(event) => {
               if (!currentCheck.current()) return;
@@ -198,7 +198,12 @@ export function ArchiveCollectionRecoveryUpload({
                 : m.library_archive_recovery_upload_read_failed()}
           </p>
         ) : null}
-        <Button variant="outline" className={actionClass} type="submit" disabled={!hasFile || busy || locked || preparing}>
+        <Button
+          variant="outline"
+          className={actionClass}
+          type="submit"
+          disabled={!hasFile || busy || locked || preparing}
+        >
           {preparing
             ? m.library_archive_recovery_preparing()
             : busy
@@ -207,7 +212,8 @@ export function ArchiveCollectionRecoveryUpload({
         </Button>
         {canUseOriginal ? (
           <Button
-            variant="outline" className={actionClass}
+            variant="outline"
+            className={actionClass}
             type="button"
             disabled={busy || locked || preparing}
             onClick={() => void onUseOriginal()}
@@ -217,7 +223,8 @@ export function ArchiveCollectionRecoveryUpload({
         ) : null}
         {canUseCompleted && !canUseOriginal ? (
           <Button
-            variant="outline" className={actionClass}
+            variant="outline"
+            className={actionClass}
             type="button"
             disabled={busy || locked || preparing}
             onClick={() => void onUseCompleted()}

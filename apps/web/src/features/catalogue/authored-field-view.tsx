@@ -56,8 +56,7 @@ import { presentStatementViolations, type StatementFeedback } from './statement-
 import type { StatementInput } from './statement-editor';
 
 // Match the caller-level phone targets while retaining dense fine-pointer desktop controls.
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 const inputClassName = 'min-w-0';
 // Keep the shared Select trigger at the same phone target size as its neighboring fields.
 const selectClassName = 'min-w-0 max-w-full';

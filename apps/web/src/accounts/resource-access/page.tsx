@@ -417,7 +417,10 @@ function GrantForm({
               </>
             )}
           </section>
-          <section aria-labelledby="access-permission-heading" className="space-y-4 rounded-xl border bg-background p-4">
+          <section
+            aria-labelledby="access-permission-heading"
+            className="space-y-4 rounded-xl border bg-background p-4"
+          >
             <h3 id="access-permission-heading" className="font-semibold">
               {kind === 'role' ? m.access_named_role() : m.access_direct_action()}
             </h3>
@@ -528,7 +531,9 @@ function GrantForm({
                               return (
                                 <li key={item.id} className="min-w-0">
                                   <p className="font-medium">{presented.label}</p>
-                                  <code className="break-all text-xs text-muted-foreground">{presented.identifier}</code>
+                                  <code className="break-all text-xs text-muted-foreground">
+                                    {presented.identifier}
+                                  </code>
                                   {!item.delegable ? (
                                     <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
                                   ) : null}
@@ -582,10 +587,10 @@ function GrantForm({
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2 border-t pt-4">
-            <Button type="submit"  disabled={finding}>
+            <Button type="submit" disabled={finding}>
               {m.access_review_title()}
             </Button>
-            <Button type="button"  variant="ghost" onClick={onCancel}>
+            <Button type="button" variant="ghost" onClick={onCancel}>
               {m.access_cancel()}
             </Button>
           </div>
@@ -808,11 +813,7 @@ function ResourceAccessEditor({
                   <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
                 </div>
                 <PendingAccessIntent intent={state.pending} />
-                <Button
-                  type="button"
-                  disabled={state.busy}
-                  onClick={() => void controller.retry()}
-                >
+                <Button type="button" disabled={state.busy} onClick={() => void controller.retry()}>
                   {m.access_retry_operation()}
                 </Button>
               </section>

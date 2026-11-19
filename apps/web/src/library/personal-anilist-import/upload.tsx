@@ -98,7 +98,7 @@ export function AniListUploadForm({
             id={scoreId}
             aria-labelledby={`${scoreId}-label`}
             {...{ 'data-anilist-score-format': true }}
-            className='w-full max-w-full'
+            className="w-full max-w-full"
           >
             <SelectValue />
           </SelectTrigger>
@@ -125,7 +125,7 @@ export function AniListUploadForm({
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}
-          className='w-full max-w-full file:me-3'
+          className="w-full max-w-full file:me-3"
         />
       </Field>
       <AniListAction type="submit" disabled={busy || disabled} aria-busy={busy}>
@@ -138,7 +138,7 @@ export function AniListUploadForm({
             <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
             <Input
               id={retainedIdInput}
-              className='w-full'
+              className="w-full"
               value={retainedId}
               disabled={busy || disabled}
               onChange={(event) => setRetainedId(event.target.value)}

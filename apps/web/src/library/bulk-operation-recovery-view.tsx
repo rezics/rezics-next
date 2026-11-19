@@ -216,14 +216,12 @@ export function LibraryBulkOperationRecoveryView({
       {read.outcomes.length === 0 ? <p>{m.library_bulk_recovery_empty()}</p> : null}
       <nav className="flex flex-wrap gap-2" aria-label={m.library_bulk_recovery_heading()}>
         {previous ? (
-          <Button variant="outline"
-            size="sm" disabled={busy} onClick={(event) => activate(event, previous)}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={(event) => activate(event, previous)}>
             {m.library_window_previous()}
           </Button>
         ) : null}
         {first ? (
-          <Button variant="outline"
-            size="sm" disabled={busy} onClick={(event) => activate(event, first)}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={(event) => activate(event, first)}>
             {m.library_window_first()}
           </Button>
         ) : null}
@@ -239,7 +237,7 @@ export function LibraryBulkOperationRecoveryView({
         ) : null}
         <Button
           variant="outline"
-            size="sm"
+          size="sm"
           disabled={busy}
           onClick={(event) => activate(event, () => readAgain(addressOperationId))}
         >
@@ -250,7 +248,7 @@ export function LibraryBulkOperationRecoveryView({
             <p role="status">{m.library_bulk_recovery_unavailable()}</p>
             <Button
               variant="outline"
-            size="sm"
+              size="sm"
               disabled={busy}
               onClick={(event) => activate(event, () => readRetry?.())}
             >

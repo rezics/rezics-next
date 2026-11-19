@@ -218,7 +218,11 @@ export function PhoneNavigationView({
         session={session}
         {...(returnTo ? { returnTo } : {})}
         trigger={
-          <Button type="button" variant="ghost" className={`${phoneTabClass} group h-auto min-h-7 shrink whitespace-normal`}>
+          <Button
+            type="button"
+            variant="ghost"
+            className={`${phoneTabClass} group h-auto min-h-7 shrink whitespace-normal`}
+          >
             <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
               <Plus aria-hidden="true" className="size-3.5 shrink-0" />
             </span>

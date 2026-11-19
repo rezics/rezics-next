@@ -115,7 +115,8 @@ async function reservationInput(request: Request): Promise<SiteReservation> {
   if ('realmId' in fields || hasContainer === hasFuture) throw invalidRequest();
   if (hasContainer) {
     if (typeof fields.containerId !== 'string') throw invalidRequest();
-    if ((shared.purpose === 'avatar' || shared.purpose === 'knowledge-image') && !contentId.test(fields.containerId)) throw invalidRequest();
+    if ((shared.purpose === 'avatar' || shared.purpose === 'knowledge-image') && !contentId.test(fields.containerId))
+      throw invalidRequest();
     return { containerId: fields.containerId, ...shared, purpose: shared.purpose };
   }
   if (shared.purpose === 'avatar' || shared.purpose === 'knowledge-image') throw invalidRequest();

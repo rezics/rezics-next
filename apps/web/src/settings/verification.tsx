@@ -62,8 +62,7 @@ import {
 
 const verificationActionClassName =
   'h-auto w-full max-w-full whitespace-normal [overflow-wrap:anywhere] sm:w-auto min-h-7';
-const verificationSummaryClassName =
-  'max-w-full cursor-pointer py-1 whitespace-normal [overflow-wrap:anywhere]';
+const verificationSummaryClassName = 'max-w-full cursor-pointer py-1 whitespace-normal [overflow-wrap:anywhere]';
 
 type VerificationPresentationFocusIntent = {
   id: number;
@@ -470,13 +469,7 @@ export function VerificationCard({
           destination = target('withdraw');
       } else if (state.attempt) {
         const retry = target('retry');
-        if (
-          !state.attempt.receipt &&
-          retry &&
-          'disabled' in retry &&
-          !retry.disabled &&
-          visibleFocusTarget(retry)
-        )
+        if (!state.attempt.receipt && retry && 'disabled' in retry && !retry.disabled && visibleFocusTarget(retry))
           destination = retry;
         else destination = target('recovery-heading');
       } else if (state.phase === 'refused') destination = target('refused-outcome');

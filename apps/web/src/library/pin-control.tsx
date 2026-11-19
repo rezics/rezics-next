@@ -145,8 +145,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     const now = live.current;
     const actual = cachedSession(now.queryClient);
     // Pure supplied fixtures keep their existing observed-session operand. Production always supplies an origin.
-    if (!supplied && !now.origin && !now.pins.origin)
-      return now.viewer === viewer && (!requireCsrf || !!now.csrfToken);
+    if (!supplied && !now.origin && !now.pins.origin) return now.viewer === viewer && (!requireCsrf || !!now.csrfToken);
     return (
       actual?.state === 'signed-in' &&
       actual.subject === viewer &&
@@ -237,14 +236,17 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     const state = client.getQueryState(queryKey);
     const value = client.getQueryData(queryKey) as LibraryNavigationRead | undefined;
     const currentPins = value?.pins;
-    if (state?.status !== 'success' || currentPins?.state !== 'loaded' || currentPins.revision < acknowledgement.revision)
+    if (
+      state?.status !== 'success' ||
+      currentPins?.state !== 'loaded' ||
+      currentPins.revision < acknowledgement.revision
+    )
       return false;
     return source.pinsOrigin
       ? currentPins.origin?.sessionSubject === source.pinsOrigin.sessionSubject &&
           currentPins.origin.credentialAgrees &&
           currentPins.origin.requestedLimit === source.pinsOrigin.requestedLimit
-      : !currentPins.origin ||
-          (currentPins.origin.sessionSubject === viewer && currentPins.origin.credentialAgrees);
+      : !currentPins.origin || (currentPins.origin.sessionSubject === viewer && currentPins.origin.credentialAgrees);
   };
   const refreshCurrentList = async (source: PinReadSource, acknowledgement?: PinAcknowledgement) => {
     if (!sourceCurrent(source)) return { retired: true, failed: false };
@@ -262,7 +264,8 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     if (!sourceCurrent(source)) return { retired: true, failed: false };
     return {
       retired: false,
-      failed: invalidations.some((result) => result.status === 'rejected') ||
+      failed:
+        invalidations.some((result) => result.status === 'rejected') ||
         (!!acknowledgement && !readbackIsCurrent(acknowledgement)),
     };
   };
@@ -439,10 +442,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
   const confirmedNotice = acknowledgement
     ? m.collection_save_confirmed({ action: labels[acknowledgement.action] })
     : notice;
-  const visibleNotice = [
-    confirmedNotice,
-    control.readback === 'failed' ? m.library_pin_read_failed() : '',
-  ]
+  const visibleNotice = [confirmedNotice, control.readback === 'failed' ? m.library_pin_read_failed() : '']
     .filter(Boolean)
     .join(' ');
 

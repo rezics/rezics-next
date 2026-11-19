@@ -104,7 +104,8 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
       >
         <label className="block space-y-2">
           <span>{m.library_archive_progress_subject()}</span>
-          <Input className="w-full"
+          <Input
+            className="w-full"
             required
             pattern={uuid}
             value={subject}
@@ -142,7 +143,8 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
               >
                 <SelectTrigger
                   id={profilePairSelectId}
-                  aria-labelledby={`${profilePairSelectId}-label`} className="w-full"
+                  aria-labelledby={`${profilePairSelectId}-label`}
+                  className="w-full"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -200,7 +202,8 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
                 >
                   <SelectTrigger
                     id={`${additionalMeasureSelectId}-${measure.unit}`}
-                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`} className="w-full"
+                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`}
+                    className="w-full"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -220,9 +223,12 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
         : null}
       <section className="space-y-3">
         <h3 className="font-semibold">{m.library_archive_progress_units()}</h3>
-        <p>{m.library_archive_progress_local_count()}: {source.completed_unit_count}</p>
         <p>
-          {m.library_archive_progress_episode_count()}: {source.episode_completed_count === undefined
+          {m.library_archive_progress_local_count()}: {source.completed_unit_count}
+        </p>
+        <p>
+          {m.library_archive_progress_episode_count()}:{' '}
+          {source.episode_completed_count === undefined
             ? m.library_archive_progress_count_unknown()
             : source.episode_completed_count}
         </p>
@@ -230,13 +236,11 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
         {choice?.mode === 'completed_units' && body ? (
           <>
             <Button
-              variant="outline" className={action}
+              variant="outline"
+              className={action}
               disabled={locked || !episodeUnits.length}
               onClick={() =>
-                void journey.review(
-                  { ...body, unitIds: episodeUnits.map(({ evidence }) => evidence.unit_id) },
-                  true,
-                )
+                void journey.review({ ...body, unitIds: episodeUnits.map(({ evidence }) => evidence.unit_id) }, true)
               }
             >
               {m.library_archive_progress_membership()}
@@ -265,7 +269,12 @@ export function MappingPanel({ journey, snap }: { journey: Journey; snap: View }
           onNext={(after) => void journey.page('units', after)}
         />
       </section>
-      <Button variant="outline" className={action} disabled={locked || !body} onClick={() => body && void journey.review(body)}>
+      <Button
+        variant="outline"
+        className={action}
+        disabled={locked || !body}
+        onClick={() => body && void journey.review(body)}
+      >
         {m.library_archive_progress_review()}
       </Button>
     </section>

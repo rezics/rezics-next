@@ -71,10 +71,10 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
           <p>Prepared feed recovery scenarios. No native requests or native acceptance evidence.</p>
           <label className="grid gap-1 text-sm">
             Prepared state
-            <select 
- className="max-w-full"
- value={scenario}
- onChange={(event) => {
+            <select
+              className="max-w-full"
+              value={scenario}
+              onChange={(event) => {
                 setScenario(event.currentTarget.value as Scenario);
                 setPending(false);
                 setKind(true);
@@ -111,7 +111,11 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
                     ? [
                         <span key="kind">
                           {long ? m.home_empty_filtered_body().repeat(3) : 'Prepared kind'}
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => setKind(false)}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setKind(false)}
                             aria-label="Remove prepared kind"
                           >
                             ×
@@ -123,7 +127,11 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
                     ? [
                         <span key="space">
                           Prepared Space
-                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => setOther(false)}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setOther(false)}
                             aria-label="Remove prepared Space"
                           >
                             ×

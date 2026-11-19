@@ -1,5 +1,12 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -149,7 +156,8 @@ function LibraryStateSelect({
         <SelectTrigger
           aria-busy={busy ? true : undefined}
           aria-label={m.library_subject_entry()}
-          data-entry-state-trigger className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+          data-entry-state-trigger
+          className="h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]"
         >
           {busy ? <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" /> : null}
           <SelectValue placeholder={m.library_subject_add()} />
@@ -177,7 +185,9 @@ function ReviewValues({ draft, receivedLabel }: { draft: Draft; receivedLabel: s
   return (
     <dl className="grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_subject()}</dt>
-      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.subject.label}</dd>
+      <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+        {draft.subject.label}
+      </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_reference()}</dt>
       <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
         <code>{draft.subject.id}</code>
@@ -219,7 +229,9 @@ function ConflictReview({
             <ReceivedValue entry={entry} label={receivedLabel} />
           </dd>
           <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
-          <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{conflict.stateLabel}</dd>
+          <dd className="h-auto m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+            {conflict.stateLabel}
+          </dd>
         </dl>
       ) : (
         <p className="mt-2 mb-0">{m.library_entry_review_conflict_unavailable()}</p>
@@ -227,7 +239,8 @@ function ConflictReview({
       {canReview ? (
         <Button
           type="button"
-          variant="outline" className="h-auto min-h-7 mt-3 max-w-full whitespace-normal"
+          variant="outline"
+          className="h-auto min-h-7 mt-3 max-w-full whitespace-normal"
           onClick={onReview}
         >
           {m.library_entry_review_conflict_review()}
@@ -476,22 +489,22 @@ export function SubjectEntryStateReview({
           <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
+              variant="default"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={
                 disabled || busy || uncertain || saving || !lifetime.current('library_entry.get', 'library_entry.put')
               }
               onClick={() => void saveChoice()}
             >
-              {saving || busy ? (
-                <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" />
-              ) : null}
+              {saving || busy ? <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" /> : null}
               {draft.kind === 'keep-current' || (entry && draft.state === entry.state)
                 ? m.library_entry_review_no_change_confirm()
                 : m.library_entry_review_save()}
             </Button>
             <Button
               type="button"
-              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+              variant="outline"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || busy || uncertain || saving}
               onClick={editChoice}
             >
@@ -499,7 +512,8 @@ export function SubjectEntryStateReview({
             </Button>
             <Button
               type="button"
-              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+              variant="outline"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={saving}
               onClick={discardChoice}
             >
@@ -531,7 +545,8 @@ export function SubjectEntryStateReview({
               </p>
               <Button
                 type="button"
-                variant="default" className="h-auto min-h-7 max-w-full whitespace-normal"
+                variant="default"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={disabled || busy || uncertain || saving}
                 onClick={() => {
                   if (
@@ -548,7 +563,8 @@ export function SubjectEntryStateReview({
               </Button>
               <Button
                 type="button"
-                variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+                variant="outline"
+                className="h-auto min-h-7 max-w-full whitespace-normal"
                 disabled={saving}
                 onClick={discardChoice}
               >
@@ -559,7 +575,8 @@ export function SubjectEntryStateReview({
           {!draft && entry && !uncertain ? (
             <Button
               type="button"
-              variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal"
+              variant="outline"
+              className="h-auto min-h-7 max-w-full whitespace-normal"
               disabled={disabled || busy || saving}
               onClick={keepCurrent}
             >

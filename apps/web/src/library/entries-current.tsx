@@ -364,11 +364,7 @@ export function SortControls({
             if (orderBy) setSelection({ ...selection, orderBy });
           }}
         >
-          <SelectTrigger
-            id={orderSelectId}
-            aria-labelledby={`${orderSelectId}-label`}
-            className="w-full max-w-full"
-          >
+          <SelectTrigger id={orderSelectId} aria-labelledby={`${orderSelectId}-label`} className="w-full max-w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>

@@ -163,11 +163,11 @@ function WorkspacePreview() {
         <label htmlFor="shell-workspace-title" className="text-sm font-medium">
           {m.studio_workspace_title()}
         </label>
-        <Input 
- id="shell-workspace-title"
- 
- value={draft}
- onChange={(event) => setDraft(event.target.value)}
+        <Input
+          id="shell-workspace-title"
+
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
         />
         <p className="text-sm text-muted-foreground">{m.studio_workspace_unsaved()}</p>
       </div>

@@ -29,8 +29,11 @@ import { ProfileDetails } from '../../pages/shared';
 import { peopleOccupationConcept } from '../people-biography';
 
 export const personReaderAnchor = 'person-biography';
-const control =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const control = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 const options = (locale: string) => ({ locale: locale as never });
 const title = (kind: 'biography' | 'occupations' | 'languages', locale: string) =>
   kind === 'biography'
@@ -150,10 +153,7 @@ export function ProfileFact({ statement, reading }: { statement: PersonStatement
       : undefined;
   const fact = (
     <div className="min-w-0 space-y-3">
-      <div
-        data-fact-text
-        className="min-w-0 max-w-prose space-y-3 text-base leading-7 [overflow-wrap:anywhere]"
-      >
+      <div data-fact-text className="min-w-0 max-w-prose space-y-3 text-base leading-7 [overflow-wrap:anywhere]">
         <Value part={statement} reading={reading} />
         {language && (
           <div className="text-sm leading-6">
@@ -341,7 +341,10 @@ export function ProfileDefinitions({
       </p>
       <button
         type="button"
-        className={cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]')}
+        className={cn(
+          buttonVariants({ variant: 'outline' }),
+          'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+        )}
         aria-disabled={!result}
         onClick={() => {
           if (result) {

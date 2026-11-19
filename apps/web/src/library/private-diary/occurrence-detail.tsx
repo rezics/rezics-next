@@ -1,15 +1,45 @@
-import { buildJournalDraftPatch, emptyJournalDraft, journalDraftText, reviewJournalDraft, formatJournalDate, formatJournalAssessment, parseJournalDateText, MAX_JOURNAL_REFLECTION_CHARACTERS, MAX_JOURNAL_REFLECTION_BYTES, type JournalDraft, type JournalField, type JournalFieldDraft, type ProgressSessionJournalPatch } from '@rezics/progress';
+import {
+  buildJournalDraftPatch,
+  emptyJournalDraft,
+  journalDraftText,
+  reviewJournalDraft,
+  formatJournalDate,
+  formatJournalAssessment,
+  parseJournalDateText,
+  MAX_JOURNAL_REFLECTION_CHARACTERS,
+  MAX_JOURNAL_REFLECTION_BYTES,
+  type JournalDraft,
+  type JournalField,
+  type JournalFieldDraft,
+  type ProgressSessionJournalPatch,
+} from '@rezics/progress';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useId,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../application';
 import { useSession } from '../application';
 import type { ProgressSessionView } from '../progress-reads';
-import { correctOccurrenceJournal, readOccurrenceJournal, changeOccurrenceLifecycle, type JournalReadResult, type JournalPatch } from './occurrence-server';
+import {
+  correctOccurrenceJournal,
+  readOccurrenceJournal,
+  changeOccurrenceLifecycle,
+  type JournalReadResult,
+  type JournalPatch,
+} from './occurrence-server';
 
 import { historyReturn } from './address';
 import { PrivateJournalDraftNavigation, usePrivateJournalDraftNavigation } from './draft-navigation';
@@ -660,7 +690,10 @@ function OccurrenceControls({
         <h2 className="font-semibold">{m.library_occurrence_heading()}</h2>
         <p>{m.library_occurrence_retired()}</p>
         <Link
-          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+          })}
           to="/library/history"
           search={returnSearch ?? {}}
         >
@@ -679,7 +712,10 @@ function OccurrenceControls({
 
       {returnSearch ? (
         <Link
-          className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]' })}
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]',
+          })}
           to="/library/history"
           search={returnSearch}
         >
@@ -900,7 +936,8 @@ function OccurrenceControls({
             {reopenAllowed && (session.state === 'completed' || session.state === 'abandoned') ? (
               <Button
                 type="button"
-                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                variant="outline"
+                className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                 disabled={
                   lifecycleCommand !== null ||
                   lifecycleConflictRevision !== null ||
@@ -917,7 +954,8 @@ function OccurrenceControls({
             {retireAllowed ? (
               <Button
                 type="button"
-                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                variant="outline"
+                className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                 disabled={
                   lifecycleCommand !== null ||
                   lifecycleConflictRevision !== null ||
@@ -959,7 +997,8 @@ function OccurrenceControls({
                 <Button
                   ref={lifecycleSubmit}
                   type="button"
-                  variant="default" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                  variant="default"
+                  className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                   disabled={busy || lifecyclePending || !!custody.flight}
                   onClick={() => void submitLifecycle(lifecycleCommand)}
                 >
@@ -970,7 +1009,8 @@ function OccurrenceControls({
                 {!lifecycleDispatched ? (
                   <Button
                     type="button"
-                    variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                    variant="outline"
+                    className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                     onClick={() => cancelLifecycleReview(lifecycleCommand)}
                   >
                     {m.library_progress_cancel()}
@@ -978,7 +1018,8 @@ function OccurrenceControls({
                 ) : (
                   <Button
                     type="button"
-                    variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                    variant="outline"
+                    className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                     disabled={readingLifecycle || lifecyclePending}
                     onClick={() => void readLifecycleCurrent()}
                   >
@@ -1000,7 +1041,8 @@ function OccurrenceControls({
               <Button
                 ref={lifecycleRecovery}
                 type="button"
-                variant="outline" className='h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]'
+                variant="outline"
+                className="h-auto min-h-7 whitespace-normal [overflow-wrap:anywhere]"
                 disabled={readingLifecycle || busy}
                 onClick={() => {
                   if (!enabled || !isCurrent() || departed.current || leaving.current) return;

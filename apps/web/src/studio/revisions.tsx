@@ -248,12 +248,8 @@ function VersionVisit({
                   const isCurrentSaved = sameExact(selected.source.revision.exact, version.exact);
                   return (
                     <li key={`${version.exact.revisionId}:${version.exact.sha256}`} className="min-w-0">
-                      {isCurrentSaved ? (
-                        <p className="studio-help">{m.studio_revision_current({}, options)}</p>
-                      ) : null}
-                      {isSelected ? (
-                        <p className="studio-help">{m.studio_revision_selected({}, options)}</p>
-                      ) : null}
+                      {isCurrentSaved ? <p className="studio-help">{m.studio_revision_current({}, options)}</p> : null}
+                      {isSelected ? <p className="studio-help">{m.studio_revision_selected({}, options)}</p> : null}
                       <Button
                         type="button"
                         variant={isSelected ? 'secondary' : 'outline'}
@@ -346,9 +342,7 @@ function VersionVisit({
                           aria-label={m.studio_revision_copy_review({}, options)}
                           className="studio-stack rounded-lg border border-border p-4"
                         >
-                          {!copyReviewed ? (
-                            <p role="status">{m.studio_revision_review_changed({}, options)}</p>
-                          ) : null}
+                          {!copyReviewed ? <p role="status">{m.studio_revision_review_changed({}, options)}</p> : null}
                           <p>
                             {selected.dirty
                               ? m.studio_revision_replace_dirty(

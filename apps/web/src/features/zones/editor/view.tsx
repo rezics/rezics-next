@@ -332,11 +332,7 @@ export function ZoneConfigurationEditor({
               issuePrefix="zone-api-error"
             />
           ) : null}
-          <Button
-            className={actionButtonClass}
-            disabled={!enabled || state.busy}
-            onClick={readCurrent}
-          >
+          <Button className={actionButtonClass} disabled={!enabled || state.busy} onClick={readCurrent}>
             {m.zone_editor_retry()}
           </Button>
         </>
@@ -403,280 +399,277 @@ export function ZoneConfigurationEditor({
                 if (canEdit()) session.edit({ ...draft, configuration: { ...draft.configuration, ...names } });
               }}
             />
-          <section
-            tabIndex={-1}
-            data-correction-section=""
-            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-1 xl:row-start-2"
-            aria-labelledby="zone-pages-heading"
-            aria-describedby={descriptions['zone-pages-heading']}
-          >
-            <h2
+            <section
               tabIndex={-1}
               data-correction-section=""
+              className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-1 xl:row-start-2"
+              aria-labelledby="zone-pages-heading"
               aria-describedby={descriptions['zone-pages-heading']}
-              id="zone-pages-heading"
-              className="text-xl font-semibold"
             >
-              {m.zone_editor_pages()}
-            </h2>
-            <p className="text-sm text-muted-foreground">{m.zone_editor_navigation_note()}</p>
-            <Field>
-              <FieldLabel htmlFor="zone-page">{m.zone_editor_page()}</FieldLabel>
-              <SharedSelect.Select
-                disabled={disabled}
-                value={String(draft.configuration.pages.indexOf(page!))}
-                items={draft.configuration.pages.map((item, index) => ({
-                  value: String(index),
-                  label: item.route || m.zone_home(),
-                }))}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  if (!currentDraft()) return;
-                  setSelected(Number(value));
-                  setComposing(false);
-                  session.clearPreview();
-                }}
+              <h2
+                tabIndex={-1}
+                data-correction-section=""
+                aria-describedby={descriptions['zone-pages-heading']}
+                id="zone-pages-heading"
+                className="text-xl font-semibold"
               >
-                <SharedSelect.SelectTrigger id="zone-page" className="w-full">
-                  <SharedSelect.SelectValue />
-                </SharedSelect.SelectTrigger>
-                <SharedSelect.SelectContent>
-                  <SharedSelect.SelectGroup>
-                    {draft.configuration.pages.map((item, index) => (
-                      <SharedSelect.SelectItem key={`${index}:${item.route}`} value={String(index)}>
-                        {item.route || m.zone_home()}
-                      </SharedSelect.SelectItem>
-                    ))}
-                  </SharedSelect.SelectGroup>
-                </SharedSelect.SelectContent>
-              </SharedSelect.Select>
-            </Field>
-            {page ? (
-              <div
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-                className="min-w-0 rounded-lg border border-border p-4"
-              >
-                <p className="text-sm text-muted-foreground">{m.zone_editor_page()}</p>
-                <p className="break-all text-lg font-semibold">{route || m.zone_home()}</p>
-              </div>
-            ) : null}
-            {page ? (
-              <div className="flex flex-wrap items-end gap-3">
-                <Field className="min-w-0 flex-1" data-invalid={invalid('zone-route')}>
-                  <FieldLabel htmlFor="zone-route">{m.zone_editor_route()}</FieldLabel>
-                  <Input
-                    id="zone-route"
-                    value={route}
+                {m.zone_editor_pages()}
+              </h2>
+              <p className="text-sm text-muted-foreground">{m.zone_editor_navigation_note()}</p>
+              <Field>
+                <FieldLabel htmlFor="zone-page">{m.zone_editor_page()}</FieldLabel>
+                <SharedSelect.Select
+                  disabled={disabled}
+                  value={String(draft.configuration.pages.indexOf(page!))}
+                  items={draft.configuration.pages.map((item, index) => ({
+                    value: String(index),
+                    label: item.route || m.zone_home(),
+                  }))}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    if (!currentDraft()) return;
+                    setSelected(Number(value));
+                    setComposing(false);
+                    session.clearPreview();
+                  }}
+                >
+                  <SharedSelect.SelectTrigger id="zone-page" className="w-full">
+                    <SharedSelect.SelectValue />
+                  </SharedSelect.SelectTrigger>
+                  <SharedSelect.SelectContent>
+                    <SharedSelect.SelectGroup>
+                      {draft.configuration.pages.map((item, index) => (
+                        <SharedSelect.SelectItem key={`${index}:${item.route}`} value={String(index)}>
+                          {item.route || m.zone_home()}
+                        </SharedSelect.SelectItem>
+                      ))}
+                    </SharedSelect.SelectGroup>
+                  </SharedSelect.SelectContent>
+                </SharedSelect.Select>
+              </Field>
+              {page ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  className="min-w-0 rounded-lg border border-border p-4"
+                >
+                  <p className="text-sm text-muted-foreground">{m.zone_editor_page()}</p>
+                  <p className="break-all text-lg font-semibold">{route || m.zone_home()}</p>
+                </div>
+              ) : null}
+              {page ? (
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field className="min-w-0 flex-1" data-invalid={invalid('zone-route')}>
+                    <FieldLabel htmlFor="zone-route">{m.zone_editor_route()}</FieldLabel>
+                    <Input
+                      id="zone-route"
+                      value={route}
+                      disabled={editDisabled || route === ''}
+                      onChange={(event) => changeRoute(event.target.value)}
+                      maxLength={255}
+                      aria-invalid={invalid('zone-route')}
+                      aria-describedby={['zone-route-help', descriptions['zone-route']].filter(Boolean).join(' ')}
+                    />
+                    <FieldDescription id="zone-route-help">{m.zone_editor_route_help()}</FieldDescription>
+                  </Field>
+                  <Button
+                    className={actionButtonClass}
+                    variant="outline"
                     disabled={editDisabled || route === ''}
-                    onChange={(event) => changeRoute(event.target.value)}
+                    onClick={() => {
+                      if (!canEdit()) return;
+                      session.edit({
+                        ...draft,
+                        configuration: {
+                          ...draft.configuration,
+                          pages: draft.configuration.pages.filter((item) => item !== page),
+                        },
+                      });
+                      setSelected(0);
+                      setComposing(false);
+                    }}
+                  >
+                    {m.zone_editor_remove()}
+                  </Button>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-end gap-3">
+                <Field className="min-w-0 flex-1">
+                  <FieldLabel htmlFor="zone-new-route">{m.zone_editor_new_route()}</FieldLabel>
+                  <Input
+                    id="zone-new-route"
+                    value={newRoute}
+                    onChange={(event) => {
+                      if (current()) setNewRoute(event.target.value);
+                    }}
+                    disabled={editDisabled || draft.configuration.pages.length >= 16}
                     maxLength={255}
-                    aria-invalid={invalid('zone-route')}
-                    aria-describedby={['zone-route-help', descriptions['zone-route']].filter(Boolean).join(' ')}
                   />
-                  <FieldDescription id="zone-route-help">{m.zone_editor_route_help()}</FieldDescription>
                 </Field>
                 <Button
                   className={actionButtonClass}
                   variant="outline"
-                  disabled={editDisabled || route === ''}
+                  disabled={
+                    editDisabled ||
+                    draft.configuration.pages.length >= 16 ||
+                    !newRoute ||
+                    draft.configuration.pages.some((item) => item.route === newRoute)
+                  }
                   onClick={() => {
                     if (!canEdit()) return;
-                    session.edit({
-                      ...draft,
-                      configuration: {
-                        ...draft.configuration,
-                        pages: draft.configuration.pages.filter((item) => item !== page),
-                      },
-                    });
-                    setSelected(0);
+                    const pages = [
+                      ...draft.configuration.pages,
+                      { route: newRoute, document: { root: { props: {} }, content: [] } },
+                    ].sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : 0));
+                    session.edit({ ...draft, configuration: { ...draft.configuration, pages } });
+                    setSelected(pages.findIndex((item) => item.route === newRoute));
+                    setNewRoute('');
                     setComposing(false);
                   }}
                 >
-                  {m.zone_editor_remove()}
+                  {m.zone_editor_add()}
                 </Button>
               </div>
-            ) : null}
-            <div className="flex flex-wrap items-end gap-3">
-              <Field className="min-w-0 flex-1">
-                <FieldLabel htmlFor="zone-new-route">{m.zone_editor_new_route()}</FieldLabel>
-                <Input
-                  id="zone-new-route"
-                  value={newRoute}
-                  onChange={(event) => {
-                    if (current()) setNewRoute(event.target.value);
-                  }}
-                  disabled={editDisabled || draft.configuration.pages.length >= 16}
-                  maxLength={255}
-                />
-              </Field>
+              <p className="text-sm text-muted-foreground">{m.zone_editor_composition_note()}</p>
               <Button
                 className={actionButtonClass}
                 variant="outline"
-                disabled={
-                  editDisabled ||
-                  draft.configuration.pages.length >= 16 ||
-                  !newRoute ||
-                  draft.configuration.pages.some((item) => item.route === newRoute)
-                }
+                disabled={editDisabled}
                 onClick={() => {
-                  if (!canEdit()) return;
-                  const pages = [
-                    ...draft.configuration.pages,
-                    { route: newRoute, document: { root: { props: {} }, content: [] } },
-                  ].sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : 0));
-                  session.edit({ ...draft, configuration: { ...draft.configuration, pages } });
-                  setSelected(pages.findIndex((item) => item.route === newRoute));
-                  setNewRoute('');
-                  setComposing(false);
+                  if (canEdit()) setComposing(!composing);
                 }}
+                id="zone-compose"
+                aria-invalid={invalid('zone-compose')}
+                aria-describedby={descriptions['zone-compose']}
+                aria-expanded={composing}
               >
-                {m.zone_editor_add()}
+                {m.zone_editor_compose()}
               </Button>
-            </div>
-            <p className="text-sm text-muted-foreground">{m.zone_editor_composition_note()}</p>
-            <Button
-              className={actionButtonClass}
-              variant="outline"
-              disabled={editDisabled}
-              onClick={() => {
-                if (canEdit()) setComposing(!composing);
-              }}
-              id="zone-compose"
-              aria-invalid={invalid('zone-compose')}
-              aria-describedby={descriptions['zone-compose']}
-              aria-expanded={composing}
-            >
-              {m.zone_editor_compose()}
-            </Button>
-            {composing && page && !editDisabled ? (
-              <div className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
-                <Suspense fallback={<EditorLoading />}>
-                  <CompositionEditor
-                    key={`${state.generation}:${selected}:${route}:${locale}`}
-                    document={page.document}
-                    locale={locale}
-                    onChange={changeDocument}
-                  />
-                </Suspense>
-              </div>
-            ) : null}
-          </section>
-          <section
-            tabIndex={-1}
-            data-correction-section=""
-            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1"
-            aria-labelledby="zone-sources-heading"
-            aria-describedby={
-              [descriptions['zone-scopes'], descriptions['zone-mounts']].filter(Boolean).join(' ') || undefined
-            }
-          >
-            <h2 id="zone-sources-heading" className="text-xl font-semibold">
-              {m.zone_editor_sources()}
-            </h2>
-            <p className="max-w-3xl text-sm text-muted-foreground">{m.zone_editor_source_note()}</p>
-            <fieldset
-              id="zone-scopes"
+              {composing && page && !editDisabled ? (
+                <div className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
+                  <Suspense fallback={<EditorLoading />}>
+                    <CompositionEditor
+                      key={`${state.generation}:${selected}:${route}:${locale}`}
+                      document={page.document}
+                      locale={locale}
+                      onChange={changeDocument}
+                    />
+                  </Suspense>
+                </div>
+              ) : null}
+            </section>
+            <section
               tabIndex={-1}
               data-correction-section=""
-              aria-invalid={invalid('zone-scopes')}
-              aria-describedby={descriptions['zone-scopes']}
-              disabled={editDisabled}
-              className="space-y-3"
+              className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1"
+              aria-labelledby="zone-sources-heading"
+              aria-describedby={
+                [descriptions['zone-scopes'], descriptions['zone-mounts']].filter(Boolean).join(' ') || undefined
+              }
             >
-              <legend className="font-semibold">{m.zone_editor_scopes()}</legend>
-              {scopeOptions.kind === 'failure' ? (
-                <EditorFailure failure={scopeOptions} locale={locale} />
-              ) : (
-                <p className="break-all text-sm text-muted-foreground">
-                  {m.zone_editor_release({ release: scopeOptions.value.release })}
-                </p>
-              )}
-              {scopeOptions.kind === 'ready' && scopeOptions.value.ids.length === 0 ? (
-                <p>{m.zone_editor_no_options()}</p>
-              ) : null}
-              {[
-                ...new Set([
-                  ...draft.configuration.scope,
-                  ...(scopeOptions.kind === 'ready' ? scopeOptions.value.ids : []),
-                ]),
-              ].map((id) => (
-                <Field orientation="horizontal" key={id}>
-                  <Checkbox
-                    id={`scope-${id}`}
-                    checked={draft.configuration.scope.includes(id)}
-                    disabled={
-                      editDisabled ||
-                      (!draft.configuration.scope.includes(id) && draft.configuration.scope.length >= 16)
-                    }
-                    onCheckedChange={(checked) => toggle(id, checked === true, true)}
-                  />
-                  <FieldLabel className="break-all" htmlFor={`scope-${id}`}>
-                    {id}
-                    {scopeOptions.kind !== 'ready' || !scopeOptions.value.ids.includes(id)
-                      ? ` · ${m.zone_editor_option_unavailable()}`
-                      : ''}
-                  </FieldLabel>
-                </Field>
-              ))}
-            </fieldset>
-            <fieldset
-              id="zone-mounts"
-              tabIndex={-1}
-              data-correction-section=""
-              aria-invalid={invalid('zone-mounts')}
-              aria-describedby={descriptions['zone-mounts']}
-              disabled={editDisabled}
-              className="space-y-3"
-            >
-              <legend className="font-semibold">{m.zone_editor_mounts()}</legend>
-              {mountOptions.kind === 'failure' ? <EditorFailure failure={mountOptions} locale={locale} /> : null}
-              {mountOptions.kind === 'ready' && !mountOptions.value.items.length ? (
-                <p>{m.zone_editor_no_options()}</p>
-              ) : null}
-              {[
-                ...new Set([
-                  ...draft.mounts,
-                  ...(mountOptions.kind === 'ready' ? mountOptions.value.items.map((item) => item.id) : []),
-                ]),
-              ].map((id) => {
-                const item =
-                  mountOptions.kind === 'ready' ? mountOptions.value.items.find((entry) => entry.id === id) : undefined;
-                return (
+              <h2 id="zone-sources-heading" className="text-xl font-semibold">
+                {m.zone_editor_sources()}
+              </h2>
+              <p className="max-w-3xl text-sm text-muted-foreground">{m.zone_editor_source_note()}</p>
+              <fieldset
+                id="zone-scopes"
+                tabIndex={-1}
+                data-correction-section=""
+                aria-invalid={invalid('zone-scopes')}
+                aria-describedby={descriptions['zone-scopes']}
+                disabled={editDisabled}
+                className="space-y-3"
+              >
+                <legend className="font-semibold">{m.zone_editor_scopes()}</legend>
+                {scopeOptions.kind === 'failure' ? (
+                  <EditorFailure failure={scopeOptions} locale={locale} />
+                ) : (
+                  <p className="break-all text-sm text-muted-foreground">
+                    {m.zone_editor_release({ release: scopeOptions.value.release })}
+                  </p>
+                )}
+                {scopeOptions.kind === 'ready' && scopeOptions.value.ids.length === 0 ? (
+                  <p>{m.zone_editor_no_options()}</p>
+                ) : null}
+                {[
+                  ...new Set([
+                    ...draft.configuration.scope,
+                    ...(scopeOptions.kind === 'ready' ? scopeOptions.value.ids : []),
+                  ]),
+                ].map((id) => (
                   <Field orientation="horizontal" key={id}>
                     <Checkbox
-                      id={`mount-${id}`}
-                      checked={draft.mounts.includes(id)}
-                      disabled={editDisabled || (!draft.mounts.includes(id) && draft.mounts.length >= 16)}
-                      onCheckedChange={(checked) => toggle(id, checked === true, false)}
+                      id={`scope-${id}`}
+                      checked={draft.configuration.scope.includes(id)}
+                      disabled={
+                        editDisabled ||
+                        (!draft.configuration.scope.includes(id) && draft.configuration.scope.length >= 16)
+                      }
+                      onCheckedChange={(checked) => toggle(id, checked === true, true)}
                     />
-                    <FieldLabel className="break-words" htmlFor={`mount-${id}`}>
-                      {item?.title ?? `${id} · ${m.zone_editor_option_unavailable()}`}
+                    <FieldLabel className="break-all" htmlFor={`scope-${id}`}>
+                      {id}
+                      {scopeOptions.kind !== 'ready' || !scopeOptions.value.ids.includes(id)
+                        ? ` · ${m.zone_editor_option_unavailable()}`
+                        : ''}
                     </FieldLabel>
                   </Field>
-                );
-              })}
-            </fieldset>
-            {mountOptions.kind === 'ready' && mountOptions.value.next ? (
-              <Button
-                className={actionButtonClass}
-                variant="outline"
-                disabled={disabled}
-                onClick={() => void readMore()}
+                ))}
+              </fieldset>
+              <fieldset
+                id="zone-mounts"
+                tabIndex={-1}
+                data-correction-section=""
+                aria-invalid={invalid('zone-mounts')}
+                aria-describedby={descriptions['zone-mounts']}
+                disabled={editDisabled}
+                className="space-y-3"
               >
-                {m.zone_editor_more()}
+                <legend className="font-semibold">{m.zone_editor_mounts()}</legend>
+                {mountOptions.kind === 'failure' ? <EditorFailure failure={mountOptions} locale={locale} /> : null}
+                {mountOptions.kind === 'ready' && !mountOptions.value.items.length ? (
+                  <p>{m.zone_editor_no_options()}</p>
+                ) : null}
+                {[
+                  ...new Set([
+                    ...draft.mounts,
+                    ...(mountOptions.kind === 'ready' ? mountOptions.value.items.map((item) => item.id) : []),
+                  ]),
+                ].map((id) => {
+                  const item =
+                    mountOptions.kind === 'ready'
+                      ? mountOptions.value.items.find((entry) => entry.id === id)
+                      : undefined;
+                  return (
+                    <Field orientation="horizontal" key={id}>
+                      <Checkbox
+                        id={`mount-${id}`}
+                        checked={draft.mounts.includes(id)}
+                        disabled={editDisabled || (!draft.mounts.includes(id) && draft.mounts.length >= 16)}
+                        onCheckedChange={(checked) => toggle(id, checked === true, false)}
+                      />
+                      <FieldLabel className="break-words" htmlFor={`mount-${id}`}>
+                        {item?.title ?? `${id} · ${m.zone_editor_option_unavailable()}`}
+                      </FieldLabel>
+                    </Field>
+                  );
+                })}
+              </fieldset>
+              {mountOptions.kind === 'ready' && mountOptions.value.next ? (
+                <Button
+                  className={actionButtonClass}
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() => void readMore()}
+                >
+                  {m.zone_editor_more()}
+                </Button>
+              ) : null}
+              <Button className={actionButtonClass} variant="outline" disabled={disabled} onClick={readCurrent}>
+                {m.zone_editor_refresh()}
               </Button>
-            ) : null}
-            <Button
-              className={actionButtonClass}
-              variant="outline"
-              disabled={disabled}
-              onClick={readCurrent}
-            >
-              {m.zone_editor_refresh()}
-            </Button>
-          </section>
+            </section>
           </div>
           <section
             className="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6"
@@ -721,12 +714,7 @@ export function ZoneConfigurationEditor({
                     >
                       {m.zone_editor_reapply()}
                     </Button>
-                    <Button
-                      className={actionButtonClass}
-                      variant="outline"
-                      disabled={state.busy}
-                      onClick={readCurrent}
-                    >
+                    <Button className={actionButtonClass} variant="outline" disabled={state.busy} onClick={readCurrent}>
                       {m.zone_editor_retry()}
                     </Button>
                   </div>
@@ -785,11 +773,15 @@ export function ZoneConfigurationEditor({
                       </SharedSelect.SelectTrigger>
                       <SharedSelect.SelectContent>
                         <SharedSelect.SelectGroup>
-                          <SharedSelect.SelectItem value="private">{m.library_visibility_private()}</SharedSelect.SelectItem>
+                          <SharedSelect.SelectItem value="private">
+                            {m.library_visibility_private()}
+                          </SharedSelect.SelectItem>
                           <SharedSelect.SelectItem value="unlisted">
                             {m.library_visibility_unlisted()}
                           </SharedSelect.SelectItem>
-                          <SharedSelect.SelectItem value="public">{m.library_visibility_public()}</SharedSelect.SelectItem>
+                          <SharedSelect.SelectItem value="public">
+                            {m.library_visibility_public()}
+                          </SharedSelect.SelectItem>
                         </SharedSelect.SelectGroup>
                       </SharedSelect.SelectContent>
                     </SharedSelect.Select>
@@ -846,12 +838,7 @@ export function ZoneConfigurationEditor({
               >
                 {m.zone_editor_open()}
               </a>
-              <Button
-                className={actionButtonClass}
-                variant="outline"
-                disabled={!enabled}
-                onClick={() => void copy()}
-              >
+              <Button className={actionButtonClass} variant="outline" disabled={!enabled} onClick={() => void copy()}>
                 {m.zone_editor_copy()}
               </Button>
             </div>

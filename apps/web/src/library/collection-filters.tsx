@@ -374,9 +374,7 @@ export function CollectionFilters({
             );
           })}
         <div className="sticky bottom-0 flex flex-wrap items-center gap-2 bg-popover py-3">
-          <Button type="submit">
-            {m.collection_filter_apply()}
-          </Button>
+          <Button type="submit">{m.collection_filter_apply()}</Button>
           <a className={buttonVariants({ variant: 'outline' })} href={clearAddress}>
             {m.collection_filter_clear()}
           </a>

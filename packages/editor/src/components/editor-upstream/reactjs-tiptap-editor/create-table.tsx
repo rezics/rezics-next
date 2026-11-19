@@ -194,15 +194,17 @@ function TableSizePicker({
           checked={withHeaderRow}
           onCheckedChange={(value) => setWithHeaderRow(value === true)}
         />
-        <FieldLabel
-          htmlFor={`${id}-header`}
-          className="min-w-0 flex-1 whitespace-normal leading-snug break-words"
-        >
+        <FieldLabel htmlFor={`${id}-header`} className="min-w-0 flex-1 whitespace-normal leading-snug break-words">
           {labels.tableHeader ?? productControlLabels.tableHeader}
         </FieldLabel>
       </Field>
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-        <Button type="button" variant="ghost" className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
+          onClick={onCancel}
+        >
           {labels.cancel}
         </Button>
         <Button type="submit" disabled={!valid} className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal">

@@ -15,8 +15,7 @@ import type { PartRow } from '../work-parts';
 import { storyArcType } from '../story-arc-profile';
 import type { ArcAddress, ArcRead, ArcTransport } from './model';
 
-const action =
-  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
+const action = 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
 const button = cn(buttonVariants({ variant: 'outline' }), action);
 const linkClassName = cn(buttonVariants({ variant: 'link' }), action, 'underline');
 type Ready = Extract<ArcRead, { ok: true }>;

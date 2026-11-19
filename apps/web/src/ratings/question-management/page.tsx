@@ -146,22 +146,12 @@ function WindowReturn({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {previous ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          onClick={(event) => previous(event.detail === 0)}
-        >
+        <Button type="button" variant="outline" disabled={disabled} onClick={(event) => previous(event.detail === 0)}>
           {m.realm_question_window_previous()}
         </Button>
       ) : null}
       {first ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          onClick={(event) => first(event.detail === 0)}
-        >
+        <Button type="button" variant="outline" disabled={disabled} onClick={(event) => first(event.detail === 0)}>
           {m.realm_question_window_first()}
         </Button>
       ) : null}
@@ -352,7 +342,8 @@ export function QuestionManagementContent({
                 <Button
                   type="button"
                   aria-current={address.selectedQuestionId === question.id ? 'page' : undefined}
-                  variant="outline" className="h-auto w-full whitespace-normal p-4 text-start"
+                  variant="outline"
+                  className="h-auto w-full whitespace-normal p-4 text-start"
                   onClick={() => onSelect(question.id)}
                 >
                   <span className="block font-medium">{question.label}</span>
@@ -490,10 +481,7 @@ export function QuestionManagementContent({
                         }));
                       }}
                     >
-                      <SharedSelect.SelectTrigger
-                        id="question-management-grain"
-                        className="w-full"
-                      >
+                      <SharedSelect.SelectTrigger id="question-management-grain" className="w-full">
                         <SharedSelect.SelectValue />
                       </SharedSelect.SelectTrigger>
                       <SharedSelect.SelectContent>
@@ -1377,11 +1365,7 @@ export function QuestionManagementPage({
               {m.home_questions_restart_action()}
             </Button>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}
-            >
+            <Button type="button" variant="outline" onClick={() => isVisitCurrent() && setRetry((value) => value + 1)}>
               {m.home_questions_retry()}
             </Button>
           )}

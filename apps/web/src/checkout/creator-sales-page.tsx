@@ -119,7 +119,7 @@ export function CreatorSalesPage({
           page.kind !== 'loading' && (
             <Button
               variant="outline"
-             
+
               nativeButton={false}
               render={
                 <a
@@ -173,7 +173,7 @@ export function CreatorSalesPage({
           {windows?.previous && (
             <Button
               variant="outline"
-             
+
               nativeButton={false}
               render={
                 <a
@@ -188,7 +188,7 @@ export function CreatorSalesPage({
           {cursor && (
             <Button
               variant="outline"
-             
+
               nativeButton={false}
               render={<a href={creatorSalesHref(locale)} onClick={paging('restart', undefined)} />}
             >
@@ -198,7 +198,7 @@ export function CreatorSalesPage({
           {page.next && (
             <Button
               variant="outline"
-             
+
               nativeButton={false}
               render={<a href={creatorSalesHref(locale, page.next)} onClick={paging('next', page.next)} />}
             >

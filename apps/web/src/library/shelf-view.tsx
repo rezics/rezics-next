@@ -338,42 +338,38 @@ function ShelfSelectionBar({
         )}
       </div>
       {controls.selected.length ? (
-          <SharedSelectionBar
-            count={controls.selected.length}
-            label={(count) => m.library_selection_count({ count })}
-            ariaLabel={m.library_selection_heading()}
-            bottomOffset="var(--bottom-nav-height, 5rem)"
-            statusMessage={
-              selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined
-            }
-            primaryAction={
-              <Button
-                ref={launcher}
-                variant="outline"
-                disabled={controls.selectionPending || !controls.isCurrent()}
-                onClick={openReview}
-              >
-                {m.library_selection_review()}
+        <SharedSelectionBar
+          count={controls.selected.length}
+          label={(count) => m.library_selection_count({ count })}
+          ariaLabel={m.library_selection_heading()}
+          bottomOffset="var(--bottom-nav-height, 5rem)"
+          statusMessage={
+            selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined
+          }
+          primaryAction={
+            <Button
+              ref={launcher}
+              variant="outline"
+              disabled={controls.selectionPending || !controls.isCurrent()}
+              onClick={openReview}
+            >
+              {m.library_selection_review()}
+            </Button>
+          }
+          actions={
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.selectPage}>
+                {m.library_selection_page()}
               </Button>
-            }
-            actions={
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Button
-                  variant="ghost"
-                  disabled={controls.selectionPending}
-                  onClick={controls.selectPage}
-                >
-                  {m.library_selection_page()}
-                </Button>
-                <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
-                <ShelfLabelAction controls={controls} />
-                <ShelfLabelAction controls={controls} kind="unassign" />
-              </div>
-            }
-            onCancel={controls.clearSelection}
-            cancelLabel={m.library_selection_clear()}
-            moreLabel={m.library_selection_more()}
-          />
+              <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
+              <ShelfLabelAction controls={controls} />
+              <ShelfLabelAction controls={controls} kind="unassign" />
+            </div>
+          }
+          onCancel={controls.clearSelection}
+          cancelLabel={m.library_selection_clear()}
+          moreLabel={m.library_selection_more()}
+        />
       ) : null}
       <SelectionReviewView
         open={reviewOpen}
@@ -1255,11 +1251,7 @@ function LabelShelfTiles({
               title={title(entry)}
               meta={
                 <>
-                  <ShelfSelectionControl
-                    label={title(entry)}
-                    selection={selectionForEntry}
-                    className="w-fit"
-                  />
+                  <ShelfSelectionControl label={title(entry)} selection={selectionForEntry} className="w-fit" />
                   <span>{entry.subject.typeLabel}</span>
                   {readingTrigger(entry)}
                   <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
@@ -1316,11 +1308,7 @@ function LabelShelfTiles({
       cover: shelfCover(entry.subject),
       creator: entry.subject ? (
         <div className="min-w-0 space-y-1">
-          <ShelfSelectionControl
-            label={entryTitle.text}
-            selection={selectionForEntry}
-            className="w-fit"
-          />
+          <ShelfSelectionControl label={entryTitle.text} selection={selectionForEntry} className="w-fit" />
           <a
             className="font-medium break-words hover:underline focus-visible:outline-ring"
             href={href(entry)}
@@ -1333,11 +1321,7 @@ function LabelShelfTiles({
         </div>
       ) : (
         <div className="min-w-0 space-y-2">
-          <ShelfSelectionControl
-            label={entryTitle.text}
-            selection={selectionForEntry}
-            className="w-fit"
-          />
+          <ShelfSelectionControl label={entryTitle.text} selection={selectionForEntry} className="w-fit" />
           <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
           {readingTrigger(entry)}
         </div>

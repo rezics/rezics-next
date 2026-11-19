@@ -13,8 +13,7 @@ import {
 } from './music-context-create';
 import type { Release } from '@rezics/definitions';
 
-const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words';
 
 export { StatementSummary as MusicContextStatementSummary } from './statement-summary';
 

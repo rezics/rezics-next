@@ -18,7 +18,7 @@ When no loader is running, it offers Read again at the current live/exact addres
 preparing state. The action obtains fresh native admission; it never revives a retired response. Its callback is
 bound to the current request and monotonic session revision, so an older detached control cannot initiate a read
 under a replacement credential. Loader transitions keep the existing preparing state.
- Returning opens the original private route and requires fresh admission;
+Returning opens the original private route and requires fresh admission;
 it supplies neither public permission nor a saved draft. A direct notebook return reads the installed notebook route.
 A link callback captured before session/exposure retirement cannot reinstall the old return coordinate. Existing
 notebook-frontier return semantics stay separate.

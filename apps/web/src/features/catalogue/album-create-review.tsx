@@ -10,8 +10,7 @@ import { creationStatement, type StatementInput } from './statement-editor';
 import { DefinitionMeaning } from './definition-meaning';
 import { useLayoutEffect, useRef } from 'react';
 
-const wrap =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const wrap = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 
 export function albumCreateFingerprint(
   release: Release,

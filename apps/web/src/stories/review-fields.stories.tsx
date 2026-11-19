@@ -95,11 +95,14 @@ function AdmittedExamples({
         Illustrative forms using existing story fixtures. Native acceptance is UNRUN.
       </p>
       <div className="flex flex-wrap gap-4">
-        <Button type="button" variant="outline" size="sm" onClick={() => setDisabled(!disabled)}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={() => setDisabled(!disabled)}>
           {disabled ? 'Unlock illustrative fields' : 'Lock illustrative fields'}
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => void client.fetchQuery({ ...sessionQuery, staleTime: 0 })}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void client.fetchQuery({ ...sessionQuery, staleTime: 0 })}
         >
           Refresh session to retire original visits
         </Button>

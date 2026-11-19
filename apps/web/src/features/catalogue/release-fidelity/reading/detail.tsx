@@ -13,8 +13,11 @@ import type { AdmittedReleasePage, ReleaseOccurrence } from './state';
 
 const actionClass =
   'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
-const linkClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const linkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 
 type DetailState = 'loading' | 'available' | 'unavailable' | 'concealed' | 'unreadable' | 'stale';
 
@@ -90,12 +93,7 @@ export function ReleaseSelectedDetail({
   return (
     <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4" data-slot="release-detail">
       <header className="min-w-0 space-y-2">
-        <h3
-          ref={headingRef}
-          id="release-selected-detail-heading"
-          tabIndex={-1}
-          className="break-words font-semibold "
-        >
+        <h3 ref={headingRef} id="release-selected-detail-heading" tabIndex={-1} className="break-words font-semibold ">
           {m.release_fidelity_inspector_title({}, o)}
         </h3>
         <p className="break-words" lang={heading.lang ?? undefined}>

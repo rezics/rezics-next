@@ -7,10 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
-const recoveryLinkClass = cn(
-  buttonVariants({ variant: 'link' }),
-  'h-auto min-h-7 max-w-full whitespace-normal px-0',
-);
+const recoveryLinkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal px-0');
 const wrapAction = 'h-auto min-h-7 max-w-full whitespace-normal';
 
 export function FollowCountContextRecovery() {

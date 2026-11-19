@@ -29,10 +29,8 @@ import { ReferenceReusePanel } from './reference-reuse-view';
 import { screenCreateFactsRead, type ScreenReuseState } from './screen-create-review';
 import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup } from './screen-profile';
 
-const screenActionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-const screenSelectClassName =
-  'w-full min-w-0 max-w-full';
+const screenActionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const screenSelectClassName = 'w-full min-w-0 max-w-full';
 const screenLabelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 export type ScreenRow = { key: string; statement: StatementInput };

@@ -6,7 +6,12 @@ import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { RuleChoices, SavedRule } from '../collection-rule-read';
-import { savedFilterReviewTree, type CurrentFieldState, type ReviewOperand, type ReviewTree } from '../saved-filter-review/model';
+import {
+  savedFilterReviewTree,
+  type CurrentFieldState,
+  type ReviewOperand,
+  type ReviewTree,
+} from '../saved-filter-review/model';
 import type { ReviewRelease } from '../saved-filter-review/read';
 import { OwnerConditionReview } from './owner';
 

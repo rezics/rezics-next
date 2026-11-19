@@ -271,8 +271,7 @@ function LifecycleControlsView({
     else if (state.read.kind === 'ready' && state.read.snapshot.state !== 'active')
       onRestriction?.(state.read.snapshot.state);
   }, [state, onRestriction, caller.lifetime, caller.connectionRevision, caller.ready]);
-  const readOnly =
-    state.read.kind === 'ready' && state.read.snapshot.actions.length === 0 && !presentation.canRetry;
+  const readOnly = state.read.kind === 'ready' && state.read.snapshot.actions.length === 0 && !presentation.canRetry;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
   const showFreshActions = state.outcome === 'none' && actions.length > 0;
@@ -344,8 +343,8 @@ function LifecycleControlsView({
             {state.outcome === 'sending' && state.intent ? (
               <div role="status" className="space-y-1 rounded-xl bg-muted p-4 text-sm">
                 <p className="font-medium [overflow-wrap:anywhere]">
-                  {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
-                  {title}
+                  {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}{' '}
+                  · {title}
                 </p>
                 <p>{m.container_lifecycle_working()}</p>
               </div>
@@ -353,7 +352,9 @@ function LifecycleControlsView({
             {state.outcome === 'confirmed' ? (
               <div role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
                 <p className="font-medium [overflow-wrap:anywhere]">
-                  {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
+                  {state.intent?.action === 'remove'
+                    ? m.container_lifecycle_removed()
+                    : m.container_lifecycle_restored()}
                 </p>
                 {state.intent?.action === 'restore' ? (
                   state.destination ? (
@@ -373,8 +374,10 @@ function LifecycleControlsView({
               <div role="alert" className="space-y-1 rounded-xl border border-border p-4 text-sm">
                 {state.intent ? (
                   <p className="font-medium [overflow-wrap:anywhere]">
-                    {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
-                    {title}
+                    {state.intent.action === 'remove'
+                      ? m.container_lifecycle_remove()
+                      : m.container_lifecycle_restore()}{' '}
+                    · {title}
                   </p>
                 ) : null}
                 <p>{m.container_lifecycle_uncertain()}</p>
@@ -384,8 +387,10 @@ function LifecycleControlsView({
               <div role="alert" className="space-y-1 rounded-xl border border-border p-4 text-sm">
                 {state.intent ? (
                   <p className="font-medium [overflow-wrap:anywhere]">
-                    {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
-                    {title}
+                    {state.intent.action === 'remove'
+                      ? m.container_lifecycle_remove()
+                      : m.container_lifecycle_restore()}{' '}
+                    · {title}
                   </p>
                 ) : null}
                 <p>{m.container_lifecycle_conflict()}</p>
@@ -423,7 +428,8 @@ function LifecycleControlsView({
           <div className="space-y-2 rounded-xl border p-4">
             {state.intent ? (
               <p className="text-sm font-medium [overflow-wrap:anywhere]">
-                {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} · {title}
+                {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
+                {title}
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">

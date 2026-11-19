@@ -1102,11 +1102,7 @@ export function ShelfPreferencesCard({
                     if (value !== null) controller.edit({ layout: value as ShelfDraft['layout'] }, 'layout');
                   }}
                 >
-                  <SelectTrigger
-                    id={layoutSelectId}
-                    aria-labelledby={`${layoutSelectId}-label`}
-                    className="max-w-full"
-                  >
+                  <SelectTrigger id={layoutSelectId} aria-labelledby={`${layoutSelectId}-label`} className="max-w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>

@@ -20,22 +20,13 @@ export function ReadingWorkspace({
       >
         {periodContext}
       </div>
-      <div
-        data-reading-workspace-slot="timeline"
-        className="order-2 min-w-0 lg:col-start-2 lg:row-start-1"
-      >
+      <div data-reading-workspace-slot="timeline" className="order-2 min-w-0 lg:col-start-2 lg:row-start-1">
         {timeline}
       </div>
-      <div
-        data-reading-workspace-slot="recovery"
-        className="order-3 min-w-0 lg:col-start-2 lg:row-start-2"
-      >
+      <div data-reading-workspace-slot="recovery" className="order-3 min-w-0 lg:col-start-2 lg:row-start-2">
         {recovery}
       </div>
-      <div
-        data-reading-workspace-slot="window-navigation"
-        className="order-4 min-w-0 lg:col-start-2 lg:row-start-3"
-      >
+      <div data-reading-workspace-slot="window-navigation" className="order-4 min-w-0 lg:col-start-2 lg:row-start-3">
         {windowNavigation}
       </div>
     </div>

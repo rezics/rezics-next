@@ -29,7 +29,11 @@ export function AniListConfirmPage({
         {ready.map((row) => {
           const fields = aniListAppliedFields(row);
           return (
-            <li key={row.ordinal} className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-anilist-confirm={row.ordinal}>
+            <li
+              key={row.ordinal}
+              className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+              data-anilist-confirm={row.ordinal}
+            >
               <header className="space-y-1">
                 <h3 className="text-lg font-semibold [overflow-wrap:anywhere]">{row.title}</h3>
                 <p className="text-sm text-muted-foreground">
@@ -63,7 +67,10 @@ export function AniListConfirmPage({
                 <ImportSourceEvidence preview={row.sourcePreview} />
               </ImportDetails>
               {row.scoreSource ? (
-                <section className="min-w-0 space-y-3 rounded-lg border bg-muted/20 p-3" data-anilist-confirm-score={row.ordinal}>
+                <section
+                  className="min-w-0 space-y-3 rounded-lg border bg-muted/20 p-3"
+                  data-anilist-confirm-score={row.ordinal}
+                >
                   <h4 className="font-semibold">{m.library_import_score()}</h4>
                   <p className="font-medium">
                     {m.library_anilist_score_source({

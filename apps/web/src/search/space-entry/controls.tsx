@@ -71,7 +71,10 @@ export function SpaceEntryControls({
   return (
     <div className="flex flex-wrap items-center gap-2" data-search-space-actions={id}>
       {signIn ? (
-        <a className={cn(buttonVariants({ variant: 'outline' }), control)} href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
+        <a
+          className={cn(buttonVariants({ variant: 'outline' }), control)}
+          href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}
+        >
           {m.search_space_sign_in({}, options)}
         </a>
       ) : (

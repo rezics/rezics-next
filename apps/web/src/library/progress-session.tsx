@@ -1559,9 +1559,7 @@ function SessionEditor({
               </>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
-              <Button type="submit">
-                {m.library_progress_record()}
-              </Button>
+              <Button type="submit">{m.library_progress_record()}</Button>
               <p className="text-sm text-muted-foreground">
                 {session.mode === 'scalar_amount'
                   ? m.library_progress_scalar_meaning()

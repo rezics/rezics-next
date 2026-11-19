@@ -170,7 +170,9 @@ export function CatalogueReportsView({
                     <h2 className="text-lg font-semibold">{m.moderation_queue_submission()}</h2>
                     <p className="mt-1 break-all text-sm text-muted-foreground">{selected.id}</p>
                   </div>
-                  {outcomeLabel(selected) ? <span className="text-sm font-medium">{outcomeLabel(selected)}</span> : null}
+                  {outcomeLabel(selected) ? (
+                    <span className="text-sm font-medium">{outcomeLabel(selected)}</span>
+                  ) : null}
                 </div>
                 <dl className="mt-5 grid gap-3 text-sm">
                   <div>

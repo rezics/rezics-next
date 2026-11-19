@@ -8,7 +8,14 @@ import { libraryUnitLabel } from '../profiles';
 import type { Release } from '../../subject/definitions';
 import { recordProgressSession, startProgressSession } from '../progress-server';
 import { readConfiguredProgressHistory } from './actions';
-import { createGuardedCommand, dispatchGuardedCommand, progressWriteOutcome, type GuardedCommand, type GuardedOutcome, type GuardedSender } from './commands';
+import {
+  createGuardedCommand,
+  dispatchGuardedCommand,
+  progressWriteOutcome,
+  type GuardedCommand,
+  type GuardedOutcome,
+  type GuardedSender,
+} from './commands';
 import type { VisitProgress } from './visit';
 import type {
   ProgressChange,
@@ -288,7 +295,8 @@ export function ConfiguredProgressPanel({
       {outcome && uncertain.current ? (
         <Button
           type="button"
-          variant="outline" className={quiet}
+          variant="outline"
+          className={quiet}
           disabled={pending}
           aria-describedby={outcome.state === 'unavailable' ? outcomeId : undefined}
           onClick={() => void deliver()}

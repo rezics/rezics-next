@@ -25,8 +25,7 @@ type Props = {
   onRetry: () => void;
 };
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-7 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
 const compactActionClassName =
   'h-auto min-h-6 max-w-full shrink whitespace-normal text-center [overflow-wrap:anywhere]';
 

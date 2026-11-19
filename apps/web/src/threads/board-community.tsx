@@ -25,13 +25,7 @@ import type { BoardPreparedNavigation } from './board-navigation';
 const actionControlLayout =
   '[&_a]:max-w-full [&_a]:whitespace-normal [&_button]:max-w-full [&_button]:whitespace-normal [&_svg]:shrink-0';
 
-function BoardCommunityAboutBody({
-  page,
-  postingInterval,
-}: {
-  page: CommunityBoardPage;
-  postingInterval?: ReactNode;
-}) {
+function BoardCommunityAboutBody({ page, postingInterval }: { page: CommunityBoardPage; postingInterval?: ReactNode }) {
   const rulesHeadingId = useId();
   const { board } = page;
   const community = page.community?.state === 'available' ? page.community.value : null;
@@ -152,9 +146,15 @@ export function BoardCommunity({
                 </div>
               </div>
             </div>
-            <div data-slot="board-community-actions" className="flex min-w-0 flex-col gap-3 md:w-56 md:shrink-0 md:items-end">
+            <div
+              data-slot="board-community-actions"
+              className="flex min-w-0 flex-col gap-3 md:w-56 md:shrink-0 md:items-end"
+            >
               {startAction ? (
-                <div data-slot="board-community-start" className={`flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end ${actionControlLayout}`}>
+                <div
+                  data-slot="board-community-start"
+                  className={`flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end ${actionControlLayout}`}
+                >
                   {startAction}
                 </div>
               ) : null}
@@ -281,11 +281,7 @@ export function BoardCommunityStatus({
         </a>
       ) : null}
       {state === 'error' && onRetry ? (
-        <Button
-          variant="outline"
-          className="mt-4 h-auto min-h-7 max-w-full whitespace-normal"
-          onClick={onRetry}
-        >
+        <Button variant="outline" className="mt-4 h-auto min-h-7 max-w-full whitespace-normal" onClick={onRetry}>
           {m.board_community_retry()}
         </Button>
       ) : null}

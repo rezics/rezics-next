@@ -27,11 +27,7 @@ Absent credential-approval ports fail closed. Absent automated-creation proof me
 ## Examples
 
 ```ts
-import {
-  isManagementOperation,
-  managementOperationProfile,
-  parseAccountOperationRefusal,
-} from '@rezics/auth-contract';
+import { isManagementOperation, managementOperationProfile, parseAccountOperationRefusal } from '@rezics/auth-contract';
 
 managementOperationProfile('membership');
 // { client_id: 'rezics-auth-account-management', scope: ['organization:membership'] }
@@ -44,10 +40,7 @@ isManagementOperation({
 });
 // true: closed descriptor check
 
-parseAccountOperationRefusal(
-  { error: 'step_up_required', effect_status: 'not_applied' },
-  401,
-);
+parseAccountOperationRefusal({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
 // { error: 'step_up_required', effect_status: 'not_applied' }
 // The same body with status 403 returns null.
 ```

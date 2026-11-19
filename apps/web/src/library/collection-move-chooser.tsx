@@ -21,9 +21,11 @@ import type { CollectionMoveAnchor, CollectionMoveChoice } from './collection-pl
 
 export type { CollectionMoveAnchor, CollectionMoveChoice };
 
-const controlClass =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start [overflow-wrap:anywhere]';
-const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]');
+const controlClass = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-start [overflow-wrap:anywhere]';
+const linkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]',
+);
 
 type ReadAttempt =
   | { kind: 'choices'; visit: BoundedPageVisit }
@@ -381,9 +383,7 @@ export function CollectionMoveChooser({
               className={controlClass}
               disabled={disabled || loading}
               onClick={(event) =>
-                choiceIssue === 'expired'
-                  ? restartChoices(event.currentTarget)
-                  : retryChoicePage(event.currentTarget)
+                choiceIssue === 'expired' ? restartChoices(event.currentTarget) : retryChoicePage(event.currentTarget)
               }
             >
               {choiceIssue === 'expired' ? m.library_collection_move_restart() : m.library_collection_move_retry()}

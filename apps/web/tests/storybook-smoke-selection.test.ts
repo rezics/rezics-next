@@ -30,7 +30,11 @@ const webIndex: SmokeStoryIndex = {
       story('pages-library-copies--none', 'Library/Copies/Copies', 'None'),
       story('pages-library-copies--many-copies', 'Library/Copies/Copies', 'Owner'),
       story('patterns-account-shell--signed-out', 'Account/Account Menu/Shell', 'Signed out, account menu open'),
-      story('patterns-account-shell--member-account-menu-open', 'Account/Account Menu/Shell', 'Member, account menu open'),
+      story(
+        'patterns-account-shell--member-account-menu-open',
+        'Account/Account Menu/Shell',
+        'Member, account menu open',
+      ),
     ].map((entry) => [entry.id, entry] as const),
   ),
 };

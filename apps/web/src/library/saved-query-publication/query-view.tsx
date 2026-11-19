@@ -7,7 +7,13 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { publicationReadWithin } from '../collection-publication';
 import { isRecord } from '../collection-records';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
-import { queryPublicationAddress, queryPublicationInput, type QueryPublicationInput, type QueryPublicationResult, type QueryPublicationStatus } from './query';
+import {
+  queryPublicationAddress,
+  queryPublicationInput,
+  type QueryPublicationInput,
+  type QueryPublicationResult,
+  type QueryPublicationStatus,
+} from './query';
 
 type Address = { collectionId: string; id: string };
 type Transport = {
@@ -176,11 +182,7 @@ export function QueryPublicationView({
                 if (value === 'public' || value === 'unlisted') setTarget(value);
               }}
             >
-              <SelectTrigger
-                id={visibilitySelectId}
-                aria-labelledby={`${visibilitySelectId}-label`}
-               
-              >
+              <SelectTrigger id={visibilitySelectId} aria-labelledby={`${visibilitySelectId}-label`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
@@ -198,7 +200,7 @@ export function QueryPublicationView({
             <NativeCheckbox
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
-              className='mt-1 shrink-0'
+              className="mt-1 shrink-0"
               disabled={busy}
             />
             <span>{m.library_query_publication_confirm()}</span>

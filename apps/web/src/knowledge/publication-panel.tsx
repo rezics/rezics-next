@@ -1,14 +1,7 @@
 import { knowledgeAuthoringImageSelection } from './media';
 import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
 import { KnowledgePublicationReaderLink } from './publication-return';
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { KnowledgeReferenceBody } from './reference-view';
 import { m } from '../paraglide/messages.js';
@@ -135,14 +128,8 @@ export function KnowledgePublicationPanel({
     const document = request.owner.ownerDocument;
     const focused = document.activeElement;
     const focusWasRetained =
-      focused === request.owner ||
-      focused === document.body ||
-      focused === document.documentElement;
-    if (
-      !active.current ||
-      request.source !== presentationSource.current ||
-      !focusWasRetained
-    ) {
+      focused === request.owner || focused === document.body || focused === document.documentElement;
+    if (!active.current || request.source !== presentationSource.current || !focusWasRetained) {
       presentation.current = null;
       return;
     }
@@ -158,8 +145,8 @@ export function KnowledgePublicationPanel({
             ? request.returnTo
             : headingRef.current
           : request.kind === 'command'
-            ? commandResultRef.current ?? readResultRef.current
-            : readResultRef.current ?? savedSourceRef.current;
+            ? (commandResultRef.current ?? readResultRef.current)
+            : (readResultRef.current ?? savedSourceRef.current);
     (isVisibleFocusTarget(target) ? target : headingRef.current)?.focus();
   });
 
@@ -509,10 +496,7 @@ export function KnowledgePublicationPanel({
               label={m.knowledge_publication_identity({}, options)}
               value={intent.expectedPublicationId ?? '—'}
             />
-            <PublicationIdentity
-              label={m.knowledge_private_revision({}, options)}
-              value={intent.revisionId ?? '—'}
-            />
+            <PublicationIdentity label={m.knowledge_private_revision({}, options)} value={intent.revisionId ?? '—'} />
           </div>
           <p className="text-sm">
             {intent.revisionId === null
@@ -668,11 +652,7 @@ function PublicationIdentity({ label, value }: { label: string; value: string })
 
 function isVisibleFocusTarget(target: HTMLElement | null): target is HTMLElement {
   if (!target || !target.isConnected) return false;
-  if (
-    target.getClientRects().length === 0 ||
-    target.closest('[hidden], [inert], [aria-hidden="true"]')
-  )
-    return false;
+  if (target.getClientRects().length === 0 || target.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
   if ('disabled' in target && Boolean((target as HTMLButtonElement).disabled)) return false;
   const visibility = target.ownerDocument.defaultView?.getComputedStyle(target).visibility;
   return visibility !== 'hidden' && visibility !== 'collapse';

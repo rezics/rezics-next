@@ -29,8 +29,7 @@ import { CatalogueFileCreateFields } from './catalogue-file-create-fields';
 import { CatalogueFileCreateReview } from './catalogue-file-create-review';
 
 const factsId = 'catalogue-file-initial-facts';
-const formClass =
-  'inline-flex items-center justify-center whitespace-normal border';
+const formClass = 'inline-flex items-center justify-center whitespace-normal border';
 
 function CatalogueFileCreateSessionLive({ locale, initial }: { locale: string; initial: CatalogueFileCreateRead }) {
   const { state } = useSession();

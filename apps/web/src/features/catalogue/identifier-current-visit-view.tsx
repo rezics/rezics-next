@@ -185,7 +185,8 @@ function IdentifierVisitReader({
               ) : (
                 <p role="status">{m.value_not_selected({}, o)}</p>
               )}
-              <Button variant="link"
+              <Button
+                variant="link"
                 className={visitControl}
                 type="button"
                 onClick={() => {
@@ -225,7 +226,8 @@ function IdentifierVisitReader({
                       <div key={item.id} className="min-w-0 space-y-2 rounded border p-3">
                         <p>{m.facts_selected_value({ number: index + 1 }, o)}</p>
                         <CandidateValue snak={item} related={evidence.related} locale={locale} />
-                        <Button variant="link"
+                        <Button
+                          variant="link"
                           type="button"
                           className={visitControl}
                           ref={(node) => {
@@ -250,7 +252,8 @@ function IdentifierVisitReader({
               ))}
             </>
           ) : null}
-          <Button variant="link"
+          <Button
+            variant="link"
             type="button"
             className={visitControl}
             disabled={query.isFetching}

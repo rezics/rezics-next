@@ -36,11 +36,7 @@ export const pageSchema = v.object({
 export const reviewSchema = v.object({
   change: changeSchema,
   current: v.object({ incarnationId: v.nullable(incarnation), revision, state }),
-  availability: v.union([
-    v.literal('available'),
-    v.literal('no_prior_state'),
-    v.literal('state_unavailable'),
-  ]),
+  availability: v.union([v.literal('available'), v.literal('no_prior_state'), v.literal('state_unavailable')]),
 });
 export const entrySchema = v.object({
   subjectId: v.pipe(v.string(), v.minLength(1)),
@@ -62,10 +58,13 @@ export function receivePage(value: unknown): EntryStatePage | null {
   if (!parsed.success) return null;
   const page = parsed.output;
   if (page.changes.length > 50 || (page.changes.length > 0 && !page.incarnationId)) return null;
-  if (page.changes.some((change, index) =>
-    change.revision > page.currentRevision ||
-    (index > 0 && change.revision >= page.changes[index - 1]!.revision),
-  )) return null;
+  if (
+    page.changes.some(
+      (change, index) =>
+        change.revision > page.currentRevision || (index > 0 && change.revision >= page.changes[index - 1]!.revision),
+    )
+  )
+    return null;
   return page;
 }
 
@@ -77,7 +76,8 @@ export function receiveReview(value: unknown): EntryStateReview | null {
     !review.current.incarnationId ||
     review.change.revision > review.current.revision ||
     (review.change.beforeState === null) !== (review.availability === 'no_prior_state')
-  ) return null;
+  )
+    return null;
   return review;
 }
 

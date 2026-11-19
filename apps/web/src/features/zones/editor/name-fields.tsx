@@ -110,9 +110,7 @@ export function ZoneNameFields({
         </Field>
       </div>
       <details ref={translations} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
-        <summary className="cursor-pointer break-words font-medium">
-          {m.zone_name_translations({}, options)}
-        </summary>
+        <summary className="cursor-pointer break-words font-medium">{m.zone_name_translations({}, options)}</summary>
         <p className="text-sm text-muted-foreground">{m.zone_name_translation_help({}, options)}</p>
         {UI_LOCALES.filter((language) => language !== primary && Object.hasOwn(labels, language)).map((language) => (
           <Field key={language} data-invalid={invalid(language)}>

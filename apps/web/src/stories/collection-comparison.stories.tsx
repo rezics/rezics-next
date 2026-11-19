@@ -165,9 +165,9 @@ function Example({
           <section className="space-y-4">
             <h1 className="text-xl font-semibold">Supplied reference</h1>
             <a
- 
- href={reference.via}
- className="underline" onClick={(event) => {
+              href={reference.via}
+              className="underline"
+              onClick={(event) => {
                 event.preventDefault();
                 returnTo(reference.via);
                 visit(null);

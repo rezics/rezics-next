@@ -266,10 +266,7 @@ export function DefinitionPublicationWorkspace({
             ? m.definition_publication_extension_intro({}, o)
             : m.definition_publication_intro({}, o)}
         </p>
-        <a
-          className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
-          href={definitionGuideHref(locale)}
-        >
+        <a className={cn(buttonVariants({ variant: 'outline' }), actionClassName)} href={definitionGuideHref(locale)}>
           {m.definition_publication_guide({}, o)}
         </a>
       </header>
@@ -450,7 +447,7 @@ export function DefinitionPublicationWorkspace({
           )}
           {independent?.subject && (
             <a
-              className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
               href={`/${locale}/subjects/${independent.subject}`}
             >
               {m.definition_publication_read_subject({}, o)}
@@ -458,7 +455,7 @@ export function DefinitionPublicationWorkspace({
           )}
           {independent?.digest && (
             <a
-              className={cn(buttonVariants({ variant: 'outline' }), actionClassName )}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
               href={definitionGuideHref(locale, { release: independent.digest })}
             >
               {m.definition_publication_read_release({}, o)}

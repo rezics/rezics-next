@@ -72,7 +72,7 @@ export function VndbUploadForm({
           accept="application/xml,text/xml,.xml"
           aria-describedby={helpId}
           disabled={busy || disabled}
-          className='w-full max-w-full file:me-3'
+          className="w-full max-w-full file:me-3"
         />
       </Field>
       <VndbAction type="submit" disabled={busy || disabled} aria-busy={busy}>

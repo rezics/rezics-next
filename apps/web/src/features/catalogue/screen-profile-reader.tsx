@@ -39,8 +39,7 @@ import {
   type ScreenCurrentVisit,
 } from './screen-current-visit';
 
-const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
 function options(locale: string) {
   return { locale: locale as never };

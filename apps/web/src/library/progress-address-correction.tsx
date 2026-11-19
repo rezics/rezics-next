@@ -49,11 +49,7 @@ export function ProgressAddressCorrection({
             ? m.library_progress_address_invalid({ field: labels[issue] })
             : m.library_progress_address_heading()}
       </p>
-      <Link
-        to="/library/progress"
-        search={{}}
-        className={buttonVariants({ variant: 'outline' })}
-      >
+      <Link to="/library/progress" search={{}} className={buttonVariants({ variant: 'outline' })}>
         {m.library_progress_return_to_progress()}
       </Link>
       {fields.map((field) => (

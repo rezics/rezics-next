@@ -59,7 +59,13 @@ function CalendarFields() {
           disabled={disabled}
           onChange={() => undefined}
         />
-        <Button type="button" className="w-fit" aria-pressed={disabled} variant="outline" size="sm" onClick={() => setDisabled((current) => !current)}
+        <Button
+          type="button"
+          className="w-fit"
+          aria-pressed={disabled}
+          variant="outline"
+          size="sm"
+          onClick={() => setDisabled((current) => !current)}
         >
           {disabled ? 'Enable date field' : 'Disable date field'}
         </Button>

@@ -68,7 +68,11 @@ function PreparedHome({ anonymous = false }: { anonymous?: boolean }) {
           <Button type="button" variant="link" size="sm" onClick={() => setRevision(revision + 1)}>
             Replace page
           </Button>
-          <Button type="button" variant="link" size="sm" onClick={() => {
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            onClick={() => {
               client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
               setSignedIn(false);
             }}

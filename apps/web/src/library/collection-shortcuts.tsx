@@ -35,10 +35,7 @@ export function CollectionShortcuts() {
           {collection.title}
         </a>
       ))}
-      <a
-        href={`/${getLocale()}/library/collections`}
-        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-      >
+      <a href={`/${getLocale()}/library/collections`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
         {m.library_all_collections()}
       </a>
     </nav>

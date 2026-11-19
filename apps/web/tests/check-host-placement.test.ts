@@ -51,7 +51,6 @@ test('a remote host test failure is returned as a check failure', async () => {
   ).rejects.toThrow('host tests failed with status 17');
 });
 
-
 test('Web driver return declarations match the selected execution branch', async () => {
   const app = resolve(import.meta.dir, '..');
   const timings = ['apps/web/.cache/check-timings.json'];
@@ -60,7 +59,10 @@ test('Web driver return declarations match the selected execution branch', async
     { args: ['--personal-host'], returns: [] },
     { args: ['--auth-binding-host'], returns: [] },
     { args: ['--prepare-only'], returns: ['apps/web/.dev.vars'] },
-    { args: ['--browser', '--report', '.temp/web-return-contract', 'tests/check-host-placement.test.ts'], returns: ['.temp/web-return-contract'] },
+    {
+      args: ['--browser', '--report', '.temp/web-return-contract', 'tests/check-host-placement.test.ts'],
+      returns: ['.temp/web-return-contract'],
+    },
     { args: ['--tests-only', 'tests/check-host-placement.test.ts'], returns: timings },
     { args: ['--tests-only', 'tests/native/hosted-book-journey.host.test.ts'], returns: timings },
     { args: ['--stories'], returns: timings },

@@ -37,10 +37,7 @@ export function SavedQueryCorrection({
               {m.library_saved_query_correct()}
             </a>
           ) : null}
-          <a
-           className={buttonVariants({ variant: 'outline' })}
-            href={savedQueryCreateHref(locale)}
-          >
+          <a className={buttonVariants({ variant: 'outline' })} href={savedQueryCreateHref(locale)}>
             {m.library_saved_query_blank()}
           </a>
         </div>

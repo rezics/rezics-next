@@ -9,7 +9,11 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { ConnectedStory } from './connected-story';
 
-const meta = { title: 'Subjects/Sources/Credit Inspection', id: 'pages-subjects-credit-inspection', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Subjects/Sources/Credit Inspection',
+  id: 'pages-subjects-credit-inspection',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

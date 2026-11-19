@@ -171,31 +171,26 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
           aria-busy={pending}
         >
           {failure ? (
-            <Button type="button" size="sm"
-                      variant="outline" disabled={pending} onClick={review.retry}>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={review.retry}>
               {m.auth_owned_retry()}
             </Button>
           ) : null}
           {review.previous ? (
-            <Button type="button" size="sm"
-                      variant="outline" disabled={pending} onClick={review.previousPage}>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={review.previousPage}>
               {m.auth_inventory_previous()}
             </Button>
           ) : null}
           {page?.next ? (
-            <Button type="button" size="sm"
-                      variant="outline" disabled={pending} onClick={review.next}>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={review.next}>
               {m.auth_inventory_next()}
             </Button>
           ) : null}
           {review.accepted ? (
-            <Button type="button" size="sm"
-                      variant="outline" disabled={pending} onClick={review.reload}>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={review.reload}>
               {m.auth_owned_reload()}
             </Button>
           ) : null}
-          <Button type="button" size="sm"
-                      variant="outline" disabled={pending} onClick={review.restart}>
+          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={review.restart}>
             {m.auth_owned_restart()}
           </Button>
         </nav>

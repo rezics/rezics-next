@@ -34,8 +34,7 @@ type RevisionHistoryNavigationProps = {
   returnSelection?: ReturnSelection | undefined;
 };
 
-const navigationAction =
-  'h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]';
+const navigationAction = 'h-auto min-h-7 max-w-full text-start whitespace-normal [overflow-wrap:anywhere]';
 
 /**
  * Page-local inspection of supplied entries. No read function or QueryClient is owned here.

@@ -131,11 +131,7 @@ function CopyTextInput({
           onChange={(event) => onChange(event.currentTarget.value)}
         />
       ) : (
-        <Input
-          {...attributes}
-          type="text"
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
+        <Input {...attributes} type="text" onChange={(event) => onChange(event.currentTarget.value)} />
       )}
       <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1 text-sm">
         <p id={`${id}-hint`} className={invalid ? 'text-destructive' : 'text-muted-foreground'}>
@@ -349,9 +345,7 @@ function CopyConditionSelect({
     return (
       <Field>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <p id={id}>
-          {copyConditionDisplayText(current)}
-        </p>
+        <p id={id}>{copyConditionDisplayText(current)}</p>
       </Field>
     );
   }

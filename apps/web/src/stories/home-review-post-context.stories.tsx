@@ -179,7 +179,11 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
             <Button type="button" variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>
               Replace page
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => {
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
                 const next = viewer === 'reader-a' ? 'reader-b' : 'reader-a';
                 client.setQueryData(['session'], {
                   state: 'signed-in',

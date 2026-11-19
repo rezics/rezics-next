@@ -3,7 +3,18 @@ import { buttonVariants, Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useRef, useState } from 'react';
 import { AccountRef } from '../account-ref';
 import { m } from '../../paraglide/messages.js';
-import { collectionReadFailure, firstCollectionVisit, nextCollectionVisit, previousCollectionVisit, publicCountOf, replaceCollectionPage, type BoundCollectionPage, type ExactPublicCount, type PublicCollectionRow, type SubjectCollectionVisit } from './model';
+import {
+  collectionReadFailure,
+  firstCollectionVisit,
+  nextCollectionVisit,
+  previousCollectionVisit,
+  publicCountOf,
+  replaceCollectionPage,
+  type BoundCollectionPage,
+  type ExactPublicCount,
+  type PublicCollectionRow,
+  type SubjectCollectionVisit,
+} from './model';
 
 const controlClass = 'h-auto min-h-7 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
@@ -90,7 +101,9 @@ export function PublicCollectionsPanel({
   const previous = previousCollectionVisit(page.visit);
   return (
     <details data-public-collections className="relative">
-      <summary className={buttonVariants({ variant: 'outline', className: `${controlClass} cursor-pointer list-none` })}>
+      <summary
+        className={buttonVariants({ variant: 'outline', className: `${controlClass} cursor-pointer list-none` })}
+      >
         {total.kind === 'exact'
           ? m.library_subject_public_collections({ count: total.value })
           : m.library_subject_public_collections_unknown()}
@@ -204,7 +217,7 @@ export function PublicCollectionsPanel({
           ? rows.map((collection) => (
               <a
                 key={`return-${collection.id}`}
-               className={buttonVariants({ variant: 'link', className: 'sr-only' })}
+                className={buttonVariants({ variant: 'link', className: 'sr-only' })}
                 href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
               >
                 {collection.title}

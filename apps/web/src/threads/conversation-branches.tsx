@@ -247,7 +247,10 @@ export function ConversationBranches({
                       {m.conversation_opening()}
                     </span>
                   ) : null}
-                  <a href={`#${row.anchorId}`} className={cn(controlClass, 'inline-flex min-h-6 items-center hover:underline')}>
+                  <a
+                    href={`#${row.anchorId}`}
+                    className={cn(controlClass, 'inline-flex min-h-6 items-center hover:underline')}
+                  >
                     {m.thread_branch_position({ position: row.index + 1 })}
                   </a>
                   {row.relatedCount > 0 ? (
@@ -272,10 +275,7 @@ export function ConversationBranches({
                   ) : null}
                 </div>
                 {row.ancestors.length ? (
-                  <ConversationInspection
-                    label={m.conversation_reply_path()}
-                    className="px-2 [overflow-wrap:anywhere]"
-                  >
+                  <ConversationInspection label={m.conversation_reply_path()} className="px-2 [overflow-wrap:anywhere]">
                     <nav aria-label={m.thread_branch_path()} className="min-w-0">
                       <ol className="flex min-w-0 flex-wrap items-center gap-1">
                         {row.ancestors.map((index) => (

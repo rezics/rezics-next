@@ -235,7 +235,12 @@ function FormattingDialog({
               {t(panel === 'codeLanguage' ? 'clearCodeLanguage' : 'removeEmphasis')}
             </Button>
           ) : null}
-          <Button type="button" variant="ghost" className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal" onClick={close}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal"
+            onClick={close}
+          >
             {labels.cancel}
           </Button>
           <Button type="submit" disabled={!valid} className="h-auto min-h-7 min-w-0 max-w-full whitespace-normal">

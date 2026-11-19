@@ -51,7 +51,8 @@ const copy = {
     pending: 'Noch nicht angewendete Filteränderungen',
     retainedKinds: 'Ausgewählte Arten außerhalb des geladenen Verzeichnisses',
     removeKind: 'Art entfernen',
-    scope: 'Der Ressourcenbereich wurde geändert. Die bisherige Facettenauswahl wurde gelöscht. Anwenden lädt die Optionen für den neuen Bereich.',
+    scope:
+      'Der Ressourcenbereich wurde geändert. Die bisherige Facettenauswahl wurde gelöscht. Anwenden lädt die Optionen für den neuen Bereich.',
   },
   fr: {
     apply: 'Appliquer tous les filtres',
@@ -60,7 +61,8 @@ const copy = {
     pending: 'Modifications des filtres non appliquées',
     retainedKinds: 'Types sélectionnés hors du répertoire chargé',
     removeKind: 'Retirer le type',
-    scope: 'Le périmètre des ressources a changé. Les anciennes sélections de facettes ont été effacées. Appliquez pour charger les options du nouveau périmètre.',
+    scope:
+      'Le périmètre des ressources a changé. Les anciennes sélections de facettes ont été effacées. Appliquez pour charger les options du nouveau périmètre.',
   },
   es: {
     apply: 'Aplicar todos los filtros',
@@ -69,7 +71,8 @@ const copy = {
     pending: 'Cambios de filtros sin aplicar',
     retainedKinds: 'Tipos seleccionados fuera del directorio cargado',
     removeKind: 'Quitar tipo',
-    scope: 'El ámbito de recursos ha cambiado. Se han borrado las selecciones de facetas anteriores. Aplica para cargar las opciones del nuevo ámbito.',
+    scope:
+      'El ámbito de recursos ha cambiado. Se han borrado las selecciones de facetas anteriores. Aplica para cargar las opciones del nuevo ámbito.',
   },
 };
 

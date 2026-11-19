@@ -60,11 +60,17 @@ async function admitted(
 
 export const readHostedBook = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(v.strictObject({ ...hostedSelection.entries, locale: uiLocale }), input))
-  .handler(({ data: { locale, ...selection } }) => admitted(locale, (native, signal) => native.read(selection, signal)));
+  .handler(({ data: { locale, ...selection } }) =>
+    admitted(locale, (native, signal) => native.read(selection, signal)),
+  );
 
 export const createHostedBook = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => v.parse(v.strictObject({ body: hostedCreate, idempotencyKey: hostedKey, locale: uiLocale }), input))
-  .handler(({ data }) => admitted(data.locale, (native, signal) => native.create(data.body, data.idempotencyKey, signal), true));
+  .validator((input: unknown) =>
+    v.parse(v.strictObject({ body: hostedCreate, idempotencyKey: hostedKey, locale: uiLocale }), input),
+  )
+  .handler(({ data }) =>
+    admitted(data.locale, (native, signal) => native.create(data.body, data.idempotencyKey, signal), true),
+  );
 
 export const reviseHostedBook = createServerFn({ method: 'POST' })
   .validator((input: unknown) =>
@@ -79,7 +85,11 @@ export const reviseHostedBook = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    admitted(data.locale, (native, signal) => native.revise(data.catalogueId, data.body, data.idempotencyKey, signal), true),
+    admitted(
+      data.locale,
+      (native, signal) => native.revise(data.catalogueId, data.body, data.idempotencyKey, signal),
+      true,
+    ),
   );
 
 export const bindHostedChapterLanguage = createServerFn({ method: 'POST' })
@@ -119,7 +129,11 @@ export const publishHostedBook = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    admitted(data.locale, (native, signal) => native.publish(data.catalogueId, data.body, data.idempotencyKey, signal), true),
+    admitted(
+      data.locale,
+      (native, signal) => native.publish(data.catalogueId, data.body, data.idempotencyKey, signal),
+      true,
+    ),
   );
 
 async function admittedOwner<T>(
@@ -144,7 +158,11 @@ async function admittedOwner<T>(
     const credential = viewerCredential(request);
     if (!accountId || !credential) return hostedFailure('denied', m.studio_sign_in({}, options));
     if (!hasKernelOrigin()) return hostedFailure('unavailable', m.studio_books_service_unavailable({}, options));
-    return await run(createHostedBookNative(kernelClient(options.locale, credential), options.locale), accountId, request.signal);
+    return await run(
+      createHostedBookNative(kernelClient(options.locale, credential), options.locale),
+      accountId,
+      request.signal,
+    );
   } catch {
     return hostedFailure(
       mutation ? 'uncertain' : 'unavailable',
@@ -164,7 +182,9 @@ export const listHostedBooks = createServerFn({ method: 'GET' })
   .handler(({ data }) =>
     admittedOwner(data.locale, (native, accountId, signal) =>
       data.accountId && data.accountId !== accountId
-        ? Promise.resolve(hostedFailure('denied', m.studio_inventory_account({}, { locale: data.locale ?? getLocale() })))
+        ? Promise.resolve(
+            hostedFailure('denied', m.studio_inventory_account({}, { locale: data.locale ?? getLocale() })),
+          )
         : native.listOwn(accountId, data.cursor, signal, data.expected),
     ),
   );
@@ -179,7 +199,9 @@ export const listHostedBookHistory = createServerFn({ method: 'GET' })
 /** Exact author-only page; authentication is required even when the selected release is public. */
 export const readHostedOutlineWindow = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(hostedOutlineWindowRequest, input))
-  .handler(({ data }) => admittedOwner(undefined, (native, _accountId, signal) => native.readOutlineWindow(data, signal)));
+  .handler(({ data }) =>
+    admittedOwner(undefined, (native, _accountId, signal) => native.readOutlineWindow(data, signal)),
+  );
 
 export const hostedOutlineWindowNative: HostedOutlineWindowNative = {
   async readOutlineWindow(data, signal) {
@@ -194,13 +216,17 @@ export const hostedOutlineWindowNative: HostedOutlineWindowNative = {
 export const writeHostedDraftPoint = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(hostedDraftPointRequest, input))
   .handler(({ data }) =>
-    admittedOwner(undefined, async (native, accountId, signal) => {
-      if (data.expectedViewer.accountId !== accountId)
-        return hostedFailure('denied', 'This book belongs to a different account.');
-      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
-      if (!owner.ok) return owner;
-      return native.writeDraftPoint(data, signal);
-    }, true),
+    admittedOwner(
+      undefined,
+      async (native, accountId, signal) => {
+        if (data.expectedViewer.accountId !== accountId)
+          return hostedFailure('denied', 'This book belongs to a different account.');
+        const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+        if (!owner.ok) return owner;
+        return native.writeDraftPoint(data, signal);
+      },
+      true,
+    ),
   );
 
 export const readHostedMetadata = createServerFn({ method: 'GET' })
@@ -210,13 +236,17 @@ export const readHostedMetadata = createServerFn({ method: 'GET' })
 export const writeHostedPublicationPoint = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(hostedPublicationPointRequest, input))
   .handler(({ data }) =>
-    admittedOwner(undefined, async (native, accountId, signal) => {
-      if (data.expectedViewer.accountId !== accountId)
-        return hostedFailure('denied', 'This Book belongs to a different account.');
-      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
-      if (!owner.ok) return owner;
-      return native.writePublicationPoint(data, signal);
-    }, true),
+    admittedOwner(
+      undefined,
+      async (native, accountId, signal) => {
+        if (data.expectedViewer.accountId !== accountId)
+          return hostedFailure('denied', 'This Book belongs to a different account.');
+        const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+        if (!owner.ok) return owner;
+        return native.writePublicationPoint(data, signal);
+      },
+      true,
+    ),
   );
 
 export const hostedPublicationPointNative: HostedPublicationPointNative & Pick<HostedBookNative, 'readOwn'> = {
@@ -241,13 +271,17 @@ export const hostedPublicationPointNative: HostedPublicationPointNative & Pick<H
 export const appendHostedRootChapter = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(hostedRootAppendRequest, input))
   .handler(({ data }) =>
-    admittedOwner(undefined, async (native, accountId, signal) => {
-      if (data.expectedViewer.accountId !== accountId)
-        return hostedFailure('denied', 'This book belongs to a different account.');
-      const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
-      if (!owner.ok) return owner;
-      return native.appendRootChapter(data, signal);
-    }, true),
+    admittedOwner(
+      undefined,
+      async (native, accountId, signal) => {
+        if (data.expectedViewer.accountId !== accountId)
+          return hostedFailure('denied', 'This book belongs to a different account.');
+        const owner = await native.readOwn(accountId, data.catalogueId, signal, data.expectedViewer);
+        if (!owner.ok) return owner;
+        return native.appendRootChapter(data, signal);
+      },
+      true,
+    ),
   );
 
 export const hostedRootAppendNative: HostedRootAppendNative &
@@ -256,7 +290,10 @@ export const hostedRootAppendNative: HostedRootAppendNative &
   ...hostedOutlineWindowNative,
   async readOwn(accountId, catalogueId, signal, expectedViewer) {
     try {
-      return await readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer, locale: getLocale() }, signal });
+      return await readOwnedHostedBook({
+        data: { accountId, catalogueId, expectedViewer, locale: getLocale() },
+        signal,
+      });
     } catch {
       return hostedFailure('unavailable', 'The current Book head could not be read. Retry the refresh.');
     }
@@ -317,7 +354,8 @@ async function hostedBrowserMutation(
 export const hostedBookNative: HostedBookNative = {
   listHistory: (catalogueId, cursor, signal) => listHostedBookHistory({ data: { catalogueId, cursor }, signal }),
   read: (data, signal) => readHostedBook({ data: { ...data, locale: getLocale() }, signal }),
-  listOwn: (accountId, cursor, signal, expected) => listHostedBooks({ data: { accountId, cursor, expected, locale: getLocale() }, signal }),
+  listOwn: (accountId, cursor, signal, expected) =>
+    listHostedBooks({ data: { accountId, cursor, expected, locale: getLocale() }, signal }),
   readOwn: (accountId, catalogueId, signal, expectedViewer) =>
     readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer, locale: getLocale() }, signal }),
   create: (body, idempotencyKey, signal) => {

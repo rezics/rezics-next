@@ -115,15 +115,7 @@ const structuredTable = normalizeDocument({
   }),
 });
 
-function NotationReview({
-  document,
-  label,
-  lang,
-}: {
-  document: DocumentSnapshot;
-  label: string;
-  lang?: string;
-}) {
+function NotationReview({ document, label, lang }: { document: DocumentSnapshot; label: string; lang?: string }) {
   const [value, setValue] = useState(document);
   return (
     <div className="flex w-full flex-col gap-5">
@@ -153,9 +145,7 @@ type Story = StoryObj<typeof meta>;
 
 export const MixedScriptRubyLanguageAndDirection: Story = {
   name: 'Mixed-script ruby, language and direction',
-  render: () => (
-    <NotationReview document={mixedScriptRubyLanguageAndDirection} label="Reading notes" lang="zh-Hant" />
-  ),
+  render: () => <NotationReview document={mixedScriptRubyLanguageAndDirection} label="Reading notes" lang="zh-Hant" />,
 };
 
 export const FootnoteReferencesAndDefinitions: Story = {

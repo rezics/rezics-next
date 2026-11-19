@@ -186,7 +186,13 @@ function Operand({
                     </>
                   )}
                 </span>
-                <Button type="button" variant="link" size="sm" className="h-auto min-h-6 shrink-0 whitespace-normal" onClick={() => onRemove(index)}>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto min-h-6 shrink-0 whitespace-normal"
+                  onClick={() => onRemove(index)}
+                >
                   {m.refinement_remove({ value: selected?.label ?? label }, opts)}
                 </Button>
               </li>
@@ -299,7 +305,13 @@ export function CharacterPersonSelectionFields({
       ) : !metadata ? (
         <div role="status">
           <p>{m.condition_metadata_unavailable({}, opts)}</p>
-          <Button variant="link" size="sm" className="h-auto min-h-6 whitespace-normal" type="button" onClick={retryMetadata}>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto min-h-6 whitespace-normal"
+            type="button"
+            onClick={retryMetadata}
+          >
             {m.character_person_retry({}, opts)}
           </Button>
         </div>

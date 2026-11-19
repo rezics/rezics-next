@@ -65,10 +65,22 @@ export function SubjectLabelAssignmentReview({
         </div>
         <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
           {!alreadyAssigned ? applyAction : null}
-          <Button type="button" variant="outline" className={actionClass} onClick={onEdit} data-subject-label-review-edit>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            onClick={onEdit}
+            data-subject-label-review-edit
+          >
             {m.library_subject_label_review_edit()}
           </Button>
-          <Button type="button" variant="outline" className={actionClass} onClick={onDiscard} data-subject-label-review-discard>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            onClick={onDiscard}
+            data-subject-label-review-discard
+          >
             {m.library_subject_label_review_discard()}
           </Button>
         </div>

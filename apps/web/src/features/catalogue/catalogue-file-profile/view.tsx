@@ -54,10 +54,12 @@ export type CatalogueFileTransport = {
 
 const actionClass =
   'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]';
-const linkClass =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
-const summaryClass =
-  'cursor-pointer font-medium [overflow-wrap:anywhere]';
+const linkClass = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
+const summaryClass = 'cursor-pointer font-medium [overflow-wrap:anywhere]';
 
 function rowTarget(row: FileRow): string | undefined {
   return row.statement ? (relatedTarget(row.statement) ?? row.holder) : row.holder;

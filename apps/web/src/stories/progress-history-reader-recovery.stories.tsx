@@ -115,7 +115,11 @@ function Reader({ data, retire = false }: { data: LoadedPage; retire?: boolean }
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 p-4">
       {retire ? (
-        <Button type="button" variant="outline" size="sm" onClick={() => {
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
             current.current = false;
           }}
         >

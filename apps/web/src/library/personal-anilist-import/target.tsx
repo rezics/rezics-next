@@ -45,7 +45,7 @@ export function AniListTargetSearch({
           data-anilist-target
           value={typed}
           disabled={disabled}
-         
+
           onChange={(event) => {
             setPicked(null);
             assign(event.target.value);

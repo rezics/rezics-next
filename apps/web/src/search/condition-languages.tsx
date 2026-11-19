@@ -162,7 +162,12 @@ export function ConditionLanguages({
           disabled={disabled || atLimit || available.length === 0}
           onValueChange={(nextSelectValue) => setSelected(nextSelectValue ?? '')}
         >
-          <SelectTrigger id={selectId} aria-invalid={invalid || undefined} aria-describedby={errorId} className="min-w-0 w-auto flex-1">
+          <SelectTrigger
+            id={selectId}
+            aria-invalid={invalid || undefined}
+            aria-describedby={errorId}
+            className="min-w-0 w-auto flex-1"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

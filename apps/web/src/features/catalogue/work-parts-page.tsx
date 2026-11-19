@@ -59,12 +59,10 @@ type OpenDraft = Correction & {
   confirmClose: boolean;
 };
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const summaryClassName =
   'cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const linkClassName =
-  'block w-fit max-w-full font-sans font-semibold underline';
+const linkClassName = 'block w-fit max-w-full font-sans font-semibold underline';
 
 /** Each opened assertion owns the existing editor's independent draft, request key and exact-slot review. */
 export const WorkPartsPage = catalogueEditor(WorkPartsPageLive);
@@ -402,10 +400,7 @@ function WorkPartsPageLive({
                     disabled={busy}
                     onValueChange={(nextSelectValue) => void load(nextSelectValue ?? '')}
                   >
-                    <SelectTrigger
-                      id={streamId}
-                      className="min-w-0 max-w-full"
-                    >
+                    <SelectTrigger id={streamId} className="min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

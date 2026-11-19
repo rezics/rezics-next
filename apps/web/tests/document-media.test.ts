@@ -5,7 +5,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { loadDocumentMedia, loadKnowledgeDocumentMedia, type DocumentImagePresentation } from '../src/threads/document-media';
+import {
+  loadDocumentMedia,
+  loadKnowledgeDocumentMedia,
+  type DocumentImagePresentation,
+} from '../src/threads/document-media';
 import { documentImageForPost, receiveThreadDocumentMedia } from '../src/threads/document-media-read';
 import { loadThreadPage, type ThreadPost } from '../src/threads/thread-page';
 import type { ThreadReadingPage } from '../src/threads/thread-reading';
@@ -315,11 +319,13 @@ describe('Sole document image adapter and native media in ordinary thread bodies
   });
 });
 
-
 test('Knowledge presentation loading shares native metadata transport and binds the returned container', async () => {
   const selection = {
-    representation: 'public' as const, documentId: id(31), revisionId: id(32),
-    sourceSha256: 'b'.repeat(64), publicationId: id(33),
+    representation: 'public' as const,
+    documentId: id(31),
+    revisionId: id(32),
+    sourceSha256: 'b'.repeat(64),
+    publicationId: id(33),
   };
   const requested: unknown[] = [];
   const native = client(async (request) => {

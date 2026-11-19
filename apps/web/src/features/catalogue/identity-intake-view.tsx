@@ -296,11 +296,7 @@ export function IdentityIntakePanel({
                 <li key={hit.id} className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
                   <article aria-labelledby={candidateId} className="min-w-0 space-y-3">
                     <div className="min-w-0 space-y-1">
-                      <h4
-                        id={candidateId}
-                        lang={label.language}
-                        className="break-words font-medium"
-                      >
+                      <h4 id={candidateId} lang={label.language} className="break-words font-medium">
                         {label.value}
                       </h4>
                       <p className="break-words text-sm text-muted-foreground">

@@ -61,7 +61,10 @@ export function CollectionFilterAddressState({
             >
               {m.collection_filter_address_correct()}
             </a>
-            <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={collectionFilterAddress(getLocale(), id, {}, {}, {}, type, context)}>
+            <a
+              className={buttonVariants({ variant: 'link', size: 'sm' })}
+              href={collectionFilterAddress(getLocale(), id, {}, {}, {}, type, context)}
+            >
               {m.collection_filter_clear()}
             </a>
           </div>
@@ -69,7 +72,9 @@ export function CollectionFilterAddressState({
       ) : null}
       <details>
         <summary>{m.collection_filter_address_inspect()}</summary>
-        <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={original}>{m.collection_filter_address_original()}</a>
+        <a className={buttonVariants({ variant: 'link', size: 'sm' })} href={original}>
+          {m.collection_filter_address_original()}
+        </a>
         <pre className="whitespace-pre-wrap break-all">{search}</pre>
         <p>{m.collection_filter_address_accepted()}</p>
         <ul>

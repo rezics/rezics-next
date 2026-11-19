@@ -171,7 +171,10 @@ export function SecurityTargetRecovery({
               ? m.auth_security_session_unknown()
               : m.auth_security_passkey_unknown();
   return (
-    <section className="auth-login-form rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10" aria-busy={reading}>
+    <section
+      className="auth-login-form rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10"
+      aria-busy={reading}
+    >
       <h2>{session ? m.auth_security_review_session() : m.auth_security_review_passkey()}</h2>
       <div ref={statusRef} tabIndex={-1} role="status">
         {message}

@@ -157,7 +157,6 @@ export function BangumiScoreReviewPanel({
         <label className="grid gap-1 sm:max-w-xs">
           <span className="font-medium">{m.library_bangumi_score_units()}</span>
           <Input
-           
             type="number"
             inputMode="numeric"
             min={question.scale.minimum}

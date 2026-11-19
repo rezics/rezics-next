@@ -1,6 +1,14 @@
 import { m } from '../../paraglide/messages.js';
 import type { BangumiEvidence, BangumiRetainedField, BangumiRow } from './contract';
-import { bangumiEmptyFields, bangumiFieldLabel, bangumiFieldValue, bangumiKnownFields, bangumiMeaningLabel, bangumiPrivateNote, bangumiUnknownFields } from './meaning';
+import {
+  bangumiEmptyFields,
+  bangumiFieldLabel,
+  bangumiFieldValue,
+  bangumiKnownFields,
+  bangumiMeaningLabel,
+  bangumiPrivateNote,
+  bangumiUnknownFields,
+} from './meaning';
 
 function Fact({ label, value, reason }: { label: string; value: string; reason?: string }) {
   return (

@@ -11,9 +11,23 @@ import type {
 import { BangumiAction, BangumiCheck } from './controls';
 import { BangumiEvidencePanel } from './fields';
 import { BangumiLabelAdoption } from './labels';
-import { bangumiCanChooseTarget, bangumiHasUnsupportedProposal, bangumiMatchLabel, bangumiOutcomeLabel, bangumiMediumLabel, bangumiNeedsReplace, bangumiTitle } from './meaning';
+import {
+  bangumiCanChooseTarget,
+  bangumiHasUnsupportedProposal,
+  bangumiMatchLabel,
+  bangumiOutcomeLabel,
+  bangumiMediumLabel,
+  bangumiNeedsReplace,
+  bangumiTitle,
+} from './meaning';
 import { BangumiTargetSearch } from './target';
-import { BangumiScoreOutcomeView, BangumiScoreReviewPanel, scoreDraftFrom, scoreSelectionFromDraft, type BangumiScoreDraft } from './score';
+import {
+  BangumiScoreOutcomeView,
+  BangumiScoreReviewPanel,
+  scoreDraftFrom,
+  scoreSelectionFromDraft,
+  type BangumiScoreDraft,
+} from './score';
 import type { BangumiVisit } from './visit';
 
 export type RowDraft = {

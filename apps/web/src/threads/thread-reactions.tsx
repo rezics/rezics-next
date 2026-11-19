@@ -519,9 +519,7 @@ function ReactionCaller({
         optimistic={optimistic}
         onChange={onChange}
         value={resolved ? resolved.snapshot.value : value}
-        {...(signedIn || signInAllowed === false
-          ? {}
-          : { signInHref: websiteSignInHref(returnTo) })}
+        {...(signedIn || signInAllowed === false ? {} : { signInHref: websiteSignInHref(returnTo) })}
       />
       {recovery && !commandRecovery ? (
         <>

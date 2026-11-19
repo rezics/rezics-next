@@ -647,20 +647,12 @@ export function ProviderReviewActions({
           {refreshFailed && <p role="alert">{m.provider_refresh_failed({}, o)}</p>}
           <div className="flex flex-wrap gap-2">
             {attempted && failed && (
-              <Button
-                variant="outline"
-                disabled={disabled || busy || !sameScope}
-                onClick={() => void execute(batch)}
-              >
+              <Button variant="outline" disabled={disabled || busy || !sameScope} onClick={() => void execute(batch)}>
                 {m.provider_retry_failed({}, o)}
               </Button>
             )}
             {attempted && (
-              <Button
-                variant="outline"
-                disabled={disabled || busy || !sameScope}
-                onClick={() => void refresh(batch)}
-              >
+              <Button variant="outline" disabled={disabled || busy || !sameScope} onClick={() => void refresh(batch)}>
                 {m.provider_refresh({}, o)}
               </Button>
             )}

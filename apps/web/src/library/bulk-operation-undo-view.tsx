@@ -237,7 +237,7 @@ export function BulkOperationUndoView({
           <Button
             type="button"
             variant="outline"
-          size="sm"
+            size="sm"
             disabled={!authorized || busy}
             onClick={(event) => beginWindowAction(onRetryRead, event.currentTarget)}
           >
@@ -248,7 +248,7 @@ export function BulkOperationUndoView({
           <Button
             type="button"
             variant="outline"
-          size="sm"
+            size="sm"
             disabled={!authorized || busy}
             onClick={(event) => beginWindowAction(onMore, event.currentTarget)}
           >
@@ -340,7 +340,7 @@ export function BulkOperationUndoView({
                           <Button
                             type="button"
                             variant="outline"
-          size="sm"
+                            size="sm"
                             disabled={busy || !csrfToken}
                             onClick={(event) =>
                               beginRestore(outcome.ordinal, () => onRestore(outcome.ordinal), event.currentTarget)

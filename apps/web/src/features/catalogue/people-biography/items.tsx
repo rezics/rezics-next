@@ -196,11 +196,7 @@ export function PeopleSelectedItems({
       outerReturn,
     );
     const content = (
-      <article
-        id={peopleBiographyAssertionAnchor(fact.id)}
-        tabIndex={-1}
-        className="min-w-0 space-y-2 "
-      >
+      <article id={peopleBiographyAssertionAnchor(fact.id)} tabIndex={-1} className="min-w-0 space-y-2 ">
         <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
         {fact.target ? (
           <a

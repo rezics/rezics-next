@@ -97,7 +97,9 @@ export function ModerationDirectory({
             <li key={key} className="min-w-0 space-y-3 rounded-lg border bg-background p-4">
               <div className="min-w-0 space-y-1">
                 <h3 className="break-words font-semibold">{entry.label}</h3>
-                {entry.parent ? <p className="break-words text-sm text-muted-foreground">{entry.parent.label}</p> : null}
+                {entry.parent ? (
+                  <p className="break-words text-sm text-muted-foreground">{entry.parent.label}</p>
+                ) : null}
               </div>
               <div className="flex min-w-0 flex-wrap gap-2">
                 {entry.queues.map((queue) => (

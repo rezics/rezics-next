@@ -524,7 +524,7 @@ function CandidateReviewLive({
         </Button>
         <Button
           variant="outline"
-         
+
           disabled={busy || !!request.current}
           onClick={cancelConfirmation}
         >
@@ -564,7 +564,7 @@ function CandidateReviewLive({
             <p>{m.candidate_actions_unavailable({}, options)}</p>
             <Button
               variant="outline"
-             
+
               disabled={busy || !!request.current}
               onClick={() => void load()}
             >
@@ -599,7 +599,7 @@ function CandidateReviewLive({
               </p>
               <Button
                 variant="outline"
-               
+
                 disabled={busy}
                 onClick={() => void (request.current ? confirm() : load())}
               >
@@ -728,7 +728,7 @@ function CandidateReviewLive({
                                 <CandidateProvenance candidate={item} read={current} locale={locale} />
                                 <Button
                                   variant="outline"
-                                 
+
                                   disabled={locked || item.retracted !== null}
                                   onClick={() => {
                                     if (!work.live()) return;
@@ -746,7 +746,7 @@ function CandidateReviewLive({
                     {current.page.next && (
                       <Button
                         variant="outline"
-                       
+
                         disabled={locked || requiresReload}
                         onClick={() => void load(property, current.page!.next!)}
                       >
@@ -830,7 +830,7 @@ function CandidateReviewLive({
                             actionAllowed('accept') && (
                               <Button
                                 variant="outline"
-                               
+
                                 disabled={
                                   locked ||
                                   requiresReload ||
@@ -848,7 +848,7 @@ function CandidateReviewLive({
                             actionAllowed('reject') && (
                               <Button
                                 variant="outline"
-                               
+
                                 disabled={
                                   locked ||
                                   requiresReload ||
@@ -863,7 +863,7 @@ function CandidateReviewLive({
                             )}
                           <Button
                             variant="outline"
-                           
+
                             disabled={locked}
                             onClick={() => work.live() && setCandidate(undefined)}
                           >
@@ -910,10 +910,7 @@ function CandidateReviewLive({
                                 }
                               }}
                             >
-                              <SharedSelect.SelectTrigger
-                                id="context-mode"
-                               
-                              >
+                              <SharedSelect.SelectTrigger id="context-mode">
                                 <SharedSelect.SelectValue />
                               </SharedSelect.SelectTrigger>
                               <SharedSelect.SelectContent>
@@ -1088,7 +1085,7 @@ function CandidateReviewLive({
           )}
           <Button
             variant="outline"
-           
+
             disabled={locked}
             onClick={() => {
               if (!work.live()) return;

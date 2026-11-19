@@ -9,8 +9,7 @@ import { createSubjectGuidance } from './create-subject-guidance';
 import type { PublicationCorrection, PublicationTerm } from './publication-editor-guidance';
 import { publicationTermControl } from './publication-editor-guidance';
 
-const actionClassName =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
+const actionClassName = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center';
 const inputClassName = 'min-w-0';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 

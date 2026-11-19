@@ -102,11 +102,7 @@ export function VndbProgressReview({
             setConsent(false);
           }}
         >
-          <SelectTrigger
-            id={`${id}-occurrence`}
-            aria-labelledby={`${id}-occurrence-label`}
-            className='w-full'
-          >
+          <SelectTrigger id={`${id}-occurrence`} aria-labelledby={`${id}-occurrence-label`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
@@ -137,11 +133,7 @@ export function VndbProgressReview({
                 setConsent(false);
               }}
             >
-              <SelectTrigger
-                id={`${id}-action`}
-                aria-labelledby={`${id}-action-label`}
-                className='w-full'
-              >
+              <SelectTrigger id={`${id}-action`} aria-labelledby={`${id}-action-label`} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>

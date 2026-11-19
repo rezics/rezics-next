@@ -91,7 +91,12 @@ function IdentifiersProfileLive({
             <p role="status">{m.candidate_loading({}, o)}</p>
           )}
           {session === 'signed-in' && !query.isFetching && (
-            <Button type="button" variant="link" className="h-auto min-h-7 justify-start text-start" onClick={() => void query.refetch()}>
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto min-h-7 justify-start text-start"
+              onClick={() => void query.refetch()}
+            >
               {m.correction_reload({}, o)}
             </Button>
           )}
@@ -125,7 +130,10 @@ function IdentifiersProfileLive({
                 <div className="space-y-2">
                   <p>{m.identifiers_global_only_notice({}, o)}</p>
                   {originHref && (
-                    <a className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 justify-start' })} href={originHref}>
+                    <a
+                      className={buttonVariants({ variant: 'link', className: 'h-auto min-h-7 justify-start' })}
+                      href={originHref}
+                    >
                       {m.identifiers_return_origin({}, o)}
                     </a>
                   )}

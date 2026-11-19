@@ -166,7 +166,13 @@ export function BookDisplaySettings({ display, change, storageAvailable, locale 
           ['strict', m.book_reader_display_strict({}, options)],
         ])}
         <div className="space-y-2 sm:col-span-2">
-          <Button type="button" size="sm" variant="ghost" className={control} onClick={() => change(defaultBookDisplay)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={control}
+            onClick={() => change(defaultBookDisplay)}
+          >
             {m.book_reader_display_reset({}, options)}
           </Button>
           <p role={storageAvailable ? undefined : 'status'} className="text-sm text-muted-foreground">

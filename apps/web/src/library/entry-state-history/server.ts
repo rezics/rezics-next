@@ -60,9 +60,16 @@ export const readEntryHistoryReview = createServerFn({ method: 'POST' })
     privateResponse();
     const request = getRequest();
     const authorization = await prepareExpectedReader(request, env as Partial<SessionEnv>, data);
-    if (!authorization) return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'retired' as const }, credential: null };
+    if (!authorization)
+      return {
+        viewer: data.expectedReader,
+        subjectId: data.subjectId,
+        result: { kind: 'retired' as const },
+        credential: null,
+      };
     const result = await reviewEntryStateChange(kernelClient(), authorization, data.subjectId, data.changeRevision);
-    if (result.kind !== 'ready') return { viewer: data.expectedReader, subjectId: data.subjectId, result, credential: null };
+    if (result.kind !== 'ready')
+      return { viewer: data.expectedReader, subjectId: data.subjectId, result, credential: null };
     try {
       const credential = await captureAnnotationCredential(
         request,
@@ -72,7 +79,12 @@ export const readEntryHistoryReview = createServerFn({ method: 'POST' })
       );
       return { viewer: data.expectedReader, subjectId: data.subjectId, result, credential };
     } catch {
-      return { viewer: data.expectedReader, subjectId: data.subjectId, result: { kind: 'unavailable' as const }, credential: null };
+      return {
+        viewer: data.expectedReader,
+        subjectId: data.subjectId,
+        result: { kind: 'unavailable' as const },
+        credential: null,
+      };
     }
   });
 

@@ -21,12 +21,10 @@ import {
   type UnavailableConfiguration,
 } from '../catalogue/character-relationships/reading';
 
-export const characterRelationshipsActionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+export const characterRelationshipsActionClass = 'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 export const characterRelationshipsSummaryClass =
   'cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-export const characterRelationshipsLinkClass =
-  'block w-fit max-w-full font-sans font-semibold underline';
+export const characterRelationshipsLinkClass = 'block w-fit max-w-full font-sans font-semibold underline';
 
 const kindMessage = (kind: CharacterAssociationStream['kind'], locale: string) => {
   const o = { locale: locale as never };
@@ -247,10 +245,7 @@ export function CharacterRelationshipsGroups({
               }))}
               onValueChange={(value) => value !== null && onSelectStream?.(value)}
             >
-              <SharedSelect.SelectTrigger
-                id={streamId}
-                className="min-w-0 max-w-full"
-              >
+              <SharedSelect.SelectTrigger id={streamId} className="min-w-0 max-w-full">
                 <SharedSelect.SelectValue />
               </SharedSelect.SelectTrigger>
               <SharedSelect.SelectContent>

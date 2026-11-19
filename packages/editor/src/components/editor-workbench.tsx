@@ -384,7 +384,12 @@ export function EditorWorkbench({
                 {labels.moreTools ?? productControlLabels.moreTools}
               </summary>
               <div className="absolute end-0 z-20 mt-1 flex w-max max-w-full flex-col gap-2 rounded-lg border bg-popover p-2 text-popover-foreground shadow-md">
-                <DomainTextControls editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptDomainActions} />
+                <DomainTextControls
+                  editor={editor}
+                  labels={labels}
+                  isCurrent={isCurrent}
+                  onCommands={acceptDomainActions}
+                />
                 <BlockActions editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptBlockActions} />
                 <AuthorFormattingControls
                   editor={editor}
@@ -392,7 +397,12 @@ export function EditorWorkbench({
                   isCurrent={isCurrent}
                   onCommands={acceptFormattingActions}
                 />
-                <EditorMediaControls editor={editor} labels={labels} isCurrent={isCurrent} onCommands={acceptMediaActions} />
+                <EditorMediaControls
+                  editor={editor}
+                  labels={labels}
+                  isCurrent={isCurrent}
+                  onCommands={acceptMediaActions}
+                />
               </div>
             </details>
           </>

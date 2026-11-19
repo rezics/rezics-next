@@ -10,8 +10,11 @@ import { PeopleBiographyOuterReturn, peopleBiographyAddress, peopleBiographyTarg
 import { peopleLabel, peopleOccupationConcept, type PeopleBiographyFact, type PeopleBiographyField } from './index';
 import type { FactsCurrent } from '../subject-facts';
 
-const control =
-  cn(buttonVariants({ variant: 'link' }), 'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]', 'underline');
+const control = cn(
+  buttonVariants({ variant: 'link' }),
+  'h-auto min-h-7 max-w-full justify-start whitespace-normal py-1 text-start [overflow-wrap:anywhere]',
+  'underline',
+);
 
 type Part = PeopleBiographyFact['statement'] | PeopleBiographyFact['statement']['qualifiers'][number];
 

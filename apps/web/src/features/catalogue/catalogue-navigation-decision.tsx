@@ -21,7 +21,11 @@ type CatalogueNavigationDecisionProps = {
 };
 
 function isVisible(element: HTMLElement | null): element is HTMLElement {
-  if (!element?.isConnected || element.matches(':disabled') || element.closest('[hidden], [inert], [aria-hidden="true"]'))
+  if (
+    !element?.isConnected ||
+    element.matches(':disabled') ||
+    element.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
     return false;
   const view = element.ownerDocument.defaultView;
   const style = view?.getComputedStyle(element);
@@ -113,12 +117,7 @@ export function CatalogueNavigationDecision({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
-        ref={captureOrigin}
-        initialFocus={stayButton}
-        finalFocus={false}
-        onKeyDown={handleKeyDown}
-      >
+      <AlertDialogContent ref={captureOrigin} initialFocus={stayButton} finalFocus={false} onKeyDown={handleKeyDown}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{m.release_fidelity_leave({}, o)}</AlertDialogDescription>

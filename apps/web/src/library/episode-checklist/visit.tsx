@@ -2,8 +2,27 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { m } from '../../paraglide/messages.js';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type { ChecklistRow, ChecklistViewerBinding, ChecklistVisit } from './contract';
-import { applyChecklistOutcome, applyReadback, appendRetainedPage, cancelChecklistReview, checklistDirty, checklistLocked, preparingVisit, replaceBinding, stageChecklistClear, stageChecklistReview, submitChecklistVisit, toggleRow } from './controller';
-import { bindEpisodeCommand, outcomeFromRecord, retryOriginal, type BoundEpisodeCommand, type EpisodeSender } from './commands';
+import {
+  applyChecklistOutcome,
+  applyReadback,
+  appendRetainedPage,
+  cancelChecklistReview,
+  checklistDirty,
+  checklistLocked,
+  preparingVisit,
+  replaceBinding,
+  stageChecklistClear,
+  stageChecklistReview,
+  submitChecklistVisit,
+  toggleRow,
+} from './controller';
+import {
+  bindEpisodeCommand,
+  outcomeFromRecord,
+  retryOriginal,
+  type BoundEpisodeCommand,
+  type EpisodeSender,
+} from './commands';
 import { EpisodeChecklistEditor, EpisodeChecklistReadout, EpisodeChecklistReview } from './editor';
 import { EpisodeChecklistRecovery } from './states';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -234,12 +253,7 @@ export function EpisodeChecklistVisit({
   }
 
   async function submit(clear = false) {
-    if (
-      !current() ||
-      activityRef.current ||
-      visitRef.current.kind === 'submitting' ||
-      visitRef.current.pending
-    ) {
+    if (!current() || activityRef.current || visitRef.current.kind === 'submitting' || visitRef.current.pending) {
       return;
     }
     const headers = credential();
@@ -397,12 +411,7 @@ export function EpisodeChecklistVisit({
         </p>
       ) : null}
       {visit.kind === 'accepted' && visit.pending && load ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={activity !== null}
-          onClick={() => void refresh()}
-        >
+        <Button type="button" variant="outline" disabled={activity !== null} onClick={() => void refresh()}>
           {m.library_progress_retry()}
         </Button>
       ) : null}

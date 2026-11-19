@@ -502,7 +502,10 @@ export async function searchType(
           subjects.some((hit) => hit?.id === options.expectedId)
         )
           return result;
-      } else if (result.status !== 503 || !['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code))) {
+      } else if (
+        result.status !== 503 ||
+        !['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code))
+      ) {
         return result;
       }
       await delay(500, undefined, { signal });

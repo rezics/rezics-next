@@ -87,9 +87,7 @@ function LocalOutline({
         if (node.type.name === 'heading' && String(node.attrs.id ?? at) === heading.id) position = at;
       });
     if (position === undefined) return;
-    editor.view.dispatch(
-      editor.state.tr.setSelection(TextSelection.near(live.resolve(position + 1))).scrollIntoView(),
-    );
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(live.resolve(position + 1))).scrollIntoView());
     if (editor.isEditable) editor.view.focus();
   }
   function renderTree(branches: readonly HeadingBranch[], nested = false): ReactNode {
