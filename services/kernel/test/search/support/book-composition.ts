@@ -346,12 +346,20 @@ export async function createBookComposition(setupDeadline: number, cleanupMs: nu
       async grow(from: number, to: number) {
         await search.backgroundWork('running');
         assert.equal(population.size, from);
-        for (let ordinal = from; ordinal < to; ordinal++) {
-          const subject = await createSubject(
-            BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!,
-            `ZZZ catalogue ${ordinal}`,
-          );
-          population.add(subject.id);
+        // Let the same live generation settle each bounded authoring window before adding more fixture data.
+        const seedWindow = 1_024;
+        for (let start = from; start < to; start += seedWindow) {
+          const end = Math.min(start + seedWindow, to);
+          const seeded: string[] = [];
+          for (let ordinal = start; ordinal < end; ordinal++) {
+            const subject = await createSubject(
+              BOOK_CATALOGUE_TYPES[ordinal % BOOK_CATALOGUE_TYPES.length]!,
+              `ZZZ catalogue ${ordinal}`,
+            );
+            population.add(subject.id);
+            seeded.push(subject.id);
+          }
+          if (end < to) assert.deepEqual(await waitForPublication(seeded, Date.now() + 120_000), published);
         }
         assert.equal(population.size, to);
         assert.deepEqual(await waitForPublication([...population], Date.now() + 120_000), published);
