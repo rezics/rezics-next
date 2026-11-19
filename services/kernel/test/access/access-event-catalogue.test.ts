@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
@@ -22,12 +23,14 @@ const { installStandingParentGrant } = await import('../../src/access/standing-p
 const { createExposureCommands } = await import('../../src/access/gates/catalogue.ts');
 const { sweepWorkflowApprovals } = await import('../../src/access/workflow-approvals.ts');
 const { createOrganizationCloseRunner } = await import('../../src/access/organization-close-work.ts');
-const {
-  createAgentVerificationCommands,
-  failAgentVerification,
-  finishAgentVerification,
-  finishAgentVerificationReversal,
-} = await import('../../src/access/agent-verification.ts');
+const { createAgentVerificationCommands, failAgentVerification } =
+  await import('../../src/access/agent-verification.ts');
+const { ensureAccountAgent } = await import('../../src/semantic/account-agents.ts');
+const { bootstrapRelease } = await import('../../src/semantic/definitions.ts');
+const { runAccountIdentityReversal, runAccountIdentityVerification } =
+  await import('../support/account-identity-publication.ts');
+const { startAccountIdentityPublication } = await import('../support/identity-work-process.ts');
+const { testKernel, testRouteKey } = await import('../support/test-kernel.ts');
 const { createAccess } = await import('../../src/access/index.ts');
 const { accessCommandAuthorization } = await import('../../src/request/access.ts');
 const { actionDeclarations, cookies, issuer, nativeFixture, password, scopes } =
@@ -51,6 +54,7 @@ const catalogueScopes = [
   'exposure:close',
 ];
 let f: Awaited<ReturnType<typeof nativeFixture>>;
+let publication: Awaited<ReturnType<typeof startAccountIdentityPublication>> | undefined;
 let bearer = '';
 let headers = new Headers();
 const key = () => Bun.randomUUIDv7();
@@ -79,13 +83,24 @@ beforeAll(async () => {
     firstParty: true,
     scopes: catalogueScopes,
   });
-}, 60_000);
+  await bootstrapRelease(pool, bundledRelease);
+  publication = await startAccountIdentityPublication({
+    databaseUrl: url,
+    routeKey: Buffer.from(testRouteKey()).toString('base64url'),
+    searchPrefix: `access-event-catalogue-${key()}-`,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+  });
+}, 120_000);
 
 afterAll(async () => {
   try {
-    await f?.close();
+    await publication?.stop();
   } finally {
-    await pool.end();
+    try {
+      await f?.close();
+    } finally {
+      await pool.end();
+    }
   }
 });
 
@@ -733,20 +748,42 @@ test('real access commands cover every registered event and the log reader accep
   );
   await step('close workflow', () => createOrganizationCloseRunner({ pool }).continueCommitted(closingOrganization));
 
-  await step('grant verification review', async () =>
+  await step('grant verification review and subject creation', async () =>
     f.bindings.grants.create(await grantContext(), {
       resource: PLATFORM_RESOURCE,
       subject: { kind: 'account', id: governor.accountId },
-      actions: ['account:verify_agent'],
+      actions: ['account:verify_agent', 'subject:create'],
       valid: '(,)',
       key: key(),
     }),
   );
+  await step('initialize account agent', () =>
+    ensureAccountAgent(pool, { account: governor.accountId, kind: 'person', name: 'Catalogue', language: 'en' }),
+  );
+  const catalogueSubject = await step('create catalogue subject', async () => {
+    const service = f.host.service;
+    const kernel = testKernel({
+      pool,
+      auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+    });
+    const response = await kernel.handle(
+      new Request('https://kernel.test/v1/subjects', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(key()),
+        },
+        body: JSON.stringify({ type: 'schema:Person', labels: { en: 'Catalogue Person' } }),
+      }),
+    );
+    if (response.status !== 201) throw new Error(`${response.status} ${await response.text()}`);
+    const { subject } = (await response.json()) as { subject: { id: string } };
+    return subject.id;
+  });
   const verification = createAgentVerificationCommands({ pool, access: f.access, clock: () => new Date() });
-  const verificationContext = await grantContext();
-  const catalogueSubject = newId(routeOf(governor.accountId)!);
-  const verificationRequest = (label: string) =>
-    verification.request(verificationContext, {
+  const verificationRequest = async (label: string) =>
+    verification.request(await grantContext(), {
       accountId: governor.accountId,
       subject: catalogueSubject,
       statement: `Catalogue event ${label}`,
@@ -755,30 +792,15 @@ test('real access commands cover every registered event and the log reader accep
     });
   await step('verification request and withdraw', async () => {
     await verificationRequest('withdrawn');
-    await verification.withdraw(verificationContext, { accountId: governor.accountId, key: key() });
+    await verification.withdraw(await grantContext(), { accountId: governor.accountId, key: key() });
   });
   await step('verification reject', async () => {
     const pending = await verificationRequest('rejected');
-    await verification.reject(verificationContext, { requestId: pending.value.id, key: key() });
-  });
-  await step('verification approve and complete', async () => {
-    const pending = await verificationRequest('verified');
-    const decision = await verification.approve(verificationContext, { requestId: pending.value.id, key: key() });
-    const workflow = {
-      id: pending.value.id,
-      accountId: pending.value.accountId,
-      accountKind: pending.value.accountKind,
-      requestedBy: pending.value.requestedBy,
-      catalogueSubjectId: pending.value.catalogueSubjectId,
-      state: 'approving' as const,
-      decisionReceiptId: decision.value.decisionReceiptId,
-      receiptId: decision.value.decisionReceiptId!,
-    };
-    await finishAgentVerification(pool, workflow, () => new Date());
+    await verification.reject(await grantContext(), { requestId: pending.value.id, key: key() });
   });
   await step('verification failed workflow', async () => {
     const pending = await verificationRequest('failed');
-    const decision = await verification.approve(verificationContext, { requestId: pending.value.id, key: key() });
+    const decision = await verification.approve(await grantContext(), { requestId: pending.value.id, key: key() });
     return failAgentVerification(
       pool,
       {
@@ -791,15 +813,15 @@ test('real access commands cover every registered event and the log reader accep
       () => new Date(),
     );
   });
+  const { workClient } = publication!;
+  await step('verification approve and complete', async () => {
+    const pending = await verificationRequest('verified');
+    const decision = await verification.approve(await grantContext(), { requestId: pending.value.id, key: key() });
+    await runAccountIdentityVerification(pool, workClient, pending.value.id, decision.value.decisionReceiptId!);
+  });
   await step('verification reversal workflow', async () => {
-    const verificationReceiptId = newId(0);
-    await pool.query(
-      `UPDATE access.account SET agent_verified = true, agent_subject_id = $1,
-       agent_verification_receipt_id = $2 WHERE route = $3 AND account_id = $4`,
-      [catalogueSubject, verificationReceiptId, routeOf(governor.accountId), governor.accountId],
-    );
-    const reversal = await verification.release(verificationContext, { accountId: governor.accountId, key: key() });
-    await finishAgentVerificationReversal(pool, reversal.value, () => new Date());
+    const reversal = await verification.release(await grantContext(), { accountId: governor.accountId, key: key() });
+    await runAccountIdentityReversal(pool, workClient, reversal.value);
   });
 
   const publicJwk = {
