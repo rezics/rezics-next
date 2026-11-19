@@ -174,7 +174,7 @@ export function CurrentViewerMineFollowingPage({
       origin.subject &&
       matches(initial, origin.subject, address.cursor, locale, kind)
         ? initial.documentPreview
-          ? { placeholderData: origin.hydrated ? undefined : initial }
+          ? { placeholderData: () => (origin.hydrated ? undefined : initial) }
           : { initialData: initial }
         : {}),
     },

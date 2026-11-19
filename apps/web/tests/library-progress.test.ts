@@ -1,3 +1,4 @@
+import type { ProgressSessionJournal } from '@rezics/progress';
 import releaseRecording from '../src/kernel/recorded/definitions-release.json';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test as bunTest } from 'bun:test';
@@ -671,13 +672,13 @@ const fake = Bun.serve({
     if (request.method === 'GET' && journal && sessions.has(journal[1]!))
       return json({
         journal: {
-          sessionId: journal[1],
+          sessionId: journal[1]!,
           revision: 0,
           startDate: null,
           finishDate: null,
           reflection: null,
-          assessment: null,
-        },
+          assessment: { meaningRevision: 1, units: null },
+        } satisfies ProgressSessionJournal,
       });
     const child = /^\/v1\/progressSessions\/([^/]+)\/(completedUnits|changes)$/.exec(url.pathname);
     if (child && request.method === 'GET') {
@@ -894,7 +895,7 @@ test(
       expect(creates()[0]?.key).toMatch(quotedUuid);
       expect(await page.locator('main').innerText()).toContain('Night watch');
       await page.getByText('Unit and recording details', { exact: true }).click();
-      expect(await page.getByText('scalar_amount', { exact: true }).isVisible()).toBe(true);
+      await page.getByText('scalar_amount', { exact: true }).waitFor();
       expect(await page.locator('main').innerText()).toContain('page');
       expect(await page.locator('main').innerText()).toContain('240');
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
@@ -912,7 +913,7 @@ test(
       expect(creates()[1]?.key).toMatch(quotedUuid);
       expect(creates()[1]?.key).not.toBe(creates()[0]?.key);
       await page.getByText('Unit and recording details', { exact: true }).click();
-      expect(await page.getByText('cursor_position', { exact: true }).isVisible()).toBe(true);
+      await page.getByText('cursor_position', { exact: true }).waitFor();
       expect(await page.locator('main').innerText()).toContain('chapter');
       expect(await page.locator('main').innerText()).not.toContain('240');
       expectReads(cursorId, access);
@@ -933,7 +934,7 @@ test(
       ]);
       expect(new Set(creates().map((call) => call.key)).size).toBe(3);
       await page.getByText('Unit and recording details', { exact: true }).click();
-      expect(await page.getByText('completed_units', { exact: true }).isVisible()).toBe(true);
+      await page.getByText('completed_units', { exact: true }).waitFor();
       expect(await page.locator('main').innerText()).toContain('episode');
       expect(sessions.get(unitsId)?.state).toBe('active');
       expect(sessions.get(unitsId)?.total).toBeNull();
@@ -973,7 +974,7 @@ test(
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('80');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
-      const alert = page.getByRole('alert');
+      const alert = page.getByRole('dialog').getByRole('alert');
       await alert.waitFor();
       expect(await alert.innerText()).toContain('older version');
       expect(await alert.innerText()).toContain('still here');
@@ -1015,21 +1016,22 @@ test(
       expect(added[0]?.key).toMatch(quotedUuid);
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
-      const before = calls.length;
+      const before = writesFor(':record').length;
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill([...batch, 'ep-101'].join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
-      const alert = page.getByRole('alert');
+      const alert = page.getByRole('dialog').getByRole('alert');
       await alert.waitFor();
       expect(await alert.innerText()).toContain('100');
       expect(await page.getByRole('textbox', { name: 'Add units', exact: true }).inputValue()).toContain('ep-101');
-      expect(calls.length).toBe(before);
+      expect(writesFor(':record')).toHaveLength(before);
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
       await page.getByRole('textbox', { name: 'Remove units', exact: true }).fill(batch.join('\n'));
       await page.getByRole('button', { name: 'Remove units', exact: true }).click();
       await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
-      await units.getByText('ep-001', { exact: true }).waitFor({ state: 'hidden' });
+      await units.getByText('No units have been completed yet.', { exact: true }).waitFor();
+      expect(await units.getByText('ep-001', { exact: true }).count()).toBe(0);
       const removed = writesFor(`/${current}:record`);
       expect(removed).toHaveLength(2);
       expect(removed[1]?.body).toEqual({ revision: 2, remove: batch });
@@ -1072,8 +1074,8 @@ test(
       await page.getByRole('link', { name: 'Start another session', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\?/);
       await hydrated(page);
-      expect(await page.locator('main').innerText()).toContain('Completed');
       await openStartForm(page);
+      expect(await page.locator('main').innerText()).toContain('Completed');
       expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
       expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       await page.getByRole('button', { name: 'Start', exact: true }).click();

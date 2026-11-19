@@ -586,7 +586,7 @@ test(
     await next.click();
     await page.waitForURL((url) => url.searchParams.get('cursor') === 'collections-next');
     const secondList = page.locator('[data-collections-list-region]');
-    await secondList.getByText('Collection 001', { exact: true }).waitFor();
+    await secondList.getByRole('heading', { name: 'Collection 001', exact: true }).waitFor();
     expect(await secondList.innerText()).not.toContain('Collection 002');
   },
   timeout,
