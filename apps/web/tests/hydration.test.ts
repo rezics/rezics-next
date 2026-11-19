@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { readExampleWorkerVars } from '../scripts/dev-vars.ts';
 import { startDevServer } from './support/dev-server.ts';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
@@ -18,6 +19,7 @@ let browser: Browser | undefined;
 
 function site(): Promise<string> {
   started ??= startDevServer({
+    env: { ...readExampleWorkerVars(), WEBSITE_SCOPES: 'openid' },
     warmUpPaths: [],
   }).then((running) => {
     server = running;
@@ -118,7 +120,7 @@ test(
       expect(await page.locator('html[data-hydrated]').count()).toBe(0);
       expect(await page.locator('header [aria-busy="true"]').isVisible()).toBe(false);
       let rejected = 0;
-      await page.route('**/_server/**', async (route) => {
+      await page.route('**/_serverFn/**', async (route) => {
         if (route.request().method() === 'GET') {
           rejected++;
           await route.abort('internetdisconnected');
@@ -146,7 +148,9 @@ test(
       await sheet.waitFor({ state: 'hidden' });
       expect(await page.evaluate(() => document.activeElement?.textContent)).toContain(zh.search_filters!);
       // A native order replacement and a locale navigation both retain the executed query.
-      await page.getByLabel(zh.search_sort_label!, { exact: true }).selectOption('rating');
+      await page.getByRole('combobox', { name: zh.search_sort_label!, exact: true }).click();
+      await page.getByRole('option', { name: zh.search_sort_rating!, exact: true }).click();
+      await page.getByRole('button', { name: zh.search_sort_submit_button!, exact: true }).click();
       await page.waitForURL((url) => url.searchParams.get('sort') === 'rating');
       expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
       const destination = new URL(page.url());
@@ -154,7 +158,8 @@ test(
       await page.goto(destination.href, { waitUntil: 'domcontentloaded' });
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel(ja.search_population_label!, { exact: true }).waitFor();
-      expect(await page.getByLabel(ja.search_sort_label!, { exact: true }).inputValue()).toBe('rating');
+      const sort = page.getByRole('combobox', { name: ja.search_sort_label!, exact: true });
+      expect(await sort.evaluate((trigger) => new FormData(trigger.closest('form')!).get('sort'))).toBe('rating');
       expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
     } finally {
       await page.context().close();
