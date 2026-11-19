@@ -162,6 +162,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         error_code TEXT,
         result_id TEXT
       ) STRICT;
+      CREATE INDEX IF NOT EXISTS showcase_action_prepared
+        ON showcase_action(action_key) WHERE state='prepared';
       CREATE TABLE IF NOT EXISTS showcase_action_decision (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         action_key TEXT NOT NULL,
