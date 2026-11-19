@@ -1,3 +1,4 @@
+import { approval, button, creationFixture, dom, fill, flush, leave, open, send } from './creation-page-fixture';
 import type { AccountDeletionPage } from '../src/account-deletion-page';
 import type { InventoryPage, InventoryView } from '../src/security-inventory';
 import { expect, test } from 'bun:test';
@@ -6,7 +7,6 @@ import { DeleteAccountContent } from '../src/routes/account.delete';
 import type { InventorySource } from '../src/security-inventory-view';
 import { m } from '../src/paraglide/messages.js';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
-import { approval, button, creationFixture, dom, fill, flush, leave, open, send } from './creation-page-fixture';
 
 creationFixture();
 
