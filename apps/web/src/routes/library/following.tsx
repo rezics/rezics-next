@@ -15,7 +15,30 @@ export const Route = createFileRoute('/library/following')({
     ...(search.kind === undefined ? {} : { kind: typeof search.kind === 'string' ? search.kind : 'invalid' }),
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor, kind: search.kind }),
-  loader: ({ deps }) => readMineFollowingForViewer({ data: { cursor: deps.cursor, kind: deps.kind } }),
+  loader: async ({ deps }) => {
+    const read = await readMineFollowingForViewer({ data: { cursor: deps.cursor, kind: deps.kind } });
+    if (typeof document !== 'undefined' || !read.page.follows.some((row) => !row.target)) return read;
+    // The document may show unavailable rows. Only a current private read supplies their command operands.
+    return {
+      ...read,
+      documentPreview: true as const,
+      page: {
+        ...read.page,
+        follows: read.page.follows.map((row) =>
+          row.target
+            ? row
+            : {
+                target: null,
+                targetId: '',
+                targetType: row.targetType,
+                state: row.state,
+                reason: row.reason,
+                idempotencyKey: row.idempotencyKey,
+              },
+        ),
+      },
+    };
+  },
   head: ({ match }) =>
     pageHead({ title: m.library_following_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: FollowingRoute,

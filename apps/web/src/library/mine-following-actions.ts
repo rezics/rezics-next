@@ -28,6 +28,7 @@ function validateInput(input: unknown): MineFollowingInput {
 }
 
 export type MineFollowingRead = {
+  documentPreview?: true;
   subject: string | null;
   /** The original requested cursor, even when the reader retries a stale cursor at the first page. */
   cursor: string | null;

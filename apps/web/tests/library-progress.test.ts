@@ -1,12 +1,11 @@
+import type { ProgressSessionJournal } from '@rezics/progress';
+import releaseRecording from '../src/kernel/recorded/definitions-release.json';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test as bunTest } from 'bun:test';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
-
-const app = join(import.meta.dir, '..');
 
 let serverStartupAbort: AbortController | undefined;
 const pendingServerStartups = new Set<Promise<string>>();
@@ -19,30 +18,6 @@ const ownedContexts = new Set<BrowserContext>();
 const pendingContextSetups = new Set<Promise<unknown>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
 const failedContextSetups = new WeakSet<BrowserContext>();
-
-function ensureSiteStartupActive(output = '', cause?: unknown): void {
-  if (teardownStarted) {
-    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
-    if (cause !== undefined) throw new Error(message, { cause });
-    throw new Error(message);
-  }
-}
-
-function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  const parentSignal = serverStartupAbort?.signal;
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener('abort', abort, { once: true });
-  if (parentSignal?.aborted) abort();
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener('abort', abort);
-    },
-  };
-}
 
 type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
 
@@ -229,7 +204,7 @@ const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')
 const stamp = '2026-04-02T15:04:05.000Z';
 const subjectId = id(1);
 const subject = { id: subjectId, label: 'Night watch', type: 'book' };
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/i;
 const decimal = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
 
@@ -292,7 +267,7 @@ function problem(status: number, code: string) {
     request_id: randomUUID(),
   };
 }
-function sessionView(item: ProgressSession, full: boolean) {
+function sessionView(item: ProgressSession, full: boolean, withPresentation = false) {
   return {
     id: item.id,
     subjectId: item.subjectId,
@@ -308,6 +283,18 @@ function sessionView(item: ProgressSession, full: boolean) {
     revision: item.revision,
     startedAt: item.startedAt,
     completedAt: item.completedAt,
+    ...(withPresentation
+      ? {
+          presentation: {
+            meaning: 'known',
+            structure: 'unverified',
+            unitLabel: item.unit,
+            unitLabelLanguage: 'en',
+            unitCountForms: { one: item.unit, other: `${item.unit}s` },
+            recording: { state: 'supported', inputRules: { step: 'any', total: 'optional' } },
+          },
+        }
+      : {}),
     ...(full
       ? {
           subject: subjects.get(item.subjectId) ?? null,
@@ -593,9 +580,20 @@ const fake = Bun.serve({
       if (family) family.revoked = true;
       return new Response(null, { status: 200 });
     }
+    if (request.method === 'GET' && url.pathname === '/v1/definitions/active') return json({ digest: 'progress-test' });
+    if (request.method === 'GET' && url.pathname === '/v1/definitions/releases/progress-test')
+      return json({
+        digest: 'progress-test',
+        release: {
+          types: { book: { library: { profileId: 'legacy-fixed-v1' } } },
+          properties: {},
+          libraryProfiles: { 'legacy-fixed-v1': releaseRecording.release.libraryProfiles['legacy-fixed-v1'] },
+        },
+      });
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     // Home readiness reads pages:read with no session. Unknown routes stay not found, like a hidden record.
-    if (!url.pathname.startsWith('/v1/progressSessions')) return json(problem(404, 'not_found'), 404, true);
+    if (!url.pathname.startsWith('/v1/progressSessions') && url.pathname !== '/v1/publishedLogs')
+      return json(problem(404, 'not_found'), 404, true);
     const body = request.method === 'GET' || request.method === 'HEAD' ? null : await request.json().catch(() => null);
     calls.push({
       method: request.method,
@@ -608,10 +606,17 @@ const fake = Bun.serve({
       key: request.headers.get('idempotency-key'),
       body,
     });
-    if (!request.headers.get('authorization')?.startsWith('Bearer '))
+    if (!accessTokens.some((token) => request.headers.get('authorization') === `Bearer ${token}`))
       return json(problem(401, 'authentication_required'), 401, true);
     if (gateClosed) return json(problem(403, 'platform_closed'), 403, true);
     const full = url.searchParams.get('view') === 'FULL';
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/v1/publishedLogs' &&
+      full &&
+      url.searchParams.get('accountId') === 'alice'
+    )
+      return json({ publishedLogs: [], next: null });
     const limit = Number(url.searchParams.get('limit') ?? 20);
     const bounded = Number.isInteger(limit) && limit >= 1 && limit <= 100 ? limit : 20;
 
@@ -638,7 +643,7 @@ const fake = Bun.serve({
       const item = makeSession(nextSession++, mode as Mode, unit as Unit, {
         ...(typeof draft.total === 'string' ? { total: draft.total } : {}),
       });
-      item.startedAt = `2026-05-01T00:00:${String(nextSession).padStart(2, '0')}.000Z`;
+      item.startedAt = new Date(Date.UTC(2026, 4, 1, 0, 0, nextSession)).toISOString();
       sessions.set(item.id, item);
       return remember(key!, 201, { progressSession: sessionView(item, false) });
     }
@@ -663,6 +668,18 @@ const fake = Bun.serve({
       if (action[2] === 'record') return record(item, payload, key!);
       return transition(item, payload, key!, action[2] as 'complete' | 'abandon');
     }
+    const journal = /^\/v1\/progressSessions\/([^/]+)\/journal$/.exec(url.pathname);
+    if (request.method === 'GET' && journal && sessions.has(journal[1]!))
+      return json({
+        journal: {
+          sessionId: journal[1]!,
+          revision: 0,
+          startDate: null,
+          finishDate: null,
+          reflection: null,
+          assessment: { meaningRevision: 1, units: null },
+        } satisfies ProgressSessionJournal,
+      });
     const child = /^\/v1\/progressSessions\/([^/]+)\/(completedUnits|changes)$/.exec(url.pathname);
     if (child && request.method === 'GET') {
       const item = sessions.get(child[1]!);
@@ -680,7 +697,7 @@ const fake = Bun.serve({
     if (one && request.method === 'GET') {
       const item = sessions.get(one[1]!);
       if (!item) return json(problem(404, 'not_found'), 404, true);
-      return json({ progressSession: sessionView(item, full) });
+      return json({ progressSession: sessionView(item, full, url.searchParams.get('presentation') === 'FULL') });
     }
     return json(problem(404, 'not_found'), 404, true);
   },
@@ -691,7 +708,11 @@ let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= startDevServer({
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (started) return started;
+  serverStartupAbort = new AbortController();
+  started = startDevServer({
+    signal: serverStartupAbort.signal,
     env: {
       KERNEL_ORIGIN: fake.url.origin,
       AUTH_ISSUER: `${fake.url.origin}/auth`,
@@ -705,6 +726,7 @@ function site(): Promise<string> {
     server = running;
     return running.origin;
   });
+  pendingServerStartups.add(started);
   return started;
 }
 
@@ -767,6 +789,7 @@ async function open(path: string): Promise<{ page: Page; access: string }> {
       const page = await context.newPage();
       await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
       await hydrated(page);
+      if (path.includes('/progress/')) await waitForSession(page);
       return { page, access: auth.access };
     },
   );
@@ -775,6 +798,18 @@ async function open(path: string): Promise<{ page: Page; access: string }> {
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
+async function waitForSession(page: Page) {
+  try {
+    await page.locator('main [data-progress-state]').waitFor({ timeout: 15_000 });
+  } catch (error) {
+    const reads = calls.filter((call) => call.method === 'GET').map(({ path, view }) => [path, view]);
+    throw new Error(
+      `Progress detail at ${new URL(page.url()).pathname}: ${await page.locator('#main-content').innerText()}
+Reads: ${JSON.stringify(reads)}`,
+      { cause: error },
+    );
+  }
+}
 afterAll(async () => {
   await cleanupSuite();
 });
@@ -782,23 +817,38 @@ afterAll(async () => {
 const creates = () => calls.filter((call) => call.method === 'POST' && call.path === '/v1/progressSessions');
 const writesFor = (suffix: string) => calls.filter((call) => call.method === 'POST' && call.path.endsWith(suffix));
 
+async function openStartForm(page: Page) {
+  const form = page.locator('details[data-progress-start]');
+  if (!(await form.evaluate((element) => (element as HTMLDetailsElement).open))) await form.locator('summary').click();
+}
+
 async function chooseMode(page: Page, mode: string, unit: string, total?: string) {
-  await page.getByRole('radio', { name: mode, exact: true }).check();
-  await page.getByRole('combobox', { name: 'Unit', exact: true }).selectOption(unit);
+  await page.getByRole('radio', { name: mode, exact: true }).click();
+  await page.getByRole('combobox', { name: 'Unit', exact: true }).click();
+  await page.getByRole('option', { name: unit, exact: true }).click();
   if (total !== undefined) await page.getByRole('textbox', { name: 'Total', exact: true }).fill(total);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
 }
 function expectReads(sessionId: string, access: string) {
   const reads = calls.filter(
-    (call) => call.method === 'GET' && call.path.startsWith(`/v1/progressSessions/${sessionId}`),
+    (call) =>
+      call.method === 'GET' &&
+      call.path.startsWith(`/v1/progressSessions/${sessionId}`) &&
+      !call.path.endsWith('/journal'),
   );
-  expect(reads.map((call) => call.path).sort()).toEqual(
+  const paths = reads.map((call) => call.path);
+  expect([...new Set(paths)].sort()).toEqual(
     [
       `/v1/progressSessions/${sessionId}`,
       `/v1/progressSessions/${sessionId}/changes`,
       `/v1/progressSessions/${sessionId}/completedUnits`,
     ].sort(),
   );
+  // Each loader (route entry or fresh viewer observation) reads one point and both history windows.
+  const pointReads = reads.filter((call) => call.path === `/v1/progressSessions/${sessionId}`).length;
+  expect(pointReads).toBeLessThanOrEqual(2);
+  expect(reads.filter((call) => call.path.endsWith('/changes'))).toHaveLength(pointReads);
+  expect(reads.filter((call) => call.path.endsWith('/completedUnits'))).toHaveLength(pointReads);
   expect(reads.every((call) => call.view === 'FULL' && call.authorization === `Bearer ${access}`)).toBe(true);
   expect(reads.find((call) => call.path.endsWith('/changes'))?.limit).toBe(pageLimit);
   expect(reads.find((call) => call.path.endsWith('/completedUnits'))?.limit).toBe(pageLimit);
@@ -813,6 +863,7 @@ test(
       expect(await page.getByRole('heading', { level: 1, name: 'Reading progress', exact: true }).innerText()).toBe(
         'Reading progress',
       );
+      await openStartForm(page);
       expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
       expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       const listed = calls.filter((call) => call.method === 'GET' && call.path === '/v1/progressSessions');
@@ -835,36 +886,44 @@ test(
 
       await chooseMode(page, 'Amount', 'page', '240');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const amountId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(creates()[0]).toMatchObject({
         body: { subjectId, mode: 'scalar_amount', unit: 'page', total: '240' },
         authorization: `Bearer ${access}`,
       });
-      expect(creates()[0]?.key).toMatch(uuid);
+      expect(creates()[0]?.key).toMatch(quotedUuid);
       expect(await page.locator('main').innerText()).toContain('Night watch');
-      expect(await page.locator('main').innerText()).toContain('Page');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      await page.getByText('scalar_amount', { exact: true }).waitFor();
+      expect(await page.locator('main').innerText()).toContain('page');
       expect(await page.locator('main').innerText()).toContain('240');
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
       expectReads(amountId, access);
 
       await page.goto(`${await site()}/en/library/progress?subjectId=${subjectId}`, { waitUntil: 'networkidle' });
       await hydrated(page);
-      await chooseMode(page, 'Cursor position', 'chapter');
+      await openStartForm(page);
+      await chooseMode(page, 'Reading place', 'chapter');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const cursorId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(cursorId).not.toBe(amountId);
       expect(creates()[1]?.body).toEqual({ subjectId, mode: 'cursor_position', unit: 'chapter' });
-      expect(creates()[1]?.key).toMatch(uuid);
+      expect(creates()[1]?.key).toMatch(quotedUuid);
       expect(creates()[1]?.key).not.toBe(creates()[0]?.key);
-      expect(await page.locator('main').innerText()).toContain('Cursor position');
-      expect(await page.locator('main').innerText()).toContain('Chapter');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      await page.getByText('cursor_position', { exact: true }).waitFor();
+      expect(await page.locator('main').innerText()).toContain('chapter');
       expect(await page.locator('main').innerText()).not.toContain('240');
       expectReads(cursorId, access);
 
       await page.goto(`${await site()}/en/library/progress?subjectId=${subjectId}`, { waitUntil: 'networkidle' });
       await hydrated(page);
+      await openStartForm(page);
       await chooseMode(page, 'Completed units', 'episode');
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
+      await waitForSession(page);
       const unitsId = new URL(page.url()).pathname.split('/').at(-1)!;
       expect(unitsId).not.toBe(amountId);
       expect(unitsId).not.toBe(cursorId);
@@ -874,8 +933,9 @@ test(
         { subjectId, mode: 'completed_units', unit: 'episode' },
       ]);
       expect(new Set(creates().map((call) => call.key)).size).toBe(3);
-      expect(await page.locator('main').innerText()).toContain('Completed units');
-      expect(await page.locator('main').innerText()).toContain('Episode');
+      await page.getByText('Unit and recording details', { exact: true }).click();
+      await page.getByText('completed_units', { exact: true }).waitFor();
+      expect(await page.locator('main').innerText()).toContain('episode');
       expect(sessions.get(unitsId)?.state).toBe('active');
       expect(sessions.get(unitsId)?.total).toBeNull();
     } finally {
@@ -895,7 +955,8 @@ test(
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('50');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('main').getByText('p. 50/200', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
+      await page.locator('main').getByText('50 / 200 pages', { exact: true }).waitFor();
       expect(sessions.get(current)).toMatchObject({ amount: '50', state: 'active', revision: 2, completedAt: null });
       const saved = writesFor(`/${current}:record`);
       expect(saved).toHaveLength(1);
@@ -903,7 +964,7 @@ test(
         body: { revision: 1, amount: '50' },
         authorization: `Bearer ${access}`,
       });
-      expect(saved[0]?.key).toMatch(uuid);
+      expect(saved[0]?.key).toMatch(quotedUuid);
       expect(Object.keys(saved[0]?.body as object).sort()).toEqual(['amount', 'revision']);
       expect(await page.getByRole('region', { name: 'Change history', exact: true }).innerText()).toMatch(/\b50\b/);
 
@@ -912,18 +973,18 @@ test(
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('80');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      const alert = page.getByRole('alert');
-      await alert.waitFor();
-      expect(await alert.innerText()).toContain('old revision');
-      expect(await alert.innerText()).toContain('still here');
+      await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
+      const conflict = page.getByRole('dialog').getByRole('alert').filter({ hasText: 'older version' });
+      await conflict.waitFor();
+      expect(await conflict.innerText()).toContain('still here');
       expect(await page.getByRole('textbox', { name: 'Amount', exact: true }).inputValue()).toBe('80');
-      expect(await page.locator('main').innerText()).toContain('p. 50/200');
-      expect(await page.locator('main').innerText()).not.toContain('p. 80/200');
+      expect(await page.locator('main').innerText()).toContain('50 / 200 pages');
+      expect(await page.locator('main').innerText()).not.toContain('80 / 200 pages');
       expect(sessions.get(current)).toMatchObject({ amount: '50', revision: seen + 1, state: 'active' });
       const stale = writesFor(`/${current}:record`);
       expect(stale).toHaveLength(2);
       expect(stale[1]?.body).toEqual({ revision: seen, amount: '80' });
-      expect(stale[1]?.key).toMatch(uuid);
+      expect(stale[1]?.key).toMatch(quotedUuid);
       expect(calls.some((call) => call.path.endsWith(':complete') || call.path.endsWith(':abandon'))).toBe(false);
     } finally {
       await closeContext(page.context());
@@ -944,34 +1005,35 @@ test(
       const units = page.getByRole('region', { name: 'Completed units', exact: true });
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill(batch.join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
       await units.getByText('ep-001', { exact: true }).waitFor();
       await units.getByText('ep-100', { exact: true }).waitFor();
       const added = writesFor(`/${current}:record`);
       expect(added).toHaveLength(1);
       expect(added[0]?.body).toEqual({ revision: 1, add: batch });
       expect(added[0]?.authorization).toBe(`Bearer ${access}`);
-      expect(added[0]?.key).toMatch(uuid);
+      expect(added[0]?.key).toMatch(quotedUuid);
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
-      const before = calls.length;
+      const before = writesFor(':record').length;
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill([...batch, 'ep-101'].join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
-      const alert = page.getByRole('alert');
-      await alert.waitFor();
-      expect(await alert.innerText()).toContain('100');
+      await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'at most 100 units' }).waitFor();
       expect(await page.getByRole('textbox', { name: 'Add units', exact: true }).inputValue()).toContain('ep-101');
-      expect(calls.length).toBe(before);
+      expect(writesFor(':record')).toHaveLength(before);
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
       await page.getByRole('textbox', { name: 'Remove units', exact: true }).fill(batch.join('\n'));
       await page.getByRole('button', { name: 'Remove units', exact: true }).click();
-      await units.getByText('ep-001', { exact: true }).waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
+      await units.getByText('No units have been completed yet.', { exact: true }).waitFor();
+      expect(await units.getByText('ep-001', { exact: true }).count()).toBe(0);
       const removed = writesFor(`/${current}:record`);
       expect(removed).toHaveLength(2);
       expect(removed[1]?.body).toEqual({ revision: 2, remove: batch });
       expect(Object.keys(removed[1]?.body as object)).not.toContain('add');
-      expect(removed[1]?.key).toMatch(uuid);
+      expect(removed[1]?.key).toMatch(quotedUuid);
       expect(removed[1]?.key).not.toBe(removed[0]?.key);
       expect(sessions.get(current)?.completedUnitCount).toBe(0);
       expect(sessions.get(current)?.units).toEqual([]);
@@ -993,8 +1055,7 @@ test(
       const history = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await history.innerText()).toMatch(/\b4\b/);
       expect(writesFor(':complete')).toHaveLength(0);
-      await page.getByRole('button', { name: 'More actions', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'Complete', exact: true }).click();
+      await page.getByRole('button', { name: 'Complete', exact: true }).click();
       expect(writesFor(':complete')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
       await page.locator('main [data-progress-state="completed"]').waitFor();
@@ -1004,12 +1065,13 @@ test(
         body: { revision: 2 },
         authorization: `Bearer ${access}`,
       });
-      expect(writesFor(`/${completed}:complete`)[0]?.key).toMatch(uuid);
+      expect(writesFor(`/${completed}:complete`)[0]?.key).toMatch(quotedUuid);
       expect(await history.innerText()).toMatch(/\b4\b/);
 
-      await page.getByRole('link', { name: 'Start again', exact: true }).click();
+      await page.getByRole('link', { name: 'Start another session', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\?/);
       await hydrated(page);
+      await openStartForm(page);
       expect(await page.locator('main').innerText()).toContain('Completed');
       expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
       expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
@@ -1026,8 +1088,7 @@ test(
       const abandonedHistory = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await abandonedHistory.innerText()).toMatch(/\b9\b/);
       expect(writesFor(':abandon')).toHaveLength(0);
-      await page.getByRole('button', { name: 'More actions', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'Abandon', exact: true }).click();
+      await page.getByRole('button', { name: 'Abandon', exact: true }).click();
       expect(writesFor(':abandon')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm abandon', exact: true }).click();
       await page.locator('main [data-progress-state="abandoned"]').waitFor();
@@ -1054,7 +1115,8 @@ test(
       await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('120');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('main').getByText('min 120/120', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Confirm progress correction', exact: true }).click();
+      await page.locator('main').getByText('120 / 120 minutes', { exact: true }).waitFor();
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
       expect(await page.locator('main [data-progress-state]').innerText()).toBe('Active');
       expect(sessions.get(current)).toMatchObject({ amount: '120', state: 'active', completedAt: null, revision: 2 });

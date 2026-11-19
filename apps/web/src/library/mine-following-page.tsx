@@ -173,7 +173,9 @@ export function CurrentViewerMineFollowingPage({
       origin.seed &&
       origin.subject &&
       matches(initial, origin.subject, address.cursor, locale, kind)
-        ? { initialData: initial }
+        ? initial.documentPreview
+          ? { placeholderData: () => (origin.hydrated ? undefined : initial) }
+          : { initialData: initial }
         : {}),
     },
     origin.client,
@@ -681,11 +683,11 @@ function MineFollowingPageState({
           const { follow, title } = row;
           return (
             <FollowingReadingRow
-              key={follow.targetId}
+              key={follow.targetId || follow.idempotencyKey}
               row={row}
               selected={reading.selection?.row.follow.targetId === follow.targetId}
               suspended={reading.suspended}
-              disabled={!!status}
+              disabled={!!status || !follow.targetId}
               canReadCollection={canReadCollection}
               current={reading.current}
               frontier={
@@ -698,28 +700,30 @@ function MineFollowingPageState({
                 if (current) reading.select(current, trigger);
               }}
               controls={
-                <span hidden={!canUnfollow}>
-                  <FollowTargetControl
-                    origin={origin}
-                    intentOwner={intentOwnerFor(follow.targetId)}
-                    targetId={follow.targetId}
-                    following
-                    disabled={!!status}
-                    idempotencyKey={follow.idempotencyKey}
-                    menuTitle={m.library_follow_more_actions({ title: title.text })}
-                    {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
-                    onReview={onReview ? () => onReview(follow.targetId) : undefined}
-                    onRemoved={() => {
-                      if (!origin.isCurrent()) return;
-                      if (reading.selection?.row.follow.targetId === follow.targetId) {
-                        reading.close(false);
-                        listHeading.current?.focus();
-                      }
-                      setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
-                      setRemoved(true);
-                    }}
-                  />
-                </span>
+                follow.targetId ? (
+                  <span hidden={!canUnfollow}>
+                    <FollowTargetControl
+                      origin={origin}
+                      intentOwner={intentOwnerFor(follow.targetId)}
+                      targetId={follow.targetId}
+                      following
+                      disabled={!!status}
+                      idempotencyKey={follow.idempotencyKey}
+                      menuTitle={m.library_follow_more_actions({ title: title.text })}
+                      {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
+                      onReview={onReview ? () => onReview(follow.targetId) : undefined}
+                      onRemoved={() => {
+                        if (!origin.isCurrent()) return;
+                        if (reading.selection?.row.follow.targetId === follow.targetId) {
+                          reading.close(false);
+                          listHeading.current?.focus();
+                        }
+                        setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
+                        setRemoved(true);
+                      }}
+                    />
+                  </span>
+                ) : null
               }
             />
           );
