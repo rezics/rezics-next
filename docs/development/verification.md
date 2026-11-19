@@ -1,73 +1,79 @@
 # Verification
 
-Verify the promised outcome through the real boundary that owns it.
-
-API acceptance covers the personas and permission rules the outcome changes, through the real boundary. Test
-rejection of invalid input where outside input enters, and lifecycle, replay or dependency failure only where the
-outcome promises behaviour for them. Use native Access and production contracts. A permissive stub cannot prove
-authorization or disclosure.
-
-Keep specified, implemented, exposed, tested and promoted distinct. Report unavailable evidence as unavailable.
-
-[Phase ownership](delivery.md#implementation-and-acceptance) separates source delivery from acceptance. The
-procedures below apply to scheduled verification, not source admission.
+Verify outcomes through their real owning boundaries. Record specified, implemented, exposed, tested and
+promoted status separately. Follow [phase ownership](delivery.md#implementation-and-acceptance).
 
 ## Capability evidence
 
-Verification follows the [architecture](../architecture.md): prove backend capabilities through the API before
-accepting their interfaces. Scheduled acceptance uses per-persona user jobs on real-shaped, released fixture data,
-with no frontend and no mocked owner modules. Freeze missing user cases when that evidence is scheduled; use the
-[API acceptance gap inventory](../research/api-acceptance-gaps.md) to find them.
+Each Goal keeps a `docs/goals/<goal>.capabilities.md` manifest with user jobs, personas, released fixture data,
+applicable surface cells, frozen scenarios and native acceptance commands. Explain inapplicable cases. Use
+[API acceptance gaps](../research/api-acceptance-gaps.md) to find missing scenarios. Prove backend behavior
+before accepting interfaces. Exercise permissions and input rejection through native Access and real APIs.
+Cover lifecycle, replay and dependency failure where promised. Completion and promotion require applicable
+passing native evidence.
 
-Each Goal maintains `docs/goals/<goal>.capabilities.md`. For every capability record the user job, personas, released
-fixture data, every applicable surface cell with frozen scenarios or an explicit reason it does not apply, and the
-native acceptance command. Completion and promotion refuse incomplete manifests. A manifest entry or parallel
-specification without its passing native binding is not proof.
+Record affected page stories and their API evidence in interface briefs. Use Storybook 11 with `addon-vitest`
+and `addon-a11y`, recorded API responses and desktop and phone views. Exercise populated, empty, overflowing,
+preparing and error states for applicable viewers, and all applicable controls on Library, Collection, subject,
+search and Zone surfaces. Match seeded page and API results under the same identity. See
+[page story coverage](page-stories.md), [page data checks](../../scripts/README.md#page-data-check) and
+[Web recording and screenshot commands](../../apps/web/README.md#storybook-and-page-recordings).
 
-Build and prove frontend surfaces in Storybook 11 with `addon-vitest` and `addon-a11y`. Every route has page stories using recorded API
-responses for populated, empty, long or overflowing content, preparing or unavailable, and error states, for each
-applicable viewer (anonymous, member, owner or curator, suspended), on desktop and phone. Cover every control state
-on library, Collection, subject, search and Zone surfaces: filters, selection, each status chip, curated and dynamic,
-private/unlisted/public, Liked and Continue progress kinds. Fakes may inject interaction or failure; they do not replace native API evidence. Page data is compared with the seeded running product under the same anonymous or member identity at the page and native API; see [the checker contract](../../scripts/README.md#page-data-check). Fixture coverage alone is not acceptance.
+## Web release qualification
 
-Every interface brief lists the page stories it adds and their API evidence. Track exact story exports in the
-[page story coverage map](page-stories.md); a story proves only what it actually renders. Existing primitive stories
-remain, but receive no further workflow effort. Play functions prove behaviour; accessibility checks and visual
-snapshots support review by eye. The development publication is `https://storybook.rezics.com`.
-[Web recording and screenshot procedures](../../apps/web/README.md#storybook-and-page-recordings) own the commands.
+Keep browser scripts, Storybook play tests, recordings and accessibility checks in development. Use representative
+seeded data for running-product browser review under the [first-public sequence](../scope.md#release-sequence).
+The Web release profile, including root Gate selection, uses production build and startup, relevant static and
+unit checks, and critical real HTTP and native API integration. Reuse applicable interface evidence from development
+and seeded review.
+
+Reuse generated contracts, messages and routes for matching inputs. Build before starting native services for
+seeded review. Preserve the compatible seeded store across Web fixes.
+
+## Continuous development checks
+
+The dev verifier takes each integrated change and schedules the affected checks. Coalesce updates to the same
+evidence inputs, retain checks with independent inputs, and prioritize the earliest check that can detect a
+regression. Prove boot first. A boot or shared prerequisite failure routes to its owner while independent checks and
+source landings continue. Follow the installed verifier's [command and placement
+rules](../../tools/goal/README.md#development-verification). Keep required evidence attached to the changed
+outcome as it advances toward release.
 
 ## Check selection and failures
 
-Dev's floor, in order: development continues, and dev runs, so problems can be debugged. A broken dev never holds
-landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
-that broke it.
+### Choosing checks
 
-The manager selects checks for the user behavior or invariant that needs evidence. Each selected command names
-what its result will decide. Use the smallest case that reaches that boundary; broader matrices belong to release
-qualification unless the changed contract requires them. A failed setup establishes unavailable evidence, not a
-failed product assertion. Do not expand coverage merely because a run failed to start.
+For each changed behavior, use the smallest real boundary that can decide it. Select checks from the difference
+against the last qualified release, including consumers of changed source, public contracts, generated outputs,
+migrations, configuration and fixtures. Start with repository-owned dependency and capability information. Cover
+both ends of changed API and event contracts. Changes to shared runtime, authorization, data integrity or money
+rules also need the relevant composed safety cases. Expand coverage for unknown inputs. A workspace-wide change
+uses its full check. A shared Kernel runtime contract uses the full Kernel check and executable control-plane
+changes use their own gate. Documentation alone requires neither.
 
-Match setup and restart to the behavior under test. Reuse a compatible live stack or prepared fixture for checks
-with isolated state. Exercise replay or recovery with the smallest real input and retain the original durable
-state. Restart the process whose lifetime is under test. Select cold startup, full preparation, or growth only
-for outcomes that depend on those conditions. Keep the original bound when proving readiness or scale.
+Separate ongoing interface, scale and failure-recovery work from the required [release checks](release.md).
+Exercise those conditions on the candidate when the changed behavior depends on them. Keep the actual safety and
+performance bounds. A failing setup establishes unavailable evidence.
 
-When a shared prerequisite fails, record its elapsed time and first failing boundary once. Mark dependent
-assertions that never ran as unreached and retain the observations already made. Reproduce the failed boundary
-with its owner before repeating the full journey.
+### Evidence and repair
 
-Reuse passing evidence when its tested source, dependencies, fixtures and relevant configuration are unchanged.
-Record its original revision and applicability; a new aggregate head alone does not require rerunning it. A relevant
-change or new defect evidence justifies a rerun. Never relabel reused evidence as a new run or use it to prove changed
-behavior. Final qualification still covers the promoted candidate.
+Reuse a result if the relevant source and dependencies, check command, toolchain, generated inputs, fixtures,
+schema, relevant configuration and environment still match. Preserve the original revision with the result and
+record why it applies. If matching inputs cannot be established, run the affected check. In a compatible prepared
+environment, keep unchanged services and data. Restore or isolate mutable case state. Restart only what the test
+depends on. Cold startup, restore and growth need their own matching evidence.
+
+Retain completed verdicts as checks finish, even when another part fails or the host is lost. Capture the first
+failing boundary with the check/run identity and the minimum state needed to replay it. Route product assertions
+to the behavior owner, fixture failures to the fixture owner, and host or runner failures to their operational
+owner. Mark dependent checks unreached and let independent checks finish. Reproduce the failure at its earliest
+real boundary on the preserved inputs; compare with the preceding applicable pass when attribution is unclear.
+After the fix, rerun the affected assertion and checks whose inputs changed. Repeat the whole journey only when
+the change or the missing evidence requires it. An equivalent second infrastructure failure goes to its owner
+with the observed phase and error before another submission.
 
 Judge assertions against the behavior promised by the owner contract, independently of public exposure. Correct
 an assertion that expects behavior outside that contract before spending another run on it.
-
-After the same setup or infrastructure failure recurs, stop resubmitting the affected check unchanged. Send its
-first error, reached stage and needed repair to the infrastructure owner. The manager chooses a narrower useful
-check, deferral or an owner repair under [scheduling](supermanager.md#scheduling-and-progress); independent source
-work continues. A source repair does not silently include repairing its verification infrastructure.
 
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
 
@@ -81,12 +87,9 @@ rules, not prerequisites for [source integration](delivery.md#direct-source-inte
 and money-path failures retain revert handling; boot failures dispatch urgent repair, and other test failures create
 or update an owner repair without reverting.
 
-Environment walks run per Goal, not per implementation outcome. An implementation brief declares no `native` or
-`browser` `acceptance.requires`. Each Goal keeps at most one walk task on seeded dev; dispatch and retry refuse a
-second while one is ready, running, held or landing.
-
-A walk repairs only what it needs to continue. Return separable defects to their owners for assigned repairs rather
-than serially absorbing them. Explicit proof and acceptance assignments retain their selected checks.
+Use one broad seeded dev walk per Goal. Put native and browser requirements in acceptance briefs. Run focused
+affected checks after each relevant integration. A walk repairs what it needs to continue and routes independent
+failures to their owners.
 
 Decision: remote run custody admission and updates use the reader's 64 KiB serialized JSON character limit; initial admission reserves 12 KiB for host and terminal transitions. Generated typing commands retain their existing 3,000-character argv chunks and exact argument boundaries. Tests separately pin per-argument binding rejection, aggregate serialized-record rejection, and terminal retention of the canonical binding, including compressed argv, hosts file and returns.
 
@@ -121,22 +124,12 @@ replacements. Locale transitions in mounted fixtures change the browser's locale
 Keep credential preparation and reached-work assertions on the real producers. Run retained multi-file selections
 through the focused runner's fresh runtime for each file, in the original selection order.
 
-Decision: mapper-enabled workspaces (Kernel, Auth, Web) typecheck one at a time inside an admitted slice so their
-tsc/Reylo runs cannot stack past the per-run memory cap. Independent checks may run concurrently in separately
-admitted slices; leaf packages may run in parallel within their admitted resources. Check producers before their
-consumers. When a prerequisite check fails, return that failure for repair before running checks that depend on it.
-Unreached checks remain unverified, and success still requires every changed workspace and required money-path test
-to pass. Reuse unchanged valid passing evidence rather than rerunning it to complete a batch.
+Typecheck Kernel, Auth and Web one at a time inside each admitted slice to fit mapper memory. Run independent
+checks in separately admitted slices and leaf packages within their assigned resources. Use the affected producer
+and consumer ordering and money-path checks above.
 
-Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
-workspace-wide change; the train and promotion own whole-workspace checks.
-
-Run selected acceptance once after the last relevant edit. Include root typing only when the changed contract needs
-workspace-wide type evidence. Write missing contract tests as acceptance work and preserve frozen acceptance.
-A discretionary check names at most twelve nearby files and a reachable failure whose result changes the next action.
-Broaden only for affected shared contracts or unresolved product assertions. A runtime contract every Kernel module
-uses needs its full check; executable control-plane changes need its gate. Documentation alone requires neither.
-A successful exit proves only the check that actually ran.
+Use [check selection](#choosing-checks) for wider coverage and run each selected check after the last relevant
+edit. A discretionary check names at most twelve nearby files and a reachable failure that changes the next action.
 
 For every operation, document one Cost entry with Operation, Touches, Bound and Growth check. Use one operation
 subsection with the bullets `Touches:`, `Bound:` and `Growth check:`; its heading supplies Operation. Existing Cost

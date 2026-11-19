@@ -20,12 +20,12 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Verify once, then stop
 
-- Follow [phase ownership](delivery.md#implementation-and-acceptance). Source delivery carries no premerge checks.
-  In scheduled verification, run selected checks once after the last relevant edit; follow
-  [check selection](verification.md#check-selection-and-failures) for reuse and reruns.
+- Follow [phase ownership](delivery.md#implementation-and-acceptance). Keep source moving and run affected
+  verification after integration. Follow [check selection](verification.md#check-selection-and-failures) for
+  reuse, fault reproduction and reruns.
 - For a foreground command, use its open session and a long yield, without polling loops. For an asynchronous
   wrapper check, return its check ID and let the controller wake the session; do not wait or poll it yourself.
-- A failure that also occurs on your base commit is not yours. Say so in one line and finish.
+- A failure also observed on the base goes to its existing owner. Record the evidence and finish independent work.
 - When the assigned phase is delivered, stop. Do not add audits, proofs or checks the brief does not ask for.
 - Tests and stories prove the outcome; they are not the outcome. Write the fewest tests that pin the user-visible
   behaviour and its edge cases, as a rule fewer test lines than product lines, and only the stories for the states the

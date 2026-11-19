@@ -12,6 +12,19 @@ The [resident manager](development/supermanager.md) allocates and verifies the f
 can continue implementation and verification for other capabilities under their own contracts. Follow
 [direct source integration](development/delivery.md#direct-source-integration) for developing features.
 
+## Release sequence
+
+1. Verify backend startup, migrations and critical native API paths. Then complete the ordinary seed, import
+   representative first-public data and finish the large seed in one retained environment. Confirm it serves the
+   imported and seeded data.
+2. Use that environment for browser verification and visual fixes. Recheck affected pages against the same data.
+   The [Web qualification rules](development/verification.md#web-release-qualification) own check selection.
+3. Pin the resulting candidate and complete [release qualification](development/release.md), including verified publication.
+   Target two hours from the start of this closeout. Data import, seeding, and browser review and its fixes belong
+   to the preceding phases.
+
+## Public systems
+
 | System                                                                                    | Owner                                                                | First public scope                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Book library and hosted novels                                                            | content, web; semantic (bibliography), commerce (personal Library)   | In: the book library is the first product; book discovery/catalogue, personal Library, complete books and hosted-novel management, publication and reading are required at launch. Release requires both [Content native API acceptance](goals/content.md#acceptance) and [Web mounted author/reader acceptance](goals/web.md#acceptance).                                                                                                                |
