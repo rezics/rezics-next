@@ -219,9 +219,17 @@ const journey: Story['play'] = async ({ canvasElement }) => {
   await select('partial-rows');
   await expect(canvas.getAllByRole('listitem').length).toBeGreaterThan(0);
   await expect(canvasElement.querySelector('[data-slot=empty-state]')).toBeNull();
+  const preparedActions = canvas.getByRole('status', { name: 'Prepared explicit actions' });
+  const actionCount = preparedActions.textContent;
   await userEvent.click(canvas.getByRole('button', { name: 'Prepared background refresh' }));
   await expect(canvas.getAllByRole('listitem').length).toBeGreaterThan(0);
-  await expect(canvas.getAllByRole('status')).toHaveLength(2); // Source explanation and prepared action output.
+  await expect(discover).toHaveAttribute('aria-busy', 'true');
+  await expect(
+    within(discover)
+      .getAllByRole('status')
+      .filter((status) => status.textContent === m.home_presentation_partial()),
+  ).toHaveLength(1);
+  await expect(preparedActions).toHaveTextContent(actionCount ?? '');
   for (const state of [
     'preparing',
     'loading',
