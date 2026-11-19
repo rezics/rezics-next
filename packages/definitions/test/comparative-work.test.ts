@@ -33,7 +33,8 @@ test('comparative Works are one directed association over only the Book and Vide
     expect(type.properties).not.toContain(inverseId);
   }
 
-  for (const type of ['schema:CreativeWork', 'bf:Instance', 'wd:Q20631656', 'skos:Concept']) {
+  expect(types['schema:CreativeWork']).toBeUndefined(); // Abstract base in the catalogue.
+  for (const type of ['bf:Instance', 'wd:Q20631656', 'skos:Concept']) {
     expect(types[type]?.properties).not.toContain(propertyId);
     expect(types[type]?.facets).not.toContain(propertyId);
   }

@@ -98,12 +98,12 @@ test('a fictional character is a catalogue profile that works reference by quali
   expect(properties['schema:keywords']).toMatchObject({
     datatype: 'wikibase-item',
     targets: ['skos:Concept'],
-    qualifiers: ['rezics:spoilerLevel'],
+    qualifiers: ['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric', 'rezics:spoilerLevel'],
   });
   expect(properties['schema:character']).toMatchObject({
     datatype: 'wikibase-item',
     targets: [character],
-    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3629', 'wdt:P3831', 'wdt:P518'],
+    qualifiers: ['rezics:spoilerLevel', 'schema:position', 'wdt:P1932', 'wdt:P3629', 'wdt:P3831', 'wdt:P518'],
     mappings: ['wd:P674'],
   });
   expect(properties['wdt:P725']!.qualifiers).toEqual(

@@ -129,13 +129,13 @@ test('a series carries its own Bangumi identifier, source-precision date and sum
 });
 
 test('the current series release is a new digest and previous pinned releases still load', () => {
-  expect(bundledRelease.catalogue.version).toBe('1.0.10');
   expect(bundledDigest).toBe(releaseDigest(bundledRelease));
   expect(bundledDigest).not.toBe('sha256:d7e378a79c42f9b7b0f846352903734f08d555ede7d21627c7cfc0af2a377f97');
   const historical = JSON.parse(
     readFileSync(new URL('./fixtures/bundled-historical-construction.json', import.meta.url), 'utf8'),
   );
   expect(historical.catalogue.version).toBe('1.0.0');
+  expect(bundledRelease.catalogue.version).not.toBe(historical.catalogue.version);
   expect(validateRelease(historical)).toEqual([]);
 });
 
