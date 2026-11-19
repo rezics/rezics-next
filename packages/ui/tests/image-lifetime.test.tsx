@@ -1,9 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import tailwindcss from '@tailwindcss/vite';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { build } from 'vite';
 import { Cover, type CoverSubject, type CoverSummary } from '../src/components/cover.tsx';
 import { CoverViewer } from '../src/components/cover-viewer.tsx';
 import { MediaImage } from '../src/components/media-image.tsx';
@@ -28,9 +30,10 @@ type Scenario = {
 
 const widths = [240, 480, 640] as const;
 const variants = widths.map((width) => ({ format: 'webp' as const, width }));
-const pageRoot = join(import.meta.dir, '../..');
+const packageRoot = join(import.meta.dir, '..');
+const temporary = join(packageRoot, '../../.temp');
 let browser: Browser | undefined;
-let browserBundle: Promise<string> | undefined;
+let browserBundle: Promise<{ script: string; css: string }> | undefined;
 
 const imageBody =
   '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="12"><rect width="8" height="12" fill="#456"/></svg>';
@@ -85,14 +88,11 @@ function serverPair(id: string, base: string, successTitle: string) {
 
 async function buildBrowserBundle() {
   browserBundle ??= (async () => {
-    const directory = join(pageRoot, '.temp/goal/image-lifetime-browser');
-    await mkdir(directory, { recursive: true });
-    const entry = join(directory, 'entry.tsx');
-    const react = Bun.resolveSync('react', pageRoot);
-    const reactDom = Bun.resolveSync('react-dom/client', pageRoot);
-    const coverFile = join(pageRoot, 'packages/ui/src/components/cover.tsx');
-    const viewerFile = join(pageRoot, 'packages/ui/src/components/cover-viewer.tsx');
-    const mediaFile = join(pageRoot, 'packages/ui/src/components/media-image.tsx');
+    const react = Bun.resolveSync('react', packageRoot);
+    const reactDom = Bun.resolveSync('react-dom/client', packageRoot);
+    const coverFile = join(packageRoot, 'src/components/cover.tsx');
+    const viewerFile = join(packageRoot, 'src/components/cover-viewer.tsx');
+    const mediaFile = join(packageRoot, 'src/components/media-image.tsx');
     const sourceCode = `
       import React, { useState } from ${JSON.stringify(react)};
       import { createRoot, hydrateRoot } from ${JSON.stringify(reactDom)};
@@ -249,12 +249,38 @@ async function buildBrowserBundle() {
       };
       window.hydrateCachedCases = () => hydrateRoot(document.getElementById('app'), renderCachedCases('cached-success'));
     `;
-    await writeFile(entry, sourceCode);
-    const result = await Bun.build({ entrypoints: [entry], target: 'browser', format: 'iife' });
-    expect(result.success, result.logs.map(String).join('\n')).toBe(true);
-    return result.outputs[0]!.text();
+    await mkdir(temporary, { recursive: true });
+    const directory = await mkdtemp(join(temporary, 'image-lifetime-'));
+    try {
+      const entry = join(directory, 'entry.tsx');
+      await writeFile(entry, sourceCode);
+      const [result, styles] = await Promise.all([
+        Bun.build({ entrypoints: [entry], target: 'browser', format: 'iife' }),
+        build({
+          root: packageRoot,
+          configFile: false,
+          logLevel: 'error',
+          plugins: [tailwindcss()],
+          build: { write: false, rolldownOptions: { input: join(packageRoot, 'src/styles.css') } },
+        }),
+      ]);
+      expect(result.success, result.logs.map(String).join('\n')).toBe(true);
+      const css =
+        'output' in styles && styles.output.find((file) => file.type === 'asset' && file.fileName.endsWith('.css'));
+      if (!css || css.type !== 'asset' || typeof css.source !== 'string') throw new Error('Expected a UI stylesheet');
+      return { script: await result.outputs[0]!.text(), css: css.source };
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   })();
   return browserBundle;
+}
+
+async function setImageContent(page: Page, markup = '') {
+  const { script, css } = await buildBrowserBundle();
+  await page.setContent(`<main id="app">${markup}</main>`);
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: script });
 }
 
 async function imagePage(outcomes: Map<string, ImageOutcome>) {
@@ -281,8 +307,7 @@ async function imagePage(outcomes: Map<string, ImageOutcome>) {
       // A replaced source may abort its pending browser request before the mock response arrives.
     }
   });
-  await page.setContent('<main id="app"></main>');
-  await page.addScriptTag({ content: await buildBrowserBundle() });
+  await setImageContent(page);
   return { page, requests };
 }
 
@@ -580,13 +605,12 @@ test('one mounted Cover, MediaImage and CoverViewer journey retires changed sour
         serverPair('failure', 'cached-failure', 'Cached failure'),
       ),
     );
-    await cached.page.setContent(`<main id="app">${markup}</main>`);
+    await setImageContent(cached.page, markup);
     await cached.page.waitForFunction(
       () =>
         [...document.querySelectorAll('[data-cache-case] img')].length === 4 &&
         [...document.querySelectorAll('[data-cache-case] img')].every((image) => (image as HTMLImageElement).complete),
     );
-    await cached.page.addScriptTag({ content: await buildBrowserBundle() });
     await cached.page.evaluate(() => (window as Window & { hydrateCachedCases: () => void }).hydrateCachedCases());
     await cached.page.locator('[data-cache-case="success"] [data-slot="cover"][data-state="loaded"]').waitFor();
     await cached.page.locator('[data-cache-case="failure"] [data-slot="cover"][data-state="placeholder"]').waitFor();
