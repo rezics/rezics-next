@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-test('the unchanged open-library source outcomes pass with the production converter', async () => {
+test('Open Library source outcomes pass with the production converter', async () => {
   const suite = resolve(import.meta.dir, '../../../specs/imports-open-library.test.ts');
   const driver = resolve(import.meta.dir, 'open-library-driver.ts');
   const names = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;

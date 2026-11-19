@@ -83,7 +83,7 @@ function statement(command: BatchCommand): BatchStatement | undefined {
   return command.op === 'propose' ? command.statement : undefined;
 }
 
-test('Bangumi character kinds and appearance roles target exact Concepts; unsupported source order stays diagnostic', () => {
+test('Bangumi character kinds and appearances retain exact Concepts, source citations and valid order', () => {
   const kind = mapBangumiVocabulary(
     input('character:990001', 'https://bgm.tv/character/990001', [
       { kind: 'character-kind', path: '/character/990001/type', character, code: 1 },
@@ -106,49 +106,47 @@ test('Bangumi character kinds and appearance roles target exact Concepts; unsupp
     ],
   });
 
-  const appearance = mapBangumiVocabulary(
-    input('990010', 'https://bgm.tv/subject/990010', [
-      {
-        kind: 'character-appearance',
-        path: '/subject-characters/2/type',
-        subject: work,
-        character,
-        characterCode: '990001',
-        roleCode: 1,
-        order: 0,
-      },
-    ]),
-  );
-  const fact = statement(appearance.proposals[0]!);
-  expect(fact).toMatchObject({
+  const row = {
+    kind: 'character-appearance',
+    path: '/subject-characters/2/type',
+    subject: work,
+    character,
+    characterCode: '990001',
+    roleCode: 1,
+    order: 0,
+  } as const;
+  const appearance = mapBangumiVocabulary(input('990010', 'https://bgm.tv/subject/990010', [row]));
+  expect(appearance.gaps).toEqual([]);
+  expect(appearance.proposals).toHaveLength(1);
+  const role = { property: { id: 'wdt:P3831' }, value: { type: 'value', content: roleConcept } } as const;
+  const expected: BatchStatement = {
     property: { id: 'schema:character' },
     value: { type: 'value', content: character.id },
-    qualifiers: [
-      expect.objectContaining({
-        property: { id: 'wdt:P3831' },
-        value: { type: 'value', content: roleConcept },
-      }),
-    ],
+    qualifiers: [role, { property: { id: 'schema:position' }, value: { type: 'value', content: '1' } }],
     references: [
-      expect.objectContaining({
-        parts: expect.arrayContaining([
-          expect.objectContaining({
+      {
+        parts: [
+          {
             property: { id: 'schema:url' },
             value: { type: 'value', content: 'https://bgm.tv/subject/990010#/subject-characters/2/type' },
-          }),
-        ]),
-      }),
+          },
+          { property: { id: 'schema:version' }, value: { type: 'value', content: '7' } },
+        ],
+      },
     ],
-  });
-  expect(appearance.gaps).toContainEqual(
-    expect.objectContaining({
+  };
+  expect(statement(appearance.proposals[0]!)).toEqual(expected);
+  const invalid = mapBangumiVocabulary(input('990010', 'https://bgm.tv/subject/990010', [{ ...row, order: -1 }]));
+  expect(invalid.proposals).toHaveLength(1);
+  expect(statement(invalid.proposals[0]!)).toEqual({ ...expected, qualifiers: [role] });
+  expect(invalid.gaps).toMatchObject([
+    {
       path: '/subject-characters/2/type',
       code: '1',
-      reason: 'qualifier_not_admitted',
+      reason: 'invalid_source_value',
       property: 'schema:position',
-    }),
-  );
-  expect(JSON.stringify(fact)).not.toContain('schema:position');
+    },
+  ]);
 
   const unknown = mapBangumiVocabulary(
     input('character:990001', 'https://bgm.tv/character/990001', [

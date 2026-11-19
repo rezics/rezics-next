@@ -279,26 +279,43 @@ test('VNDB preserves date precision and reports TBA, absent dates, and release e
       },
       {
         kind: 'release-supersedes',
-        path: '/releases_supersedes/4/rid',
+        path: '/releases_supersedes/r4/rid',
+        origin: { externalId: 'r4', url: 'https://vndb.org/r4' },
         release,
         endpoint: native(5, 'wd:Q20631656'),
-        endpointCode: '5',
+        endpointCode: 'r5',
       },
-      { kind: 'release-supersedes', path: '/releases_supersedes/4/rid', release, endpointCode: '6' },
+      { kind: 'release-supersedes', path: '/releases_supersedes/r4/rid', release, endpointCode: 'r6' },
     ]),
   );
   const mapped = proposals(result.proposals);
-  expect(mapped).toHaveLength(4);
-  const dates = mapped.filter((item) => item.op === 'propose' && item.statement.property.id === 'schema:datePublished');
+  expect(mapped).toHaveLength(5);
+  const dates = mapped.filter((item) => item.statement.property.id === 'schema:datePublished');
   expect(
-    dates.map((item) =>
-      item.op === 'propose' && item.statement.value.type === 'value' ? item.statement.value.content : null,
-    ),
+    dates.map(({ subject, statement }) => [subject, statement.value.type === 'value' ? statement.value.content : null]),
   ).toEqual([
-    { time: '+2020-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
-    { time: '+2020-02-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
-    { time: '+2020-02-29T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+    [id(4), { time: '+2020-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }],
+    [id(6), { time: '+2020-02-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }],
+    [id(7), { time: '+2020-02-29T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }],
   ]);
+  const supersessions = mapped.filter((item) => item.statement.property.id === 'rezics:releaseSupersedes');
+  expect(supersessions).toHaveLength(1);
+  expect(supersessions[0]).toMatchObject({ subject: id(4), source: { external_id: 'r4', record_revision: '7' } });
+  expect(supersessions[0]!.statement).toEqual({
+    property: { id: 'rezics:releaseSupersedes' },
+    value: { type: 'value', content: id(5) },
+    references: [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://vndb.org/r4#/releases_supersedes/r4/rid' },
+          },
+          { property: { id: 'schema:version' }, value: { type: 'value', content: '7' } },
+        ],
+      },
+    ],
+  });
   expect(JSON.stringify(mapped)).not.toContain('wdt:P155');
   expect(result.gaps).toMatchObject([
     {
@@ -317,13 +334,12 @@ test('VNDB preserves date precision and reports TBA, absent dates, and release e
     },
     { path: '/releases_vn/4/vn', code: 'complete', reason: 'qualifier_not_admitted', property: 'wdt:P31' },
     {
-      path: '/releases_supersedes/4/rid',
-      endpoint: '5',
-      reason: 'property_not_admitted',
-      requiredProfile: 'wd:Q20631656',
-      property: 'wdt:P155',
+      path: '/releases_supersedes/r4/rid',
+      code: 'r6',
+      endpoint: 'r6',
+      reason: 'missing_identity',
+      property: 'rezics:releaseSupersedes',
     },
-    { path: '/releases_supersedes/4/rid', code: '6', endpoint: '6', reason: 'missing_identity' },
   ]);
 });
 

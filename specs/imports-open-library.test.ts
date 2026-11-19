@@ -50,6 +50,9 @@ function freeze(record: unknown): void {
 function recordIdentifier(key: unknown) {
   return (key as string).replace(/^\/(?:works|books)\//, '');
 }
+function recordCitationUrl(key: unknown) {
+  return `https://openlibrary.org${key}.json`;
+}
 function sourceDay(record: RecordPayload) {
   return {
     time: `+${(record.last_modified as { value: string }).value.slice(0, 10)}T00:00:00Z`,
@@ -59,7 +62,7 @@ function sourceDay(record: RecordPayload) {
 }
 function recordCitation(reference: BatchReference, record: RecordPayload) {
   const parts = [
-    ['schema:url', `https://openlibrary.org${record.key}`],
+    ['schema:url', recordCitationUrl(record.key)],
     ['wdt:P648', recordIdentifier(record.key)],
     ['schema:version', String(record.revision)],
     ['schema:dateModified', sourceDay(record)],
@@ -98,6 +101,8 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     for (const statement of statements) {
       expect(['schema:identifier', 'schema:version', 'schema:dateModified']).not.toContain(statement.property.id);
       expect(statement.qualifiers?.some((part) => part.property.id === 'schema:identifier') ?? false).toBe(false);
+      if (statement.property.id === 'wdt:P648')
+        expect(statement.value).toEqual({ type: 'value', content: recordIdentifier(record.key) });
       expect(statement.references).toHaveLength(1);
       recordCitation(statement.references[0]!, record);
     }
@@ -139,7 +144,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
       expect(path.startsWith(`${ref.path}/`)).toBe(true);
     }
     expect(pointer(command, ref.keyPath)).toBe(recordIdentifier(record.key));
-    expect(pointer(command, ref.urlPath)).toBe(`https://openlibrary.org${record.key}`);
+    expect(pointer(command, ref.urlPath)).toBe(recordCitationUrl(record.key));
     expect(command.source.record_revision).toBe(String(record.revision));
     expect(pointer(command, ref.revisionPath)).toBe(String(record.revision));
     expect(pointer(command, ref.lastModifiedPath)).toEqual(sourceDay(record));
@@ -207,7 +212,7 @@ function relationshipSource(output: Accepted, kind: 'author' | 'work', identifie
     expect(statement.references[0]!.parts).toEqual(
       expect.arrayContaining([
         { property: { id: 'wdt:P648' }, value: { type: 'value', content: recordIdentifier(key) } },
-        { property: { id: 'schema:url' }, value: { type: 'value', content: `https://openlibrary.org${key}` } },
+        { property: { id: 'schema:url' }, value: { type: 'value', content: recordCitationUrl(key) } },
       ]),
     );
   }
