@@ -1328,8 +1328,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   `_id`. External version is the snapshot partition position. After the subject snapshot, indexing reads public
   collection counts once per chunk for visible, nonredirected subjects it will index (one primary-key statement, at
   most 256 rows; no read when none will be indexed). At most one `_bulk?refresh=wait_for` request per nonempty chunk
-  (none without relevant IDs),
-  at most 2b NDJSON lines; no target traversal or SQL write. Grow N/P/H with b and subject payloads fixed.
+  (none without relevant IDs). Sparse homes occupy a relay slot until their bulk becomes searchable. Subject
+  generations refresh at 100 ms so independent homes can share refreshes at the relay polling cadence. Relay
+  installation upgrades the previous one-second allocation setting. Each bulk contains at most 2b NDJSON lines. It adds no target
+  traversal or SQL write. Grow N/P/H with b and subject payloads fixed.
 - Bound: At most b root documents written/deleted. Each indexed subject costs 1 + F Lucene documents: the root
   plus one nested document per facet-capable statement. A relation property's contribution is at most 128 distinct
   values plus its overflow marker; repeated relation witnesses for the same pair do not multiply indexed facts.

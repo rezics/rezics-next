@@ -353,11 +353,19 @@ for (const history of [64, 512, 4096]) {
 test('metadata refresh may replace generations during pause without dispatching even a partition scan', async () => {
   await fixture(async (f) => {
     await createSubjectIndex(native, prefix, 2);
+    // Install an older generation beside an explicitly configured one.
+    await native.request('PUT', `/${index(2)}/_settings`, { index: { refresh_interval: '1s' } });
+    await native.request('PUT', `/${index(1)}/_settings`, { index: { refresh_interval: '-1' } });
     await f.append(2);
     const before = { ...f.sql };
     const start = f.calls.length;
     await f.runner.refresh();
     await f.runner.pause();
+    const settings = await native.request('GET', `/${index(1)},${index(2)}/_settings/index.refresh_interval`);
+    expect(settings.body).toMatchObject({
+      [index(1)]: { settings: { index: { refresh_interval: '-1' } } },
+      [index(2)]: { settings: { index: { refresh_interval: '100ms' } } },
+    });
     expect(f.sql).toEqual(before);
     expect(f.calls.slice(start).filter((call) => call.startsWith('source ') || call.startsWith('bulk '))).toEqual([]);
     expect(await f.visible(2)).toEqual([]);

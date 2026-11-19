@@ -50,6 +50,7 @@ import {
   subjectGenerations,
   subjectIndexName,
   subjectAlias,
+  upgradeSubjectRefreshInterval,
 } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
@@ -253,6 +254,7 @@ export async function startSearchIndexing(options: {
           liveGenerations.map(async (generation) => {
             await readSubjectCalendarMappingFormat(search, options.prefix, generation);
             await readSubjectCreditMappingFormat(search, options.prefix, generation);
+            await upgradeSubjectRefreshInterval(search, options.prefix, generation);
             return createSubjectIndexer({
               pool: options.pool,
               search,

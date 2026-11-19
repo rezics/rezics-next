@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import subjects from '../../db/search/indices/subjects.json';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import {
@@ -10,7 +10,6 @@ import { creditSearchIndexDefinition, hasCreditIndexFormat } from './credit-sear
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
-const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
 export const SUBJECT_SORT_FORMAT = 1;
 export { MAX_SUBJECT_GENERATIONS };
@@ -71,11 +70,7 @@ export function subjectAlias(prefix: string): string {
 }
 
 export function subjectIndexDefinition(): SubjectIndexDefinition {
-  if (definition === undefined) {
-    const base = JSON.parse(readFileSync(definitionUrl, 'utf8')) as SubjectIndexDefinition;
-    definition = creditSearchIndexDefinition(calendarIndexDefinition(base));
-  }
-  return definition;
+  return (definition ??= creditSearchIndexDefinition(calendarIndexDefinition(subjects)));
 }
 
 export async function createSubjectIndex(
@@ -437,6 +432,26 @@ export async function ensureSubjectActivationMetadata(
     'Subject generation activation mapping could not be established',
   );
   return Date.parse(activatedAt);
+}
+
+/** Upgrade the previous allocation default once when installing the relay for a live Subject generation. */
+export async function upgradeSubjectRefreshInterval(search: OpenSearch, prefix: string, generation: number) {
+  const index = subjectIndexName(prefix, generation);
+  const path = `/${index}/_settings`;
+  const interval = async () => {
+    const { body } = await search.request<Record<string, { settings?: { index?: { refresh_interval?: string } } }>>(
+      'GET',
+      `${path}/index.refresh_interval`,
+    );
+    return body[index]?.settings?.index?.refresh_interval;
+  };
+  if ((await interval()) !== '1s') return;
+  const refresh_interval = subjects.settings.refresh_interval;
+  await observedWrite(
+    () => search.request('PUT', path, { index: { refresh_interval } }),
+    async () => (await interval()) === refresh_interval,
+    'Subject refresh interval could not be established',
+  );
 }
 
 /** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
