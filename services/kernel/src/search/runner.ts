@@ -424,10 +424,11 @@ export function startDiscoveryIndexing(options: {
   reviewSource?: ReviewDiscoverySource;
   publicPreparation?: PublicPreparation;
 }) {
-  const configuredConcurrency = options.concurrency ?? 2;
+  const poolConcurrency = relayConcurrencyForPool(options.pool);
+  const configuredConcurrency = options.concurrency ?? poolConcurrency;
   if (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
     throw new RangeError('concurrency must be a positive integer below the pool size');
-  const relayConcurrency = Math.min(configuredConcurrency, relayConcurrencyForPool(options.pool));
+  const relayConcurrency = Math.min(configuredConcurrency, poolConcurrency);
   const lifetime = new AbortController();
   const search = runnerSearch(options.search, lifetime.signal);
   type Installation = {

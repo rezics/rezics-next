@@ -488,7 +488,6 @@ export function createSearchWorkModule(
             source,
             listing,
             prefix: searchConfig.prefix,
-            concurrency: 2,
             discovery: { routeKey, producers: discoveryProducers },
             publicPreparation: preparation,
           });
