@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import {
@@ -133,7 +132,7 @@ function instrument(importer: Importer, probe: ReturnType<typeof createSqlitePro
 }
 
 test('production resume path stays within indexed bound as sealed work and unrelated history grow', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'resume-growth-'));
+  const dir = mkdtempSync('/dev/shm/resume-growth-');
   const resumeSamples: { scale: number; counted: ReturnType<typeof countedSample> }[] = [];
   const admissionSamples: { scale: number; counted: ReturnType<typeof countedSample> }[] = [];
   try {

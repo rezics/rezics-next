@@ -1,7 +1,5 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   countedSample,
   countedViolations,
@@ -26,7 +24,7 @@ const check: CountedCheck = {
 };
 
 async function importRecords(count: number): Promise<{ work: Work; committed: boolean }> {
-  const directory = mkdtempSync(join(tmpdir(), 'record-cpu-growth-'));
+  const directory = mkdtempSync('/dev/shm/record-cpu-growth-');
   const driver = await createImportPipelineDriver({
     directory,
     recordConcurrency: 16,

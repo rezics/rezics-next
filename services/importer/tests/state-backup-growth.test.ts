@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { ImportSession } from '../src/import-session.ts';
@@ -52,7 +51,7 @@ function seed(path: string, records: number) {
 }
 
 test('backup, validate and restore scale with database bytes and keep bounded memory', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'importer-backup-growth-'));
+  const dir = mkdtempSync('/dev/shm/importer-backup-growth-');
   try {
     const samples = [];
     for (const scale of [32, 64, 128]) {

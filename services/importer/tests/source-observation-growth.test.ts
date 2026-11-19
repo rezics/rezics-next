@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -33,7 +32,7 @@ function vn(index: number): SourceRecord {
 test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fixed history', async () => {
   const samples: { n: number; puts: number; heads: number; figures: number; journal: number; pages: number }[] = [];
   for (const n of SCALES) {
-    const directory = await mkdtemp(join(tmpdir(), 'obs-growth-'));
+    const directory = await mkdtemp('/dev/shm/obs-growth-');
     const sequence = { value: 0 };
     let puts = 0;
     let heads = 0;

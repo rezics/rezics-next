@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   countedSample,
   countedViolations,
@@ -12,7 +12,6 @@ import { DisappearanceReview } from '../src/disappearance-review.ts';
 import { RUN_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 
-const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
 const source = 'wikidata';
 const check: CountedCheck = {
   read: (value: unknown) => value as CountedValues,
@@ -102,10 +101,9 @@ function sample(
 }
 
 test('stop evidence capture and missing pages stay indexed at 32/128/512 with unrelated history', async () => {
-  mkdirSync(temporaryRoot, { recursive: true });
   const groups = new Map<string, { scale: number; counted: ReturnType<typeof countedSample> }[]>();
   for (const scale of [32, 128, 512]) {
-    const directory = mkdtempSync(join(temporaryRoot, 'disappearance-review-growth-'));
+    const directory = mkdtempSync('/dev/shm/disappearance-review-growth-');
     const path = join(directory, 'state.sqlite');
     const writeDb = new Database(path, { create: true, strict: true });
     const writeProbe = createSqliteProbe(writeDb, { growingTables: RUN_TABLES });

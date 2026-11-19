@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   countedSample,
   countedViolations,
@@ -18,7 +18,6 @@ import { retentionCatalog } from '../src/retention.ts';
 import { RUN_TABLES, RunStore, type SourceProjection } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 
-const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
 const source = 'wikidata';
 const unrelated = 'bangumi';
 const constant: CountedCheck = {
@@ -88,9 +87,8 @@ test('staging retirement review, apply and restart stay indexed as selected rows
   const reviewSamples: { scale: number; counted: ReturnType<typeof countedSample> }[] = [];
   const restartSamples: { scale: number; counted: ReturnType<typeof countedSample> }[] = [];
   const historySamples: { scale: number; counted: ReturnType<typeof countedSample> }[] = [];
-  mkdirSync(temporaryRoot, { recursive: true });
   for (const scale of [32, 128, 512]) {
-    const dir = mkdtempSync(join(temporaryRoot, 'staging-retirement-growth-'));
+    const dir = mkdtempSync('/dev/shm/staging-retirement-growth-');
     const state = join(dir, 'state.sqlite');
     const planPath = join(dir, 'plan.json');
     try {
@@ -207,7 +205,7 @@ test('staging retirement review, apply and restart stay indexed as selected rows
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-    const historic = mkdtempSync(join(temporaryRoot, 'staging-retirement-history-'));
+    const historic = mkdtempSync('/dev/shm/staging-retirement-history-');
     const historicState = join(historic, 'state.sqlite');
     try {
       const writer = new RunStore<SourceProjection>(historicState, { projectionMode: 'source-record' });
