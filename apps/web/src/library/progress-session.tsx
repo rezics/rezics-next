@@ -18,6 +18,7 @@ import { ProgressRow } from '@rezics/ui/progress-row';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { fullDateTime } from '../threads/byline-time';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -73,10 +74,7 @@ import { progressSessionAddress } from './progress-address';
 import { progressHistoryRecord } from './progress-history-restore';
 import { ProgressSessionWorkspace } from './progress-session-workspace';
 
-const buttonClass = buttonVariants({
-  variant: 'outline',
-  className: 'h-auto min-h-7 max-w-full whitespace-normal',
-});
+const buttonClass = cn(buttonVariants({ variant: 'outline' }), 'h-auto min-h-7 max-w-full whitespace-normal');
 
 const { Exposure } = exposure;
 const readDetail = async (data: ProgressDetailAddress, isCurrent: () => boolean) => {

@@ -4,6 +4,7 @@ import { progressAddressIssue, progressIndexAddress } from './progress-address';
 import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { ProgressChoice } from './progress-actions';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -103,10 +104,10 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
   return m.library_progress_state_active();
 }
 
-const buttonClass = buttonVariants({
-  variant: 'outline',
-  className: 'h-auto min-h-7 max-w-full whitespace-normal text-center wrap-anywhere',
-});
+const buttonClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-7 max-w-full whitespace-normal text-center wrap-anywhere',
+);
 
 function ProgressReturnRecovery({
   selection,

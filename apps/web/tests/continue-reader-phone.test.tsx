@@ -175,10 +175,9 @@ function retry(host: HTMLElement) {
   if (!button) throw new Error('Missing current recovery control');
   return button;
 }
-function targetPolicy(control: HTMLElement) {
-  expect(control.classList.contains('min-h-11')).toBe(true);
-  expect(control.classList.contains('focus-visible:outline-2')).toBe(true);
-  expect(control.classList.contains('focus-visible:outline-offset-2')).toBe(true);
+function targetPolicy(control: HTMLElement, visual: 'min-h-6' | 'size-6' = 'min-h-6') {
+  expect(control.classList.contains(visual)).toBe(true);
+  expect(control.classList.contains('focus-visible:ring-2')).toBe(true);
 }
 
 test('real Continue retains FULL order, historical decimals, literal zero, original session links and opaque navigation without render/focus reads', async () => {
@@ -247,8 +246,7 @@ test('actual row controls keep scroll operands and unavailable/disabled tab sema
   );
   const [back, forward] = buttons as [HTMLButtonElement, HTMLButtonElement];
   for (const button of buttons) {
-    targetPolicy(button);
-    expect(button.classList.contains('min-w-11')).toBe(true);
+    targetPolicy(button, 'size-6');
     expect(button.classList.contains('pointer-fine:flex')).toBe(true);
     expect(button.classList.contains('pointer-coarse:hidden')).toBe(true);
     expect(row.contains(button)).toBe(false);

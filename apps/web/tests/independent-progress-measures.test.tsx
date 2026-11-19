@@ -499,8 +499,9 @@ test('independent measure reads stay F-bounded across owner histories of 20, 200
   }
 });
 
-test('wrapping actions stay 44px and historical descriptors stay unlabeled guesses', () => {
-  expect(independentActionClass).toContain('min-h-11');
+test('wrapping actions keep the official Mira height and historical descriptors stay unlabeled guesses', () => {
+  expect(independentActionClass).toContain('h-auto');
+  expect(independentActionClass).toContain('min-h-7');
   expect(independentActionClass).toContain('[overflow-wrap:anywhere]');
   const historical = projectIndependentMeasures(
     sessionView({

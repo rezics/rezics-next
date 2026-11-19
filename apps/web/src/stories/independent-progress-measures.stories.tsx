@@ -5,6 +5,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import type { ProgressSessionPage, ProgressSessionView } from '../library/progress-reads';
 import { IndependentMeasuresVisit } from '../library/independent-measures/visit';
 import { m } from '../paraglide/messages.js';
+import { expectCompactMiraTarget } from './mira-control-target';
 
 type Scenario = 'refresh' | 'draft' | 'correction' | 'withdrawn';
 
@@ -116,8 +117,7 @@ type Story = StoryObj<typeof meta>;
 async function refreshWithoutDraft({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   const refresh = canvas.getByRole('button', { name: m.library_progress_measures_refresh() });
-  await expect(refresh.className).toContain('min-h-11');
-  await expect(refresh.className).toContain('min-w-11');
+  expectCompactMiraTarget(refresh, 28);
   await userEvent.click(refresh);
   const amounts = canvas.getAllByLabelText(m.library_progress_amount()) as HTMLInputElement[];
   await expect(amounts.map((input) => input.value)).toEqual(['11', '3']);

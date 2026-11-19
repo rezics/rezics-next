@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { expectCompactMiraTarget } from './mira-control-target';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
@@ -236,8 +237,7 @@ export const WindowNavigation: Story = {
       [m.library_next_page(), 'next+/=='],
     ] as const) {
       const link = await view.findByRole('link', { name: label });
-      await expect(link).toHaveClass(/min-h-11/);
-      await expect(link).toHaveClass(/focus-visible:outline-2/);
+      expectCompactMiraTarget(link, 24);
       await expect(link).toHaveAttribute(
         'href',
         continueCursorHref(getLocale(), '?display=compact&tag=a&tag=b&cursor=current', '#resume', cursor),

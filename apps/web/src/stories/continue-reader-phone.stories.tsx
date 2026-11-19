@@ -8,6 +8,7 @@ import recording from '../kernel/recorded/library-continue-progress-sessions.jso
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady, PatternStory } from './page';
+import { expectCompactMiraTarget } from './mira-control-target';
 
 const meta = {
   title: 'Library/Continue/Continue Reader',
@@ -121,13 +122,8 @@ async function target(control: HTMLElement, icon = false) {
   control.focus();
   await expect(control).toHaveFocus();
   expect(control.matches(':focus-visible')).toBe(true);
-  const style = getComputedStyle(control);
-  expect(Number.parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(2);
-  expect(style.outlineStyle).not.toBe('none');
-  expect(style.outlineColor).not.toBe('rgba(0, 0, 0, 0)');
-  const bounds = control.getBoundingClientRect();
-  expect(bounds.height).toBeGreaterThanOrEqual(44);
-  if (icon) expect(bounds.width).toBeGreaterThanOrEqual(44);
+  expect(getComputedStyle(control).boxShadow).not.toBe('none');
+  const bounds = expectCompactMiraTarget(control, 24, icon);
   expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
   return bounds;
 }

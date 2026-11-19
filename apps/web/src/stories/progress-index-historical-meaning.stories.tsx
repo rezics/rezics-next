@@ -5,6 +5,7 @@ import type { ProgressIndex } from '../library/progress-reads';
 import recorded from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { expectCompactMiraTarget } from './mira-control-target';
 import { PatternStory } from './page';
 
 const meta = {
@@ -148,9 +149,9 @@ export const LongPaginationLabels: Story = {
       expect(destination.searchParams.get('subjectId')).toBe(source.subjectId);
       expect(destination.searchParams.get('cursor')).toBe(index ? next : null);
       // Stress the actual anchor using the active locale's label, without a second renderer or destination.
-      link.textContent = Array(12).fill(link.textContent).join(' ');
-      const box = link.getBoundingClientRect();
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expectCompactMiraTarget(link, 28);
+      link.textContent = Array(64).fill(link.textContent).join(' ');
+      expect(link.getBoundingClientRect().height).toBeGreaterThan(28);
       expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);
       const range = document.createRange();
       range.selectNodeContents(link);
@@ -161,6 +162,6 @@ export const LongPaginationLabels: Story = {
     await userEvent.tab();
     expect(more).toHaveFocus();
     expect(more.matches(':focus-visible')).toBe(true);
-    expect(Number.parseFloat(getComputedStyle(more).outlineWidth)).toBeGreaterThan(0);
+    expect(getComputedStyle(more).boxShadow).not.toBe('none');
   },
 };
