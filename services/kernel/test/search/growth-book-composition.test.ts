@@ -98,10 +98,18 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
       await world.pauseBackgroundWork();
     },
     operation: measurePage,
-    async verify(_db, scale, _repetition, _value, capture) {
-      expect(costOf(capture).statements, `Native statement count at catalogue scale ${scale}`).toBeLessThanOrEqual(
-        composedLimitBound.statements,
-      );
+    async verify(_db, scale, _repetition, value, capture) {
+      const measured = value as Awaited<ReturnType<typeof measurePage>>;
+      const cost = costOf(capture);
+      expect(
+        cost.statements,
+        `Native statement count at catalogue scale ${scale} (examined ${cost.rows}/${measured.rowLimit} rows)`,
+      ).toBeLessThanOrEqual(composedLimitBound.statements);
+      expect(cost.rows).toBeLessThanOrEqual(measured.rowLimit);
+      expect(cost.blocks).toBeLessThanOrEqual(6 * measured.rowLimit);
+      assert(cost.requestBytes !== undefined && cost.responseBytes !== undefined);
+      expect(cost.requestBytes + measured.engineRequestBytes).toBeLessThanOrEqual(measured.requestLimit);
+      expect(cost.responseBytes + measured.engineResponseBytes).toBeLessThanOrEqual(measured.responseLimit);
     },
     counted: {
       read: (value) => value as Awaited<ReturnType<typeof measurePage>>,
@@ -116,13 +124,7 @@ test('published Book, Series and Edition lists serve 128 disclosed slots within 
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
-  for (const { cost, counted, occurrenceRepetitions } of report.samples) {
-    assert(counted && cost.requestBytes !== undefined && cost.responseBytes !== undefined);
-    const rows = counted.rowLimit!.value;
-    expect(cost.rows).toBeLessThanOrEqual(rows);
-    expect(cost.blocks).toBeLessThanOrEqual(6 * rows);
-    expect(cost.requestBytes + counted.engineRequestBytes!.value).toBeLessThanOrEqual(counted.requestLimit!.value);
-    expect(cost.responseBytes + counted.engineResponseBytes!.value).toBeLessThanOrEqual(counted.responseLimit!.value);
+  for (const { occurrenceRepetitions } of report.samples) {
     for (const { statements, retainedForegroundPlans } of occurrenceRepetitions) {
       const coverage = statements.filter(({ statement }) => privacyPlan(statement));
       expect(retainedForegroundPlans).toHaveLength(2);
