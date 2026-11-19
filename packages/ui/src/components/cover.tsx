@@ -366,12 +366,12 @@ function Withheld({ text }: { text: CoverLabels }) {
 
 function RevealButton({ text, onReveal }: { text: CoverLabels; onReveal: () => void }) {
   return (
-    <div className="absolute inset-x-0 bottom-[16%] flex justify-center @max-[119px]:inset-0 @max-[119px]:bottom-0 @max-[119px]:items-center">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[16%] flex justify-center @max-[119px]:inset-0 @max-[119px]:bottom-0 @max-[119px]:items-center">
       <Button
         type="button"
         variant="secondary"
         size="sm"
-        className="h-auto min-h-6 max-w-full whitespace-normal"
+        className="pointer-events-auto h-auto min-h-6 max-w-full whitespace-normal"
         onClick={onReveal}
         aria-label={text.reveal}
       >

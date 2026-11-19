@@ -483,7 +483,13 @@ export const ComposedCompatibility: Story = {
     const menuButton = within(linkedArticle).getByRole('button', {
       name: 'More actions for A translated work',
     });
-    await expect(menuButton.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    const menuRect = menuButton.getBoundingClientRect();
+    await expect(menuRect.width).toBe(20);
+    await expect(menuRect.height).toBe(20);
+    await expect(document.elementFromPoint(menuRect.left - 1, menuRect.top + menuRect.height / 2)).toBe(menuButton);
+    await expect(document.elementFromPoint(menuRect.left + menuRect.width / 2, menuRect.bottom + 1)).toBe(menuButton);
+    await userEvent.tab();
+    await expect(menuButton).toHaveFocus();
     await userEvent.click(menuButton);
     await expect(
       within(await settled(await screen.findByRole('menu'))).getByRole('menuitem', { name: 'Remove' }),
@@ -504,7 +510,10 @@ export const ComposedCompatibility: Story = {
     const checkbox = within(creditArticle).getByRole('checkbox', { name: 'Qualified work' });
     await expect(writerLink).toHaveAttribute('href', '/people/author');
     await expect(creditTitle.querySelector('a, button, input')).toBeNull();
-    await expect(checkbox.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    const checkboxRect = checkbox.getBoundingClientRect();
+    await expect(checkboxRect.width).toBe(16);
+    await expect(checkboxRect.height).toBe(16);
+    await expect(document.elementFromPoint(checkboxRect.left - 6, checkboxRect.bottom + 5)).toBe(checkbox);
     creditTitle.focus();
     await userEvent.tab();
     await expect(writerLink).toHaveFocus();

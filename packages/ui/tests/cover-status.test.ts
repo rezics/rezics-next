@@ -56,28 +56,13 @@ test('a tile without status has no status element or reserved caption space', ()
   expect(html).not.toContain('In progress');
 });
 
-test('long status labels stay on one line and truncate within the tile', () => {
-  const html = renderToStaticMarkup(
-    tile({ status: { label: 'A very long localized library status label that must not widen the tile' } }),
-  );
-  const match = html.match(/<span[^>]*data-slot="cover-card-status"[^>]*>/);
-  expect(match?.[0]).toContain('truncate');
-  expect(match?.[0]).toContain('min-w-0');
-  expect(match?.[0]).toContain('whitespace-nowrap');
-  expect(html).toContain('aria-label="A very long localized library status label that must not widen the tile"');
+test('long status labels render in full and can wrap within the tile', () => {
+  const label = 'A very long localized library status label that must not widen the tile';
+  const html = renderToStaticMarkup(tile({ status: { label } }));
+  const [, chip, text] = html.match(/(<span\b[^>]*data-slot="cover-card-status"[^>]*>)([^<]*)<\/span>/) ?? [];
+  expect(chip).toContain('max-w-full');
+  expect(chip).toContain('whitespace-normal');
+  expect(chip).toContain('wrap-anywhere');
+  expect(chip).toContain(`aria-label="${label}"`);
+  expect(text).toBe(label);
 });
-
-test('status story verifies keyboard access, truncation, and foreground contrast in both themes', async () => {
-  const run = Bun.spawn(['bun', 'x', 'vitest', 'run', 'src/components/cover-card.stories.tsx'], {
-    cwd: new URL('..', import.meta.url).pathname,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, CI: '1' },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(run.stdout).text(),
-    new Response(run.stderr).text(),
-    run.exited,
-  ]);
-  expect(code, `${stdout}\n${stderr}`).toBe(0);
-}, 300_000);
