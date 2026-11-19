@@ -26,14 +26,16 @@ const Page = observeLocaleComponent(function Page() {
   );
 });
 const apply = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('.auth-locale-actions button')!.click();
+const selectedLabel = (control: Element) => control.querySelector('[data-slot="select-value"]')?.textContent;
 
 test('real shell offers eight autonyms, stages/cancels with focus, and preserves rapid/restored choices', async () => {
   initializeDocumentLocale('en');
   const p = await open(<Page />, {});
   await flush(() => p.host.querySelector<HTMLButtonElement>('[role=combobox]')!.click());
   const options = [...document.querySelectorAll<HTMLElement>('[role=option]')];
-  expect(options.map((option) => [option.lang, option.textContent, option.lang])).toEqual(
-    locales.map((locale) => [locale, localeNames[locale], locale]),
+  expect(options).toHaveLength(8);
+  expect(options.map((option) => [option.lang, option.textContent])).toEqual(
+    locales.map((locale) => [locale, localeNames[locale]]),
   );
   await flush(() => document.querySelector<HTMLElement>('[role=option][lang=en]')!.click());
   const control = p.host.querySelector<HTMLButtonElement>('[role=combobox]')!;
@@ -41,13 +43,13 @@ test('real shell offers eight autonyms, stages/cancels with focus, and preserves
   await chooseLocale(p.host, 'ja');
   expect(getLocale()).toBe('en');
   await flush(() => p.host.querySelectorAll<HTMLButtonElement>('.auth-locale-actions button')[1]!.click());
-  expect(control.textContent).toBe(localeNames.en);
+  expect(selectedLabel(control)).toBe(localeNames.en);
   expect(document.activeElement).toBe(control);
   for (const locale of locales) {
     await chooseLocale(p.host, locale);
     if (p.host.querySelector('.auth-locale-actions')) await flush(() => apply(p.host));
     expect(document.documentElement.lang).toBe(locale);
-    expect(control.textContent).toBe(localeNames[locale]);
+    expect(selectedLabel(control)).toBe(localeNames[locale]);
     expect(p.host.querySelector('h1')?.textContent).toBe(m.auth_login_heading({}, { locale }));
     expect(control).toBe(p.host.querySelector('[role=combobox]'));
   }
@@ -66,7 +68,7 @@ test('real shell offers eight autonyms, stages/cancels with focus, and preserves
     restoreDocumentLocale();
     window.dispatchEvent(new dom.Event('pageshow') as unknown as Event);
   });
-  expect(p.host.querySelector('[role=combobox]')!.textContent).toBe(localeNames.fr);
+  expect(selectedLabel(control)).toBe(localeNames.fr);
   expect(document.cookie).toBe(`${cookieName}=fr`);
   expect(p.host.querySelector('.auth-locale-actions')).toBeNull();
   expect(p.calls).toHaveLength(0);
@@ -86,13 +88,13 @@ test('blocked persistence preserves exact hydration language and reports the cur
     initializeDocumentLocale('fr');
     const host = document.body.appendChild(document.createElement('div'));
     host.innerHTML = renderToString(<Page />);
-    expect(host.querySelector('[role=combobox]')!.textContent).toBe(localeNames.fr);
+    expect(selectedLabel(host.querySelector('[role=combobox]')!)).toBe(localeNames.fr);
     const errors: unknown[] = [];
     await flush(() => {
       root = hydrateRoot(host, <Page />, { onRecoverableError: (error) => errors.push(error) });
     });
     expect(errors).toEqual([]);
-    expect(host.querySelector('[role=combobox]')!.textContent).toBe(localeNames.fr);
+    expect(selectedLabel(host.querySelector('[role=combobox]')!)).toBe(localeNames.fr);
     expect(host.querySelector('h1')?.textContent).toBe(m.auth_login_heading({}, { locale: 'fr' }));
     await chooseLocale(host, 'ko');
     await flush(() => apply(host));
