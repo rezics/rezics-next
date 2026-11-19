@@ -22,6 +22,7 @@ import {
 import { sessionQueryKey } from '../src/session/browser-state';
 import { continueCursorHref, continueNewestHref } from '../src/library/continue-address';
 import { m } from '../src/paraglide/messages.js';
+import { parseSearch, stringifySearch } from '../src/router-search';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -42,6 +43,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previousGlobals = new Map(
@@ -64,31 +66,14 @@ mock.module('../src/kernel/exposure', () => ({ prepareExposure: async () => {}, 
 mock.module('../src/session/guard', () => ({ requireSignedIn: async () => {} }));
 mock.module('../src/library/pins-current', () => ({ useCurrentLibraryNavigation: () => ({ data: undefined }) }));
 mock.module('../src/library/library-nav', () => ({ LibraryNavigation: () => null }));
+mock.module('../src/library/hosted-checkpoint-books', () => ({ HostedCheckpointBooks: () => null }));
 mock.module('../src/library/continue-read', () => ({ readContinueEntries }));
+mock.module('../src/shell/head-context', () => ({
+  pageHeadContext: (path: string) => ({ origin: window.location.origin, locale: 'en', path }),
+}));
 
 const { createRoot } = await import('react-dom/client');
 const { Route } = await import('../src/routes/library/continue');
-
-function parseSearch(searchString: string): Record<string, unknown> {
-  const search = new URLSearchParams(searchString);
-  const parsed: Record<string, unknown> = Object.create(null);
-  for (const [key, value] of search) {
-    if (!Object.hasOwn(parsed, key)) parsed[key] = value;
-    else if (Array.isArray(parsed[key])) (parsed[key] as string[]).push(value);
-    else parsed[key] = [parsed[key] as string, value];
-  }
-  return parsed;
-}
-
-function stringifySearch(search: Record<string, unknown>): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(search)) {
-    if (typeof value === 'string') params.append(key, value);
-    else if (Array.isArray(value)) for (const item of value) if (typeof item === 'string') params.append(key, item);
-  }
-  const query = params.toString();
-  return query ? `?${query}` : '';
-}
 
 function entry(label: string): ContinueEntry {
   const subjectId = `subject-${label.toLowerCase().replaceAll(' ', '-')}`;
@@ -142,7 +127,11 @@ async function mount(path: string, read: (cursor: unknown) => Promise<ContinueRe
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader-a', csrfToken: 'token-a' });
   const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: () => <Outlet /> });
-  const continueRoute = Route.update({ getParentRoute: () => rootRoute } as never);
+  const continueRoute = Route.update({
+    id: '/library/continue',
+    path: '/library/continue',
+    getParentRoute: () => rootRoute,
+  } as never);
   const router = createRouter({
     routeTree: rootRoute.addChildren([continueRoute]),
     context: { queryClient },
@@ -215,10 +204,14 @@ afterAll(async () => {
 });
 
 test('the actual Router browses three native windows across remount, Back, Forward, Previous and First', async () => {
+  const second = 'cursor-b+/==?&';
+  const third = 'cursor-c /+#';
+  const query = 'display=compact&tag=a&tag=b';
+  const href = (cursor: string) => `/en/library/continue?${query}&${new URLSearchParams({ cursor })}#resume`;
   const ui = await mount('/library/continue?display=compact&tag=a&tag=b#resume', (cursor) => {
-    if (cursor === undefined) return page('Book A', 'cursor-b');
-    if (cursor === 'cursor-b') return page('Book B', 'cursor-c');
-    if (cursor === 'cursor-c') return { state: 'loaded', entries: [], next: null };
+    if (cursor === undefined) return page('Book A', second);
+    if (cursor === second) return page('Book B', third);
+    if (cursor === third) return { state: 'loaded', entries: [], next: null };
     return { state: 'unavailable', status: 503 };
   });
   try {
@@ -226,13 +219,13 @@ test('the actual Router browses three native windows across remount, Back, Forwa
     expect(ui.host.querySelector<HTMLAnchorElement>('[data-slot="cover-card-title"]')?.getAttribute('href')).toBe(
       '/en/library/progress/session-book-a',
     );
-    expect(ui.host.querySelector(`a[href*="cursor-b"]`)?.getAttribute('href')).toBe(
-      '/en/library/continue?display=compact&tag=a&tag=b&cursor=cursor-b#resume',
-    );
+    expect(link(ui.host, m.library_next_page()).getAttribute('href')).toBe(href(second));
     expect(ui.host.querySelector(`a[aria-disabled="true"]`)).toBeNull();
 
     await activate(ui.host, m.library_next_page(), true);
     expect(ui.host.textContent).toContain('Book B');
+    expect(ui.router.history.location.search).toBe(new URL(href(second), window.location.origin).search);
+    expect(link(ui.host, m.library_next_page()).getAttribute('href')).toBe(href(third));
     expect(window.document.activeElement?.tagName).toBe('H1');
     expect(link(ui.host, m.library_continue_previous_window()).getAttribute('href')).toBe(
       '/en/library/continue?display=compact&tag=a&tag=b#resume',
@@ -242,12 +235,14 @@ test('the actual Router browses three native windows across remount, Back, Forwa
     );
 
     await activate(ui.host, m.library_next_page());
+    expect(ui.router.history.location.search).toBe(new URL(href(third), window.location.origin).search);
+    // Router can reload the first window when its history entry acquires the visit ID.
+    expect(readCalls.filter((cursor) => cursor === undefined).length).toBeLessThanOrEqual(2);
+    expect(readCalls.filter((cursor) => cursor !== undefined)).toEqual([second, third]);
     expect(ui.host.textContent).toContain(m.library_continue_empty());
     expect(ui.host.textContent).not.toContain('Book B');
-    expect(ui.host.querySelector(`a[href*="cursor-c"]`)).toBeNull();
-    expect(link(ui.host, m.library_continue_previous_window()).getAttribute('href')).toBe(
-      '/en/library/continue?display=compact&tag=a&tag=b&cursor=cursor-b#resume',
-    );
+    expect(hasLink(ui.host, m.library_next_page())).toBe(false);
+    expect(link(ui.host, m.library_continue_previous_window()).getAttribute('href')).toBe(href(second));
     await ui.remount();
     expect(ui.host.textContent).toContain(m.library_continue_empty());
 
@@ -266,9 +261,7 @@ test('the actual Router browses three native windows across remount, Back, Forwa
     await activate(ui.host, m.library_continue_first_window());
     expect(ui.host.textContent).toContain('Book A');
     expect(ui.host.querySelector(`a[aria-disabled="true"]`)).toBeNull();
-    expect(link(ui.host, m.library_next_page()).getAttribute('href')).toBe(
-      '/en/library/continue?display=compact&tag=a&tag=b&cursor=cursor-b#resume',
-    );
+    expect(link(ui.host, m.library_next_page()).getAttribute('href')).toBe(href(second));
   } finally {
     await ui.close();
   }
@@ -347,16 +340,20 @@ test('session replacement during a staged read retires old rows and focus intent
   });
   try {
     await activate(ui.host, m.library_next_page(), true);
+    expect(targetReads).toBe(1);
+    expect(ui.queryClient.getQueryData(CONTINUE_WINDOW_QUERY_KEY)).toBeDefined();
     outside.focus();
     await act(async () => {
       ui.queryClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader-a', csrfToken: 'token-a' });
       ui.queryClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader-b', csrfToken: 'token-b' });
       ui.queryClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader-a', csrfToken: 'token-a' });
     });
+    expect(ui.queryClient.getQueryData(CONTINUE_WINDOW_QUERY_KEY)).toBeUndefined();
     await act(async () => resolveOld(page('Book B retired', 'cursor-c')));
     await settle();
     expect(ui.host.textContent).toContain('Book B current');
     expect(ui.host.textContent).not.toContain('Book B retired');
+    expect(targetReads).toBe(2);
     expect(hasLink(ui.host, m.library_continue_previous_window())).toBe(false);
     expect(window.document.activeElement).toBe(outside);
     expect(ui.queryClient.getQueryData(CONTINUE_WINDOW_QUERY_KEY)).toBeUndefined();
@@ -436,7 +433,7 @@ test('coordinate commits are exact, branch from the current page and retain eigh
 
 test('cursor links preserve opaque bytes, other query values and the fragment', () => {
   expect(continueCursorHref('fr', '?cursor=old&tag=a&tag=b&display=compact', '#resume', 'next+/==?&')).toBe(
-    '/fr/library/continue?tag=a&tag=b&display=compact&cursor=next%2B%2F%3D%3D%3F%26#resume',
+    '/fr/library/continue?cursor=next%2B%2F%3D%3D%3F%26&tag=a&tag=b&display=compact#resume',
   );
   expect(continueCursorHref('fr', '?cursor=old&tag=a&tag=b', '#resume', null)).toBe(
     '/fr/library/continue?tag=a&tag=b#resume',

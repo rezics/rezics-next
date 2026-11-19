@@ -52,6 +52,7 @@ afterAll(async () => {
 const operations = new Set<string>();
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => operations.has(operation),
+  useOperationAdmission: (operation: string) => (operations.has(operation) ? 'available' : 'denied'),
   operationIsAdmitted: (operation: string, admitted?: readonly string[]) => admitted?.includes(operation) ?? false,
   Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
     operations.has(operation) ? children : null,
@@ -77,10 +78,11 @@ const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { ProgressIndexPage } = await import('../src/library/progress-page');
+const { LibraryApplicationContext } = await import('../src/library/application');
+const { libraryApplication } = await import('../src/session/library-application');
 const {
   progressIndexSelectionLocationState,
   progressReturnContextFromLocationState,
-  progressReturnContextForPage,
   progressReturnLocationState,
   progressIndexReturnSelectionFromLocationState,
 } = await import('../src/library/progress-start-draft-navigation');
@@ -118,6 +120,9 @@ test('disclosed Subject navigation survives read-only active and completed rows;
   const view = within(host);
   const user = userEvent.setup({ document });
   const subject = { ...profileSession.subject, typeLabel: 'Journey' };
+  const continued = 'cursor/+?== &記録';
+  const sourceReturnTo = '/en/library/continue?cursor=original%2B%2F';
+  const windowCoordinates = { predecessors: [null, 'prior/opaque'], current: continued };
   const page: ProgressIndex = {
     signedIn: true,
     subjectId: '',
@@ -140,11 +145,15 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       root.render(
         <QueryClientProvider client={client}>
           <RouterContextProvider router={router}>
-            <ProgressIndexPage
-              page={{ ...page, sessions: [row === profileSession ? session : row], subjectId: row.subjectId }}
-              cursor={options.cursor}
-              returnSelection={options.returnSelection}
-            />
+            <LibraryApplicationContext value={libraryApplication}>
+              <ProgressIndexPage
+                page={{ ...page, sessions: [row === profileSession ? session : row], subjectId: row.subjectId }}
+                cursor={options.cursor}
+                returnSelection={options.returnSelection}
+                sourceReturnTo={sourceReturnTo}
+                windowCoordinates={options.cursor === continued ? windowCoordinates : undefined}
+              />
+            </LibraryApplicationContext>
           </RouterContextProvider>
         </QueryClientProvider>,
       ),
@@ -193,40 +202,34 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       await render('completed', false);
       expect(menu()).toBeNull();
     }
-    expect(request).not.toHaveBeenCalled();
-
     operations.add('progress_session.read');
-    const continued = 'cursor/+?== &記録';
     await render('active', true, { cursor: continued });
     const sessionLink = host.querySelector<HTMLAnchorElement>(`a[href="/en/library/progress/${profileSession.id}"]`)!;
     expect(sessionLink.href).toBe(`https://rezics.test/en/library/progress/${profileSession.id}`);
-    const context = progressReturnContextForPage(
-      { ...page, subjectId: profileSession.subjectId, sessions: [{ ...profileSession, subject }] },
-      continued,
-      'en',
-      profileSession.id,
-      profileSession.subjectId,
-      undefined,
-      profileSession.startedAt,
-      { predecessors: [null, 'prior/opaque'], current: continued },
-    );
+    await tick(() => sessionLink.click());
+    expect(router.history.location.href).toBe(`/en/library/progress/${profileSession.id}`);
     const returnContext = progressReturnContextFromLocationState(
-      progressReturnLocationState(context!),
+      router.history.location.state,
       profileSession.id,
       'en',
     );
-    expect(new URL(returnContext!.indexHref, window.location.href).searchParams.get('cursor')).toBe(continued);
+    const indexAddress = new URL(returnContext!.indexHref, window.location.href);
+    expect(indexAddress.pathname).toBe('/en/library/progress');
+    expect(indexAddress.searchParams.get('cursor')).toBe(continued);
+    expect(returnContext?.sourceReturnTo).toBe(sourceReturnTo);
     expect(returnContext?.subjectId).toBe(profileSession.subjectId);
     expect(returnContext?.startedAt).toBe(profileSession.startedAt);
     expect(returnContext?.windowCoordinates).toEqual({ predecessors: [null, 'prior/opaque'], current: continued });
     expect(Object.keys(returnContext?.windowCoordinates ?? {})).toEqual(['predecessors', 'current']);
-    expect(progressReturnLocationState(returnContext!).progressReturn).not.toHaveProperty('sessions');
+    expect(router.history.location.state).toHaveProperty('progressReturn');
+    expect(router.history.location.state).not.toHaveProperty('progressReturn.sessions');
 
     const selection = progressIndexReturnSelectionFromLocationState(
       progressIndexSelectionLocationState(returnContext!, profileSession.startedAt),
       'en',
     );
     expect(selection?.indexSearch?.cursor).toBe(continued);
+    expect(selection?.sourceReturnTo).toBe(sourceReturnTo);
     expect(selection?.windowCoordinates).toEqual({ predecessors: [null, 'prior/opaque'], current: continued });
     const oversizedSelection = progressIndexReturnSelectionFromLocationState(
       {
@@ -238,19 +241,7 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       'en',
     );
     expect(oversizedSelection?.windowCoordinates).toBeUndefined();
-    await tick(() =>
-      root.render(
-        <QueryClientProvider client={client}>
-          <RouterContextProvider router={router}>
-            <ProgressIndexPage
-              page={{ ...page, subjectId: profileSession.subjectId, sessions: [{ ...profileSession, subject }] }}
-              cursor={continued}
-              returnSelection={selection}
-            />
-          </RouterContextProvider>
-        </QueryClientProvider>,
-      ),
-    );
+    await render('active', true, { cursor: continued, returnSelection: selection });
     expect(window.document.activeElement).toBe(host.querySelector('[data-progress-session-id]'));
 
     const changedIncarnation = { ...profileSession, startedAt: '2026-11-01T00:00:00Z', subject };
@@ -260,8 +251,10 @@ test('disclosed Subject navigation survives read-only active and completed rows;
     expect(new URL(firstPage.getAttribute('href')!, window.location.href).searchParams.has('cursor')).toBe(false);
     const changedState = progressReturnLocationState(returnContext!);
     expect(progressReturnContextFromLocationState(changedState, profileSession.id, 'ja')).toBeUndefined();
+    expect(request).not.toHaveBeenCalled();
   } finally {
     await tick(() => root.unmount());
+    router.history.destroy();
     host.remove();
     client.clear();
   }
