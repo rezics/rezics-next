@@ -499,7 +499,8 @@ export async function createViewerActionsDriver(): Promise<NativeViewerActionsDr
     // still comes from real Auth and commands; no selected reference is inserted
     // here, and eligibility continues to read the actual owning tables.
     async function seedSupport(f: ViewerActionsFixture) {
-      const storedCollection = (
+      // The copied Collection gets a new route, so PostgreSQL derives its partition.
+      const { partition_no: _partitionNo, ...storedCollection } = (
         await db!.pool.query('SELECT * FROM library.collection WHERE route=$1 AND collection_id=$2', [
           routeOf(f.collection.id),
           f.collection.id,
