@@ -37,6 +37,8 @@ function run(pkg: string, command: string[], env: Record<string, string | undefi
 test('only isolated server consumers join the shared browser group', () => {
   expect(usesSharedBrowserServer('tests/scaffold.test.ts')).toBe(true);
   expect(usesSharedBrowserServer('tests/hydration.test.ts')).toBe(true);
+  expect(usesSharedBrowserServer('tests/checkout.test.ts')).toBe(false);
+  expect(usesSharedBrowserServer('tests/page-stories.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/post-editing.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/record-script.test.ts')).toBe(false);
   expect(usesSharedBrowserServer('tests/native/stack.host.test.ts')).toBe(false);

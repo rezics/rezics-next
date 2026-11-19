@@ -11,7 +11,16 @@ import {
   type FileOutcome,
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -142,13 +151,17 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
     : mkdtempSync(join(root, '.temp/web-check-'));
   mkdirSync(reportDirectory, { recursive: true });
   const recorder = createRecorder();
+  const run = sourceEnvironment.REZICS_CHECK_RUN;
+  const manifest = run && /^[a-zA-Z0-9-]+$/.test(run) && join(root, '.temp/check-host', `source-manifest-${run}.json`);
+  const source = manifest && existsSync(manifest) ? JSON.parse(readFileSync(manifest, 'utf8')) : undefined;
+  const attempts = new Map<string, { argv: string[]; fileSha256: string; exitCode?: number }>();
   const reportsByFile = new Map<string, string>();
   const runner = recorder.wrap<string>(
     {
       create: () => undefined,
       run: async (file, database) => {
         const report = join(reportDirectory, `${database}.xml`);
-        const wrapper = sharedBrowser ? ['scripts/with-dev-server.ts', '--'] : ['scripts/isolated.ts'];
+        const wrapper = sharedBrowser ? ['scripts/with-dev-server.ts', '--'] : ['scripts/isolated.ts', '--check-file'];
         const invocation = browserFiles.includes(file) ? ['bun', ...wrapper, 'bun', 'test'] : ['bun', 'test'];
         recordRunMarker(env.WEB_CHECK_EVENTS, 'start', file);
         try {
@@ -158,12 +171,14 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
             if (all[index - 1] === '--reporter' || all[index - 1] === '--reporter-outfile') return false;
             return argument !== '--dots' && argument !== '--only-failures';
           });
-          const result = await capture(
-            invocation[0]!,
-            [...invocation.slice(1), ...testCommand(file, report, undefined, testArguments).slice(1)],
-            env,
-            directory,
-          );
+          const argv = [...invocation, ...testCommand(file, report, undefined, testArguments).slice(1)];
+          const attempt = {
+            argv,
+            fileSha256: new Bun.CryptoHasher('sha256').update(readFileSync(resolve(directory, file))).digest('hex'),
+          };
+          attempts.set(file, attempt);
+          const result = await capture(argv[0]!, argv.slice(1), env, directory);
+          attempts.set(file, { ...attempt, exitCode: result.status });
           try {
             reportsByFile.set(file, readFileSync(report, 'utf8'));
           } catch {
@@ -190,6 +205,25 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
     WEB_TEST_STATE_DIR: inheritedStateRoot ?? ownedStateRoot,
   };
 
+  function completed(outcome: FileOutcome<string>, retry = false) {
+    const attempt = attempts.get(outcome.file);
+    const pending = !retry && classifyLoadInducedFailures(outcome, reportsByFile.get(outcome.file))?.length;
+    const record = {
+      run,
+      revision: source?.head,
+      sourceSha256: source?.sourceSha256,
+      file: outcome.file,
+      ...attempt,
+      attempt: retry ? 2 : 1,
+      result: pending ? 'retry-pending' : outcome.error ? 'failed' : 'passed',
+      seconds: recorder.timings()[outcome.file]?.wall,
+    };
+    const line = JSON.stringify(record);
+    appendFileSync(join(reportDirectory, 'outcomes.jsonl'), `${line}\n`);
+    process.stdout.write(`[web-file] ${line}\n`);
+    (options.onComplete ?? reportOutcome)(outcome);
+  }
+
   try {
     const [browserOutcomes, unitOutcomes] = await Promise.all([
       runTestFiles(
@@ -199,7 +233,7 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
         stackConcurrency,
         {
           ...runner,
-          onComplete: options.onComplete ?? reportOutcome,
+          onComplete: completed,
         },
         env,
       ),
@@ -210,7 +244,7 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
         unitConcurrency,
         {
           ...runner,
-          onComplete: options.onComplete ?? reportOutcome,
+          onComplete: completed,
         },
         env,
       ),
@@ -220,6 +254,7 @@ async function runWebFiles(options: WebTestLanesOptions, sharedBrowser: boolean)
       [...browserOutcomes, ...unitOutcomes],
       async (file) => {
         const [outcome] = await scheduleFiles(`web_rerun_${++rerunIndex}_test`, [file], 1, runner);
+        completed(outcome!, true);
         return outcome!;
       },
       (outcome) => classifyLoadInducedFailures(outcome, reportsByFile.get(outcome.file)),
