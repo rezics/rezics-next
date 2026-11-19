@@ -17,10 +17,10 @@ rules](../../../docs/development/README.md), owner documents and [AGENTS](../../
 3. **Brief and implement.** Use [briefing](references/briefing.md) and
    [phase ownership](../../../docs/development/delivery.md#implementation-and-acceptance) to separate source delivery
    from acceptance. Units consume native Codex Goals; each unit and its helpers share one worktree.
-4. **Prove.** When assigned acceptance, use [verification](references/verification.md) for the selected API, page,
-   interaction, accessibility and visual evidence. Source assignments do not automatically enter this stage.
-5. **Review and deliver.** Use [review](references/review.md) to assess the diff and evidence, repair defect classes,
-   commit and hand off. Units merge source under the delivery rules; promotion and product Goal closure stay separate.
+4. **Prove continuously.** Use [verification](references/verification.md) for the affected outcomes on integrated
+   source. Fix the first failing boundary with its owner while independent implementation continues.
+5. **Review and release.** Use [review](references/review.md) to assess and hand off source and evidence. Qualify and
+   publish a pinned candidate under the [release workflow](../../../docs/development/release.md).
 6. **Measure and improve.** The manager uses [efficiency](references/efficiency.md) at checkpoints to compare accepted
    outcomes and test corrective decisions at the existing progress checkpoint.
 

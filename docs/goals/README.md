@@ -37,8 +37,8 @@ State what a person or API consumer can do when the Goal is complete.
 ## Done when
 
 List observable outcomes and their acceptance evidence. Include applicable disclosure, lifecycle, cost, interface
-and operational outcomes. Completion requires the scoped changes on main with recorded checks covering the promoted
-commit.
+and operational outcomes. Completion follows [release qualification](../development/release.md) for the scoped
+outcomes on the promoted revision.
 
 ## Scope
 
@@ -54,8 +54,9 @@ Name required capabilities and accepted interfaces. Do not encode temporary task
 
 ## Acceptance
 
-Link outcome suites, growth checks and interface review requirements. Give the applicable commands or their owning
-runbook.
+Link outcome suites, growth checks and interface review requirements. Name the owners and smallest decisive checks
+for each independent increment. Follow [continuous development checks](../development/verification.md#continuous-development-checks)
+and identify cross-owner evidence needed on the release candidate. Link commands to their owning runbooks.
 
 ## External conditions
 

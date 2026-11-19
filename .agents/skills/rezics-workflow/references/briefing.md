@@ -5,15 +5,15 @@ Read [delivery rules](../../../../docs/development/delivery.md), the relevant
 Use that schema directly; this skill does not define another one. Every unit immediately merges its own coherent
 source manually under [direct source integration](../../../../docs/development/delivery.md#direct-source-integration).
 Apply [phase ownership](../../../../docs/development/delivery.md#implementation-and-acceptance) before allocation.
-Acceptance-writing steps below belong to separately assigned verification, not source admission.
+Prepare acceptance alongside source work and run it as soon as affected source integrates.
 
 The manager and workers who author Goals:
 
 - [ ] State the outcome, owner links, paths, risk areas, dependencies and estimate. Name the implementation
       deliverable, acceptance owner, selected checks and deferred evidence; keep the product Goal's Done when intact.
 - [ ] Name required per-persona API outcomes under the
-      [capability evidence rules](../../../../docs/development/verification.md#capability-evidence); schedule their
-      execution after integration, rather than requiring a red test before implementation.
+      [capability evidence rules](../../../../docs/development/verification.md#capability-evidence). Give each
+      independently writable increment its smallest decisive check and an owner.
 - [ ] For interfaces, list exact stories to add: route/control, state, viewer, viewport and recorded API evidence.
 - [ ] Apply [brief preflight](../../../../docs/development/delivery.md#brief-preflight) to control-plane, stabilize and
       verification briefs; product workers on dev preflight their own. Check current task state before reshape.

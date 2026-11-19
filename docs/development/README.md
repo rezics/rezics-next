@@ -8,13 +8,10 @@ Owner documents hold rules, research supplies evidence, and tracked Goals define
 The [rezics-workflow skill](../../.agents/skills/rezics-workflow/SKILL.md) supplies the operating procedures for these
 rules. Keep durable rules here and command mechanics in their owning runbooks; the skill links both.
 
-Use this workflow:
-
-1. [Design the feature](feature-design.md).
-2. [Prepare and deliver the work](delivery.md).
-3. [Verify its outcomes](verification.md).
-4. [Measure delivery efficiency](efficiency.md).
-5. [Maintain shared tools and dependencies](maintenance.md).
+[Design the feature](feature-design.md) and [integrate independent increments on `dev`](delivery.md).
+[Verify affected outcomes continuously](verification.md) so defects return to their owners while development continues.
+[Qualify and publish a pinned candidate](release.md) independently of ongoing changes on `dev`.
+[Measure development, repair and release](efficiency.md) and [maintain shared tools](maintenance.md) at their owners.
 
 [Instructions and documentation](documentation.md) owns instruction layers, owner documents, research records and
 size budgets.

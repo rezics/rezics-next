@@ -1,60 +1,50 @@
 # Delivery
 
-Start from the tracked Goal brief and current owner contracts. Size a task by its outcome, not by a line limit: a
-large task is fine when it is clear. State what it delivers in user terms and design it on the best abstraction before
-dispatch. A failure must not lose work: a retry resumes the same session with its commits and evidence and continues
-from where it stopped, so the cost of failing is the remaining work, never a restart.
-
-Execution units own the how; the resident manager owns the what. A brief states the outcome in user terms, owner links, what done means,
-dependencies and estimated size; the worker designs and implements the change. Acceptance evidence follows the
-source-integration policy below and the scheduled verification. Use the schema in
-[Goal tooling](../../tools/goal/README.md); do not maintain another schema here.
-
-For release acceptance, link each capability to its `docs/goals/<goal>.capabilities.md` evidence entry under
-[verification](verification.md#capability-evidence). Every interface brief names the page stories it adds, including
-states, viewers, viewports and their recorded API evidence. Missing cross-Goal scenarios and owned acceptance are
-written when acceptance work is scheduled; they do not become source prerequisites under direct integration.
+Start from the tracked Goal and current owner contracts. A brief uses the [Goal tooling
+schema](../../tools/goal/README.md#briefs-and-routing) and states the user outcome, dependencies, write scope and
+acceptance owner. The resident owns scope and allocation. Execution units own implementation. Resume failed work
+from its existing source and evidence.
 
 ## Release progress
 
-Report current release scope in two parts. Start with backend capabilities: for each unfinished outcome, give
-the remaining API logic, the smallest decisive [native API check](verification.md#capability-evidence), and its
-owner and evidence. Then report frontend integration and interaction: distinguish a missing API from a defect
-in how the client consumes a working API, and name the shared repair where applicable. Run independent frontend
-work in parallel against stable contracts. Report release qualification separately, with an estimate based on
-the current critical path. Archived scope and historical task counts do not measure current completion.
+Report outstanding backend and frontend outcomes with their owners and smallest decisive checks. Distinguish a
+missing API from a defect in its consumer. Report the pinned candidate and its [release time
+remaining](release.md#candidate-and-time-budget) separately from source progress on `dev`.
 
 ## Direct source integration
 
-Each execution unit manually merges coherent committed increments into its target immediately, preserving target
-history, source identity and both sides' required behavior. Repair conflicts in the owner module. Product, urgent,
-control-plane, stabilize, specification and verification-source work all follow this rule; no landing queue, peer
-unit or publisher is a source prerequisite.
-Unresolved Git merges stop dependent ref publication; Main and Dev preserve all integrated history, a structural loss-prevention rule rather than an acceptance gate.
+Each execution unit manually integrates coherent committed increments as soon as they are ready. Preserve target
+history, source identity and both sides' required behavior. Resolve conflicts in the owner module. An unresolved
+merge stops only dependent ref publication. Product, urgent, stabilize, specification and verification-source work
+can continue on `dev` while a release is qualified or repaired. Target-specific control-plane publication follows
+[checkout discipline](#checkout-and-landing-discipline).
 
-Source admission has no premerge verification: defer tests, typechecks, transpilation, generators, architecture,
-schema and Kernel-import checks. Preserve existing tests and report deferred acceptance. This rule replaces
-source-stage check and coverage demands elsewhere. Implement product contracts, authorization, money invariants
-and production input validation; their tests are scheduled separately. Prioritize repairs that restore Storybook
-or unblock source work. The single publisher builds and publishes the integrated revision afterward.
+Source admission has no premerge verification. Schedule tests, typechecks, transpilation, generators, architecture,
+schema and Kernel-import checks after integration. Preserve existing tests and report deferred acceptance. Implement
+product contracts, authorization, money invariants and production input validation. A unit may use a focused local
+probe to write or debug a change. Prioritize repairs that restore Storybook or unblock source work.
+
+The [dev verifier](verification.md#continuous-development-checks) picks up affected checks after integration.
+Red checks get owner repairs while unrelated landings continue. The publisher qualifies and advances the pinned
+release independently. Behind platform grants, choose evidence by impact on shared behavior and granted users.
+[Public exposure](../scope.md) follows its own scope rules.
 
 ## Implementation and acceptance
 
-Before allocation, name the implementation deliverable, acceptance owner, selected checks and deferred evidence
-separately. Implementation and acceptance run asynchronously; sharing a worktree does not combine their duties.
-An implementation-only assignment ends when its scoped source is integrated and remaining acceptance has an owner
-and a next action. Report that as source delivery, not product acceptance. A product Goal stays open until its
-adopted outcomes and required release evidence hold; do not narrow an active product Goal merely to close it.
+Before allocating an increment, name its observable source outcome, acceptance owner and required checks. Prepare
+acceptance alongside implementation so integration can trigger it. Record feature and interface requirements in the
+[capability evidence](verification.md#capability-evidence). A source assignment ends after integration and a handoff
+of outstanding evidence to its owner. A worker waiting on a remote check takes ready independent work or returns the
+slot. A Goal stays open until its adopted outcomes meet [release qualification](release.md).
 
-Verification receives a pinned integrated candidate and returns reached assertions, unavailable evidence and
-actionable defects to their owners. It does not turn the implementation unit into the default owner of setup,
-generation, host or check-runner repairs. The manager allocates those repairs and further acceptance explicitly.
-The same unit may receive a later assignment; it need not remain occupied waiting for that assignment.
+Verification reports reached assertions, unavailable evidence and the first actionable failure on an identified
+revision. Route product, fixture and runner defects to their owners. Preserve usable source and evidence on either
+side of a failure. The resident resolves genuine cross-owner decisions.
 
 ## Source batches
 
-During a maintainer-authorized code-only window, assign complete source outcomes. Defer test authoring and execution,
-typing and browser matrices unless explicitly required. Preserve existing tests and record unverified behavior.
+Size work around a complete source increment that can be integrated independently. Scope tests and acceptance to
+the changed behavior under [phase ownership](#implementation-and-acceptance).
 
 Design before coding: state the invariant, owner, transitions, partial failure and retry behavior, and growth cost.
 Use the shared contract; tests provide evidence rather than supplying missing design.
@@ -111,10 +101,8 @@ them. See [integration mechanics](../../tools/goal/README.md#integration-promoti
 Prefer the oldest ready dependency. Do not restart a live attempt for an unchanged contract. Check actual task state
 immediately before changing it.
 
-A behaviour-changing brief identifies existing tests depending on the old behavior. Update them when acceptance
-work is scheduled; under [direct source integration](#direct-source-integration), they are deferred rather than a
-source prerequisite. When scheduled acceptance contradicts the contract, an owner document or delivered code,
-change the smallest assertion that makes them agree, list the file and reason, and continue.
+A behavior-changing brief identifies existing assertions that depend on the old contract. Update them in the
+assigned acceptance. Repair a contradictory check at its smallest boundary and report the evidence and reason.
 
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.
@@ -167,8 +155,7 @@ attempts in a row without a new commit, stop the task and notify its manager
 ([integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing)).
 Report specification conflicts with the conflicting outcomes and evidence. Do not create informal gate exceptions.
 
-Release acceptance and Goal closure follow [verification](verification.md), with the scoped outcomes on main and
-recorded evidence covering the promoted commit. They are separate from direct source integration.
+Release acceptance and Goal closure follow [release qualification](release.md).
 
 The resident manager reads, acts on and acknowledges inbox events. Before idling, establish the supported wakeup path. Use the
 engine's idle mechanism rather than repeated model turns.
@@ -196,21 +183,9 @@ reversible choice; the resident resolves cross-unit conflicts, scope/resource tr
 control-plane authority. Keep independent work moving while only the dependent seam waits. Units do not maintain
 manager continuations, domain-manager inboxes or recurring management turns.
 
-The existing hourly Traditional Chinese progress report continues. Pair qualifying Web campaign additions against
-the [throughput target](efficiency.md#output-and-flow) with overall product additions, accepted journeys, integrated
-revisions, visible product results and the remaining completion forecast. Exclude tests, stories, fixtures,
-recordings, generated files, JSON, evidence and documents from product-line counts. Report native unit/subagent starts
-and actual writing separately from checks, admission/integration waits, stopped operations and allowance. Count
-resumed usage once and avoid parent/child or managed/native duplication; mark missing attribution unknown.
-
-The manager handles real delivery alarms and the existing requested scheduling checkpoint. Old domain-manager
-counts, backlog quotas and coder floors do not establish useful capacity. When a cause is unclear, commission one
-bounded measurement rather than a standing review loop. Lines are a diagnostic, never permission to pad code. A
-[token-free watchdog](supermanager.md#resident-supervision) supervises the resident; every model wake has a counted cost.
-
-The control plane exists to maximize useful, accepted work per time and allowance. Repair workflow defects in their
-owner modules; check-host health retains its existing operational owner. Remove orchestration steps that add waiting
-without improving delivery, preserving the single publisher and separate release qualification.
+Use the existing hourly Traditional Chinese report for [development, repair and release metrics](efficiency.md).
+Repair workflow defects in their owner modules and use the [resident watchdog](supermanager.md#resident-supervision)
+for supervision.
 
 Runtime release, authenticated authority receiving, physical custody, workflow execution and delivered evidence are
 distinct facts. Source integration and a successful compiler command do not certify native runtime release or consume

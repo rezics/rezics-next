@@ -60,21 +60,17 @@ composed consumers can read the same dedicated ring.
 
 ## Scheduling and progress
 
-Keep the existing progress reports running. Include native unit and subagent activity alongside managed historical
-work without double-counting usage, source or integration. Compare accepted user journeys, integrated source,
-allowance per accepted result, observed writing time and check/admission/integration waits. Report missing attribution
-as unknown. A process or a native Goal's active label alone does not establish productive writing or accepted outcomes.
+Reserve coding capacity for ready independent development when scheduling a release. Set coding and check admission
+separately using actual writing, runnable outcomes, host capacity and allowance. Release repairs get priority on
+their critical path. Only dependent work waits. Apply the [allocation and throughput rules](efficiency.md#operating-discipline).
 
-Set unit and subagent width from independent writable outcomes, host capacity and authorized allowance. Do not use old
-domain-manager quotas or fixed coder floors to create filler. At a requested half-hour checkpoint, use the existing
-inbox/reminder path to inspect the largest delivery loss and make a scheduling decision. Count the context reload cost;
-do not add a second timer or polling loop. Keep a timeboxed experiment's planned wakes finite.
-
-At existing checkpoints, compare delivered outcomes and the finish forecast with the timebox. Act on the largest
-measured loss under [incident analysis](efficiency.md#incident-method). If checks repeatedly fail to reach relevant
-assertions or exceed the delivery forecast, choose and record a narrower check, deferred evidence, an owner repair
-or a revised scope/forecast. Do not default to more runs or leave implementation occupied by verification.
-Required product acceptance remains open; a scope change follows the Goal owner and maintainer's authority.
+Assign one owner per outstanding release outcome. The owner selects checks, records verdicts and owns cleanup.
+Route repeatable diagnostics, scheduling and result delivery through the existing tools. Use the existing inbox and
+requested checkpoints for failures, capacity trade-offs and [release decisions](release.md#candidate-and-time-budget).
+When a check repeatedly fails before its relevant assertions or exceeds the forecast, record the narrower check,
+deferral, owner repair or revised forecast. Required acceptance remains open until its evidence is available.
+Use the [progress measures](efficiency.md) to separate development from repairs and checks. Fix the largest loss
+under the [incident method](efficiency.md#incident-method).
 
 ## Environment incidents
 
