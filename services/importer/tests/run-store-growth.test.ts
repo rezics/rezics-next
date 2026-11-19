@@ -1,7 +1,5 @@
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import {
   countedSample,
@@ -71,7 +69,7 @@ const ack = (keys: string[]): BatchWriteResult => ({
 });
 
 test('fixed run-state operations stay indexed at three scales', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'run-growth-'));
+  const directory = await mkdtemp('/dev/shm/run-growth-');
   const d = await createImportRunStoreDriver({ directory });
   const samples = new Map<string, { scale: number; counted: CountedSample }[]>();
   try {
@@ -268,7 +266,7 @@ async function measureRunGrowth(
   const samples: { scale: number; counted: CountedSample }[] = [];
   const plans: string[] = [];
   for (const scale of RUN_SCALES) {
-    const directory = await mkdtemp(join(tmpdir(), 'run-store-growth-followup-'));
+    const directory = await mkdtemp('/dev/shm/run-store-growth-followup-');
     const store = new RunStore(`${directory}/runs.sqlite`);
     const probe = createSqliteProbe(store.database, {
       growingTables: [
@@ -356,7 +354,7 @@ test('Run omission check stays within its bound as R grows', async () => {
 }, 120_000);
 
 test('prepared omission handoff returns the durable strongest proof without changing request bytes', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'run-store-omission-handoff-'));
+  const directory = await mkdtemp('/dev/shm/run-store-omission-handoff-');
   const store = new RunStore(`${directory}/runs.sqlite`);
   try {
     const run = store.begin(FIXTURE_SOURCE);

@@ -1,7 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
@@ -268,7 +267,7 @@ async function measuredAtScale<T>(
   counts: { 'sqlite returned rows': number; 'sqlite statements': number };
   statements: SqliteEvidence[];
 }> {
-  const directory = await mkdtemp(join(tmpdir(), 'bindings-growth-'));
+  const directory = await mkdtemp('/dev/shm/bindings-growth-');
   const native = new Database(join(directory, 'bindings.sqlite'), { create: true, strict: true });
   const probe = createSqliteProbe(native, { growingTables: TABLES });
   const bindings = new RecordBindings(probe.database);
