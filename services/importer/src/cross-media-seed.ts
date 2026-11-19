@@ -1,5 +1,6 @@
 import { observeSeedPreparation, seedPreparationFailure, type EnterSeedPreparation } from './seed-preparation.ts';
 import { SeedFinalization, finalizeSeedResult, seedImportRunFailure } from './seed-cli.ts';
+import { MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import { recordSeedBatchFailure } from './seed-remaining-request.ts';
 import { createHash } from 'node:crypto';
 import { showcaseFranchiseSelection } from './showcase-franchise.ts';
@@ -4681,6 +4682,7 @@ async function runSeedCli(
             transport: importPort,
             readPublic: (id) => publicClient.readSubject(id),
             journal,
+            continuationSignal: () => AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS),
           })
         : undefined;
     finalization.enter('person-current-reads');

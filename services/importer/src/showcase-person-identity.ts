@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   identityOperationId,
   type ReviewedPersonAdmission,
@@ -226,7 +227,7 @@ export type ReviewedPersonPublication =
   | Readonly<{ state: 'pending' | 'unconfirmed'; operation: string }>
   | Readonly<{ state: 'withheld'; reason: string }>;
 
-/** A native job may take minutes under load; the journal keeps its admitted operation for a later run. */
+/** The initial observation window is finite. Seed finalization can continue the admitted operation. */
 const MERGE_POLLS = 120;
 const MERGE_POLL_MS = 1_000;
 const MERGE_READ_ATTEMPTS = 10;
@@ -246,8 +247,9 @@ export async function publishReviewedPersonMerge(input: {
   transport: ReviewedPersonMergeTransport;
   readPublic: (id: string) => Promise<ReviewedSubjectRead>;
   journal: ReviewedPersonMergeJournal;
-  pause?: (ms: number) => Promise<void>;
+  pause?: (ms: number, signal?: AbortSignal) => Promise<void>;
   polls?: number;
+  continuationSignal?: () => AbortSignal;
 }): Promise<ReviewedPersonPublication> {
   const [bangumi, vndb] = input.pair;
   if (
@@ -307,13 +309,32 @@ export async function publishReviewedPersonMerge(input: {
     input.journal.acknowledgeAction(actionKey, location);
   }
   const operation = identityOperationId(location);
-  const pause = input.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const pause = input.pause ?? ((ms: number, signal?: AbortSignal) => delay(ms, undefined, { signal }));
+  const observe = async (signal?: AbortSignal) => {
+    const observed = await input.transport.readReviewedPersonOperation(location, signal);
+    signal?.throwIfAborted();
+    if (observed.id !== operation) throw new TypeError('Unexpected native Person operation');
+    return observed.done ? observed : undefined;
+  };
   const polls = input.polls ?? MERGE_POLLS;
   let done: Extract<ReviewedPersonOperation, { done: true }> | undefined;
   for (let attempt = 0; attempt < polls && !done; attempt += 1) {
-    const observed = await input.transport.readReviewedPersonOperation(location);
-    if (observed.done) done = observed;
-    else if (attempt + 1 < polls) await pause(MERGE_POLL_MS);
+    done = await observe();
+    if (!done && attempt + 1 < polls) await pause(MERGE_POLL_MS);
+  }
+  if (!done && input.continuationSignal) {
+    // Continue the acknowledged Location under one deadline, including delays and in-flight reads.
+    const signal = input.continuationSignal();
+    try {
+      while (!signal.aborted && !done) {
+        await pause(MERGE_POLL_MS, signal);
+        signal.throwIfAborted();
+        done = await observe(signal);
+      }
+    } catch (error) {
+      if (!signal.aborted || (error !== signal.reason && (error as Error | undefined)?.cause !== signal.reason))
+        throw error;
+    }
   }
   if (!done) return { state: 'pending', operation };
   const { survivor, redirected, revision } = done.result;
