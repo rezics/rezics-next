@@ -642,6 +642,7 @@ export function mergeTrainHarness() {
 export function tempDirectory(): string {
   return temporaryDirectory().path;
 }
+const defaultInstruction = 'Write the requested result and commit it.';
 export const markdown = `---
 goal: fixture
 kind: implementation
@@ -657,7 +658,7 @@ estimate:
 criticalPath: false
 waiting: []
 ---
-Write the requested result and commit it.
+${defaultInstruction}
 `;
 export function brief(): Brief {
   return parseBrief(markdown, readRiskOwnership(join(import.meta.dir, '../risk-areas.json')));
@@ -702,6 +703,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   store: WorkerStore;
   tasks: WorkerTasks;
   briefFile: string;
+  writeBrief(instruction: string, template?: string): string;
   ownerToken: string;
   dispose(): void;
   disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
@@ -738,6 +740,14 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
     store,
     tasks,
     briefFile,
+    writeBrief(instruction: string, template = markdown) {
+      const path = join(state, `brief-${randomUUID()}.md`);
+      writeFileSync(
+        path,
+        template.replace(defaultInstruction, () => instruction),
+      );
+      return path;
+    },
     ownerToken,
     dispose() {
       if (disposed) return;
@@ -838,10 +848,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     acceptance: string[] | null = ['true'],
     goal = 'fixture',
     target?: 'main' | 'stabilize',
+    instruction = defaultInstruction,
   ) {
-    const briefFile = join(h.settings.stateDirectory, `brief-${crypto.randomUUID()}.md`);
-    writeFileSync(
-      briefFile,
+    const briefFile = h.writeBrief(
+      instruction,
       markdown
         .replace('goal: fixture', `goal: ${goal}${target ? `\ntarget: ${target}` : ''}`)
         .replace('paths: [result.txt]', `paths: [${file}]`)

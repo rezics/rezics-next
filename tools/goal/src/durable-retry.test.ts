@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { WorkerJob } from './job.ts';
 import { runWorkerCommand } from './worker-commands.ts';
@@ -9,9 +9,10 @@ test('retry and retry --brief persist the changed brief and pending start intent
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
+    const amended = h.tasks.dispatch(h.writeBrief('Produce the result that will be revised before retry.'));
+    expect(amended.id).not.toBe(task.id);
     const worker = await h.tasks.retry(task.id);
     await worker.exited;
-    const amended = h.tasks.dispatch(h.briefFile);
     const amendedWorker = await h.tasks.retry(amended.id);
     await amendedWorker.exited;
     writeFileSync(join(h.settings.stateDirectory, 'capacity.json'), JSON.stringify({ maxWorkers: 0 }));
@@ -38,7 +39,8 @@ test('retry and retry --brief persist the changed brief and pending start intent
         .filter((intent) => intent.status === 'pending')
         .map((intent) => intent.taskId),
     ).toEqual([task.id, amended.id]);
-    expect(existsSync(join(h.settings.stateDirectory, 'capacity-queue'))).toBe(false);
+    const capacityQueue = join(h.settings.stateDirectory, 'capacity-queue');
+    expect(existsSync(capacityQueue) ? readdirSync(capacityQueue) : []).toEqual([]);
   } finally {
     h.dispose();
   }
@@ -70,10 +72,11 @@ test('a product retry still waiting to start takes an amended brief and keeps it
   const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
+    const other = h.tasks.dispatch(h.writeBrief('Produce the result queued after the amended retry.'));
+    expect(other.id).not.toBe(task.id);
     await (
       await h.tasks.retry(task.id)
     ).exited;
-    const other = h.tasks.dispatch(h.briefFile);
     await (
       await h.tasks.retry(other.id)
     ).exited;
@@ -141,7 +144,8 @@ test('a never-started product task retries at generation zero, also through --ex
   const h = harness();
   try {
     const plain = h.tasks.dispatch(h.briefFile);
-    const amended = h.tasks.dispatch(h.briefFile);
+    const amended = h.tasks.dispatch(h.writeBrief('Produce the result that will be amended before its first start.'));
+    expect(amended.id).not.toBe(plain.id);
     for (const task of [plain, amended])
       h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
         current.state = 'stopped';

@@ -13,19 +13,19 @@ test.each([0, 3])(
     const h = harness();
     try {
       const blocker = h.tasks.dispatch(h.briefFile);
-      const dispatchHeld = async (name: string, manager: string) => {
-        const path = join(h.root, `.temp/goal/${name}.md`);
-        writeFileSync(
-          path,
-          markdown
-            .replace('goal: fixture', `goal: fixture\nmanager: ${manager}`)
-            .replace('waiting: []', `waiting: []\nafter: [${blocker.id}]`),
+      const dispatchHeld = (instruction: string, manager: string) =>
+        h.tasks.dispatch(
+          h.writeBrief(
+            instruction,
+            markdown
+              .replace('goal: fixture', `goal: fixture\nmanager: ${manager}`)
+              .replace('waiting: []', `waiting: []\nafter: [${blocker.id}]`),
+          ),
         );
-        return h.tasks.dispatch(path);
-      };
-      const first = await dispatchHeld('first', 'manager-a');
-      const second = await dispatchHeld('second', 'manager-a');
-      const third = await dispatchHeld('third', 'manager-b');
+      const first = dispatchHeld('Write the first follow-up result.', 'manager-a');
+      const second = dispatchHeld('Write the second follow-up result.', 'manager-a');
+      const third = dispatchHeld('Write the follow-up result for the other manager.', 'manager-b');
+      expect(new Set([blocker.id, first.id, second.id, third.id]).size).toBe(4);
 
       for (let attempt = 0; attempt < generation; attempt++) {
         const worker = await h.tasks.retry(blocker.id);
@@ -141,14 +141,15 @@ test('a dropped-dependency notice refused by the attempt fence does not stop oth
     events: ManagerEvent[] = [];
   try {
     const refusedBlocker = h.tasks.dispatch(h.briefFile);
-    const otherBlocker = h.tasks.dispatch(h.briefFile);
+    const otherBlocker = h.tasks.dispatch(h.writeBrief('Produce the result whose notice will be delivered.'));
     const dispatchHeld = (name: string, blockerId: string) => {
       const path = join(h.root, `.temp/goal/${name}.md`);
       writeFileSync(path, markdown.replace('waiting: []', `waiting: []\nafter: [${blockerId}]`));
       return h.tasks.dispatch(path);
     };
-    dispatchHeld('refused', refusedBlocker.id);
-    dispatchHeld('other', otherBlocker.id);
+    const refusedHeld = dispatchHeld('refused', refusedBlocker.id);
+    const otherHeld = dispatchHeld('other', otherBlocker.id);
+    expect(new Set([refusedBlocker.id, otherBlocker.id, refusedHeld.id, otherHeld.id]).size).toBe(4);
     await h.tasks.cancel(refusedBlocker.id);
     await h.tasks.cancel(otherBlocker.id);
     h.store.db.query('DELETE FROM manager_inbox WHERE manager = ?').run('fixture');
