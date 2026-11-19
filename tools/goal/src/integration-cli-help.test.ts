@@ -52,6 +52,8 @@ test('retired managed-manager entrypoints cannot access runtime state or service
     ['manager', 'renew'],
     ['manager', 'assign'],
   ]) {
-    await expect(runIntegration(args, runtime)).rejects.toThrow('Managed manager launches and assignments are retired');
+    await expect(runIntegration(args, runtime)).rejects.toThrow(
+      'Managed manager launches and assignments are retired; use unit register for an execution unit',
+    );
   }
 });

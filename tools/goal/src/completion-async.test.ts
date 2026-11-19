@@ -1,9 +1,10 @@
+import { historicalManager } from '../test-support/historical-manager.ts';
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { completionChecker } from './completion.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { ManagerSessions } from './managers.ts';
 import { temporaryDirectory, repository } from './test-support.ts';
 
 test('manager complete returns at once and the verdict arrives as an inbox event', async () => {
@@ -22,21 +23,8 @@ test('manager complete returns at once and the verdict arrives as an inbox event
       }),
     command: ['goal'],
   });
-  const spec: ManagerSpec = {
-    id: 'manager',
-    goal: 'refactor',
-    objective: 'Finish',
-    brief: 'Manage',
-    cwd: temporary.path,
-    engine: 'claude',
-    pool: { id: 'sol', codexHome: join(temporary.path, 'codex-home') },
-    budget: 1000,
-    effort: 'high',
-    supermanager: 'supervisor',
-    limits: { turns: 20, turnsWithoutDecision: 10, wallMs: 60_000 },
-  };
   try {
-    await managers.start(spec);
+    const spec = historicalManager(db, temporary.path);
     const firstStarted = waitForStart();
     const request = managers.complete(spec.id);
     await firstStarted;
