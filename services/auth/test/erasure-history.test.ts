@@ -18,7 +18,7 @@ async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
 }
 
 test('real default deletion transfers only its discharged native source, then erases exact Auth copies and durably redrives the separate barrier proof', async () => {
-  const f = await nativeFixture();
+  const f = await nativeFixture({ restartable: true });
   let release = () => {};
   const paused = new Promise<void>((resolve) => {
     release = resolve;
@@ -126,32 +126,29 @@ test('real default deletion transfers only its discharged native source, then er
         .consent_completed_at,
     ).toBeNull();
     expect(await erasureHistoryPage(f.pool, accepted.id)).toBe(false);
-    // Lose the reply after the real supported cancellation returns. The durable
-    // retirement cut must still permit exact deletion on retry, with no new
-    // producer or consumer inferred from terminal status.
-    const cancel = DBOS.cancelWorkflow;
-    DBOS.cancelWorkflow = async (id) => {
-      await cancel.call(DBOS, id);
-      throw new Error('test reply lost after native cancellation');
+    // Lose the reply after the SDK commits exact payload deletion. Auth has
+    // persisted the native writer fence but has yet to mark the payload absent.
+    const maintain = DBOSClient.prototype.maintainWorkflowOnce;
+    DBOSClient.prototype.maintainWorkflowOnce = async function (...args) {
+      const result = await maintain.apply(this, args);
+      if (args[1].workflowID === registration.workflow_id && args[2] === 'delete')
+        throw new Error('test reply lost after native deletion');
+      return result;
     };
     try {
       await expect(eraseCopy(f.pool, registration.workflow_id)).rejects.toThrow('reply lost');
     } finally {
-      DBOS.cancelWorkflow = cancel;
+      DBOSClient.prototype.maintainWorkflowOnce = maintain;
     }
-    expect(
-      (
-        await f.pool.query('SELECT status FROM auth_dbos.workflow_status WHERE workflow_uuid=$1', [
-          registration.workflow_id,
-        ])
-      ).rows,
-    ).toEqual([{ status: 'SUCCESS' }]);
-    // The pinned SDK leaves SUCCESS unchanged. Retirement, not cancellation
-    // status, persists the earlier verified consumer cut.
-    expect(
-      (await f.pool.query('SELECT retired FROM auth_copy_work WHERE workflow_id=$1', [registration.workflow_id])).rows,
-    ).toEqual([{ retired: true }]);
+    const retirement = () =>
+      f.pool.query('SELECT retired,absent,sdk_fence_closure_id FROM auth_copy_work WHERE workflow_id=$1', [
+        registration.workflow_id,
+      ]);
+    const cut = (await retirement()).rows[0]!;
+    expect(cut).toMatchObject({ retired: true, absent: false, sdk_fence_closure_id: expect.any(String) });
+    expect(await copiesAbsent(f.pool, registration.workflow_id)).toBe(true);
     expect(await eraseCopy(f.pool, registration.workflow_id)).toBe(true);
+    expect((await retirement()).rows).toEqual([{ ...cut, absent: true }]);
     expect(await copiesAbsent(f.pool, registration.workflow_id)).toBe(true);
     await eventually(async () => completionAttempts > 0, 370_000);
     const local = (await f.pool.query('SELECT * FROM auth_erasure WHERE id=$1', [accepted.id])).rows[0]!;
@@ -169,14 +166,13 @@ test('real default deletion transfers only its discharged native source, then er
     ).rejects.toThrow('binding unavailable');
     expect(await copiesAbsent(f.pool, registration.workflow_id)).toBe(true);
     expect(await copiesAbsent(f.pool, live.workflow_id)).toBe(true);
-    await f.host.workflows.close();
     // Every personal DBOS history is already physically absent; the native
     // completion and immutable barrier remain after executor death/history loss.
     expect((await f.pool.query('SELECT 1 FROM auth_copy_role WHERE account_id=$1', [victim.accountId])).rowCount).toBe(
       0,
     );
+    await f.restart();
     submissionsEnabled = true;
-    await f.host.workflows.start();
     await eventually(
       async () =>
         !!(
@@ -253,7 +249,7 @@ test('real default deletion transfers only its discharged native source, then er
 }, 450_000);
 
 test('default recovery consumes an ordinary committed native result after caller loss and restart, without a caller retry', async () => {
-  const f = await nativeFixture();
+  const f = await nativeFixture({ restartable: true });
   let restore = () => {};
   try {
     const person = await f.person('lost-result');
@@ -289,8 +285,7 @@ test('default recovery consumes an ordinary committed native result after caller
     expect(copy.ready).toBe(false);
     expect(copy.result_finished_at).toBeInstanceOf(Date);
     expect((await f.bindings.workflowPorts.readAccount(person.accountId))!.handle).toBe(operation.handle);
-    await f.host.workflows.close();
-    await f.host.workflows.start();
+    await f.restart();
     // No resumeOperation or caller retry repairs the native result consumer.
     expect((await f.delete(person)).status).toBe(200);
     await eventually(
@@ -320,7 +315,7 @@ test('default recovery consumes an ordinary committed native result after caller
 }, 450_000);
 
 test('activated registration lost after native result consumption retires through default maintenance after restart', async () => {
-  const f = await nativeFixture();
+  const f = await nativeFixture({ restartable: true });
   let restore = () => {};
   try {
     const key = randomUUID();
@@ -355,8 +350,7 @@ test('activated registration lost after native result consumption retires throug
         ])
       ).rows[0],
     ).toMatchObject({ ready: false, result_finished_at: expect.any(Date) });
-    await f.host.workflows.close();
-    await f.host.workflows.start();
+    await f.restart();
     const person = await f.login({ accountId: source.account_id, email });
     expect((await f.delete(person)).status).toBe(200);
     await eventually(
@@ -456,13 +450,15 @@ test('a live native result consumer stays pending; lawful disclosure refusal aft
 }, 180_000);
 
 test('a lost native-consumed reply redrives from the committed source after restart and DBOS history deletion, independently of copy completion', async () => {
-  const f = await nativeFixture();
+  const f = await nativeFixture({ restartable: true });
   const ports = f.bindings.trustedAccess;
   const submit = ports.recordAuthNativeConsumption!;
   let attempts = 0;
+  let acknowledge = false;
   ports.recordAuthNativeConsumption = async (source) => {
     await submit(source);
-    if (++attempts === 1) throw new Error('Lost native source reply');
+    attempts++;
+    if (!acknowledge) throw new Error('Lost native source reply');
   };
   try {
     const person = await f.person('lost-source-reply');
@@ -481,8 +477,8 @@ test('a lost native-consumed reply redrives from the committed source after rest
     expect(source.source_discharged_at).toBeInstanceOf(Date);
     expect(source.copies_completed_at).toBeNull();
     await DBOS.deleteWorkflows([source.source_workflow_id], false);
-    await f.host.workflows.close();
-    await f.host.workflows.start();
+    await f.restart();
+    acknowledge = true;
     await eventually(
       async () =>
         !!(

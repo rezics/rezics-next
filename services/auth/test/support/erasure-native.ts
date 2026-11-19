@@ -171,6 +171,7 @@ export async function attachOperatingOpening(
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture(
   options: {
+    restartable?: boolean;
     openPool?: (url: string) => Promise<Pool>;
     startHost?: (host: Awaited<ReturnType<typeof createAuthHost>>) => Promise<void>;
   } = {},
@@ -195,8 +196,13 @@ export async function nativeFixture(
     process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
     configureTestReceiptKeys(kernel);
     phase = 'Auth pool acquisition';
-    const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
-    const poolRelease = ownNativePool(pool, resources, 'Auth pool');
+    const openPool = async () =>
+      options.openPool ? options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
+    let pool = await openPool();
+    let poolRelease = ownNativePool(pool, resources, 'Auth pool');
+    // Proof bindings survive executor replacement and never query a stopped host's pool.
+    const proofPool = options.restartable ? await openPool() : pool;
+    if (proofPool !== pool) ownNativePool(proofPool, resources, 'Auth proof pool');
     const previousDatabaseUrl = process.env.DATABASE_URL;
     const restoreDatabaseUrl = resources.own('DATABASE_URL restoration', () => {
       if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
@@ -237,7 +243,7 @@ export async function nativeFixture(
         fetch: async () => host.service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
       },
     });
-    const proofs = createNativeWorkflowProofPorts({ database: pool });
+    const proofs = createNativeWorkflowProofPorts({ database: proofPool });
     const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
     const bindings = modules.createNativeAccountBindings({
       pool: kernel,
@@ -248,8 +254,8 @@ export async function nativeFixture(
       auth: () => host.service,
       proofs: {
         workflow: proofs,
-        provisioning: createProvisioningEvidenceVerifier({ database: pool }),
-        barriers: createBarrierProofVerifier({ database: pool }),
+        provisioning: createProvisioningEvidenceVerifier({ database: proofPool }),
+        barriers: createBarrierProofVerifier({ database: proofPool }),
       },
     });
     const approvals = modules.createWorkflowApprovals({
@@ -267,27 +273,32 @@ export async function nativeFixture(
       alg: 'ES256',
     };
     phase = 'Auth host construction';
-    host = await createAuthHost({
-      database: pool,
-      systemDatabasePool: pool,
-      issuer,
-      audience: 'https://native-erasure.api.test',
-      secret: randomBytes(48).toString('hex'),
-      signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: bindings.trustedAccess,
-      access: bindings.workflowPorts,
-      accountOperations: bindings.accountOperations,
-      accountManagementReads: bindings.accountManagementReads,
-      recoveryDelivery: {
-        async deliver(message) {
-          deliveries.push(message);
+    const secret = randomBytes(48).toString('hex');
+    const stagingKey = randomBytes(32);
+    const createHost = () =>
+      createAuthHost({
+        database: pool,
+        systemDatabasePool: pool,
+        issuer,
+        audience: 'https://native-erasure.api.test',
+        secret,
+        signing: { activeKid: key.kid, privateKeys: [key] },
+        trustedAccess: bindings.trustedAccess,
+        access: bindings.workflowPorts,
+        accountOperations: bindings.accountOperations,
+        accountManagementReads: bindings.accountManagementReads,
+        recoveryDelivery: {
+          async deliver(message) {
+            deliveries.push(message);
+          },
         },
-      },
-      stagingKey: randomBytes(32),
-      executorId: `erasure-${randomUUID()}`,
-      maintenanceSchedule: '* * * * * *',
-    });
-    const hostRelease = resources.own('Auth workflow host', () => host.stop());
+        stagingKey,
+        executorId: `erasure-${randomUUID()}`,
+        maintenanceSchedule: '* * * * * *',
+      });
+    const ownHost = (generation: typeof host) => resources.own('Auth workflow host', () => generation.stop());
+    host = await createHost();
+    let hostRelease = ownHost(host);
     phase = 'Auth host startup';
     await (options.startHost ? options.startHost(host) : host.start());
     phase = 'Auth fixture client setup';
@@ -302,9 +313,22 @@ export async function nativeFixture(
       );
     return {
       fixture,
-      pool,
+      get pool() {
+        return pool;
+      },
       kernel,
-      host,
+      get host() {
+        return host;
+      },
+      async restart() {
+        if (!options.restartable) throw new Error('Restart requires independent fixture proof bindings');
+        await hostRelease.release();
+        pool = await openPool();
+        poolRelease = ownNativePool(pool, resources, 'Auth pool');
+        host = await createHost();
+        hostRelease = ownHost(host);
+        await host.start();
+      },
       key,
       bindings,
       access,
