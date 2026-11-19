@@ -12,11 +12,12 @@ released portions of a mixed system retain their own scope. Opening a gate requi
 
 ## Release sequence
 
-1. On the release candidate, complete the ordinary seed, import representative first-public data, and finish the
-   large seed. Confirm the retained environment can serve the imported and seeded data.
+1. Verify backend startup, migrations and critical native API paths. Then complete the ordinary seed, import
+   representative first-public data and finish the large seed in one retained environment. Confirm it serves the
+   imported and seeded data.
 2. Use that environment for browser verification and visual fixes. Recheck affected pages against the same data.
    The [Web qualification rules](development/verification.md#web-release-qualification) own check selection.
-3. Pin the resulting candidate, finish release qualification, promote it, and confirm the promoted revision.
+3. Pin the resulting candidate and complete [release qualification](development/release.md), including verified publication.
    Target two hours from the start of this closeout. Data import, seeding, and browser review and its fixes belong
    to the preceding phases.
 

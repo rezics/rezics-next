@@ -20,9 +20,10 @@ acceptance, select only the applicable procedures below; preserve boundary valid
 - [ ] Validate external configuration through the [real integration boundary](../../../../docs/development/verification.md#external-integrations)
       and include first-deployment evidence when required by acceptance.
 - [ ] Select the narrowest acceptance under [check selection](../../../../docs/development/verification.md#check-selection-and-failures).
-      Confirm fresh-worktree preparation is owned by the runner, and classify transport failures separately.
-- [ ] Run selected acceptance once after the last relevant edit. Apply check selection for evidence reuse,
-      prerequisite failures and owner repairs; preserve exit status and logs. Root typing is not a default step.
+      Start with the earliest affected boundary. Reuse matching fixture state and preserve independent verdicts.
+- [ ] For a failure, send the earliest failing phase, source and reproducible inputs to its owner. After repair,
+      rerun the affected assertion and checks whose inputs changed. Keep release decisions in the
+      [pinned candidate workflow](../../../../docs/development/release.md).
 
 Commands from the repository root; replace placeholders with the contract's actual names, and select only the
 commands applicable to the change:
