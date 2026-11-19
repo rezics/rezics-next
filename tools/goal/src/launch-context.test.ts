@@ -602,13 +602,36 @@ function contractRevision(body: string, command: string): string {
 }
 
 function integratedDependency(h: ReturnType<typeof harness>, filename: string): { id: string; commit: string } {
-  const dependency = h.tasks.dispatch(h.briefFile);
+  const dependency = h.tasks.dispatch(initialBrief(h.root, filename, `Implement ${filename}.`));
   writeFileSync(join(dependency.worktree, filename), `export const ${filename.replace(/\W/g, '_')} = true;\n`);
   git(dependency.worktree, ['add', filename]);
   git(dependency.worktree, ['commit', '-m', `Integrate ${filename}`]);
   const commit = git(dependency.worktree, ['rev-parse', 'HEAD']);
   const oldDev = git(h.root, ['rev-parse', 'refs/heads/dev']);
   git(h.root, ['update-ref', 'refs/heads/dev', commit, oldDev]);
+  h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+    current.state = 'integrated';
+    current.integratedCommit = commit;
+  });
+  return { id: dependency.id, commit };
+}
+
+function foreignDependency(h: ReturnType<typeof harness>): { id: string; commit: string } {
+  const foreign = join(h.root, '.temp/goal/foreign-source');
+  mkdirSync(foreign, { recursive: true });
+  git(foreign, ['init', '-b', 'main']);
+  git(foreign, [
+    '-c',
+    'user.email=fixture@example.invalid',
+    '-c',
+    'user.name=Fixture',
+    'commit',
+    '--allow-empty',
+    '-m',
+    'Foreign commit',
+  ]);
+  const commit = git(foreign, ['rev-parse', 'HEAD']);
+  const dependency = h.tasks.dispatch(initialBrief(h.root, 'foreign-source', 'Integrate foreign source.'));
   h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
     current.state = 'integrated';
     current.integratedCommit = commit;
@@ -799,12 +822,12 @@ test('held release resumes old sessions once with actual dependency source recei
     const firstPath = initialBrief(
       h.root,
       'held-first',
-      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting.',
+      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting the first task.',
     );
     const secondPath = initialBrief(
       h.root,
       'held-second',
-      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting.',
+      'BEGIN_WAITING_SESSION\nHistorical future-tense instruction: wait for cleanup to merge before starting the second task.',
     );
     const first = h.tasks.dispatch(firstPath);
     const second = h.tasks.dispatch(secondPath);
@@ -849,11 +872,18 @@ test('held release resumes old sessions once with actual dependency source recei
     await job.recoverOrphans();
     await job.drain();
 
+    expect(
+      h.store
+        .events()
+        .filter((event) => event.kind === 'held-task-released')
+        .map((event) => event.task_id),
+    ).toEqual([first.id, second.id]);
     for (const task of [first, second]) {
       expect(h.store.task(task.id).currentAttempt).toBe(2);
       const resumed = captured(h.store.task(task.id), 2, 'resume');
       const context = contextFromPrompt(resumed.prompt);
       expect(resumed.args).toContain('resume');
+      expect(resumed.args).toContain(`fixture-session-${task.id}`);
       expect(context).toMatchObject({ boundary: 'held-release', origin: 'managed' });
       expect(context.task).toMatchObject({
         id: task.id,
@@ -869,7 +899,9 @@ test('held release resumes old sessions once with actual dependency source recei
         'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
       );
       expect(resumed.prompt).not.toContain('Historical future-tense instruction: wait for cleanup to merge');
-      expect(h.store.attempts(task.id).filter((attempt) => attempt.attempt === 2)).toHaveLength(1);
+      expect(h.store.attempts(task.id).map((attempt) => attempt.attempt)).toEqual([1, 2]);
+      expect(h.store.events(task.id, 2).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
+      expect(existsSync(join(task.worktree, '.temp/goal/launch-2-start.json'))).toBe(false);
     }
     expect(contextFromPrompt(captured(h.store.task(first.id), 2, 'resume').prompt).task.contractSha256).toBe(
       hash(readFileSync(latestRevision, 'utf8')),
@@ -879,7 +911,7 @@ test('held release resumes old sessions once with actual dependency source recei
     );
   } finally {
     for (const task of waitingTasks) releaseOutstandingChecks(task);
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
@@ -1124,21 +1156,13 @@ test('a later dependency merge is described truthfully and an unavailable source
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const prepared = task.base;
-    const dependency = h.tasks.dispatch(h.briefFile);
-    writeFileSync(join(dependency.worktree, 'later.ts'), 'export const later = true;\n');
-    git(dependency.worktree, ['add', 'later.ts']);
-    git(dependency.worktree, ['commit', '-m', 'Later dependency']);
-    const commit = git(dependency.worktree, ['rev-parse', 'HEAD']);
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
-      current.state = 'integrated';
-      current.integratedCommit = commit;
-    });
+    const { id: dependencyId, commit } = integratedDependency(h, 'later.ts');
     git(task.worktree, ['merge', '--no-edit', '-m', 'Take later dependency', commit]);
     replaceTaskContract(
       h,
       task.id,
       0,
-      readFileSync(amendedBrief(h.root, 'later-merge', dependency.id, 'Use later merge.'), 'utf8'),
+      readFileSync(amendedBrief(h.root, 'later-merge', dependencyId, 'Use later merge.'), 'utf8'),
     );
     const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (attempt) =>
       fixtureAttempt(task.id, attempt, h.settings.stateDirectory),
@@ -1153,31 +1177,29 @@ test('a later dependency merge is described truthfully and an unavailable source
     });
     const laterPrompt = renderLaunchContext(later);
     expect(laterPrompt).toContain(
-      `- \`${dependency.id}\`: present in current source at \`${commit}\`; not in your prepared base.`,
+      `- \`${dependencyId}\`: present in current source at \`${commit}\`; not in your prepared base.`,
     );
     expect(laterPrompt).not.toContain(`integrated in your base at \`${commit}\``);
 
-    const foreign = join(h.root, '.temp/goal/unavailable-dependency');
-    mkdirSync(foreign, { recursive: true });
-    git(foreign, ['init', '-b', 'main']);
-    git(foreign, ['config', 'user.email', 'fixture@example.invalid']);
-    git(foreign, ['config', 'user.name', 'Fixture']);
-    writeFileSync(join(foreign, 'foreign.ts'), 'export const foreign = true;\n');
-    git(foreign, ['add', 'foreign.ts']);
-    git(foreign, ['commit', '-m', 'Unavailable dependency commit']);
-    const unavailable = git(foreign, ['rev-parse', 'HEAD']);
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
-      current.integratedCommit = unavailable;
+    const foreign = foreignDependency(h);
+    const unknown = underLease(h, task.id, () => {
+      replaceTaskContract(
+        h,
+        task.id,
+        ref.attempt,
+        readFileSync(amendedBrief(h.root, 'foreign-merge', foreign.id, 'Use foreign merge.'), 'utf8'),
+      );
+      return captureLaunchContext(h.store, ref, 'retry');
     });
-    const unknown = underLease(h, task.id, () => captureLaunchContext(h.store, ref, 'retry'));
     expect(unknown.dependencies.receipts[0]).toMatchObject({
+      commit: foreign.commit,
       sourcePresence: 'unknown',
       basePresence: 'unknown',
       precondition: 'unknown',
     });
     const unknownPrompt = renderLaunchContext(unknown);
     expect(unknownPrompt).toContain(
-      `- \`${dependency.id}\`: source observation is unavailable; build against its contract.`,
+      `- \`${foreign.id}\`: source observation is unavailable; build against its contract.`,
     );
     expect(unknownPrompt).not.toContain('not in your base');
   } finally {
@@ -1188,40 +1210,31 @@ test('a later dependency merge is described truthfully and an unavailable source
 test('unknown, cancelled, missing and absent dependency source proofs are never rendered as installed code', async () => {
   const h = harness(provider);
   try {
-    const dependency = h.tasks.dispatch(h.briefFile);
     const task = h.tasks.dispatch(h.briefFile);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.start(task.id);
+    const ref = { taskId: task.id, attempt: 1 };
+    const captureWithDependency = (id: string) =>
+      underLease(h, task.id, () => {
+        const brief = amendedBrief(h.root, 'source-proof', id, 'Inspect current source proof.');
+        replaceTaskContract(h, task.id, ref.attempt, readFileSync(brief, 'utf8'));
+        return captureLaunchContext(h.store, ref, 'retry');
+      });
 
-    writeFileSync(join(dependency.worktree, 'unmerged.ts'), 'export const unmerged = true;\n');
-    git(dependency.worktree, ['add', 'unmerged.ts']);
-    git(dependency.worktree, ['commit', '-m', 'Create unmerged dependency source']);
-    const dependencyCommit = git(dependency.worktree, ['rev-parse', 'HEAD']);
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
-      current.state = 'integrated';
-      current.integratedCommit = dependencyCommit;
-    });
-    const afterDependency = amendedBrief(h.root, 'source-proof', dependency.id, 'Inspect current source proof.');
-    replaceTaskContract(h, task.id, 1, readFileSync(afterDependency, 'utf8'));
-
-    const absent = underLease(h, task.id, () =>
-      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
-    );
+    const dependency = integratedDependency(h, 'unmerged.ts');
+    const absent = captureWithDependency(dependency.id);
     expect(absent.dependencies.receipts[0]).toMatchObject({
       state: 'integrated',
       completion: 'integrated',
-      commit: dependencyCommit,
+      commit: dependency.commit,
       sourcePresence: 'absent',
       precondition: 'unmet',
     });
     expect(absent.task.sourceProof).toBe('verified');
 
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
-      current.state = 'cancelled';
-    });
-    const cancelled = underLease(h, task.id, () =>
-      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
-    );
+    const cancelledDependency = h.tasks.dispatch(initialBrief(h.root, 'cancelled-source', 'Prepare cancelled source.'));
+    await h.tasks.stop(cancelledDependency.id, true);
+    const cancelled = captureWithDependency(cancelledDependency.id);
     expect(cancelled.dependencies.receipts[0]).toMatchObject({
       state: 'cancelled',
       completion: 'not-integrated',
@@ -1229,35 +1242,17 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
       precondition: 'unmet',
     });
 
-    const foreign = join(h.root, '.temp/goal/foreign-dependency');
-    mkdirSync(foreign, { recursive: true });
-    git(foreign, ['init', '-b', 'main']);
-    git(foreign, ['config', 'user.email', 'fixture@example.invalid']);
-    git(foreign, ['config', 'user.name', 'Fixture']);
-    writeFileSync(join(foreign, 'foreign.ts'), 'export const foreignDependency = true;\n');
-    git(foreign, ['add', 'foreign.ts']);
-    git(foreign, ['commit', '-m', 'Create unavailable dependency commit']);
-    const unavailableCommit = git(foreign, ['rev-parse', 'HEAD']);
-    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
-      current.state = 'integrated';
-      current.integratedCommit = unavailableCommit;
-    });
-    const unknownCommit = underLease(h, task.id, () =>
-      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
-    );
+    const foreign = foreignDependency(h);
+    const unknownCommit = captureWithDependency(foreign.id);
     expect(unknownCommit.dependencies.receipts[0]).toMatchObject({
       state: 'integrated',
       completion: 'integrated',
-      commit: unavailableCommit,
+      commit: foreign.commit,
       sourcePresence: 'unknown',
       precondition: 'unknown',
     });
 
-    const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
-    replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));
-    const missing = underLease(h, task.id, () =>
-      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
-    );
+    const missing = captureWithDependency('missing-task');
     expect(missing.dependencies.receipts[0]).toMatchObject({
       id: 'missing-task',
       state: 'missing',
@@ -1267,47 +1262,25 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
     });
     expect(JSON.stringify(missing.dependencies)).not.toContain('"sourcePresence":"present"');
 
-    const taskRef = { taskId: task.id, attempt: 1 };
-    underLease(h, task.id, () =>
-      h.store.updateTask(taskRef, (current) => {
-        current.branch = 'worker/wrong-branch';
-      }),
-    );
-    const badIdentity = underLease(h, task.id, () => captureLaunchContext(h.store, taskRef, 'retry'));
+    const badIdentity = underLease(h, task.id, () => {
+      git(task.worktree, ['switch', '-c', 'worker/wrong-branch']);
+      return captureLaunchContext(h.store, ref, 'retry');
+    });
     expect(badIdentity.task.sourceProof).toBe('unknown');
-    expect(badIdentity.task.sourceBranch).toBe(task.branch);
-    underLease(h, task.id, () =>
-      h.store.updateTask(taskRef, (current) => {
-        current.branch = task.branch;
-      }),
-    );
+    expect(badIdentity.task.sourceBranch).toBe('worker/wrong-branch');
 
-    const oldRef = { taskId: task.id, attempt: 1 };
-    const previous = h.store.attempt(oldRef);
-    underLease(h, task.id, () =>
-      h.store.nextAttempt(oldRef, (attempt) => ({
-        ...previous,
-        attempt,
-        state: 'pending',
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-        process: null,
-        driver: null,
-        session: null,
-        checks: [],
-        logPath: join(h.settings.stateDirectory, 'runs', task.id, `${attempt}.jsonl`),
-        evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(attempt)),
-      })),
-    );
-    expect(() => underLease(h, task.id, () => captureLaunchContext(h.store, oldRef, 'retry'))).toThrow(
-      StaleAttemptError,
-    );
+    underLease(h, task.id, () => {
+      git(task.worktree, ['switch', task.branch]);
+      const next = h.store.nextAttempt(ref, (attempt) => fixtureAttempt(task.id, attempt, h.settings.stateDirectory));
+      expect(captureLaunchContext(h.store, next, 'retry').task).toMatchObject({ attempt: 2, sourceProof: 'verified' });
+      expect(() => captureLaunchContext(h.store, ref, 'retry')).toThrow(StaleAttemptError);
+    });
   } finally {
     h.dispose();
   }
 });
 
-test('launch dependency projection batches shared facts and observes changed rows and failed ancestry on the next capture', () => {
+test('launch dependency projection batches shared facts and observes changed rows and failed ancestry on the next capture', async () => {
   const h = harness();
   const originalEnv = {
     path: process.env.PATH,
@@ -1321,9 +1294,9 @@ test('launch dependency projection batches shared facts and observes changed row
     h.store.updateTask({ taskId: shared.id, attempt: 0 }, (current) => {
       current.integratedCommit = first.commit;
     });
-    const missingObject = h.tasks.dispatch(h.briefFile);
-    const nonCommit = h.tasks.dispatch(h.briefFile);
-    const invalidCommit = h.tasks.dispatch(h.briefFile);
+    const missingObject = h.tasks.dispatch(initialBrief(h.root, 'missing-object', 'Integrate missing object.'));
+    const nonCommit = h.tasks.dispatch(initialBrief(h.root, 'tree-object', 'Integrate tree object.'));
+    const invalidCommit = h.tasks.dispatch(initialBrief(h.root, 'invalid-commit', 'Integrate invalid commit.'));
     for (const dependency of [missingObject, nonCommit, invalidCommit])
       h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
         current.state = 'integrated';
@@ -1331,7 +1304,7 @@ test('launch dependency projection batches shared facts and observes changed row
       });
     const task = h.tasks.dispatch(h.briefFile);
     git(task.worktree, ['tag', '-a', 'projection-peel', '-m', 'peel', first.commit]);
-    const tagged = h.tasks.dispatch(h.briefFile);
+    const tagged = h.tasks.dispatch(initialBrief(h.root, 'tagged-source', 'Integrate tagged source.'));
     const tagObject = git(task.worktree, ['rev-parse', 'projection-peel']);
     h.store.updateTask({ taskId: tagged.id, attempt: 0 }, (current) => {
       current.state = 'integrated';
@@ -1341,6 +1314,7 @@ test('launch dependency projection batches shared facts and observes changed row
     h.store.updateTask({ taskId: nonCommit.id, attempt: 0 }, (current) => {
       current.integratedCommit = tree;
     });
+    const awaitingSource = h.tasks.dispatch(initialBrief(h.root, 'awaiting-source', 'Prepare source for integration.'));
     const after = [
       first.id,
       first.id,
@@ -1352,6 +1326,7 @@ test('launch dependency projection batches shared facts and observes changed row
       nonCommit.id,
       invalidCommit.id,
       9,
+      awaitingSource.id,
     ];
     h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
       current.brief = { ...current.brief, after: after as unknown as string[] };
@@ -1424,8 +1399,8 @@ exec "${realGit}" "$@"
         reason,
       }) as const;
     expect(captured.context.dependencies).toEqual({
-      required: 10,
-      included: 10,
+      required: 11,
+      included: 11,
       omitted: 0,
       completeness: 'complete',
       receipts: [
@@ -1463,6 +1438,16 @@ exec "${realGit}" "$@"
           null,
           'historical task record contains an invalid dependency id',
         ),
+        {
+          id: awaitingSource.id,
+          state: 'ready',
+          completion: 'not-integrated',
+          commit: null,
+          sourcePresence: 'not-checked',
+          basePresence: 'not-checked',
+          precondition: 'unmet',
+          reason: 'dependency is not integrated or merged',
+        },
       ],
     });
     expect(captured.commands.filter((command) => command.startsWith('cat-file --batch-check'))).toHaveLength(1);
@@ -1478,6 +1463,7 @@ exec "${realGit}" "$@"
           missingObject.id,
           nonCommit.id,
           invalidCommit.id,
+          awaitingSource.id,
         ].map((id) => [id, 1]),
       ),
     );
@@ -1494,6 +1480,7 @@ exec "${realGit}" "$@"
         ...['missing-record', missingObject.id, nonCommit.id, invalidCommit.id, '<invalid dependency 10>'].map(
           (id) => `- \`${id}\`: source observation is unavailable; build against its contract.`,
         ),
+        `- \`${awaitingSource.id}\`: not in your base; build against its contract.`,
         '```json',
         JSON.stringify({
           version: captured.context.version,
@@ -1505,24 +1492,25 @@ exec "${realGit}" "$@"
       ].join('\n'),
     );
 
-    h.store.updateTask({ taskId: first.id, attempt: 0 }, (current) => {
-      current.state = 'cancelled';
-    });
+    await h.tasks.stop(awaitingSource.id, true);
     const failed = capture(true);
-    expect(failed.context.dependencies.receipts.slice(0, 3)).toMatchObject([
-      { state: 'cancelled', completion: 'not-integrated', sourcePresence: 'not-checked' },
-      { state: 'cancelled', completion: 'not-integrated', sourcePresence: 'not-checked' },
-      {
+    for (const receipt of failed.context.dependencies.receipts.slice(0, 3))
+      expect(receipt).toMatchObject({
         state: 'integrated',
         sourcePresence: 'unknown',
         basePresence: 'unknown',
         precondition: 'unknown',
         reason: 'fixture ancestry unavailable',
-      },
-    ]);
+      });
+    expect(failed.context.dependencies.receipts.at(-1)).toMatchObject({
+      id: awaitingSource.id,
+      state: 'cancelled',
+      completion: 'not-integrated',
+      sourcePresence: 'not-checked',
+    });
     expect(failed.commands.filter((command) => command.startsWith('cat-file --batch-check'))).toHaveLength(1);
     expect(failed.commands.filter((command) => command.startsWith('merge-base --is-ancestor'))).toHaveLength(3);
-    expect([...counts.values()]).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
+    expect([...counts.values()]).toEqual(Array(9).fill(2));
     expect(renderLaunchContext(failed.context)).toContain(
       `- \`${shared.id}\`: source observation is unavailable; build against its contract.`,
     );
