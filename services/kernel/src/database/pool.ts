@@ -177,7 +177,7 @@ async function checkedOutConnection<T>(
   try {
     return await heldPools.run(next, () => work(client));
   } finally {
-    client.query = originalQuery;
+    if (accounting) client.query = originalQuery;
     checkedOutClients.delete(client);
     if (!custody.released) {
       custody.released = true;
