@@ -290,6 +290,7 @@ function offHostGateFixture() {
               kind: string;
               command?: string[];
               concurrency?: string;
+              hostsFile?: string;
               target?: string;
               key?: string;
             },
