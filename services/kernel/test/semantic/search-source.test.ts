@@ -173,6 +173,23 @@ test("the source reads a subject's terms and adopted Global statements in one sn
     document: { names: expect.arrayContaining(['吾輩は猫である', 'Wagahai wa Neko de Aru']) },
   });
 
+  const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
+  const names = subjectSource(pool, new Uint8Array(32).fill(4)).readBookCandidateNames!;
+  const book = snapshot.subjects[0]!;
+  const window = await names([work.id, absent, elsewhere]);
+  expect(window?.get(partition)).toEqual({
+    ...snapshot,
+    subjects: [
+      {
+        ...book,
+        aliases: [],
+        descriptions: [],
+        statements: book.statements.filter(({ property }) => property === 'schema:inLanguage'),
+      },
+    ],
+  });
+  expect(window?.get(subjectPartition(elsewhere))?.subjects).toEqual([]);
+
   const [language] = work.statements['schema:inLanguage'].map(({ id }: { id: string }) => id);
   await ok(`/v1/subjects/${work.id}/candidates/${language}:hide`, { reason: 'spam' });
   const hidden = (await source.read(partition, [work.id])).subjects[0]!;
@@ -182,8 +199,11 @@ test("the source reads a subject's terms and adopted Global statements in one sn
     'schema:datePublished',
     'schema:name',
   ]);
+  expect((await names([work.id]))?.get(partition)?.subjects[0]).toMatchObject({
+    securityRevision: 1,
+    statements: [],
+  });
 
-  const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
   await expect(source.read(partition, [elsewhere])).rejects.toThrow(TypeError);
   await expect(
     source.read(
@@ -247,6 +267,9 @@ test('subjects that are not visible or redirected are reported for deletion and 
   expect(await counted(redirected!)).toBe(redirectedBefore - 1);
   const merged = (await source.read(subjectPartition(redirected!), [redirected!])).subjects[0]!;
   expect([merged.redirect, merged.visibility]).toEqual([survivor!, 'hidden']);
+  expect(
+    (await source.readBookCandidateNames!([redirected!]))?.get(subjectPartition(redirected!))?.subjects[0],
+  ).toMatchObject({ redirect: survivor!, visibility: 'hidden', labels: [] });
   const count = await source.count(subjectPartition(redirected!));
   expect(count.position).toBe(await position(subjectPartition(redirected!)));
 });

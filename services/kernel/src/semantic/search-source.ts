@@ -54,6 +54,7 @@ import readVisibility from './read-visibility.sql';
 import readRelatedStates from './read-subject-related-states.sql';
 import { withReadTransaction } from './read.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { bookCandidateNames } from './search-source-book-names.ts';
 
 export { readPartition };
 
@@ -218,6 +219,9 @@ export function subjectSource(
   return {
     readSubjectKeyPage,
     canonicalNames: createSubjectCanonicalNames(pool),
+    readBookCandidateNames: bookCandidateNames(pool, routeKey, (deadline, subject) =>
+      resumeSelection(pool, deadline, subject),
+    ),
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
       if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH) throw new TypeError('A subject snapshot accepts at most 256 ids');

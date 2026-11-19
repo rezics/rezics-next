@@ -109,6 +109,8 @@ export type RetainedRelationFacetPage = Readonly<{
 export interface SubjectSource {
   /** Unknown ids are omitted. Every id must route to `partition`. */
   read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+  /** Exact current name projection for installed Book TypeLists. Null requests full Source hydration. */
+  readBookCandidateNames?(ids: readonly string[]): Promise<ReadonlyMap<number, SubjectSnapshot> | null>;
   /** Index-only complete input. Ordinary reader observations must not pay for creator projection. */
   readForIndex?(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
   /** Exact current native support for one bounded credited-name projection. */

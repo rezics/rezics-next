@@ -1317,7 +1317,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       };
       let canonicalIds: Awaited<ReturnType<typeof resolveCanonicalKeyset<IndexedSubject>>> | undefined;
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
-        if (bookPage && admitted && 'type' in admitted) {
+        if (bookPage && admitted && 'type' in admitted && !hitOptions.descriptions && !hitOptions.properties) {
           const batch = composedBookCandidates({
             owner: bookPage,
             pool,

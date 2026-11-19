@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { AdmissionYield } from '../http/admission.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { readReleasedIdentityMappingsInSnapshot } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { admitCanonicalKeyset, type CanonicalKeysetAdmission, type SearchIdentityMapping } from './canonical-keyset.ts';
@@ -25,6 +26,34 @@ export type BookCandidateRead = {
   answer: PromiseWithResolvers<CandidateResult>;
 };
 
+async function bookCandidateSource(source: SubjectSource, hits: readonly SearchHit[]): Promise<SubjectSource> {
+  if (!source.readBookCandidateNames) return source;
+  const keys = new Map<number, Set<string>>();
+  for (const { id, partition } of hits) {
+    const route = routeOf(id);
+    if (route === null || partitionOf(route) !== partition) continue;
+    const ids = keys.get(partition) ?? new Set();
+    ids.add(id);
+    keys.set(partition, ids);
+  }
+  const snapshots = await source.readBookCandidateNames([...keys.values()].flatMap((ids) => [...ids]));
+  if (!snapshots) return source;
+  if (snapshots.size !== keys.size) throw new Error('Incomplete Book candidate snapshot');
+  for (const [partition, ids] of keys) {
+    const snapshot = snapshots.get(partition);
+    if (!snapshot || snapshot.subjects.some(({ id }) => !ids.has(id)))
+      throw new Error('Invalid Book candidate snapshot keys');
+  }
+  return {
+    count: source.count.bind(source),
+    async read(partition, ids) {
+      const snapshot = snapshots.get(partition)!;
+      const wanted = new Set(ids);
+      return { ...snapshot, subjects: snapshot.subjects.filter(({ id }) => wanted.has(id)) };
+    },
+  };
+}
+
 /** One current Source window across the retained lists. Keep the original hit objects:
  * their native positions, revisions, and per-list canonical traversal still belong to each list. */
 export async function readBookCandidates(waiting: BookCandidateRead[], check: () => void) {
@@ -35,7 +64,8 @@ export async function readBookCandidates(waiting: BookCandidateRead[], check: ()
       const results = await first.admit(async () => {
         check();
         const hits = reads.flatMap((read) => read.hits);
-        const { passed } = await first.disclosure.checkHits(first.source, hits, new Map());
+        const source = await bookCandidateSource(first.source, hits);
+        const { passed } = await first.disclosure.checkHits(source, hits, new Map());
         const visible = new Map(passed.map(({ hit, subject }) => [hit, subject]));
         const lists = reads.map(({ hits, types }) => {
           const selected = new Map<SearchHit, IndexedSubject>();
