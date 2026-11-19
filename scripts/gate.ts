@@ -777,6 +777,35 @@ function outcomeFrom(
   };
 }
 
+// Direct remote runs have a restored Git HEAD but may lack a prepared source manifest.
+// In that case HEAD identifies the base of the physical run, including for a dirty candidate.
+function workspaceProgressSource(gateRoot: string, run: string | undefined) {
+  if (!run || !/^[a-zA-Z0-9-]+$/.test(run)) return;
+  let baseRevision: string | undefined;
+  try {
+    const git = Bun.spawnSync(['git', 'rev-parse', '--verify', 'HEAD^{commit}'], {
+      cwd: gateRoot,
+      stderr: 'ignore',
+    });
+    const head = git.stdout.toString().trim();
+    if (git.exitCode !== 0 || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(head)) return { run };
+    baseRevision = head;
+    const path = join(gateRoot, '.temp/check-host', `source-manifest-${run}.json`);
+    const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (
+      isRecord(manifest) &&
+      manifest.head === head &&
+      typeof manifest.sourceSha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(manifest.sourceSha256)
+    ) {
+      return { run, revision: head, sourceSha256: manifest.sourceSha256 };
+    }
+  } catch {
+    // Source progress is diagnostic even without a readable prepared manifest.
+  }
+  return { run, baseRevision };
+}
+
 function resultPath(path: string, gateRoot = root): string {
   return resolve(gateRoot, path);
 }
@@ -859,6 +888,20 @@ export async function runLocalGate(
     throw new Error(`GATE_CONCURRENCY must be a positive integer, received ${JSON.stringify(configuredConcurrency)}`);
   }
 
+  const source = workspaceProgressSource(gateRoot, env.REZICS_CHECK_RUN);
+  const reportWorkspaceProgress = (outcome: WorkspaceOutcome, first: WorkspaceResult, retry?: WorkspaceResult) => {
+    if (!source) return;
+    const record = {
+      ...source,
+      ...outcome,
+      attempt: retry ? 2 : 1,
+      result: !retry && first.retryable ? 'retry-pending' : outcome.passed ? 'passed' : 'failed',
+      exitCode: (retry ?? first).code,
+    };
+    // The live log records only reached workspace attempts. The final report settles the Gate.
+    writeOutput(`[gate-workspace] ${JSON.stringify(record)}\n`, 'stdout', env);
+  };
+
   let nextWorkspace = 0;
   const outcomes: WorkspaceOutcome[] = [];
   const failures: WorkspaceResult[] = [];
@@ -866,7 +909,9 @@ export async function runLocalGate(
     while (nextWorkspace < workspaces.length) {
       const index = nextWorkspace++;
       const result = await checkWorkspace(workspaces[index]!, gateRoot, env);
-      outcomes.push(outcomeFrom(result, env));
+      const outcome = outcomeFrom(result, env);
+      outcomes.push(outcome);
+      reportWorkspaceProgress(outcome, result);
       if (result.code === 0) writeOutput(result.block, 'stdout', env);
       else failures.push(result);
     }
@@ -888,6 +933,7 @@ export async function runLocalGate(
     const again = await checkWorkspace(workspace, gateRoot, env);
     const existing = outcomes.find((outcome) => outcome.directory === workspace.directory)!;
     Object.assign(existing, outcomeFrom(failure, env, again));
+    reportWorkspaceProgress(existing, failure, again);
     if (again.code === 0) {
       writeOutput(failure.block, 'stdout', env);
       writeOutput(again.block, 'stdout', env);
