@@ -1,46 +1,43 @@
-import { createHash } from 'node:crypto';
+import type { ImporterOptions } from './importer.ts';
+import { mediaJournalRequest } from './media-resolver.ts';
+import type { Owner, RecordBindings } from './record-bindings.ts';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 
-/** The owner whose selected cover journal is keyed by its exact source tuple. */
-export type SelectedCoverOwner = { source: string; external_id: string };
-
-/** The durable media journal a selected cover resumes from; only acceptance and the final status matter. */
-export type SelectedCoverJournal = { accepted: unknown; status: { media: { state: string } } | null };
-
-/** The two capabilities a resume needs: exact-key journal lookup and the coordinator's media resolver. */
-export type SelectedCoverResumePort = {
-  bindings: { mediaPending(owner: SelectedCoverOwner, key: string): SelectedCoverJournal | null };
-  resolver: {
-    resolve(input: {
-      owner: SelectedCoverOwner;
-      subject: string;
-      mediaImportIntents: MediaImportRequest[];
-      signal: AbortSignal;
-      deferPending: boolean;
-    }): Promise<unknown>;
-  };
+type SelectedCoverReceipt = {
+  status: 'available' | 'rejected';
+  mediaState: 'available' | 'rejected';
+  mediaKey: string;
+  mediaId?: string;
+  credit: MediaImportRequest['credit'];
+  provenance: MediaImportRequest['provenance'];
 };
 
-/**
- * Resume a selected cover whose sealed media journal is not final. A prepared request replays its exact bytes and
- * key, and an accepted reservation polls its own Media ID. A final journal, or none, makes no media call.
- */
+/** Read a terminal observation from the exact intent, or resume its unfinished delivery. */
 export async function resumeSelectedCover(
-  port: SelectedCoverResumePort,
-  input: { owner: SelectedCoverOwner; containerId: string; intent: MediaImportRequest; signal: AbortSignal },
-): Promise<'absent' | 'final' | 'resumed'> {
-  const signature = createHash('sha256').update(JSON.stringify(input.intent)).digest('hex');
-  const key = `${input.owner.source}:${input.owner.external_id}:${signature}`;
+  port: { bindings: Pick<RecordBindings, 'mediaPending'>; resolver?: ImporterOptions['mediaResolver'] },
+  input: { owner: Owner; containerId: string; intent: MediaImportRequest; signal: AbortSignal },
+): Promise<SelectedCoverReceipt | undefined> {
+  const { key, signature, request } = mediaJournalRequest(input.owner, input.intent);
   const journal = port.bindings.mediaPending(input.owner, key);
-  if (!journal) return 'absent';
-  const state = journal.status?.media.state;
-  if (journal.accepted !== null && (state === 'available' || state === 'rejected')) return 'final';
-  await port.resolver.resolve({
+  if (!journal) return;
+  if (journal.signature !== signature || journal.bytes !== JSON.stringify(request))
+    throw new TypeError('Selected cover does not match its sealed request');
+  const media = journal.status?.media;
+  if (journal.accepted && media && (media.state === 'available' || media.state === 'rejected'))
+    return {
+      status: media.state,
+      mediaState: media.state,
+      mediaKey: key,
+      ...(media.state === 'available' ? { mediaId: media.id } : {}),
+      // The journal verified both fields on observation. Keep the converter's original manifest representation.
+      credit: input.intent.credit,
+      provenance: input.intent.provenance,
+    };
+  await port.resolver?.resolve({
     owner: input.owner,
     subject: input.containerId,
     mediaImportIntents: [input.intent],
     signal: input.signal,
     deferPending: false,
   });
-  return 'resumed';
 }

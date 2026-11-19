@@ -125,6 +125,15 @@ function ownValue(input: object, name: string): unknown {
   return descriptor.value;
 }
 
+/** The same canonical bytes identify an asset during delivery and same-store recovery. */
+export function mediaJournalRequest(owner: Owner, intent: MediaImportRequest) {
+  const request = snapshot(intent);
+  const signature = createHash('sha256').update(JSON.stringify(request)).digest('hex');
+  const key = `${owner.source}:${owner.external_id}:${signature}`;
+  ensure(Buffer.byteLength(key) <= 255 && /^[\x20-\x7e]+$/.test(key));
+  return { request, signature, key };
+}
+
 /**
  * Resolve only the supplied bounded assets, using exact indexed journals rather than cover_key.
  * RecordBindings validates and durably stores actual receipts/statuses before we use them.
@@ -155,7 +164,8 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
       const urls = new Set<string>();
       // Validate every asset before any fence or media call. Each has its own 64KiB budget.
       const assets = Array.from({ length }, (_, index) => {
-        const request = snapshot(ownValue(supplied, String(index))) as MediaImportRequest;
+        const asset = mediaJournalRequest(owner, ownValue(supplied, String(index)) as MediaImportRequest);
+        const { request } = asset;
         ensure(checkRequest(request).length === 0);
         ensure(
           request.containerId === containerId &&
@@ -164,10 +174,7 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
         );
         ensure(!urls.has(request.sourceUrl));
         urls.add(request.sourceUrl);
-        const signature = createHash('sha256').update(JSON.stringify(request)).digest('hex');
-        const key = `${owner.source}:${owner.external_id}:${signature}`;
-        ensure(Buffer.byteLength(key) <= 255 && /^[\x20-\x7e]+$/.test(key));
-        return { request, signature, key };
+        return asset;
       });
       const claim = bindings.claim(owner);
       ensure(claim?.state === 'bound' && claim.subject === containerId);

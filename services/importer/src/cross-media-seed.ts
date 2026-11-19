@@ -3354,16 +3354,14 @@ export async function seedCrossMedia(
         : undefined;
     progress?.enter('cover-readback');
     type MediaResolveInput = Parameters<NonNullable<ImporterOptions['mediaResolver']>['resolve']>[0];
-    /** Resume a selected cover whose sealed media journal is not final; see resumeSelectedCover. */
     const resumeSelectedMedia = async (
-      source: { sourceAlias: string; externalId: string; sourceStatus: string },
+      source: BangumiCoverSource,
       containerId: string,
-    ): Promise<void> => {
-      const resolver = importerOptions.mediaResolver;
+    ): Promise<CrossMediaMediaOutcome | undefined> => {
       const row = [...plan.records.bangumi, ...plan.entities.bangumi].find(
         (candidate) => candidate.key === source.externalId,
       );
-      if (!resolver || !row) return;
+      if (!row) return;
       const converted = bindSourceRegistration(selectedFamilyAdmission('bangumi'), {
         source: source.sourceAlias,
         converterRevision: crossMediaBangumiRevision,
@@ -3374,8 +3372,8 @@ export async function seedCrossMedia(
       const intent = converted.mediaImportIntents?.[0];
       if (!intent) return;
       try {
-        await resumeSelectedCover(
-          { bindings: importer.session.bindings, resolver },
+        const receipt = await resumeSelectedCover(
+          { bindings: importer.session.bindings, resolver: importerOptions.mediaResolver },
           {
             owner: { source: source.sourceAlias, external_id: source.externalId },
             containerId,
@@ -3383,6 +3381,7 @@ export async function seedCrossMedia(
             signal: AbortSignal.timeout(30_000),
           },
         );
+        if (receipt) return { ...source, containerId, ...receipt };
       } catch (error) {
         // The resolver wrapper records refusals and unknown deliveries before they surface; other errors throw.
         if (!(error instanceof ImportTransportError)) throw error;
@@ -3398,8 +3397,8 @@ export async function seedCrossMedia(
         mediaOutcomes.push({ ...source, status: source.sourceStatus, containerId });
         continue;
       }
-      if (containerId && !mediaAttempts.has(recordKey)) await resumeSelectedMedia(source, containerId);
-      const prior = mediaAttempts.get(recordKey);
+      const recovered =
+        containerId && !mediaAttempts.has(recordKey) ? await resumeSelectedMedia(source, containerId) : undefined;
       if (containerId) {
         try {
           const fence = await port.fence({
@@ -3417,63 +3416,17 @@ export async function seedCrossMedia(
           continue;
         }
       }
-      const mediaId = containerId ? importer.session.bindings.mediaIds(owner).cover : undefined;
-      let storedIntent: CrossMediaMediaOutcome | undefined;
-      if (containerId && mediaId) {
-        const row = [...plan.records.bangumi, ...plan.entities.bangumi].find(
-          (candidate) => candidate.key === source.externalId,
-        );
-        if (row) {
-          const converted = bindSourceRegistration(selectedFamilyAdmission('bangumi'), {
-            source: source.sourceAlias,
-            converterRevision: crossMediaBangumiRevision,
-          }).convert(
-            {
-              external_id: row.key,
-              record_revision: row.revision ?? 'unversioned',
-              record: row.payload,
-            },
-            { source: source.sourceAlias, subjectId: containerId },
-          ) as {
-            mediaImportIntents?: Array<{
-              credit: CrossMediaMediaOutcome['credit'];
-              provenance: CrossMediaMediaOutcome['provenance'];
-            }>;
-          };
-          const intent = converted.mediaImportIntents?.[0];
-          if (intent)
-            storedIntent = {
-              ...source,
-              status: 'available',
-              containerId,
-              mediaId,
-              ...(intent.credit ? { credit: intent.credit } : {}),
-              ...(intent.provenance ? { provenance: intent.provenance } : {}),
-            };
-        }
-      }
-      const outcome = prior ??
-        storedIntent ?? {
-          ...source,
-          status: 'unavailable' as const,
-          containerId,
-          code: 'media-intent-not-delivered' as const,
-        };
-      if (outcome.status === 'available' && (!mediaId || outcome.mediaId !== mediaId)) {
-        const {
-          mediaId: _mediaId,
-          mediaKey: _mediaKey,
-          credit: _credit,
-          provenance: _provenance,
-          ...sourceEvidence
-        } = outcome;
-        mediaOutcomes.push({
-          ...sourceEvidence,
-          status: 'unavailable',
-          containerId,
-          code: 'media-intent-not-delivered',
-        });
-      } else mediaOutcomes.push(outcome);
+      let outcome = recovered ?? mediaAttempts.get(recordKey);
+      if (
+        outcome?.status === 'available' &&
+        (!outcome.mediaKey ||
+          !outcome.mediaId ||
+          importer.session.bindings.mediaIds(owner, outcome.mediaKey).cover !== outcome.mediaId)
+      )
+        outcome = undefined;
+      mediaOutcomes.push(
+        outcome ?? { ...source, status: 'unavailable', containerId, code: 'media-intent-not-delivered' },
+      );
     }
     return {
       status:

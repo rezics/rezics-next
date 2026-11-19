@@ -693,15 +693,19 @@ export class RecordBindings {
     return entry?.accepted === null && (JSON.parse(entry.bytes) as MediaImportRequest).provenance.digest === digest;
   }
 
-  /** The current job contributes a cover ID only after a real matching available snapshot. */
-  mediaIds(input: Owner): { cover?: string } {
+  /** Read available media for the bound container, optionally selecting an exact sealed intent. */
+  mediaIds(input: Owner, key?: string): { cover?: string } {
     const o = ownerInput(input);
+    if (key !== undefined) requestKey(o, key);
     const binding = this.binding(o);
-    if (binding?.state !== 'bound' || !binding.cover_key) return {};
-    const entry = this.mediaEntry(o, binding.cover_key);
+    const selectedKey = key ?? binding?.cover_key;
+    if (binding?.state !== 'bound' || !selectedKey) return {};
+    const entry = this.mediaEntry(o, selectedKey);
     if (!entry?.status) return {};
     const status = JSON.parse(entry.status) as MediaImportStatus;
-    return status.media.state === 'available' ? { cover: status.media.id } : {};
+    return status.media.state === 'available' && status.media.containerId === binding.subject
+      ? { cover: status.media.id }
+      : {};
   }
 
   /** Finalize this instance's statements. Never closes the caller's DB or deletes durable observations. */
