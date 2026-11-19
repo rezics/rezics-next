@@ -11,7 +11,7 @@ import {
   send,
   session,
 } from './creation-page-fixture';
-import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { OrganizationDeleteContent } from '../src/organization-delete-content';
 import { m } from '../src/paraglide/messages.js';
 import { readOrganizationDeleteUnknown, storeOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
@@ -87,8 +87,8 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
   expect(page.calls).toHaveLength(2);
 
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: organization })));
-  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
-  expect(page.host.textContent).toContain('cleanup completion');
+  expect(page.host.textContent).toContain('Deletion was committed.');
+  expect(page.host.textContent).toContain('Cleanup is still pending.');
   expect(page.host.textContent).not.toContain('Private organization');
   expect(page.host.querySelector('form')).toBeNull();
   expect(readOrganizationDeleteUnknown(organization).kind).toBe('absent');
@@ -96,7 +96,7 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
   current = { kind: 'unavailable' };
   await flush(() => page.host.querySelector<HTMLButtonElement>('#organization-delete-return-review')!.click());
   expect(reads).toBe(3);
-  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
+  expect(page.host.textContent).toContain('Deletion was committed.');
   expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
   expect(page.calls).toHaveLength(2);
 
@@ -106,7 +106,7 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
   expect(page.host.textContent).toContain(replacementHuman);
   expect(page.host.textContent).toContain('@current-name');
   expect(page.host.textContent).not.toContain('@private-name');
-  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
+  expect(page.host.textContent).toContain('Deletion was committed.');
   expect(page.host.querySelector<HTMLInputElement>('#organization-delete-confirmation')!.value).toBe('');
   expect(page.calls).toHaveLength(2);
 });
@@ -136,7 +136,7 @@ test('retained uncertainty stays read-only and guarded through denied, successfu
   const review = () => page.host.querySelector<HTMLButtonElement>('#organization-delete-return-review')!.click();
   await flush(review);
   expect(reads).toBe(1);
-  expect(page.host.textContent).toContain('Current deletion review was denied');
+  expect(page.host.textContent).toContain('Deletion review was denied');
   expect(page.host.textContent).toContain('The deletion result is unknown');
   expect(page.host.querySelector('form')).toBeNull();
   const unload = new dom.Event('beforeunload', { cancelable: true });
@@ -154,7 +154,7 @@ test('retained uncertainty stays read-only and guarded through denied, successfu
   advice = ready(replacementHuman, 'replacement-private-name');
   await flush(review);
   expect(reads).toBe(3);
-  expect(page.host.textContent).toContain('account, organization or request changed');
+  expect(page.host.textContent).toContain(m.auth_organization_delete_recovery_changed());
   expect(page.host.textContent).not.toContain(replacementHuman);
   expect(page.host.textContent).not.toContain('replacement-private-name');
   expect(readOrganizationDeleteUnknown(organization)).toEqual(saved);

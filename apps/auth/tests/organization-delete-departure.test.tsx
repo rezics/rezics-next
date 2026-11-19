@@ -19,7 +19,7 @@ import {
   session,
 } from './creation-page-fixture';
 import { m } from '../src/paraglide/messages.js';
-import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { OrganizationDeleteContent } from '../src/organization-delete-content';
 import { readOrganizationDeleteStepUp, readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
 

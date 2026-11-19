@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { creationFixture, button, dom, flush, leave, open, session } from './creation-page-fixture';
-import { NewOrganizationPage } from '../src/routes/organizations.new';
+import { NewOrganizationPage } from '../src/organization-create-page';
 import { storePendingAccountOperationStepUp } from '../src/account-operation-step-up';
 import { storePendingOrganizationHandle } from '../src/account-operations';
 creationFixture();
@@ -25,31 +25,21 @@ test('return and read Retry make bounded session reads but no approval or execut
   );
   expect(page.host.textContent).toContain('creation result is still unknown');
   expect(page.host.textContent).not.toContain('private-team');
-  expect(button(page.host, 'Check current advice')).not.toBeNull();
+  expect(button(page.host, 'Check current status')).toBeDefined();
   expect(button(page.host, 'Retry this creation')).toBeUndefined();
 
-  const originalFetch = globalThis.fetch;
-  let sessionReads = 0;
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input) === '/session') sessionReads++;
-    return originalFetch(input, init);
-  }) as typeof fetch;
-  try {
-    await flush(() => button(page.host, 'Check current advice')!.click());
-    expect(sessionReads).toBe(1);
-    expect(page.calls).toHaveLength(0);
-    expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('private-team');
+  await flush(() => button(page.host, 'Check current status')!.click());
+  expect(page.sessionReads).toHaveLength(1);
+  expect(page.calls).toHaveLength(0);
+  expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('private-team');
 
-    await flush(() => {
-      leave();
-      expect(page.host.querySelector('input')).toBeNull();
-      const pageshow = new dom.Event('pageshow');
-      Object.defineProperty(pageshow, 'persisted', { value: true });
-      window.dispatchEvent(pageshow as unknown as Event);
-    });
-    expect(sessionReads).toBe(2);
-    expect(page.calls).toHaveLength(0);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  await flush(() => {
+    leave();
+    expect(page.host.querySelector('input')).toBeNull();
+    const pageshow = new dom.Event('pageshow');
+    Object.defineProperty(pageshow, 'persisted', { value: true });
+    window.dispatchEvent(pageshow as unknown as Event);
+  });
+  expect(page.sessionReads).toHaveLength(2);
+  expect(page.calls).toHaveLength(0);
 });

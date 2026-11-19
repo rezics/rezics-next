@@ -18,7 +18,7 @@ import {
   send,
   session,
 } from './creation-page-fixture';
-import { NewOrganizationPage } from '../src/routes/organizations.new';
+import { NewOrganizationPage } from '../src/organization-create-page';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
 import { readPendingOrganizationHandle } from '../src/account-operations';
 creationFixture();
