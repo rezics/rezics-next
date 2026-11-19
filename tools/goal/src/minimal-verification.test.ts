@@ -14,15 +14,15 @@ const brief = {
   markdown: '',
 } as unknown as Parameters<typeof workerCheckProtocol>[1];
 
-test('minimal verification mode replaces acceptance checks with a local type check', () => {
+test('minimal verification uses owning workspace checks and retains compiler placement', () => {
   const state = mkdtempSync(join(tmpdir(), 'goal-minimal-'));
   try {
     writeFileSync(join(state, 'verification-mode'), 'minimal\n');
     const protocol = workerCheckProtocol(state, brief, state);
     expect(protocol).toContain('Verification is minimal');
-    expect(protocol).toContain('typecheck');
-    expect(protocol).toContain('compiler database');
-    expect(protocol).toContain('env -u KERNEL_CHECK_REMOTE');
+    expect(protocol).toContain('bun run --cwd <workspace> typecheck');
+    expect(protocol).toContain('Kernel/Auth may use compiler DB/host');
+    expect(protocol).toContain("don't unset KERNEL_CHECK_REMOTE or force local");
     expect(protocol).not.toContain('Run the acceptance command once');
     expect(protocol).not.toContain('--wait <id>`, poll');
   } finally {
@@ -30,12 +30,12 @@ test('minimal verification mode replaces acceptance checks with a local type che
   }
 });
 
-test('without the mode file the normal acceptance protocol is unchanged', () => {
+test('the governed attempt stays minimal without a mode file or with full mode requested', () => {
   const state = mkdtempSync(join(tmpdir(), 'goal-minimal-'));
   try {
-    expect(workerCheckProtocol(state, brief, state)).toContain('run your acceptance command once');
+    expect(workerCheckProtocol(state, brief, state)).toContain('Verification is minimal');
     writeFileSync(join(state, 'verification-mode'), 'full\n');
-    expect(workerCheckProtocol(state, brief, state)).not.toContain('Verification is minimal');
+    expect(workerCheckProtocol(state, brief, state)).toContain('Verification is minimal');
   } finally {
     rmSync(state, { recursive: true, force: true });
   }
@@ -69,7 +69,7 @@ test('source-only fresh launches override the enabled minimal budget and restore
     const rendered = renderWorkerPrompt({ task, mainCheckout: '/missing-main', stateDirectory: state });
     expect(Object.keys(rendered.manifest.conditions)).toEqual(['source-only']);
     expect(rendered.deferredAcceptance).toEqual(['browser']);
-    expect(rendered.prompt).toContain('do not run a new optional typecheck');
+    expect(rendered.prompt).toContain('defer tests, typing, builds, browser captures and worker-check commands');
     expect(rendered.prompt).not.toContain('Typecheck each changed workspace');
     expect(rendered.prompt).not.toContain('run your acceptance command once');
     expect(rendered.prompt).not.toContain("after the wrapper's own rerun");
@@ -85,7 +85,7 @@ test('source-only retry and continuation launches retain source evidence without
     const prompt = workerPrompt(task, state, undefined, [], '/missing-main', undefined, state);
     expect(prompt).toContain(manifest);
     expect(prompt).toContain('.temp/continuation/<short-name>.md');
-    expect(prompt).toContain('Do not rerun commands from a retry manifest');
+    expect(prompt).toContain('Do not rerun retry-manifest commands for another verdict');
     expect(prompt).not.toContain('Rerun the failing command once');
     expect(prompt).not.toContain('until it is built and its checks pass');
     expect(prompt).not.toContain('type-checking part');
@@ -101,7 +101,7 @@ test('source-only wake rendering keeps the exact delivered failure and outstandi
     expect(prompt).toContain(result);
     expect(prompt).toContain('Missing, unknown, failed or running evidence is never a pass');
     expect(prompt).toContain('Return waiting only for a still-running check this attempt already owns');
-    expect(prompt).toContain('A finished check must not be returned as waiting');
+    expect(prompt).toContain('Finished checks are not waiting');
     expect(prompt).toContain('an old pass cannot prove changed source');
     expect(prompt).not.toContain('Typecheck each changed workspace');
   });
