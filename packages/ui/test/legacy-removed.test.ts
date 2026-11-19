@@ -41,7 +41,7 @@ const arkOnly = [
 ];
 
 /** Legacy components whose control shadcn provides under another name. */
-const renamed = ['password-input', 'skip-nav', 'menu', 'segment-group', 'circular-progress', 'autocomplete'];
+const renamed = ['password-input', 'skip-nav', 'segment-group', 'circular-progress', 'autocomplete'];
 
 const legacy = [
   ...new Set([
@@ -68,13 +68,20 @@ const workspaceSources = () =>
     .split('\n')
     .filter((file) => /\.(tsx?|mts|jsx?|mjs)$/.test(file) && existsSync(join(repository, file)));
 
+const scanners = { ts: new Bun.Transpiler({ loader: 'ts' }), tsx: new Bun.Transpiler({ loader: 'tsx' }) };
+
 function importsOf(file: string): string[] {
   const code = readFileSync(join(repository, file), 'utf8');
   try {
-    return new Bun.Transpiler({ loader: file.endsWith('x') ? 'tsx' : 'ts' }).scanImports(code).map((item) => item.path);
+    return scanners[file.endsWith('x') ? 'tsx' : 'ts'].scanImports(code).map((item) => item.path);
   } catch {
     return [...code.matchAll(/(?:from|import\()\s*['"]([^'"]+)['"]/g)].map((match) => match[1]!);
   }
+}
+
+let scanned: Map<string, string[]> | undefined;
+function workspaceImports(): ReadonlyMap<string, string[]> {
+  return (scanned ??= new Map(workspaceSources().map((file) => [file, importsOf(file)])));
 }
 
 test('packages/ui exports no legacy component that has a shadcn counterpart, and no workspace imports one', () => {
@@ -94,8 +101,8 @@ test('packages/ui exports no legacy component that has a shadcn counterpart, and
   expect(legacy.filter((name) => existsSync(join(components, `${name}.stories.tsx`)))).toEqual([]);
 
   const importers: string[] = [];
-  for (const file of workspaceSources()) {
-    for (const path of importsOf(file)) {
+  for (const [file, imports] of workspaceImports()) {
+    for (const path of imports) {
       let name: string | undefined;
       const alias = path.match(/^@rezics\/ui\/([^/]+)$/);
       if (alias) name = alias[1];
@@ -110,16 +117,9 @@ test('packages/ui exports no legacy component that has a shadcn counterpart, and
 
   // What the site still imports stays, with its story where it renders something.
   for (const name of keptLegacy) expect(existsSync(join(components, `${name}.tsx`)), name).toBe(true);
-  for (const name of [
-    'cover',
-    'reactions',
-    'content-actions',
-    'document-body',
-    'report-dialog',
-    'rating',
-    'media-image',
-  ])
+  for (const name of ['cover', 'reactions', 'content-actions', 'menu', 'report-dialog', 'rating', 'media-image'])
     expect(existsSync(join(components, `${name}.tsx`)), name).toBe(true);
+  expect(existsSync(join(repository, 'packages/editor/src/components/document-body.tsx'))).toBe(true);
 });
 
 const probe = mkdtempSync(join(tmpdir(), 'rezics-ui-legacy-removed-'));
@@ -174,5 +174,8 @@ test('packages/ui does not depend on @ark-ui/react and no source file in the wor
     Object.keys((manifest[field] ?? {}) as Record<string, string>).some((name) => name.startsWith('@ark-ui/')),
   );
   expect(declared).toEqual([]);
-  expect(workspaceSources().filter((file) => importsOf(file).some((path) => path.startsWith('@ark-ui/')))).toEqual([]);
+  const arkImporters = [...workspaceImports()]
+    .filter(([, imports]) => imports.some((path) => path.startsWith('@ark-ui/')))
+    .map(([file]) => file);
+  expect(arkImporters).toEqual([]);
 });
