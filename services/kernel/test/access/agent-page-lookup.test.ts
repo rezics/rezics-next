@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { startAccountIdentityPublication } from '../support/identity-work-process.ts';
+import { publishVerifiedAgentFixture } from '../support/verified-agent-fixture.ts';
 import { createReceiptTestPool } from '../support/receipt-test-pool.ts';
 import { AgentVerificationPageConflictError, writeAgentVerificationPage } from '../../src/access/agent-verification.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -12,12 +17,16 @@ const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const accountRoute = 0x5234;
 const subjectRoute = 0x6543;
-const routeKey = new Uint8Array(32).fill(37);
+const routeKey = Buffer.alloc(32, 37);
 const clock = () => new Date();
 let admin: Pool;
 let databaseName: string;
 let pool: Pool;
 let kernel: ReturnType<typeof createKernel>;
+let verification: Awaited<ReturnType<typeof publishVerifiedAgentFixture>>;
+const verifiedSubject = newId(subjectRoute);
+const verifiedAccountId = newId(accountRoute);
+const invalidSubjects: string[] = [];
 
 type AccountSeed = {
   id: string;
@@ -70,23 +79,33 @@ beforeAll(async () => {
   pool = createReceiptTestPool(target.toString());
   kernel = createKernel({ pool, routeKey, clock });
 
-  const verifiedSubject = newId(subjectRoute);
-  const verifiedAccountId = newId(accountRoute);
-  const verifiedReceipt = newId(0);
-  await pool.query(
-    `INSERT INTO access.account
-      (route, account_id, kind, handle, display_name, state, transaction_id,
-       agent_verified, agent_subject_id, agent_verification_receipt_id)
-     VALUES ($1, $2, 'actor', 'agent_page_person', 'Agent Page Person', 'active', $2, true, $3, $4)`,
-    [accountRoute, verifiedAccountId, verifiedSubject, verifiedReceipt],
-  );
+  await bootstrapRelease(pool, bundledRelease);
+  await seedAccount({ id: verifiedAccountId, handle: 'agent_page_person' });
+  await ensureAccountAgent(pool, {
+    account: verifiedAccountId,
+    kind: 'person',
+    name: 'Agent Page Person',
+  });
+  const publication = await startAccountIdentityPublication({
+    databaseUrl: target.toString(),
+    routeKey: routeKey.toString('base64url'),
+    searchPrefix: `agent-page-${randomUUID().slice(0, 8)}-`,
+    openSearchUrl: process.env.OPENSEARCH_URL,
+  });
+  try {
+    verification = await publishVerifiedAgentFixture(pool, publication.workClient, verifiedAccountId, verifiedSubject, {
+      en: 'Catalogue person',
+    });
+  } finally {
+    await publication.stop();
+  }
+
   const handleRoute = createHash('sha256').update('agent_page_person').digest().readUInt16BE(0);
   await pool.query(
     `INSERT INTO access.handle_claim(route, normalized_handle, account_id, state, transaction_id)
      VALUES ($1, 'agent_page_person', $2, 'active', $2)`,
     [handleRoute, verifiedAccountId],
   );
-  await seedPointer(verifiedSubject, verifiedAccountId, verifiedReceipt);
 
   const unverifiedAccountId = newId(accountRoute);
   const unverifiedSubject = newId(subjectRoute);
@@ -114,7 +133,10 @@ beforeAll(async () => {
     subjectId: deletedSubject,
   });
   await seedPointer(deletedSubject, deletedAccountId);
-}, 60_000);
+  const missingAccountSubject = newId(subjectRoute);
+  await seedPointer(missingAccountSubject, newId(accountRoute));
+  invalidSubjects.push(unverifiedSubject, staleSubject, deletedSubject, missingAccountSubject);
+}, 240_000);
 
 afterAll(async () => {
   try {
@@ -129,14 +151,7 @@ afterAll(async () => {
 }, 30_000);
 
 test('verified agent subject lookup returns the same public identity as its handle', async () => {
-  const { rows } = await pool.query<{ subject_id: string }>(
-    `SELECT subject_id::text FROM access.agent_page WHERE route = $1 AND account_id = (
-       SELECT account_id FROM access.handle_claim WHERE normalized_handle = 'agent_page_person' AND state = 'active'
-     )`,
-    [subjectRoute],
-  );
-  const subjectId = rows[0]!.subject_id;
-  const bySubject = await get(`/v1/accounts?agent=${subjectId}`);
+  const bySubject = await get(`/v1/accounts?agent=${verifiedSubject}`);
   const byHandle = await get('/v1/accounts?handle=agent_page_person');
 
   expect(bySubject).toEqual(byHandle);
@@ -145,55 +160,50 @@ test('verified agent subject lookup returns the same public identity as its hand
     handle: 'agent_page_person',
     state: 'active',
     verified: true,
-    subject: null,
+    subject: { id: verifiedSubject, label: 'Catalogue person', type: 'schema:Person' },
   });
 });
 
-test('unknown, unverified, stale and deleted agent pointers answer like an unknown handle', async () => {
-  const { rows: subjects } = await pool.query<{ subject_id: string }>(
-    `SELECT page.subject_id::text
-     FROM access.agent_page AS page
-     LEFT JOIN access.account AS account
-       ON account.route = $2 AND account.account_id = page.account_id
-     WHERE page.route = $1
-       AND (account.account_id IS NULL OR account.state = 'deleted' OR NOT account.agent_verified
-         OR account.agent_subject_id IS DISTINCT FROM page.subject_id)
-     ORDER BY page.subject_id`,
-    [subjectRoute, accountRoute],
-  );
-  const unknown = newId(subjectRoute);
-  expect(subjects.map(({ subject_id }) => subject_id)).not.toContain(unknown);
+test('unknown, unverified, stale, deleted and missing-account agent pointers answer like an unknown handle', async () => {
   const unknownHandle = await get('/v1/accounts?handle=agent_page_unknown');
   expect(unknownHandle).toEqual({ status: 200, body: { accounts: [], next: null } });
 
-  for (const subjectId of [unknown, ...subjects.map(({ subject_id }) => subject_id)]) {
-    const result = await get(`/v1/accounts?agent=${subjectId}`);
-    expect(result).toEqual(unknownHandle);
+  for (const subjectId of [newId(subjectRoute), ...invalidSubjects]) {
+    expect(await get(`/v1/accounts?agent=${subjectId}`)).toEqual(unknownHandle);
   }
 });
 
 test('replayed pointer writes converge and a subject already naming another account fails typed', async () => {
-  const subjectId = newId(subjectRoute);
-  const accountId = newId(accountRoute);
-  const request = {
-    id: newId(0),
-    accountId,
-    accountKind: 'actor' as const,
-    requestedBy: newId(accountRoute),
-    catalogueSubjectId: subjectId,
-    state: 'approving' as const,
-    decisionReceiptId: newId(0),
-  };
-  const input = { ...request, receiptId: request.decisionReceiptId };
-  await writeAgentVerificationPage(pool, input);
-  await writeAgentVerificationPage(pool, input);
-  const saved = await pool.query<{ count: string }>(
-    'SELECT count(*)::text AS count FROM access.agent_page WHERE route = $1 AND subject_id = $2',
-    [subjectRoute, subjectId],
-  );
-  expect(saved.rows[0]!.count).toBe('1');
+  await writeAgentVerificationPage(pool, verification);
+  await writeAgentVerificationPage(pool, verification);
+  const readPointer = async () =>
+    (
+      await pool.query<{ account_id: string; verification_receipt_id: string }>(
+        'SELECT account_id, verification_receipt_id FROM access.agent_page WHERE route = $1 AND subject_id = $2',
+        [subjectRoute, verifiedSubject],
+      )
+    ).rows;
+  expect(await readPointer()).toEqual([
+    {
+      account_id: verifiedAccountId,
+      verification_receipt_id: verification.receiptId,
+    },
+  ]);
 
-  await expect(
-    writeAgentVerificationPage(pool, { ...request, id: newId(0), accountId: newId(accountRoute), receiptId: newId(0) }),
-  ).rejects.toBeInstanceOf(AgentVerificationPageConflictError);
+  const otherAccountId = newId(accountRoute);
+  const otherReceiptId = newId(0);
+  await pool.query('DELETE FROM access.agent_page WHERE route = $1 AND subject_id = $2', [
+    subjectRoute,
+    verifiedSubject,
+  ]);
+  await seedPointer(verifiedSubject, otherAccountId, otherReceiptId);
+  await expect(writeAgentVerificationPage(pool, verification)).rejects.toBeInstanceOf(
+    AgentVerificationPageConflictError,
+  );
+  expect(await readPointer()).toEqual([
+    {
+      account_id: otherAccountId,
+      verification_receipt_id: otherReceiptId,
+    },
+  ]);
 });
