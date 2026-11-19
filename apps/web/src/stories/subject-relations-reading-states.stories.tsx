@@ -11,6 +11,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { defaultReader } from '../subject/reader';
 import { PatternStory } from './page';
+import { expectSubjectPointerTarget } from './subject-pointer-target';
 
 type State = 'empty' | 'unavailable' | 'populated';
 function ReadingPage({ state }: { state: State }) {
@@ -93,13 +94,12 @@ const meta = {
     const region = heading.closest<HTMLElement>('[data-slot="relations-view"]')!;
     await expect(within(region).getAllByRole('heading', { level: 1 })).toHaveLength(1);
     if (args.state === 'populated') {
-      await expect(within(region).queryByRole('alert')).toBeNull();
-      await expect(within(region).queryByRole('status')).toBeNull();
+      await expect(region.querySelector(':scope > [role="alert"], :scope > [role="status"]')).toBeNull();
       await expect(within(region).getAllByRole('article')).toHaveLength(links.links.length);
     } else
-      await expect(within(region).getByRole(args.state === 'unavailable' ? 'alert' : 'status')).toHaveTextContent(
-        args.state === 'unavailable' ? m.subject_section_failed() : m.subject_relation_empty_page(),
-      );
+      await expect(
+        region.querySelector(`:scope > [role="${args.state === 'unavailable' ? 'alert' : 'status'}"]`),
+      ).toHaveTextContent(args.state === 'unavailable' ? m.subject_section_failed() : m.subject_relation_empty_page());
     const anchor = region.querySelector<HTMLAnchorElement>('[data-slot="next-page"], [data-slot="restart-page"]');
     if (!anchor) {
       await expect(args.state).toBe('populated');
@@ -109,11 +109,17 @@ const meta = {
     if (args.state === 'empty')
       await expect(new URL(anchor.href).searchParams.get('cursor')).toBe('opaque:/+?=&% 日本語#');
     else await expect(new URL(anchor.href).searchParams.has('cursor')).toBe(false);
+    await expect(anchor.getBoundingClientRect().height).toBe(28);
+    await expectSubjectPointerTarget(anchor);
     // Stress the actual native control without changing its destination or the locale catalogue.
     anchor.textContent += ` / 次の関係 / ${'WeitereBeziehungen'.repeat(12)}`;
-    await expect(anchor.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-    await expect(anchor.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-    await expect(anchor.scrollWidth).toBeLessThanOrEqual(anchor.clientWidth + 1);
+    await expect(anchor.getBoundingClientRect().height).toBeGreaterThan(28);
+    const label = anchor.ownerDocument.createRange();
+    label.selectNodeContents(anchor);
+    const text = label.getBoundingClientRect();
+    const box = anchor.getBoundingClientRect();
+    await expect(text.left).toBeGreaterThanOrEqual(box.left);
+    await expect(text.right).toBeLessThanOrEqual(box.right);
     await expect(anchor.getBoundingClientRect().right).toBeLessThanOrEqual(region.getBoundingClientRect().right + 1);
     anchor.focus();
     await userEvent.tab({ shift: true });

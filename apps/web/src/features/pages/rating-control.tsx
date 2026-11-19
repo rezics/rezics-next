@@ -51,7 +51,7 @@ function formResultFailure(locale: string, result: SubjectRatingFormHint | undef
 }
 
 const actionClassName =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export async function applyOptimisticRatingChange(input: {
   queryClient: ReturnType<typeof useQueryClient>;
@@ -284,7 +284,7 @@ export function RatingControlView({
           step={question.scale.displayStep}
           value={[sliderValue]}
         >
-          <Slider.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50">
+          <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
             <Slider.Track
               data-slot="slider-track"
               className="relative h-1 w-full grow overflow-hidden rounded-md bg-muted select-none"
@@ -296,14 +296,14 @@ export function RatingControlView({
               aria-valuetext={valueText}
               aria-describedby={scaleId}
               data-slot="slider-thumb"
-              className="relative block size-3 shrink-0 rounded-md border border-ring bg-white ring-ring/30 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-2 focus-visible:ring-2 focus-visible:outline-hidden active:ring-2 disabled:pointer-events-none disabled:opacity-50"
+              className="relative block size-3 shrink-0 rounded-md border border-ring bg-white ring-ring/30 transition-[color,box-shadow] select-none after:absolute after:-inset-4 hover:ring-2 focus-visible:ring-2 focus-visible:outline-hidden active:ring-2 disabled:pointer-events-none disabled:opacity-50"
             />
           </Slider.Control>
         </Slider.Root>
         <p id={scaleId} className="text-xs text-muted-foreground tabular-nums">
           {m.rating_native_scale({ min: displayNumber.min, max: displayNumber.max, step: displayNumber.step }, options)}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-5">
           <Button
             className={actionClassName}
             disabled={nativeFallback && (pending || value === null || value === state.units)}
@@ -383,7 +383,7 @@ export function RatingRecoveryView({
             )}
       </p>
       <p className="text-xs text-muted-foreground wrap-anywhere">{original.question.meaning}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-5">
         <Button className={actionClassName} disabled={busy} onClick={onRetry} type="button">
           {original.units === null
             ? m.subject_rating_control_retry_clear({}, options)
@@ -458,7 +458,7 @@ function NoScriptForm({
       <form
         action={returnTo}
         aria-labelledby={labelId}
-        className="mt-3 flex flex-wrap items-center gap-2"
+        className="mt-3 flex flex-wrap items-center gap-5"
         id={formId}
         method="post"
       >

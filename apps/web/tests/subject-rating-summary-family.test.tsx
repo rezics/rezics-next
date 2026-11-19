@@ -279,7 +279,7 @@ test('supplied and selected Realm summaries share semantic headings, useful figu
     expect(remove.type).toBe('button');
     expect(remove.textContent).toBe(m.rating_population_remove({ name: realms[2]!.name }, options));
     expect(remove.closest('a')).toBeNull();
-    for (const token of ['min-h-11', 'min-w-11', 'focus-visible:outline-2'])
+    for (const token of ['hitbox-[9px]', 'min-h-7', 'min-w-7', 'focus-visible:outline-2'])
       expect(remove.classList.contains(token)).toBe(true);
     const beforeRemove = requests.length;
     await act(async () => {

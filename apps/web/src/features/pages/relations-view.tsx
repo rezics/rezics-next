@@ -22,7 +22,7 @@ export type RelationsViewData = {
 
 const PAGE_LIMIT = 100;
 const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /**
  * The reads of the Relations view: the subject's overview page, which carries the subject for the frame and the
@@ -129,9 +129,9 @@ export function RelationsView({
       ) : (
         groups.map(({ group, members }) => (
           <div key={group} data-slot="relation-group" data-group={group} className="min-w-0 space-y-3">
-            {groups.length > 1 && (
-              <h2 className="text-lg font-semibold tracking-tight">{GROUP_TITLES[group](options)}</h2>
-            )}
+            <h2 className={groups.length > 1 ? 'text-lg font-semibold tracking-tight' : 'sr-only'}>
+              {GROUP_TITLES[group](options)}
+            </h2>
             <CoverList items={members} value={{ ...value, subject: subject.id }} label={heading} />
           </div>
         ))

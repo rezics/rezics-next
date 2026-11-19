@@ -11,6 +11,7 @@ import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { SubjectViewError } from '../subject/view-error';
+import { expectSubjectPointerTarget } from './subject-pointer-target';
 
 const entry =
   '/subjects/example/%E6%9C%AC%20%26%20book/relations?cursor=refused%2Bcursor&realm=reading&node=related&context=review%2Fnotes#selection';
@@ -72,7 +73,7 @@ const meta = {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', {
       level: 1,
-      name: args.errorMessage === 'dependency_unavailable' ? m.subject_view_changed() : m.subject_view_unavailable(),
+      name: m.subject_view_unavailable(),
     });
     const retry = canvas.getByRole('button', { name: m.subject_view_retry() });
     const restart = canvas.getByRole('link', { name: m.subject_view_restart() });
@@ -80,19 +81,20 @@ const meta = {
     destination.searchParams.delete('cursor');
     await expect(restart).toHaveAttribute('href', `${destination.pathname}${destination.search}${destination.hash}`);
     for (const target of [retry, restart]) {
-      await expect(target.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      await expect(target.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      await expect(target.getBoundingClientRect().height).toBe(28);
+      await expectSubjectPointerTarget(target);
     }
     const retryBox = retry.getBoundingClientRect();
     const restartBox = restart.getBoundingClientRect();
-    await expect(restartBox.left >= retryBox.right + 12 || restartBox.top >= retryBox.bottom + 12).toBe(true);
+    await expect(restartBox.left >= retryBox.right + 20 || restartBox.top >= retryBox.bottom + 20).toBe(true);
     for (let step = 0; step < 10 && document.activeElement !== retry; step += 1) await userEvent.tab();
     await expect(retry).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await expect(args.onReset).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(args.onRead).toHaveBeenCalledTimes(2));
     await expect(args.onRead).toHaveBeenLastCalledWith(
       expect.objectContaining({ searchStr: new URL(entry, 'https://rezics.test').search }),
     );
+    await expect(args.onReset).not.toHaveBeenCalled();
     const restartAfterReset = await canvas.findByRole('link', { name: m.subject_view_restart() });
     for (let step = 0; step < 10 && document.activeElement !== restartAfterReset; step += 1) await userEvent.tab();
     await expect(restartAfterReset).toHaveFocus();
@@ -101,7 +103,7 @@ const meta = {
     await waitFor(() =>
       expect(args.onRead).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          pathname: internal.pathname,
+          href: `${internal.pathname}${internal.search}${internal.hash}`,
           searchStr: internal.search,
           hash: internal.hash.slice(1),
         }),

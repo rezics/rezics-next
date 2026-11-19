@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PageStory, PatternStory, pagePaths, pageReady } from '../page';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expectSubjectPointerTarget } from '../subject-pointer-target';
 import { RatingControlView, RatingRecoveryView, type RatingAnswerRecovery } from '../../features/pages/rating-control';
 import type { QuestionBoundRatingInput } from '../../features/pages/rating-actions';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
@@ -75,17 +76,23 @@ function Vote({ failed = false, pending = false }: { failed?: boolean; pending?:
 
 async function expectComfortableAction(action: HTMLElement) {
   const bounds = action.getBoundingClientRect();
-  await expect(bounds.height).toBeGreaterThanOrEqual(44);
-  await expect(bounds.width).toBeGreaterThanOrEqual(44);
+  await expect(bounds.height).toBe(28);
+  if (!action.matches(':disabled')) await expectSubjectPointerTarget(action);
   await expect(getComputedStyle(action).whiteSpace).toBe('normal');
 
   // Exercise the current translated copy in a narrow column without replacing its accessible name.
   const maxWidth = action.style.maxWidth;
   try {
     action.style.maxWidth = '4rem';
-    await expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth);
-    await expect(action.scrollHeight).toBeLessThanOrEqual(action.clientHeight);
-    await expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const box = action.getBoundingClientRect();
+    const label = action.ownerDocument.createRange();
+    label.selectNodeContents(action);
+    const text = label.getBoundingClientRect();
+    await expect(text.left).toBeGreaterThanOrEqual(box.left);
+    await expect(text.right).toBeLessThanOrEqual(box.right);
+    await expect(text.top).toBeGreaterThanOrEqual(box.top);
+    await expect(text.bottom).toBeLessThanOrEqual(box.bottom);
+    await expect(box.height).toBeGreaterThanOrEqual(28);
   } finally {
     action.style.maxWidth = maxWidth;
   }
@@ -157,6 +164,7 @@ export const SaveClearZero: Story = {
     await userEvent.keyboard('{Home}');
     await userEvent.tab();
     await expectKeyboardFocus(save);
+    await expectSubjectPointerTarget(save);
     await userEvent.keyboard('{Enter}');
     await expect(clear).toBeEnabled();
     await expect(slider).toHaveAttribute('aria-valuenow', '0');
@@ -165,6 +173,7 @@ export const SaveClearZero: Story = {
     slider.focus();
     await userEvent.tab();
     await expectKeyboardFocus(clear);
+    await expectSubjectPointerTarget(clear);
     await userEvent.keyboard('{Enter}');
     await expect(view.getByText(m.subject_rating_control_unrated())).toBeVisible();
   },
@@ -376,11 +385,15 @@ export const ManySuppliedContexts: Story = {
   render: () => <Figures data={suppliedContexts} />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.click(view.getByText(m.subject_ratings_comparisons()));
+    const comparisons = view.getByText(m.subject_ratings_comparisons());
+    await expect(comparisons.getBoundingClientRect().height).toBe(28);
+    await expectSubjectPointerTarget(comparisons);
+    await userEvent.click(comparisons);
     await expect(canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(5);
     await expect(view.queryByText('Duplicate Global must be omitted')).not.toBeInTheDocument();
     const more = view.getByRole('button', { name: m.subject_ratings_more_comparisons({ count: '3' }) });
     await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expectComfortableAction(more);
     await userEvent.click(more);
     await expect(canvasElement.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(8);
     await expect(view.getByText('Archive Readers')).toBeVisible();

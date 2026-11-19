@@ -12,7 +12,7 @@ import {
 } from './subject-history';
 
 const actionClass =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal [overflow-wrap:anywhere] px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal [overflow-wrap:anywhere] text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type RelationHistoryRevision = { revision: number; kind: string };
 
@@ -62,44 +62,48 @@ export function RelationHistorySelectionView({
           ))}
         </ol>
       )}
-      {origin && (
-        <a
-          data-slot="subject-history-retry"
-          href={origin}
-          onClick={(event) => onRetry?.(origin, event)}
-          className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
-        >
-          {m.subject_section_retry({}, options)}
-        </a>
+      {(origin || restart || changes || next) && (
+        <div className="flex flex-wrap items-center gap-5">
+          {origin && (
+            <a
+              data-slot="subject-history-retry"
+              href={origin}
+              onClick={(event) => onRetry?.(origin, event)}
+              className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
+            >
+              {m.subject_section_retry({}, options)}
+            </a>
+          )}
+          {restart && restart !== origin && (
+            <a
+              data-slot="subject-history-restart"
+              href={restart}
+              className={cn(buttonVariants({ variant: 'link' }), actionClass)}
+            >
+              {m.subject_relation_restart({}, options)}
+            </a>
+          )}
+          {changes && (
+            <a
+              data-slot="subject-history-changes"
+              href={changes}
+              className={cn(buttonVariants({ variant: 'link' }), actionClass)}
+            >
+              {m.changes_title({}, options)}
+            </a>
+          )}
+          {next ? (
+            <button
+              type="button"
+              data-slot="subject-history-more"
+              className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
+              onClick={(event) => onMoreHistory?.(next, event)}
+            >
+              {m.subject_section_more({ label: m.changes_title({}, options) }, options)}
+            </button>
+          ) : null}
+        </div>
       )}
-      {restart && restart !== origin && (
-        <a
-          data-slot="subject-history-restart"
-          href={restart}
-          className={cn(buttonVariants({ variant: 'link' }), actionClass)}
-        >
-          {m.subject_relation_restart({}, options)}
-        </a>
-      )}
-      {changes && (
-        <a
-          data-slot="subject-history-changes"
-          href={changes}
-          className={cn(buttonVariants({ variant: 'link' }), actionClass)}
-        >
-          {m.changes_title({}, options)}
-        </a>
-      )}
-      {next ? (
-        <button
-          type="button"
-          data-slot="subject-history-more"
-          className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
-          onClick={(event) => onMoreHistory?.(next, event)}
-        >
-          {m.subject_section_more({ label: m.changes_title({}, options) }, options)}
-        </button>
-      ) : null}
     </section>
   );
 }

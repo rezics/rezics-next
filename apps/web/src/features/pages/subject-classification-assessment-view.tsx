@@ -31,12 +31,12 @@ import { providerStatisticLabel, type Statistic } from './subject-ratings';
 import { sourceObservationHref } from '../catalogue/source-observation/contract';
 
 const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const summaryClass =
-  'list-item list-inside max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-y-[8px] list-item list-inside min-h-7 max-w-full cursor-pointer text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const ClassificationAssessmentContext = createContext<ClassificationAssessmentSnapshot | null>(null);
 export const ClassificationAssessmentSelectionContext = createContext<DisclosedClassificationAssociation[] | null>(
@@ -263,9 +263,9 @@ function AssessmentEditor({
         if (assessment) submit({ kind: 'set', assessment, falsePositive });
       }}
     >
-      <fieldset className="min-w-0 space-y-2" disabled={!editable || uncertain}>
+      <fieldset className="min-w-0 space-y-4" disabled={!editable || uncertain}>
         <legend className="text-sm font-medium">{m.subject_classification_assessment_select({}, options)}</legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-5">
           <label className={`inline-flex items-center gap-2 ${actionClass}`}>
             <input
               type="radio"
@@ -302,7 +302,7 @@ function AssessmentEditor({
         {current?.falsePositive ? ` ${m.subject_classification_assessment_own_lie({}, options)}` : ''}
       </p>
       {uncertain && <p role="status">{m.subject_classification_assessment_uncertain({}, options)}</p>}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-5">
         {uncertain && retry ? (
           <Button type="button" className={actionClass} onClick={onRetry}>
             {m.subject_classification_assessment_retry({}, options)}
@@ -383,7 +383,7 @@ export function ClassificationAssessmentView({
           {m.subject_classification_assessment_empty({}, options)}
         </p>
       ) : (
-        <ul className="grid min-w-0 gap-2">
+        <ul className="grid min-w-0 gap-4">
           {associations.map((item) => {
             const active =
               selected?.associationId === item.associationId && selected.qualifiersKey === item.qualifiersKey;
@@ -417,11 +417,17 @@ export function ClassificationAssessmentView({
               <p>{selected.associationId}</p>
               {selected.release && <p>{selected.release}</p>}
               {selected.revision !== undefined && <p>{String(selected.revision)}</p>}
-              <div className="flex flex-wrap gap-2">
-                <a className={`text-primary underline underline-offset-4 ${actionClass}`} href={selected.inspectHref}>
+              <div className="flex flex-wrap gap-5">
+                <a
+                  className={`inline-flex items-center text-primary underline underline-offset-4 ${actionClass}`}
+                  href={selected.inspectHref}
+                >
                   {m.subject_classification_assessment_inspect({}, options)}
                 </a>
-                <a className={`text-primary underline underline-offset-4 ${actionClass}`} href={selected.changesHref}>
+                <a
+                  className={`inline-flex items-center text-primary underline underline-offset-4 ${actionClass}`}
+                  href={selected.changesHref}
+                >
                   {m.subject_classification_assessment_changes({}, options)}
                 </a>
               </div>

@@ -34,13 +34,13 @@ test('shared subject recovery actions remain distinct accessible touch targets w
   expect(button).toContain('Try again');
   expect(link).toContain('Start again');
   for (const action of [button, link]) {
-    expect(action).toContain('min-h-11');
-    expect(action).toContain('min-w-11');
+    expect(action).toContain('min-h-7');
+    expect(action).toContain('hitbox-[9px]');
     expect(action).toContain('whitespace-normal');
-    expect(action).toContain('focus-visible:ring-3');
+    expect(action).toContain('focus-visible:ring-2');
   }
   expect(html).toContain('flex-wrap');
-  expect(html).toContain('gap-3');
+  expect(html).toContain('gap-5');
   expect(html).toMatch(/<article aria-labelledby="([^"]+)"[\s\S]*?<h1 id="\1"/);
   expect(html).not.toContain('<main');
   const href = link.match(/href="([^"]+)"/)?.[1]?.replaceAll('&amp;', '&');

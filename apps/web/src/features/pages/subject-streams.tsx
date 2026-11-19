@@ -73,7 +73,7 @@ function SubjectStreamNav({
     <nav
       data-slot="subject-streams"
       aria-label={m.subject_relations({}, { locale: locale as never })}
-      className="flex min-w-0 flex-wrap gap-2"
+      className="flex min-w-0 flex-wrap gap-4"
     >
       {streams.entries.map((entry) => {
         const relation = relations?.[entry.property];
@@ -88,7 +88,7 @@ function SubjectStreamNav({
             aria-current={entry.node === streams.selected ? 'page' : undefined}
             className={cn(
               buttonVariants({ variant: entry.node === streams.selected ? 'secondary' : 'outline' }),
-              'h-auto min-h-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
             )}
           >
             {label}

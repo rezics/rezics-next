@@ -219,7 +219,8 @@ test('relation readers and history keep exact selection across continuation keyb
     expect(new URL(retry.href).searchParams.get('streamDirection')).toBe('forward');
     window.resizeTo(1280, 800);
     expect(window.innerWidth).toBe(1280);
-    expect(retry.className).toContain('min-h-11');
+    expect(retry.className).toContain('hitbox-[9px]');
+    expect(retry.className).toContain('min-h-7');
     expect(m.changes_title({}, { locale: 'zh-Hans' as never })).toBeTruthy();
   } finally {
     await act(async () => root.unmount());

@@ -34,7 +34,7 @@ export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal)
 const transport: PopulationTransport = (data, signal) =>
   readSubjectRatingPopulations(signal ? { data, signal } : { data });
 const actionClass =
-  'h-auto min-h-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'hitbox-[9px] h-auto min-h-7 min-w-7 max-w-full whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 let serial = 0;
 
 /** Subscribes before a mounted owner starts work. Cache observations retire monotonically before React commits. */
@@ -588,7 +588,7 @@ function PopulationVisit({
             {selected.length === POPULATION_LIMIT && (
               <p role="status">{m.rating_population_limit({ limit: String(POPULATION_LIMIT) }, options)}</p>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-5">
               <Button
                 className={actionClass}
                 type="button"
@@ -688,23 +688,25 @@ function PopulationVisit({
               </li>
             ))}
           </ul>
-          {canRetrySelection && selectedOutcome.kind === 'ready' && (
-            <Button
-              className={actionClass}
-              type="button"
-              variant="outline"
-              aria-disabled={selectedWaiting || undefined}
-              onClick={() => {
-                if (selectedWaiting || !admitRatingRetry(selectedRetryAt)) return;
-                retry('selected');
-              }}
-            >
-              {m.subject_section_retry({}, options)}
+          <div className="flex flex-wrap gap-5">
+            {canRetrySelection && selectedOutcome.kind === 'ready' && (
+              <Button
+                className={actionClass}
+                type="button"
+                variant="outline"
+                aria-disabled={selectedWaiting || undefined}
+                onClick={() => {
+                  if (selectedWaiting || !admitRatingRetry(selectedRetryAt)) return;
+                  retry('selected');
+                }}
+              >
+                {m.subject_section_retry({}, options)}
+              </Button>
+            )}
+            <Button className={actionClass} type="button" variant="outline" onClick={clear}>
+              {m.rating_population_clear({}, options)}
             </Button>
-          )}
-          <Button className={actionClass} type="button" variant="outline" onClick={clear}>
-            {m.rating_population_clear({}, options)}
-          </Button>
+          </div>
         </div>
       )}
     </div>
