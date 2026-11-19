@@ -3,6 +3,7 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { readDump } from '../src/dumps.ts';
 import { IMPORTER_SCOPES } from '../src/credentials.ts';
 import { runImportCli } from '../src/cli.ts';
@@ -46,6 +47,8 @@ test.each(['bangumi', 'bangumi_cross_media'])(
       const sent: BatchCommand[] = [];
       const subjects = new Map<string, string>();
       const receipts = new Map<string, BatchWriteResult['results'][number]>();
+      const portraitId = randomUUID();
+      let portrait: MediaImportRequest | undefined;
       let sequence = 0;
       const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = input instanceof Request ? input : new Request(input, init);
@@ -81,6 +84,30 @@ test.each(['bangumi', 'bangumi_cross_media'])(
         if (url.pathname === '/v1/source-records:setMetadata') {
           const body = (await request.json()) as { metadata: Record<string, unknown> };
           return Response.json({ record: body.metadata, metadata_revision: 1, effect: 'filled' }, { status: 201 });
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/media:importFromUrl') {
+          portrait = (await request.json()) as MediaImportRequest;
+          expect(portrait.containerId).toBe(subjects.get(`${alias}:person:641`));
+          expect(portrait.provenance).toMatchObject({ source: alias, external_id: 'person:641', field_group: 'cover' });
+          return Response.json(
+            { media: { id: portraitId, containerId: portrait.containerId, purpose: 'cover', state: 'reserved' } },
+            { status: 202 },
+          );
+        }
+        if (request.method === 'GET' && url.pathname === `/v1/media/${portraitId}:importStatus` && portrait) {
+          return Response.json({
+            media: {
+              id: portraitId,
+              containerId: portrait.containerId,
+              purpose: 'cover',
+              state: 'available',
+              credit: portrait.credit,
+              provenance: portrait.provenance,
+              byteCount: 123,
+              mediaType: 'image/jpeg',
+              sha256: 'a'.repeat(64),
+            },
+          });
         }
         if (url.pathname !== '/v1/subjects:batchWrite') return new Response('', { status: 404 });
         const body = (await request.json()) as BatchWriteRequest;
