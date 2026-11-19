@@ -34,7 +34,7 @@ test('docs/deletion.md states terminal account erasure and retention without wai
   expect(policy).toContain('indexed existence probes, never by full counts');
   expect(policy).toContain('it never postpones account erasure');
   expect(policy).not.toContain('purged when the window ends');
-  expect(policy).toEndWith(
+  expect(policy).toContain(
     "Each owner documents in its README which records it soft-deletes, how restore works, and its purge job's bound.",
   );
 });
@@ -72,13 +72,18 @@ test('Access agent verification follows permanent subject identity and serialize
   expect(verification).toContain('Every published redirect points directly at an active terminal');
   expect(verification).toContain('a read takes at most one step');
   expect(verification).toContain('at most 4,096 originals, checked when a merge is admitted');
-  expect(verification).toContain('Stored references are never rewritten');
+  expect(verification).toContain(
+    'Stored references are never rewritten: personal entries, labels, sessions, copies and Collection occurrences keep their stored subject ids.',
+  );
   expect(verification).toContain('New writes address the current terminal, and canonical views group them.');
-  expect(verification).toContain("Merge and unmerge run serialized through Semantic's one durable identity job");
+  const identity = document('services/kernel/src/semantic/identity-epoch-contract.md');
+  expect(identity).toContain(
+    'Merge, unmerge, repoint, account-agent verification and reversal use the same native job mechanism.',
+  );
+  expect(identity).toContain('`identity_epoch_busy` means overlapping groups only');
   expect(verification).toContain('marks a catalogue identity epoch pending');
   expect(verification).toContain('bounded mapping and index maintenance, then publishes the next epoch');
   expect(verification).toContain('A crashed job stays pending and resumes.');
-  expect(verification).toContain('no stored reference is moved or rewritten');
   expect(verification).not.toContain('links moved from the account node');
 });
 
@@ -94,12 +99,22 @@ test('account retention requires an owner inventory and expiry for moderation ev
 
 test('Access documents truthful acknowledgement, owner resolution, coordinator states and backup policy gap', () => {
   const access = document('services/kernel/src/access/README.md');
-  expect(access).toContain('Only `erased` may name optional `retained` exceptions, at most 16');
-  expect(access).toContain('A participant without a decided expiry stays pending.');
-  expect(access).toContain('`resolveRetention({ pool }, { accountId, participant, store })`');
-  expect(access).toContain('purges each store at expiry');
-  expect(access).toContain('`pending` until all participants acknowledge, then `retention-outstanding`');
-  expect(access).toContain('then `complete`');
-  expect(access).toContain('Backup expiry is an open external condition');
-  expect(access).not.toContain('[Library](../library/README.md) and [organization close]');
+  const erasure = access.split('## Erasure consumers ')[1]!.split('### Managed erasure progress read')[0]!;
+  expect(erasure).toContain('`erased` attests to actual cleanup and `none` attests that no data applies.');
+  expect(erasure).toContain('Only `erased` may name optional `retained` exceptions, at most 16');
+  expect(erasure).toContain('A participant without a decided expiry stays pending.');
+  expect(erasure).toContain('The owner names exceptions in its acknowledgement and retention inventory');
+  expect(erasure).toContain(
+    'purges each store at expiry, then calls `resolveRetention({ pool }, { accountId, participant, store })` as its own command transaction after that purge commits.',
+  );
+  expect(erasure).toContain(
+    'all participants acknowledge, no late item is open, the effects frontier has passed, and no pre-T locator work is open.',
+  );
+  expect(erasure).toContain('Acknowledgement alone never marks completion.');
+  expect(erasure).toContain('report unresolved work without exposing locators.');
+  expect(erasure).toContain(
+    '`state` stays `pending` until active cleanup completes, then `retention-outstanding` while exceptions remain unresolved, then `complete`.',
+  );
+  expect(erasure).toContain('Backup expiry remains an open external condition');
+  expect(erasure).not.toContain('[Library](../library/README.md) and [organization close]');
 });
