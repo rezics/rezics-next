@@ -4,7 +4,6 @@ import type { AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { CollectionResourceView } from './collection-reads.ts';
 import { withCollectionReadSnapshot } from './collection-read-connection.ts';
 import historyHead from './collection-structure-history-head.sql';
 import historyPage from './collection-structure-history-page.sql';
@@ -75,10 +74,6 @@ export type CollectionStructureHistoryComparison = {
   basis: CollectionStructureHistoryBasis | null;
 };
 
-type CurrentCollection = Pick<CollectionResourceView, 'id' | 'curatorAccountId'> & {
-  membershipKind?: 'curated' | 'dynamic';
-};
-type Current = (actor: Actor, collectionId: string, deadline: number) => Promise<CurrentCollection>;
 type PageRow = Awaited<ReturnType<typeof historyPage.run>>[number];
 type HeadRow = NonNullable<Awaited<ReturnType<typeof historyHead.run>>>;
 
@@ -281,7 +276,11 @@ function viewChange(
   };
 }
 
-export function createCollectionStructureHistory(dependencies: { pool: Pool; tokens: KeyRing; current: Current }) {
+export function createCollectionStructureHistory(dependencies: {
+  pool: Pool;
+  tokens: KeyRing;
+  requireAuthority: (actor: AccountActor, collectionId: string, deadline: number) => Promise<void>;
+}) {
   const { pool, tokens } = dependencies;
   return { page, compare };
 
@@ -289,13 +288,7 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
     if (actor.kind !== 'account' || !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1) throw notFound();
     const route = routeOf(collectionId);
     if (route === null) throw notFound();
-    const collection = await dependencies.current(actor, collectionId, deadline);
-    if (
-      collection.id !== collectionId ||
-      collection.curatorAccountId !== actor.accountId ||
-      collection.membershipKind === 'dynamic'
-    )
-      throw notFound();
+    await dependencies.requireAuthority(actor, collectionId, deadline);
     return { actor, route };
   }
 

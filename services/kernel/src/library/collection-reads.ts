@@ -347,6 +347,7 @@ export function createCollectionReads(
     readCollectionSummary,
     readCollectionMetadataHistory,
     readCollectionMetadataHistoryChange,
+    requireCollectionStructureHistoryAuthority,
     readRule,
     listCollections,
     listAccountCollections,
@@ -442,7 +443,7 @@ export function createCollectionReads(
     viewer: Actor,
     id: string,
     deadline: number,
-    read: (client: QueryClient, row: StoredCollection) => Promise<T>,
+    read: (client: QueryClient, row: StoredCollection, account: ReadAccount | null) => Promise<T>,
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
     work?: AccessWorkAccounting,
   ): Promise<T | null> {
@@ -483,7 +484,7 @@ export function createCollectionReads(
         }
       }
       const row = disclose(sink.row, allowed, account, viewer);
-      return row === null ? null : read(client, row);
+      return row === null ? null : read(client, row, account);
     });
   }
 
@@ -522,6 +523,25 @@ export function createCollectionReads(
     if (!row) throw notFound();
     if (ownerManagement && (viewer.kind !== 'account' || viewer.accountId !== row.curatorAccountId)) throw notFound();
     return present(viewer, row, deadline, ownerManagement);
+  }
+
+  async function requireCollectionStructureHistoryAuthority(viewer: AccountActor, id: string, deadline: number) {
+    const route = routeOf(id);
+    if (route === null || !viewer.scopes.includes('collection:update')) throw notFound();
+    const check = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
+    const allowed = await withReadableCollection(
+      viewer,
+      id,
+      deadline,
+      async (client, row, account) =>
+        row.membershipKind === 'curated' &&
+        row.builtinKind === null &&
+        row.curatorAccountId === viewer.accountId &&
+        account !== null &&
+        grantCapable(account, viewer) &&
+        (await check(client)),
+    );
+    if (!allowed) throw notFound();
   }
 
   async function withCurrentMetadataOwner<T>(
