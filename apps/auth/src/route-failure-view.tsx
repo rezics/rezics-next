@@ -19,11 +19,9 @@ import type { RouteRetryState } from './route-failure';
 type RecoveryKind = 'failure' | 'missing';
 type RecoveryState = RouteRetryState | 'interrupted';
 type RecoveryAttempt = { kind: RecoveryKind; state: RecoveryState | 'checking' };
-type ResetOwner = { reset: (() => void) | undefined };
 type RecoveryContextValue = {
   attempt: RecoveryAttempt | null;
   retry(kind: RecoveryKind): void;
-  registerReset(owner: ResetOwner): () => void;
   reportRenderFailure(): void;
 };
 const RecoveryContext = createContext<RecoveryContextValue | null>(null);
@@ -32,7 +30,6 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [attempt, setAttempt] = useState<RecoveryAttempt | null>(null);
   const attemptRef = useRef<RecoveryAttempt | null>(null);
-  const resetOwner = useRef<ResetOwner | null>(null);
   const generation = useRef(0);
   const inFlight = useRef(false);
   const suspended = useRef(false);
@@ -49,7 +46,6 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
     };
     const unsubscribe = router.history.subscribe(() => {
       retire();
-      resetOwner.current = null;
       publish(null);
     });
     const hide = () => {
@@ -69,19 +65,11 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
     return () => {
       retire();
       attemptRef.current = null;
-      resetOwner.current = null;
       unsubscribe();
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
     };
   }, [publish, router]);
-
-  const registerReset = useCallback((owner: ResetOwner) => {
-    resetOwner.current = owner;
-    return () => {
-      if (resetOwner.current === owner) resetOwner.current = null;
-    };
-  }, []);
 
   const reportRenderFailure = useCallback(() => {
     if (attemptRef.current?.state === 'checking') publish({ kind: attemptRef.current.kind, state: 'failed' });
@@ -99,7 +87,6 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
       inFlight.current = true;
       const token = ++generation.current;
       const currentLocationKey = router.state.location.state.__TSR_key;
-      const owner = resetOwner.current;
       const matchIds = new Set(router.state.matches.map((match) => match.id));
       const current = () =>
         !suspended.current &&
@@ -117,7 +104,6 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
             return;
           }
           publish({ kind, state: 'checking' });
-          if (owner && resetOwner.current === owner) owner.reset?.();
         } catch {
           if (current()) publish({ kind, state: 'failed' });
         } finally {
@@ -130,22 +116,20 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
 
   const presenting = attempt && attempt.state !== 'checking' ? { kind: attempt.kind, state: attempt.state } : null;
   return (
-    <RecoveryContext.Provider value={{ attempt, retry, registerReset, reportRenderFailure }}>
-      <div hidden={!!presenting}>{children}</div>
+    <RecoveryContext.Provider value={{ attempt, retry, reportRenderFailure }}>
+      {/* Invalidation can update the router before it resolves. Mount the route and
+          its error boundaries only when the current attempt can hand back control. */}
       {presenting ? (
         <RouteFailureView kind={presenting.kind} state={presenting.state} onRetry={() => retry(presenting.kind)} />
-      ) : null}
+      ) : (
+        <div>{children}</div>
+      )}
     </RecoveryContext.Provider>
   );
 }
 
-export function RouteFailureError({ reset }: { reset?: () => void }) {
+export function RouteFailureError() {
   const recovery = useRecoveryContext();
-  const owner = useRef<ResetOwner>({ reset });
-  useLayoutEffect(() => {
-    owner.current.reset = reset;
-  });
-  useLayoutEffect(() => recovery.registerReset(owner.current), [recovery.registerReset]);
   useLayoutEffect(() => {
     if (recovery.attempt?.state === 'checking') recovery.reportRenderFailure();
   }, [recovery.attempt?.state, recovery.reportRenderFailure]);

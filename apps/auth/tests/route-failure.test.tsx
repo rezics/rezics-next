@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, useState } from 'react';
+import { act, createElement, useLayoutEffect, useState } from 'react';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
@@ -63,6 +63,10 @@ async function mount(router: ReturnType<typeof createRouter>) {
   };
 }
 
+function retryButton(host: Document) {
+  return host.querySelector<HTMLButtonElement>('.auth-route-failure button')!;
+}
+
 async function waitForText(host: Document, text: string) {
   if (host.documentElement?.textContent?.includes(text)) return;
   await new Promise<void>((resolve, reject) => {
@@ -94,10 +98,11 @@ test('missing pages keep the document shell, focus recovery, use fixed exits and
       expect(document.documentElement.getAttribute('lang')).toBe(locale);
       expect(page.host.querySelector('a[href="/login"]')?.textContent).toBe(m.auth_route_failure_exit_login());
       expect(page.host.querySelector('a[href="/security"]')?.textContent).toBe(m.auth_route_failure_exit_security());
-      expect(page.host.textContent).not.toContain('private-code');
-      expect(page.host.textContent).not.toContain('private@example.test');
-      if (locale === 'en') expect(document.activeElement).toBe(heading);
+      expect(page.host.documentElement.textContent).not.toContain('private-code');
+      expect(page.host.documentElement.textContent).not.toContain('private@example.test');
+      expect(document.activeElement === heading).toBe(true);
     } finally {
+      overwriteGetLocale(() => 'en');
       await page.close();
     }
   }
@@ -121,12 +126,12 @@ test('a read loader can recover, fail again visibly, then recover on a deliberat
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
     expect(page.host.documentElement?.textContent).not.toContain('private-code');
     expect(page.host.documentElement?.textContent).not.toContain('private.test');
-    await act(async () => page.host.querySelector('button')!.click());
-    await act(async () => waitForText(page.host, m.auth_route_failure_failed_title()));
+    await act(async () => retryButton(page.host).click());
+    await waitForText(page.host, m.auth_route_failure_failed_title());
     expect(reads).toBe(2);
     expect(page.host.documentElement?.textContent).toContain(m.auth_route_failure_retry_failed());
-    await act(async () => page.host.querySelector('button')!.click());
-    await act(async () => waitForText(page.host, 'Fresh page'));
+    await act(async () => retryButton(page.host).click());
+    await waitForText(page.host, 'Fresh page');
     expect(reads).toBe(3);
     expect(page.host.querySelector('.auth-route-failure')).toBeNull();
   } finally {
@@ -141,18 +146,22 @@ test('a render failure can recover without invoking a command', async () => {
     component: function RenderPage() {
       const [failed, setFailed] = useState(false);
       if (failed) throw new Error('private render failure');
-      return <button onClick={() => setFailed(true)}>Trigger render failure</button>;
+      return (
+        <main>
+          <button onClick={() => setFailed(true)}>Trigger render failure</button>
+        </main>
+      );
     },
   });
   const { router } = makeRouter('/render', [pageRoute]);
   const page = await mount(router);
   try {
-    await act(async () => page.host.querySelector('button')!.click());
+    await act(async () => page.host.querySelector<HTMLButtonElement>('main button')!.click());
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
-    await act(async () => page.host.querySelector('button')!.click());
-    await act(async () => waitForText(page.host, 'Trigger render failure'));
+    await act(async () => retryButton(page.host).click());
+    await waitForText(page.host, 'Trigger render failure');
     expect(page.host.querySelector('.auth-route-failure')).toBeNull();
-    await act(async () => page.host.querySelector('button')!.click());
+    await act(async () => page.host.querySelector<HTMLButtonElement>('main button')!.click());
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
   } finally {
     await page.close();
@@ -168,24 +177,26 @@ test('Retry never repeats a command already dispatched by the failed page', asyn
       const [sent, setSent] = useState(false);
       if (sent) throw new Error('private authorization result');
       return (
-        <button
-          onClick={() => {
-            commands += 1;
-            setSent(true);
-          }}
-        >
-          Approve once
-        </button>
+        <main>
+          <button
+            onClick={() => {
+              commands += 1;
+              setSent(true);
+            }}
+          >
+            Approve once
+          </button>
+        </main>
       );
     },
   });
   const { router } = makeRouter('/command', [command]);
   const page = await mount(router);
   try {
-    await act(async () => page.host.querySelector('button')!.click());
+    await act(async () => page.host.querySelector<HTMLButtonElement>('main button')!.click());
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
-    await act(async () => page.host.querySelector('button')!.click());
-    await act(async () => waitForText(page.host, 'Approve once'));
+    await act(async () => retryButton(page.host).click());
+    await waitForText(page.host, 'Approve once');
     expect(commands).toBe(1);
     expect(page.host.documentElement?.textContent).not.toContain('private authorization result');
     expect(page.host.documentElement?.textContent).not.toContain('refused');
@@ -219,18 +230,22 @@ test('pending retries are single-flight and stale route results do not replace t
   const { router, history } = makeRouter('/pending', [read, replacement]);
   const page = await mount(router);
   try {
-    await act(async () => page.host.querySelector('button')!.click());
-    expect(page.host.querySelector('button')?.hasAttribute('disabled')).toBe(true);
+    await act(async () => {
+      const button = retryButton(page.host);
+      button.click();
+      button.click();
+    });
+    expect(retryButton(page.host).disabled).toBe(true);
     expect(page.host.documentElement?.textContent).toContain(m.auth_route_failure_retrying());
-    await act(async () => page.host.querySelector('button')!.click());
+    await act(async () => retryButton(page.host).click());
     expect(reads).toBe(2);
     await act(async () => {
       history.push('/replacement?account=replaced');
       await router.load();
     });
-    release();
-    await act(async () => waitForText(page.host, 'Replacement page'));
-    expect(page.host.textContent).not.toContain(m.auth_route_failure_retry_failed());
+    await act(async () => release());
+    await waitForText(page.host, 'Replacement page');
+    expect(page.host.documentElement.textContent).not.toContain(m.auth_route_failure_retry_failed());
   } finally {
     await page.close();
   }
@@ -247,15 +262,11 @@ test('back and forward restore the current matched page around a missing route',
   try {
     expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_missing_title());
     await act(async () => router.navigate({ to: '/known' } as never));
-    await act(async () => waitForText(page.host, 'Known page'));
-    await act(async () => {
-      history.back();
-      await waitForText(page.host, m.auth_route_missing_title());
-    });
-    await act(async () => {
-      history.forward();
-      await waitForText(page.host, 'Known page');
-    });
+    await waitForText(page.host, 'Known page');
+    await act(async () => history.back());
+    await waitForText(page.host, m.auth_route_missing_title());
+    await act(async () => history.forward());
+    await waitForText(page.host, 'Known page');
   } finally {
     await page.close();
   }
@@ -263,6 +274,7 @@ test('back and forward restore the current matched page around a missing route',
 
 test('unmount fences a pending recovery result', async () => {
   let reads = 0;
+  let mounts = 0;
   let release!: () => void;
   const read = createRoute({
     getParentRoute: () => authRoot,
@@ -275,12 +287,21 @@ test('unmount fences a pending recovery result', async () => {
       });
       return 'done';
     },
-    component: () => <p>Recovered</p>,
+    component: () => {
+      useLayoutEffect(() => {
+        mounts += 1;
+      }, []);
+      return <p>Recovered</p>;
+    },
   });
   const { router } = makeRouter('/unmount', [read]);
   const page = await mount(router);
-  await act(async () => page.host.querySelector('button')!.click());
-  expect(reads).toBe(2);
-  await page.close();
-  release();
+  try {
+    await act(async () => retryButton(page.host).click());
+    expect(reads).toBe(2);
+  } finally {
+    await page.close();
+    await act(async () => release?.());
+  }
+  expect(mounts).toBe(0);
 });
