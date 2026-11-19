@@ -1,17 +1,12 @@
-import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createBrowserHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as browser from '@simplewebauthn/browser';
 import * as passkeys from '../src/passkeys';
 import { Route } from '../src/routes/login';
+import { initializeDocumentLocale } from '../src/locale-observation';
 import { nativeSignInOptions, nativeSignInProof } from './sign-in-fixture';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 creationFixture();
-const scroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
-afterAll(() => {
-  if (scroll) Object.defineProperty(globalThis, 'scrollTo', scroll);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
-});
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanup.splice(0)) close();
@@ -25,6 +20,7 @@ const advice = (account: string | null = null, password = true) => ({
   continuation: { href: '/security', requires_sign_in: false },
 });
 async function setup(autofill = false) {
+  initializeDocumentLocale('en');
   window.history.replaceState(null, '', '/login?scope=&scope=openid&sig=opaque%2Bsignature');
   const prompt = Promise.withResolvers<any>();
   for (const spy of [
@@ -82,7 +78,7 @@ test('retained password dispatch clears private DOM synchronously, ignores late 
   await flush(() => send(p.host));
   const command = p.calls.at(-1)!;
   await p.hide();
-  expect(p.host.textContent).toContain('outcome could not be confirmed');
+  expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
   expect(document.activeElement?.textContent).toContain('Earlier sign-in');
   await p.restore();
   expect(p.calls.map((c) => c.path)).toEqual(['/signin/page', '/signin', '/signin/page']);
@@ -91,7 +87,7 @@ test('retained password dispatch clears private DOM synchronously, ignores late 
   expect(p.assign).not.toHaveBeenCalled();
   await p.reply(advice('replacement', false));
   expect(p.host.textContent).toContain('replacement@example.test');
-  expect(p.host.textContent).toContain('outcome could not be confirmed');
+  expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
   expect(p.host.querySelector<HTMLInputElement>('#login-password')?.value).toBeUndefined();
   await p.click('Continue');
   expect(p.assign).toHaveBeenCalledWith('/security');
@@ -114,7 +110,7 @@ test('unknown survives repeated read failure, replacement viewer, and a later cr
   await p.enter();
   await flush(() => send(p.host));
   await p.reply({ error: 'authentication_denied' }, 401);
-  expect(p.host.textContent).toContain('outcome could not be confirmed');
+  expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
   const count = p.calls.length;
   await p.click('Dismiss earlier sign-in notice');
   expect(p.calls).toHaveLength(count);
@@ -131,7 +127,7 @@ test.each(['empty', 'wrong-profile'] as const)(
     const proof = nativeSignInProof(request.body);
     await p.reply(invalid === 'empty' ? {} : { ...proof, client_id: 'other-client' });
     expect(p.assign).not.toHaveBeenCalled();
-    expect(p.host.textContent).toContain('outcome could not be confirmed');
+    expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
     expect(p.calls.map((call) => call.path)).toEqual(['/signin/page', '/signin']);
   },
 );
@@ -148,10 +144,10 @@ test.each(['options', 'prompt', 'dispatched'] as const)(
     await p.hide();
     expect(p.host.textContent).toContain(
       phase === 'options'
-        ? 'options were being prepared'
+        ? 'No sign-in was sent.'
         : phase === 'prompt'
           ? 'waiting for a passkey'
-          : 'outcome could not be confirmed',
+          : 'Sign-in could not be confirmed. It may have completed.',
     );
     await p.restore();
     await p.reply(advice());
@@ -196,7 +192,7 @@ test('an acknowledgement before pagehide stays historical and return never navig
   await p.hide();
   await p.restore();
   await p.reply(advice('current'));
-  expect(p.host.textContent).toContain('Authentication was acknowledged');
+  expect(p.host.textContent).toContain('Sign-in was acknowledged before you left this page.');
   expect(p.assign).toHaveBeenCalledTimes(1);
   expect(p.calls).toHaveLength(3);
 });

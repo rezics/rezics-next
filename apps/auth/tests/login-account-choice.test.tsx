@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -8,18 +8,11 @@ import {
 } from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/login';
+import { initializeDocumentLocale } from '../src/locale-observation';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
 import { nativeSignInProof } from './sign-in-fixture';
 creationFixture();
-const scroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-beforeAll(() =>
-  Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true, writable: true }),
-);
-afterAll(() => {
-  if (scroll) Object.defineProperty(globalThis, 'scrollTo', scroll);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
-});
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanup.splice(0)) close();
@@ -32,6 +25,7 @@ const advice = (account: string | null = 'a', required = false, href = '/securit
   continuation: { href, requires_sign_in: required },
 });
 async function setup(initial = advice(), query = '?return_to=%2Fsecurity', supported = true) {
+  initializeDocumentLocale('en');
   window.history.replaceState(null, '', `/login${query}`);
   for (const spy of [
     spyOn(passkeys, 'passkeysSupported').mockReturnValue(supported),
@@ -161,7 +155,7 @@ test.each(['a', 'b', null, 'unavailable'])(
     await p.enter();
     await flush(() => send(p.host));
     await flush(() => p.calls[0]!.resolve(new Response('', { status: 502 })));
-    expect(p.host.textContent).toContain('outcome could not be confirmed');
+    expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
     expect(button(p.host, 'Continue')).toBeUndefined();
     await p.review(viewer === 'unavailable' ? null : advice(viewer));
     expect(p.calls).toHaveLength(1);
@@ -172,11 +166,12 @@ test.each(['a', 'b', null, 'unavailable'])(
     ]);
     expect(p.assign).not.toHaveBeenCalled();
     expect(p.host.textContent).toContain('A matching account does not confirm this attempt');
+    expect(p.host.textContent).toContain('The account shown now is a separate check.');
     if (viewer === 'b') expect(p.host.textContent).toContain('account has changed');
     if (viewer === null) expect(p.host.textContent).toContain('now signed out');
     if (viewer === 'unavailable') {
       expect(p.host.textContent).not.toContain('a@example.test');
-      expect(button(p.host, 'Try loading sign-in again')).not.toBeNull();
+      expect(button(p.host, 'Try loading sign-in again')).toBeDefined();
     } else if (viewer) {
       await p.click('Continue');
       expect(p.assign).toHaveBeenCalledWith('/security');
@@ -193,7 +188,10 @@ test('review invalidates the old control, preserves exact native return encoding
     oldContinue.click();
   });
   expect(p.assign).not.toHaveBeenCalled();
-  expect(p.reads).toHaveLength(2);
+  expect(p.reads.map(({ body }) => body)).toEqual([
+    { query: '?scope=&scope=openid%20profile&state=%2f&state=' },
+    { query: '?scope=&scope=openid%20profile&state=%2f&state=' },
+  ]);
   await flush(() => p.reads[1]!.resolve(Response.json(advice('b', false, href))));
   expect(p.host.textContent).not.toContain('a@example.test');
   await p.click('Continue');
@@ -243,9 +241,11 @@ test('an uncertain explicit passkey offers review without restarting autofill or
   const p = await setup(advice('a', true));
   await p.click('Sign in with a passkey');
   await flush(() => p.ceremony.resolve({ ok: false, reason: 'unavailable' }));
-  expect(p.host.textContent).toContain('outcome could not be confirmed');
+  expect(p.host.textContent).toContain('Sign-in could not be confirmed. It may have completed.');
   await p.review(advice('a'));
+  expect(p.host.textContent).toContain('A matching account does not confirm this attempt');
   expect(p.passkey).toHaveBeenCalledTimes(1);
+  expect(p.reads).toHaveLength(2);
   expect(p.calls).toHaveLength(0);
   expect(p.assign).not.toHaveBeenCalled();
 });
