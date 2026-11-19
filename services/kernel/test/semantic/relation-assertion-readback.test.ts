@@ -69,6 +69,55 @@ const snak = (property: string, content: string) => ({
   value: { type: 'value', content },
 });
 
+test('the adopted Bangumi occupation is publicly readable by its native candidate and cited career', async () => {
+  const artist = await create('skos:Concept', 'Artist');
+  const person = await create('schema:Person', '悠木真一');
+  const statement = {
+    ...snak('wdt:P106', artist.id),
+    references: [
+      {
+        parts: [
+          snak('schema:url', 'https://api.bgm.tv/v0/persons/10760#/career'),
+          snak('schema:version', 'unversioned'),
+        ],
+      },
+    ],
+  };
+  const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
+  const path = `/v1/subjects/${person.id}`;
+  const proposed = await driver.request('editor', 'POST', `${path}/candidates`, { statement }, key());
+  expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
+  const candidate = proposed.body.candidate as string;
+  const context = { context: GLOBAL_CONTEXT, expected_head: null };
+  const accepted = await driver.request('acceptor', 'POST', `${path}/candidates/${candidate}:accept`, context, key());
+  expect(accepted.status, JSON.stringify(accepted.body)).toBe(200);
+  const adopted = await driver.request(
+    'acceptor',
+    'POST',
+    `${path}:adopt`,
+    {
+      ...context,
+      property: 'wdt:P106',
+      target: artist.id,
+      mode: 'replace',
+      selection: [{ candidate, rank: 'normal' }],
+    },
+    key(),
+  );
+  expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+  await catchUp([person.id, artist.id]);
+  const client = createPublicBulkClient({
+    origin: 'https://kernel.test',
+    fetch: fixtureFetch((input) => requestAsReader(String(input))),
+  });
+  const expected = { id: candidate, rank: 'normal', ...statement };
+  expect((await client.readSubject(person.id)).subject.statements['wdt:P106']).toMatchObject([expected]);
+  expect(await client.readSubjectRelations!(person.id, 'wdt:P106')).toMatchObject({
+    statements: [expected],
+    next: null,
+  });
+});
+
 test('unqualified Book series windows retain the exact cited assertion and item citation labels in both directions', async () => {
   const series = await create('schema:BookSeries', 'Series');
   const citation = await create('schema:Person', 'Citation source');

@@ -4,7 +4,7 @@ import { routeOf } from '../route/route.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { holderKeys, positionKey } from './link-keys.ts';
 import type { FactRow } from './item.ts';
-import { relationSlotForStatement, statementSlotId } from './item.ts';
+import { isRelationProperty, relationSlotForStatement, statementSlotId } from './item.ts';
 
 export type LinkChange = {
   context_id?: string;
@@ -137,7 +137,7 @@ function linksOf(
     const link = linkTarget(fact, dataTypes);
     if (!link) continue;
     const relation = metadata?.release.properties[link.property]?.relation;
-    const relationStatement = !!relation && relation.group !== 'classification';
+    const relationStatement = !!metadata && isRelationProperty(metadata.release, link.property);
     if (link.target === null && !relationStatement) continue;
     if (!metadata || !holder) {
       links.set(linkKey(link), link);
