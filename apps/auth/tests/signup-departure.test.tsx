@@ -1,20 +1,43 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
+import {
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
+import * as registration from '../src/registration-page';
 import type { RegistrationPage } from '../src/registration-page';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 creationFixture();
-const originalScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
-afterAll(() => {
-  if (originalScroll) Object.defineProperty(globalThis, 'scrollTo', originalScroll);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
+let history: ReturnType<typeof createBrowserHistory> | undefined;
+let restoreAdvice: (() => void) | undefined;
+let restoreBrowser: () => void;
+beforeEach(() => {
+  const locale = getLocale;
+  overwriteGetLocale(() => 'en');
+  const head = dom.document.head;
+  const append = head.appendChild;
+  const inertScripts = spyOn(head, 'appendChild').mockImplementation(function <T extends Node>(node: T): T {
+    if (node instanceof dom.HTMLScriptElement) (node as HTMLScriptElement).type = 'application/x-test';
+    return append.call(head, node) as T;
+  });
+  restoreBrowser = () => {
+    inertScripts.mockRestore();
+    delete window.turnstile;
+    overwriteGetLocale(locale);
+  };
 });
-const append = document.head.appendChild.bind(document.head);
-document.head.appendChild = <T extends Node>(node: T): T => {
-  if (node instanceof dom.HTMLScriptElement) (node as unknown as HTMLScriptElement).type = 'application/x-test';
-  return append(node);
-};
+afterEach(() => {
+  history?.destroy();
+  history = undefined;
+  restoreAdvice?.();
+  restoreAdvice = undefined;
+  restoreBrowser();
+});
 let serial = 0;
 async function setup() {
   const root = createRootRoute({ component: Outlet });
@@ -33,17 +56,14 @@ async function setup() {
     scriptUrl: `https://challenge.test/signup-${++serial}.js`,
   };
   let config: RegistrationPage = registrationPage;
-  const route = Route.update({
-    id: '/signup',
-    path: '/signup',
-    getParentRoute: () => root,
-    loader: () => config,
-  } as never);
+  const read = spyOn(registration, 'readRegistrationPage').mockImplementation(async () => config);
+  restoreAdvice = () => read.mockRestore();
+  const route = createRoute({ getParentRoute: () => root, path: '/signup', component: Route.options.component });
   const query = '?state=original&resource=one&resource=two';
-  const router = createRouter({
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
-  });
+  const login = createRoute({ getParentRoute: () => root, path: '/login', component: () => null });
+  dom.history.replaceState(null, '', `/signup${query}`);
+  history = createBrowserHistory({ window: dom });
+  const router = createRouter({ routeTree: root.addChildren([route, login]), history });
   await router.load();
   const page = await open(<RouterProvider router={router} />, {});
   let token!: (value: string) => void;
@@ -56,15 +76,27 @@ async function setup() {
     reset: () => {},
     remove: () => {},
   };
-  await flush(() =>
-    document
-      .querySelector<HTMLScriptElement>(`script[src="${registrationPage.scriptUrl}"]`)!
-      .dispatchEvent(new dom.Event('load') as unknown as Event),
-  );
+  const loadWidget = async () => {
+    const script = dom.document.querySelector<HTMLScriptElement>(`script[src="${registrationPage.scriptUrl}"]`);
+    expect(script, page.host.textContent ?? '').not.toBeNull();
+    const previous = token;
+    await flush(() => script!.dispatchEvent(new dom.Event('load') as unknown as Event));
+    expect(token).toBeFunction();
+    expect(token).not.toBe(previous);
+  };
+  await loadWidget();
   const input = (name: string) => page.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const edit = (name: string, value: string) => flush(() => fill(input(name), value));
-  const choose = (label: string) => flush(() => button(document.body, label)!.click());
-  const navigate = () => flush(() => router.history.replace('/signup?state=new'));
+  const choose = (label: string) =>
+    flush(() => {
+      const control = button(document.body, label);
+      expect(control, document.body.textContent ?? '').toBeDefined();
+      control!.click();
+    });
+  const navigate = () =>
+    flush(() => {
+      void router.navigate({ to: '/signup?state=new', replace: true });
+    });
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event as unknown as Event);
@@ -86,7 +118,9 @@ async function setup() {
     registrationPage,
     setPage: async (next: RegistrationPage) => {
       config = next;
-      await router.invalidate();
+      const reads = read.mock.calls.length;
+      await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+      expect(read).toHaveBeenCalledTimes(reads + 1);
     },
     input,
     edit,
@@ -112,9 +146,10 @@ test('empty and whitespace-only details do not warn; Stay preserves invalid inpu
   expect(error).toBe('signup-handle-hint signup-handle-error');
   expect(p.unload()).toBe(true);
   await flush(() => p.host.querySelector<HTMLAnchorElement>('a[href^="/login"]')!.click());
-  const dialog = document.querySelector('[role="alertdialog"]')!;
-  expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
-  expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog, document.body.textContent ?? '').not.toBeNull();
+  expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy();
+  expect(dialog!.getAttribute('aria-describedby')).toBeTruthy();
   await p.choose('Stay');
   expect(p.router.history.location.search).toBe(p.query);
   expect(p.input('handle').value).toBe('bad!');
@@ -151,11 +186,15 @@ test('Stay retains a pending creation and retry key; Leave fences late creation 
   await p.navigate();
   await p.choose('Leave');
   expect(secret.isConnected).toBe(false);
-  expect(p.input('password').value).toBe('');
+  expect(secret.value).toBe('');
+  expect(p.host.querySelector('input[name="password"]')).toBeNull();
+  expect(p.host.textContent).toContain('Your earlier account creation may have completed');
   await flush(() => p.calls[1]!.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
   expect(p.calls).toHaveLength(2); // Leave retired the old callback, so late 201 cannot start sign-in.
-  expect(p.input('password').value).toBe('');
+  expect(p.host.querySelector('input[name="password"]')).toBeNull();
   expect(p.unload()).toBe(false);
+  await p.choose('I have reviewed this');
+  expect(p.input('password').value).toBe('');
 });
 
 test('a failed registration-page refresh preserves an unresolved attempt without reopening editable fields', async () => {
@@ -188,11 +227,11 @@ test('a newly signed-in viewer closes pending signup advice and fences its late 
     verification: { configured: true },
     actions: { register: false, continue: true },
   });
-  expect(document.body.textContent).toContain('A current account is signed in');
+  expect(document.body.textContent).toContain('An account is signed in');
   expect(p.host.querySelector('input[name="password"]')).toBeNull();
   await flush(() => signup.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
   expect(p.calls).toHaveLength(1); // A stale 201 cannot start sign-in or redirect this viewer.
-  expect(document.body.textContent).toContain('A current account is signed in');
+  expect(document.body.textContent).toContain('An account is signed in');
 });
 
 test('malformed acknowledgement retains exact retry; admitted retry starts only one separate sign-in', async () => {
