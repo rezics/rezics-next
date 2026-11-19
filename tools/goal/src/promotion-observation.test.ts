@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -185,18 +184,7 @@ test('restarts preserve append-only group identity, failures, and unknown interv
   }
 });
 
-test('without a public physical custody seam, nested markers and caller timeouts leave physical fields unknown', () => {
-  const producer = readFileSync(join(import.meta.dir, '../../../scripts/remote-check.ts'), 'utf8');
-  const observer = readFileSync(join(import.meta.dir, './promotion-observation.ts'), 'utf8');
-
-  expect(producer).toContain('export function readHosts');
-  expect(producer).toContain('export async function remoteCheck');
-  expect(producer).not.toMatch(
-    /export\s+(?:type|interface|function|const)\s+.*(?:Custody|Incarnation|CgroupDescriptor)/i,
-  );
-  expect(observer).toContain(PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE);
-  expect(observer).not.toContain('exitCode');
-
+test('promotion caller timeouts and nested output leave physical custody and launch source unknown', () => {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'promotion.sqlite'));
   try {

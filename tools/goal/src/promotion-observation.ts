@@ -4,9 +4,9 @@ import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 
 export const PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE =
-  'scripts/remote-check.ts exposes no structured current run, generation, cgroup identity, or terminal custody event';
+  'The promotion gate did not receive a verified physical run, generation, cgroup identity, or terminal custody event';
 export const PROMOTION_LAUNCH_SOURCE_UNAVAILABLE =
-  'scripts/remote-check.ts exposes no authenticated launch revision, script hash, producer revision, or client cohort receipt';
+  'The promotion gate did not receive an authenticated launch revision, script hash, producer revision, or client cohort receipt';
 export const MAX_PROMOTION_COMMAND_RECORD_BYTES = defaultPolicy.promotion.commandRecordBytes;
 export const MAX_PROMOTION_REASON_BYTES = defaultPolicy.promotion.reasonBytes;
 
