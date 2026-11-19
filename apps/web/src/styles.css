@@ -104,8 +104,11 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
 
 /* Apply the saved rail width before React hydrates the expanded, reader-independent document. */
 @media (min-width: 768px) {
+  html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar'] {
+    --sidebar-width: var(--sidebar-width-icon);
+  }
+
   html[data-nav='collapsed']:not([data-hydrated]) :is([data-slot='sidebar-gap'], [data-slot='sidebar-container']) {
-    width: var(--sidebar-width-icon);
     transition: none;
   }
 
@@ -115,7 +118,7 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
   }
 
   html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar-menu-button'] > span {
-    display: none;
+    @apply sr-only;
   }
 }
 

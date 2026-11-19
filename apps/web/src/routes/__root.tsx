@@ -164,12 +164,13 @@ const clientLoadRecovery = String.raw`(() => {
     if (!document.documentElement.hasAttribute('data-hydrated'))
       document.documentElement.dataset.clientLoadFailed = '';
   };
+  const importFailed = (message) =>
+    /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message);
   window.addEventListener('error', (event) => {
-    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') failed();
+    if ((event.target instanceof HTMLScriptElement && event.target.type === 'module') || importFailed(event.message)) failed();
   }, true);
   window.addEventListener('unhandledrejection', (event) => {
-    const message = String(event.reason?.message ?? event.reason);
-    if (/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message)) failed();
+    if (importFailed(event.reason?.message ?? event.reason)) failed();
   });
 })()`;
 

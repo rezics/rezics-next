@@ -1,3 +1,4 @@
+import { readExampleWorkerVars } from '../scripts/dev-vars.ts';
 import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import AxeBuilder from '@axe-core/playwright';
@@ -33,6 +34,7 @@ let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
   started ??= startDevServer({
+    env: { ...readExampleWorkerVars(), WEBSITE_SCOPES: 'openid' },
     warmUpPaths: [],
   }).then((running) => {
     server = running;
@@ -161,6 +163,11 @@ test(
     expect(await page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true);
     const cookies = await page.context().cookies();
     expect(cookies.find((cookie) => cookie.name === 'rezics_theme')?.value).toBe('dark');
+    await page.route('**/*', (route) =>
+      route.request().resourceType() === 'script' ? route.abort() : route.continue(),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(await page.locator('html.dark:not([data-hydrated])').count()).toBe(1);
     await page.context().close();
   },
   timeout,
@@ -172,16 +179,15 @@ test(
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
-    await any(
-      page.getByRole('combobox', { name: en.shell_language!, exact: true }),
-      page.getByRole('button', { name: en.shell_language!, exact: true }),
-    ).click();
-    await any(
-      page.getByRole('option', { name: endonyms.ja, exact: true }),
-      page.getByRole('menuitemradio', { name: endonyms.ja, exact: true }),
-      page.getByRole('link', { name: endonyms.ja, exact: true }),
-    ).click();
+    await page.getByRole('button', { name: `${en.shell_language}: ${endonyms.en}`, exact: true }).click();
+    await page
+      .getByRole('menuitemradio', {
+        name: en.shell_language_option_page!.replace('{language}', endonyms.ja),
+        exact: true,
+      })
+      .click();
     await page.waitForURL(`${origin}/ja`);
+    await page.locator('html[lang="ja"][data-hydrated]').waitFor({ state: 'attached' });
     const cookie = (await page.context().cookies()).find((entry) => entry.name === 'rezics_locale');
     expect(cookie?.value).toBe('ja');
     const redirect = await fetch(`${origin}/`, {
