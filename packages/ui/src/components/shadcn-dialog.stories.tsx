@@ -28,7 +28,7 @@ import { Command, CommandDialog, CommandInput, CommandItem, CommandList } from '
 import { CoverViewer } from './cover-viewer.tsx';
 import type { CoverSummary, CoverSubject } from './cover-model.ts';
 import { waitForFocus } from '../test/focus.ts';
-import { settled, withSurface } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 
 const meta = {
   title: 'Overlays/Dialog',
@@ -175,60 +175,60 @@ function LongProfileEdit() {
               <Button type="submit">Review save</Button>
             </DialogFooter>
           </form>
+          <AlertDialog
+            open={confirmationOpen}
+            onOpenChange={(next, details) => {
+              if (!next) setConfirmationCloseRequests((count) => count + 1);
+              if (!next && pending) {
+                details.cancel();
+                return;
+              }
+              setConfirmationOpen(next);
+            }}
+          >
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Save profile changes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The profile and its long biography will be updated together. You can keep editing until the save is
+                  confirmed.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {pending ? <p role="status">Save is pending. Dismissal is held until the result arrives.</p> : null}
+              <AlertDialogFooter>
+                <AlertDialogCancel type="button">Keep editing</AlertDialogCancel>
+                <AlertDialogAction type="button" onClick={() => setPending(true)}>
+                  Save now
+                </AlertDialogAction>
+              </AlertDialogFooter>
+              {pending ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setPending(false);
+                      setSaveMessage('The save was refused. Your edits are still open.');
+                    }}
+                  >
+                    Resolve as refused
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPending(false);
+                      setConfirmationOpen(false);
+                      setOpen(false);
+                    }}
+                  >
+                    Finish save
+                  </Button>
+                </div>
+              ) : null}
+            </AlertDialogContent>
+          </AlertDialog>
         </DialogContent>
       </Dialog>
-      <AlertDialog
-        open={confirmationOpen}
-        onOpenChange={(next, details) => {
-          if (!next) setConfirmationCloseRequests((count) => count + 1);
-          if (!next && pending) {
-            details.cancel();
-            return;
-          }
-          setConfirmationOpen(next);
-        }}
-      >
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Save profile changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The profile and its long biography will be updated together. You can keep editing until the save is
-              confirmed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {pending ? <p role="status">Save is pending. Dismissal is held until the result arrives.</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel type="button">Keep editing</AlertDialogCancel>
-            <AlertDialogAction type="button" onClick={() => setPending(true)}>
-              Save now
-            </AlertDialogAction>
-          </AlertDialogFooter>
-          {pending ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setPending(false);
-                  setSaveMessage('The save was refused. Your edits are still open.');
-                }}
-              >
-                Resolve as refused
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setPending(false);
-                  setConfirmationOpen(false);
-                  setOpen(false);
-                }}
-              >
-                Finish save
-              </Button>
-            </div>
-          ) : null}
-        </AlertDialogContent>
-      </AlertDialog>
       <span
         aria-hidden="true"
         className="sr-only"
@@ -258,7 +258,7 @@ const expectWithinViewport = (panel: HTMLElement) => {
 
 export const LongFormWorkflow: Story = {
   render: () => <LongProfileEdit />,
-  globals: {},
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Edit profile' });
     const callbackCounts = () => {
@@ -279,7 +279,7 @@ export const LongFormWorkflow: Story = {
 
     const firstField = within(dialog).getByLabelText('Display name');
     const lastField = within(dialog).getByLabelText(/Biography and interests/);
-    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    await waitForFocus(firstField);
     expectReachableIn(dialog, lastField);
     expectReachableIn(dialog, within(dialog).getByRole('button', { name: 'Close' }));
     expectReachableIn(dialog, firstField);
@@ -299,10 +299,10 @@ export const LongFormWorkflow: Story = {
     await expect(screen.getByRole('alertdialog', { name: 'Save profile changes?' })).toBeVisible();
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Resolve as refused' }));
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }));
-    await gone();
+    await dismissed('alertdialog');
     expect(callbackCounts()).toEqual({ dialog: 1, confirmationClose: 2 });
-    await expect(screen.getByRole('dialog', { name: 'Edit profile' })).toBeVisible();
-    const refusedDialog = screen.getByRole('dialog', { name: 'Edit profile' });
+    const refusedDialog = await screen.findByRole('dialog', { name: 'Edit profile' });
+    await expect(refusedDialog).toBeVisible();
     await expect(within(refusedDialog).getByRole('status')).toHaveTextContent(/save was refused/i);
     const retainedField = within(refusedDialog).getByLabelText('Display name');
     expect(retainedField).toBe(firstField);
@@ -321,6 +321,7 @@ export const LongFormWorkflow: Story = {
     await waitFor(() => expect(secondConfirmation.contains(document.activeElement)).toBe(true));
     await userEvent.click(within(secondConfirmation).getByRole('button', { name: 'Save now' }));
     await userEvent.click(within(secondConfirmation).getByRole('button', { name: 'Finish save' }));
+    await dismissed('alertdialog');
     await gone();
     expect(callbackCounts()).toEqual({ dialog: 3, confirmationClose: 2 });
     await waitForFocus(trigger);
@@ -361,9 +362,9 @@ function NestedCommandPalette() {
         Open command palette
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Commands" description="Choose a site command">
-        <Command>
+        <Command label="Find a command">
           <CommandInput placeholder="Find a command" />
-          <CommandList aria-label="Available commands">
+          <CommandList label="Available commands">
             {availableCommands.map((command) => (
               <CommandItem key={command} value={command}>
                 {command}
@@ -381,8 +382,11 @@ export const NestedScrollCompatibility: Story = {
   globals: {},
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Open command palette' });
-    await userEvent.click(trigger);
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Commands' }));
+    const input = within(dialog).getByRole('combobox', { name: 'Find a command' });
+    await waitForFocus(input);
     expectWithinViewport(dialog);
     expect(getComputedStyle(dialog).overflowY).toBe('hidden');
     const list = within(dialog).getByRole('listbox', { name: 'Available commands' });
@@ -394,6 +398,8 @@ export const NestedScrollCompatibility: Story = {
     const commandBounds = finalCommand.getBoundingClientRect();
     expect(commandBounds.top).toBeGreaterThanOrEqual(listBounds.top);
     expect(commandBounds.bottom).toBeLessThanOrEqual(listBounds.bottom);
+    await userEvent.keyboard('manage zones');
+    await waitFor(() => expect(within(list).getAllByRole('option')).toEqual([finalCommand]));
     await userEvent.keyboard('{Escape}');
     await gone();
     await waitForFocus(trigger);

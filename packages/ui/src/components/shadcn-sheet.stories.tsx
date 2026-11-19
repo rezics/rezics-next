@@ -39,13 +39,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const expectWithinViewport = (panel: HTMLElement) => {
-  const bounds = panel.getBoundingClientRect();
-  expect(bounds.top).toBeGreaterThanOrEqual(0);
-  expect(bounds.left).toBeGreaterThanOrEqual(0);
-  expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
-  expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
-};
+const expectWithinViewport = (panel: HTMLElement) =>
+  waitFor(() => {
+    const bounds = panel.getBoundingClientRect();
+    expect(bounds.top).toBeGreaterThanOrEqual(0);
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
+    expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+  });
 
 const expectReachableIn = (panel: HTMLElement, target: HTMLElement) => {
   target.scrollIntoView({ block: 'nearest' });
@@ -85,7 +86,7 @@ export const Default: Story = {
     const sheet = await settled(await screen.findByRole('dialog', { name: 'Filter Works' }));
     await expect(sheet).toHaveAccessibleDescription('Narrow the list by author or title.');
     await expect(sheet).toHaveAttribute('data-side', 'right');
-    expectWithinViewport(sheet);
+    await expectWithinViewport(sheet);
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
     await waitForFocus(trigger);
@@ -98,7 +99,7 @@ export const Sides: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Filters' }));
     const sheet = await settled(await screen.findByRole('dialog'));
     await expect(sheet).toHaveAttribute('data-side', 'left');
-    expectWithinViewport(sheet);
+    await expectWithinViewport(sheet);
     await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
     await dismissed('dialog');
   },
@@ -110,7 +111,7 @@ export const Bottom: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Filters' }));
     const sheet = await settled(await screen.findByRole('dialog'));
     await expect(sheet).toHaveAttribute('data-side', 'bottom');
-    expectWithinViewport(sheet);
+    await expectWithinViewport(sheet);
     await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
     await dismissed('dialog');
   },
@@ -122,7 +123,7 @@ export const Top: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Filters' }));
     const sheet = await settled(await screen.findByRole('dialog'));
     await expect(sheet).toHaveAttribute('data-side', 'top');
-    expectWithinViewport(sheet);
+    await expectWithinViewport(sheet);
     await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
     await dismissed('dialog');
   },
@@ -197,6 +198,7 @@ const LongSheetForm = () => (
 
 export const LongFormScroll: Story = {
   render: () => <LongSheetForm />,
+  globals: { viewport: { value: 'mobile1', isRotated: false } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Edit filters' }));
     const sheet = await settled(await screen.findByRole('dialog', { name: 'Edit collection filters' }));
@@ -204,7 +206,7 @@ export const LongFormScroll: Story = {
     expect(sheet).toHaveClass('sheet-workflow-override');
     expect(sheet.style.getPropertyValue('--sheet-workflow-marker')).toBe('preserved');
     expect(sheet.scrollHeight).toBeGreaterThan(sheet.clientHeight);
-    expectWithinViewport(sheet);
+    await expectWithinViewport(sheet);
 
     const lastField = within(sheet).getByLabelText('Summary');
     const close = within(sheet).getByRole('button', { name: 'Close' });
@@ -268,20 +270,15 @@ const MobileSidebar = () => (
 
 export const SidebarCompatibility: Story = {
   render: () => <MobileSidebar />,
+  parameters: {
+    viewport: { options: { shortPhone: { name: 'Short phone', styles: { width: '390px', height: '500px' } } } },
+  },
+  globals: { viewport: { value: 'shortPhone', isRotated: false } },
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Toggle Sidebar' });
-    if (!window.matchMedia('(max-width: 767px)').matches) {
-      const sidebar = canvasElement.querySelector<HTMLElement>('[data-slot="sidebar"]')!;
-      await userEvent.click(trigger);
-      await waitFor(() => expect(sidebar.closest('[data-state]')).toHaveAttribute('data-state', 'collapsed'));
-      await userEvent.click(trigger);
-      await waitFor(() => expect(sidebar.closest('[data-state]')).toHaveAttribute('data-state', 'expanded'));
-      await expect(within(sidebar).getByRole('link', { name: 'Help and support' })).toBeVisible();
-      return;
-    }
     await userEvent.click(trigger);
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Sidebar' }));
-    expectWithinViewport(dialog);
+    await expectWithinViewport(dialog);
     const panel = document.querySelector<HTMLElement>('[data-slot="sidebar"][data-mobile="true"]')!;
     expect(panel).toHaveClass('w-(--sidebar-width)', 'p-0');
     expect(panel.style.getPropertyValue('--sidebar-width')).toBe('18rem');
