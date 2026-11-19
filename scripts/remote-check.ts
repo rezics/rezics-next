@@ -6700,14 +6700,19 @@ async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostPr
   return result;
 }
 
+function sshExitDetail(host: Host, code: number, diagnostic: string): string {
+  const tail = scrubSshDiagnostic(host, diagnostic).trim().slice(-384);
+  return tail ? `exit ${code}, diagnostic ${JSON.stringify(tail)}` : `exit ${code}`;
+}
+
 function sessionLease(
   host: Host,
   holder: Bun.Subprocess<'pipe', 'pipe', 'pipe'>,
-  stderrDrained: Promise<void>,
+  stderr: ReturnType<typeof collectSshStderr>,
 ): SessionLease {
   let ended = false;
   let released = false;
-  const exited = Promise.all([holder.exited, stderrDrained]).then(([code]) => {
+  const exited = Promise.all([holder.exited, stderr.drained]).then(([code]) => {
     ended = true;
     return code;
   });
@@ -6738,8 +6743,14 @@ function sessionLease(
         throw new RemoteTransportError(host.name, 'slot lease release', REMOTE_TRANSPORT_FAILURE, false,
           'remote lease custody remains unknown; retained reservations are not a successful release');
       }
-      if (result !== 0) throw new RemoteTransportError(host.name, 'slot lease cleanup', result, false);
-
+      if (result !== 0)
+        throw new RemoteTransportError(
+          host.name,
+          'slot lease cleanup',
+          result,
+          false,
+          sshExitDetail(host, result, stderr.snapshot().stderrTail),
+        );
     },
   };
 }
@@ -6760,7 +6771,7 @@ async function takeSession(
     stderr: 'pipe',
   });
   const stderr = collectSshStderr(host, holder.stderr);
-  const lease = sessionLease(host, holder, stderr.drained);
+  const lease = sessionLease(host, holder, stderr);
   const reader = holder.stdout.getReader();
   let accepted = false;
   let stopping: Promise<void> | undefined;
@@ -8526,7 +8537,13 @@ async function uploadRun(
           }
           if (result.code !== 0) {
             if (!result.output.includes(CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION))
-              throw new RemoteTransportError(host.name, 'GitHub fetch', result.code);
+              throw new RemoteTransportError(
+                host.name,
+                'GitHub fetch',
+                result.code,
+                true,
+                sshExitDetail(host, result.code, result.stderr),
+              );
             throw new Error('check-git: host fetch failed');
           }
           fetchedPublished = true;
@@ -8663,6 +8680,9 @@ async function cleanupPreparedRun(prepared: PreparedRun, unacknowledgedLease = f
           'run cleanup verification',
           cleaned || REMOTE_TRANSPORT_FAILURE,
           false,
+          cleaned === 0
+            ? 'expected run cleanup acknowledgement was missing'
+            : sshExitDetail(prepared.host, cleaned, output),
         );
       }
       return {
