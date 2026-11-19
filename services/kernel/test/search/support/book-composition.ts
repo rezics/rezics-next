@@ -39,14 +39,18 @@ type TypeListResponse = { status: number; body: Record<string, unknown> };
 const marker = 'cataloguepublication';
 const editorCredentialWindowMs = 30_000;
 
-export async function publishBookOriginals(setupDeadline: number, cleanupMs: number, searchWorker?: 'owned-child') {
+export async function publishBookOriginals(
+  setupDeadline: number,
+  cleanupMs: number,
+  options: { searchWorker?: 'owned-child'; writeRateOverrides?: string } = {},
+) {
   let database: GrowthDatabase | undefined;
   let owner: ReleasedDiscoveryFixture | undefined;
   try {
     const fixture = await createReleasedDiscoveryFixture({
       version: 1,
       search: 'native',
-      ...(searchWorker === undefined ? {} : { searchWorker }),
+      ...options,
       async kernelPool(url) {
         // The default instrumented worker has its own checkout and shares the capture.
         if (database) {
@@ -231,7 +235,11 @@ export async function publishBookOriginals(setupDeadline: number, cleanupMs: num
 
 export async function createBookComposition(setupDeadline: number, cleanupMs: number) {
   const { fixture, database, originals, published, waitForPublication, createAnchor, createSubject } =
-    await publishBookOriginals(setupDeadline, cleanupMs, 'owned-child');
+    await publishBookOriginals(setupDeadline, cleanupMs, {
+      searchWorker: 'owned-child',
+      // The editor authors up to 4,096 distractors plus the selected catalogue and its supporting reads.
+      writeRateOverrides: JSON.stringify({ 'new-account': { write: { maximum: 6000, seconds: 60 } } }),
+    });
   try {
     const search = fixture.search;
     assert(search);

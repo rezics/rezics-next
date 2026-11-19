@@ -261,6 +261,7 @@ export async function createReleasedDiscoveryFixture(
     kernelPool?: (url: string) => Pool | Promise<Pool>;
     search?: 'native';
     searchWorker?: 'owned-child';
+    writeRateOverrides?: string;
   } = {
     version: releasedDiscoveryVersion,
   },
@@ -348,7 +349,8 @@ export async function createReleasedDiscoveryFixture(
         ...(search === undefined ? {} : { search }),
         writeRate: createWriteRateLimiter({
           secret: 'released-discovery-native-test-rate-secret',
-          overrides: JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
+          overrides:
+            options.writeRateOverrides ?? JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
         }),
       });
     },
