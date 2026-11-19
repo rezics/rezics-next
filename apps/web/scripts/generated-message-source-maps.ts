@@ -2,9 +2,9 @@ import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
 /** Generated catalogues have no authored JavaScript to map back to. */
-export function generatedMessageSourceMaps(appRoot: string): Plugin {
-  const entry = resolve(appRoot, 'src/paraglide/messages.js').replaceAll('\\', '/');
-  const directory = resolve(appRoot, 'src/paraglide/messages').replaceAll('\\', '/') + '/';
+export function generatedMessageSourceMaps(appRoot: string, outdir = 'src/paraglide'): Plugin {
+  const entry = resolve(appRoot, outdir, 'messages.js').replaceAll('\\', '/');
+  const directory = resolve(appRoot, outdir, 'messages').replaceAll('\\', '/') + '/';
   return {
     name: 'generated-message-source-maps',
     apply: 'serve',

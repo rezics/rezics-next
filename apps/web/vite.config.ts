@@ -15,6 +15,7 @@ import { bundledWebStartupPlugin } from './scripts/bundled-web-startup.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import { messageImports } from './scripts/message-imports.ts';
 import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
+import { catalogueLocaleModules, catalogueParaglideImports, paraglideViteOptions } from './scripts/paraglide-vite.ts';
 import { clientModuleSelectorEsm } from './scripts/client-module-esm.ts';
 import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
 import { logWebStartupMemory, webStartupMemoryAdmitted } from './tests/native/native-memory.ts';
@@ -394,6 +395,8 @@ export default defineConfig((context) => {
   }
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
+  const compactMessages = !testRuntime && context.command === 'serve' && process.env[catalogueLocaleModules] === '1';
+  const paraglide = paraglideViteOptions(compactMessages);
   const previewRoot =
     testRuntime && process.env.NATIVE_WEB_BUNDLED_CLIENT === '1' ? process.env.NATIVE_WEB_PREVIEW_ROOT : undefined;
   const workerPlugin = cloudflare({
@@ -431,7 +434,7 @@ export default defineConfig((context) => {
     optimizer,
     clientHold: clientOptimizeDeps.holdUntilCrawlEnd ? 'enabled' : 'disabled',
     workerOptimizer: 'pinned-include-no-discovery',
-    paraglide: testRuntime ? 'prepared-only' : 'live',
+    paraglide: testRuntime ? 'prepared-only' : paraglide.outputStructure,
     cloudflareLocal: process.env.CLOUDFLARE_VITE_FORCE_LOCAL === 'true' ? 'enabled' : 'unset',
     trace: webStartupTraceId() ? 'enabled' : 'disabled',
   });
@@ -567,11 +570,9 @@ export default defineConfig((context) => {
       },
       // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
       // rewrites that shared tree while Bun and the Worker optimizer are reading it.
-      ...(process.env.REZICS_TEST_RUNTIME === '1'
-        ? []
-        : [paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' })]),
-      messageImports(appRoot),
-      generatedMessageSourceMaps(appRoot),
+      ...(testRuntime ? [] : [paraglideVitePlugin(paraglide)]),
+      compactMessages ? catalogueParaglideImports(appRoot) : messageImports(appRoot),
+      generatedMessageSourceMaps(appRoot, paraglide.outdir),
       // The generated client route tree references every route. Split loaders and page components so their feature
       // graphs load with the visited route instead of blocking the root shell.
       tanstackStart({

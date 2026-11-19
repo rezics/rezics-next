@@ -1,5 +1,6 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createServer } from 'vite';
+import { catalogueLocaleModules, paraglideViteOptions } from './paraglide-vite.ts';
 
 // Use the installed plugin's own input/output-validated cache. A standalone compile produces a different
 // cache identity and cannot prime that cache. No app routes, optimizer, listener or Cloudflare runtime is needed.
@@ -7,7 +8,7 @@ const server = await createServer({
   configFile: false,
   root: process.cwd(),
   cacheDir: '.temp/paraglide-vite',
-  plugins: [paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' })],
+  plugins: [paraglideVitePlugin(paraglideViteOptions(process.env[catalogueLocaleModules] === '1'))],
   server: { middlewareMode: true, watch: null, hmr: false },
   optimizeDeps: { noDiscovery: true, include: [] },
 });
