@@ -137,6 +137,25 @@ afterAll(async () => {
   templates.clear();
 }, 120_000);
 
+export function importWorkerEnvironment(
+  configuration: Pick<ImportIdentity, 'accessConfig' | 'tokenKeys' | 'routeKey'>,
+) {
+  const auth = configuration.accessConfig.auth!;
+  return workerTestEnv({
+    AUTH_ISSUER: auth.issuer,
+    AUTH_AUDIENCE: auth.audience,
+    AUTH_JWKS_URL: auth.jwksUrl,
+    KERNEL_SESSION_KEYS: [...configuration.tokenKeys.keys]
+      .map(([id, bytes]) => `${id}:${Buffer.from(bytes).toString('base64url')}`)
+      .join(','),
+    KERNEL_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
+    CF_ACCESS_CLIENT_ID: 'external-fixture',
+    CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
+    KERNEL_ROUTE_KEY: Buffer.from(configuration.routeKey).toString('base64url'),
+    STRIPE_SECRET_KEY: '',
+  });
+}
+
 /** One owner of credentials, public transport, worker, durable journal and cleanup. */
 export async function openApiRuntime(
   options: DriverOptions & {
@@ -240,7 +259,6 @@ export async function openApiRuntime(
         clock: () => new Date(),
         ...(options.sourceStatistics === undefined ? {} : { sourceStatistics: options.sourceStatistics }),
         async configured(configuration) {
-          const auth = configuration.accessConfig.auth!;
           boundary = await time('media boundary', () =>
             createMediaBoundary({
               content: {
@@ -250,19 +268,7 @@ export async function openApiRuntime(
                 clock: () => new Date(),
               },
               fetchConfig,
-              workerEnvironment: workerTestEnv({
-                AUTH_ISSUER: auth.issuer,
-                AUTH_AUDIENCE: auth.audience,
-                AUTH_JWKS_URL: auth.jwksUrl,
-                KERNEL_SESSION_KEYS: [...configuration.tokenKeys.keys]
-                  .map(([id, bytes]) => `${id}:${Buffer.from(bytes).toString('base64url')}`)
-                  .join(','),
-                KERNEL_AUTH_CONSENT_URL: `${auth.issuer}/internal/v1/consents:read`,
-                CF_ACCESS_CLIENT_ID: 'external-fixture',
-                CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
-                OPENSEARCH_URL: '',
-                STRIPE_SECRET_KEY: '',
-              }),
+              workerEnvironment: { ...importWorkerEnvironment(configuration), OPENSEARCH_URL: '' },
             }),
           );
         },

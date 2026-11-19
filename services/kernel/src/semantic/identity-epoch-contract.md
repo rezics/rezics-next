@@ -1740,6 +1740,11 @@ The creation mapping records that dirty head in the creation transaction; a defa
 The proof does not depend on mutable PREPARE or pending-job bookkeeping. Admission preserves an already
 validated active native mapping. Under a valid native absence installation, a mapping still in legacy closure
 can also use its exact source mapping commit and the same published job's current ready output generation.
+Admission under that same absence installation also accepts an editorially revised creation when revision 1,
+the self mapping and the self gate still share their birth transaction and XID, the active owner and gate epochs
+match, and the mapping's original structural revision equals both dirty heads. The gate must have no pending
+job or epoch and the source must have no redirect. Reviewed admission still locks and compares both current
+editorial endpoints. Bootstrap export and source ACK continue to require the unchanged revision-1 birth proof.
 Other legacy input requires the birth proof or the installed-cutover and sealed-source-home barrier. The bounded
 source cursor advances over the complete raw page before filtering.
 A retained unchanged birth may use its existing exact-head path before conversion; this does not authorize

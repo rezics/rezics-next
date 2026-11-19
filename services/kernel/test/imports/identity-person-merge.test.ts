@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,21 +11,44 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { startWorker } from '../../src/worker.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import { importWorkerEnvironment, openApiRuntime } from './api-runtime.ts';
 import { fixtureFetch } from './type-helpers.ts';
 import '../support/native-history-composition.ts';
 
 test('a reviewed Person pair merges once through the native contract and both originals read the canonical Person', async () => {
   // These two exact imported claims share a partition under this fixture's route key.
+  const searchUrl = process.env.OPENSEARCH_URL;
+  if (!searchUrl) throw new Error('Person merge publication requires OPENSEARCH_URL');
+  const search = createOpenSearch(searchUrl);
   const routeKey = new Uint8Array(32);
   new DataView(routeKey.buffer).setUint32(0, 4209);
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536, routeKey });
+  const runtime = await openApiRuntime({
+    batchRecords: 8,
+    maxFields: 64,
+    maxRecordBytes: 65_536,
+    workerStartup: 'on-demand',
+    routeKey,
+  });
   const directory = await mkdtemp(join(tmpdir(), 'identity-person-merge-native-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const prefix = 'reviewed-' + randomUUID().replaceAll('-', '');
+  let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   try {
+    worker = await startWorker(
+      { databaseUrl: runtime.database.url, poolSize: 8, handleSignals: false },
+      (modules) => modules.filter(({ name }) => name === 'semantic' || name === 'search'),
+      {
+        ...importWorkerEnvironment(runtime.identity),
+        DATABASE_URL: runtime.database.url,
+        OPENSEARCH_URL: searchUrl,
+        KERNEL_SEARCH_PREFIX: prefix,
+      },
+    );
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const editor = await openApiObserver(runtime, { reviewedMerge: true });
     const publicClient = createPublicBulkClient({
@@ -58,13 +82,16 @@ test('a reviewed Person pair merges once through the native contract and both or
     expect(pair.state).toBe('selected');
     if (pair.state !== 'selected') throw new Error('Expected the selected Person pair');
     expect(pair.sources.map(({ boundSubjectId }) => partitionOf(routeOf(boundSubjectId)!))).toEqual([692, 692]);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: runtime.identity.bulk.accountId },
-      actions: ['context:accept', 'context:adopt', 'subject:merge', 'gate:subject_identity'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    const grant = async (actions: string[]) => {
+      const response = await editor.http('/v1/grants', {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: runtime.identity.bulk.accountId },
+        actions,
+        valid: '(,)',
+      });
+      expect(response.status).toBe(201);
+    };
+    await grant(['context:accept', 'context:adopt']);
     await publishShowcase({
       plan,
       result: first,
@@ -74,13 +101,39 @@ test('a reviewed Person pair merges once through the native contract and both or
       publicClient,
     });
 
+    const subjects = pair.sources.map(({ boundSubjectId }) => boundSubjectId);
+    const sources = [
+      { source: 'bangumi_cross_media', externalId: 'person:1916', property: 'wdt:P6298', value: '1916' },
+      { source: 'vndb_cross_media', externalId: 's224', property: 'wdt:P3180', value: 's224' },
+    ] as const;
+    const endpoints = [];
+    for (const [index, source] of sources.entries()) {
+      const subject = subjects[index]!;
+      const read = await runtime.importTransport.readReviewedPersonIdentity(subject, source);
+      const response = runtime.captures.at(-1)!.response;
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(read.reviewedIdentity).toEqual({
+        ...source,
+        subject,
+        securityRevision: '0',
+        revision: expect.any(Number),
+        claimTransactionId: expect.any(String),
+      });
+      endpoints.push(read.reviewedIdentity);
+    }
+    const body = { subjects, expectedIdentity: { endpoints } };
+    const closed = await runtime.request('/v1/subjects:merge', body, runtime.bulk.bearer);
+    expect(closed.status).toBe(403);
+    expect(await closed.json()).toMatchObject({ code: 'platform_closed', effect_status: 'not_applied' });
+    await grant(['subject:merge', 'gate:subject_identity']);
+
     const merge = () =>
       publishReviewedPersonMerge({
         pair: pair.sources,
         transport: runtime.importTransport,
         readPublic: (id) => publicClient.readSubject(id),
         journal,
-        pause: async () => {},
       });
     const published = await merge();
     expect(published.state).toBe('published');
@@ -96,25 +149,13 @@ test('a reviewed Person pair merges once through the native contract and both or
     expect([published.survivor, published.redirected].sort()).toEqual(
       pair.sources.map((source) => source.boundSubjectId).sort(),
     );
+    const redirect = await runtime.request(`/v1/subjects/${published.redirected}`);
+    expect([redirect.status, redirect.headers.get('location')]).toEqual([308, `/v1/subjects/${published.survivor}`]);
     // A reopened run replays the journaled intent: the admitted operation is not sent again.
     expect(await merge()).toEqual(published);
-    const reviews = runtime.captures.filter(({ request }) =>
-      new URL(request.url).searchParams.has('reviewIdentitySource'),
-    );
-    expect(reviews.map(({ response }) => response.status)).toEqual([200, 200]);
-    expect(reviews.map(({ response }) => response.headers.get('cache-control'))).toEqual([
-      'private, no-store',
-      'private, no-store',
-    ]);
-    const endpoints = await Promise.all(reviews.map(async ({ response }) => (await response.json()).reviewedIdentity));
-    expect(endpoints.map(({ source, externalId, securityRevision }) => [source, externalId, securityRevision])).toEqual(
-      [
-        ['bangumi_cross_media', 'person:1916', '0'],
-        ['vndb_cross_media', 's224', '0'],
-      ],
-    );
     const admissions = runtime.captures.filter(({ request }) => new URL(request.url).pathname === '/v1/subjects:merge');
     expect(admissions.map(({ response }) => response.status)).toEqual([202]);
+    expect(JSON.parse(admissions[0]!.body)).toEqual(body);
     const location = `/v1/subjectIdentityOperations/${published.operation}`;
     expect(admissions[0]!.response.headers.get('location')).toBe(location);
     expect(await admissions[0]!.response.json()).toEqual({ operation: { id: published.operation } });
@@ -128,11 +169,24 @@ test('a reviewed Person pair merges once through the native contract and both or
       },
     });
   } finally {
-    journal.close();
     try {
-      await runtime.close();
+      await worker?.stop();
+      const { body: indices } = await search.request<{ index: string }[]>(
+        'GET',
+        `/_cat/indices/${prefix}*`,
+        undefined,
+        {
+          query: { format: 'json', h: 'index' },
+        },
+      );
+      for (const { index } of indices) await search.request('DELETE', `/${index}`);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      journal.close();
+      try {
+        await runtime.close();
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     }
   }
 }, 600_000);

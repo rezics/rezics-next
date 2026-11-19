@@ -29,11 +29,12 @@ const delegated =
 export const searchReceivingCaptureStatements = Object.freeze({
   enable: "SELECT set_config('semantic.identity_receiving_capture','on',true)",
   next: `SELECT q.ordinal::text,q.partition_no,q.store,q.record_key::text,
-    coalesce(q.source_transaction_id,j.recorded_transaction_id)::text AS source_transaction_id,
+    q.source_transaction_id::text,q.job_id::text,
     nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid::text AS native_transaction_id
     FROM semantic.identity_receiving_capture_pending q
-    LEFT JOIN semantic.identity_epoch_job j ON j.partition_no=q.partition_no AND j.job_id=q.job_id
     WHERE q.transaction_xid=pg_current_xact_id()::text AND q.ordinal>$1::bigint ORDER BY q.ordinal LIMIT 1`,
+  jobOrigin: `SELECT recorded_transaction_id::text FROM semantic.identity_epoch_job
+    WHERE partition_no=$1 AND job_id=$2`,
   copyFirst: `SELECT ${roleProjection} FROM semantic.erasure_copy_role
     WHERE partition_no=$1 AND store=$2 AND record_key=$3 AND transaction_id=$4
     ORDER BY erasure_copy_role.account_id,erasure_copy_role.role LIMIT 1`,
@@ -61,7 +62,7 @@ export const searchReceivingCaptureStatementCosts = Object.freeze(
         name === 'enable'
           ? dimensions(1, 0, 1, 128, 0)
           : name === 'next'
-            ? dimensions(2, 2, 1, 512, 1)
+            ? dimensions(1, 1, 1, 512, 1)
             : name === 'arm'
               ? dimensions(1, 1, 1, 1024, 0)
               : dimensions(1, 1, 1, 256, 1),
@@ -183,19 +184,21 @@ export async function prepareSearchReceivingCaptures(
         partition_no: number;
         store: string;
         record_key: string;
+        job_id: string | null;
         source_transaction_id: string | null;
         native_transaction_id: string | null;
       }>(searchReceivingCaptureStatements.next, [after])
     ).rows[0];
     if (!entry) return;
-    const {
-      ordinal,
-      partition_no: home,
-      store,
-      record_key: key,
-      source_transaction_id: original,
-      native_transaction_id: native,
-    } = entry;
+    const { ordinal, partition_no: home, store, record_key: key, native_transaction_id: native } = entry;
+    let original = entry.source_transaction_id;
+    if (!original && entry.job_id) {
+      const job = await client.query<{ recorded_transaction_id: string }>(searchReceivingCaptureStatements.jobOrigin, [
+        home,
+        entry.job_id,
+      ]);
+      original = job.rows[0]?.recorded_transaction_id ?? null;
+    }
     if (!original) throw unavailable('original job transaction is absent');
     reserve(fixed);
     reserve(originControl);

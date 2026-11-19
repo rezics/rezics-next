@@ -15,13 +15,18 @@ JOIN core.partition p ON p.partition_no=(SELECT partition_no FROM parameters)
 LEFT JOIN semantic.identity_epoch_dirty d ON (d.route,d.original)=(s.route,s.subject_id)
 WHERE r.recorded_transaction_id=s.recorded_transaction_id
   AND r.recorded_transaction_id=m.recorded_transaction_id AND r.recorded_transaction_id=g.recorded_transaction_id
-  AND r.xmin=s.xmin AND r.xmin=m.xmin AND r.xmin=g.xmin
+  AND r.xmin=m.xmin AND r.xmin=g.xmin
   AND m.origin='creation' AND m.terminal=s.subject_id AND m.control_group=s.subject_id
   AND m.control_partition=p.partition_no AND m.owner_epoch=p.epoch AND p.write_state='active'
   AND m.epoch>0 AND g.epoch=m.epoch AND g.terminal=s.subject_id
   AND coalesce(d.revision,0)::text=requested.source_revision
   AND coalesce(d.captured_revision,0)::text=requested.source_revision
-  AND NOT EXISTS(SELECT 1 FROM semantic.revision later
-    WHERE later.route=s.route AND later.subject_id=s.subject_id AND later.revision>1)
+  AND (
+    (r.xmin=s.xmin AND NOT EXISTS(SELECT 1 FROM semantic.revision later
+      WHERE later.route=s.route AND later.subject_id=s.subject_id AND later.revision>1))
+    OR ($3::boolean AND m.closure_state='legacy' AND m.source_revision=d.revision
+      AND g.pending_job IS NULL AND g.pending_epoch IS NULL
+      AND EXISTS(SELECT 1 FROM semantic.read_identity_epoch_installation() i WHERE i.valid AND i.mode='absence'))
+  )
   AND NOT EXISTS(SELECT 1 FROM semantic.redirect redirect
     WHERE redirect.route=s.route AND redirect.subject_id=s.subject_id);

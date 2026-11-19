@@ -978,61 +978,73 @@ import {
   searchReceivingDeferredCaptureStatements,
 } from '../../src/semantic/identity-search-receiving-statements.ts';
 
-test('a shared-origin writer capture funds the final queue seek from the original frame', async () => {
-  const capture = searchReceivingCaptureStatements;
-  const original = crypto.randomUUID();
-  const { pool, calls } = driver(undefined, (sql, values) => {
-    if (sql === capture.next && values[0] === '0') {
-      return [{
-        ordinal: '1',
-        partition_no: 512,
-        store: 'identity_epoch_step',
-        record_key: '1',
-        source_transaction_id: original,
-        native_transaction_id: null,
-      }];
-    }
-    if (sql === capture.basis) return [{ actor: true, delegated: false, requested_bytes: 0 }];
-    if (sql === capture.arm) {
-      expect(values.slice(0, 9)).toEqual(['1', original, null, 0, 0, 2, 0, null, null]);
-      return [{ ordinal: '1' }];
-    }
-    return [];
-  });
-  const base = costs();
-  // The checkout and prior writer work leave 34 of the original 128 points for capture.
-  const priorWriterPoints = 93;
-  const declaration = receivingWorkDeclaration({
-    ...base,
-    statements: [
-      ...base.statements.map((entry) =>
-        entry.sql === commonWrite ? { ...entry, work: { ...entry.work, nativePoints: priorWriterPoints } } : entry,
-      ),
-      ...searchReceivingCaptureStatementCosts,
-    ],
-  });
-  await funded(pool, async (context) => {
-    const result = await withSearchReceivingWork(pool, context, declaration, [capture.enable], async () => {
-      const tx = await pool.connect();
-      try {
-        await tx.query(begin);
-        await tx.query(commonWrite, [original]);
-        await tx.query('COMMIT');
-      } catch (error) {
-        await tx.query('ROLLBACK');
-        throw error;
-      } finally {
-        tx.release();
+test.each(['explicit', 'job'] as const)(
+  'a shared-origin writer capture funds its %s origin and final queue seek',
+  async (originKind) => {
+    const capture = searchReceivingCaptureStatements;
+    const original = crypto.randomUUID();
+    const job = crypto.randomUUID();
+    const { pool, calls } = driver(undefined, (sql, values) => {
+      if (sql === capture.next && values[0] === '0') {
+        return [
+          {
+            ordinal: '1',
+            partition_no: 512,
+            store: 'identity_epoch_step',
+            record_key: '1',
+            source_transaction_id: originKind === 'explicit' ? original : null,
+            job_id: job,
+            native_transaction_id: null,
+          },
+        ];
       }
+      if (sql === capture.jobOrigin) {
+        expect(values).toEqual([512, job]);
+        return [{ recorded_transaction_id: original }];
+      }
+      if (sql === capture.basis) return [{ actor: true, delegated: false, requested_bytes: 0 }];
+      if (sql === capture.arm) {
+        expect(values.slice(0, 9)).toEqual(['1', original, null, 0, 0, 2, 0, null, null]);
+        return [{ ordinal: '1' }];
+      }
+      return [];
     });
-    expect(result.work.used.nativePoints).toBe(128);
-    const parent = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline)!;
-    expect(parent.receipt().used).toEqual(result.work.used);
-    const native = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline)!;
-    expect(context.allowance.points - native.points).toBe(result.work.used.nativePoints);
-  });
-  expect(calls.slice(-3)).toEqual([capture.arm, capture.next, 'COMMIT']);
-});
+    const base = costs();
+    // Only the job-backed origin needs an additional point between the queue row and EOF.
+    const priorWriterPoints = originKind === 'explicit' ? 95 : 94;
+    const declaration = receivingWorkDeclaration({
+      ...base,
+      statements: [
+        ...base.statements.map((entry) =>
+          entry.sql === commonWrite ? { ...entry, work: { ...entry.work, nativePoints: priorWriterPoints } } : entry,
+        ),
+        ...searchReceivingCaptureStatementCosts,
+      ],
+    });
+    await funded(pool, async (context) => {
+      const result = await withSearchReceivingWork(pool, context, declaration, [capture.enable], async () => {
+        const tx = await pool.connect();
+        try {
+          await tx.query(begin);
+          await tx.query(commonWrite, [original]);
+          await tx.query('COMMIT');
+        } catch (error) {
+          await tx.query('ROLLBACK');
+          throw error;
+        } finally {
+          tx.release();
+        }
+      });
+      expect(result.work.used.nativePoints).toBe(128);
+      const parent = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline)!;
+      expect(parent.receipt().used).toEqual(result.work.used);
+      const native = identitySourceConsumerNativeWork(pool, context.identityConsumerWork, context.deadline)!;
+      expect(context.allowance.points - native.points).toBe(result.work.used.nativePoints);
+    });
+    expect(calls.filter((sql) => sql === capture.jobOrigin)).toHaveLength(originKind === 'job' ? 1 : 0);
+    expect(calls.slice(-3)).toEqual([capture.arm, capture.next, 'COMMIT']);
+  },
+);
 
 test('a local SQL subtotal cannot admit the unresolved deferred Source capture graph as zero work', async () => {
   const { pool, calls } = driver();

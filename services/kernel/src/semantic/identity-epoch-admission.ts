@@ -198,14 +198,19 @@ export function createIdentityAdmissionOperations(
           const sourceHome = partitionOf(point.route);
           const ready = await capabilities.read.withReadTransaction(pool, async (tx) => {
             if (group.ready && point.origin === 'creation') {
-              const births = await currentNativeIdentityBirths(tx, sourceHome, [
-                {
-                  route: point.route,
-                  original: point.original,
-                  source_revision: String(point.source_revision),
-                  present: true,
-                },
-              ]);
+              const births = await currentNativeIdentityBirths(
+                tx,
+                sourceHome,
+                [
+                  {
+                    route: point.route,
+                    original: point.original,
+                    source_revision: String(point.source_revision),
+                    present: true,
+                  },
+                ],
+                'admission',
+              );
               if (births.has(point.original)) return true;
             }
             if (group.ready && point.closure_state === 'legacy' && point.origin === 'published') {

@@ -355,7 +355,7 @@ async function stepBootstrapHome(
           // Advance using the full selected page before excluding already-native births.
           // This preserves the bounded keyset even when every selected row is proven native.
           if ((phase === 'subjects' || phase === 'dirty') && rows.length) {
-            const nativeBirths = await currentNativeIdentityBirths(tx, partition, rows, work);
+            const nativeBirths = await currentNativeIdentityBirths(tx, partition, rows, 'bootstrap', work);
             rows = rows.filter((row) => !nativeBirths.has(row.original));
             const nativeImages = await currentNativeIdentitySourceImages(tx, partition, rows, work);
             rows = rows.filter((row) => !nativeImages.has(row.original));

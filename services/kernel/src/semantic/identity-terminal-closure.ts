@@ -176,7 +176,7 @@ async function exportSource(
     }
     // A retained page from an earlier writer may contain an unchanged native birth.
     // ACK only its exact source head; converted or dirty sources retain their existing custody.
-    if ((await currentNativeIdentityBirths(tx, exported.partition, [row], work)).has(row.original)) {
+    if ((await currentNativeIdentityBirths(tx, exported.partition, [row], 'bootstrap', work)).has(row.original)) {
       await tx.query(
         `UPDATE semantic.identity_epoch_bootstrap_row SET closure_complete=true
         WHERE partition_no=$1 AND transaction_id=$2 AND route=$3 AND original=$4`,
