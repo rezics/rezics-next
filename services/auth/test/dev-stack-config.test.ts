@@ -530,6 +530,7 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
     // An admitted post-replay launch must work without a live database or native SQL preparation.
     const launch = await resolveFrontendProcess('web', [], true, env, webFile);
     expect(launch.environment).toMatchObject({ ...setup, AUTH_ORIGIN: origins.native, PUBLIC_ORIGIN: origins.web });
+    expect(launch.environment.REZICS_WEB_CATALOGUE_LOCALE_MODULES).toBe('1');
     expect(launch.command).toContain('apps/web');
     await privateFile(webFile, developmentBindings({ ...setup, WEBSITE_SCOPES: 'openid' }));
     await expect(resolveFrontendProcess('web', [], true, env, webFile)).rejects.toThrow('differ from walk setup');
@@ -578,10 +579,12 @@ test('walk Web launch uses the product Vite child and does not raise Node heap',
   const child = webLaunchEnvironment({
     PATH: '/bin',
     REZICS_TEST_RUNTIME: '1',
+    REZICS_WEB_CATALOGUE_LOCALE_MODULES: '1',
     NODE_OPTIONS: '--max-old-space-size=8192',
     AUTH_ORIGIN: 'http://127.0.0.1:20022',
   });
   expect(child.REZICS_TEST_RUNTIME).toBeUndefined();
+  expect(child.REZICS_WEB_CATALOGUE_LOCALE_MODULES).toBeUndefined();
   expect(child.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
   expect(child.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
   expect(child.AUTH_ORIGIN).toBe('http://127.0.0.1:20022');

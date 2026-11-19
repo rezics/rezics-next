@@ -9,6 +9,7 @@ import { securityScopeLimit } from '@rezics/auth-contract';
 import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
+import { catalogueLocaleModules } from '../../../apps/web/scripts/paraglide-vite.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
 import {
   CATALOGUE_IMPORTER_SCOPES,
@@ -1275,6 +1276,7 @@ export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
     CLOUDFLARE_CF_FETCH_ENABLED: 'false',
   };
   delete child.REZICS_TEST_RUNTIME;
+  delete child[catalogueLocaleModules];
   return child;
 }
 
@@ -1431,7 +1433,11 @@ async function catalogueWebProcess(
     bindings.SITE_ORIGINS !== origins.web
   )
     throw new Error('Catalogue Web bindings belong to another stack');
-  return frontendProcess('web', args, environment, { ...bindings, ...frontendOriginBindings() });
+  return frontendProcess('web', args, environment, {
+    ...bindings,
+    ...frontendOriginBindings(),
+    [catalogueLocaleModules]: '1',
+  });
 }
 
 export async function resolveFrontendProcess(
