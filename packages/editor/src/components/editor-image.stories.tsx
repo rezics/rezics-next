@@ -143,6 +143,7 @@ const text = demo('text');
 export const AltText: Story = {
   render: () => <altText.Demo />,
   async play({ canvasElement }) {
+    const keyboardDescription = 'A ridge above the clouds\nat dawn';
     const canvas = await choose(canvasElement, 'Original description');
     const page = within(canvasElement.ownerDocument.body);
     const loaded = (await canvas.findByRole('img', { name: 'Original description' })) as HTMLImageElement;
@@ -166,28 +167,32 @@ export const AltText: Story = {
     const reopened = page.getByRole('textbox', { name: 'Alt text' });
     expect(reopened).toHaveValue('A ridge above the clouds');
     await userEvent.clear(reopened);
-    await userEvent.type(reopened, 'A ridge above the clouds at dawn');
+    await userEvent.type(reopened, 'A ridge above the clouds{Enter}at dawn');
+    expect(reopened).toHaveValue(keyboardDescription);
+    const apply = page.getByRole('button', { name: 'Apply' });
+    for (let step = 0; step < 5; step++) await userEvent.tab();
+    expect(apply).toHaveFocus();
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn'));
+    await waitFor(() => expect(images(altText.latest.current)[0]?.attrs?.alt).toBe(keyboardDescription));
     expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
 
     await userEvent.keyboard('{Enter}');
     const cancelDraft = page.getByRole('textbox', { name: 'Alt text' });
-    expect(cancelDraft).toHaveValue('A ridge above the clouds at dawn');
+    expect(cancelDraft).toHaveValue(keyboardDescription);
     await userEvent.clear(cancelDraft);
     await userEvent.type(cancelDraft, 'Discard this draft');
     await userEvent.click(page.getAllByRole('button', { name: 'Cancel' }).at(-1)!);
     expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
-    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
+    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe(keyboardDescription);
 
     await userEvent.keyboard('{Enter}');
     const escapeDraft = page.getByRole('textbox', { name: 'Alt text' });
-    expect(escapeDraft).toHaveValue('A ridge above the clouds at dawn');
+    expect(escapeDraft).toHaveValue(keyboardDescription);
     await userEvent.clear(escapeDraft);
     await userEvent.type(escapeDraft, 'Discard with Escape');
     await userEvent.keyboard('{Escape}');
     expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
-    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
+    expect(images(altText.latest.current)[0]?.attrs?.alt).toBe(keyboardDescription);
 
     const removeEditor = canvas.getByRole('button', { name: 'Remove editor' });
     await userEvent.keyboard('{Enter}');
@@ -216,7 +221,11 @@ export const PasteImage: Story = {
     );
     await waitFor(() => expect(pasted.calls).toHaveLength(5));
     expect(pasted.states.at(-1)).toEqual({ state: 'pending', count: 5 });
-    expect(canvas.getByRole('status', { name: 'Uploading image' })).toHaveTextContent('image-4');
+    expect(
+      canvas
+        .getAllByRole('status', { name: 'Uploading image' })
+        .map((status) => status.querySelector('bdi')?.textContent),
+    ).toEqual(types.map((_, index) => `image-${index}`));
     pasted.calls.forEach((call, index) => call.resolve({ src: `media-${index}` }));
     await waitFor(() => expect(canvas.getAllByRole('img', { name: 'Image' })).toHaveLength(5));
     await waitFor(() => expect(images(pasted.latest.current)).toHaveLength(5));
@@ -429,8 +438,9 @@ async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt:
       before.length === 0 || /\s$/u.test(before),
       'The fixture must offer slash insertion at its intended text boundary',
     ).toBe(true);
-    await userEvent.keyboard('/i');
-    await canvas.findByRole('option', { name: 'Image' });
+    await userEvent.keyboard('/image');
+    const option = await canvas.findByRole('option', { name: 'Image' });
+    await waitFor(() => expect(textbox).toHaveAttribute('aria-activedescendant', option.id));
     await userEvent.keyboard('{Enter}');
   } else {
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
