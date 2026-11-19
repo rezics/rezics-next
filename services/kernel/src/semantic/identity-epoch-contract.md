@@ -353,6 +353,17 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
 | Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, ordered P=1 custody | Complete mapping maintenance, registration handshake and native committed partition summaries; fixed participant custody still gates publication                      |
 
+For a public Book TypeList, `public_filter_published_coverage` binds the child read definition to the active
+physical publication. Its coverage generation tracks projection and privacy work. The selected mapping reader
+checks pending claims and terminal closure for the requested originals. A claim on an off-page original can
+leave both the current window and its physical publication unchanged.
+
+The missing operand is the public identity scope's capture ID and clean committed revision bound to that
+publication, incarnation and complete type/name-order definition. A relevant claim must be visible at the
+start and final reads, and its completed effects must advance the revision used by an authentic continuation.
+`identity-scoped-observations.ts` retains the public attempt in `identity_scope_completion`; finishing it
+still requires the public projection producer's complete effect enumeration and receiving custody.
+
 Search's actual `searchWorkModule -> startSearchIndexing -> createSubjectIndexer`, subjectIndexName/subjectAlias,
 per-generation subjectConsumer, 256-ID chunks and `refresh: wait_for` bulk precede ordinary checkpoints. They do
 not supply complete canonical/negative-query observation or SourceAccess. Native namespace/query admission must

@@ -5,6 +5,7 @@ import { createNativeIdentityCapabilities } from '../../src/semantic/identity-ad
 import type { NativeIdentityCapabilities } from '../../src/semantic/identity-adapter-port.ts';
 import { createIdentityReaders } from '../../src/semantic/identity-adapters/identity-epoch-read.ts';
 import owners from '../../src/semantic/identity-epoch-read-owners.sql';
+import pending from '../../src/semantic/identity-epoch-read-pending.sql';
 import sources from '../../src/semantic/identity-epoch-read-sources.sql';
 import current from '../../src/semantic/identity-terminal-closure-current.sql';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
@@ -123,6 +124,64 @@ test('mapping evidence passes share one fresh deadline and preserve the exact on
   expect(sourceKeys).toEqual(Array(2).fill(original));
   expect(releaseErrors).toEqual(Array(4).fill(undefined));
   expect(activeSnapshots).toBe(0);
+});
+
+test('same-home originals observe their shared pending control in the source snapshot', async () => {
+  const originals = [newId(0x20), newId(0x21)];
+  const home = partitionOf(0x20);
+  const terminal = originals[0]!;
+  const job = { jobId: newId(0x50), epoch: 8n };
+  const reads: string[] = [];
+  const releases: Array<Error | boolean | undefined> = [];
+  const harness = readerHarness(async (sql, values) => {
+    if (sql === owners.sql) {
+      reads.push('owner');
+      return { rows: [{ partition_no: home, epoch: 3, write_state: 'active' }] };
+    }
+    if (sql === sources.sql) {
+      reads.push('sources');
+      return {
+        rows: originals.map((original) => ({
+          subject_id: original,
+          original,
+          control_partition: home,
+          control_group: terminal,
+          epoch: '7',
+          owner_epoch: 3,
+          dirty_revision: '0',
+          captured_revision: '0',
+          terminal,
+          closure_state: 'legacy',
+          current_target: original === terminal ? null : terminal,
+        })),
+      };
+    }
+    if (sql === pending.sql) {
+      reads.push('claim');
+      expect(values).toEqual([[home], [terminal]]);
+      return { rows: [{ partition_no: home, terminal, pending_job: job.jobId, pending_epoch: '8' }] };
+    }
+    if (sql === current.sql) {
+      reads.push('closure');
+      return {
+        rows: originals.map((original) => ({
+          partition_no: home,
+          terminal,
+          requested_original: original,
+          redirected: false,
+          owner_epoch: 3,
+          closure_state: 'open',
+          published_epoch: '7',
+        })),
+      };
+    }
+    return { rows: [] };
+  }, releases);
+  await expect(harness.readers.readIdentityMappings(harness.pool, originals)).resolves.toEqual(
+    originals.map((original) => ({ state: 'pending', original, job })),
+  );
+  expect(reads).toEqual(['owner', 'sources', 'claim', 'closure']);
+  expect(releases).toEqual([undefined]);
 });
 
 test('a slow home expires the original ambient deadline and prevents the next home query', async () => {

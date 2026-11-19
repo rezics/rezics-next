@@ -151,6 +151,7 @@ async function controlPhase(
   client: Queryable,
   locators: readonly IdentityRatingControlLocator[],
   sourceRows: readonly IdentitySourceEvidence[],
+  snapshotOwners?: readonly IdentityOwnerEvidence[],
 ) {
   if (!locators.length) return { owners: [], pending: [], current: [] };
   const homes = [...new Set(locators.map((row) => row.partition))].sort((a, b) => a - b);
@@ -165,7 +166,9 @@ async function controlPhase(
       .sort(
         (left, right) => left.terminal.localeCompare(right.terminal) || left.original.localeCompare(right.original),
       );
-    const ownerResult = await client.query(owners.sql, [[home]]);
+    const homeOwners = snapshotOwners
+      ? snapshotOwners.filter((owner) => owner.partition_no === home)
+      : ((await client.query(owners.sql, [[home]])).rows as unknown as IdentityOwnerEvidence[]);
     const pendingResult = await client.query(pending.sql, [
       controlKeys.map(() => home),
       controlKeys.map((row) => row.group),
@@ -175,7 +178,7 @@ async function controlPhase(
       pairs.map((row) => row.terminal),
       pairs.map((row) => row.original),
     ]);
-    ownersRows.push(...(ownerResult.rows as unknown as IdentityOwnerEvidence[]));
+    ownersRows.push(...homeOwners);
     pendingRows.push(...pendingResult.rows.map(selectedPendingEvidence));
     currentRows.push(...(currentResult.rows as unknown as IdentityControlEvidence[]));
   }
@@ -401,18 +404,16 @@ async function readIdentityMappingsWith(
     return route;
   });
   const deadline = capabilities.read.requestDeadline();
-  // Keep every source/control snapshot local to one home. Double collection
-  // detects changes while releasing homes; unrelated partition positions do not
-  // invalidate exact mapping evidence.
-  async function collect(): Promise<IdentityMappingEvidence> {
+  const sourceHomes = new Set(routes.map(partitionOf));
+  async function collect() {
     const sourceOwners: IdentityOwnerEvidence[] = [],
       sourceRows: IdentitySourceEvidence[] = [];
     const controlOwners: IdentityOwnerEvidence[] = [],
       pendingRows: IdentityPendingEvidence[] = [],
       currentRows: IdentityControlEvidence[] = [];
-    for (const home of new Set(routes.map(partitionOf))) {
+    for (const home of sourceHomes) {
       const indices = routes.flatMap((route, index) => (partitionOf(route) === home ? [index] : []));
-      await capabilities.read.withReadTransaction(
+      const local = await capabilities.read.withReadTransaction(
         pool,
         async (tx) => {
           sourceOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
@@ -424,46 +425,49 @@ async function readIdentityMappingsWith(
               ])
             ).rows,
           );
+          if (sourceHomes.size !== 1) return null;
+          const locators = controlLocatorsOf(sourceRows);
+          if (locators.some((key) => key.partition !== home)) return null;
+          // All evidence, including any missing owner or pending claim, comes
+          // from this one RR snapshot. No home was released between reads.
+          return controlPhase(tx, locators, sourceRows, sourceOwners);
         },
         deadline,
       );
+      if (local)
+        return {
+          singleSnapshot: true,
+          evidence: {
+            sourceOwners,
+            sourceRows,
+            controlOwners: local.owners,
+            pendingRows: local.pending,
+            currentRows: local.current,
+          },
+        };
     }
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
       const group = available.filter((row) => row.control_partition === home);
-      await capabilities.read.withReadTransaction(
+      const control = await capabilities.read.withReadTransaction(
         pool,
-        async (tx) => {
-          controlOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
-          pendingRows.push(
-            ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows.map(
-              selectedPendingEvidence,
-            ),
-          );
-          currentRows.push(
-            ...(
-              await tx.query(current.sql, [
-                group.map(() => home),
-                group.map((row) => row.control_group),
-                group.map((row) => row.original),
-              ])
-            ).rows,
-          );
-        },
+        (tx) => controlPhase(tx, controlLocatorsOf(group), group),
         deadline,
       );
+      controlOwners.push(...control.owners);
+      pendingRows.push(...control.pending);
+      currentRows.push(...control.current);
     }
-    return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
+    return { singleSnapshot: false, evidence: { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows } };
   }
-  const first = await collect(),
-    last = await collect();
-  if (comparableIdentityEvidence(first) !== comparableIdentityEvidence(last))
-    return originals.map(() => ({ state: 'unavailable', reason: 'bootstrap' }));
-  return classifyIdentityMappings(
-    originals.map((original, index) => ({ original, sourceHome: partitionOf(routes[index]!) })),
-    last,
-    identitySourceSupportJob(),
-  );
+  let collected = await collect();
+  if (!collected.singleSnapshot) {
+    const first = collected.evidence;
+    collected = await collect();
+    if (comparableIdentityEvidence(first) !== comparableIdentityEvidence(collected.evidence))
+      return originals.map(() => ({ state: 'unavailable', reason: 'bootstrap' }));
+  }
+  return classifyIdentityMappings(requestsFor(originals, routes), collected.evidence, identitySourceSupportJob());
 }
 
 /** The caller owns one repeatable-read snapshot of the physical pool. Read the
