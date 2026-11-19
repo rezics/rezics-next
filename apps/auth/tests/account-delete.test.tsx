@@ -1,5 +1,6 @@
 import type { AccountDeletionPage } from '../src/account-deletion-page';
 import { expect, spyOn, test } from 'bun:test';
+import { m } from '../src/paraglide/messages.js';
 import * as fixture from './creation-page-fixture';
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import {
@@ -74,7 +75,7 @@ test('uncertain deletion survives cached return with its exact command; accepted
   expect(page.calls[3]!.body).toEqual({ operationKey: saved.operationKey, operation: saved.operation });
   await flush(() => page.calls[3]!.resolve(approval()));
   await flush(() => page.calls[4]!.resolve(Response.json({ accountId: initial.accountId })));
-  expect(page.host.textContent).toContain('Cleanup of native, shared and external copies is still pending');
+  expect(page.host.textContent).toContain(m.auth_account_delete_cleanup_pending());
   expect(readPendingAccountOperationStepUp()).toBeNull();
   await flush(() => {
     leave();
@@ -230,7 +231,7 @@ test('direct ordinary visit authenticates without confirmation or approval and r
   expect(page.host.textContent).not.toContain('person@example.test');
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   try {
-    await flush(() => button(page.host, 'Authenticate and return to review')!.click());
+    await flush(() => button(page.host, m.auth_account_delete_authenticate())!.click());
     expect(assign).toHaveBeenCalledWith('/step-up?account_operation=delete&return_to=%2Faccount%2Fdelete');
     const saved = readPendingAccountOperationStepUp()!;
     expect(saved.submitted).toBe(false);
@@ -238,7 +239,7 @@ test('direct ordinary visit authenticates without confirmation or approval and r
     await page.render(<DeleteAccountContent key="returned" {...props} initial={visit} />);
     expect(page.host.querySelector('input')!.value).toBe('');
     expect(button(page.host, 'Delete account')!.disabled).toBe(true);
-    expect(page.host.textContent).toContain('No action has been executed by returning here');
+    expect(page.host.textContent).toContain(m.auth_account_operation_reconfirm());
     const departure = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(departure);
     expect(departure.defaultPrevented).toBe(false);
@@ -259,7 +260,7 @@ test('native refusal cannot authenticate or submit; dependency retry renews revi
   const page = await open(<DeleteAccountContent {...props} initial={{ ...visit, action: 'refused' }} />, visit);
   expect(page.host.querySelector('input')).toBeNull();
   expect(button(page.host, 'Delete account')!.disabled).toBe(true);
-  expect(button(page.host, 'Authenticate and return to review')).toBeUndefined();
+  expect(button(page.host, m.auth_account_delete_authenticate())).toBeUndefined();
   await page.render(<DeleteAccountContent key="unavailable" {...props} initial={{ kind: 'unavailable' }} />);
   await flush(() => button(page.host, 'Retry')!.click());
   expect(page.host.querySelector('input')!.value).toBe('');

@@ -171,7 +171,7 @@ test(
       expect(await page.getByText(/permanently deletes your REZICS account/i).count()).toBe(1);
       expect(await page.getByText(/signs you out everywhere/i).count()).toBe(1);
       expect(await page.getByText(/cannot be undone/i).count()).toBeGreaterThan(0);
-      expect(await page.getByText(/no automated accounts are operated by this account/i).count()).toBe(1);
+      expect(await page.getByText(/this account does not operate any automated accounts/i).count()).toBe(1);
       expect(await page.getByText(/not the last owner of any organization/i).count()).toBe(1);
       expect(await page.getByText(/no transfer is pending/i).count()).toBe(1);
 
@@ -241,6 +241,11 @@ test(
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       await page.getByRole('textbox').waitFor({ state: 'visible' });
+      const afterSignIn = calls.slice(calls.findIndex((call) => call.url === '/signin') + 1);
+      expect(afterSignIn.find((call) => call.url === '/session')).toMatchObject({
+        method: 'GET',
+        headers: { origin, cookie: expect.stringContaining('auth_session=fake-fresh-session') },
+      });
       expect(state.sessionFresh).toBe(true);
       expect(postBodies('/signin')).toEqual([
         {
@@ -419,7 +424,7 @@ test(
       const alert = page.getByRole('alert');
       await alert.waitFor();
       expect(await alert.innerText()).toContain('This account cannot be deleted yet');
-      expect(await alert.innerText()).toContain('Complete the items listed above first.');
+      expect(await alert.innerText()).toContain('Complete the items listed above.');
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
       expect(state.signedOut).toBe(false);
     } finally {
@@ -613,14 +618,14 @@ test(
   'both account-operation pages offer sign-in when signed out',
   async () => {
     reset({ signedOut: true });
-    for (const [path, heading] of [
-      ['/account/delete', 'Delete your account'],
-      ['/organizations/new', 'Create an organization'],
+    for (const [path, heading, signIn] of [
+      ['/account/delete', 'Delete your account', '/login?return_to=%2Faccount%2Fdelete'],
+      ['/organizations/new', 'Create an organization', '/login'],
     ]) {
       const { page } = await open(path, {}, false);
       try {
         await page.getByRole('heading', { name: heading, exact: true }).waitFor();
-        expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
+        expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe(signIn);
         expect(authCalls('/account-operations/approve')).toHaveLength(0);
         expect(authCalls('/account-operations/execute')).toHaveLength(0);
       } finally {

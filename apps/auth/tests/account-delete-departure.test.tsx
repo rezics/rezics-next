@@ -1,3 +1,4 @@
+import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import type { AccountDeletionPage } from '../src/account-deletion-page';
 import { expect, spyOn, test } from 'bun:test';
 import { createContext, useContext } from 'react';
@@ -9,7 +10,6 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
 
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import { emptyInventory } from '../src/stories/accounts-operations/story';

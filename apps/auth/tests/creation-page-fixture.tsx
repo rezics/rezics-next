@@ -91,10 +91,10 @@ mock.module('../src/account-session', () => ({
 export const { fill, button, session } = await import('../src/stories/accounts-operations/story');
 const { createRoot } = await import('react-dom/client');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
-overwriteGetLocale(() => 'en');
 export const flush = (action: () => void) => act(async () => action());
 const roots = new Set<ReturnType<typeof createRoot>>();
 function installBrowser() {
+  overwriteGetLocale(() => 'en');
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }

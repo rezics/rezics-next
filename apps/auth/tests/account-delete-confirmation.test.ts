@@ -155,7 +155,7 @@ const confirmations = {
     'アカウントの削除は確定後に取り消せません。',
   ],
   ko: ['내 계정 삭제', '확인하려면 “내 계정 삭제”를 입력하세요.', '계정을 삭제하면 되돌릴 수 없습니다.'],
-  'zh-Hans': ['删除我的账号', '请输入“删除我的账号”以确认。', '账号一经删除便无法恢复。'],
+  'zh-Hans': ['删除我的账户', '请输入“删除我的账户”以确认。', '账户一经删除便无法恢复。'],
   'zh-Hant': ['刪除我的帳號', '請輸入「刪除我的帳號」以確認。', '帳號一經刪除便無法復原。'],
 } as const;
 
@@ -296,7 +296,7 @@ test(
       expect(await page.getByRole('checkbox').count()).toBe(0);
       await input.fill(confirmations.en[0]);
       await page.getByRole('button', { name: 'Delete account', exact: true }).click();
-      await page.getByRole('status').waitFor();
+      await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).waitFor();
       expect(postBodies('/account-operations/approve')).toEqual([
         { operationKey: expect.any(String), operation: { kind: 'delete', accountId } },
       ]);

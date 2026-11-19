@@ -172,7 +172,17 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
           state.sessionClientId = payload.client_id;
           state.sessionScopes = scopes;
           headers.append('set-cookie', 'auth_session=fake-fresh-session; Path=/; HttpOnly; SameSite=Lax');
-          return Response.json({ success: true }, { headers });
+          return Response.json(
+            {
+              account_id: state.sessionAccountId,
+              client_id: state.sessionClientId,
+              scope: state.sessionScopes,
+              authn_epoch: 0,
+              auth_time: Math.floor(Date.now() / 1000),
+              amr: ['pwd'],
+            },
+            { headers },
+          );
         }
         return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
       }

@@ -3,13 +3,17 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { createFakeAuthState, startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const session = 'account-operation-session';
 const calls: FakeAuthRequest[] = [];
-const state = createFakeAuthState();
+const state = createFakeAuthState({
+  sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+  sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+});
 const fake = startFakeAuth({ state, onRequest: (request) => calls.push(request) });
 
 function freePort(): Promise<number> {
@@ -123,14 +127,14 @@ const copy = {
     retained: 'Stays, without your name',
     retainedItems: ['Your public Collections as they are now, with their current notes.', 'Your posts and reviews.'],
     attribution:
-      'These contributions remain attributed to “Deleted account”, frozen and no longer editable by anyone. No replacement curator is assigned.',
+      'These stay attributed to “Deleted account”. No one can edit them, and no replacement curator is assigned.',
     prepare: 'If you do not want something to stay, make the Collection private or delete the post first.',
     privacy: 'To get a copy of your data, before or after deletion, contact mailto:privacy@example.test.',
   },
   de: {
     erased: 'Wird gelöscht',
     erasedItems: [
-      'Dein Profil, Name, Handle und Avatar.',
+      'Dein Profil, Name, Benutzername und Avatar.',
       'Deine gesamte Bibliothek: Regaleinträge, Lesefortschritt und Leseverlauf, Exemplare und gefolgte Inhalte.',
       'Deine privaten, nicht gelisteten und gelöschten Sammlungen.',
       'Leseprotokolle, die du ausdrücklich veröffentlicht hast.',
@@ -141,14 +145,14 @@ const copy = {
       'Deine Beiträge und Rezensionen.',
     ],
     attribution:
-      'Diese Inhalte bleiben unter „Gelöschtes Konto“ erhalten, werden eingefroren und können von niemandem mehr bearbeitet werden. Es wird keine neue Betreuung zugewiesen.',
+      'Diese bleiben „Gelöschtes Konto“ zugeordnet. Niemand kann sie bearbeiten, und es wird kein Ersatzkurator zugewiesen.',
     prepare: 'Wenn etwas nicht erhalten bleiben soll, stelle die Sammlung vorher auf privat oder lösche den Beitrag.',
     privacy: 'Für eine Kopie deiner Daten, vor oder nach der Löschung, wende dich an mailto:privacy@example.test.',
   },
   es: {
     erased: 'Se elimina',
     erasedItems: [
-      'Tu perfil, nombre, identificador y avatar.',
+      'Tu perfil, nombre, nombre de usuario y avatar.',
       'Toda tu biblioteca: entradas de estantería, progreso e historial de lectura, ejemplares y seguimientos.',
       'Tus colecciones privadas, no listadas y eliminadas.',
       'Los registros de lectura que publicaste expresamente.',
@@ -158,8 +162,7 @@ const copy = {
       'Tus colecciones públicas tal como están ahora, con sus notas actuales.',
       'Tus publicaciones y reseñas.',
     ],
-    attribution:
-      'Estas contribuciones se conservan a nombre de «Cuenta eliminada», quedan congeladas y nadie podrá editarlas. No se asignará otra persona para gestionarlas.',
+    attribution: 'Siguen a nombre de «Cuenta eliminada». Nadie puede editarlos y no se asigna un curador sustituto.',
     prepare: 'Si no quieres que algo se conserve, haz privada la colección o elimina la publicación primero.',
     privacy:
       'Para obtener una copia de tus datos, antes o después de eliminar la cuenta, contacta con mailto:privacy@example.test.',
@@ -178,7 +181,7 @@ const copy = {
       'Vos publications et vos critiques.',
     ],
     attribution:
-      'Ces contributions restent attribuées à « Compte supprimé », sont figées et ne peuvent plus être modifiées par personne. Aucun autre responsable ne sera désigné.',
+      'Ces éléments restent attribués à « Compte supprimé ». Personne ne peut les modifier, et aucun responsable de remplacement n’est désigné.',
     prepare:
       'Si vous ne voulez pas conserver un contenu, rendez la collection privée ou supprimez la publication au préalable.',
     privacy:
@@ -195,7 +198,7 @@ const copy = {
     retained: '名前を伏せて残るもの',
     retainedItems: ['公開コレクションとその現在のメモ。今の状態のまま残ります。', '投稿とレビュー。'],
     attribution:
-      'これらは「削除されたアカウント」によるものとして凍結され、誰も編集できなくなります。代わりの管理者は割り当てられません。',
+      'これらは「削除されたアカウント」によるものとして残ります。誰も編集できず、代わりの管理者は割り当てられません。',
     prepare: '残したくないものがある場合は、先にコレクションを非公開にするか、投稿を削除してください。',
     privacy:
       '削除の前後を問わず、データのコピーをご希望の場合は、プライバシー窓口 mailto:privacy@example.test にご連絡ください。',
@@ -211,37 +214,37 @@ const copy = {
     retained: '이름 없이 남는 항목',
     retainedItems: ['현재 메모를 포함한 공개 컬렉션이 지금 상태 그대로 남습니다.', '게시물과 리뷰.'],
     attribution:
-      '이 기여는 “삭제된 계정”의 것으로 표시되며 동결되어 누구도 수정할 수 없습니다. 대신 관리할 사람은 지정되지 않습니다.',
+      '이것들은 “삭제된 계정”의 것으로 남습니다. 누구도 수정할 수 없으며, 대신 관리할 사람은 지정되지 않습니다.',
     prepare: '남기고 싶지 않은 항목이 있다면 먼저 컬렉션을 비공개로 바꾸거나 게시물을 삭제하세요.',
-    privacy: '삭제 전이나 후에 데이터 사본을 받으려면 개인정보 문의처 mailto:privacy@example.test 로 연락하세요.',
+    privacy: '삭제 전이나 후에 데이터 사본을 받으려면 mailto:privacy@example.test에 연락하세요.',
   },
   'zh-Hans': {
     erased: '将被清除',
     erasedItems: [
-      '你的个人资料、姓名、账号标识和头像。',
+      '你的个人资料、姓名、用户名和头像。',
       '你的整个书库：书架条目、阅读进度和历史、藏本以及关注。',
-      '你的私人、不公开列出和已删除的收藏集。',
+      '你的私人、未列出和已删除的收藏集。',
       '你主动发布的阅读日志。',
     ],
     retained: '保留，但不再显示你的姓名',
     retainedItems: ['你的公开收藏集及其当前笔记，按现状保留。', '你的帖子和书评。'],
-    attribution: '这些贡献将显示为由“已删除的账号”发布，并被冻结，任何人都无法再编辑。不会指定接替的管理者。',
+    attribution: '这些仍归于“已删除的账户”。任何人都不能编辑，也不会指定接替的管理者。',
     prepare: '如果不希望某项内容被保留，请先将收藏集设为私人或删除帖子。',
-    privacy: '无论删除账户之前还是之后，如需获取你的数据副本，请联系隐私事务联系人：mailto:privacy@example.test。',
+    privacy: '如需在删除之前或之后获取你的数据副本，请联系 mailto:privacy@example.test。',
   },
   'zh-Hant': {
-    erased: '將被清除',
+    erased: '會抹除',
     erasedItems: [
-      '你的個人資料、姓名、帳號識別名稱和頭像。',
+      '你的個人資料、姓名、使用者名稱和頭像。',
       '你的整個書庫：書架項目、閱讀進度與歷史、藏本以及追蹤。',
       '你的私人、不公開列出和已刪除的收藏集。',
-      '你主動發布的閱讀日誌。',
+      '你明確發布的閱讀日誌。',
     ],
     retained: '保留，但不再顯示你的姓名',
     retainedItems: ['你的公開收藏集及其目前筆記，按現狀保留。', '你的貼文和書評。'],
-    attribution: '這些貢獻將顯示為由「已刪除的帳號」發布，並遭凍結，任何人都無法再編輯。不會指定接替的管理者。',
+    attribution: '這些仍會標示為「已刪除的帳號」。任何人都不能編輯，也不會指派接手的策展人。',
     prepare: '如果不希望某項內容被保留，請先將收藏集設為私人或刪除貼文。',
-    privacy: '無論刪除帳戶之前還是之後，如需取得你的資料副本，請聯絡隱私事務聯絡人：mailto:privacy@example.test。',
+    privacy: '如需在刪除前或刪除後取得你的資料副本，請聯絡 mailto:privacy@example.test。',
   },
 };
 
@@ -260,6 +263,7 @@ for (const [locale, expected] of Object.entries(copy)) {
   test(
     `${locale}: deletion lists erased data, retained contributions and attribution, preparation, and the privacy contact`,
     async () => {
+      const start = calls.length;
       const { page } = await open('/account/delete', {
         locale,
         extraHTTPHeaders: { 'Accept-Language': locale },
@@ -284,7 +288,9 @@ for (const [locale, expected] of Object.entries(copy)) {
         expect(await page.locator('main').innerText()).not.toMatch(
           /\b(immediately|instantly|within \d+|by \d{4}|sofort|unverzüglich|inmediatamente|immédiatement)\b|即時|立即|马上|馬上|すぐに|直ちに|즉시/iu,
         );
-        expect(calls.filter((call) => call.method !== 'GET')).toHaveLength(0);
+        expect(calls.slice(start).filter((call) => call.method !== 'GET')).toEqual([
+          expect.objectContaining({ method: 'POST', url: '/account-management/deletion-page', body: '{}' }),
+        ]);
       } finally {
         await page.context().close();
       }

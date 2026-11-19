@@ -18,6 +18,7 @@ import {
   send,
   session,
 } from './creation-page-fixture';
+import { m } from '../src/paraglide/messages.js';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import { readOrganizationDeleteStepUp, readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
@@ -145,7 +146,7 @@ test('accepted deletion releases an open departure prompt', async () => {
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
   expect(page.router.history.location.pathname).toBe('/away');
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
-  expect(page.host.textContent).toContain('Organization deletion committed');
+  expect(page.host.textContent).toContain(m.auth_organization_delete_accepted());
   expect(page.unload()).toBe(false);
 });
 
@@ -169,7 +170,8 @@ test('late exact acknowledgement after Leave keeps generic history and clears on
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
 
   expect(page.host.querySelector('form')).toBeNull();
-  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
+  expect(page.host.textContent).toContain(m.auth_organization_delete_accepted());
+  expect(page.host.textContent).toContain(m.auth_organization_delete_return_acknowledged());
   expect(page.host.textContent).not.toContain('@first');
   expect(page.host.textContent).not.toContain(human);
   expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
@@ -229,16 +231,17 @@ test('lost authority releases an open prompt without sending a native command', 
   expect(page.unload()).toBe(false);
 });
 
-for (const kind of [
-  'ready',
-  'denied',
-  'hidden',
-  'missing',
-  'signed-out',
-  'changed',
-  'unavailable',
-  'authentication-required',
-] as const)
+const readbackMessages = {
+  ready: m.auth_organization_delete_still_readable,
+  denied: m.auth_organization_delete_recovery_denied,
+  hidden: m.auth_organization_delete_recovery_hidden,
+  missing: m.auth_organization_delete_recovery_missing,
+  'signed-out': m.auth_account_operation_sign_in_required,
+  changed: m.auth_organization_delete_recovery_changed,
+  unavailable: m.auth_organization_delete_recovery_unavailable,
+  'authentication-required': m.auth_organization_delete_recovery_authentication,
+};
+for (const kind of Object.keys(readbackMessages) as (keyof typeof readbackMessages)[])
   test(`unknown deletion keeps departure protection after ${kind} readback`, async () => {
     let result = ready(first);
     const page = await setup(async () => result);
@@ -250,6 +253,10 @@ for (const kind of [
     await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
     await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
     const saved = readOrganizationDeleteUnknown(first);
+    expect(saved).toMatchObject({
+      kind: 'pending',
+      value: { humanAccountId: human, organizationId: first, operationKey: page.calls[0]!.body.operationKey },
+    });
     result =
       kind === 'ready'
         ? ready(first)
@@ -263,8 +270,10 @@ for (const kind of [
     expect(page.host.textContent).not.toContain('@first');
     expect(page.host.textContent).not.toContain(human);
     expect(page.host.textContent).toContain('The deletion result is unknown');
-    expect(page.host.textContent).not.toContain('Organization deletion committed');
-    expect(page.host.querySelector('[role="status"]')!.textContent).not.toBe('');
+    expect(page.host.textContent).not.toContain(m.auth_organization_delete_accepted());
+    expect(
+      page.host.querySelector('[aria-labelledby="organization-delete-recovery-heading"] [role="status"]')?.textContent,
+    ).toBe(readbackMessages[kind]());
     if (kind === 'authentication-required' || kind === 'signed-out')
       expect(page.host.querySelector('a[href="/login"]')).not.toBeNull();
     expect(page.unload()).toBe(true);
