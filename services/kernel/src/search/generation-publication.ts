@@ -153,6 +153,12 @@ const cost = (): Meter => ({
 });
 const PAGE = 50;
 const SUBJECT_ENROLLMENT_PAGES = 32;
+const SUBJECT_ENROLLMENT_FRONTIER_INPUTS = 7;
+const SUBJECT_ENROLLMENT_TARGET_INPUTS = 4;
+const SUBJECT_ENROLLMENT_CHECKPOINT_INPUTS = SUBJECT_ENROLLMENT_FRONTIER_INPUTS + SUBJECT_ENROLLMENT_TARGET_INPUTS;
+const SUBJECT_ENROLLMENT_SCAN_INPUTS =
+  5 * PAGE + SUBJECT_ENROLLMENT_FRONTIER_INPUTS + SUBJECT_ENROLLMENT_CHECKPOINT_INPUTS;
+const SUBJECT_ENROLLMENT_SCAN_TURNS = 4;
 const SUBJECT_SETTLEMENT_TURNS = 8;
 const SUBJECT_VALIDATION_HOMES = 256;
 const SUBJECT_VALIDATION_SLICES = 4;
@@ -272,6 +278,7 @@ type Job = {
   revision: string;
 };
 type Home = { partition: number; epoch: number; position: string; account_revision: string; claim_revision: string };
+type SubjectEnrollmentFrontier = { registration: string; bootstrap: string; end: number };
 
 /** Preserve released projection metadata when publishing the durable activation timestamp. */
 export async function publishSubjectActivationMetadata(search: OpenSearch, index: string, activatedAt: string) {
@@ -571,14 +578,17 @@ export function createSearchGenerationPublication(
 
   async function continueSubjectEnrollment(
     job: Job,
-    client: PoolClient,
+    client: PoolClient | null,
     context: PublicFilterConsumerContext,
     meter: Meter,
     capturingOnly = false,
+    reservedInputs = 0,
   ) {
     const inputs = capturingOnly ? 4 : 2;
-    const reserve =
-      capturingOnly && job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE;
+    const reserve = Math.max(
+      reservedInputs,
+      capturingOnly && job.phase === 'validate' ? SUBJECT_VALIDATION_HOMES : PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+    );
     if (
       !nativeMeaning ||
       registry ||
@@ -592,8 +602,9 @@ export function createSearchGenerationPublication(
     guardAvailable();
     meter.inputKeys += inputs;
     meter.dependencyPoints += inputs;
-    const { rows } = await client.query<{ id: string; bootstrap: string }>(
-      `SELECT r.id,r.consumer_bootstrap AS bootstrap FROM search.public_filter_registration r
+    const registration = (connection: PoolClient) =>
+      connection.query<{ id: string; bootstrap: string }>(
+        `SELECT r.id,r.consumer_bootstrap AS bootstrap FROM search.public_filter_registration r
        JOIN search.public_filter_target t USING(partition_no,physical_target)
        WHERE r.partition_no=0 AND r.physical_target=$1 AND md5(r.consumer)=md5($2) AND r.consumer=$2
          AND r.state='active' AND t.incarnation=$3 AND r.consumer_work IS NOT NULL
@@ -604,8 +615,11 @@ export function createSearchGenerationPublication(
            AND NOT EXISTS (SELECT FROM search.identity_writer_gate g
              WHERE (g.partition_no,g.physical_target)=(0,r.physical_target) AND g.publication_fence IS NOT NULL)
          )) LIMIT 2`,
-      [job.physical_target, encodePublicFilterNativeState(job.consumer), job.native_incarnation, capturingOnly],
-    );
+        [job.physical_target, encodePublicFilterNativeState(job.consumer), job.native_incarnation, capturingOnly],
+      );
+    const { rows } = client
+      ? await registration(client)
+      : await withBoundedReadConnection(pool, context.deadline, registration, publicationLifetime);
     if (rows.length !== 1) return null;
     const { id, bootstrap } = rows[0]!;
     const result = await advanceNativePublicFilterPreparation(
@@ -625,7 +639,10 @@ export function createSearchGenerationPublication(
     if (!result) return null;
     add(meter, result.cost);
     if (result.status === 'enrollment-sealed') return 'sealed' as const;
-    if (capturingOnly) return result.status === 'preparing' && result.enrollmentAdvanced;
+    if (capturingOnly) {
+      if ('reason' in result && result.reason === 'deadline') throw new Pending('deadline');
+      return (result.status === 'preparing' || result.status === 'begun') && result.enrollmentAdvanced === true;
+    }
     if (
       (result.status === 'begun' && !result.enrollmentAdvanced) ||
       ('reason' in result && (result.reason === 'binding_mismatch' || result.reason === 'observation_lost'))
@@ -634,6 +651,96 @@ export function createSearchGenerationPublication(
     if (result.status !== 'preparing' && result.status !== 'begun')
       throw new Pending('reason' in result && result.reason === 'deadline' ? 'deadline' : 'source_pending');
     return result.enrollmentAdvanced === true;
+  }
+
+  async function subjectEnrollmentFrontier(job: Job, client: PoolClient, meter: Meter) {
+    // Source commits the Search preparation edge and both Source cursors together.
+    // This keyed read admits work behind that edge. The Subject proof uses current native evidence.
+    meter.inputKeys += SUBJECT_ENROLLMENT_FRONTIER_INPUTS;
+    meter.dependencyPoints += SUBJECT_ENROLLMENT_FRONTIER_INPUTS;
+    const { rows } = await client.query<SubjectEnrollmentFrontier>(
+      `SELECT r.id AS registration,r.consumer_bootstrap AS bootstrap,c.after_home AS "end"
+       FROM search.public_filter_registration r
+       JOIN search.public_filter_target t USING (partition_no,physical_target)
+       JOIN search.public_filter_coverage_preparation c
+         ON (c.partition_no,c.registration,c.bootstrap)=(r.partition_no,r.id,
+           substring(r.consumer_bootstrap FROM '^0:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$')::uuid)
+       JOIN semantic.public_filter_bootstrap b ON (b.partition_no,b.bootstrap)=(c.partition_no,c.bootstrap)
+       JOIN core.partition p ON (p.partition_no,p.epoch)=(b.partition_no,b.owner_epoch)
+       WHERE r.partition_no=0 AND r.physical_target=$1 AND t.incarnation=$2
+         AND md5(r.consumer)=md5($3) AND r.consumer=$3 AND r.state='active' AND r.consumer_work IS NOT NULL
+         AND c.consumer=r.consumer AND c.definition=$4 AND b.read_definition=c.definition
+         AND c.population_protocol=1 AND c.after_home=b.account_after AND c.after_home=b.coverage_after
+         AND c.root=b.coverage_root AND c.generation=b.coverage_generation
+         AND b.snapshot_kind='prepared' AND b.state IN ('capturing','begun') AND b.coverage_publication IS NULL
+         AND b.owner_epoch=$5 AND p.write_state='active' AND b.queried IS NULL AND b.publication_job IS NULL
+         AND NOT EXISTS (SELECT FROM search.public_filter_observation o
+           WHERE (o.partition_no,o.registration)=(r.partition_no,r.id) AND o.state<>'closed')
+         AND NOT EXISTS (SELECT FROM search.identity_writer_gate g
+           WHERE (g.partition_no,g.physical_target)=(0,r.physical_target) AND g.publication_fence IS NOT NULL)
+       LIMIT 2`,
+      [
+        job.physical_target,
+        job.native_incarnation,
+        encodePublicFilterNativeState(job.consumer),
+        job.binding.readDefinition,
+        job.binding.source.epoch,
+      ],
+    );
+    return rows.length === 1 ? rows[0]! : null;
+  }
+
+  async function checkpointEnrolledSubjects(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    enrollment: SubjectEnrollmentFrontier,
+  ) {
+    meter.inputKeys += SUBJECT_ENROLLMENT_TARGET_INPUTS;
+    if ((await native(job.consumer, context, validationSearch(context, meter))).activeSubjectGeneration !== null)
+      throw new Pending('observation_lost');
+    const retained = await subjectEnrollmentFrontier(job, client, meter);
+    if (
+      !retained ||
+      retained.bootstrap !== enrollment.bootstrap ||
+      retained.registration !== enrollment.registration ||
+      retained.end < enrollment.end
+    )
+      throw new Pending('registration_missing');
+    check(context);
+    await save(client, job, meter);
+  }
+
+  async function advanceEnrolledSubjects(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    frontier: SubjectEnrollmentFrontier,
+  ) {
+    let longest = 0;
+    for (let turn = 0; turn < SUBJECT_ENROLLMENT_SCAN_TURNS && job.home < frontier.end; turn++) {
+      const started = Date.now();
+      if (started + 2 * longest >= context.deadline || earlySubjectPageLimit(meter) <= 0) break;
+      const { home, after_id, revision } = job;
+      try {
+        await advance(job, client, context, meter, false, frontier);
+      } catch (error) {
+        if (!(error instanceof Pending) || error.reason !== 'source_pending') throw error;
+        if (job.revision === revision && (job.home !== home || job.after_id !== after_id))
+          await checkpointEnrolledSubjects(job, client, context, meter, frontier);
+        return;
+      }
+      longest = Math.max(longest, Date.now() - started);
+    }
+  }
+
+  function earlySubjectPageLimit(meter: Meter) {
+    // Reserve the Source page, settled writer inputs and keyed engine hits,
+    // plus the target and enrollment checks before checkpointing.
+    const remaining = SUBJECT_ENROLLMENT_SCAN_INPUTS - meter.inputKeys - SUBJECT_ENROLLMENT_CHECKPOINT_INPUTS;
+    return Math.min(PAGE, Math.floor(remaining / 5));
   }
 
   function jobPin(job: Job): GenerationPublicationPin | null {
@@ -840,26 +947,47 @@ export function createSearchGenerationPublication(
                   throw error;
                 }
               }
-              // Preserve the reconciliation cursor while the original cold cut
-              // commits contiguous receipt pages. Sealing resumes the ordinary pass.
+              // A committed enrollment prefix admits a first-pass Subject slice alongside
+              // future Source pages. The publication session remains the only cursor writer.
               if (earlyEnrollment && physical?.activeSubjectGeneration === null) {
                 const enrollment = await continueSubjectEnrollment(job, client, context, meter, true);
                 if (enrollment === 'sealed') return work(job, client, current, capture, enrollment);
+                if (enrollment === false) throw new Pending('source_pending');
                 if (enrollment !== true) return work(job, client, current, capture);
-                // The publication lock already excludes this alias's other native jobs.
-                // Each Source page rechecks custody, and its receipt chain and cursors
-                // commit together. Reconciling or publishing still requires a new turn.
-                const additionalEnrollmentCosts: SearchPublicFilterCost[] = [];
-                let duration = 0;
-                while (additionalEnrollmentCosts.length + 1 < SUBJECT_ENROLLMENT_PAGES) {
-                  const started = Date.now();
-                  if (started + 2 * duration >= context.deadline) break;
-                  const pageMeter = cost();
-                  const advanced = await continueSubjectEnrollment(job, client, context, pageMeter, true);
-                  additionalEnrollmentCosts.push(pageMeter);
-                  if (advanced !== true) break;
-                  duration = Math.max(duration, Date.now() - started);
-                }
+                const subjectMeter = cost();
+                const frontier =
+                  job.phase === 'subject' && job.pass === '1' && !job.pit && job.previous_uuid === null
+                    ? await subjectEnrollmentFrontier(job, client, subjectMeter)
+                    : null;
+                const scan = frontier && job.home < frontier.end;
+                const additionalEnrollmentCosts: Meter[] = [];
+                const enroll = async () => {
+                  let duration = 0;
+                  for (let page = 1; page < SUBJECT_ENROLLMENT_PAGES; page++) {
+                    const started = Date.now();
+                    if (started + 2 * duration >= context.deadline) break;
+                    const pageMeter = cost();
+                    additionalEnrollmentCosts.push(pageMeter);
+                    const advanced = await continueSubjectEnrollment(
+                      job,
+                      scan ? null : client,
+                      context,
+                      pageMeter,
+                      true,
+                      page === 1 && scan ? SUBJECT_ENROLLMENT_SCAN_INPUTS : 0,
+                    );
+                    if (advanced !== true) break;
+                    duration = Math.max(duration, Date.now() - started);
+                  }
+                };
+                const results = await Promise.allSettled([
+                  enroll(),
+                  scan ? advanceEnrolledSubjects(job, client, context, subjectMeter, frontier) : undefined,
+                ]);
+                add(additionalEnrollmentCosts[0] ?? meter, subjectMeter);
+                // The initial enrollment page committed even if either lane stopped.
+                for (const result of results)
+                  if (result.status === 'rejected' && !(result.reason instanceof Pending)) throw result.reason;
                 return work(job, client, current, capture, true, additionalEnrollmentCosts);
               }
               return await work(job, client, current, capture);
@@ -905,14 +1033,20 @@ export function createSearchGenerationPublication(
     };
   }
   /** Certify the empty interval following a complete Subject page in the same snapshot as its next occupied home. */
-  async function nextSubjectHome(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+  async function nextSubjectHome(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    end = 4096,
+  ) {
     check(context);
     const result = await client.query<{ next_home: number; witnessed: number }>(
       `WITH frontier AS (
          SELECT coalesce((
            SELECT partition_no FROM semantic.partition_subjects
-           WHERE visible>0 AND partition_no>$3 AND partition_no<4096 ORDER BY partition_no LIMIT 1
-         ),4096) AS next_home
+           WHERE visible>0 AND partition_no>$3 AND partition_no<$5 ORDER BY partition_no LIMIT 1
+         ),$5) AS next_home
        ), homes AS (
          SELECT p.partition_no,p.epoch,p.position
          FROM frontier f JOIN core.partition p ON p.partition_no>$3 AND p.partition_no<f.next_home
@@ -929,7 +1063,7 @@ export function createSearchGenerationPublication(
          RETURNING partition_no
        )
        SELECT next_home,(SELECT count(*)::integer FROM witnessed) AS witnessed FROM frontier`,
-      [job.job, job.pass, job.home, job.fenced_pass],
+      [job.job, job.pass, job.home, job.fenced_pass, end],
     );
     const { next_home, witnessed } = result.rows[0]!;
     meter.frontierWrites += witnessed;
@@ -985,7 +1119,9 @@ export function createSearchGenerationPublication(
       old.epoch === before.epoch &&
       BigInt(old.position) < BigInt(before.position) &&
       (await verifyChanged());
-    if (changed && !startsSubjectHome && !replayed) {
+    const missingCursorWitness =
+      !old && job.family === 'subjects' && job.phase === 'subject' && !job.fenced_pass && job.after_id !== null;
+    if (missingCursorWitness || (changed && !startsSubjectHome && !replayed)) {
       if (sameOwnerAdvance) {
         await rewindSubjectHome(job, before.partition, client, meter);
         return 'rewound';
@@ -1044,29 +1180,30 @@ export function createSearchGenerationPublication(
     ids: readonly string[],
     position: bigint,
     meter: Meter,
-    wholeHomeContext?: PublicFilterConsumerContext,
+    workContext?: PublicFilterConsumerContext,
+    wholeHome = false,
   ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
     meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
-    const work = wholeHomeContext && (() => validationWork(wholeHomeContext, meter));
+    const work = workContext && (() => validationWork(workContext, meter));
     const actions =
-      wholeHomeContext && !ids.length
+      wholeHome && !ids.length
         ? []
         : await readSearchWriterGenerationActions(writerGuard, partition, ids, position, work);
     if (!actions) {
       console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
       return 'writer-pending';
     }
-    if (wholeHomeContext && actions.some(({ op }) => op !== 'index')) return 'engine-mismatch';
-    if (wholeHomeContext) meter.inputKeys += actions.length + 1;
+    if (wholeHome && actions.some(({ op }) => op !== 'index')) return 'engine-mismatch';
+    if (workContext) meter.inputKeys += actions.length + Number(wholeHome);
     meter.engineSearches++;
     try {
       const hits = await assertNativeGenerationActionsVisible(
-        wholeHomeContext ? validationSearch(wholeHomeContext, meter) : search,
+        workContext ? validationSearch(workContext, meter) : search,
         job.physical_target,
         actions,
-        wholeHomeContext ? partition : undefined,
+        wholeHome ? partition : undefined,
       );
-      if (!wholeHomeContext) meter.inputKeys += hits;
+      if (!workContext) meter.inputKeys += hits;
       return 'matched';
     } catch (error) {
       if (!(error instanceof GenerationReconciliationMismatch)) throw error;
@@ -1109,16 +1246,24 @@ export function createSearchGenerationPublication(
     position: bigint,
     context: PublicFilterConsumerContext,
     meter: Meter,
+    checkingEnrollment = false,
   ) {
     if (!ids.length) return;
     check(context);
     if (job.family === 'subjects') {
-      const verified = await verifySubjectKeys(job, partition, ids, position, meter);
+      const verified = await verifySubjectKeys(
+        job,
+        partition,
+        ids,
+        position,
+        meter,
+        checkingEnrollment ? context : undefined,
+      );
       if (verified === 'matched') return;
       // Subject population first waits for ordinary settlement to avoid competing for its initial write.
       // A settled copy can still lag a native projection that finished preparing after that write.
       // Repair the mismatch through the ordinary writer while the generation remains open.
-      if (job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
+      if (checkingEnrollment || job.fenced_pass || (job.phase === 'subject' && verified === 'writer-pending'))
         throw new Pending('source_pending');
       // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
@@ -1233,7 +1378,7 @@ export function createSearchGenerationPublication(
       return false;
     }
     try {
-      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context);
+      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context, true);
       if (result !== 'matched') return false;
     } catch (error) {
       if (error instanceof SearchUnavailableError) return false;
@@ -1416,6 +1561,7 @@ export function createSearchGenerationPublication(
     context: PublicFilterConsumerContext,
     meter: Meter,
     batchValidation = false,
+    enrollment?: SubjectEnrollmentFrontier,
   ) {
     if (job.phase === 'active') return;
     if (job.fenced_pass) await held(job, context, meter);
@@ -1427,7 +1573,11 @@ export function createSearchGenerationPublication(
       job.home === 0 &&
       job.after_id === null &&
       (await aliasTarget(job, context, meter)) === null &&
-      (await readSubjectActivationTime(search, job.prefix, Number(job.generation))) === null
+      (await readSubjectActivationTime(
+        enrollment ? validationSearch(context, meter) : search,
+        job.prefix,
+        Number(job.generation),
+      )) === null
     )
       await publicationRefresh(job, context, meter, true);
     if (job.phase === 'subject' || job.phase === 'account') {
@@ -1436,7 +1586,10 @@ export function createSearchGenerationPublication(
       const replaysValidationHome =
         job.family === 'subjects' && job.pit === null && job.previous_uuid === SUBJECT_VALIDATION_REPLAY;
       let emptySeeks = 0;
+      const end = enrollment?.end ?? 4096;
       for (;;) {
+        const inputLimit = enrollment ? earlySubjectPageLimit(meter) : PAGE;
+        if (enrollment && (job.home >= end || inputLimit <= 0)) break;
         if (job.home === 4096) {
           job.phase = 'engine';
           job.home = 0;
@@ -1451,7 +1604,7 @@ export function createSearchGenerationPublication(
           complete: boolean,
           keys: DiscoveryKey[] | undefined;
         if (job.phase === 'subject') {
-          const page = await sourceKeys.read({ partition: job.home, after, inputLimit: PAGE }, context);
+          const page = await sourceKeys.read({ partition: job.home, after, inputLimit }, context);
           add(meter, page.cost);
           if (page.status !== 'eligible') {
             console.warn('Search publication trace', {
@@ -1462,11 +1615,13 @@ export function createSearchGenerationPublication(
             });
             job.after_route = null;
             job.after_id = null;
-            await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-              job.home,
-              job.job,
-            ]);
-            await save(client, job, meter);
+            if (!enrollment) {
+              await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
+                job.home,
+                job.job,
+              ]);
+              await save(client, job, meter);
+            }
             throw new Pending(
               page.status === 'unavailable' && page.reason === 'deadline' ? 'deadline' : 'source_pending',
             );
@@ -1505,11 +1660,12 @@ export function createSearchGenerationPublication(
             ids.length === 0 &&
             after === null
           ) {
-            const nextHome = await nextSubjectHome(job, client, context, meter);
+            const nextHome = await nextSubjectHome(job, client, context, meter, end);
             job.after_route = null;
             job.after_id = null;
             job.home = nextHome;
             if (++emptySeeks >= PAGE) {
+              if (enrollment) break;
               await save(client, job, meter);
               return;
             }
@@ -1527,7 +1683,7 @@ export function createSearchGenerationPublication(
 
           keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
         }
-        await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
+        await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter, enrollment !== undefined);
         const observed = await head(job.home, context);
         if (!same(before, observed)) {
           console.warn('Search publication trace', { gate: 'post-reconcile-head', before, observed });
@@ -1549,8 +1705,8 @@ export function createSearchGenerationPublication(
           } else if (job.family === 'subjects' && !registry && ids.length > 0) {
             // The current home is complete and its head still matches. Start the next
             // turn at the next occupied home without reopening Source on an empty neighbor.
-            job.home = await nextSubjectHome(job, client, context, meter);
-            if (job.home === 4096) {
+            job.home = await nextSubjectHome(job, client, context, meter, end);
+            if (!enrollment && job.home === 4096) {
               job.phase = 'engine';
               job.home = 0;
             }
@@ -1708,6 +1864,7 @@ export function createSearchGenerationPublication(
       }
       if (!(await compareHomes(job, client, context, meter, validationHomes))) return;
     }
+    if (enrollment) return checkpointEnrolledSubjects(job, client, context, meter, enrollment);
     await native(job.consumer, context);
     await save(client, job, meter);
   }
