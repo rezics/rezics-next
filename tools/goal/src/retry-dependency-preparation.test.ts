@@ -134,7 +134,7 @@ test('healthy shared installations reuse their store; missing or stale workspace
   const h = fixture();
   try {
     const a = h.tasks.dispatch(h.briefFile),
-      b = h.tasks.dispatch(h.briefFile);
+      b = h.tasks.dispatch(h.writeBrief('Produce a result using the original alpha dependency.'));
     expect(h.count()).toBe(1);
     const store = readlinkSync(join(a.worktree, 'node_modules/.bun'));
     const inode = lstatSync(join(a.worktree, 'node_modules/.bun')).ino;
@@ -327,9 +327,10 @@ test('three dependency setup failures wake operations once and retain every raw 
     h.settings.integration.operationsManager = 'operations';
     const tasks = [];
     for (let index = 0; index < 3; index++) {
-      const task = h.tasks.dispatch(h.briefFile);
+      const version = `2.0.${index}`;
+      const task = h.tasks.dispatch(h.writeBrief(`Update the definitions workspace to alpha ${version}.`));
       await h.tasks.retry(task.id);
-      const source = h.commit(task.worktree, manifestPath, manifest(`2.0.${index}`));
+      const source = h.commit(task.worktree, manifestPath, manifest(version));
       tasks.push({ task, source });
     }
     writeFileSync(h.fail, 'fail');
@@ -367,7 +368,7 @@ test('shared module refresh fails before launch while a live peer holds dependen
   const h = fixture();
   try {
     h.settings.sharedWebModules = { sample: ['result.txt'] };
-    const peer = h.tasks.dispatch(h.briefFile);
+    const peer = h.tasks.dispatch(h.writeBrief('Produce the sample result with its current dependencies.'));
     await h.tasks.retry(peer.id);
     const task = h.tasks.dispatch(h.briefFile);
     h.store.updateAttempt({ taskId: peer.id, attempt: 1 }, (attempt) => {
@@ -529,7 +530,7 @@ test('declared new Bun replaces the old installation on a same-base paid resume 
   const h = pinnedFixture();
   try {
     const task = h.tasks.dispatch(h.briefFile),
-      peer = h.tasks.dispatch(h.briefFile);
+      peer = h.tasks.dispatch(h.writeBrief('Produce a result using the original Bun pin.'));
     await h.tasks.retry(task.id);
     const oldBinary = realpathSync(join(peer.worktree, 'node_modules/.bin/bun'));
     const oldBytes = readFileSync(oldBinary);
@@ -582,7 +583,7 @@ test('same-key wrong materialized Bun bin refreshes only the consumer skeleton a
   const h = pinnedFixture();
   try {
     const task = h.tasks.dispatch(h.briefFile),
-      peer = h.tasks.dispatch(h.briefFile);
+      peer = h.tasks.dispatch(h.writeBrief('Produce a separate result with the healthy Bun installation.'));
     await h.tasks.retry(task.id);
     const key = dependencyKey(task.worktree);
     const count = h.count();
@@ -689,7 +690,7 @@ test('corrupt published store manifests prepare a same-base resume privately wit
     const h = fixture();
     try {
       const task = h.tasks.dispatch(h.briefFile);
-      const peer = h.tasks.dispatch(h.briefFile);
+      const peer = h.tasks.dispatch(h.writeBrief('Produce a result using the existing shared alpha installation.'));
       await h.tasks.retry(task.id);
       const paid = git(task.worktree, ['rev-parse', 'HEAD']);
       const packages = readlinkSync(join(task.worktree, 'node_modules/.bun'));
