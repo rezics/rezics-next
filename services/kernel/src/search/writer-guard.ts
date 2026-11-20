@@ -63,7 +63,7 @@ import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './
 import enroll from './identity-epoch-participant-enroll.sql';
 import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
-import { OpenSearchError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
+import { OpenSearchError, type OpenSearch, type SearchRequestOptions, type SearchRequestWork } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { proveSubjectRelayDispatch, subjectRelayIntent } from './subject-relay-recovery.ts';
 import {
@@ -1079,6 +1079,7 @@ const generationReaders = new WeakMap<
     partition: number,
     ids: readonly string[],
     obligation: bigint,
+    work?: () => SearchRequestWork,
   ) => Promise<readonly IndexAction<SubjectDocument>[] | null>
 >();
 
@@ -1091,8 +1092,9 @@ export async function readSearchWriterGenerationActions(
   partition: number,
   ids: readonly string[],
   obligation: bigint,
+  work?: () => SearchRequestWork,
 ): Promise<readonly IndexAction<SubjectDocument>[] | null> {
-  return generationReaders.get(guard)?.(partition, ids, obligation) ?? null;
+  return generationReaders.get(guard)?.(partition, ids, obligation, work) ?? null;
 }
 
 type GateRow = {
@@ -2710,9 +2712,27 @@ export function createSearchWriterGuard(options: {
       await release();
     },
   };
-  generationReaders.set(guard, async (partition, input, obligation) => {
+  generationReaders.set(guard, async (partition, input, obligation, work) => {
     const ids = keys(partition, input);
-    const target = await readSearchWriterPhysicalTarget(options.search, options.index);
+    // Name analysis can issue concurrent requests. Settle bytes in sequence when
+    // this proof shares the validation turn's allowance.
+    let previous = Promise.resolve();
+    const transport: OpenSearch = work
+      ? {
+          ...options.search,
+          request<T>(...[method, path, body, request]: Parameters<OpenSearch['request']>) {
+            const response = previous.then(() =>
+              options.search.request<T>(method, path, body, { ...request, work: work() }),
+            );
+            previous = response.then(
+              () => undefined,
+              () => undefined,
+            );
+            return response;
+          },
+        }
+      : options.search;
+    const target = await readSearchWriterPhysicalTarget(transport, options.index);
     const { snapshot } = await indexObservation(partition, ids);
     const subjects = validateIndexObservation(snapshot, partition, ids, obligation);
     const visible = ids.filter((id) => {
@@ -2720,7 +2740,7 @@ export function createSearchWriterGuard(options: {
       return subject?.visibility === 'visible' && subject.redirect === null;
     });
     const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
-    const actions = await prepareBoundedSortKeys(options.search, options.index, documentActions(snapshot, ids, counts));
+    const actions = await prepareBoundedSortKeys(transport, options.index, documentActions(snapshot, ids, counts));
     const versions = await withReadTransaction(options.pool, async (tx) => {
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active' || owner.position !== snapshot.position) return null;
@@ -2750,7 +2770,7 @@ export function createSearchWriterGuard(options: {
         return null;
       return new Map(rows.map((row) => [row.original_id, BigInt(row.source_position!)]));
     });
-    const current = await readSearchWriterPhysicalTarget(options.search, options.index);
+    const current = await readSearchWriterPhysicalTarget(transport, options.index);
     if (!versions || current.incarnation !== target.incarnation || current.writeAlias !== target.writeAlias)
       return null;
     return actions.map((action) => ({ ...action, version: versions.get(action.id)! }));

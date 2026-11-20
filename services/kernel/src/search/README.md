@@ -2294,9 +2294,12 @@ to four pages with the same meter and deadline, saving each verified successor b
 The next turn verifies the closed Search settlement before Source can acknowledge coverage.
 Steps retain a scalar frontier. Subject reconciliation validates up to 256 saved native home heads in one
 statement snapshot per step. After engine traversal, Search can refresh that pass's position witness for an
-empty home with the same active epoch and no retained writer row for this physical target. Each refresh uses
-the current Semantic visible count and one target/home writer lookup, with at most one witness write per
-compared home. Changed occupied homes, writer-bearing homes and changed epochs replay their native key work.
+empty home with the same active epoch and no retained writer row for this physical target. The unfenced pass
+can also recheck a bounded writer-bearing home after a generic position advance. It requires the same epoch,
+writer settlements already covered by the saved position, a complete current Source page and exact physical
+home equality down to each document and external version. The physical check includes a lookahead for extras.
+The saved position advances only while the new home position still matches. Changed epochs, moving writers and
+homes without this complete proof replay their native key work.
 Mixed discovery still checks its Account-owner witnesses. Durable progress dispatches
 the next preparation step immediately. A step waiting for a dependency or in-flight writer backs off. Source
 enumeration runs only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed

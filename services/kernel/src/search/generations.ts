@@ -3146,17 +3146,22 @@ export async function assertNativeGenerationActionsVisible(
   search: OpenSearch,
   index: string,
   actions: readonly (DiscoveryIndexAction | IndexAction<SubjectDocument>)[],
+  wholePartition?: number,
 ): Promise<number> {
   if (actions.length > 100) throw new RangeError('Native reconciliation accepts at most 100 keyed actions');
-  if (!actions.length) return 0;
+  if (!actions.length && wholePartition === undefined) return 0;
   const response = await search.request<unknown>(
     'POST',
     `/${index}/_search`,
     {
-      size: actions.length,
+      // For whole-partition verification, one lookahead hit refutes completeness.
+      size: wholePartition === undefined ? actions.length : actions.length + 1,
       version: true,
       track_total_hits: false,
-      query: { ids: { values: actions.map(({ id }) => id) } },
+      query:
+        wholePartition === undefined
+          ? { ids: { values: actions.map(({ id }) => id) } }
+          : { term: { partition: wholePartition } },
     },
     { query: { allow_partial_search_results: false } },
   );

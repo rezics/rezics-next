@@ -74,7 +74,7 @@ import {
   SUBJECT_SORT_FORMAT,
 } from './indices.ts';
 import { discoveryGenerations } from './generations.ts';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { validateObservation } from './indexer.ts';
 import { validateRefreshResponse } from './write-actions.ts';
@@ -163,6 +163,9 @@ const SUBJECT_VALIDATION_TRAILING_INPUTS = 4;
 const SUBJECT_VALIDATION_ROW_BYTES = 512;
 const SUBJECT_VALIDATION_SQL_BYTES = 4096;
 const SUBJECT_VALIDATION_CHECKPOINT_BYTES = 4096;
+// One bounded writer inventory, one Source page, and keyed proof with one engine lookahead.
+const SUBJECT_VALIDATION_RECHECK_INPUTS = 6 * PAGE + 1;
+const SUBJECT_VALIDATION_RECHECK_SQL_BYTES = 4096;
 const SUBJECT_VALIDATION_REPLAY = 'subject-validation-replay';
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -1041,16 +1044,29 @@ export function createSearchGenerationPublication(
     ids: readonly string[],
     position: bigint,
     meter: Meter,
+    wholeHomeContext?: PublicFilterConsumerContext,
   ): Promise<'matched' | 'writer-pending' | 'engine-mismatch'> {
     meter.inputKeys += ids.length * 3; // Publication inputs, current Source inputs and settled native copies.
-    const actions = await readSearchWriterGenerationActions(writerGuard, partition, ids, position);
+    const work = wholeHomeContext && (() => validationWork(wholeHomeContext, meter));
+    const actions =
+      wholeHomeContext && !ids.length
+        ? []
+        : await readSearchWriterGenerationActions(writerGuard, partition, ids, position, work);
     if (!actions) {
       console.warn('Search publication trace', { gate: 'writer-actions', partition, count: ids.length });
       return 'writer-pending';
     }
+    if (wholeHomeContext && actions.some(({ op }) => op !== 'index')) return 'engine-mismatch';
+    if (wholeHomeContext) meter.inputKeys += actions.length + 1;
     meter.engineSearches++;
     try {
-      meter.inputKeys += await assertNativeGenerationActionsVisible(search, job.physical_target, actions);
+      const hits = await assertNativeGenerationActionsVisible(
+        wholeHomeContext ? validationSearch(wholeHomeContext, meter) : search,
+        job.physical_target,
+        actions,
+        wholeHomeContext ? partition : undefined,
+      );
+      if (!wholeHomeContext) meter.inputKeys += hits;
       return 'matched';
     } catch (error) {
       if (!(error instanceof GenerationReconciliationMismatch)) throw error;
@@ -1162,6 +1178,79 @@ export function createSearchGenerationPublication(
     job.pit = null;
     job.engine_after = null;
   }
+  function validationWork(context: PublicFilterConsumerContext, meter: Meter) {
+    return {
+      bytes: VALIDATION_BYTE_LIMIT - meter[validationBytes] - SUBJECT_VALIDATION_CHECKPOINT_BYTES,
+      deadline: context.deadline,
+      settle: (bytes: number) => (meter[validationBytes] += bytes),
+    };
+  }
+  function validationSearch(context: PublicFilterConsumerContext, meter: Meter): OpenSearch {
+    return {
+      ...search,
+      request: (method, path, body, options) =>
+        search.request(method, path, body, {
+          ...options,
+          work: validationWork(context, meter),
+        }),
+    };
+  }
+
+  async function refreshChangedSubjectHome(
+    job: Job,
+    before: Home,
+    currentPosition: string,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    // Generic commands share this position. A complete current Source and physical
+    // home proof can retain the completed PIT traversal when its writer did not move.
+    const inventory = await client.query<{ retained: number; stable: boolean }>(
+      `SELECT count(*)::integer AS retained,
+              bool_and(coalesce(owner_epoch=$3 AND incarnation=$4 AND dispatch_state='settled'
+                AND writer_token IS NULL AND closed_job IS NULL
+                AND writer_position<=$5 AND source_position<=$5
+                AND visible_position<=$5 AND visible_position=settled_position,false)) IS TRUE AS stable
+       FROM (SELECT owner_epoch,incarnation,dispatch_state,writer_token,closed_job,
+                    writer_position,source_position,visible_position,settled_position
+             FROM search.identity_writer
+             WHERE partition_no=$1 AND physical_target=$2 ORDER BY original_id LIMIT $6) AS writers`,
+      [before.partition, job.physical_target, before.epoch, job.native_incarnation, before.position, PAGE],
+    );
+    const { retained, stable } = inventory.rows[0]!;
+    meter.inputKeys += retained;
+    if (!stable || retained >= PAGE) return false;
+    const page = await sourceKeys.read({ partition: before.partition, after: null, inputLimit: PAGE }, context);
+    add(meter, page.cost);
+    if (
+      page.status !== 'eligible' ||
+      !page.complete ||
+      page.partition !== before.partition ||
+      page.epoch !== before.epoch ||
+      page.position !== BigInt(currentPosition)
+    ) {
+      return false;
+    }
+    try {
+      const result = await verifySubjectKeys(job, before.partition, page.ids, page.position, meter, context);
+      if (result !== 'matched') return false;
+    } catch (error) {
+      if (error instanceof SearchUnavailableError) return false;
+      throw error;
+    }
+    check(context);
+    const refreshed = await client.query(
+      `UPDATE search.generation_publication_home h SET position=$6
+       FROM core.partition p
+       WHERE h.partition_no=$1 AND h.job=$2 AND h.pass=$3 AND h.epoch=$4 AND h.position=$5
+         AND p.partition_no=h.partition_no AND p.write_state='active' AND p.epoch=h.epoch AND p.position=$6`,
+      [before.partition, job.job, job.pass, before.epoch, before.position, currentPosition],
+    );
+    meter.frontierWrites += refreshed.rowCount ?? 0;
+    return refreshed.rowCount === 1;
+  }
+
   async function compareHomes(
     job: Job,
     client: PoolClient,
@@ -1231,6 +1320,27 @@ export function createSearchGenerationPublication(
             row.claim_revision === '0'
           : same(row, await head(row.partition, context));
       if (matches) continue;
+      if (
+        job.family === 'subjects' &&
+        !job.fenced_pass &&
+        current_epoch === row.epoch &&
+        current_position !== null &&
+        BigInt(current_position) > BigInt(row.position) &&
+        row.account_revision === '0' &&
+        row.claim_revision === '0'
+      ) {
+        const reserveBytes = SUBJECT_VALIDATION_RECHECK_SQL_BYTES + SUBJECT_VALIDATION_CHECKPOINT_BYTES;
+        if (
+          meter.inputKeys + SUBJECT_VALIDATION_RECHECK_INPUTS + SUBJECT_VALIDATION_TRAILING_INPUTS >
+            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT ||
+          meter[validationBytes] + reserveBytes >= VALIDATION_BYTE_LIMIT
+        ) {
+          job.home = row.partition;
+          return true;
+        }
+        meter[validationBytes] += SUBJECT_VALIDATION_RECHECK_SQL_BYTES;
+        if (await refreshChangedSubjectHome(job, row, current_position, client, context, meter)) continue;
+      }
       const sameOwnerAdvance =
         current_position !== null &&
         row.account_revision === '0' &&
@@ -1266,19 +1376,7 @@ export function createSearchGenerationPublication(
   ) {
     const recheckTarget = async () => {
       meter.inputKeys += SUBJECT_VALIDATION_TRAILING_INPUTS;
-      const transport: OpenSearch = {
-        ...search,
-        request: (method, path, body, options) =>
-          search.request(method, path, body, {
-            ...options,
-            work: {
-              bytes: VALIDATION_BYTE_LIMIT - meter[validationBytes] - SUBJECT_VALIDATION_CHECKPOINT_BYTES,
-              deadline: context.deadline,
-              settle: (bytes) => (meter[validationBytes] += bytes),
-            },
-          }),
-      };
-      return native(job.consumer, context, transport);
+      return native(job.consumer, context, validationSearch(context, meter));
     };
     let longest = 0;
     for (let slice = 0; slice < SUBJECT_VALIDATION_SLICES && job.home < 4096; slice++) {
@@ -1303,7 +1401,9 @@ export function createSearchGenerationPublication(
         if (slice === 0) throw new Pending('deadline');
         break;
       }
+      const home = job.home;
       await compareHomes(job, client, context, meter, count, recheckTarget);
+      if (job.home < home + count) break;
       longest = Math.max(longest, Date.now() - started);
     }
     await recheckTarget();

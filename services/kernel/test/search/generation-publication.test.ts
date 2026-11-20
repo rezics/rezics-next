@@ -13,7 +13,10 @@ import { createSubjectIndex, subjectAlias, subjectIndexName, subjectGenerations 
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
 import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
 import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
-import { unavailableSearchWriterPublication } from '../../src/search/writer-guard.ts';
+import { createSearchWriterGuard, unavailableSearchWriterPublication } from '../../src/search/writer-guard.ts';
+import type { SubjectSource } from '../../src/search/source.ts';
+import { prepareBoundedSortKeys } from '../../src/search/bounded-sort-keys.ts';
+import { newId } from '../../src/route/route.ts';
 import {
   assertNativeGenerationActionsVisible,
   GenerationReconciliationMismatch,
@@ -50,7 +53,7 @@ afterAll(async () => {
   for (const index of indices) await search.request('DELETE', `/${index}`);
   await pool.end();
 });
-async function fixture(keyPages?: SubjectSourceKeyPages) {
+async function fixture(keyPages?: SubjectSourceKeyPages, writerSource?: SubjectSource) {
   const prefix = `publication-${crypto.randomUUID().slice(0, 8)}-`;
   for (const generation of [1, 2]) {
     await createSubjectIndex(search, prefix, generation);
@@ -106,7 +109,16 @@ async function fixture(keyPages?: SubjectSourceKeyPages) {
     readPublicationCompletion: async () => ({ status: 'unready', reason: 'source_missing', cost: zero }),
     clock: () => new Date(),
     meaning: definition.meaning,
-    writerGuard,
+    writerGuard: writerSource
+      ? createSearchWriterGuard({
+          pool,
+          search,
+          index: subjectIndexName(prefix, 2),
+          consumer: 'publication_test',
+          source: writerSource,
+          listing: { read: async () => new Map() },
+        })
+      : writerGuard,
   });
   const register = () =>
     custody.register(
@@ -362,6 +374,133 @@ test('Subject validation replays one changed occupied home before a fresh engine
   } finally {
     await f.operations.close();
     await pool.query('UPDATE semantic.partition_subjects SET visible=0 WHERE partition_no=ANY($1)', [occupied]);
+  }
+});
+
+test('Subject validation keeps its PIT coverage for a generic advance only with an exact settled home proof', async () => {
+  const home = 71;
+  const id = newId(home * 16);
+  const head = async () =>
+    (
+      await pool.query<{ epoch: number; position: string }>(
+        'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+        [home],
+      )
+    ).rows[0]!;
+  const read = async () => ({
+    partition: home,
+    position: BigInt((await head()).position),
+    subjects: [
+      {
+        id,
+        type: 'schema:Book',
+        visibility: 'visible' as const,
+        redirect: null,
+        securityRevision: 1,
+        labels: [{ language: 'en', value: 'Retained Subject' }],
+        aliases: [],
+        descriptions: [],
+        statements: [],
+      },
+    ],
+  });
+  const f = await fixture(
+    {
+      async read({ partition }) {
+        const { epoch, position } = await head();
+        return {
+          status: 'eligible',
+          partition,
+          epoch,
+          position: BigInt(position),
+          ids: [id],
+          after: null,
+          complete: true,
+          cost: zero,
+        };
+      },
+    },
+    { read, readForIndex: read, count: async () => ({ position: (await read()).position, count: 1 }) },
+  );
+  const index = subjectIndexName(f.prefix, 2);
+  try {
+    const prepared = await f.operations.prepare(f.registered.consumer, context());
+    if (prepared.status !== 'preparing') throw new Error(prepared.reason);
+    const job = prepared.job.job;
+    const step = () => f.operations.step(prepared.job, context());
+    const state = async () =>
+      (await pool.query('SELECT phase,home FROM search.generation_publication WHERE partition_no=0 AND job=$1', [job]))
+        .rows[0];
+    const validate = () =>
+      pool.query("UPDATE search.generation_publication SET phase='validate',home=64 WHERE partition_no=0 AND job=$1", [
+        job,
+      ]);
+    const advance = () => pool.query('UPDATE core.partition SET position=position+1 WHERE partition_no=$1', [home]);
+    await pool.query('UPDATE core.partition SET position=position+3 WHERE partition_no=$1', [home]);
+    await pool.query('UPDATE semantic.partition_subjects SET visible=1 WHERE partition_no=$1', [home]);
+    await pool.query(
+      `INSERT INTO search.identity_writer
+       (partition_no,physical_target,original_id,incarnation,owner_epoch,dispatch_state,writer_transaction_id,
+        writer_position,source_position,visible_transaction_id,visible_position,settled_transaction_id,settled_position)
+       SELECT partition_no,$2,$3,$4,epoch,'settled',$5,position-2,position-2,$6,position,$6,position
+       FROM core.partition WHERE partition_no=$1`,
+      [home, index, id, f.registered.consumer.incarnation, crypto.randomUUID(), crypto.randomUUID()],
+    );
+    const snapshot = await read();
+    const actions = await prepareBoundedSortKeys(
+      search,
+      index,
+      documentActions({ ...snapshot, position: snapshot.position - 2n }, [id], new Map()),
+    );
+    await writeIndexActions(search, index, actions);
+    await pool.query(
+      `INSERT INTO search.generation_publication_home (partition_no,job,pass,epoch,position)
+       SELECT partition_no,$1,1,epoch,position FROM core.partition`,
+      [job],
+    );
+    await validate();
+    await advance();
+    expect(await step()).toMatchObject({ status: 'progress' });
+    expect(await state()).toEqual({ phase: 'validate', home: 320 });
+    expect(
+      (
+        await pool.query(
+          'SELECT position::text FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2',
+          [home, job],
+        )
+      ).rows[0],
+    ).toEqual({ position: (await head()).position });
+
+    // A native extra in this home must still send validation through a fresh PIT.
+    const extra = newId(home * 16);
+    const extraSubject = { ...snapshot.subjects[0]!, id: extra };
+    await writeIndexActions(
+      search,
+      index,
+      await prepareBoundedSortKeys(
+        search,
+        index,
+        documentActions({ ...snapshot, subjects: [extraSubject] }, [extra], new Map()),
+      ),
+    );
+    await validate();
+    await advance();
+    expect(await step()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await state()).toEqual({ phase: 'subject', home });
+
+    await writeIndexActions(search, index, [{ op: 'delete', id: extra, version: snapshot.position + 1n }]);
+    await validate();
+    await advance();
+    await pool.query(
+      `UPDATE search.identity_writer SET visible_position=$4,settled_position=$4
+       WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+      [home, index, id, (await head()).position],
+    );
+    expect(await step()).toMatchObject({ status: 'unready', reason: 'source_pending' });
+    expect(await state()).toEqual({ phase: 'subject', home });
+  } finally {
+    await f.operations.close();
+    await pool.query('UPDATE semantic.partition_subjects SET visible=0 WHERE partition_no=$1', [home]);
   }
 });
 
