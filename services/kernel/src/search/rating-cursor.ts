@@ -183,7 +183,10 @@ export async function decodeRatingCursor(
   if (
     (signedPrefix !== PREFIX && !realmToken) ||
     !validContext(signedContext) ||
-    (realmToken && (encodedFrontier.length !== 1 || typeof encodedFrontier[0] !== 'string'))
+    (phase !== 'scored' && phase !== 'unscored') ||
+    (realmToken
+      ? encodedFrontier.length !== 1 || typeof encodedFrontier[0] !== 'string'
+      : !validPosition(signedContext.priorEpoch, phase, encodedFrontier))
   )
     return { ok: false, reason: 'invalid' };
   if (
@@ -194,8 +197,9 @@ export async function decodeRatingCursor(
   )
     return { ok: false, reason: 'restart' };
   const after = realmToken
-    ? decryptFrontier(ring, context, phase as RatingPhase, encodedFrontier[0] as string)
+    ? decryptFrontier(ring, context, phase, encodedFrontier[0] as string)
     : encodedFrontier;
-  if (!after || !validPosition(context.priorEpoch, phase, after)) return { ok: false, reason: 'invalid' };
-  return { ok: true, generation: decoded.generation, phase: phase as RatingPhase, after };
+  if (!after || (realmToken && !validPosition(signedContext.priorEpoch, phase, after)))
+    return { ok: false, reason: 'invalid' };
+  return { ok: true, generation: decoded.generation, phase, after };
 }
