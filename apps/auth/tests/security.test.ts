@@ -11,6 +11,9 @@ const timeout = 300_000;
 const accountId = 'acct+id/秘密';
 const password = 'new secure password';
 const session = 'current-session-token';
+const effectRef = '00000000-0000-4000-8000-000000000001';
+const approvalReference = `${'A'.repeat(48)}.${'A'.repeat(43)}`;
+const receiptId = '00000000-0000-4000-8000-000000000002';
 const now = Date.now();
 
 type Session = {
@@ -127,7 +130,7 @@ const fake = Bun.serve({
       if (url.pathname === '/credential-effects/stage')
         return Response.json(
           {
-            effectRef: 'effect-ref',
+            effectRef,
             key: JSON.parse(call.body).key,
             subjectId: accountId,
             purpose: 'set-password',
@@ -137,7 +140,7 @@ const fake = Bun.serve({
         );
       if (url.pathname === '/credential-effects/approve')
         return Response.json(
-          { reference: 'approval-reference', expiresAt: new Date(Date.now() + approvalLifetimeMs).toISOString() },
+          { reference: approvalReference, expiresAt: new Date(Date.now() + approvalLifetimeMs).toISOString() },
           { headers },
         );
       if (url.pathname === '/credential-effects/apply' && refuseNextApply) {
@@ -151,7 +154,7 @@ const fake = Bun.serve({
         const key = String(JSON.parse(call.body).key);
         const replayed = acceptedApplyKeys.has(key);
         acceptedApplyKeys.add(key);
-        return Response.json({ receiptId: 'receipt-id', replayed }, { headers });
+        return Response.json({ receiptId, replayed }, { headers });
       }
     }
 
@@ -359,9 +362,14 @@ test(
       await form.input.fill(password);
       await form.confirmation.fill(password);
       await form.review.click();
-      await page.getByRole('heading', { name: 'Review this password change' }).waitFor();
-      expect(await page.locator('body').innerText()).toContain(accountId);
-      expect(await page.locator('body').innerText()).toContain('Auth signs out all sessions, including this one.');
+      await page.getByRole('heading', { name: 'Review this password change', exact: true }).waitFor();
+      const effects = page.locator('[aria-labelledby="security-password-review-heading"]');
+      const reviewText = await effects.innerText();
+      expect(reviewText).toContain(accountId);
+      expect(reviewText).toContain(
+        'If this replaces an existing password, you are signed out of all sessions, including this one.',
+      );
+      expect(reviewText).toContain('If the account has no password yet, adding one keeps existing sessions signed in.');
       expect(await page.locator('body').innerText()).not.toContain(password);
       expect(authCalls('/credential-effects/stage')).toHaveLength(0);
       await Promise.all([
@@ -381,17 +389,17 @@ test(
       expect(approve).toEqual({
         key: stage.key,
         subjectId: accountId,
-        effectRef: 'effect-ref',
+        effectRef,
         purpose: 'set-password',
         digest: 'a'.repeat(64),
       });
       expect(apply).toEqual({
         key: stage.key,
         subjectId: accountId,
-        effectRef: 'effect-ref',
+        effectRef,
         purpose: 'set-password',
         digest: 'a'.repeat(64),
-        reference: 'approval-reference',
+        reference: approvalReference,
       });
       expect(stage).not.toHaveProperty('confirmation');
       expect(authCalls('/credential-effects/stage').length).toBe(1);
@@ -469,7 +477,10 @@ test(
         ),
         form.confirm.click(),
       ]);
-      await page.getByText('Auth refused this step and reported that it was not applied.', { exact: false }).waitFor();
+      await page
+        .getByRole('alert')
+        .filter({ hasText: 'This step was refused and was not applied. No password change was confirmed.' })
+        .waitFor();
       expect(new URL(page.url()).pathname).toBe('/security');
       expect(page.url()).toContain(origin);
       expect(authCalls('/credential-effects/stage')).toHaveLength(1);
@@ -500,7 +511,10 @@ test.each(['before', 'after'] as const)(
       await form.confirmation.fill(password);
       await form.review.click();
       await form.confirm.click();
-      await page.getByText('Auth did not confirm whether the password changed.', { exact: false }).waitFor();
+      const unknown = page
+        .getByRole('status')
+        .filter({ hasText: 'We could not confirm whether the password changed.' });
+      await unknown.waitFor();
       await page.waitForTimeout(100);
       expect(
         await page.evaluate(
@@ -531,18 +545,10 @@ test.each(['before', 'after'] as const)(
           page.getByRole('button', { name: 'Retry original attempt', exact: true }).click(),
         ]);
         await page
-          .getByText('A refusal now cannot tell whether an earlier apply changed the password.', { exact: false })
+          .getByText('A refusal now cannot show whether the password already changed.', { exact: false })
           .waitFor();
-        await page
-          .getByRole('status')
-          .filter({ hasText: 'Auth did not confirm whether the password changed.' })
-          .waitFor();
-        expect(
-          await page
-            .getByRole('status')
-            .filter({ hasText: 'Auth did not confirm whether the password changed.' })
-            .count(),
-        ).toBe(1);
+        await unknown.waitFor();
+        expect(await unknown.count()).toBe(1);
         expect(authCalls('/credential-effects/apply')).toHaveLength(2);
       }
 
@@ -590,7 +596,7 @@ test(
 
       await rows.nth(1).getByRole('button', { name: 'Sign out Firefox on Linux', exact: true }).click();
       await page.getByRole('heading', { name: 'Review session sign-out', exact: true }).waitFor();
-      expect(await page.getByText('Revoking this session signs that device out.', { exact: true }).count()).toBe(1);
+      expect(await page.getByText('Signing out this session signs that device out.', { exact: true }).count()).toBe(1);
       await page.getByRole('button', { name: 'Confirm session sign-out', exact: true }).click();
       await rows.nth(1).waitFor({ state: 'detached' });
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'older-session' });

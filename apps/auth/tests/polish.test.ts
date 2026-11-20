@@ -264,9 +264,12 @@ test(
       await list.waitFor();
       const sections = page.getByRole('heading', { level: 2 });
       expect(await sections.allTextContents()).toEqual([
+        'Signed-in account',
         'Password',
         'Passkeys',
         'Sessions',
+        'Applications you own',
+        'Permissions you granted',
         'Organizations',
         'Delete account',
       ]);
@@ -348,7 +351,7 @@ test(
       const alert = page.getByRole('alert');
       await alert.waitFor({ state: 'visible' });
       expect(await alert.getAttribute('data-slot')).toBe('alert');
-      expect(await alert.getAttribute('class')).toContain('border-destructive');
+      expect(await alert.evaluate((element) => element.classList.contains('text-destructive'))).toBe(true);
       expect(await alert.locator('svg').count()).toBeGreaterThan(0);
       expect(await alert.locator('[data-slot="alert-title"]').count()).toBe(1);
       expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
