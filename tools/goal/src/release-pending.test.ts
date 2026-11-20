@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { WorkerJob } from './job.ts';
+import { capacityWaiters } from './launch-capacity.ts';
 import { harness, markdown } from './test-support.ts';
 import { git } from './merge.ts';
 import type { Attempt } from './types.ts';
@@ -92,9 +93,12 @@ test('the host recovery sweep starts a ready task with a pending attempt and fre
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
 
     await job.recoverOrphans();
+    await job.recoverOrphans();
     await job.drain();
 
     expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })).toMatchObject({ status: 'started', nextAttempt: 2 });
+    expect(capacityWaiters(h.settings.stateDirectory)).toEqual(new Set());
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
     expect(h.store.attempt({ taskId: task.id, attempt: 2 }).state).toBe('exited');
   } finally {

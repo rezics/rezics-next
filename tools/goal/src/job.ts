@@ -624,8 +624,6 @@ export class WorkerJob implements GateOutcomeSink {
     this.track(this.follow(worker));
     return true;
   }
-  /** Tasks whose lost pending attempt this process is already retrying. */
-  private readonly recovering = new Set<string>();
   /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
@@ -1588,6 +1586,11 @@ export class WorkerJob implements GateOutcomeSink {
       }
     }
   }
+  private recoverStart(ref: AttemptRef, stage: string): void {
+    // Reuse the retry runner's generation guard and any existing backoff.
+    this.tasks.store.saveRetryIntent(ref, {});
+    this.track(this.runRetryIntent(ref).catch((error) => this.recoveryFailed(ref.taskId, stage, error)));
+  }
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
@@ -1834,13 +1837,7 @@ export class WorkerJob implements GateOutcomeSink {
             );
             continue;
           }
-          if (this.recovering.has(attempt.taskId)) continue;
-          this.recovering.add(attempt.taskId);
-          this.track(
-            this.start(attempt.taskId)
-              .catch((error) => this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error))
-              .finally(() => this.recovering.delete(attempt.taskId)),
-          );
+          this.recoverStart({ taskId: attempt.taskId, attempt: attempt.attempt }, 'pending attempt recovery');
         } catch (error) {
           this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error);
         }
@@ -1855,29 +1852,17 @@ export class WorkerJob implements GateOutcomeSink {
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory, store);
       for (const task of store.activeTasks()) {
         await yieldSweep();
-        if (
-          task.brief.kind === 'verification' ||
-          task.state !== 'ready' ||
-          task.currentAttempt !== 0 ||
-          this.recovering.has(task.id)
-        )
-          continue;
+        if (task.brief.kind === 'verification' || task.state !== 'ready' || task.currentAttempt !== 0) continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
           acquireDirectoryLease(
             join(this.tasks.settings.stateDirectory, 'leases', task.id),
             this.tasks.settings.policy?.leases,
           ).release();
+          this.recoverStart({ taskId: task.id, attempt: 0 }, 'first start');
         } catch (error) {
           this.recoveryFailed(task.id, 'first start', error);
-          continue;
         }
-        this.recovering.add(task.id);
-        this.track(
-          this.start(task.id, { expectedAttempt: 0 })
-            .catch((error) => this.recoveryFailed(task.id, 'first start', error))
-            .finally(() => this.recovering.delete(task.id)),
-        );
       }
     }
     // One /proc scan for all candidates: a scan per candidate made every command cost attempts × processes.

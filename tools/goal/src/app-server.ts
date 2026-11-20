@@ -337,14 +337,16 @@ async function waitForAppServerReady(
       clearTimeout(timer);
       if (poll) clearInterval(poll);
       child.stderr?.removeListener('data', onData);
+      // Keep draining the pipe after readiness so later diagnostics cannot block the server.
+      child.stderr?.resume();
       child.removeListener('error', onError);
       child.removeListener('exit', onExit);
       if (error) reject(error);
       else resolveReady(value!);
     };
     const observe = (text: string) => {
+      const match = stripAnsi(stderr + text).match(APP_SERVER_READY);
       stderr = retainAppServerDiagnostics(stderr, text, policy.diagnosticCharacters);
-      const match = stripAnsi(stderr).match(APP_SERVER_READY);
       if (match) finish(undefined, match[1]);
     };
     const onData = (chunk: Buffer | string) => observe(String(chunk));

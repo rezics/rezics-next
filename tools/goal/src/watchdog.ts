@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSyn
 import { join, sep } from 'node:path';
 import { sameProcess } from './process.ts';
 import { CHECK_HOST_TRANSPORT, readLogTail } from './records.ts';
-import type { WorkerStore } from './store.ts';
+import { retryDrainState, type WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import { checkWaitMs } from './launch.ts';
@@ -524,7 +524,9 @@ export function violations(
         (event) => event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
       );
     const compilerReconciliationHold = typingRetryUnreconciled || sourceAmendmentCompilerHold;
-    if (attempt.state !== 'exited' && !compilerReconciliationHold) continue;
+    // Retry preparation revokes the old writer before the replacement can be admitted.
+    const previousState = (retry ? retryDrainState(attempt) : undefined) ?? attempt.state;
+    if (previousState !== 'exited' && !compilerReconciliationHold) continue;
     const eligibleAt = Math.max(
       ...[attempt.endedAt, retry?.queuedAt, retry?.options?.notBefore]
         .map((time) => Date.parse(time ?? ''))

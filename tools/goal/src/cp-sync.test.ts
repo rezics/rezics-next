@@ -813,7 +813,7 @@ test('cp-sync publishes the real CLI and installs services while retiring a tran
   git(repo, 'commit', '-qam', 'Fixture legacy CLI');
   const main = git(repo, 'rev-parse', 'HEAD');
   git(repo, 'branch', 'stabilize');
-  git(repo, 'checkout', '--quiet', '-b', 'dev');
+  git(repo, 'checkout', '--quiet', '-B', 'dev');
   write(repo, 'tools/goal/src/cli.ts', cli);
   git(repo, 'commit', '-qam', 'Fixture resident CLI');
   const goalTree = git(repo, 'rev-parse', 'HEAD:tools/goal');

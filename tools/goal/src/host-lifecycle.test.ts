@@ -403,9 +403,7 @@ test.skipIf(!tmuxBinary)(
   'a routine Goal host restart keeps the pool server endpoint and its tmux viewer',
   async () => {
     const f = fixture();
-    const tmuxDirectory = join(process.cwd(), '.temp');
-    mkdirSync(tmuxDirectory, { recursive: true });
-    const tmuxSocket = join(tmuxDirectory, `goal-tmux-${randomUUID()}.sock`);
+    const tmuxSocket = join(f.path, 'tmux.sock');
     const session = 'goal-host-lifecycle';
     const rpcPath = join(f.path, 'rpc.jsonl');
     const viewerPath = join(f.path, 'viewers.jsonl');

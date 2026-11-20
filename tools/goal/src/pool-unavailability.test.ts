@@ -125,6 +125,7 @@ test('an aged exited retry remains watchdog-waiting through a recovery pass and 
     const recovery = h.settings.policy!.host.recoveryIntervalMs;
     const lead = h.settings.policy!.worker.retryIntentLeadMs;
     expect(waiting).toMatchObject({ status: 'pending', options: { evidence, escalation: 'environment' } });
+    expect(h.store.attempt(retryRef)).toMatchObject({ state: 'superseded', retryDrain: 'exited' });
     expect(notBefore - Date.now()).toBeGreaterThan(recovery - 2_000);
     const watchdogAt = (now: number) =>
       violations(h.store, now, h.store.activeTasks(), h.settings.stateDirectory, h.settings.policy!);

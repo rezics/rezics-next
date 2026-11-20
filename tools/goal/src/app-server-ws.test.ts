@@ -1,7 +1,7 @@
-import { expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterEach, expect, test } from 'bun:test';
+import { chmodSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import { connectPool } from './app-server.ts';
 import { readControlPolicy } from './policy.ts';
 
@@ -32,8 +32,19 @@ function installFake(directory: string, source: string): string {
   return executable;
 }
 
+const closeDirectories: (() => void)[] = [];
+function fixtureDirectory(prefix: string): string {
+  const directory = ownedTemporaryDirectory(resolve(import.meta.dir, '../../../.temp/goal-tests'), prefix);
+  closeDirectories.push(directory.close);
+  return directory.path;
+}
+
+afterEach(() => {
+  while (closeDirectories.length) closeDirectories.pop()!();
+});
+
 test('pool policy bounds readiness diagnostics and request deadlines', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-policy-'));
+  const directory = fixtureDirectory('goal-ws-policy-');
   const policy = readControlPolicy({
     appServer: {
       readinessTimeoutMs: 1000,
@@ -78,7 +89,7 @@ test('pool policy bounds readiness diagnostics and request deadlines', async () 
 });
 
 test('a pool app-server listens on a loopback WebSocket owned by the caller and serves JSON-RPC', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-'));
+  const directory = fixtureDirectory('goal-ws-');
   const executable = installFake(directory, fake);
   const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
   const endpoint = server.endpoint;
@@ -93,9 +104,8 @@ test('a pool app-server listens on a loopback WebSocket owned by the caller and 
     await Bun.sleep(50);
     expect(notifications).toContain('thread/started');
   } finally {
-    server.close();
+    await server.close();
   }
-  await Bun.sleep(300);
   expect(
     await fetch(`${endpoint.replace('ws://', 'http://')}/readyz`).then(
       () => 'up',
@@ -105,29 +115,47 @@ test('a pool app-server listens on a loopback WebSocket owned by the caller and 
 });
 
 test('a noisy app-server remains bounded after readiness and still connects when the readiness marker crosses stream chunks', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-split-'));
+  const directory = fixtureDirectory('goal-ws-split-');
   const executable = installFake(
     directory,
-    fake.replace(
-      "console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');",
-      `process.stderr.write('  readyz: ht');
-await Bun.sleep(50);
-process.stderr.write('tp://127.0.0.1:' + server.port + '/readyz\\n');
-const noise = Buffer.alloc(32 * 1024, 0x78);
-for (let i = 0; i < 32; i++) process.stderr.write(noise);`,
-    ),
+    fake
+      .replace('message(ws, data) {', 'async message(ws, data) {')
+      .replace(
+        'if (message.id === undefined) return;',
+        "if (message.id === undefined) return;\n  if (message.method === 'thread/list') await noiseWritten;",
+      )
+      .replace(
+        "console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');",
+        `const write = (data) => new Promise((resolve) => process.stderr.write(data, resolve));
+const noiseWritten = (async () => {
+  await write('  readyz: ht');
+  await Bun.sleep(50);
+  // Keep the marker suffix and more than one diagnostic tail in one pipe write.
+  await write('tp://127.0.0.1:' + server.port + '/readyz\\n' + 'x'.repeat(2048));
+  const noise = Buffer.alloc(32 * 1024, 0x78);
+  for (let i = 0; i < 32; i++) await write(noise);
+})();`,
+      ),
   );
-  const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
+  const policy = readControlPolicy({
+    appServer: { diagnosticCharacters: 128, readinessTimeoutMs: 2000, requestTimeoutMs: 2000 },
+  }).appServer;
+  const server = await connectPool(
+    { id: 'pool', codexHome: join(directory, 'home'), executable },
+    undefined,
+    undefined,
+    policy,
+  );
   try {
     expect(server.endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
     expect(await server.request('thread/list', {})).toEqual({ echo: 'thread/list', params: {} });
   } finally {
-    server.close();
+    await server.close();
   }
 });
 
 test('a startup failure still reports a readiness marker split across chunks without retaining unbounded stderr', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-fail-'));
+  const directory = fixtureDirectory('goal-ws-fail-');
   const executable = installFake(
     directory,
     `#!/usr/bin/env bun
