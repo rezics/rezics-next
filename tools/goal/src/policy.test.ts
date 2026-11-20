@@ -1,10 +1,13 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
 import { checkSettings, readControlPolicy } from './config.ts';
+import { openDb } from './db.ts';
+import * as hostPressure from './host-pressure.ts';
 import { capacityAvailable } from './launch.ts';
-import { harness } from './test-support.ts';
+import { WorkerStore } from './store.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
 import { toolRetryDelay } from './attempt-progress.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 
@@ -70,12 +73,20 @@ test('local policy overrides individual leaves and validates configurable notifi
     const retrySettings = settings;
     const task = h.tasks.dispatch(h.briefFile),
       ref = { taskId: task.id, attempt: 0 };
-    const other = h.tasks.dispatch(h.briefFile);
-    h.store.event({ taskId: task.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
+    const other = h.tasks.dispatch(h.writeBrief('Exercise the other rebase outcome.'));
+    expect(other.id).not.toBe(task.id);
+    h.store.event(ref, 'gate-outcome', { stage: 'rebase' });
     h.store.event({ taskId: other.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
-    expect(lifecycleMetrics(h.store.db, new Date(), settings.policy).conflicts.recordedOutcomes).toMatchObject({
+    const metricsAt = new Date();
+    expect(lifecycleMetrics(h.store.db, metricsAt, settings.policy).conflicts.recordedOutcomes).toMatchObject({
       complete: false,
+      observedCount: 0,
       unclassifiedCount: 1,
+    });
+    expect(lifecycleMetrics(h.store.db, metricsAt).conflicts.recordedOutcomes).toMatchObject({
+      complete: true,
+      observedCount: 0,
+      unclassifiedCount: 2,
     });
     const now = Date.now();
     const fixtureEnvironment = process.env.REZICS_GOAL_TEST_ENVIRONMENT;
@@ -133,17 +144,33 @@ test('fractional and retry-list policies reject invalid leaves and copy schedule
 });
 
 test('host admission uses configured defaults and retains the capacity file override and opt-in', () => {
-  const h = harness();
+  const temporary = temporaryDirectory();
+  const db = openDb(':memory:');
+  const pressure = spyOn(hostPressure, 'readHostPressure').mockReturnValue({ memoryFull: 0, ioFull: 0 });
+  const headroom = spyOn(hostPressure, 'workerHeadroomMiB').mockReturnValue(Number.POSITIVE_INFINITY);
   try {
+    const store = new WorkerStore(db);
+    db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, 1, 1, ?)').run(
+      'running',
+      JSON.stringify({ state: 'running' }),
+    );
+    db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, 1, ?)').run(
+      'running',
+      JSON.stringify({ state: 'running' }),
+    );
     const policy = readControlPolicy({ capacity: { maxWorkers: 1, minAvailableMiB: 0 } }).capacity;
-    const store = { runningAttemptsCount: () => 1 } as typeof h.store;
-    expect(capacityAvailable(store, h.settings.stateDirectory, policy)).toBe(true);
-    const file = join(h.settings.stateDirectory, 'capacity.json');
+    expect(capacityAvailable(store, temporary.path, policy)).toBe(true);
+    const file = join(temporary.path, 'capacity.json');
     writeFileSync(file, '{}');
-    expect(capacityAvailable(store, h.settings.stateDirectory, policy)).toBe(false);
+    expect(capacityAvailable(store, temporary.path, policy)).toBe(false);
+    writeFileSync(file, '{');
+    expect(capacityAvailable(store, temporary.path, policy)).toBe(false);
     writeFileSync(file, JSON.stringify({ maxWorkers: 2 }));
-    expect(capacityAvailable(store, h.settings.stateDirectory, policy)).toBe(true);
+    expect(capacityAvailable(store, temporary.path, policy)).toBe(true);
   } finally {
-    h.dispose();
+    headroom.mockRestore();
+    pressure.mockRestore();
+    db.close();
+    temporary.close();
   }
 });

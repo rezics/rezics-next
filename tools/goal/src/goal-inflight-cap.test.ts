@@ -7,16 +7,41 @@ import { awaitHostCapacity } from './launch-capacity.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { checkSettings } from './settings.ts';
+import type { Attempt, Task } from './types.ts';
 
 let sequence = 0;
 
-function task(db: ReturnType<typeof openDb>, id: string, goal: string, state: string, urgent = false): void {
+function task(
+  db: ReturnType<typeof openDb>,
+  id: string,
+  goal: string,
+  state: Task['state'],
+  urgent = false,
+  attemptState: Attempt['state'] | undefined = state === 'running'
+    ? 'running'
+    : state === 'landing'
+      ? 'exited'
+      : undefined,
+): void {
   sequence += 1;
-  db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, 1, ?)').run(
+  const currentAttempt = attemptState === undefined ? 0 : 1;
+  db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
     id,
     sequence,
-    JSON.stringify({ id, currentAttempt: 1, state, brief: { goal, manager: goal, urgent } }),
+    currentAttempt,
+    JSON.stringify({ id, currentAttempt, state, brief: { goal, manager: goal, urgent } }),
   );
+  if (attemptState !== undefined)
+    db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
+      id,
+      currentAttempt,
+      JSON.stringify({
+        taskId: id,
+        attempt: currentAttempt,
+        state: attemptState,
+        ...(attemptState === 'waiting' ? { checks: ['check'] } : {}),
+      }),
+    );
 }
 
 type CapacityOptions = NonNullable<Parameters<typeof awaitHostCapacity>[5]>;
@@ -29,6 +54,8 @@ function capacityOptions(goal: string, id: string, overrides: Partial<CapacityOp
     pollIntervalMs: 5,
     policy: { ...defaultPolicy.capacity, minAvailableMiB: 0, pollIntervalMs: 5, reservationPollMs: 5 },
     availableMiB: () => 1_000_000,
+    pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+    workerHeadroomMiB: () => Number.POSITIVE_INFINITY,
     ...overrides,
   };
 }
@@ -96,13 +123,16 @@ test('six running, check-parked or landing tasks block starts while ready work k
   let firstRelease: (() => void) | undefined;
   let secondRelease: (() => void) | undefined;
   const pending: Promise<void>[] = [];
+  const integrate = (id: string) =>
+    db.transaction(() => {
+      db.query("UPDATE worker_attempts SET body=json_set(body, '$.state', 'exited') WHERE task_id=? AND attempt=1").run(
+        id,
+      );
+      db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'integrated') WHERE id=?").run(id);
+    })();
   try {
     for (let index = 0; index < 4; index += 1) task(db, `running-${index}`, 'web', 'running');
-    task(db, 'parked-check', 'web', 'running');
-    db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, 1, ?)').run(
-      'parked-check',
-      JSON.stringify({ taskId: 'parked-check', attempt: 1, state: 'waiting', checks: ['check'] }),
-    );
+    task(db, 'parked-check', 'web', 'running', false, 'waiting');
     task(db, 'landing', 'web', 'landing');
     task(db, 'held-on-dependency', 'web', 'held');
     task(db, 'urgent-running', 'web', 'running', true);
@@ -116,25 +146,33 @@ test('six running, check-parked or landing tasks block starts while ready work k
     retry();
 
     task(db, 'ready-z', 'web', 'ready');
-    task(db, 'ready-a', 'web', 'ready');
+    task(db, 'ready-a', 'web', 'ready', false, 'exited');
+    await expect(
+      awaitHostCapacity(store, temporary.path, false, 'ready-a', 1, capacityOptions('web', 'ready-a')),
+    ).rejects.toThrow('attempt 0 of ready-a is stale');
     let firstStarted = false;
     let secondStarted = false;
-    const second = awaitHostCapacity(store, temporary.path, false, 'ready-a', 1, {
+    const secondWaits: (readonly string[])[] = [];
+    const second = awaitHostCapacity(store, temporary.path, false, 'ready-a', 2, {
       ...capacityOptions('web', 'ready-a'),
       now: () => Date.now() + 1,
+      onWaitReasons: (reasons) => secondWaits.push(reasons),
     }).then((release) => {
       secondRelease = release;
       secondStarted = true;
     });
     pending.push(second);
+    void second.catch(() => {});
 
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await until(() => secondWaits.length > 0);
+    expect(secondWaits[0]).toContain('goal-start-limit');
     expect(secondStarted).toBe(false);
     const readyBody = db.query('SELECT body FROM worker_tasks WHERE id=?').get('ready-a') as { body: string };
     expect((JSON.parse(readyBody.body) as { state: string }).state).toBe('ready');
 
-    db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'integrated') WHERE id=?").run('running-0');
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    integrate('running-0');
+    const checksBeforeFreeing = secondWaits.length;
+    await until(() => secondWaits.length > checksBeforeFreeing);
     expect(firstStarted).toBe(false);
     expect(secondStarted).toBe(false);
 
@@ -146,18 +184,28 @@ test('six running, check-parked or landing tasks block starts while ready work k
       firstStarted = true;
     });
     pending.push(first);
+    void first.catch(() => {});
     await until(() => firstStarted);
     expect(secondStarted).toBe(false);
 
-    db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'running') WHERE id=?").run('ready-z');
+    db.transaction(() => {
+      db.query(
+        "UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.state', 'running', '$.currentAttempt', 1) WHERE id=?",
+      ).run('ready-z');
+      db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, 1, ?)').run(
+        'ready-z',
+        JSON.stringify({ taskId: 'ready-z', attempt: 1, state: 'running' }),
+      );
+    })();
     firstRelease?.();
-    db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'integrated') WHERE id=?").run('running-1');
+    integrate('running-1');
     await until(() => secondStarted);
+    expect(store.capacityLifecycle('ready-a')).toMatchObject({ currentAttempt: 1, attemptState: 'exited' });
   } finally {
     firstRelease?.();
     secondRelease?.();
     db.query(
-      "UPDATE worker_tasks SET body=json_set(body, '$.state', 'integrated') WHERE json_extract(body, '$.brief.goal') = 'web'",
+      "UPDATE worker_tasks SET body=json_set(body, '$.state', 'cancelled') WHERE json_extract(body, '$.state') = 'ready'",
     ).run();
     await Promise.allSettled(pending);
     firstRelease?.();
@@ -176,6 +224,8 @@ test('urgent and control-plane starts bypass the per-Goal cap, while dependency-
     task(db, 'web-held', 'web', 'held');
     task(db, 'cp-one', 'control-plane', 'running');
     task(db, 'cp-two', 'control-plane', 'landing');
+    task(db, 'urgent-next', 'web', 'ready', true);
+    task(db, 'cp-next', 'control-plane', 'ready');
     expect(store.goalInFlightCount('web')).toBe(6);
     expect(store.goalInFlightCount('control-plane')).toBe(0);
 

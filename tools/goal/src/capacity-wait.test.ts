@@ -1,8 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { migrate, openDb } from './db.ts';
+import * as hostPressure from './host-pressure.ts';
 import { awaitHostCapacity, capacityAvailable, waitersAhead } from './launch.ts';
+import { processIdentity } from './process.ts';
 import { WorkerStore, workerMigrations } from './store.ts';
 import { readWidthSnapshot } from './width-governor.ts';
 
@@ -22,7 +24,7 @@ test('the shared current-attempt projection backfills admission and width counts
       2,
       JSON.stringify({ state: 'running', brief: { goal: 'goal', manager: 'manager' } }),
     );
-    const process = { pid: 1234, start: 'start', boot: 'boot', group: 1234 };
+    const process = { pid: 1234, start: '123456', boot: 'boot', group: 1234 };
     db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
       'task',
       1,
@@ -57,6 +59,8 @@ test('a start waiting for host capacity counts current running attempts with one
   const directory = mkdtempSync(join(temporaryRoot, 'goal-capacity-count-'));
   const path = join(directory, 'capacity.sqlite');
   const db = openDb(path);
+  const pressure = spyOn(hostPressure, 'readHostPressure').mockReturnValue({ memoryFull: 0, ioFull: 0 });
+  const headroom = spyOn(hostPressure, 'workerHeadroomMiB').mockReturnValue(Number.POSITIVE_INFINITY);
   try {
     const store = new WorkerStore(db);
     const query = db.query.bind(db);
@@ -164,6 +168,8 @@ test('a start waiting for host capacity counts current running attempts with one
       expect(new Set(work).size).toBe(1);
     }
   } finally {
+    headroom.mockRestore();
+    pressure.mockRestore();
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -172,6 +178,8 @@ test('a start waiting for host capacity counts current running attempts with one
 test('a critical-path start waits at the cap like any other and only goes half an hour ahead in the queue', async () => {
   const directory = mkdtempSync(join(temporaryRoot, 'goal-capacity-critical-'));
   const db = openDb(':memory:');
+  const capacityFile = join(directory, 'capacity.json');
+  let pending: ReturnType<typeof awaitHostCapacity> | undefined;
   try {
     const store = new WorkerStore(db);
     db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
@@ -185,23 +193,42 @@ test('a critical-path start waits at the cap like any other and only goes half a
       1,
       JSON.stringify({ state: 'running' }),
     );
-    writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    const now = Date.now();
+    const waits: (readonly string[])[] = [];
+    pending = awaitHostCapacity(store, directory, true, 'critical', 1, {
+      now: () => now,
+      availableMiB: () => Number.POSITIVE_INFINITY,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => Number.POSITIVE_INFINITY,
+      onWaitReasons: (reasons) => waits.push(reasons),
+    });
+    void pending.catch(() => {});
     // At the cap a critical-path start does not return; it used to start regardless and starve ordinary waiters.
-    const started = await Promise.race([
-      awaitHostCapacity(store, directory, true, 'critical').then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 300)),
-    ]);
-    expect(started).toBe(false);
+    expect(waits[0]).toContain('worker-limit');
     const queue = join(directory, 'capacity-queue');
     const [critical] = readdirSync(queue);
-    const now = Date.now();
-    const older = `${String(now - 60 * 60_000).padStart(15, '0')}-${process.pid}-older`;
-    const newer = `${String(now - 60_000).padStart(15, '0')}-${process.pid}-newer`;
-    writeFileSync(join(queue, older), '');
-    writeFileSync(join(queue, newer), '');
-    expect(waitersAhead(queue, critical!)).toBe(1);
-    expect(waitersAhead(queue, newer)).toBe(2);
+    expect(critical).toEndWith('-critical');
+    expect(Number(critical?.split('.')[0])).toBe(now - 30 * 60_000);
+    const owner = processIdentity();
+    expect(owner).not.toBeNull();
+    const writeStart = (taskId: string, queuedAt: number) => {
+      const name = `${String(queuedAt).padStart(15, '0')}.00000001-${process.pid}-${taskId}`;
+      writeFileSync(
+        join(queue, name),
+        JSON.stringify({ ...owner, taskId, attempt: 1, operation: 'start', queuedAt, priorityHeadStart: false }),
+      );
+      return name;
+    };
+    const older = writeStart('older', now - 60 * 60_000);
+    const newer = writeStart('newer', now - 60_000);
+    expect(waitersAhead(queue, older, store)).toBe(0);
+    expect(waitersAhead(queue, critical!, store)).toBe(1);
+    expect(waitersAhead(queue, newer, store)).toBe(2);
   } finally {
+    rmSync(capacityFile, { force: true });
+    const [settled] = await Promise.allSettled(pending ? [pending] : []);
+    if (settled?.status === 'fulfilled') settled.value();
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }

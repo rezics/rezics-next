@@ -7,7 +7,7 @@ import { readPoolPolicies } from './pools.ts';
 import { checkSettings } from './settings.ts';
 import { WorkerStore } from './store.ts';
 import { fixturePool, temporaryDirectory } from './test-support.ts';
-import type { Pool, Profile, Settings } from './types.ts';
+import type { Pool, Profile } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
 const main = join(import.meta.dir, '../../..');
@@ -89,16 +89,24 @@ test('policy.maxConcurrent counts live sessions only; status lists live and wait
     },
   ]);
 
+  const temporary = temporaryDirectory();
   const db = openDb(':memory:');
   try {
     const store = new WorkerStore(db);
     let sequence = 1;
     const insert = (id: string, state: string) => {
+      const taskSequence = sequence++;
       db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
         id,
-        sequence++,
+        taskSequence,
         1,
-        JSON.stringify({ id, state: 'running', currentAttempt: 1 }),
+        JSON.stringify({
+          id,
+          sequence: taskSequence,
+          state: state === 'exited' ? 'integrated' : 'running',
+          currentAttempt: 1,
+          brief: { goal: 'web', manager: 'web' },
+        }),
       );
       db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
         id,
@@ -112,29 +120,15 @@ test('policy.maxConcurrent counts live sessions only; status lists live and wait
     insert('exited-1', 'exited');
     expect(store.runningAttemptsByPool()).toEqual({ 'claude-worker': 5 });
     expect(store.waitingAttemptsByPool()).toEqual({ 'claude-worker': 3 });
-  } finally {
-    db.close();
-  }
 
-  const temporary = temporaryDirectory();
-  const output: string[] = [];
-  try {
-    const settings = {
-      stateDirectory: temporary.path,
-      mainCheckout: main,
-      integrationBranch: 'dev',
-      pools: [capped],
-    } as Settings;
-    const store = {
-      db: { query: () => ({ all: () => [], get: () => null, run() {} }), close() {} },
-      tasks: () => [],
-      runningAttemptsByPool: () => ({ 'claude-worker': 5 }),
-      waitingAttemptsByPool: () => ({ 'claude-worker': 11 }),
-    };
+    for (let i = 3; i < 11; i++) insert(`wait-${i}`, 'waiting');
+    const localFile = join(temporary.path, 'local.json');
+    writeFileSync(localFile, JSON.stringify({ version: 1, stateDirectory: temporary.path, pools: [capped] }));
+    const settings = checkSettings({ cwd: main, localFile, env: { GOAL_MAIN_CHECKOUT: main } });
+    const output: string[] = [];
     await runWorkerCommand('status', [], {
       settings,
-      store: store as never,
-      tasks: { settings, store } as never,
+      store,
       print: (value) => output.push(String(value)),
     });
     expect(JSON.parse(output[0]!).pools).toContainEqual({
@@ -146,6 +140,7 @@ test('policy.maxConcurrent counts live sessions only; status lists live and wait
       maxConcurrent: 8,
     });
   } finally {
+    db.close();
     temporary.close();
   }
 });
