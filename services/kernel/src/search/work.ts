@@ -72,6 +72,23 @@ export function createSearchServiceGate<T>(unavailable: () => Error) {
   };
 }
 
+export function registerPublicPreparationWork(ready: () => Promise<Pick<PublicPreparation, 'run'>>) {
+  const step = DBOS.registerStep(
+    async (id: string, revision: string) => {
+      await (await ready()).run(id, revision);
+    },
+    { name: 'search.publicPreparationStep', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
+  );
+  DBOS.registerWorkflow(
+    async (input: { id: string; revision: string; notBefore: number }) => {
+      const delay = input.notBefore - Date.now();
+      if (delay > 0) await DBOS.sleep(delay);
+      await step(input.id, input.revision);
+    },
+    { name: PUBLIC_PREPARATION_WORKFLOW },
+  );
+}
+
 export { collectionPublicationScopeRuntime } from './scope-runtime.ts';
 
 export { readSearchConfig, type SearchConfig } from './config.ts';
@@ -370,20 +387,7 @@ export function createSearchWorkModule(
         },
         { name: SCOPE_PREPARATION_WORKFLOW },
       );
-      const step = DBOS.registerStep(
-        async (id: string, revision: string) => {
-          await (await preparationGate.ready()).run(id, revision);
-        },
-        { name: 'search.publicPreparationStep', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
-      );
-      DBOS.registerWorkflow(
-        async (input: { id: string; revision: string; notBefore: number }) => {
-          const delay = input.notBefore - Date.now();
-          if (delay > 0) await DBOS.sleep(delay);
-          await step(input.id, input.revision);
-        },
-        { name: PUBLIC_PREPARATION_WORKFLOW },
-      );
+      registerPublicPreparationWork(preparationGate.ready);
       context.addService(async () => {
         const defaults = composeRuntimeDefaults({
           env: { ...context.env },

@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createPool } from '../../src/database/pool.ts';
-import { createWorkClient } from '../../src/work/client.ts';
+import { createWorkClient, DBOS_SCHEMA, WORK_APPLICATION } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { createPublicPreparation, type PublicPreparationOptions } from '../../src/search/public-preparation.ts';
+import { createSearchServiceGate, registerPublicPreparationWork } from '../../src/search/work.ts';
 import { subjectIndexName } from '../../src/search/indices.ts';
 import { activeRelease } from '../../src/semantic/definitions.ts';
 import {
@@ -101,8 +103,8 @@ function population(key = '1'): PopulationFrontier {
   };
 }
 
-function identity(id: string, revision: string): string {
-  return `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}`;
+function identity(id: string, revision: string, kind: 'repair' | 'population' = 'repair'): string {
+  return `${PUBLIC_PREPARATION_WORKFLOW}:${id}:${revision}${kind === 'population' ? ':population' : ''}`;
 }
 
 async function read(owner: string, id: string) {
@@ -167,7 +169,7 @@ test('repeated due discovery keeps delayed repair and population deliveries disp
   expect(await read(owner, populationId)).toEqual(populationBefore);
   expect(await read(isolated, otherId)).toEqual(otherBefore);
   expect(await workflows(repairId)).toEqual([identity(repairId, repairBefore!.revision)]);
-  expect(await workflows(populationId)).toEqual([identity(populationId, populationBefore!.revision)]);
+  expect(await workflows(populationId)).toEqual([identity(populationId, populationBefore!.revision, 'population')]);
   await active.run(repairId, repairBefore!.revision);
   expect(settled).toBe(1);
   expect(await read(owner, repairId)).toBeNull();
@@ -186,12 +188,76 @@ test('due discovery recovers a ready enrollment successor after an interrupted d
   const claim = (await store.claim(id, original.revision, Date.now() + 30_000))!;
   const revision = await store.advance(claim, { ...frontier, phase: 'activate' }, 0, Date.now() + 30_000, true);
   expect(revision).not.toBeNull();
-  expect(await workflows(id)).toEqual([identity(id, original.revision)]);
+  expect(await workflows(id)).toEqual([identity(id, original.revision, 'population')]);
   await store.due();
-  expect(await workflows(id)).toEqual([identity(id, original.revision), identity(id, revision!)]);
+  expect(await workflows(id)).toEqual([
+    identity(id, original.revision, 'population'),
+    identity(id, revision!, 'population'),
+  ]);
   expect((await store.claim(id, revision!, Date.now() + 30_000))?.locator).toMatchObject({ phase: 'activate' });
   expect(await store.claim(id, revision!, Date.now() + 30_000)).toBeNull();
 });
+
+test('a terminal pre-claim population delivery gets one fresh claim after restart', async () => {
+  const owner = prefix();
+  const store = createPublicPreparationStore(pool, work, owner);
+  const frontier = { ...population('restart'), publication: crypto.randomUUID(), phase: 'native' as const };
+  const id = track(await store.retain(frontier, Date.now() + 86_400_000));
+  const original = (await read(owner, id))!;
+  const originalId = identity(id, original.revision, 'population');
+  const unavailable = () => new Error('Search preparation service is not running');
+  type Runner = Pick<ReturnType<typeof createPublicPreparation>, 'run'>;
+  const stopped = createSearchServiceGate<Runner>(unavailable);
+  stopped.stop();
+  let claimed: PreparationRecord | null = null;
+  const live = createSearchServiceGate<Runner>(unavailable);
+  live.offer({
+    async run(id, revision) {
+      claimed = await store.claim(id, revision, Date.now() + 30_000);
+    },
+  });
+  let ready = stopped.ready;
+  registerPublicPreparationWork(() => ready());
+  await work.registerQueue('workflows', WORK_QUEUES.workflows);
+  const launch = async () => {
+    DBOS.setConfig({
+      name: WORK_APPLICATION,
+      systemDatabaseUrl: databaseUrl,
+      systemDatabaseSchemaName: DBOS_SCHEMA,
+      runMigrations: false,
+      logLevel: 'error',
+    });
+    await DBOS.launch();
+  };
+  try {
+    await launch();
+    await expect(DBOS.getResult(originalId, { timeoutSeconds: 8 })).rejects.toThrow(
+      'Search preparation service is not running',
+    );
+    await DBOS.shutdown();
+    expect(await read(owner, id)).toEqual(original);
+    const originalSteps = await work.listWorkflowSteps(originalId);
+    expect(originalSteps?.some((step) => step.error)).toBe(true);
+
+    await Promise.all([store.due(), store.due()]);
+    const renewed = (await read(owner, id))!;
+    expect(renewed).toEqual({ ...original, revision: String(BigInt(original.revision) + 1n) });
+    const renewedId = identity(id, renewed.revision, 'population');
+    await store.due();
+    expect(await workflows(id)).toEqual([originalId, renewedId]);
+    expect(await store.claim(id, original.revision, Date.now() + 30_000)).toBeNull();
+
+    ready = live.ready;
+    await launch();
+    await DBOS.getResult(renewedId, { timeoutSeconds: 8 });
+    expect(claimed).toMatchObject({ id, locator: frontier });
+    expect((await work.getWorkflow(renewedId))?.status).toBe('SUCCESS');
+    expect((await work.getWorkflow(originalId))?.status).toBe('ERROR');
+    expect(await work.listWorkflowSteps(originalId)).toEqual(originalSteps);
+  } finally {
+    await DBOS.shutdown({ deregister: true });
+  }
+}, 25_000);
 
 test('expired claims recover once and a stale claimed revision cannot overwrite the newer frontier', async () => {
   const owner = prefix();
@@ -205,7 +271,10 @@ test('expired claims recover once and a stale claimed revision cannot overwrite 
   const recovered = await read(owner, id);
   expect(Number(recovered!.revision)).toBeGreaterThan(Number(claimed!.revision));
   expect(recovered!.lease_until).toBe('0');
-  expect(await workflows(id)).toEqual([identity(id, original!.revision), identity(id, recovered!.revision)]);
+  expect(await workflows(id)).toEqual([
+    identity(id, original!.revision, 'population'),
+    identity(id, recovered!.revision, 'population'),
+  ]);
   await store.advance(claimed!, { ...frontier, phase: 'replay' });
   expect((await read(owner, id))?.locator).toEqual(frontier);
   const live = await store.claim(id, recovered!.revision, Date.now() + 30_000);
