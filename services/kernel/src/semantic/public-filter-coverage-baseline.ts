@@ -283,9 +283,8 @@ async function verifyReceipts(
   return length < 0 ? receipts : receipts.slice(0, length);
 }
 
-/** Adopt a verified contiguous prefix with one registration lock. Advance
- * Source after each original receiver receipt so both per-home guards observe
- * the same predecessor and root.
+/** Adopt a verified contiguous prefix with one registration lock and commit
+ * both cursor advances with the original receipt chain and per-home effects.
  */
 export async function adoptPublicFilterCoverageBaselinePage(
   pool: Pool,
@@ -312,10 +311,10 @@ export async function adoptPublicFilterCoverageBaselinePage(
   const verified = await verifyReceipts(pool, binding, receipts, deadline);
   await transaction(pool, deadline, async (client) => {
     await lockRegistration(client, binding);
-    // Reserve the original per-home Search and Source footprints. The SQL
-    // function removes transport round trips while keeping the guarded writes.
+    // Keep the original input reservation, including the bounded interval
+    // checks. Each home can write four rows, plus two cursor writes per page.
     await client.query(
-      `/* semantic.native-keyed:${16 * verified.length + 1}:${16 * verified.length + 1}:${6 * verified.length} */
+      `/* semantic.native-keyed:${16 * verified.length + 1}:${16 * verified.length + 1}:${4 * verified.length + 2} */
        SELECT semantic.adopt_public_filter_baseline_page($1,$2,$3,$4,$5,$6::jsonb)`,
       [
         binding.registration.id,

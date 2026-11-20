@@ -6,10 +6,11 @@ and complete original receipt. The receiver verifies the exact committed receipt
 checkpoint for each home in a bounded page. It releases that read checkout before locking the Search registration.
 Only the verified contiguous prefix is eligible for adoption.
 
-The registration transaction retains the original predecessor and root per home. Each receiver advance and its
-Source cursor CAS now commit together. An interrupted page can replay its committed Access receipts. A receiver that
-was one home ahead before this change reuses its original root. Neither interruption nor an empty home grants a
-repair ACK, changes the covered cut or allows the Source to seal early.
+The registration transaction retains the original predecessor and root per home and advances the receiver and
+Source cursors once per page. The guards check the bounded chain from each old root to the new root. Source also
+checks that every bootstrap account in a multi-home advance is present. Both cursors commit with all the page's
+rows. An interrupted page can replay its committed Access receipts. A receiver that was one home ahead during
+legacy single-home adoption reuses its original root. Empty homes still owe the original repair ACK.
 
 Binding and receipt fields are copied before checkout. They must be own data fields on plain objects. Accessors,
 proxies, coercible positions and out-of-domain scalars are refused before native work. The database proof and receiver
@@ -46,14 +47,20 @@ reserves five shared inputs for the registration owner, registration and prepara
 reread. Initial authorization, pinning and other fixed reads are charged before planning. Wide closures continue
 the native key frontier and admit at most 450 keys per home per turn, or fewer when the remaining budget requires it.
 
-With four keys, the default Subject home costs 42 inputs. With the 872-input maximum Search offer and five shared
-inputs, at most 20 homes fit, so 4,096 homes need at least 205 enrollment turns. With 64 inputs already charged,
-19 homes fit and 216 turns suffice under that fixed offer. The ordinary cold path drops from 30 SQL statements per
-home to 18 per home and 10 shared statements per page, excluding fixed turn work. At most three independent Access
-checkouts can run concurrently, each holding only its own home.
+Full Subject publication and mixed Discovery can enroll fresh complete key closures in groups of up to 16 homes.
+Each group takes Core, Account and Source locks in order. A retained pin or receipt uses the single-home path with
+up to three independent Access checkouts. Subject receipts omit Account and claim revisions.
 
-A default Search preparation delivery may claim up to four exact ready revisions when Source reports durable
-enrollment progress. Every revision keeps its separate Search meter and shares the delivery's existing deadline.
-At 216 turns this allows 54 deliveries with uninterrupted inline claims. The existing due scan discovers a ready
-revision if inline continuation is interrupted, and the ordinary enqueue path owns the final revision of each
-burst. Materialization, repair and writer fencing still receive their own scheduling and evidence.
+With seven compiler keys for the cold Subject catalogue, the planner reserves 56 inputs per home including the
+eight-input group probe. The 872-input maximum Search offer and five shared inputs admit at most 15 homes, so
+4,096 homes take at least 274 enrollment turns. Each adopted page writes two durable cursors.
+
+A default Search preparation delivery can claim exact ready revisions inline while Source advances and time remains
+in the delivery's deadline. Every revision keeps a separate Search meter. The due scan discovers a ready revision
+after interruption, and the ordinary enqueue path owns the final revision of each burst.
+
+Cold Subject publication can continue the registration's original prepared bootstrap directly after reconciliation.
+Search checks the physical incarnation and alias under its publication lock. Source reloads the exact definition,
+checks the job's Source basis and revalidates the live registration before enrolling the next bounded page.
+The completed page only advances enrollment. Opening the observation and publishing the generation still require
+the normal custody, repair and writer-fence checks.

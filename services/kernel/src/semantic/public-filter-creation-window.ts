@@ -190,7 +190,7 @@ export function publicFilterCreationAction(type: string, accounts: boolean): 'se
   return accounts && accountEvents.includes(type) ? 'accounts' : null;
 }
 
-type CreationEvent = Readonly<{
+type CreationEnvelope = Readonly<{
   position: string;
   event_seq: number;
   event_count: number;
@@ -202,8 +202,9 @@ type CreationEvent = Readonly<{
 
 type Meter = { inputKeys: number; rows: number; dependencyPoints: number };
 
-/** Walk exact original event keys in one snapshot, stopping at the first repair action.
- * Replay caps the read at the original event count and validates the same envelopes.
+/** Walk exact original event keys in one snapshot. A Subject range stops before
+ * the first different repair identity, including that lookahead in the meter.
+ * Legacy replay remains capped at its original retained count.
  */
 export async function readPublicFilterCreationEvents(
   pool: Pool,
@@ -212,15 +213,28 @@ export async function readPublicFilterCreationEvents(
     window: PublicFilterCreationWindow;
     accounts: boolean;
     inputLimit: number;
+    subjectRange: boolean;
     retainedCount?: number;
   }>,
   context: Readonly<{ deadline: number }>,
   cost: Meter,
-) {
+): Promise<{
+  event: CreationEnvelope;
+  next: PublicFilterCreationWindow;
+  envelopes: readonly CreationEnvelope[];
+  packed: string | undefined;
+}> {
   requireAccessDeadline(context.deadline);
   const w = input.window;
   const limit = input.retainedCount ?? input.inputLimit;
-  if (!validWindow(w) || w.position > w.through || !Number.isInteger(limit) || limit < 1 || limit > input.inputLimit)
+  if (
+    !validWindow(w) ||
+    w.position > w.through ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > input.inputLimit ||
+    (input.subjectRange && (input.accounts || input.retainedCount !== undefined))
+  )
     throw new TypeError('Invalid creation event range');
 
   const charge = (points: number) => {
@@ -229,10 +243,10 @@ export async function readPublicFilterCreationEvents(
     cost.dependencyPoints += points;
   };
   charge(3 + limit);
-  const { rows } = await pool.query<CreationEvent>(
+  const { rows } = await pool.query<CreationEnvelope>(
     `/* semantic.native-keyed:0:0 */
      WITH RECURSIVE events AS (
-       SELECT 0 AS ordinal,$4::bigint AS next_position,$5::integer AS next_seq,false AS repair,
+       SELECT 0 AS ordinal,$4::bigint AS next_position,$5::integer AS next_seq,false AS stop,NULL::text AS repair_subject,
               NULL::bigint AS position,NULL::integer AS event_seq,NULL::integer AS event_count,
               NULL::integer AS epoch,NULL::uuid AS id,NULL::text AS type,NULL::text AS subject
        FROM semantic.public_filter_home_enrollment e
@@ -247,7 +261,9 @@ export async function readPublicFilterCreationEvents(
               CASE WHEN o.event_seq+1<o.event_count THEN o.position
                    WHEN o.position<$9 THEN o.position+1 END,
               CASE WHEN o.event_seq+1=o.event_count THEN 0 ELSE o.event_seq+1 END,
-              starts_with(o.type,$11) OR starts_with(o.type,$12) OR o.type=ANY($13::text[]),
+              action.repair AND (NOT $14::boolean OR o.subject IS NULL OR
+                (e.repair_subject IS NOT NULL AND o.subject IS DISTINCT FROM e.repair_subject)),
+              CASE WHEN action.repair THEN coalesce(e.repair_subject,o.subject) ELSE e.repair_subject END,
               o.position,o.event_seq,o.event_count,o.epoch,o.id,o.type,o.subject
        FROM events e
        JOIN LATERAL (
@@ -256,7 +272,10 @@ export async function readPublicFilterCreationEvents(
          WHERE (o.partition_no,o.position,o.event_seq)=($1,e.next_position,e.next_seq)
          LIMIT 1
        ) o ON true
-       WHERE e.ordinal<$10 AND e.next_position<=$9 AND NOT e.repair
+       CROSS JOIN LATERAL (
+         SELECT starts_with(o.type,$11) OR starts_with(o.type,$12) OR o.type=ANY($13::text[]) AS repair
+       ) action
+       WHERE e.ordinal<$10 AND e.next_position<=$9 AND NOT e.stop
      )
      SELECT position::text,event_seq,event_count,epoch,id,type,subject
      FROM events WHERE ordinal>0 ORDER BY ordinal`,
@@ -274,14 +293,21 @@ export async function readPublicFilterCreationEvents(
       subjectPrefix,
       statementPrefix,
       input.accounts ? accountEvents : [],
+      input.subjectRange,
     ],
   );
 
   let next = w;
-  let action: ReturnType<typeof publicFilterCreationAction> = null;
+  let target: CreationEnvelope | undefined;
+  const envelopes: CreationEnvelope[] = [];
+  const packed: string[] = [];
+  // Leave room in the 16 KiB native state for the original window and its
+  // successor. The compact tuple list is stored as an escaped JSON string.
+  let bytes = 2;
+  let stopped = false;
   for (const row of rows) {
     if (
-      action !== null ||
+      (!input.subjectRange && target !== undefined) ||
       next.position > w.through ||
       BigInt(row.position) !== next.position ||
       row.event_seq !== next.sequence ||
@@ -290,17 +316,48 @@ export async function readPublicFilterCreationEvents(
       (next.eventCount !== null && row.event_count !== next.eventCount)
     )
       throw new CommandUnavailableError('contention', w.partition);
+    const action = publicFilterCreationAction(row.type, input.accounts);
+    if (input.subjectRange) {
+      const tuple = JSON.stringify([
+        row.position,
+        row.event_seq,
+        row.event_count,
+        row.epoch,
+        row.id,
+        row.type,
+        row.subject,
+      ]);
+      bytes += Buffer.byteLength(JSON.stringify(tuple)) - 1;
+      if ((target && action && row.subject !== target.subject) || bytes > 12 * 1024) {
+        stopped = true;
+        break;
+      }
+      packed.push(tuple);
+    }
+    if (action) target = row;
+    envelopes.push(row);
     next = creationEventSuccessor(next, row.event_count);
-    action = publicFilterCreationAction(row.type, input.accounts);
   }
-  const event = rows.at(-1);
+  if (stopped && !envelopes.length) {
+    charge(rows.length - limit);
+    // A single oversized envelope still has the original digest-based replay.
+    return readPublicFilterCreationEvents(pool, { ...input, subjectRange: false }, context, cost);
+  }
+  const event = target ?? envelopes.at(-1);
   if (
     !event ||
     rows.length > limit ||
     (input.retainedCount !== undefined && rows.length !== input.retainedCount) ||
-    (rows.length < input.inputLimit && action === null && next.position <= w.through)
+    (rows.length < input.inputLimit &&
+      next.position <= w.through &&
+      (input.subjectRange ? !stopped && target?.subject !== null : !target))
   )
     throw new CommandUnavailableError('contention', w.partition);
   charge(rows.length - limit);
-  return { event, next, envelopes: rows };
+  return {
+    event,
+    next,
+    envelopes,
+    packed: input.subjectRange && (target || stopped) ? `[${packed.join(',')}]` : undefined,
+  };
 }
