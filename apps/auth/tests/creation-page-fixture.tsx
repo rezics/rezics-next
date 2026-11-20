@@ -57,6 +57,7 @@ const readBrowserSession: typeof nativeSession.requestAccountSession = async (si
 // Load DOM-aware UI modules only after installing the browser fixture.
 export const { fill, button, session } = await import('../src/stories/accounts-operations/story');
 const { createRoot } = await import('react-dom/client');
+const { createBrowserHistory } = await import('@tanstack/react-router');
 const localeRuntime = await import('../src/paraglide/runtime.js');
 export const flush = (action: () => void) => act(async () => action());
 // Dialog focus and removal can finish on the frame after React commits.
@@ -64,7 +65,25 @@ export const flushFrame = () =>
   act(async () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
+export async function departureDialog() {
+  const deadline = performance.now() + 1000;
+  do {
+    const dialog = document.querySelector<HTMLElement>('[role="alertdialog"][data-open]');
+    if (dialog) return dialog;
+    // The link's history blocker and the dialog portal can settle after the click's act scope.
+    await act(() => Bun.sleep(1));
+  } while (performance.now() < deadline);
+  throw new Error('The departure dialog did not open');
+}
 const roots = new Set<ReturnType<typeof createRoot>>();
+const histories = new Set<ReturnType<typeof createBrowserHistory>>();
+
+export function createFixtureHistory() {
+  const history = createBrowserHistory({ window: dom });
+  histories.add(history);
+  return history;
+}
+
 function installBrowser() {
   localeRuntime.overwriteGetLocale(() => 'en');
   for (const [key, value] of Object.entries(globals))
@@ -87,9 +106,19 @@ export function creationFixture() {
       });
     } finally {
       roots.clear();
-      document.body.replaceChildren();
-      window.sessionStorage.clear();
-      globalThis.fetch = globals.fetch;
+      try {
+        // Drain queued browser events and cancel remaining tasks before restoring the DOM globals.
+        await act(async () => {
+          await Bun.sleep(0);
+          await dom.happyDOM.abort();
+        });
+      } finally {
+        for (const history of histories) history.destroy();
+        histories.clear();
+        document.body.replaceChildren();
+        window.sessionStorage.clear();
+        globalThis.fetch = globals.fetch;
+      }
     }
   });
   afterAll(() => {
@@ -101,6 +130,16 @@ export function creationFixture() {
     }
   });
 }
+export async function mountPage(page: ReactNode) {
+  const host = document.body.appendChild(document.createElement('div'));
+  const root = createRoot(host);
+  const render = (next: ReactNode) => flush(() => root.render(next));
+  // Own the root before rendering, including a render that rejects during setup.
+  roots.add(root);
+  await render(page);
+  return { host, render };
+}
+
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   const sessionReads: { method: string; cookie: string | null }[] = [];
@@ -156,13 +195,7 @@ export async function open(page: ReactNode, sessionBody: object) {
     calls.push({ path: String(path), body: JSON.parse(String(init?.body)), resolve: request.resolve });
     return request.promise;
   }) as typeof fetch;
-  const host = document.body.appendChild(document.createElement('div'));
-  const root = createRoot(host);
-  const render = (next: ReactNode) => flush(() => root.render(next));
-  // Own the root before rendering, including a render that rejects during setup.
-  roots.add(root);
-  await render(page);
-  return { host, calls, render, sessionReads };
+  return { ...(await mountPage(page)), calls, sessionReads };
 }
 export const send = (host: HTMLElement) => host.querySelector<HTMLFormElement>('form')!.requestSubmit();
 export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);

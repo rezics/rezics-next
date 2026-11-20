@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
+import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import {
-  createBrowserHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from '@tanstack/react-router';
-import { creationFixture, button, dom, fill, flush, flushFrame, open, send } from './creation-page-fixture';
+  creationFixture,
+  button,
+  createFixtureHistory,
+  departureDialog,
+  dom,
+  fill,
+  flush,
+  flushFrame,
+  open,
+  send,
+} from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
 import * as registration from '../src/registration-page';
 import type { RegistrationPage } from '../src/registration-page';
 import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 creationFixture();
-let history: ReturnType<typeof createBrowserHistory> | undefined;
 let restoreAdvice: (() => void) | undefined;
 let restoreBrowser: () => void;
 beforeEach(() => {
@@ -32,8 +35,6 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
-  history?.destroy();
-  history = undefined;
   restoreAdvice?.();
   restoreAdvice = undefined;
   restoreBrowser();
@@ -62,7 +63,7 @@ async function setup() {
   const query = '?state=original&resource=one&resource=two';
   const login = createRoute({ getParentRoute: () => root, path: '/login', component: () => null });
   dom.history.replaceState(null, '', `/signup${query}`);
-  history = createBrowserHistory({ window: dom });
+  const history = createFixtureHistory();
   const router = createRouter({ routeTree: root.addChildren([route, login]), history });
   await router.load();
   const page = await open(<RouterProvider router={router} />, {});
@@ -146,10 +147,9 @@ test('empty and whitespace-only details do not warn; Stay preserves invalid inpu
   expect(error).toBe('signup-handle-hint signup-handle-error');
   expect(p.unload()).toBe(true);
   await flush(() => p.host.querySelector<HTMLAnchorElement>('a[href^="/login"]')!.click());
-  const dialog = document.querySelector('[role="alertdialog"]');
-  expect(dialog, document.body.textContent ?? '').not.toBeNull();
-  expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy();
-  expect(dialog!.getAttribute('aria-describedby')).toBeTruthy();
+  const dialog = await departureDialog();
+  expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+  expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
   await flushFrame();
   expect(document.activeElement?.textContent).toBe('Stay');
   await p.choose('Stay');

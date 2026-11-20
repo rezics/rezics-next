@@ -1,27 +1,24 @@
-import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
+import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import {
-  createBrowserHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from '@tanstack/react-router';
-import { creationFixture, button, dom, fill, flush, flushFrame, open, send } from './creation-page-fixture';
+  creationFixture,
+  button,
+  createFixtureHistory,
+  departureDialog,
+  dom,
+  fill,
+  flush,
+  flushFrame,
+  open,
+  send,
+} from './creation-page-fixture';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
 import { nativeSignInProof } from './sign-in-fixture';
 creationFixture();
 const { Route } = await import('../src/routes/login');
-const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
-afterAll(() => {
-  if (originalScrollTo) Object.defineProperty(globalThis, 'scrollTo', originalScrollTo);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
-});
 const spies: { mockRestore: () => void }[] = [];
-const histories: { destroy: () => void }[] = [];
 afterEach(() => {
-  for (const history of histories.splice(0)) history.destroy();
   for (const spy of spies.splice(0)) spy.mockRestore();
 });
 async function setup(query = '?client_id=reader&scope=openid&scope=&sig=old&exp=1&prompt=login') {
@@ -37,7 +34,7 @@ async function setup(query = '?client_id=reader&scope=openid&scope=&sig=old&exp=
   const parent = createRootRoute();
   const login = createRoute({ path: '/login', getParentRoute: () => parent, component: Route.options.component });
   const away = createRoute({ getParentRoute: () => parent, path: '/recovery', component: () => 'Away' });
-  const history = createBrowserHistory({ window: dom });
+  const history = createFixtureHistory();
   const router = createRouter({ history, routeTree: parent.addChildren([login, away]) });
   await router.load();
   const page = await open(<RouterProvider router={router} />, {});
@@ -57,7 +54,6 @@ async function setup(query = '?client_id=reader&scope=openid&scope=&sig=old&exp=
     window.dispatchEvent(event as unknown as Event);
     return event.defaultPrevented;
   };
-  histories.push(history);
   return { ...page, router, navigate, choose, input, enter, unload, assign, ceremony };
 }
 test('untouched form and background passkey autofill do not warn or continue after departure', async () => {
@@ -78,6 +74,7 @@ test('Stay preserves credentials, validation and focus; help links offer Leave w
   const email = p.input('email');
   expect(p.unload()).toBe(true);
   await p.navigate();
+  await departureDialog();
   await flushFrame();
   expect(document.activeElement?.textContent).toBe('Stay');
   await p.choose('Stay');
@@ -91,7 +88,8 @@ test('Stay preserves credentials, validation and focus; help links offer Leave w
   });
   expect(p.unload()).toBe(true);
   await flush(() => p.host.querySelector<HTMLAnchorElement>('a[href="/recovery"]')!.click());
-  expect(document.querySelector('[role=alertdialog]')?.textContent).not.toContain('private password');
+  const dialog = await departureDialog();
+  expect(dialog.textContent).not.toContain('private password');
   await p.choose('Leave');
   expect(p.router.history.location.pathname).toBe('/recovery');
   expect(p.unload()).toBe(false);
