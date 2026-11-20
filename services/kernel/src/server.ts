@@ -269,6 +269,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             prefix: searchConfig.prefix,
             clock: defaults.clock,
             facetAccess: defaults.facetAccess,
+            ...(searchConfig.subjectSubscriptionProtocol === 1 ? { subjectSubscriptionProtocol: 1 } : {}),
             ...(creditSearch === undefined ? {} : { creditSearch }),
           });
           const producers = createDiscoveryProducerEntry({

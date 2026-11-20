@@ -143,10 +143,10 @@ async function verifyPublication(url: string) {
           birth,
         ])
       ).rows,
-    ).toEqual([{ end_home: 10 }]);
+    ).toEqual([{ end_home: 34 }]);
     expect(await frontier()).toEqual({ next_home: 2, next_ordinal: 1 });
     expect(await step()).toMatchObject({ status: 'progress', sourceAdvanced: true });
-    expect(await frontier()).toEqual({ next_home: 10, next_ordinal: 0 });
+    expect(await frontier()).toEqual({ next_home: 34, next_ordinal: 0 });
     const { body } = await search.request<{ hits: { hits: { _id: string }[] } }>('POST', '/' + target + '/_search', {
       query: { match_all: {} },
     });

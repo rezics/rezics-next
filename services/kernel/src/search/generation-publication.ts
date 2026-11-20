@@ -1028,11 +1028,15 @@ export function createSearchGenerationPublication(
                 const physical = await native(job.consumer, context, validationSearch(context, meter));
                 if (physical.activeSubjectGeneration !== null) throw new Pending('observation_lost');
                 await adopt(job, context, meter, physical);
-                const endHome = job.end_home ?? Math.min(4096, job.next_home + 8);
                 // Reserve the capture, original owner checks, 32 inventory keys or
                 // event slots and the closing custody comparison before dispatch.
-                const inputs = 176 + 18 * (endHome - job.next_home);
-                if (inputs + meter.inputKeys + 5 * 32 > 1000) throw new Pending('source_pending');
+                const fixedInputs = 176;
+                const perHomeInputs = 18;
+                const available = PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - meter.inputKeys - 5 * 32;
+                const width = Math.min(32, Math.floor((available - fixedInputs) / perHomeInputs));
+                const endHome = job.end_home ?? Math.min(4096, job.next_home + width);
+                const inputs = fixedInputs + perHomeInputs * (endHome - job.next_home);
+                if (endHome <= job.next_home || inputs > available) throw new Pending('source_pending');
                 meter.inputKeys += inputs;
                 meter.dependencyPoints += inputs;
                 await reconcileHeldSubjectPage(
