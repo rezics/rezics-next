@@ -124,8 +124,12 @@ generation and both stream bases. An uncertain commit reopens the same birth, in
 
 For a job with an explicit held preparation, the ordinary publication step consumes these original IDs
 and positions through its writer and physical generation comparison. Only a successful comparison and a
-fresh check of the page can advance the Source reconciliation cursor. A change after a page's finite end
-still belongs to the subsequent publication revalidation and held traversal. The physical fixture checks
+fresh check of the page can advance the Source reconciliation cursor. A fresh capture commits before the same
+turn seeks the first original key. When a step has no writer obligations, its evidence and cursor
+advance share the transaction that checked every home. A fresh
+inventory with writer obligations leaves its ordinal for the next funded comparison. The finite-window
+step starts after the inventory commit. Changes after its finite end belong to the subsequent
+publication revalidation and held traversal. The physical fixture checks
 the pending writer, the settled resident Book, the withdrawn Book and continuation into a fresh page.
 [PostgreSQL and OpenSearch fixture](../../test/semantic/public-filter-held-publication.test.ts)
 
@@ -154,9 +158,9 @@ in-flight Account update, stale compiler closure and deliberately torn outbox gr
 | Advance Source cursor after inventory handoff | 7 | 124 | 1 |
 | Save both finite creation ends | 6 | 61 | 1 |
 | Recover finite ends after a later append | 5 | 71 | 0 |
-| Advance Source cursor after window handoff | 7 | 122 | 1 |
+| Advance Source cursor after window handoff | 6 | 65 | 1 |
 | Replay four creation and visibility slots | 6 | 91 | 1 |
-| Advance Source cursor after event handoff | 7 | 154 | 1 |
+| Advance Source cursor after event handoff | 6 | 151 | 1 |
 
 ### Shared Subject receiver pages
 

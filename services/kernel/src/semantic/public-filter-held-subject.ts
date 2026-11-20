@@ -1,5 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
+import { nativeSourceQuery } from '../database/native-source-query.ts';
+import moveFrontier from './public-filter-held-subject-advance.sql';
 import { withBoundedCommandConnection } from '../database/pool.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import type { PublicFilterConsumer } from './public-filter-source-contract.ts';
@@ -244,8 +246,13 @@ async function reopenStep(db: PoolClient, page: Page, step: Step, context: Conte
  * No caller-provided key cursor, end position or event count can advance it.
  */
 export async function advanceHeldSubjectPage(pool: Pool, input: Page, context: Context): Promise<Step> {
+  const page = validatedPage(input);
+  return transaction(pool, context, (db) => readOrSaveStep(db, page, context));
+}
+
+function validatedPage(input: Page) {
   const page = { ...input };
-  const { job, bootstrap, birth, firstHome, endHome, ordinal } = page;
+  const { firstHome, endHome, ordinal } = page;
   if (
     !Number.isSafeInteger(ordinal) ||
     ordinal < 0 ||
@@ -258,35 +265,33 @@ export async function advanceHeldSubjectPage(pool: Pool, input: Page, context: C
     endHome - firstHome > 32
   )
     throw new TypeError('Invalid held Subject page');
-  return transaction(pool, context, async (db) => {
-    const { rows } = await db.query<{ cuts: Cut[] }>(
-      `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5) AS cuts FROM core.subject_subscription_v1 m
-       JOIN semantic.subject_source_preparation_v1 s USING(birth)
-       JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home,p.end_home)=(m.birth,$4,$5)
-       WHERE (m.job,m.bootstrap,m.birth)=($1,$2,$3) AND p.captured_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()`,
-      [job, bootstrap, birth, firstHome, endHome],
-    );
-    const cuts = rows[0]?.cuts;
-    if (!cuts || cuts.length !== endHome - firstHome) return pending(firstHome);
-    const steps = await db.query<{ ordinal: number; evidence: Step }>(
-      `SELECT ordinal,evidence FROM semantic.subject_source_step_v1
-       WHERE birth=$1 AND first_home=$2 AND ordinal BETWEEN $3::integer-1 AND $3 ORDER BY ordinal DESC`,
-      [birth, firstHome, ordinal],
-    );
-    const prior = steps.rows[0];
-    if (prior?.ordinal === ordinal) return reopenStep(db, page, prior.evidence, context);
-    const cursor: Cursor | null =
-      ordinal === 0 ? { phase: 'inventory', partition: firstHome, after: null } : (prior?.evidence.next ?? null);
-    if (!cursor) return pending(firstHome);
-    const step = await produce(db, page, cursor, cuts, context);
-    await db.query('INSERT INTO semantic.subject_source_step_v1 VALUES($1,$2,$3,$4)', [
-      birth,
-      firstHome,
-      ordinal,
-      step,
-    ]);
-    return step;
-  });
+  return page;
+}
+
+async function readOrSaveStep(db: PoolClient, page: Page, context: Context): Promise<Step> {
+  const { job, bootstrap, birth, firstHome, endHome, ordinal } = page;
+  const { rows } = await db.query<{ cuts: Cut[] }>(
+    `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5) AS cuts FROM core.subject_subscription_v1 m
+     JOIN semantic.subject_source_preparation_v1 s USING(birth)
+     JOIN semantic.subject_access_page_v1 p ON (p.birth,p.first_home,p.end_home)=(m.birth,$4,$5)
+     WHERE (m.job,m.bootstrap,m.birth)=($1,$2,$3) AND p.captured_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()`,
+    [job, bootstrap, birth, firstHome, endHome],
+  );
+  const cuts = rows[0]?.cuts;
+  if (!cuts || cuts.length !== endHome - firstHome) return pending(firstHome);
+  const steps = await db.query<{ ordinal: number; evidence: Step }>(
+    `SELECT ordinal,evidence FROM semantic.subject_source_step_v1
+     WHERE birth=$1 AND first_home=$2 AND ordinal BETWEEN $3::integer-1 AND $3 ORDER BY ordinal DESC`,
+    [birth, firstHome, ordinal],
+  );
+  const prior = steps.rows[0];
+  if (prior?.ordinal === ordinal) return reopenStep(db, page, prior.evidence, context);
+  const cursor: Cursor | null =
+    ordinal === 0 ? { phase: 'inventory', partition: firstHome, after: null } : (prior?.evidence.next ?? null);
+  if (!cursor) return pending(firstHome);
+  const step = await produce(db, page, cursor, cuts, context);
+  await db.query('INSERT INTO semantic.subject_source_step_v1 VALUES($1,$2,$3,$4)', [birth, firstHome, ordinal, step]);
+  return step;
 }
 
 export type HeldSubjectFrontier = Member & { firstHome: number; endHome: number; ordinal: number };
@@ -301,37 +306,44 @@ export async function reconcileHeldSubjectPage(
   context: Context,
   settle: (obligation: Obligation) => Promise<void>,
 ) {
-  const page = { ...input };
-  const captured = await withBoundedCommandConnection(pool, context.deadline, (db) =>
-    db.query(
-      `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5)
+  const page = validatedPage(input);
+  const captured =
+    page.ordinal === 0 &&
+    (await withBoundedCommandConnection(pool, context.deadline, (db) =>
+      db.query(
+        `SELECT semantic.capture_subject_access_page_v1(m.birth,$4,$5)
         FROM core.subject_subscription_v1 m JOIN semantic.subject_source_preparation_v1 s USING(birth)
         WHERE (m.job,m.bootstrap,m.birth)=($1,$2,$3) AND (s.next_home,s.next_ordinal)=($4,$6)
           AND NOT EXISTS (SELECT FROM semantic.subject_access_page_v1 p WHERE (p.birth,p.first_home)=(m.birth,$4))`,
-      [page.job, page.bootstrap, page.birth, page.firstHome, page.endHome, page.ordinal],
-    ),
-  );
-  if (captured.rowCount) return;
-  const step = await advanceHeldSubjectPage(pool, page, context);
+        [page.job, page.bootstrap, page.birth, page.firstHome, page.endHome, page.ordinal],
+      ),
+    ));
+  // The original cut must commit before the first key seek. A fresh turn can
+  // save that inventory with its second page check. If it found writer work,
+  // leave the original ordinal for the next funded comparison and recheck.
+  const step = await transaction(pool, context, async (db) => {
+    const original = await readOrSaveStep(db, page, context);
+    if (original.obligations.length === 0) await advanceFrontier(db, page, original, false);
+    return original;
+  });
+  if (step.obligations.length === 0) return step;
+  if (captured && captured.rowCount) return;
   for (const obligation of step.obligations) await settle(obligation);
-  const changed = await withBoundedCommandConnection(pool, context.deadline, (db) =>
-    db.query(
-      `UPDATE semantic.subject_source_preparation_v1 s SET next_home=$4,next_ordinal=$5
-     FROM core.subject_subscription_v1 m
-     WHERE (s.birth,s.next_home,s.next_ordinal)=($1,$2,$3) AND (m.birth,m.bootstrap,m.job)=(s.birth,$6,$7)
-       AND jsonb_array_length(semantic.capture_subject_access_page_v1(s.birth,$2,$8))=$8::integer-$2`,
-      [
-        page.birth,
-        page.firstHome,
-        page.ordinal,
-        step.complete ? page.endHome : page.firstHome,
-        step.complete ? 0 : page.ordinal + 1,
-        page.bootstrap,
-        page.job,
-        page.endHome,
-      ],
-    ),
-  );
-  if (changed.rowCount !== 1) return pending(page.firstHome);
+  await withBoundedCommandConnection(pool, context.deadline, (db) => advanceFrontier(db, page, step, true));
   return step;
+}
+
+async function advanceFrontier(db: PoolClient, page: Page, step: Step, recheckAfterWriter: boolean) {
+  const changed = await nativeSourceQuery(db, moveFrontier, {
+    birth: page.birth,
+    bootstrap: page.bootstrap,
+    job: page.job,
+    first_home: page.firstHome,
+    end_home: page.endHome,
+    ordinal: page.ordinal,
+    next_home: step.complete ? page.endHome : page.firstHome,
+    next_ordinal: step.complete ? 0 : page.ordinal + 1,
+    after_writer: recheckAfterWriter,
+  });
+  if (changed.length !== 1) return pending(page.firstHome);
 }
