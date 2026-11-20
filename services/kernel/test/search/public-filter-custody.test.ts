@@ -5,6 +5,7 @@ import {
   createPublicFilterCustody,
   readPublicFilterConsumerCustody,
   stepRetainedTargetErasure,
+  withDiscoveryRepairCustody,
 } from '../../src/search/public-filter-custody.ts';
 import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
 import { releaseDigest, RELEASE_FORMAT, RELEASE_LIMITS, releaseAdmission, validateRelease } from '@rezics/definitions';
@@ -54,8 +55,8 @@ function definition(): CustodyDefinition {
     dependencyKeys: [{ kind: 'order', order: 'id' }],
   };
 }
-async function target() {
-  const index = `${prefix}-${indices.length}`;
+async function target(suffix = '') {
+  const index = `${prefix}-${indices.length}${suffix}`;
   await search.request('PUT', `/${index}`, { settings: { number_of_shards: 1, number_of_replicas: 0 } });
   indices.push(index);
   const settings = await search.request<Record<string, { settings: { index: { uuid: string } } }>>(
@@ -64,8 +65,8 @@ async function target() {
   );
   return { index, uuid: settings.body[index]!.settings.index.uuid };
 }
-async function setup() {
-  const physical = await target();
+async function setup(suffix?: string) {
+  const physical = await target(suffix);
   const input = {
     definition: definition(),
     physicalTarget: physical.index,
@@ -110,6 +111,33 @@ async function append(
   }
   return execution;
 }
+
+test('expired preparation custody is usable only inside the original native repair', async () => {
+  const { registration, queried } = await setup('-discovery-g3');
+  const bootstrap = `0:${crypto.randomUUID()}`;
+  try {
+    await pool.query(
+      `UPDATE search.public_filter_observation SET expires_at=0,consumer_bootstrap=$3,consumer_work='{}'
+       WHERE (partition_no,observation)=($1,$2)`,
+      [registration.partition, queried.snapshot.observation, bootstrap],
+    );
+    const read = () => readPublicFilterConsumerCustody(pool, { queried }, context());
+    expect(await read()).toMatchObject({ reason: 'observation_lost' });
+    expect(await registry.acquire(queried, context())).toMatchObject({ reason: 'observation_lost' });
+    expect(await withDiscoveryRepairCustody(queried, `0:${crypto.randomUUID()}`, read)).toMatchObject({
+      reason: 'observation_lost',
+    });
+    await withDiscoveryRepairCustody(queried, bootstrap, async () => {
+      expect(await read()).toMatchObject({ status: 'found' });
+      const use = await registry.acquire(queried, context());
+      expect(use.status).toBe('acquired');
+      if (use.status === 'acquired') await registry.release(use.use, context());
+    });
+    expect(await read()).toMatchObject({ reason: 'observation_lost' });
+  } finally {
+    await registry.closeObservation(queried, search, context());
+  }
+});
 
 test('concurrent copies on one target enroll every retained observation', async () => {
   const { registration, physical, queried } = await setup();

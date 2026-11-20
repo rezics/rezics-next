@@ -1,4 +1,7 @@
 import { expect, mock, test } from 'bun:test';
+import * as accountDiscovery from '../../src/search/account-discovery.ts';
+import * as generations from '../../src/search/generations.ts';
+import * as indexer from '../../src/search/indexer.ts';
 
 const INTERVAL = 60_000;
 const generation = {
@@ -27,6 +30,7 @@ let maintenanceReached = Promise.withResolvers<void>();
 let maintenanceRelease = Promise.withResolvers<void>();
 
 mock.module('../../src/search/account-discovery.ts', () => ({
+  ...accountDiscovery,
   nativeDiscoveryRegistry: async () => {
     if (holdMaintenance) {
       holdMaintenance = false;
@@ -43,11 +47,13 @@ mock.module('../../src/search/account-discovery.ts', () => ({
   copyLocator: () => ({}),
 }));
 mock.module('../../src/search/generations.ts', () => ({
+  ...generations,
   discoveryConsumer: (prefix: string, n: number) => `search_${prefix.replaceAll('-', '_')}discovery_g${n}`,
   advanceDiscovery: async () => {},
   discoveryGenerations: async () => availableGenerations,
 }));
 mock.module('../../src/search/indexer.ts', () => ({
+  ...indexer,
   createDiscoveryIndexer: (_pool: unknown, _projection: unknown, consumer: string) => ({
     consumer,
     run: async () => ({ status: 'busy' }),
@@ -91,17 +97,35 @@ mock.module('../../src/events/relays.ts', () => ({
 }));
 
 const { startDiscoveryIndexing } = await import('../../src/search/runner.ts');
+type RunnerOptions = Parameters<typeof startDiscoveryIndexing>[0];
+const search = {
+  async request(_method: string, path: string) {
+    const name = path.slice(1);
+    const target = availableGenerations.find(({ prefix, generation }) => name === `${prefix}discovery-g${generation}`);
+    if (!target) throw new Error(`Unexpected Search request ${path}`);
+    return {
+      status: 200,
+      body: {
+        [name]: {
+          settings: { index: { uuid: target.uuid } },
+          mappings: { _meta: { incarnation: target.incarnation } },
+        },
+      },
+    };
+  },
+} as RunnerOptions['search'];
 
-function runner(poolMax: number, concurrency?: number) {
+function runner(poolMax: number, concurrency?: number, publicPreparation?: RunnerOptions['publicPreparation']) {
   return startDiscoveryIndexing({
     pool: { options: { max: poolMax } } as never,
-    search: {} as never,
+    search,
     source: {} as never,
     listing: {} as never,
     prefix: 'intent-',
     routeKey: new Uint8Array(32),
     intervalMs: INTERVAL,
     ...(concurrency === undefined ? {} : { concurrency }),
+    ...(publicPreparation === undefined ? {} : { publicPreparation }),
   });
 }
 
@@ -151,7 +175,7 @@ test('resume during an unresolved discovery pause wins after drains settle; stop
   holdMaintenance = true;
   const runner = startDiscoveryIndexing({
     pool: {} as never,
-    search: {} as never,
+    search,
     source: {} as never,
     listing: {} as never,
     prefix: 'intent-',
@@ -202,6 +226,25 @@ test('resume during an unresolved discovery pause wins after drains settle; stop
     await runner.stop();
     globalThis.setTimeout = originalSet;
     globalThis.clearTimeout = originalClear;
+  }
+});
+
+test('Home preparation reconciles the current active physical generation once per maintenance interval', async () => {
+  availableGenerations = [generation, { ...secondGeneration, state: 'replaying' }];
+  const prepareDefaultHome = mock(async (_target: accountDiscovery.DiscoveryTarget, _deadline: number) => true);
+  const active = runner(5, undefined, { prepareDefaultHome } as unknown as RunnerOptions['publicPreparation']);
+  try {
+    await active.refresh();
+    await active.refresh();
+    expect(prepareDefaultHome.mock.calls).toEqual([[generation, expect.any(Number)]]);
+    availableGenerations = [secondGeneration];
+    await active.refresh();
+    expect(prepareDefaultHome.mock.calls).toEqual([
+      [generation, expect.any(Number)],
+      [secondGeneration, expect.any(Number)],
+    ]);
+  } finally {
+    await active.stop();
   }
 });
 

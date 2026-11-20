@@ -499,6 +499,7 @@ async function read(
     q.consumer.incarnation,
     Date.now(),
     execution ?? null,
+    repairBootstrap(q),
   ]);
   const row = result.rows[0];
   check(context);
@@ -574,6 +575,26 @@ export async function readPublicFilterConsumerCustody(
 // settlement or retained state is cached here. Recovery must install the real owner binding again.
 const repairSources = new WeakMap<Pool, PublicFilterRepairSourceBinding>();
 const repairAllowance = new AsyncLocalStorage<Readonly<{ spent: CustodyCost; maintenance: boolean }>>();
+const discoveryRepair = new AsyncLocalStorage<{ observation: string; target: string; bootstrap: string }>();
+
+/** Background repair retains an adopted cut as evidence after its serving PIT expires. */
+export function withDiscoveryRepairCustody<T>(q: PublicFilterQueriedObservation, bootstrap: string, work: () => T): T {
+  return discoveryRepair.run(
+    { observation: q.snapshot.observation, target: q.consumer.physicalTarget, bootstrap },
+    work,
+  );
+}
+
+function repairBootstrap(q: PublicFilterQueriedObservation): string | null {
+  const repair = discoveryRepair.getStore();
+  return q.snapshot.kind === 'pit' &&
+    repair?.observation === q.snapshot.observation &&
+    repair.target === q.consumer.physicalTarget &&
+    /discovery-g[1-9][0-9]*$/.test(repair.target)
+    ? repair.bootstrap
+    : null;
+}
+
 /** Keep all reader phases within the calling consumer's already-spent allowance. */
 export function withPublicFilterRepairAllowance<T>(
   spent: CustodyCost,
@@ -2257,8 +2278,10 @@ export function createPublicFilterCustody(
       return run(context, async (meter, context) => {
         const token = randomUUID();
         const home = partition(input.snapshot.observation);
+        const bootstrap = repairBootstrap(input);
         const batch =
           input.snapshot.kind === 'pit' &&
+          bootstrap === null &&
           bookRows(
             'reference',
             JSON.stringify([home, input.consumer.physicalTarget, input.consumer.incarnation]),
@@ -2302,7 +2325,8 @@ export function createPublicFilterCustody(
           SELECT o.partition_no,o.observation FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
-          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4
+          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open'
+            AND (o.expires_at>$4 OR (o.consumer_bootstrap=$10::text AND o.consumer_work IS NOT NULL))
             AND r.state='active' AND t.incarnation=$7
             AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate g
               WHERE g.partition_no=0 AND g.physical_target=r.physical_target AND g.publication_fence IS NOT NULL)
@@ -2321,6 +2345,7 @@ export function createPublicFilterCustody(
               input.consumer.incarnation,
               input.snapshot.kind === 'prepared' ? input.snapshot.build : null,
               input.snapshot.kind === 'prepared' ? input.snapshot.generation.toString() : null,
+              bootstrap,
             ],
           );
           if (!result.rowCount) throw new Failure('observation_lost');

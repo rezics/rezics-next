@@ -46,6 +46,7 @@ import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import { createQueryPrivacyConsumer, type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
 import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { FEED_PAGE_LIMIT } from '../content/contract/index.ts';
+import { homeDiscoverySelection } from '../content/feed-discovery.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
   pool: Pool;
@@ -428,27 +429,35 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const scope = await readDiscoveryScope(config.pool, config.prefix, context.deadline, 'preparation');
         if (
           !scope ||
-          scope.state === 'active' ||
           scope.generation !== target.generation ||
           scope.uuid !== target.uuid ||
           scope.incarnation !== target.incarnation
         )
           return;
-        const owners = await resolveDiscoveryOwnerAdapters(producers, scope.metadataKinds, 'population');
+        const active = scope.state === 'active';
+        const owners = await resolveDiscoveryOwnerAdapters(
+          producers,
+          scope.metadataKinds,
+          active ? undefined : 'population',
+        );
         if (
-          Object.keys(producers.metadataProducers).some((kind) => !Object.hasOwn(owners.metadataProducers, kind)) ||
+          (!active &&
+            Object.keys(producers.metadataProducers).some((kind) => !Object.hasOwn(owners.metadataProducers, kind))) ||
           scope.metadataKinds.some((kind) => !owners.metadataProducers[kind]) ||
           !discoveryCapabilityMatches(scope, scope.capability, owners.capabilityWitnesses)
         )
           return;
         const release = await requestMeaning(context);
-        if (release === null || !(await discoveryPhysicalTargetMatches(requestSearch(context), scope))) return;
+        const matches = active ? discoveryAliasMatches : discoveryPhysicalTargetMatches;
+        if (release === null || !(await matches(requestSearch(context), scope))) return;
         const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, producers.subjects, {
           release: release.release,
           ownerAdapters: owners.ownerAdapters,
           accounts: producers.accounts,
           omittedKinds: owners.omittedKinds,
         });
+        const { kinds, filter } = homeDiscoverySelection(undefined);
+        if (!kinds.every((kind) => registry.entries.some((entry) => entry.kind === kind))) return;
         const operations = await create(
           discoveryIndexName(config.prefix, scope.generation),
           release,
@@ -458,14 +467,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           'enrollment',
         );
         try {
-          // Admit the native root for the default unfiltered Home page. Only its
+          // Admit the native root for the default catalogue Home page. Only its
           // durable repair locator leaves this enrollment attempt.
           const capture = await operations.captureDiscovery(
             {
               plan: {
                 representation: 'discovery-v1',
                 comparator: 'mixed-public-v1',
-                filterDocument: undefined,
+                filterDocument: filter,
                 text: undefined,
                 sort: 'name',
                 size: Math.min(200, 2 * FEED_PAGE_LIMIT + 1),

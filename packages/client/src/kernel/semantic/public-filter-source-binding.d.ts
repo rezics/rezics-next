@@ -281,7 +281,7 @@ export declare function readNativePublicFilterPublicationCompletion(binding: Pub
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] & Readonly<{
     inputLimit?: number;
-    usePublishedCoverage?: true;
+    usePublishedCoverage?: true | 'reconcile';
     definition?: PublicFilterSourceDefinition;
 }>) | Readonly<{
     bootstrap: string;
