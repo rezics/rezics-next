@@ -13,14 +13,14 @@ export async function preloadNativeKernel(): Promise<void> {
 
 /** Cold native SQL analysis is file setup. Keep its database live for lazy imports,
  * separately from the connections, deadlines and measured work of each scenario. */
-export function beforeNativeKernelTests() {
+export function beforeNativeKernelTests(load = preloadNativeKernel) {
   let analysis: ReturnType<typeof kernelTestDatabase> | undefined;
   beforeAll(async () => {
     analysis = kernelTestDatabase();
     const previous = process.env.DATABASE_URL;
     process.env.DATABASE_URL = analysis.url;
     try {
-      await preloadNativeKernel();
+      await load();
     } finally {
       if (previous === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = previous;
