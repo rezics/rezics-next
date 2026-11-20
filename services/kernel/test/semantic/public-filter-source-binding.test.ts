@@ -565,6 +565,18 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       }
       found = true;
       const stepInput = { ...original, predecessor: frontier };
+      // A second consumer replaces the mutable projection build before this
+      // execution verifies the exact Source page it already retained.
+      const competing = await publicFilterSource(f.config).readPublicFilterProjectionPage({
+        subject: book,
+        meaning: f.meaning,
+        inputLimit: request.inputLimit,
+        frontier: null,
+        context: readContext(),
+      });
+      if (repair.projection.status !== 'complete' || competing.status !== 'complete')
+        throw new Error('Both native projections must complete');
+      expect(competing.frontier.build).not.toBe(repair.projection.frontier.build);
       const step = await binding.readRepairStep(stepInput, readContext());
       expect(step).toMatchObject({
         status: 'verified',

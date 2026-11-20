@@ -220,7 +220,40 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
   requireAccessDeadline(deadline);
   const routed = routePartition(page.source.subject);
   if (!routed || !validRetainedMeaning(meaning)) return false;
+  const terminal = routePartition(page.source.terminal);
+  if (!terminal) return false;
+  const homes = new Set([routed.partition, terminal.partition]);
+  const dependencies = [
+    ...page.repairLocators.flatMap((locator) => locator.dependencies),
+    ...page.records.flatMap((record) => record.dependencies),
+  ];
+  for (const dependency of dependencies) {
+    // A Semantic privacy head cannot stand in for an original Account tuple.
+    if (dependency.kind === 'consent') return false;
+    const route = dependency.kind === 'sourceTuple' ? dependency.tuple.route : dependency.route;
+    if (!Number.isInteger(route) || route < 0 || route > 65535) return false;
+    homes.add(partitionOf(route));
+  }
   return inSnapshot(pool, deadline, async (client) => {
+    if (page.status === 'complete') {
+      // The original page digest binds these heads. A different consumer may
+      // replace the mutable build while this execution waits to verify its page.
+      const heads = new Set(page.requiredHeads.map(({ partition }) => partition));
+      if (heads.size !== page.requiredHeads.length || [...homes].some((partition) => !heads.has(partition)))
+        return false;
+      for (const { partition, epoch, position } of page.requiredHeads) {
+        requireAccessDeadline(deadline);
+        const current = await nativeSourceQuery(client, readCurrentRetainedHead, { partition_no: partition });
+        if (
+          !current ||
+          current.write_state !== 'active' ||
+          current.epoch !== epoch ||
+          BigInt(current.position) !== position
+        )
+          return false;
+      }
+      return true;
+    }
     const build = rows(
       await nativeSourceQuery(client, readBuild, {
         partition_no: routed.partition,
@@ -241,22 +274,6 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
       build.current_release !== page.source.currentRelease
     )
       return false;
-    const terminal = routePartition(page.source.terminal);
-    if (!terminal) return false;
-    const homes = new Set([routed.partition, terminal.partition]);
-    const dependencies = [
-      ...page.repairLocators.flatMap((locator) => locator.dependencies),
-      ...page.records.flatMap((record) => record.dependencies),
-    ];
-    for (const dependency of dependencies) {
-      // A Semantic privacy head cannot stand in for an original Account tuple.
-      // Until that tuple is retained by this projection build, consent replay is
-      // unknown and cannot produce a verified repair receipt.
-      if (dependency.kind === 'consent') return false;
-      const route = dependency.kind === 'sourceTuple' ? dependency.tuple.route : dependency.route;
-      if (!Number.isInteger(route) || route < 0 || route > 65535) return false;
-      homes.add(partitionOf(route));
-    }
     // These are the original build's keyed retained heads, not a current catalogue
     // enumeration or a newly captured replacement for the original Source page.
     for (const partition of homes) {
